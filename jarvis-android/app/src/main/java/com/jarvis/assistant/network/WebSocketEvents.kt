@@ -66,7 +66,7 @@ data class ApprovalRequestEvent(
 ) : InboundEvent {
 
     val isNoteEdit: Boolean
-        get() = note != null || action in NOTE_ACTIONS
+        get() = note != null || (action != null && action in NOTE_ACTIONS)
 
     companion object {
         val NOTE_ACTIONS = setOf("edit_joplin_note", "edit_logseq_page")
