@@ -54,6 +54,15 @@ object WidgetDataRepository {
     /** GPU designs throttle around here, so it is the point worth flagging. */
     const val GPU_WARN_C = 75
 
+    const val CPU_WARN_PERCENT = 85
+
+    /**
+     * VRAM pressure is a fraction of the card, not an absolute. A fixed 7.2 GB
+     * mark would sit at 90% of an 8 GB card and 30% of a 24 GB one, warning
+     * constantly on the larger card while it is barely loaded.
+     */
+    const val VRAM_WARN_FRACTION = 0.90
+
     fun getPendingApprovals(): List<ApprovalItem> {
         if (!JarvisRuntime.isInitialized) return emptyList()
         return JarvisRuntime.pendingApprovals.value.map(::toItem)

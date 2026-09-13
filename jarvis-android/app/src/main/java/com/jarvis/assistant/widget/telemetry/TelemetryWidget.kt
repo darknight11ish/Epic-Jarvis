@@ -14,7 +14,6 @@ import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
-import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
@@ -22,7 +21,6 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -56,18 +54,18 @@ class TelemetryWidget : GlanceAppWidget() {
                 ) {
                     Text("WORKSTATION", style = JarvisGlanceTheme.Label)
                     Spacer(GlanceModifier.defaultWeight())
-                    Box(
-                        modifier = GlanceModifier
-                            .size(6.dp)
-                            .background(
-                                if (snapshot.isOnline) {
-                                    JarvisGlanceTheme.StatusOk
-                                } else {
-                                    JarvisGlanceTheme.TextMuted
-                                },
-                            )
-                            .cornerRadius(3.dp),
-                    ) {}
+                    Text(
+                        text = if (snapshot.isOnline) "LIVE" else "OFFLINE",
+                        style = TextStyle(
+                            color = if (snapshot.isOnline) {
+                                JarvisGlanceTheme.StatusOk
+                            } else {
+                                JarvisGlanceTheme.StatusBad
+                            },
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
                 }
 
                 Spacer(GlanceModifier.height(8.dp))
@@ -90,17 +88,27 @@ class TelemetryWidget : GlanceAppWidget() {
                     stale = !snapshot.isOnline,
                 )
                 Spacer(GlanceModifier.height(6.dp))
+                val vramTight = isVramTight(snapshot.vramUsedMb, snapshot.vramTotalMb)
                 Metric(
                     label = "VRAM",
                     value = formatVram(snapshot.vramUsedMb, snapshot.vramTotalMb),
-                    tint = JarvisGlanceTheme.TextPrimary,
+                    tint = if (vramTight) {
+                        JarvisGlanceTheme.StatusBad
+                    } else {
+                        JarvisGlanceTheme.TextPrimary
+                    },
                     stale = !snapshot.isOnline,
                 )
                 Spacer(GlanceModifier.height(6.dp))
+                val cpuBusy = (snapshot.cpuPercent ?: 0) >= WidgetDataRepository.CPU_WARN_PERCENT
                 Metric(
                     label = "CPU",
                     value = snapshot.cpuPercent?.let { "$it%" } ?: "—",
-                    tint = JarvisGlanceTheme.TextPrimary,
+                    tint = if (cpuBusy) {
+                        JarvisGlanceTheme.StatusBad
+                    } else {
+                        JarvisGlanceTheme.TextPrimary
+                    },
                     stale = !snapshot.isOnline,
                 )
 
@@ -141,6 +149,11 @@ class TelemetryWidget : GlanceAppWidget() {
                 ),
             )
         }
+    }
+
+    private fun isVramTight(usedMb: Int?, totalMb: Int?): Boolean {
+        if (usedMb == null || totalMb == null || totalMb <= 0) return false
+        return usedMb.toDouble() / totalMb >= WidgetDataRepository.VRAM_WARN_FRACTION
     }
 
     private fun formatVram(usedMb: Int?, totalMb: Int?): String {
