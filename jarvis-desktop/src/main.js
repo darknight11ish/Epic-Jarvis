@@ -43,6 +43,32 @@ const JARVIS_CLIENT_HEADER = "hud";
 const CLIPBOARD_PREVIEW = 90;
 
 /**
+ * Quick-capture prefixes. Typing one at the head of the prompt pre-routes the
+ * turn to a note store and shows a chip; the prefix itself is stripped before
+ * the text is sent.
+ */
+const NOTE_PREFIXES = {
+  "#log": { target: "logseq", label: "Logseq Journal" },
+  "#logseq": { target: "logseq", label: "Logseq Journal" },
+  "#journal": { target: "logseq", label: "Logseq Journal" },
+  "#joplin": { target: "joplin", label: "Joplin Vault" },
+  "#vault": { target: "joplin", label: "Joplin Vault" },
+};
+
+/**
+ * Routing instruction sent as a system turn alongside `note_target`, so a
+ * server that reads either mechanism lands in the same place.
+ */
+const NOTE_INSTRUCTIONS = {
+  logseq:
+    "Route this turn to the Logseq daily journal via append_logseq_journal. " +
+    "Capture it verbatim unless asked to summarise.",
+  joplin:
+    "Route this turn to the Joplin personal vault via create_joplin_note, " +
+    "or search_joplin when the user is asking a question rather than filing one.",
+};
+
+/**
  * Smallest gap between native window resizes, in milliseconds. Each resize is a
  * `SetWindowPos` on a transparent, Acrylic-backed window; firing one per token
  * makes DWM recomposite the blur dozens of times a second, which shows up as
@@ -75,6 +101,16 @@ async function invoke(command, args = {}) {
   }
 }
 
+/**
+ * Like [`invoke`], but propagates the rejection. Used where the caller needs to
+ * see the failure — the chat stream reports its terminal state through the
+ * promise, so swallowing it would leave the card spinning forever.
+ */
+async function invokeStrict(command, args = {}) {
+  if (!IS_TAURI) throw new Error("no Tauri backend");
+  return TAURI.core.invoke(command, args);
+}
+
 /** Subscribes to a backend event. No-ops outside Tauri. */
 async function listen(event, handler) {
   if (!TAURI || !TAURI.event || !TAURI.event.listen) return () => {};
@@ -101,6 +137,16 @@ const dom = {
   routeModel: $("route-model"),
   pin: $("pin"),
   submitHint: $("submit-hint"),
+  noteChip: $("note-chip"),
+  noteChipLabel: $("note-chip-label"),
+
+  approval: $("approval"),
+  approvalAction: $("approval-action"),
+  approvalTarget: $("approval-target"),
+  approvalPreview: $("approval-preview"),
+  approvalHint: $("approval-hint"),
+  approvalApprove: $("approval-approve"),
+  approvalDeny: $("approval-deny"),
 
   attachments: $("attachments"),
   captureChip: $("attachment-capture"),
@@ -142,10 +188,14 @@ const state = {
   capture: null,
   /** Pending clipboard context. */
   clipboard: null,
+  /** `null`, `"logseq"` or `"joplin"` — set by a prompt prefix. */
+  noteTarget: null,
+  /** The approval gate awaiting a decision, if any. */
+  approval: null,
   route: { ...DEFAULT_ROUTE },
 };
 
-/** Moves the whole UI into a phase; CSS keys most of its animation off this. */
+/** `idle` | `streaming` | `done` | `error` | `approval`. */
 function setPhase(phase) {
   state.phase = phase;
   dom.root.dataset.state = phase;
@@ -583,6 +633,186 @@ function attachClipboard(text) {
 }
 
 /* ==========================================================================
+   Quick capture — note prefixes
+   ========================================================================== */
+
+/**
+ * Splits a leading `#log` / `#joplin` prefix off the prompt.
+ * Returns the target (or null) and the text with the prefix removed.
+ */
+function parseNotePrefix(text) {
+  const match = text.match(/^\s*(#[a-z]+)(\s+|$)/i);
+  if (!match) return { target: null, label: null, body: text };
+  const spec = NOTE_PREFIXES[match[1].toLowerCase()];
+  if (!spec) return { target: null, label: null, body: text };
+  return { ...spec, body: text.slice(match[0].length) };
+}
+
+/** Mirrors the prefix in the chip beside the reactor as the user types. */
+function syncNoteChip() {
+  const { target, label } = parseNotePrefix(dom.prompt.value);
+  state.noteTarget = target;
+  dom.noteChip.hidden = !target;
+  if (target) {
+    dom.noteChip.dataset.target = target;
+    dom.noteChipLabel.textContent = label;
+  }
+  syncWindowHeight();
+}
+
+/* ==========================================================================
+   Approval gates
+   ========================================================================== */
+
+/**
+ * Recognises a pending approval in a decoded stream chunk.
+ *
+ * The gate can arrive as an HTTP 409 body forwarded by the backend or as an
+ * inline event while streaming, and different tools describe themselves
+ * differently, so this accepts the shapes the server is known to emit and
+ * normalises them into one object. Returns null when the chunk is ordinary
+ * content.
+ */
+function approvalFromChunk(chunk) {
+  if (!chunk || typeof chunk !== "object") return null;
+
+  const node =
+    chunk.approval || chunk.pending_approval || chunk.approval_request || chunk;
+  const tier = String(node.tier || chunk.tier || "").toLowerCase();
+  const status = String(node.status || chunk.status || "").toLowerCase();
+
+  const pending =
+    tier === "ask" ||
+    status === "pending_approval" ||
+    status === "awaiting_approval" ||
+    node.awaiting_approval === true ||
+    chunk.event === "approval_required";
+  if (!pending) return null;
+
+  const id = node.id || node.request_id || node.approval_id || chunk.id;
+  if (!id) return null;
+
+  return {
+    id: String(id),
+    action: String(
+      node.action || node.tool || node.name || chunk.action || "run an action"
+    ),
+    target: node.target || node.note_target || chunk.note_target || null,
+    preview: approvalPreview(node),
+  };
+}
+
+/** Builds the markdown preview shown inside the approval card. */
+function approvalPreview(node) {
+  if (typeof node.diff === "string" && node.diff.trim()) {
+    return `\`\`\`diff\n${node.diff.trim()}\n\`\`\``;
+  }
+  if (typeof node.command === "string" && node.command.trim()) {
+    return `\`\`\`sh\n${node.command.trim()}\n\`\`\``;
+  }
+  for (const key of ["preview", "content", "body", "text", "summary"]) {
+    if (typeof node[key] === "string" && node[key].trim()) return node[key];
+  }
+  const args = node.arguments || node.args || node.params;
+  if (args && typeof args === "object") {
+    return `\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``;
+  }
+  return "_No preview was supplied for this action._";
+}
+
+/**
+ * Colours a unified diff inside the preview.
+ *
+ * Operates on `textContent` and rebuilds the node from escaped pieces, so the
+ * escape-first guarantee of the renderer still holds.
+ */
+function decorateDiff(container) {
+  for (const code of container.querySelectorAll("pre code.language-diff")) {
+    const html = code.textContent
+      .split("\n")
+      .map((line) => {
+        const escaped = escapeHtml(line);
+        if (/^(\+\+\+|---|@@|diff |index )/.test(line)) {
+          return `<span class="diff-meta">${escaped || "&nbsp;"}</span>`;
+        }
+        if (line.startsWith("+")) {
+          return `<span class="diff-add">${escaped || "&nbsp;"}</span>`;
+        }
+        if (line.startsWith("-")) {
+          return `<span class="diff-remove">${escaped || "&nbsp;"}</span>`;
+        }
+        return `<span>${escaped || "&nbsp;"}</span>`;
+      })
+      .join("");
+    code.innerHTML = html;
+  }
+}
+
+/** Renders the gate and hands the keyboard to it. */
+function openApproval(approval) {
+  state.approval = approval;
+  setPhase("approval");
+
+  dom.approvalAction.textContent = approval.action;
+  dom.approvalTarget.hidden = !approval.target;
+  if (approval.target) {
+    dom.approvalTarget.textContent = String(approval.target);
+  }
+  dom.approvalPreview.innerHTML = renderMarkdown(approval.preview);
+  decorateDiff(dom.approvalPreview);
+  dom.approvalHint.textContent = "Nothing runs until you decide.";
+  dom.approvalApprove.disabled = false;
+  dom.approvalDeny.disabled = false;
+  dom.approval.hidden = false;
+  dom.cursor.hidden = true;
+  dom.stop.hidden = true;
+  // The turn is not streaming any more, it is waiting on a person.
+  if (!dom.card.hidden) dom.cardStatusText.textContent = "Paused for approval";
+
+  // A gate must survive the user clicking away to read what it is about.
+  setPinned(true, { silent: true });
+  syncWindowHeight();
+  dom.approvalApprove.focus();
+}
+
+/** Clears the gate. */
+function closeApproval() {
+  state.approval = null;
+  dom.approval.hidden = true;
+  dom.approvalPreview.innerHTML = "";
+  syncWindowHeight();
+}
+
+/** Sends the decision and reports the outcome in the answer card. */
+async function decideApproval(approved) {
+  const approval = state.approval;
+  if (!approval) return;
+
+  dom.approvalApprove.disabled = true;
+  dom.approvalDeny.disabled = true;
+  dom.approvalHint.textContent = approved ? "Approving…" : "Denying…";
+
+  try {
+    await invokeStrict("decide_approval", { id: approval.id, approved });
+    closeApproval();
+    setPhase("done");
+    state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${
+      approved ? "Approved" : "Denied"
+    } \`${approval.action}\` from the desktop spotlight.`;
+    openCard(approved ? "Approved" : "Denied");
+    paint({ immediate: true });
+  } catch (error) {
+    dom.approvalApprove.disabled = false;
+    dom.approvalDeny.disabled = false;
+    dom.approvalHint.textContent = String(
+      (error && error.message) || error || "the decision could not be sent"
+    );
+  } finally {
+    await setPinned(false, { silent: true });
+  }
+}
+
+/* ==========================================================================
    Streaming
    ========================================================================== */
 
@@ -665,6 +895,14 @@ function consumeLine(rawLine) {
     return true;
   }
 
+  const approval = approvalFromChunk(chunk);
+  if (approval) {
+    openApproval(approval);
+    // The turn is now waiting on a person, so the stream is over as far as the
+    // card is concerned.
+    return true;
+  }
+
   const route = routeFromPayload(chunk);
   if (route) applyRoute(route);
 
@@ -698,54 +936,42 @@ function abortStream() {
 /**
  * Streams through the Rust backend over a Tauri channel.
  *
- * This is the real transport. Going through Rust means no CORS negotiation, no
- * preflight round trip to reach a loopback service, and no auth token in
- * JavaScript; cancelling drops the socket rather than abandoning a fetch.
+ * The channel carries raw response lines; the promise carries the terminal
+ * state. That split means the frontend never has to infer "the stream ended"
+ * from silence, and a transport failure arrives as a rejection rather than a
+ * card that spins forever.
  */
 async function streamViaBackend(payload) {
   const channel = new TAURI.core.Channel();
-  let closed = false;
+  let settled = false;
 
-  const close = (phase, statusText) => {
-    if (closed) return;
-    closed = true;
-    finishStream(phase, statusText);
-  };
-
-  channel.onmessage = (message) => {
-    if (!message || closed) return;
-    switch (message.event) {
-      case "chunk":
-        // `consumeLine` returns true on the stream's own terminator, which can
-        // arrive before the body closes.
-        if (consumeLine(message.data)) {
-          invoke("cancel_chat");
-          close("done");
-        }
-        break;
-      case "error":
-        showError(String(message.message ?? "the stream failed"));
-        close("error");
-        refreshHealth();
-        break;
-      case "done":
-        close(state.phase === "error" ? "error" : "done");
-        break;
-      default:
-        console.warn("[jarvis] unknown chat event:", message);
+  channel.onmessage = (line) => {
+    if (settled || typeof line !== "string") return;
+    // `consumeLine` returns true on the stream's own terminator, and on an
+    // approval gate — both mean stop reading.
+    if (consumeLine(line)) {
+      settled = true;
+      invoke("cancel_chat");
     }
   };
 
   state.abort = () => {
-    closed = true;
+    settled = true;
     invoke("cancel_chat");
     finishStream("done", "Stopped");
   };
 
-  const started = await invoke("stream_chat", { ...payload, channel });
-  if (started === null && !closed) {
-    showError("The backend refused to start the stream. Check the app log.");
-    close("error");
+  try {
+    await invokeStrict("stream_chat", { ...payload, onEvent: channel });
+    if (settled) return;
+    settled = true;
+    finishStream(state.phase === "error" ? "error" : "done");
+  } catch (error) {
+    if (settled) return;
+    settled = true;
+    showError(String((error && error.message) || error));
+    finishStream("error");
+    refreshHealth();
   }
 }
 
@@ -768,12 +994,11 @@ async function streamViaFetch(payload) {
       },
       body: JSON.stringify({
         messages: payload.messages,
-        prompt: payload.prompt,
         has_image: payload.hasImage,
         images: payload.images,
         stream: true,
-        auto: true,
-        client: "jarvis-desktop",
+        auto: payload.auto,
+        ...(payload.noteTarget ? { note_target: payload.noteTarget } : {}),
       }),
       signal: controller.signal,
     });
@@ -860,18 +1085,26 @@ async function send(promptText) {
   // Stay open while the answer streams, even if focus wanders.
   await setPinned(true, { silent: true });
 
+  // A `#log` / `#joplin` prefix pre-routes the turn: the prefix is stripped
+  // from the text, declared as `note_target`, and restated as a system turn so
+  // a server reading either mechanism lands in the same place.
+  const { target: noteTarget, body } = parseNotePrefix(message);
+  const text = noteTarget ? body.trim() : message;
+
   // Clipboard context rides as a system turn; the server validates an
   // OpenAI-shaped `messages` array and routes on `has_image`.
   const payload = {
-    prompt: message,
     messages: [
+      ...(noteTarget ? [{ role: "system", content: NOTE_INSTRUCTIONS[noteTarget] }] : []),
       ...(state.clipboard
         ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
         : []),
-      { role: "user", content: message },
+      { role: "user", content: text },
     ],
     hasImage: Boolean(state.capture),
     images: state.capture ? [state.capture] : [],
+    auto: true,
+    noteTarget,
   };
 
   if (IS_TAURI) {
@@ -925,8 +1158,10 @@ async function setPinned(pinned, { silent = false } = {}) {
 /** Clears the composer and hides the window. */
 async function dismiss() {
   abortStream();
+  closeApproval();
   dom.prompt.value = "";
   autoGrowPrompt();
+  syncNoteChip();
   state.capture = null;
   state.clipboard = null;
   dom.captureThumb.removeAttribute("src");
@@ -953,6 +1188,11 @@ function focusInput({ selectAll = true } = {}) {
 }
 
 function submitCurrentPrompt() {
+  // A pending gate owns Enter: the safe thing must be the deliberate thing.
+  if (state.approval) {
+    decideApproval(true);
+    return;
+  }
   const value = dom.prompt.value;
   if (!value.trim()) return;
   dom.prompt.value = "";
@@ -964,7 +1204,10 @@ function submitCurrentPrompt() {
    Event wiring
    ========================================================================== */
 
-dom.prompt.addEventListener("input", autoGrowPrompt);
+dom.prompt.addEventListener("input", () => {
+  autoGrowPrompt();
+  syncNoteChip();
+});
 
 dom.prompt.addEventListener("keydown", (event) => {
   // Enter sends; Shift+Enter inserts a newline.
@@ -979,6 +1222,11 @@ dom.prompt.addEventListener("keydown", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
+    // A pending gate owns Esc, and denying is what closing it means.
+    if (state.approval) {
+      decideApproval(false);
+      return;
+    }
     // The first Esc stops a running stream; a second one dismisses the window.
     if (state.abort) {
       abortStream();
@@ -1009,6 +1257,9 @@ dom.copy.addEventListener("click", async () => {
 });
 
 dom.pin.addEventListener("click", () => setPinned(!state.pinned));
+
+dom.approvalApprove.addEventListener("click", () => decideApproval(true));
+dom.approvalDeny.addEventListener("click", () => decideApproval(false));
 
 dom.captureRemove.addEventListener("click", () => {
   state.capture = null;
@@ -1069,6 +1320,23 @@ listen("screen-captured", (event) => {
   focusInput();
 });
 
+listen("quick-note-summon", (event) => {
+  const target = String(event.payload || "logseq");
+  const prefix = target === "joplin" ? "#joplin " : "#log ";
+  // Keep whatever the user had already typed; just arm the destination.
+  const existing = dom.prompt.value.trim();
+  const { target: current, body } = parseNotePrefix(dom.prompt.value);
+  dom.prompt.value = current
+    ? `${prefix}${body.trim()}`
+    : `${prefix}${existing}`;
+  autoGrowPrompt();
+  syncNoteChip();
+  focusInput({ selectAll: false });
+  // Put the caret after the prefix so typing continues the note.
+  const caret = dom.prompt.value.length;
+  dom.prompt.setSelectionRange(caret, caret);
+});
+
 listen("capture-failed", (event) => {
   showError(`Desktop capture failed: ${String(event.payload || "unknown error")}`);
 });
@@ -1085,6 +1353,7 @@ listen("pin-changed", (event) => {
    ========================================================================== */
 
 applyRoute(DEFAULT_ROUTE);
+syncNoteChip();
 autoGrowPrompt();
 syncWindowHeight();
 refreshHealth();

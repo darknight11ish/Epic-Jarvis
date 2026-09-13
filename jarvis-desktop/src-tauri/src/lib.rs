@@ -4,7 +4,8 @@
 //! defines the running application:
 //!
 //! * plugin registration — global shortcut, clipboard manager, notifications;
-//! * the three global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`);
+//! * the four global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`,
+//!   `Alt+Shift+N`);
 //! * the notification-area tray icon ([`tray::create_tray`]);
 //! * window vibrancy and focus-loss auto-hide ([`windows::setup_windows`]).
 //!
@@ -19,10 +20,10 @@ pub mod commands;
 pub mod tray;
 pub mod windows;
 
-use std::sync::atomic::AtomicU64;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use tauri::{async_runtime::JoinHandle, AppHandle, Emitter};
+use tauri::{AppHandle, Emitter};
+use tokio::sync::Notify;
 
 /// Label of the spotlight quickbar window.
 pub const QUICKBAR_LABEL: &str = "quickbar";
@@ -51,17 +52,61 @@ pub mod events {
     pub const HEALTH_REPORT: &str = "health-report";
     /// Payload: `bool` — whether the quickbar is pinned open.
     pub const PIN_CHANGED: &str = "pin-changed";
+    /// Payload: `&str` — the note target to pre-arm, `"logseq"` or `"joplin"`.
+    pub const QUICK_NOTE_SUMMON: &str = "quick-note-summon";
 }
 
-/// Tracks the one chat stream the spotlight is allowed to have in flight.
+/// Cancellation handle for the one chat stream the spotlight may have running.
 ///
-/// `generation` is bumped whenever a stream starts or is cancelled, so a task
-/// sitting between await points can tell that it has been superseded and stop
-/// delivering rather than racing the abort.
+/// [`Notify::notify_one`] leaves a permit behind when nobody is waiting yet, so
+/// a cancel that lands between `begin` and the `select!` still wins the race —
+/// which a bare `notify_waiters` would lose.
 #[derive(Default)]
 pub struct ChatState {
-    pub generation: AtomicU64,
-    pub task: Mutex<Option<JoinHandle<()>>>,
+    cancel: Mutex<Option<Arc<Notify>>>,
+}
+
+impl ChatState {
+    /// Starts a stream, cancelling whatever was already running. The returned
+    /// handle is what the new stream selects against.
+    pub fn begin(&self) -> Arc<Notify> {
+        let token = Arc::new(Notify::new());
+        let mut slot = self
+            .cancel
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(previous) = slot.replace(token.clone()) {
+            previous.notify_one();
+        }
+        token
+    }
+
+    /// Cancels the stream in flight, if any.
+    pub fn cancel(&self) {
+        if let Some(token) = self
+            .cancel
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+        {
+            token.notify_one();
+        }
+    }
+
+    /// Clears the slot, but only if it still holds this stream's handle — a
+    /// newer stream must not have its cancellation forgotten.
+    pub fn finish(&self, token: &Arc<Notify>) {
+        let mut slot = self
+            .cancel
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if slot
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, token))
+        {
+            *slot = None;
+        }
+    }
 }
 
 /// Emits an event to the quickbar window only.
@@ -96,6 +141,8 @@ struct Hotkeys {
     /// ERROR_HOTKEY_ALREADY_REGISTERED (1409) and the user gets the Snipping
     /// Tool instead of the Jarvis vision pipeline.
     capture_screen: tauri_plugin_global_shortcut::Shortcut,
+    /// `Alt+Shift+N` — summon the bar pre-armed for a Logseq journal note.
+    quick_note: tauri_plugin_global_shortcut::Shortcut,
 }
 
 #[cfg(desktop)]
@@ -106,6 +153,7 @@ impl Hotkeys {
             toggle_quickbar: Shortcut::new(Some(Modifiers::ALT), Code::Space),
             ingest_clipboard: Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyJ),
             capture_screen: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS),
+            quick_note: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyN),
         }
     }
 }
@@ -159,6 +207,22 @@ fn capture_desktop(app: &AppHandle) {
     });
 }
 
+/// Default note target for the quick-capture hotkey.
+///
+/// Logseq is the dev/agent journal and the one a keystroke-speed capture almost
+/// always means; the Joplin vault is reached by typing `#joplin` instead.
+pub const DEFAULT_NOTE_TARGET: &str = "logseq";
+
+/// Summons the bar pre-armed for a note. The frontend fills in the prefix.
+#[cfg(desktop)]
+fn summon_quick_note(app: &AppHandle) {
+    if let Err(err) = windows::show_quickbar(app) {
+        eprintln!("[jarvis] unable to show the quickbar: {err}");
+        return;
+    }
+    emit_quickbar(app, events::QUICK_NOTE_SUMMON, DEFAULT_NOTE_TARGET);
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -173,6 +237,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::stream_chat,
             commands::cancel_chat,
+            commands::decide_approval,
             commands::capture_screen,
             commands::check_server_health,
             commands::hide_quickbar,
@@ -199,6 +264,7 @@ pub fn run() {
         let toggle = hotkeys.toggle_quickbar;
         let ingest = hotkeys.ingest_clipboard;
         let capture = hotkeys.capture_screen;
+        let quick_note = hotkeys.quick_note;
 
         builder = builder.plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -224,6 +290,8 @@ pub fn run() {
                         ingest_clipboard(app);
                     } else if shortcut == &capture {
                         capture_desktop(app);
+                    } else if shortcut == &quick_note {
+                        summon_quick_note(app);
                     }
                 })
                 .build(),
@@ -257,6 +325,7 @@ pub fn run() {
                     ("Alt+Space", hotkeys.toggle_quickbar),
                     ("Win+Shift+J", hotkeys.ingest_clipboard),
                     ("Alt+Shift+S", hotkeys.capture_screen),
+                    ("Alt+Shift+N", hotkeys.quick_note),
                 ] {
                     match handle.global_shortcut().register(shortcut) {
                         Ok(()) => println!("[jarvis] hotkey {label} registered"),

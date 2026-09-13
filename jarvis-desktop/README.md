@@ -18,6 +18,7 @@ driving a WebView2 frontend.
 | `Alt` + `Space` | Toggle the quickbar. On show it is centred, focused, and the frontend receives `focus-input`. |
 | `Win` + `Shift` + `J` | Read the clipboard and inject it into the quickbar as context. |
 | `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
+| `Alt` + `Shift` + `N` | Summon the bar pre-armed for a Logseq journal note (`#log `). |
 
 Capture is **not** bound to `Win+Shift+S`: the shell owns that for the Snipping
 Tool, so `RegisterHotKey` returns ERROR_HOTKEY_ALREADY_REGISTERED (1409) and the
@@ -84,7 +85,8 @@ Commands exposed to the frontend (`invoke("<name>", …)`):
 | Command | Purpose |
 |---------|---------|
 | `stream_chat` | Open a chat stream against the Jarvis server and push each response line down a Tauri channel. Returns the stream's generation number. |
-| `cancel_chat` | Abort the stream in flight. |
+| `cancel_chat` | Abort the stream in flight; drops the socket, so the workstation stops generating. |
+| `decide_approval` | Answer a pending approval — `POST /api/approve` or `/api/deny` with `{id, by: "desktop_spotlight"}`. |
 | `capture_screen` | Grab the primary display, return a base64 JPEG data URI. |
 | `check_server_health` | Probe Jarvis (`:4719/api/status`), Ollama (`:11434/api/tags`) and LiteLLM (`:4000/health`) concurrently; returns a structured report. |
 | `hide_quickbar` / `show_quickbar` | Dismiss or summon the spotlight. |
@@ -121,6 +123,45 @@ its command line, Rust's argument escaping targets the C runtime convention
 rather than cmd's metacharacters, and link text here is written by a language
 model — a URL containing `&` would become a second command.
 
+## Dual-note quick capture
+
+A prefix at the head of the prompt pre-routes the turn and shows a chip beside
+the reactor:
+
+| Prefix | Target | Chip |
+|--------|--------|------|
+| `#log`, `#logseq`, `#journal` | Logseq daily journal (`append_logseq_journal`) | cyan **Logseq Journal** |
+| `#joplin`, `#vault` | Joplin personal vault (`create_joplin_note` / `search_joplin`) | violet **Joplin Vault** |
+
+`Alt+Shift+N` summons the bar with `#log ` already typed and the caret after
+it; anything already in the box is kept.
+
+The prefix is stripped before sending. Routing is declared twice, so a server
+reading either mechanism lands in the same place: a top-level `note_target`
+field, and a system turn naming the tool. `note_target` is additive — a server
+that does not know the field ignores it.
+
+## Approval gates
+
+When the server answers `409` or streams a chunk marked `"tier": "ask"`, the
+spotlight renders an approval card instead of prose: the action name, a preview
+of the change, and Approve / Deny. Nothing runs until the human decides.
+
+* The gate pins the window, so clicking away to read the diff does not dismiss
+  it.
+* `Enter` approves and `Esc` denies — both keys are taken over for as long as
+  the gate is open, so neither can be hit by muscle memory meaning something
+  else.
+* A `diff` preview is colour-coded by rebuilding the escaped text into tagged
+  spans, so the escape-first guarantee still holds — no raw HTML is ever
+  inserted.
+* The card is fed by whatever the server sends. It recognises the id under
+  `id`, `request_id` or `approval_id`; the action under `action`, `tool` or
+  `name`; and a preview from `diff`, `command`, `preview`, `content`, `body`,
+  `text`, `summary`, or an `arguments` object rendered as JSON. Anything nested
+  under `approval`, `pending_approval` or `approval_request` is unwrapped
+  first.
+
 ## Chat protocol
 
 Chat requests are made **from Rust**, not from the WebView. `stream_chat` posts
@@ -130,20 +171,20 @@ response down a `tauri::ipc::Channel`:
 ```jsonc
 {
   "messages": [
+    { "role": "system", "content": "Route this turn to the Logseq daily journal…" },
     { "role": "system", "content": "Context:\n…clipboard…" },
     { "role": "user",   "content": "…" }
   ],
-  "prompt": "…",
   "has_image": true,
   "images": ["data:image/jpeg;base64,…"],
   "stream": true,
   "auto": true,
-  "client": "jarvis-desktop"
+  "note_target": "logseq"   // only when a prefix pre-routed the turn
 }
 ```
 
-Headers: `X-Jarvis-Client: hud`, plus `X-Jarvis-Token` when the `JARVIS_TOKEN`
-environment variable is set on the app process.
+Headers: `X-Jarvis-Client: hud`, plus `X-Jarvis-Token` when `JARVIS_TOKEN` or
+`HUD_TOKEN` is set in the app process's environment.
 
 Going through Rust rather than `fetch` buys four things:
 
@@ -159,11 +200,13 @@ Going through Rust rather than `fetch` buys four things:
 * **One stream at a time.** Starting a stream bumps a generation counter and
   aborts the previous task, so a superseded stream cannot deliver late chunks.
 
-Channel events are `{ "event": "chunk", "data": "<line>" }`,
-`{ "event": "done", "status": 200 }` and
-`{ "event": "error", "message": "…" }`. Lines are assembled from raw bytes in
-Rust, so a multi-byte character split across two network chunks is never
-decoded half-way.
+The channel carries raw response lines and the promise carries the terminal
+state: `stream_chat` resolves when the body ends and rejects with the failure
+text otherwise, so the frontend never infers "the stream ended" from silence.
+A `409` is not a failure — the body is forwarded down the channel so the
+approval card renders through the normal parsing path. Lines are assembled from
+raw bytes in Rust, so a multi-byte character split across two network chunks is
+never decoded half-way.
 
 The frontend parses each line itself, accepting Server-Sent Events
 (`data: {…}`, `[DONE]`), newline-delimited JSON and plain text, and reading

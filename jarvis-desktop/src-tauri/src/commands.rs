@@ -6,12 +6,11 @@
 //! structs. Failures come back as `Result::Err(String)` and surface in the
 //! frontend as a rejected promise.
 
-use std::sync::atomic::Ordering;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 use crate::{windows, ChatState, HUD_LABEL, JARVIS_SERVER_URL, LITELLM_URL, OLLAMA_URL};
@@ -32,6 +31,9 @@ const CHAT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 /// Value of the `X-Jarvis-Client` header. The server accepts a request whose
 /// `Origin` is absent or unrecognised only when this marks it first-party.
 const JARVIS_CLIENT: &str = "hud";
+/// Approval decisions are a single small round trip, so they do get a total
+/// timeout — unlike the chat stream.
+const APPROVAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ---------------------------------------------------------------------------
 // Payload types
@@ -94,39 +96,18 @@ pub struct HealthReport {
     pub services: Vec<ServiceStatus>,
 }
 
-/// One turn of the transcript, in the OpenAI shape the Jarvis server validates.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub role: String,
-    pub content: String,
-}
-
-/// What the backend pushes down a chat [`Channel`].
-///
-/// A typed enum rather than raw strings so the terminal and failure cases are
-/// explicit: the frontend never has to infer "the stream ended" from silence.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "event", rename_all = "camelCase")]
-pub enum ChatEvent {
-    /// One complete line of the response body, newline stripped. SSE framing,
-    /// NDJSON and bare text all arrive this way and are parsed frontend-side.
-    Chunk { data: String },
-    /// The response body ended cleanly.
-    Done { status: u16 },
-    /// The request failed, or the server answered with a non-2xx.
-    Error { message: String },
-}
-
 /// Shared secret for `X-Jarvis-Token`, read once from the environment.
 ///
-/// Keeping it in the backend means the token never enters WebView2 memory,
-/// where any script running in the HUD could reach it.
+/// `JARVIS_TOKEN` wins; `HUD_TOKEN` is accepted as the name the server itself
+/// uses. Keeping it in the backend means the token never enters WebView2
+/// memory, where any script running in the HUD could reach it.
 fn jarvis_token() -> Option<&'static String> {
     static TOKEN: OnceLock<Option<String>> = OnceLock::new();
     TOKEN
         .get_or_init(|| {
-            std::env::var("JARVIS_TOKEN")
-                .ok()
+            ["JARVIS_TOKEN", "HUD_TOKEN"]
+                .iter()
+                .find_map(|name| std::env::var(name).ok())
                 .map(|t| t.trim().to_string())
                 .filter(|t| !t.is_empty())
         })
@@ -370,93 +351,26 @@ pub async fn check_server_health() -> Result<HealthReport, String> {
 // Chat streaming
 // ---------------------------------------------------------------------------
 
-/// Aborts whatever stream is in flight, if any.
-fn abort_active_stream(state: &ChatState) {
-    if let Some(handle) = state
-        .task
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .take()
-    {
-        handle.abort();
+/// Shared `reqwest` client settings for talking to the Jarvis server.
+///
+/// There is deliberately no *total* timeout: a chat response is a long-lived
+/// body, and `Client::timeout` covers the read as well as the connect, so it
+/// would guillotine a long answer mid-sentence.
+fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder()
+        .connect_timeout(CHAT_CONNECT_TIMEOUT)
+        // A loopback service; a proxy would only get in the way.
+        .no_proxy();
+    if let Some(timeout) = total_timeout {
+        builder = builder.timeout(timeout);
     }
+    builder
+        .build()
+        .map_err(|e| format!("unable to build the HTTP client: {e}"))
 }
 
-/// Opens a chat stream against the local Jarvis server and pushes each line of
-/// the response down `channel`.
-///
-/// The request is made from Rust rather than from the WebView on purpose:
-///
-/// * no CORS and no preflight — a native client should not be negotiating with
-///   a browser sandbox to reach its own loopback service;
-/// * `X-Jarvis-Token` stays in the backend instead of sitting in a JavaScript
-///   constant that any script in the HUD could read;
-/// * cancelling drops the socket immediately rather than abandoning a fetch.
-///
-/// Returns the generation number of the stream it started. Starting a stream
-/// cancels the previous one, so the spotlight can only ever have one in flight.
-#[tauri::command]
-pub fn stream_chat(
-    app: AppHandle,
-    state: State<'_, ChatState>,
-    prompt: String,
-    messages: Vec<ChatMessage>,
-    has_image: bool,
-    images: Vec<String>,
-    channel: Channel<ChatEvent>,
-) -> Result<u64, String> {
-    abort_active_stream(&state);
-    let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
-
-    let body = serde_json::json!({
-        "messages": messages,
-        "prompt": prompt,
-        "has_image": has_image,
-        "images": images,
-        "stream": true,
-        "auto": true,
-        "client": "jarvis-desktop",
-    });
-
-    let handle = tauri::async_runtime::spawn(async move {
-        let outcome = pump_chat(&app, generation, body, &channel).await;
-        if let Err(message) = outcome {
-            // A cancelled stream is not a failure worth reporting to the user.
-            if is_current(&app, generation) {
-                let _ = channel.send(ChatEvent::Error { message });
-            }
-        }
-    });
-
-    *state
-        .task
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(handle);
-
-    Ok(generation)
-}
-
-/// Cancels the in-flight stream, if there is one.
-#[tauri::command]
-pub fn cancel_chat(state: State<'_, ChatState>) {
-    // Bumping the generation makes any chunk still in flight stale, so a task
-    // that is between await points cannot deliver after the abort.
-    state.generation.fetch_add(1, Ordering::SeqCst);
-    abort_active_stream(&state);
-}
-
-/// True while `generation` is still the stream the frontend is listening to.
-fn is_current(app: &AppHandle, generation: u64) -> bool {
-    app.state::<ChatState>().generation.load(Ordering::SeqCst) == generation
-}
-
-/// Drives one request to completion, forwarding whole lines as they arrive.
-async fn pump_chat(
-    app: &AppHandle,
-    generation: u64,
-    body: serde_json::Value,
-    channel: &Channel<ChatEvent>,
-) -> Result<(), String> {
+/// `X-Jarvis-Client` and, when configured, `X-Jarvis-Token`.
+fn jarvis_headers() -> Result<reqwest::header::HeaderMap, String> {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "X-Jarvis-Client",
@@ -464,21 +378,79 @@ async fn pump_chat(
     );
     if let Some(token) = jarvis_token() {
         let value = reqwest::header::HeaderValue::from_str(token).map_err(|_| {
-            "JARVIS_TOKEN contains characters that cannot go in a header".to_string()
+            "JARVIS_TOKEN/HUD_TOKEN contains characters that cannot go in a header".to_string()
         })?;
         headers.insert("X-Jarvis-Token", value);
     }
+    Ok(headers)
+}
 
-    let client = reqwest::Client::builder()
-        .connect_timeout(CHAT_CONNECT_TIMEOUT)
-        .no_proxy()
-        .build()
-        .map_err(|e| format!("unable to build the HTTP client: {e}"))?;
+/// Opens a chat stream against the Jarvis server and forwards each line of the
+/// response body to the frontend over `on_event`.
+///
+/// The request is made from Rust rather than from the WebView on purpose:
+///
+/// * no CORS and no preflight `OPTIONS` — a native client should not negotiate
+///   with a browser sandbox to reach its own loopback service;
+/// * the token stays in the backend instead of sitting in JavaScript memory
+///   where a script injected into the HUD could read it;
+/// * cancelling drops the response future, which drops the connection, which
+///   stops the workstation generating tokens nobody is waiting for.
+///
+/// The future resolves when the body ends, and rejects with the failure text if
+/// the request could not be completed — so the frontend learns the terminal
+/// state from the promise and never has to infer it from silence.
+#[tauri::command]
+pub async fn stream_chat(
+    app: AppHandle,
+    messages: Vec<serde_json::Value>,
+    has_image: bool,
+    images: Vec<String>,
+    auto: bool,
+    note_target: Option<String>,
+    on_event: Channel<String>,
+) -> Result<(), String> {
+    let cancel = app.state::<ChatState>().begin();
 
-    let mut response = client
+    let mut payload = serde_json::json!({
+        "messages": messages,
+        "has_image": has_image,
+        "images": images,
+        "stream": true,
+        "auto": auto,
+    });
+    // Additive: only present when a #log / #joplin prefix pre-routed the turn,
+    // so a server that does not know the field simply ignores it.
+    if let Some(target) = note_target.as_deref().filter(|t| !t.is_empty()) {
+        payload["note_target"] = serde_json::Value::String(target.to_string());
+    }
+
+    // `notified()` consumes a permit left by `notify_one`, so a cancel that
+    // lands before this future is polled still wins the race.
+    let outcome = tokio::select! {
+        result = pump_chat(payload, &on_event) => result,
+        _ = cancel.notified() => Ok(()),
+    };
+
+    app.state::<ChatState>().finish(&cancel);
+    outcome
+}
+
+/// Cancels the stream in flight, if there is one.
+///
+/// Dropping the `pump_chat` future closes the HTTP connection, so the server
+/// sees the client disappear immediately rather than after the model finishes.
+#[tauri::command]
+pub fn cancel_chat(state: State<'_, ChatState>) {
+    state.cancel();
+}
+
+/// Drives one request to completion, forwarding whole lines as they arrive.
+async fn pump_chat(payload: serde_json::Value, on_event: &Channel<String>) -> Result<(), String> {
+    let mut response = jarvis_client(None)?
         .post(format!("{JARVIS_SERVER_URL}/api/chat"))
-        .headers(headers)
-        .json(&body)
+        .headers(jarvis_headers()?)
+        .json(&payload)
         .send()
         .await
         .map_err(|e| {
@@ -491,64 +463,100 @@ async fn pump_chat(
 
     let status = response.status();
     if !status.is_success() {
-        let detail = response.text().await.unwrap_or_default();
-        let detail = detail.trim();
-        return Err(if detail.is_empty() {
+        let body = response.text().await.unwrap_or_default();
+        // 409 is the approval gate, not a failure: the body describes what the
+        // agent wants to do. Forward it so the frontend renders the card
+        // through its normal parsing path.
+        if status == reqwest::StatusCode::CONFLICT {
+            let _ = on_event.send(body);
+            return Ok(());
+        }
+        let body = body.trim();
+        return Err(if body.is_empty() {
             format!("the server answered HTTP {}", status.as_u16())
         } else {
-            format!("the server answered HTTP {}: {detail}", status.as_u16())
+            format!("the server answered HTTP {}: {body}", status.as_u16())
         });
     }
 
-    // Lines are assembled from raw bytes so a multi-byte character split across
-    // two network chunks is never decoded half-way.
+    // Lines are cut from raw bytes so a multi-byte character split across two
+    // network chunks is never decoded half-way.
     let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
 
-    loop {
-        if !is_current(app, generation) {
-            return Ok(());
-        }
-
-        match response.chunk().await {
-            Ok(Some(bytes)) => {
-                buffer.extend_from_slice(&bytes);
-                while let Some(newline) = buffer.iter().position(|b| *b == b'\n') {
-                    let line: Vec<u8> = buffer.drain(..=newline).collect();
-                    let text = String::from_utf8_lossy(&line[..line.len() - 1])
-                        .trim_end_matches('\r')
-                        .to_string();
-                    // Blank lines are only SSE frame separators; dropping them
-                    // here saves an IPC hop per frame.
-                    if text.trim().is_empty() {
-                        continue;
-                    }
-                    if !is_current(app, generation) {
-                        return Ok(());
-                    }
-                    channel
-                        .send(ChatEvent::Chunk { data: text })
-                        .map_err(|e| format!("unable to deliver a chunk: {e}"))?;
-                }
+    while let Some(bytes) = response
+        .chunk()
+        .await
+        .map_err(|e| format!("the stream broke: {e}"))?
+    {
+        buffer.extend_from_slice(&bytes);
+        while let Some(newline) = buffer.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=newline).collect();
+            let text = String::from_utf8_lossy(&line[..line.len() - 1])
+                .trim_end_matches('\r')
+                .to_string();
+            // Blank lines are only SSE frame separators; dropping them here
+            // saves an IPC hop per frame.
+            if text.trim().is_empty() {
+                continue;
             }
-            Ok(None) => break,
-            Err(e) => return Err(format!("the stream broke: {e}")),
+            on_event
+                .send(text)
+                .map_err(|e| format!("unable to deliver a chunk: {e}"))?;
         }
     }
 
     // Whatever is left without a trailing newline is still a line.
-    if !buffer.is_empty() {
-        let text = String::from_utf8_lossy(&buffer).trim().to_string();
-        if !text.is_empty() && is_current(app, generation) {
-            let _ = channel.send(ChatEvent::Chunk { data: text });
-        }
+    let tail = String::from_utf8_lossy(&buffer).trim().to_string();
+    if !tail.is_empty() {
+        let _ = on_event.send(tail);
     }
 
-    if is_current(app, generation) {
-        let _ = channel.send(ChatEvent::Done {
-            status: status.as_u16(),
-        });
-    }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Approval gates
+// ---------------------------------------------------------------------------
+
+/// Answers a pending autonomy approval.
+///
+/// `approved` picks the endpoint: `/api/approve` or `/api/deny`. Both carry
+/// `{"id": …, "by": "desktop_spotlight"}` so the server can attribute the
+/// decision to the machine the human was actually sitting at.
+#[tauri::command]
+pub async fn decide_approval(id: String, approved: bool) -> Result<serde_json::Value, String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("that approval has no id to answer".to_string());
+    }
+
+    let endpoint = if approved { "approve" } else { "deny" };
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{JARVIS_SERVER_URL}/api/{endpoint}"))
+        .headers(jarvis_headers()?)
+        .json(&serde_json::json!({ "id": id, "by": "desktop_spotlight" }))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {JARVIS_SERVER_URL}")
+            } else {
+                format!("unable to {endpoint} `{id}`: {e}")
+            }
+        })?;
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!(
+            "the server answered HTTP {} to /{endpoint}: {}",
+            status.as_u16(),
+            body.trim()
+        ));
+    }
+
+    Ok(serde_json::from_str(&body)
+        .unwrap_or_else(|_| serde_json::json!({ "ok": true, "endpoint": endpoint, "raw": body })))
 }
 
 // ---------------------------------------------------------------------------

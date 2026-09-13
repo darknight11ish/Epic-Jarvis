@@ -41,6 +41,11 @@
           </svg>
         </div>
 
+        <span class="note-chip" id="note-chip" data-target="" hidden>
+          <span class="note-chip-dot" aria-hidden="true"></span>
+          <span id="note-chip-label">Logseq Journal</span>
+        </span>
+
         <div class="field">
           <label class="sr-only" for="prompt">Ask Jarvis</label>
           <textarea
@@ -110,6 +115,35 @@
         </div>
       </div>
 
+      <!-- ── Approval gate ─────────────────────────────────────────────── -->
+      <section class="approval" id="approval" hidden aria-live="assertive">
+        <header class="approval-head">
+          <span class="approval-badge" aria-hidden="true">
+            <svg viewBox="0 0 16 16" focusable="false">
+              <path d="M8 1.6l5.6 2.2v3.6c0 3.3-2.3 6.2-5.6 7-3.3-.8-5.6-3.7-5.6-7V3.8L8 1.6Z" />
+              <path d="M5.6 8.1l1.7 1.7 3.3-3.4" class="approval-tick" />
+            </svg>
+          </span>
+          <div class="approval-title">
+            <span class="approval-kicker">Jarvis wants to</span>
+            <strong id="approval-action">run an action</strong>
+          </div>
+          <span class="approval-target" id="approval-target" hidden></span>
+        </header>
+
+        <div class="approval-preview markdown" id="approval-preview"></div>
+
+        <footer class="approval-actions">
+          <span class="approval-hint" id="approval-hint">Nothing runs until you decide.</span>
+          <button class="approval-button approval-deny" type="button" id="approval-deny">
+            Deny <kbd>Esc</kbd>
+          </button>
+          <button class="approval-button approval-approve" type="button" id="approval-approve">
+            Approve <kbd>↵</kbd>
+          </button>
+        </footer>
+      </section>
+
       <!-- ── Answer card ───────────────────────────────────────────────── -->
       <section class="card" id="card" hidden>
         <header class="card-head">
@@ -139,6 +173,7 @@
             <kbd>Esc</kbd> dismiss
             <kbd>Alt</kbd>+<kbd>Space</kbd> summon
             <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> capture
+            <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> note
           </span>
         </footer>
       </section>
