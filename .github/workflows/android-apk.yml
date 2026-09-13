@@ -13,7 +13,8 @@ on:
         default: "17"
   push:
     branches: ["**"]
-    paths-ignore: ["**.md", "docs/**", ".gitignore"]
+    # The desktop endpoint has no bearing on the APK.
+    paths-ignore: ["**.md", "docs/**", ".gitignore", "server/**"]
 
 concurrency:
   group: apk-${{ github.ref }}
