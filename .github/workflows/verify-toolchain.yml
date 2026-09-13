@@ -79,23 +79,33 @@ jobs:
           done
 
       - name: Which Compose BOM works with compileSdk 36
+        # bash without -e: a BOM that is not published, or a POM that does not
+        # mention ui-android, must skip that row rather than end the survey.
+        shell: bash {0}
         run: |
           set -uo pipefail
           echo "### Compose BOM -> compose version -> minCompileSdk" | tee -a "$GITHUB_STEP_SUMMARY"
           BASE=https://dl.google.com/dl/android/maven2
-          for bom in 2026.09.00 2026.08.00 2026.07.00 2026.06.00 2026.05.00 2026.04.00 2026.03.00 2026.02.00 2026.01.00 2025.12.00; do
-            pom=$(curl -sS "$BASE/androidx/compose/compose-bom/$bom/compose-bom-$bom.pom" 2>/dev/null || true)
-            ver=$(printf '%s' "$pom" | grep -A1 '<artifactId>ui-android</artifactId>' \
-                  | grep -o '<version>[^<]*' | head -1 | cut -d'>' -f2)
-            if [ -z "$ver" ]; then
+          for bom in 2026.09.00 2026.08.00 2026.07.00 2026.06.00 2026.05.00 \
+                     2026.04.00 2026.03.00 2026.02.00 2026.01.00 \
+                     2025.12.01 2025.11.00 2025.10.01 2025.09.00; do
+            pom=$(curl -sS --fail "$BASE/androidx/compose/compose-bom/$bom/compose-bom-$bom.pom" 2>/dev/null)
+            if [ -z "$pom" ]; then
               echo "- BOM $bom: not published" | tee -a "$GITHUB_STEP_SUMMARY"
               continue
             fi
-            # minCompileSdk lives in the AAR's own metadata, which is the thing
-            # CheckAarMetadata actually enforces.
-            curl -sS -o ui.aar "$BASE/androidx/compose/ui/ui-android/$ver/ui-android-$ver.aar" 2>/dev/null || true
+            ver=$(printf '%s' "$pom" \
+                  | grep -A2 '<artifactId>ui-android</artifactId>' \
+                  | grep -o '<version>[^<]*' | head -1 | cut -d'>' -f2)
+            if [ -z "$ver" ]; then
+              echo "- BOM $bom: no ui-android entry" | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            curl -sS --fail -o ui.aar \
+              "$BASE/androidx/compose/ui/ui-android/$ver/ui-android-$ver.aar" 2>/dev/null
             min=$(unzip -p ui.aar META-INF/com/android/build/gradle/aar-metadata.properties 2>/dev/null \
                   | grep '^minCompileSdk=' | cut -d= -f2 | tr -d '\r')
-            echo "- BOM $bom -> compose ${ver} -> minCompileSdk ${min:-unknown}" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "- BOM $bom -> compose ${ver} -> minCompileSdk ${min:-unknown}" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
             rm -f ui.aar
           done
