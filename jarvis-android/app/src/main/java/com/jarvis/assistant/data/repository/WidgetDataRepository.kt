@@ -110,8 +110,9 @@ object WidgetDataRepository {
         }
 
         scope.launch {
+            // No distinctUntilChanged: a StateFlow already conflates equal values,
+            // and kotlinx deprecates the operator on StateFlow at ERROR level.
             JarvisRuntime.desktopTelemetry
-                .distinctUntilChanged()
                 .collect { TelemetryWidget().updateAll(app) }
         }
 

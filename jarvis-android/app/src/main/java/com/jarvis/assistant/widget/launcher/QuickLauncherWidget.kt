@@ -9,6 +9,7 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.action.Action
 import androidx.glance.action.actionStartActivity
+import androidx.glance.appwidget.action.actionStartActivity as actionStartActivityIntent
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.cornerRadius
@@ -89,14 +90,14 @@ class QuickLauncherWidget : GlanceAppWidget() {
     }
 
     private fun route(context: Context, action: String): Action =
-        actionStartActivity(
+        actionStartActivityIntent(
             Intent(context, MainActivity::class.java)
                 .setAction(action)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         )
 
     private fun capture(context: Context, target: String): Action =
-        actionStartActivity(
+        actionStartActivityIntent(
             Intent(context, MainActivity::class.java)
                 .setAction(MainActivity.ACTION_QUICK_CAPTURE)
                 .putExtra(MainActivity.EXTRA_CAPTURE_TARGET, target)
