@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Jarvis Mobile</string>
+    <string name="assist_label">Jarvis</string>
+
+    <string name="fgs_special_use_reason">Maintains the persistent link to the user\'s own self-hosted Jarvis server so approval requests and voice replies arrive while the device is locked.</string>
+
+    <string name="channel_approvals_name">Jarvis Approvals</string>
+    <string name="channel_approvals_description">Interactive approval requests from the Jarvis desktop server.</string>
+    <string name="channel_link_name">Jarvis Link</string>
+    <string name="channel_link_description">Ongoing status of the connection to the Jarvis desktop server.</string>
+
+    <string name="action_approve">Approve</string>
+    <string name="action_reject">Reject</string>
+</resources>

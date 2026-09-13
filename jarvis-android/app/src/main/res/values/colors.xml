@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pure black so AMOLED pixels stay unlit. -->
+    <color name="jarvis_black">#FF000000</color>
+    <color name="jarvis_cyan">#FF22D3EE</color>
+    <color name="ic_launcher_background">#FF000000</color>
+</resources>

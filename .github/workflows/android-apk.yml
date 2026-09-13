@@ -44,11 +44,15 @@ jobs:
           elif [ -f package.json ] && [ -d android ]; then
             kind=react-native
             dir=android
-          elif ls android/*.gradle* >/dev/null 2>&1; then
-            kind=gradle
-            dir=android
           elif ls ./*.gradle* >/dev/null 2>&1; then
             kind=gradle
+          else
+            # A Gradle project living in a subdirectory, e.g. jarvis-android/.
+            settings=$(find . -maxdepth 3 -name 'settings.gradle*' -not -path '*/build/*' | head -n1)
+            if [ -n "$settings" ]; then
+              kind=gradle
+              dir=$(dirname "$settings")
+            fi
           fi
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
