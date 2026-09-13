@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Jarvis</string>
+
+    <!--
+      §3.1(2). specialUse, not dataSync. dataSync is capped at six hours per
+      rolling 24h on Android 15; when the budget runs out the system calls
+      onTimeout() and then throws a fatal RemoteServiceException. For an
+      assistant meant to be there when you speak to it that is a crash on a
+      timer, not a limitation.
+
+      The usual cost of specialUse is a Play Console justification review. This
+      APK is sideloaded, never listed and non-commercial, so that cost does not
+      apply here.
+    -->
+    <string name="fgs_special_use_reason">Holds the live event connection to the
+        user\'s own Jarvis backend, running on their own machine, so approval
+        requests arrive while the screen is off.</string>
+
+    <string name="channel_link_name">Jarvis link</string>
+    <string name="channel_link_desc">Ongoing connection to your Jarvis backend.</string>
+</resources>

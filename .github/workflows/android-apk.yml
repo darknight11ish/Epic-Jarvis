@@ -14,7 +14,9 @@ on:
   push:
     branches: ["**"]
     # The desktop endpoint has no bearing on the APK.
-    paths-ignore: ["**.md", "docs/**", ".gitignore", "server/**"]
+    # Scoped to the old client: jarvis-client/ has its own workflow and a
+    # different AGP, so one detect step cannot serve both roots.
+    paths: ["jarvis-android/**", ".github/workflows/android-apk.yml"]
 
 concurrency:
   group: apk-${{ github.ref }}

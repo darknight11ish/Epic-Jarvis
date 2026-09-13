@@ -1,0 +1,49 @@
+name: Jarvis client
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "jarvis-client/**"
+      - ".github/workflows/jarvis-client.yml"
+
+concurrency:
+  group: jarvis-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jarvis-client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Assemble debug APK
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          find . -name '*.apk' -not -path './artifacts/*' -exec cp {} artifacts/ \;
+          ls -lh artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-client-debug-apk
+          path: jarvis-client/artifacts/*.apk
+          if-no-files-found: error
+          retention-days: 30
