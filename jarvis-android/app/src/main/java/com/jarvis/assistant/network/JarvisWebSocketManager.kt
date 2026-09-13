@@ -28,10 +28,11 @@ enum class ConnectionState { OFFLINE, RECONNECTING, CONNECTED }
 /**
  * Persistent link to the desktop server.
  *
- * Reconnects with exponential backoff (1s, 2s, 4s … capped at 30s) and relies on
- * OkHttp's 45-second ping/pong to keep the Tailscale path warm while the handset
- * is dozing — without traffic the NAT mapping is reclaimed and inbound approval
- * requests would stall until the next radio wake.
+ * Reconnects with exponential backoff (1s, 2s, 4s … capped at 30s) and pings on
+ * a 25-second interval to keep the Tailscale path warm while the handset dozes.
+ * Without traffic the NAT mapping is reclaimed and inbound approval requests
+ * stall until the next radio wake; carrier CGNAT gateways commonly reap idle
+ * mappings at 30 seconds, so the interval has to sit comfortably under that.
  */
 class JarvisWebSocketManager private constructor() {
 
@@ -57,8 +58,15 @@ class JarvisWebSocketManager private constructor() {
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
+    private val _binaryAudio = MutableSharedFlow<ByteArray>(
+        replay = 0,
+        extraBufferCapacity = 256,
+    )
+    val binaryAudio: SharedFlow<ByteArray> = _binaryAudio.asSharedFlow()
+
     @Volatile private var socket: WebSocket? = null
     @Volatile private var url: String? = null
+    @Volatile private var authToken: String? = null
     @Volatile private var shutdown = true
     private var attempt = 0
     private var reconnectJob: Job? = null
@@ -70,10 +78,12 @@ class JarvisWebSocketManager private constructor() {
      */
     @Volatile private var generation = 0
 
-    /** Idempotent: re-dials only when the target URL actually changed. */
-    fun connect(wsUrl: String) {
-        if (!shutdown && url == wsUrl && socket != null) return
+    /** Idempotent: re-dials only when the target URL or token actually changed. */
+    fun connect(wsUrl: String, token: String? = null) {
+        val normalizedToken = token?.takeIf { it.isNotBlank() }
+        if (!shutdown && url == wsUrl && authToken == normalizedToken && socket != null) return
         url = wsUrl
+        authToken = normalizedToken
         shutdown = false
         attempt = 0
         redial()
@@ -130,7 +140,10 @@ class JarvisWebSocketManager private constructor() {
     private fun openSocket() {
         val target = url ?: return
         _state.value = ConnectionState.RECONNECTING
-        val request = Request.Builder().url(target).build()
+        val request = Request.Builder()
+            .url(target)
+            .apply { authToken?.let { header("Authorization", "Bearer $it") } }
+            .build()
         socket = client.newWebSocket(request, Listener(generation))
     }
 
@@ -177,8 +190,11 @@ class JarvisWebSocketManager private constructor() {
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-            // Reserved for future binary downlink; audio arrives as audio_chunk today.
-            Log.d(TAG, "ignoring ${bytes.size} byte binary frame")
+            if (!current) return
+            if (bytes.size < 2) return
+            if (!_binaryAudio.tryEmit(bytes.toByteArray())) {
+                Log.w(TAG, "binary audio buffer full, dropped ${bytes.size} bytes")
+            }
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -210,7 +226,7 @@ class JarvisWebSocketManager private constructor() {
 
     companion object {
         private const val TAG = "JarvisWS"
-        private const val PING_SECONDS = 45L
+        private const val PING_SECONDS = 25L
         private const val BASE_BACKOFF_MS = 1_000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val NORMAL_CLOSURE = 1000

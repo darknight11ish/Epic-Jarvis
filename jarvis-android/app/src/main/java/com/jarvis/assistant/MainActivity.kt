@@ -61,6 +61,9 @@ class MainActivity : ComponentActivity() {
                 val desktop by JarvisRuntime.desktopTelemetry.collectAsStateWithLifecycle()
                 val approvals by JarvisRuntime.pendingApprovals.collectAsStateWithLifecycle()
                 val statusText by JarvisRuntime.statusText.collectAsStateWithLifecycle()
+                val blockingError by JarvisRuntime.blockingError.collectAsStateWithLifecycle()
+                val hasSecret by JarvisRuntime.settings.hasSharedSecret.collectAsStateWithLifecycle()
+                val hasToken by JarvisRuntime.settings.hasAuthToken.collectAsStateWithLifecycle()
 
                 val tick = resumeTick.intValue
                 var micGranted by remember { mutableStateOf(JarvisRuntime.hasMicPermission()) }
@@ -87,6 +90,9 @@ class MainActivity : ComponentActivity() {
                         statusText = statusText,
                         lastError = lastError,
                         batteryExempt = batteryExempt,
+                        blockingError = blockingError,
+                        hasSharedSecret = hasSecret,
+                        hasAuthToken = hasToken,
                     ),
                     actions = HudActions(
                         onServerAddressChange = JarvisRuntime::updateServerAddress,
@@ -101,6 +107,8 @@ class MainActivity : ComponentActivity() {
                         onApprove = { id -> JarvisRuntime.submitApprovalDecision(id, true) },
                         onReject = { id -> JarvisRuntime.submitApprovalDecision(id, false) },
                         onRequestBatteryExemption = ::requestBatteryExemption,
+                        onSharedSecretChange = JarvisRuntime::updateSharedSecret,
+                        onAuthTokenChange = JarvisRuntime::updateAuthToken,
                     ),
                     modifier = Modifier
                         .fillMaxSize()

@@ -32,9 +32,28 @@ class JarvisSettings(context: Context) {
             prefs.edit { putString(KEY_DEVICE_ID, it) }
         }
 
+    private val _hasSecret = MutableStateFlow(!prefs.getString(KEY_SECRET, "").isNullOrEmpty())
+
+    /** Whether a signing key exists, without exposing the key itself to the UI. */
+    val hasSharedSecret: StateFlow<Boolean> = _hasSecret.asStateFlow()
+
     var sharedSecret: String
         get() = prefs.getString(KEY_SECRET, "") ?: ""
-        set(value) = prefs.edit { putString(KEY_SECRET, value) }
+        set(value) {
+            prefs.edit { putString(KEY_SECRET, value) }
+            _hasSecret.value = value.isNotEmpty()
+        }
+
+    private val _hasAuthToken = MutableStateFlow(!prefs.getString(KEY_TOKEN, "").isNullOrEmpty())
+    val hasAuthToken: StateFlow<Boolean> = _hasAuthToken.asStateFlow()
+
+    /** Sent as `Authorization: Bearer` on the upgrade request, before the socket opens. */
+    var authToken: String
+        get() = prefs.getString(KEY_TOKEN, "") ?: ""
+        set(value) {
+            prefs.edit { putString(KEY_TOKEN, value) }
+            _hasAuthToken.value = value.isNotEmpty()
+        }
 
     fun setServerAddress(value: String) {
         val trimmed = value.trim()
@@ -57,12 +76,51 @@ class JarvisSettings(context: Context) {
         private const val PREFS = "jarvis_settings"
         private const val KEY_SERVER = "server_address"
         private const val KEY_SECRET = "shared_secret"
+        private const val KEY_TOKEN = "auth_token"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_HANDS_FREE = "hands_free"
 
         /** Tailscale CGNAT range; replace with your own desktop's Tailscale IP. */
         const val DEFAULT_SERVER = "100.64.0.1:4719"
         const val WS_PATH = "/api/mobile/ws"
+
+        /**
+         * Whether an unencrypted `ws://` target is somewhere the traffic cannot
+         * leave the private network.
+         *
+         * Android's network security config cannot express this: its domain rules
+         * take hostnames and IP literals, not CIDR ranges, so a 100.64.0.0/10 rule
+         * is not writable there and the check has to live in code.
+         */
+        fun isCleartextTargetPrivate(url: String): Boolean {
+            if (!url.startsWith("ws://", ignoreCase = true)) return true
+            val host = hostOf(url)?.lowercase() ?: return false
+
+            if (host == "localhost" || host == "::1" || host.startsWith("127.")) return true
+            if (host.endsWith(".ts.net") || host.endsWith(".local")) return true
+
+            val octets = host.split('.')
+            if (octets.size != 4) return false
+            val parts = octets.map { it.toIntOrNull() ?: return false }
+            if (parts.any { it !in 0..255 }) return false
+
+            return when {
+                // Tailscale CGNAT range.
+                parts[0] == 100 && parts[1] in 64..127 -> true
+                parts[0] == 10 -> true
+                parts[0] == 192 && parts[1] == 168 -> true
+                parts[0] == 172 && parts[1] in 16..31 -> true
+                else -> false
+            }
+        }
+
+        fun hostOf(url: String): String? {
+            val schemeEnd = url.indexOf("://").takeIf { it >= 0 }?.plus(3) ?: return null
+            val rest = url.substring(schemeEnd)
+            val authority = rest.substringBefore('/')
+            if (authority.startsWith("[")) return authority.substringAfter('[').substringBefore(']')
+            return authority.substringBefore(':').takeUnless { it.isEmpty() }
+        }
 
         fun normalizeToWebSocketUrl(raw: String): String {
             val input = raw.trim().ifEmpty { DEFAULT_SERVER }

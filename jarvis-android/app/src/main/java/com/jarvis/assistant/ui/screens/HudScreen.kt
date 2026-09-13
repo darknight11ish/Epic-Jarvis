@@ -38,6 +38,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jarvis.assistant.network.ApprovalRequestEvent
@@ -70,6 +72,10 @@ data class HudState(
     val lastError: String?,
     /** True once Android has been told to stop dozing this app. */
     val batteryExempt: Boolean,
+    /** Set when signing or the target address blocks an action outright. */
+    val blockingError: String?,
+    val hasSharedSecret: Boolean,
+    val hasAuthToken: Boolean,
 )
 
 data class HudActions(
@@ -79,6 +85,8 @@ data class HudActions(
     val onApprove: (String) -> Unit,
     val onReject: (String) -> Unit,
     val onRequestBatteryExemption: () -> Unit,
+    val onSharedSecretChange: (String) -> Unit,
+    val onAuthTokenChange: (String) -> Unit,
 )
 
 @Composable
@@ -100,6 +108,27 @@ fun HudScreen(state: HudState, actions: HudActions, modifier: Modifier = Modifie
                 address = state.serverAddress,
                 onCommit = actions.onServerAddressChange,
                 onReconnect = actions.onReconnect,
+            )
+        }
+
+        state.blockingError?.let { message ->
+            item(key = "blocking-error") {
+                WarningCard(text = message, actionLabel = null, onAction = null)
+            }
+        }
+
+        item(key = "pairing") {
+            SectionLabel("PAIRING")
+            SecretField(
+                label = "Signing secret",
+                isSet = state.hasSharedSecret,
+                onCommit = actions.onSharedSecretChange,
+            )
+            Spacer(Modifier.height(8.dp))
+            SecretField(
+                label = "Auth token (optional)",
+                isSet = state.hasAuthToken,
+                onCommit = actions.onAuthTokenChange,
             )
         }
 
@@ -248,6 +277,74 @@ private fun ServerAddressField(
             ),
         ) {
             Text("Link", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+/**
+ * Write-only: a stored secret is never read back into the UI, so a shoulder-surfer
+ * or a screenshot cannot recover it. The field reports only whether one is set.
+ */
+@Composable
+private fun SecretField(label: String, isSet: Boolean, onCommit: (String) -> Unit) {
+    var draft by rememberSaveable { mutableStateOf("") }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            label = {
+                Text(
+                    text = if (isSet) "$label — set" else label,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            },
+            placeholder = {
+                Text(
+                    text = if (isSet) "Enter a new value to replace" else "Not set",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            },
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    keyboard?.hide()
+                    onCommit(draft)
+                    draft = ""
+                },
+            ),
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = JarvisCyan,
+                unfocusedBorderColor = if (isSet) JarvisGreen.copy(alpha = 0.5f) else JarvisAmber,
+                focusedContainerColor = JarvisSurface,
+                unfocusedContainerColor = JarvisSurface,
+            ),
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(
+            onClick = {
+                keyboard?.hide()
+                onCommit(draft)
+                draft = ""
+            },
+            enabled = draft.isNotEmpty(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = JarvisSurface,
+                contentColor = JarvisCyan,
+                disabledContainerColor = JarvisSurface,
+                disabledContentColor = JarvisTextMuted,
+            ),
+        ) {
+            Text("Save", style = MaterialTheme.typography.labelSmall)
         }
     }
 }

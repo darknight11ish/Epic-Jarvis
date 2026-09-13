@@ -88,11 +88,16 @@ object JarvisRuntime {
     private val _micActive = MutableStateFlow(false)
     val micActive: StateFlow<Boolean> = _micActive.asStateFlow()
 
+    /** Non-null when a decision could not be signed or the target was refused. */
+    private val _blockingError = MutableStateFlow<String?>(null)
+    val blockingError: StateFlow<String?> = _blockingError.asStateFlow()
+
     /** Decisions taken while the socket was down, replayed on reconnect. */
     private val outbox = ConcurrentLinkedQueue<OutboundMessage>()
 
     @Volatile private var micStreamId: String? = null
     @Volatile private var expectingWavHeader = false
+    @Volatile private var downlinkTag: Int? = null
 
     @Synchronized
     fun initialize(context: Context) {
@@ -108,6 +113,7 @@ object JarvisRuntime {
         started = true
 
         scope.launch { socket.events.collect(::handleEvent) }
+        scope.launch { socket.binaryAudio.collect(::handleBinaryAudio) }
         scope.launch {
             socket.state.collect { state ->
                 if (state == ConnectionState.CONNECTED) onConnected()
@@ -117,19 +123,43 @@ object JarvisRuntime {
         connect()
     }
 
+    /**
+     * Refuses to dial an unencrypted target outside the Tailnet or a private LAN,
+     * so a mistyped address cannot put approvals and voice on the open internet.
+     */
     fun connect() {
-        socket.connect(settings.resolveWebSocketUrl())
+        val url = settings.resolveWebSocketUrl()
+        if (!JarvisSettings.isCleartextTargetPrivate(url)) {
+            _blockingError.value =
+                "Refusing plaintext ws:// to a public host. Use a Tailscale address or wss://."
+            socket.disconnect()
+            return
+        }
+        if (_blockingError.value?.startsWith("Refusing plaintext") == true) {
+            _blockingError.value = null
+        }
+        socket.connect(url, settings.authToken)
     }
 
     fun updateServerAddress(address: String) {
         settings.setServerAddress(address)
-        socket.connect(settings.resolveWebSocketUrl())
+        connect()
+    }
+
+    fun updateSharedSecret(secret: String) {
+        settings.sharedSecret = secret
+        if (secret.isNotEmpty()) _blockingError.value = null
+    }
+
+    fun updateAuthToken(token: String) {
+        settings.authToken = token
+        reconnectNow()
     }
 
     /** User-driven "try again now", bypassing the remaining backoff delay. */
     fun reconnectNow() {
         if (::settings.isInitialized) {
-            socket.connect(settings.resolveWebSocketUrl())
+            connect()
             socket.reconnectNow()
         }
     }
@@ -163,6 +193,7 @@ object JarvisRuntime {
 
             is AudioStreamStartEvent -> {
                 expectingWavHeader = event.encoding.equals("wav", ignoreCase = true)
+                downlinkTag = event.binaryTag
                 player.start(event.sampleRate, event.channels)
             }
 
@@ -177,6 +208,7 @@ object JarvisRuntime {
 
             is AudioStreamEndEvent -> {
                 expectingWavHeader = false
+                downlinkTag = null
                 player.finish()
             }
 
@@ -190,6 +222,19 @@ object JarvisRuntime {
 
             is StatusEvent -> _statusText.value = event.text
         }
+    }
+
+    /**
+     * Binary downlink: `[tag][pcm…]`, where the tag was announced by the
+     * audio_stream_start that opened the stream. Frames for any other tag belong
+     * to a stream that has already ended and are dropped.
+     */
+    private fun handleBinaryAudio(frame: ByteArray) {
+        val expected = downlinkTag ?: return
+        if (frame.isEmpty()) return
+        if ((frame[0].toInt() and 0xFF) != expected) return
+        if (frame.size <= 1) return
+        player.enqueue(stripWavHeaderIfPresent(frame.copyOfRange(1, frame.size)))
     }
 
     /** WAV downlinks carry a 44-byte RIFF header the AudioTrack must not play. */
@@ -245,22 +290,40 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * An unsigned decision is never sent. The request stays in the pending list
+     * and the HUD says why, rather than the desktop acting on an approval this
+     * handset cannot prove it authorised.
+     */
     fun submitApprovalDecision(requestId: String, approved: Boolean) {
         val now = System.currentTimeMillis()
-        val decision = ApprovalDecisionMessage(
+        val nonce = UUID.randomUUID().toString()
+        val signature = ApprovalSigner.sign(
+            secret = settings.sharedSecret,
             id = requestId,
             approved = approved,
             deviceId = settings.deviceId,
-            decidedAtMs = now,
-            signature = ApprovalSigner.sign(
-                secret = settings.sharedSecret,
+            atMs = now,
+            nonce = nonce,
+        )
+
+        if (signature == null) {
+            _blockingError.value =
+                "No pairing secret set, so this decision cannot be signed. Set one below."
+            telemetry.vibrate("alert")
+            return
+        }
+
+        sendOrQueue(
+            ApprovalDecisionMessage(
                 id = requestId,
                 approved = approved,
                 deviceId = settings.deviceId,
-                atMs = now,
+                decidedAtMs = now,
+                nonce = nonce,
+                signature = signature,
             ),
         )
-        sendOrQueue(decision)
         clearApproval(requestId)
         telemetry.vibrate(if (approved) "confirm" else "tick")
     }

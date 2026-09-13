@@ -17,6 +17,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Chunks land on a bounded channel and are drained by a single writer coroutine,
  * so a burst from the server cannot block the WebSocket reader thread.
+ *
+ * Playback does not begin on the first byte. [PREROLL_MS] of audio is written
+ * into the track first, giving the stream a jitter buffer: over cellular, packet
+ * arrival is bursty, and starting immediately means the track drains faster than
+ * the network refills it and the speech breaks up. The cost is a fixed startup
+ * delay, which is invisible next to network and synthesis latency.
  */
 class AudioPlayer {
 
@@ -35,13 +41,19 @@ class AudioPlayer {
         if (playing.get() && sampleRate == currentSampleRate) return
         stopInternal(flush = true)
 
+        val channelCount = if (channels >= 2) 2 else 1
         val channelMask =
-            if (channels >= 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
+            if (channelCount == 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
         val minBuffer = AudioTrack.getMinBufferSize(sampleRate, channelMask, ENCODING)
         if (minBuffer <= 0) {
             Log.e(TAG, "unsupported playback configuration ${sampleRate}Hz")
             return
         }
+
+        val prerollBytes = sampleRate * channelCount * BYTES_PER_SAMPLE * PREROLL_MS / 1000
+        // The track must hold the whole preroll plus headroom, otherwise the
+        // writer blocks on a full buffer before playback has been allowed to start.
+        val bufferSize = maxOf(minBuffer * 4, prerollBytes * 2)
 
         val newTrack = try {
             AudioTrack.Builder()
@@ -58,9 +70,8 @@ class AudioPlayer {
                         .setChannelMask(channelMask)
                         .build(),
                 )
-                .setBufferSizeInBytes(minBuffer * 2)
+                .setBufferSizeInBytes(bufferSize)
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
                 .build()
         } catch (e: Exception) {
             Log.e(TAG, "AudioTrack construction failed", e)
@@ -78,9 +89,11 @@ class AudioPlayer {
         track = newTrack
         queue = channel
         playing.set(true)
-        newTrack.play()
 
         writer = scope.launch {
+            var buffered = 0
+            var started = false
+
             for (chunk in channel) {
                 if (!playing.get()) break
                 var offset = 0
@@ -88,7 +101,17 @@ class AudioPlayer {
                     val written = newTrack.write(chunk, offset, chunk.size - offset)
                     if (written <= 0) break
                     offset += written
+                    buffered += written
+                    if (!started && buffered >= prerollBytes) {
+                        started = true
+                        runCatching { newTrack.play() }
+                    }
                 }
+            }
+
+            // A reply shorter than the preroll still has to be heard.
+            if (!started && playing.get() && buffered > 0) {
+                runCatching { newTrack.play() }
             }
         }
     }
@@ -96,8 +119,7 @@ class AudioPlayer {
     fun enqueue(pcm: ByteArray) {
         if (!playing.get()) start(currentSampleRate)
         val channel = queue ?: return
-        val result = channel.trySend(pcm)
-        if (result.isFailure) {
+        if (channel.trySend(pcm).isFailure) {
             Log.w(TAG, "playback queue full, dropping ${pcm.size} bytes")
         }
     }
@@ -106,13 +128,11 @@ class AudioPlayer {
     @Synchronized
     fun finish() {
         queue?.close()
+        val pending = writer
         scope.launch {
-            writer?.join()
+            pending?.join()
             synchronized(this@AudioPlayer) {
-                if (playing.get()) {
-                    runCatching { track?.stop() }
-                    stopInternal(flush = false)
-                }
+                if (playing.get()) stopInternal(flush = false)
             }
         }
     }
@@ -149,6 +169,10 @@ class AudioPlayer {
         private const val TAG = "JarvisPlayer"
         const val DEFAULT_SAMPLE_RATE = 22_050
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
+        private const val BYTES_PER_SAMPLE = 2
         private const val QUEUE_CAPACITY = 256
+
+        /** Jitter budget before playback starts. */
+        private const val PREROLL_MS = 120
     }
 }

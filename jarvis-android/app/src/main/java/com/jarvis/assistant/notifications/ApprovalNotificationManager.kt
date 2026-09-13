@@ -19,20 +19,30 @@ import javax.crypto.spec.SecretKeySpec
  * Signs approval decisions so the desktop can prove the tap came from the paired
  * handset rather than anything else that reached the WebSocket port.
  *
- * With no shared secret configured the signature is empty and the desktop is
- * expected to fall back to whatever transport-level trust the Tailnet gives it.
+ * There is deliberately no unsigned path. An empty-signature fallback would mean
+ * that losing or never setting the secret silently downgrades every approval to
+ * "trust anything that can reach the port" — the failure would be invisible
+ * precisely when it matters. Without a secret, signing fails and the decision is
+ * not sent at all.
  */
 object ApprovalSigner {
 
-    fun sign(secret: String, id: String, approved: Boolean, deviceId: String, atMs: Long): String {
-        if (secret.isEmpty()) return ""
-        val payload = "$id|$approved|$deviceId|$atMs"
+    fun sign(
+        secret: String,
+        id: String,
+        approved: Boolean,
+        deviceId: String,
+        atMs: Long,
+        nonce: String,
+    ): String? {
+        if (secret.isEmpty()) return null
+        val payload = "$id|$approved|$deviceId|$atMs|$nonce"
         return runCatching {
             val mac = Mac.getInstance("HmacSHA256")
             mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
             mac.doFinal(payload.toByteArray(Charsets.UTF_8))
                 .joinToString("") { byte -> "%02x".format(byte) }
-        }.getOrDefault("")
+        }.getOrNull()
     }
 }
 

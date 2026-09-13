@@ -8,9 +8,10 @@ import kotlinx.serialization.json.JsonObject
 /**
  * Wire protocol between the phone and the self-hosted desktop server.
  *
- * Both directions are JSON text frames discriminated by a `type` field, with one
- * exception: microphone audio travels as raw binary frames, bracketed by
- * [AudioInputStart] / [AudioInputEnd] so the server knows what the bytes belong to.
+ * Control traffic is JSON text frames discriminated by a `type` field. Audio in
+ * both directions is raw binary: uplink frames are bracketed by
+ * [AudioInputStartMessage] / [AudioInputEndMessage], downlink frames carry a
+ * one-byte stream tag matching the [AudioStreamStartEvent] that opened them.
  */
 val JarvisJson: Json = Json {
     classDiscriminator = "type"
@@ -52,6 +53,12 @@ data class AudioStreamStartEvent(
     val channels: Int = 1,
     /** `pcm16` (raw little-endian) or `wav` (RIFF header on the first chunk). */
     val encoding: String = "pcm16",
+    /**
+     * First byte of every binary frame belonging to this stream (0-255). Omit to
+     * fall back to base64 [AudioChunkEvent] frames, which cost a 33% payload
+     * inflation plus a JSON parse per 20ms of speech.
+     */
+    @SerialName("binary_tag") val binaryTag: Int? = null,
 ) : InboundEvent
 
 @Serializable
@@ -118,7 +125,13 @@ data class HelloMessage(
     @SerialName("protocol_version") val protocolVersion: Int = 1,
 ) : OutboundMessage
 
-/** HMAC-signed so the desktop can prove the tap came from this paired handset. */
+/**
+ * HMAC-signed so the desktop can prove the tap came from this paired handset.
+ *
+ * The [nonce] is inside the signed payload: a timestamp window alone still lets
+ * an identical decision be replayed until the window closes, so the desktop must
+ * reject a nonce it has already seen.
+ */
 @Serializable
 @SerialName("approval_decision")
 data class ApprovalDecisionMessage(
@@ -126,6 +139,7 @@ data class ApprovalDecisionMessage(
     val approved: Boolean,
     @SerialName("device_id") val deviceId: String,
     @SerialName("decided_at_ms") val decidedAtMs: Long,
+    val nonce: String,
     val signature: String,
 ) : OutboundMessage
 
