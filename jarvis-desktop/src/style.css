@@ -1,0 +1,955 @@
+/* ==========================================================================
+   Jarvis Desktop — AMOLED spotlight theme
+   --------------------------------------------------------------------------
+   The native window is transparent and frameless; every visible surface is
+   drawn here. Colours are tuned for true-black OLED panels: the background is
+   pure #000 at the edges so the bar reads as a floating pane of glass, and the
+   accent is a single cyan that carries the focus, route and streaming states.
+   ========================================================================== */
+
+:root {
+  --accent: #38f0ff;
+  --accent-bright: #b8fbff;
+  --accent-dim: rgba(56, 240, 255, 0.32);
+  --accent-faint: rgba(56, 240, 255, 0.12);
+
+  --cloud: #b98bff;
+  --cloud-dim: rgba(185, 139, 255, 0.3);
+
+  --ok: #3ddc97;
+  --warn: #ffc860;
+  --bad: #ff6b7a;
+
+  --surface: rgba(8, 9, 12, 0.86);
+  --surface-raised: rgba(18, 20, 26, 0.9);
+  --surface-sunken: rgba(0, 0, 0, 0.55);
+
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.14);
+
+  --text: #f2f5f8;
+  --text-muted: #8b94a3;
+  --text-faint: #5b6474;
+
+  --radius-shell: 18px;
+  --radius-card: 14px;
+  --radius-chip: 999px;
+
+  --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
+    sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, "SF Mono", monospace;
+
+  --bar-height: 80px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* --------------------------------------------------------------------------
+   Reset
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* Nothing in the spotlight is selectable except the answer text. */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* `hidden` must beat the component `display` rules below, otherwise the card
+   and the attachment strip stay on screen when the app hides them. */
+[hidden] {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Shell — the floating glass pane
+   -------------------------------------------------------------------------- */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: var(--radius-shell);
+  background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045) 0%,
+      rgba(255, 255, 255, 0) 42%
+    ),
+    var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 26px 60px -18px rgba(0, 0, 0, 0.9),
+    0 0 44px -22px var(--accent-dim);
+  overflow: hidden;
+  animation: shell-in 180ms var(--ease) both;
+}
+
+@keyframes shell-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The accent hairline across the top edge brightens while streaming. */
+.shell::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-dim) 22%,
+    var(--accent) 50%,
+    var(--accent-dim) 78%,
+    transparent
+  );
+  opacity: 0.45;
+  transition: opacity 200ms var(--ease);
+  pointer-events: none;
+}
+
+html[data-state="streaming"] .shell::before {
+  opacity: 1;
+  animation: scan 1.6s linear infinite;
+}
+
+@keyframes scan {
+  0% {
+    background-position: -100% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Input row
+   -------------------------------------------------------------------------- */
+
+.bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: var(--bar-height);
+  min-height: var(--bar-height);
+  padding: 0 16px 0 18px;
+}
+
+.field {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.prompt {
+  width: 100%;
+  max-height: 56px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 20px;
+  font-weight: 380;
+  line-height: 28px;
+  letter-spacing: 0.1px;
+  caret-color: var(--accent);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.prompt::placeholder {
+  color: var(--text-faint);
+  font-weight: 350;
+}
+
+/* --------------------------------------------------------------------------
+   Reactor glow icon
+   -------------------------------------------------------------------------- */
+
+.reactor {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 0 6px var(--accent-dim));
+}
+
+.reactor svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.reactor-halo {
+  opacity: 0.5;
+  transform-origin: center;
+  animation: halo-breathe 3.4s ease-in-out infinite;
+}
+
+.reactor-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.1;
+  opacity: 0.55;
+  transform-origin: center;
+}
+
+.reactor-ring-outer {
+  stroke-dasharray: 26 12;
+  animation: spin 9s linear infinite;
+}
+
+.reactor-ring-mid {
+  stroke-dasharray: 14 8;
+  opacity: 0.4;
+  animation: spin 6s linear infinite reverse;
+}
+
+.reactor-vanes line {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  opacity: 0.35;
+}
+
+.reactor-core {
+  fill: var(--accent-bright);
+  opacity: 0.9;
+  transform-origin: center;
+  animation: core-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes halo-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 0.62;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes core-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+/* The reactor spins up while a response streams. */
+html[data-state="streaming"] .reactor-ring-outer {
+  animation-duration: 2.2s;
+  opacity: 0.9;
+}
+
+html[data-state="streaming"] .reactor-ring-mid {
+  animation-duration: 1.5s;
+  opacity: 0.7;
+}
+
+html[data-state="streaming"] .reactor {
+  filter: drop-shadow(0 0 12px var(--accent));
+}
+
+html[data-state="error"] .reactor-ring,
+html[data-state="error"] .reactor-vanes line {
+  stroke: var(--bad);
+}
+
+html[data-state="error"] .reactor-core {
+  fill: var(--bad);
+}
+
+/* --------------------------------------------------------------------------
+   Route badge + bar controls
+   -------------------------------------------------------------------------- */
+
+.bar-meta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.route {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--accent-dim);
+  background: var(--accent-faint);
+  color: var(--accent-bright);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  transition:
+    border-color 200ms var(--ease),
+    background 200ms var(--ease),
+    color 200ms var(--ease);
+}
+
+.route-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.route-sep {
+  opacity: 0.45;
+  font-weight: 400;
+}
+
+.route-model {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+.route[data-route="cloud"] {
+  border-color: var(--cloud-dim);
+  background: rgba(185, 139, 255, 0.12);
+  color: #e2d2ff;
+}
+
+.route[data-route="cloud"] .route-dot {
+  background: var(--cloud);
+  box-shadow: 0 0 8px var(--cloud);
+}
+
+.route[data-route="offline"] {
+  border-color: rgba(255, 107, 122, 0.32);
+  background: rgba(255, 107, 122, 0.1);
+  color: #ffc4ca;
+}
+
+.route[data-route="offline"] .route-dot {
+  background: var(--bad);
+  box-shadow: 0 0 8px var(--bad);
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition:
+    color 140ms var(--ease),
+    background 140ms var(--ease),
+    border-color 140ms var(--ease);
+}
+
+.icon-button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#pin svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.icon-button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--hairline);
+}
+
+.icon-button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--accent-faint);
+  border-color: var(--accent-dim);
+}
+
+.hint {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--hairline);
+  border-bottom-width: 2px;
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Attachments
+   -------------------------------------------------------------------------- */
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 12px 18px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 12px;
+}
+
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 6px 8px 6px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+}
+
+.attachment img {
+  width: 56px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--hairline-strong);
+  background: #000;
+}
+
+.attachment-text {
+  padding-left: 12px;
+}
+
+.attachment-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.attachment-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.attachment-meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+}
+
+/* --------------------------------------------------------------------------
+   Answer card
+   -------------------------------------------------------------------------- */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--hairline);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.6));
+  animation: card-in 200ms var(--ease) both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px 9px 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: background 200ms var(--ease);
+}
+
+html[data-state="streaming"] .pulse {
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+html[data-state="done"] .pulse {
+  background: var(--ok);
+  box-shadow: 0 0 8px rgba(61, 220, 151, 0.7);
+}
+
+html[data-state="error"] .pulse {
+  background: var(--bad);
+  box-shadow: 0 0 8px rgba(255, 107, 122, 0.7);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-stat {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.text-button {
+  padding: 3px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 140ms var(--ease),
+    border-color 140ms var(--ease),
+    background 140ms var(--ease);
+}
+
+.text-button:hover {
+  color: var(--text);
+  border-color: var(--hairline-strong);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.text-button:active {
+  transform: translateY(0.5px);
+}
+
+.card-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 520px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 18px 16px;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px 9px 18px;
+  border-top: 1px solid var(--hairline);
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+.services {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.service {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.2px;
+}
+
+.service i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: background 200ms var(--ease);
+}
+
+.service[data-online="true"] i {
+  background: var(--ok);
+  box-shadow: 0 0 7px rgba(61, 220, 151, 0.6);
+}
+
+.service[data-online="false"] i {
+  background: var(--bad);
+  box-shadow: 0 0 7px rgba(255, 107, 122, 0.55);
+}
+
+.keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.keys kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Streaming cursor
+   -------------------------------------------------------------------------- */
+
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-dim);
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Each freshly appended block fades in, so tokens arrive rather than snap. */
+.markdown > *.fresh {
+  animation: token-in 260ms var(--ease) both;
+}
+
+@keyframes token-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Markdown
+   -------------------------------------------------------------------------- */
+
+.markdown {
+  font-size: 14px;
+  line-height: 1.62;
+  color: #dfe5ec;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  word-break: break-word;
+}
+
+.markdown > *:first-child {
+  margin-top: 0;
+}
+
+.markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown p {
+  margin: 0 0 10px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 16px 0 8px;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--text);
+  letter-spacing: -0.1px;
+}
+
+.markdown h1 {
+  font-size: 19px;
+}
+.markdown h2 {
+  font-size: 16.5px;
+}
+.markdown h3 {
+  font-size: 15px;
+}
+.markdown h4 {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.markdown li {
+  margin: 3px 0;
+}
+
+.markdown li::marker {
+  color: var(--accent-dim);
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-dim);
+}
+
+.markdown a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.markdown strong {
+  color: #fff;
+  font-weight: 650;
+}
+
+.markdown em {
+  color: #e8eef5;
+}
+
+.markdown code {
+  padding: 1.5px 5px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: rgba(56, 240, 255, 0.07);
+  color: var(--accent-bright);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.markdown pre {
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--hairline);
+  border-left: 2px solid var(--accent-dim);
+  border-radius: 10px;
+  background: #000;
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: #cfe9ee;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.markdown blockquote {
+  margin: 0 0 12px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--accent-dim);
+  color: var(--text-muted);
+}
+
+.markdown hr {
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.markdown table {
+  width: 100%;
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.markdown th,
+.markdown td {
+  padding: 5px 9px;
+  border: 1px solid var(--hairline);
+  text-align: left;
+}
+
+.markdown th {
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 600;
+}
+
+.markdown .error {
+  color: var(--bad);
+}
+
+/* --------------------------------------------------------------------------
+   Focus states
+   -------------------------------------------------------------------------- */
+
+.prompt:focus-visible,
+.text-button:focus-visible,
+.icon-button:focus-visible {
+  outline: none;
+}
+
+.text-button:focus-visible,
+.icon-button:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-faint);
+}
+
+/* The whole shell glows when the input holds the caret. */
+.shell:has(.prompt:focus) {
+  border-color: rgba(56, 240, 255, 0.24);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 26px 60px -18px rgba(0, 0, 0, 0.9),
+    0 0 60px -18px var(--accent-dim);
+}
+
+/* --------------------------------------------------------------------------
+   Scrollbars
+   -------------------------------------------------------------------------- */
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: rgba(255, 255, 255, 0.13);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent-dim);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

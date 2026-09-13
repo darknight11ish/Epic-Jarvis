@@ -1,0 +1,27 @@
+{
+  "name": "jarvis-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Jarvis Desktop — native Windows 11 spotlight client for the Jarvis stack (Tauri v2 + WebView2).",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "sync:config": "node -e \"const f=require('fs');f.copyFileSync('tauri.conf.json','src-tauri/tauri.conf.json')\"",
+    "dev": "npm run sync:config && tauri dev",
+    "build": "npm run sync:config && tauri build",
+    "build:debug": "npm run sync:config && tauri build --debug",
+    "bundle:msi": "npm run sync:config && tauri build --bundles msi",
+    "bundle:nsis": "npm run sync:config && tauri build --bundles nsis",
+    "icons": "tauri icon src-tauri/icons/icon.png",
+    "info": "tauri info",
+    "fmt": "cd src-tauri && cargo fmt",
+    "lint": "cd src-tauri && cargo clippy --all-targets -- -D warnings",
+    "check": "cd src-tauri && cargo check",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}
