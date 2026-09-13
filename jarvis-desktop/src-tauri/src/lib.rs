@@ -4,7 +4,7 @@
 //! defines the running application:
 //!
 //! * plugin registration — global shortcut, clipboard manager, notifications;
-//! * the three global hotkeys (`Alt+Space`, `Win+Shift+J`, `Win+Shift+S`);
+//! * the three global hotkeys (`Alt+Space`, `Win+Shift+J`, `Alt+Shift+S`);
 //! * the notification-area tray icon ([`tray::create_tray`]);
 //! * window vibrancy and focus-loss auto-hide ([`windows::setup_windows`]).
 //!
@@ -75,7 +75,12 @@ struct Hotkeys {
     toggle_quickbar: tauri_plugin_global_shortcut::Shortcut,
     /// `Win+Shift+J` — ingest the clipboard into the quickbar.
     ingest_clipboard: tauri_plugin_global_shortcut::Shortcut,
-    /// `Win+Shift+S` — capture the active desktop.
+    /// `Alt+Shift+S` — capture the active desktop.
+    ///
+    /// Deliberately *not* `Win+Shift+S`: that combination is owned by the
+    /// Windows Snipping Tool at the shell level, so `RegisterHotKey` returns
+    /// ERROR_HOTKEY_ALREADY_REGISTERED (1409) and the user gets the Snipping
+    /// Tool instead of the Jarvis vision pipeline.
     capture_screen: tauri_plugin_global_shortcut::Shortcut,
 }
 
@@ -86,7 +91,7 @@ impl Hotkeys {
         Self {
             toggle_quickbar: Shortcut::new(Some(Modifiers::ALT), Code::Space),
             ingest_clipboard: Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyJ),
-            capture_screen: Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyS),
+            capture_screen: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS),
         }
     }
 }
@@ -223,9 +228,8 @@ pub fn run() {
             }
 
             // Bind the accelerators. A failure here is not fatal: another
-            // application may already own the combination (Win+Shift+S is the
-            // Windows Snipping Tool default), and Jarvis still works from the
-            // tray in that case.
+            // application may already own a combination, and Jarvis still works
+            // from the tray in that case.
             #[cfg(desktop)]
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -234,7 +238,7 @@ pub fn run() {
                 for (label, shortcut) in [
                     ("Alt+Space", hotkeys.toggle_quickbar),
                     ("Win+Shift+J", hotkeys.ingest_clipboard),
-                    ("Win+Shift+S", hotkeys.capture_screen),
+                    ("Alt+Shift+S", hotkeys.capture_screen),
                 ] {
                     match handle.global_shortcut().register(shortcut) {
                         Ok(()) => println!("[jarvis] hotkey {label} registered"),

@@ -17,10 +17,12 @@ driving a WebView2 frontend.
 |----------|--------|
 | `Alt` + `Space` | Toggle the quickbar. On show it is centred, focused, and the frontend receives `focus-input`. |
 | `Win` + `Shift` + `J` | Read the clipboard and inject it into the quickbar as context. |
-| `Win` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
+| `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
 
-`Win+Shift+S` is the Windows Snipping Tool default. If Windows already owns it
-the registration fails, the app logs a line and everything else keeps working.
+Capture is **not** bound to `Win+Shift+S`: the shell owns that for the Snipping
+Tool, so `RegisterHotKey` returns ERROR_HOTKEY_ALREADY_REGISTERED (1409) and the
+user gets the Snipping Tool instead. Any registration failure is logged and
+non-fatal — the tray still drives everything.
 
 ## Layout
 
@@ -94,20 +96,54 @@ Commands exposed to the frontend (`invoke("<name>", …)`):
 Events emitted to the frontend: `focus-input`, `clipboard-inject`,
 `screen-captured`, `capture-failed`, `health-report`, `pin-changed`.
 
+## Security posture
+
+`capabilities/default.json` grants only `core:default`, window drag and the
+devtools toggle. Everything privileged — capture, health probes, clipboard,
+notifications, window control — is an app-defined command in `commands.rs`,
+and app commands are not permission-gated, so the clipboard, notification and
+global-shortcut *plugin* permissions are simply not granted.
+
+There is deliberately no `remote` block. The HUD loads
+`http://127.0.0.1:4719` over plain HTTP; without a remote grant that origin
+gets no IPC at all, so an XSS in the HUD web app cannot reach the clipboard,
+the global shortcuts, or the window list. If the HUD ever needs IPC, add a
+*separate* capability file scoped to that one window and that one command —
+do not widen this one.
+
 ## Chat protocol
 
 The quickbar posts to `POST http://127.0.0.1:4719/api/chat`:
 
 ```json
 {
-  "message": "…",
-  "prompt": "…",
-  "stream": true,
-  "client": "jarvis-desktop",
+  "messages": [
+    { "role": "system", "content": "Context:\n…clipboard…" },
+    { "role": "user", "content": "…" }
+  ],
+  "has_image": true,
   "images": ["data:image/jpeg;base64,…"],
-  "context": { "clipboard": "…" }
+  "stream": true,
+  "auto": true,
+  "client": "jarvis-desktop"
 }
 ```
+
+Headers: `Content-Type: application/json`, `Accept: text/event-stream` and
+`X-Jarvis-Client: hud`. The last one matters — a Tauri WebView's origin is
+`http://tauri.localhost`, which will not be in the server's `ALLOWED_ORIGINS`,
+and the client header is the documented fallback. Set `JARVIS_TOKEN` at the top
+of `main.js` to also send `X-Jarvis-Token`.
+
+**The server must still answer CORS.** `Content-Type: application/json` plus a
+custom header makes this a preflighted request, so the WebView sends
+`OPTIONS /api/chat` first and drops the response unless the server replies with
+`Access-Control-Allow-Origin: http://tauri.localhost` (or `*`),
+`Access-Control-Allow-Headers: content-type, x-jarvis-client, x-jarvis-token`
+and `Access-Control-Allow-Methods: POST, OPTIONS`. A server-side origin check
+passing is not sufficient; the browser enforces its own. If adding that to the
+server is not an option, move the request into Rust (`reqwest` is already a
+dependency) — same-process HTTP has no CORS.
 
 The response reader accepts Server-Sent Events (`data: {…}`, terminated by
 `[DONE]`), newline-delimited JSON, and plain text. Token deltas are read from

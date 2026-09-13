@@ -24,8 +24,32 @@ const CHAT_ENDPOINT = `${JARVIS_SERVER}/api/chat`;
 const DEFAULT_ROUTE = { tier: "local", label: "Local", model: "qwen3:8b" };
 const CLOUD_ROUTE = { tier: "cloud", label: "Cloud", model: "jarvis-escalate" };
 
+/**
+ * Sent as `X-Jarvis-Client`. The Jarvis server accepts a request whose `Origin`
+ * is not in its allow-list only when this header marks it as a first-party HUD
+ * client, and a Tauri WebView's origin (`http://tauri.localhost`) is never in
+ * that list.
+ */
+const JARVIS_CLIENT_HEADER = "hud";
+
+/**
+ * Optional shared secret. When the server is started with a token, put the same
+ * value here and it travels as `X-Jarvis-Token`. Empty means the header is
+ * omitted entirely.
+ */
+const JARVIS_TOKEN = "";
+
 /** Clipboard context longer than this is trimmed in the attachment chip. */
 const CLIPBOARD_PREVIEW = 90;
+
+/**
+ * Smallest gap between native window resizes, in milliseconds. Each resize is a
+ * `SetWindowPos` on a transparent, Acrylic-backed window; firing one per token
+ * makes DWM recomposite the blur dozens of times a second, which shows up as
+ * border flicker and stutter. Coalescing to ~7 Hz is invisible to the reader
+ * and costs DWM nothing.
+ */
+const RESIZE_INTERVAL_MS = 150;
 
 /* ==========================================================================
    Tauri bridge
@@ -156,12 +180,16 @@ function renderInline(text) {
     return `@@JARVISCODE${codeSpans.length - 1}@@`;
   });
 
+  // Strong runs first and non-greedily, so `**bold *italic* tail**` keeps its
+  // inner emphasis instead of failing to match on the nested asterisks. The
+  // italic pass then only sees the leftover single delimiters. `(?!\s)` keeps
+  // arithmetic like `a * b * c` from turning into emphasis.
   out = out
-    .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
-    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
-    .replace(/~~([^~]+)~~/g, "<s>$1</s>");
+    .replace(/\*\*\*([\s\S]+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/__([\s\S]+?)__/g, "<strong>$1</strong>")
+    .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*/g, "$1<em>$2</em>")
+    .replace(/~~([\s\S]+?)~~/g, "<s>$1</s>");
 
   // Only http(s) links are linkified; anything else stays plain text so model
   // output can never produce a `javascript:` or `file:` href.
@@ -282,19 +310,65 @@ function renderMarkdown(source) {
       continue;
     }
 
-    // Lists.
-    const ordered = /^\s*\d+[.)]\s+/.test(line);
-    const unordered = /^\s*[-*+]\s+/.test(line);
-    if (ordered || unordered) {
-      const pattern = ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-*+]\s+/;
+    // Lists. Indentation-aware: an item owns every following line indented
+    // past its marker, so nested lists, multi-paragraph items and fenced code
+    // inside an item all survive by recursing through this same parser.
+    const marker = line.match(/^(\s*)([-*+]|\d+[.)])\s+/);
+    if (marker) {
+      const baseIndent = marker[1].length;
+      const ordered = /\d/.test(marker[2]);
       const items = [];
-      while (index < lines.length && pattern.test(lines[index])) {
-        items.push(lines[index].replace(pattern, ""));
+
+      while (index < lines.length) {
+        const item = lines[index].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+        // A marker at a different indent belongs to an enclosing or nested
+        // list; a different kind starts a separate list.
+        if (!item || item[1].length !== baseIndent) break;
+        if (/\d/.test(item[2]) !== ordered) break;
+
+        const head = item[3];
+        const rest = [];
         index += 1;
+
+        while (index < lines.length) {
+          const next = lines[index];
+          if (!next.trim()) {
+            // A blank line only stays inside the item when indented content
+            // follows it; otherwise the list has ended.
+            const after = lines[index + 1] || "";
+            const afterIndent = after.match(/^(\s*)/)[1].length;
+            if (!after.trim() || afterIndent <= baseIndent) break;
+            rest.push("");
+            index += 1;
+            continue;
+          }
+          if (next.match(/^(\s*)/)[1].length <= baseIndent) break;
+          rest.push(next);
+          index += 1;
+        }
+
+        // Dedent continuation lines by their own common indent so nested
+        // fences keep their original relative shape.
+        const indents = rest
+          .filter((l) => l.trim())
+          .map((l) => l.match(/^(\s*)/)[1].length);
+        const strip = indents.length ? Math.min(...indents) : 0;
+        items.push([head, ...rest.map((l) => l.slice(strip))]);
       }
+
       const tag = ordered ? "ol" : "ul";
       const itemsHtml = items
-        .map((item) => `<li>${renderInline(item)}</li>`)
+        .map((buffer) => {
+          // A one-line item stays inline so plain lists are not padded with
+          // paragraph margins; anything richer goes back through the block
+          // parser, with its leading paragraph unwrapped.
+          if (buffer.length === 1) return `<li>${renderInline(buffer[0])}</li>`;
+          const body = renderMarkdown(buffer.join("\n")).replace(
+            /^<p>([\s\S]*?)<\/p>/,
+            "$1"
+          );
+          return `<li>${body}</li>`;
+        })
         .join("");
       html.push(`<${tag}>${itemsHtml}</${tag}>`);
       continue;
@@ -345,13 +419,42 @@ function paint({ immediate = false } = {}) {
 }
 
 let lastReportedHeight = 0;
+let pendingHeight = 0;
+let lastResizeAt = 0;
+let resizeTimer = null;
 
-/** Grows or shrinks the native window so it hugs the shell exactly. */
+/**
+ * Measures the shell and asks the backend to match it, at most once every
+ * [`RESIZE_INTERVAL_MS`]. While an answer streams the window only ever grows:
+ * a reflow that briefly reports a shorter shell would otherwise make the frame
+ * jitter between two heights.
+ */
 function syncWindowHeight() {
   const height = Math.ceil(dom.shell.getBoundingClientRect().height);
-  if (!height || Math.abs(height - lastReportedHeight) < 2) return;
-  lastReportedHeight = height;
-  invoke("resize_quickbar", { height });
+  if (!height) return;
+  if (state.phase === "streaming" && height < lastReportedHeight) return;
+
+  pendingHeight = height;
+  if (Math.abs(height - lastReportedHeight) < 2) return;
+
+  const elapsed = performance.now() - lastResizeAt;
+  if (elapsed >= RESIZE_INTERVAL_MS) {
+    commitWindowHeight();
+  } else if (resizeTimer === null) {
+    resizeTimer = setTimeout(commitWindowHeight, RESIZE_INTERVAL_MS - elapsed);
+  }
+}
+
+/** Sends the pending height to the backend and restarts the throttle window. */
+function commitWindowHeight() {
+  if (resizeTimer !== null) {
+    clearTimeout(resizeTimer);
+    resizeTimer = null;
+  }
+  if (!pendingHeight || Math.abs(pendingHeight - lastReportedHeight) < 2) return;
+  lastReportedHeight = pendingHeight;
+  lastResizeAt = performance.now();
+  invoke("resize_quickbar", { height: pendingHeight });
 }
 
 if (typeof ResizeObserver !== "undefined") {
@@ -604,29 +707,49 @@ async function send(promptText) {
   // Stay open while the answer streams, even if focus wanders.
   await setPinned(true, { silent: true });
 
+  // The server validates an OpenAI-shaped `messages` array and routes to its
+  // vision lane on `has_image`, so clipboard context rides as a system turn
+  // rather than a side-channel field.
   const body = {
-    message,
-    prompt: message,
+    messages: [
+      ...(state.clipboard
+        ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
+        : []),
+      { role: "user", content: message },
+    ],
+    has_image: Boolean(state.capture),
+    images: state.capture ? [state.capture] : [],
     stream: true,
+    auto: true,
     client: "jarvis-desktop",
   };
-  if (state.capture) body.images = [state.capture];
-  if (state.clipboard) body.context = { clipboard: state.clipboard };
+
+  const headers = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+    "X-Jarvis-Client": JARVIS_CLIENT_HEADER,
+  };
+  if (JARVIS_TOKEN) headers["X-Jarvis-Token"] = JARVIS_TOKEN;
 
   try {
     const response = await fetch(CHAT_ENDPOINT, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
+      headers,
       body: JSON.stringify(body),
       signal: state.controller.signal,
     });
 
     if (!response.ok) {
+      // 400 and 403 are the two the Jarvis server returns for a malformed body
+      // and a rejected origin; naming them saves a round trip to the log.
+      const hint =
+        response.status === 403
+          ? " — the server rejected this origin. Add http://tauri.localhost to its ALLOWED_ORIGINS, or confirm X-Jarvis-Token."
+          : response.status === 400
+            ? " — the server rejected the request body."
+            : "";
       throw new Error(
-        `the server answered HTTP ${response.status} ${response.statusText}`
+        `the server answered HTTP ${response.status} ${response.statusText}${hint}`
       );
     }
 
@@ -703,6 +826,9 @@ function finishStream(phase, statusText) {
 
   updateStat();
   paint({ immediate: true });
+  // The stream is over, so settle the window on its final height immediately
+  // rather than waiting out the throttle.
+  commitWindowHeight();
 
   // Release the pin so clicking away dismisses the bar again.
   setPinned(false, { silent: true });

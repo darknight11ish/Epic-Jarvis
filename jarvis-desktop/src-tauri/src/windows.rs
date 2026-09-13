@@ -74,8 +74,24 @@ pub fn setup_windows(app: &AppHandle) -> Result<(), String> {
 // Vibrancy
 // ---------------------------------------------------------------------------
 
-/// Acrylic behind the spotlight bar: it blurs whatever is underneath, which is
-/// what sells the floating-glass look on a 750×80 frameless window.
+/// Acrylic behind the spotlight bar.
+///
+/// Acrylic rather than Mica is deliberate, on three grounds:
+///
+/// * Fluent guidance puts Mica on long-lived base layers of app windows and
+///   Acrylic on transient, light-dismiss surfaces — a command palette is the
+///   canonical Acrylic case, and this bar is exactly that.
+/// * Mica tints from the *desktop wallpaper*; it does not blur what sits behind
+///   the window. On a 750×80 pane floating over other applications that throws
+///   away the floating-glass effect the design is built on.
+/// * Mica needs Windows 11 22000+. On Windows 10 it fails outright, and a
+///   transparent window with no backdrop is worse than a blurred one.
+///
+/// The DWM stutter sometimes blamed on Acrylic comes from resizing the window
+/// at token rate, not from the material; the frontend throttles resizes to
+/// ~7 Hz (`RESIZE_INTERVAL_MS` in `main.js`), which is the actual fix. To trade
+/// the blur for a wallpaper tint anyway, swap this call for the `apply_mica`
+/// used by [`apply_hud_effects`].
 #[cfg(target_os = "windows")]
 pub fn apply_quickbar_effects(window: &WebviewWindow) -> Result<(), String> {
     use window_vibrancy::apply_acrylic;
