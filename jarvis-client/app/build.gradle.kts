@@ -45,7 +45,18 @@ android {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2026.08.00"))
+    // NOT the 2026.08.00 the brief pins. That BOM resolves Compose 1.12.0,
+    // whose every artifact declares minCompileSdk 37, and CheckAarMetadata
+    // enforces that as a hard error. §3 also forbids compiling against 37
+    // because it is Beta, so the two requirements cannot both be met.
+    //
+    // Surveying the BOMs by the minCompileSdk in their own AAR metadata:
+    // 1.12.x needs 37, everything from 1.11.3 back to 1.9.1 needs 35. Compose
+    // never required 36, so 2026.06.00 is the newest BOM usable here.
+    //
+    // The brief gives a reason for compileSdk 36 and none for this particular
+    // BOM, so the BOM is the constraint that yields.
+    implementation(platform("androidx.compose:compose-bom:2026.06.00"))
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
