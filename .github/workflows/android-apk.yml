@@ -124,6 +124,29 @@ jobs:
         if: needs.detect.outputs.kind == 'flutter'
         run: flutter build apk --"$BUILD_TYPE"
 
+      # Unit tests gate the APK: shipping an artifact whose logic is broken is
+      # worse than failing here.
+      - name: Run unit tests
+        if: needs.detect.outputs.kind != 'flutter'
+        working-directory: ${{ needs.detect.outputs.dir }}
+        run: |
+          set -euo pipefail
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew testDebugUnitTest --stacktrace
+          else
+            gradle testDebugUnitTest --stacktrace
+          fi
+
+      - name: Upload test reports
+        if: failure() && needs.detect.outputs.kind != 'flutter'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: ${{ needs.detect.outputs.dir }}/**/build/reports/tests/**
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Build Gradle APK
         if: needs.detect.outputs.kind != 'flutter'
         working-directory: ${{ needs.detect.outputs.dir }}

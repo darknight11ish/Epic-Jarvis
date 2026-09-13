@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import com.jarvis.assistant.JarvisRuntime
 import com.jarvis.assistant.R
 import com.jarvis.assistant.network.ApprovalRequestEvent
+import com.jarvis.assistant.ui.approval.Markdown
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -91,12 +92,21 @@ class ApprovalNotificationManager(context: Context) {
     }
 
     fun post(request: ApprovalRequestEvent) {
+        val note = request.note
+        // Markdown reads as noise in a notification, which has no styling to
+        // carry it: flatten to text rather than showing raw syntax.
+        val proposed = note?.markdown ?: note?.after ?: request.detail
         val body = buildString {
             append(request.summary.ifBlank { "Waiting on your approval." })
-            request.detail?.takeIf { it.isNotBlank() }?.let {
+            proposed?.takeIf { it.isNotBlank() }?.let {
                 append('\n')
-                append(it)
+                append(Markdown.toPlainText(it).take(NOTIFICATION_BODY_LIMIT))
             }
+        }
+
+        val subText = when {
+            note != null -> if (note.isJoplin) "Joplin" else "Logseq"
+            else -> request.tier
         }
 
         val notification = NotificationCompat.Builder(appContext, CHANNEL_APPROVALS)
@@ -104,8 +114,10 @@ class ApprovalNotificationManager(context: Context) {
             .setContentTitle(request.title)
             .setContentText(request.summary.ifBlank { "Waiting on your approval." })
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setSubText(request.tier)
+            .setSubText(subText)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            // NotificationCompat has no CATEGORY_WORK; REMINDER is the closest
+            // documented category for a pending action awaiting a decision.
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(false)
@@ -151,6 +163,9 @@ class ApprovalNotificationManager(context: Context) {
         const val ACTION_APPROVE = "com.jarvis.assistant.APPROVE"
         const val ACTION_REJECT = "com.jarvis.assistant.REJECT"
         const val EXTRA_REQUEST_ID = "request_id"
+
+        /** A shade notification truncates anyway; sending less keeps it legible. */
+        private const val NOTIFICATION_BODY_LIMIT = 600
 
         fun notificationId(requestId: String): Int = requestId.hashCode() and 0x7fffffff
     }

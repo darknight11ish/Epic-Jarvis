@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.assistant.network.ApprovalRequestEvent
 import com.jarvis.assistant.network.ConnectionState
 import com.jarvis.assistant.network.DesktopTelemetryEvent
+import com.jarvis.assistant.ui.approval.ApprovalCard
 import com.jarvis.assistant.ui.theme.JarvisAmber
 import com.jarvis.assistant.ui.theme.JarvisBlack
 import com.jarvis.assistant.ui.theme.JarvisCyan
@@ -384,57 +385,6 @@ private fun StatTile(label: String, value: String?, modifier: Modifier = Modifie
             color = if (value == null) JarvisTextMuted else JarvisCyan,
             maxLines = 1,
         )
-    }
-}
-
-@Composable
-private fun ApprovalCard(
-    request: ApprovalRequestEvent,
-    onApprove: () -> Unit,
-    onReject: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(JarvisSurface, RoundedCornerShape(12.dp))
-            .border(1.dp, JarvisAmber.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-            .padding(14.dp),
-    ) {
-        Text(request.title, style = MaterialTheme.typography.titleMedium, color = JarvisAmber)
-        if (request.summary.isNotBlank()) {
-            Spacer(Modifier.height(6.dp))
-            Text(request.summary, style = MaterialTheme.typography.bodyMedium)
-        }
-        request.detail?.takeIf { it.isNotBlank() }?.let { detail ->
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = detail,
-                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                color = JarvisTextMuted,
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onApprove,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = JarvisGreen.copy(alpha = 0.16f),
-                    contentColor = JarvisGreen,
-                ),
-            ) { Text("Approve") }
-
-            Button(
-                onClick = onReject,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = JarvisRed.copy(alpha = 0.16f),
-                    contentColor = JarvisRed,
-                ),
-            ) { Text("Reject") }
-        }
     }
 }
 

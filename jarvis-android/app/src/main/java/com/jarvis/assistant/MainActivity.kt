@@ -23,7 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jarvis.assistant.network.ConnectionState
 import com.jarvis.assistant.service.JarvisForegroundService
+import com.jarvis.assistant.ui.capture.QuickCaptureSheet
 import com.jarvis.assistant.ui.screens.HudActions
 import com.jarvis.assistant.ui.screens.HudScreen
 import com.jarvis.assistant.ui.screens.HudState
@@ -35,6 +37,9 @@ class MainActivity : ComponentActivity() {
     /** Bumped on every resume so permission-dependent UI re-reads its state. */
     private val resumeTick = mutableIntStateOf(0)
     private var startListeningOnResume = false
+
+    private val captureOpen = mutableStateOf(false)
+    private val captureSeed = mutableStateOf("")
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -77,6 +82,32 @@ class MainActivity : ComponentActivity() {
                         startListeningOnResume = false
                         JarvisRuntime.startMic()
                     }
+                }
+
+                if (captureOpen.value) {
+                    val queued by JarvisRuntime.pendingNotes.pendingCount
+                        .collectAsStateWithLifecycle()
+                    QuickCaptureSheet(
+                        connected = connection == ConnectionState.CONNECTED,
+                        initialText = captureSeed.value,
+                        micActive = micActive,
+                        micPermissionGranted = micGranted,
+                        queuedCount = queued,
+                        onSend = { target, body ->
+                            JarvisRuntime.sendQuickNote(target.wire, body)
+                        },
+                        onToggleMic = {
+                            if (JarvisRuntime.hasMicPermission()) {
+                                JarvisRuntime.toggleMic()
+                            } else {
+                                requestRuntimePermissions()
+                            }
+                        },
+                        onDismiss = {
+                            captureOpen.value = false
+                            captureSeed.value = ""
+                        },
+                    )
                 }
 
                 HudScreen(
@@ -136,6 +167,17 @@ class MainActivity : ComponentActivity() {
      * to talk immediately rather than look at the HUD.
      */
     private fun handleIntent(intent: Intent?) {
+        if (intent?.action == ACTION_QUICK_CAPTURE) {
+            captureOpen.value = true
+            return
+        }
+        // Share sheet: seed capture with whatever was shared.
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            captureSeed.value = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+            captureOpen.value = true
+            return
+        }
+
         val wantsMic = intent?.action == Intent.ACTION_ASSIST ||
             intent?.action == ACTION_START_LISTENING ||
             intent?.action == "android.intent.action.VOICE_COMMAND"
@@ -173,5 +215,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_START_LISTENING = "com.jarvis.assistant.START_LISTENING"
+        const val ACTION_QUICK_CAPTURE = "com.jarvis.assistant.QUICK_CAPTURE"
     }
 }

@@ -10,6 +10,11 @@
     <string name="channel_link_name">Jarvis Link</string>
     <string name="channel_link_description">Ongoing status of the connection to the Jarvis desktop server.</string>
 
+    <string name="tile_quick_capture">Jarvis Capture</string>
+    <string name="tile_subtitle_linked">Linked</string>
+    <string name="tile_subtitle_reconnecting">Reconnecting</string>
+    <string name="tile_subtitle_offline">Offline — will queue</string>
+
     <string name="action_approve">Approve</string>
     <string name="action_reject">Reject</string>
 </resources>

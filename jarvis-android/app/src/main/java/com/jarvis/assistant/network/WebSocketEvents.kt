@@ -25,6 +25,31 @@ val JarvisJson: Json = Json {
 @Serializable
 sealed interface InboundEvent
 
+/**
+ * A proposed edit to a Joplin note or a Logseq page.
+ *
+ * The desktop may send whichever it has: [markdown] alone for a new note,
+ * [before] and [after] for a rewrite, or a pre-computed unified [diff]. When both
+ * before/after and a diff arrive, the diff wins — the desktop's own diff is
+ * authoritative over one reconstructed here.
+ */
+@Serializable
+data class NoteEditPayload(
+    /** `joplin` or `logseq`. */
+    val target: String,
+    val title: String? = null,
+    /** Notebook, folder or journal page the edit lands in. */
+    val location: String? = null,
+    /** Full proposed content, for a create or a whole-body replace. */
+    val markdown: String? = null,
+    val before: String? = null,
+    val after: String? = null,
+    /** Unified diff, if the desktop computed one. */
+    val diff: String? = null,
+) {
+    val isJoplin: Boolean get() = target.equals("joplin", ignoreCase = true)
+}
+
 /** An `ask` tier action on the desktop is gated until the phone answers. */
 @Serializable
 @SerialName("approval_request")
@@ -34,8 +59,19 @@ data class ApprovalRequestEvent(
     val summary: String = "",
     val tier: String = "ask",
     val detail: String? = null,
+    /** e.g. `edit_joplin_note`, `edit_logseq_page`, `shell`, `send_email`. */
+    val action: String? = null,
+    val note: NoteEditPayload? = null,
     @SerialName("expires_at_ms") val expiresAtMs: Long? = null,
-) : InboundEvent
+) : InboundEvent {
+
+    val isNoteEdit: Boolean
+        get() = note != null || action in NOTE_ACTIONS
+
+    companion object {
+        val NOTE_ACTIONS = setOf("edit_joplin_note", "edit_logseq_page")
+    }
+}
 
 /** The gate was resolved elsewhere (timeout, desktop UI); drop the notification. */
 @Serializable
@@ -179,3 +215,29 @@ data class DeviceCommandResultMessage(
     val ok: Boolean,
     val detail: String? = null,
 ) : OutboundMessage
+
+/**
+ * A note captured on the phone and pushed to the desktop's note stores.
+ *
+ * [timestampMs] is when the user hit send, not when the frame reached the
+ * desktop: a note queued offline and replayed an hour later still belongs in the
+ * journal entry for the moment it was written.
+ */
+@Serializable
+@SerialName("quick_note")
+data class QuickNoteMessage(
+    /** `logseq` or `joplin`. */
+    val target: String,
+    /** `append` or `create`. */
+    val mode: String,
+    val content: String,
+    @SerialName("timestamp_ms") val timestampMs: Long,
+) : OutboundMessage {
+
+    companion object {
+        const val TARGET_LOGSEQ = "logseq"
+        const val TARGET_JOPLIN = "joplin"
+        const val MODE_APPEND = "append"
+        const val MODE_CREATE = "create"
+    }
+}

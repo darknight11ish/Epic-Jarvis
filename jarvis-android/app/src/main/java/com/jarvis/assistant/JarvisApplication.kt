@@ -7,6 +7,7 @@ import android.util.Log
 import com.jarvis.assistant.audio.AudioPlayer
 import com.jarvis.assistant.audio.AudioStreamer
 import com.jarvis.assistant.data.JarvisSettings
+import com.jarvis.assistant.data.PendingNoteStore
 import com.jarvis.assistant.network.ApprovalDecisionMessage
 import com.jarvis.assistant.network.ApprovalRequestEvent
 import com.jarvis.assistant.network.ApprovalResolvedEvent
@@ -23,6 +24,7 @@ import com.jarvis.assistant.network.HelloMessage
 import com.jarvis.assistant.network.InterruptMessage
 import com.jarvis.assistant.network.JarvisWebSocketManager
 import com.jarvis.assistant.network.OutboundMessage
+import com.jarvis.assistant.network.QuickNoteMessage
 import com.jarvis.assistant.network.StatusEvent
 import com.jarvis.assistant.network.TelemetryRequestEvent
 import com.jarvis.assistant.network.TelemetrySnapshotMessage
@@ -70,6 +72,8 @@ object JarvisRuntime {
         private set
     lateinit var player: AudioPlayer
         private set
+    lateinit var pendingNotes: PendingNoteStore
+        private set
 
     private lateinit var appContext: Context
     private lateinit var streamer: AudioStreamer
@@ -106,6 +110,7 @@ object JarvisRuntime {
         settings = JarvisSettings(appContext)
         telemetry = DeviceTelemetryProvider(appContext)
         approvals = ApprovalNotificationManager(appContext)
+        pendingNotes = PendingNoteStore(appContext)
         player = AudioPlayer()
         streamer = AudioStreamer(appContext) { buffer, length ->
             socket.sendAudio(buffer, length)
@@ -176,6 +181,52 @@ object JarvisRuntime {
             if (!socket.send(queued)) break
             outbox.poll()
         }
+
+        flushPendingNotes()
+    }
+
+    /**
+     * Replays notes captured while offline, oldest first so the journal keeps
+     * the order they were written in. Each is removed only once the socket has
+     * actually taken it.
+     */
+    private fun flushPendingNotes() {
+        for (note in pendingNotes.snapshot()) {
+            if (!socket.send(note)) return
+            pendingNotes.remove(note)
+        }
+    }
+
+    /**
+     * Capture never fails in front of the user: an unsendable note goes to disk
+     * and is replayed on reconnect.
+     *
+     * @return true when it went straight out over the socket.
+     */
+    fun sendQuickNote(target: String, content: String, mode: String? = null): Boolean {
+        val trimmed = content.trim()
+        if (trimmed.isEmpty()) return false
+
+        val note = QuickNoteMessage(
+            target = target,
+            // A journal is a running log, a vault note is a document.
+            mode = mode ?: if (target == QuickNoteMessage.TARGET_LOGSEQ) {
+                QuickNoteMessage.MODE_APPEND
+            } else {
+                QuickNoteMessage.MODE_CREATE
+            },
+            content = trimmed,
+            timestampMs = System.currentTimeMillis(),
+        )
+
+        if (socket.send(note)) {
+            telemetry.vibrate("confirm")
+            return true
+        }
+        pendingNotes.add(note)
+        telemetry.vibrate("tick")
+        connect()
+        return false
     }
 
     // --------------------------------------------------------- inbound ----
