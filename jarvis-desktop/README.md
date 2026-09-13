@@ -83,6 +83,8 @@ Commands exposed to the frontend (`invoke("<name>", …)`):
 
 | Command | Purpose |
 |---------|---------|
+| `stream_chat` | Open a chat stream against the Jarvis server and push each response line down a Tauri channel. Returns the stream's generation number. |
+| `cancel_chat` | Abort the stream in flight. |
 | `capture_screen` | Grab the primary display, return a base64 JPEG data URI. |
 | `check_server_health` | Probe Jarvis (`:4719/api/status`), Ollama (`:11434/api/tags`) and LiteLLM (`:4000/health`) concurrently; returns a structured report. |
 | `hide_quickbar` / `show_quickbar` | Dismiss or summon the spotlight. |
@@ -91,6 +93,7 @@ Commands exposed to the frontend (`invoke("<name>", …)`):
 | `set_quickbar_pinned` / `is_quickbar_pinned` | Keep the bar open through focus loss. |
 | `write_clipboard` / `read_clipboard` | Clipboard access. |
 | `notify_user` | Raise a Windows toast. |
+| `open_external_url` | Validate an http(s) URL and hand it to the OS shell. |
 | `quit_app` | Release the hotkeys and exit. |
 
 Events emitted to the frontend: `focus-input`, `clipboard-inject`,
@@ -111,16 +114,26 @@ the global shortcuts, or the window list. If the HUD ever needs IPC, add a
 *separate* capability file scoped to that one window and that one command —
 do not widen this one.
 
+External links in the answer card are opened by `open_external_url`, which
+validates the URL and then spawns `rundll32 url.dll,FileProtocolHandler`. It
+deliberately does **not** shell out through `cmd /C start`: `cmd.exe` re-parses
+its command line, Rust's argument escaping targets the C runtime convention
+rather than cmd's metacharacters, and link text here is written by a language
+model — a URL containing `&` would become a second command.
+
 ## Chat protocol
 
-The quickbar posts to `POST http://127.0.0.1:4719/api/chat`:
+Chat requests are made **from Rust**, not from the WebView. `stream_chat` posts
+to `http://127.0.0.1:4719/api/chat` with `reqwest` and pushes each line of the
+response down a `tauri::ipc::Channel`:
 
-```json
+```jsonc
 {
   "messages": [
     { "role": "system", "content": "Context:\n…clipboard…" },
-    { "role": "user", "content": "…" }
+    { "role": "user",   "content": "…" }
   ],
+  "prompt": "…",
   "has_image": true,
   "images": ["data:image/jpeg;base64,…"],
   "stream": true,
@@ -129,26 +142,37 @@ The quickbar posts to `POST http://127.0.0.1:4719/api/chat`:
 }
 ```
 
-Headers: `Content-Type: application/json`, `Accept: text/event-stream` and
-`X-Jarvis-Client: hud`. The last one matters — a Tauri WebView's origin is
-`http://tauri.localhost`, which will not be in the server's `ALLOWED_ORIGINS`,
-and the client header is the documented fallback. Set `JARVIS_TOKEN` at the top
-of `main.js` to also send `X-Jarvis-Token`.
+Headers: `X-Jarvis-Client: hud`, plus `X-Jarvis-Token` when the `JARVIS_TOKEN`
+environment variable is set on the app process.
 
-**The server must still answer CORS.** `Content-Type: application/json` plus a
-custom header makes this a preflighted request, so the WebView sends
-`OPTIONS /api/chat` first and drops the response unless the server replies with
-`Access-Control-Allow-Origin: http://tauri.localhost` (or `*`),
-`Access-Control-Allow-Headers: content-type, x-jarvis-client, x-jarvis-token`
-and `Access-Control-Allow-Methods: POST, OPTIONS`. A server-side origin check
-passing is not sufficient; the browser enforces its own. If adding that to the
-server is not an option, move the request into Rust (`reqwest` is already a
-dependency) — same-process HTTP has no CORS.
+Going through Rust rather than `fetch` buys four things:
 
-The response reader accepts Server-Sent Events (`data: {…}`, terminated by
-`[DONE]`), newline-delimited JSON, and plain text. Token deltas are read from
-any of `choices[0].delta.content`, `choices[0].message.content`,
-`message.content`, `response`, `delta`, `token`, `content` or `text`, so
-Jarvis-native, Ollama and OpenAI-compatible shapes all render. A `route`,
-`tier`, `provider` or `model` field anywhere in a chunk updates the badge
-between **Local / qwen3:8b** and **Cloud / jarvis-escalate**.
+* **No CORS, no preflight.** A native client should not negotiate with a
+  browser sandbox to reach its own loopback service. `fetch` from
+  `http://tauri.localhost` needs an `OPTIONS` round trip on every request even
+  though the server allows that origin.
+* **The token stays out of the WebView.** It is read from the environment in
+  `commands.rs` and never enters JavaScript memory, so a script injected into
+  the HUD cannot read it.
+* **Cancelling drops the socket.** `cancel_chat` aborts the Tokio task; no
+  abandoned fetch keeps draining a response.
+* **One stream at a time.** Starting a stream bumps a generation counter and
+  aborts the previous task, so a superseded stream cannot deliver late chunks.
+
+Channel events are `{ "event": "chunk", "data": "<line>" }`,
+`{ "event": "done", "status": 200 }` and
+`{ "event": "error", "message": "…" }`. Lines are assembled from raw bytes in
+Rust, so a multi-byte character split across two network chunks is never
+decoded half-way.
+
+The frontend parses each line itself, accepting Server-Sent Events
+(`data: {…}`, `[DONE]`), newline-delimited JSON and plain text, and reading
+token deltas from any of `choices[0].delta.content`,
+`choices[0].message.content`, `message.content`, `response`, `delta`, `token`,
+`content` or `text`. A `route`, `tier`, `provider` or `model` field anywhere in
+a chunk flips the badge between **Local / qwen3:8b** and
+**Cloud / jarvis-escalate**.
+
+Opening `index.html` in a plain browser (no Tauri) falls back to a streaming
+`fetch`, purely so the UI can be iterated on outside the app. That path is
+subject to CORS and sends no token.

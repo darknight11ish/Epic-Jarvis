@@ -19,7 +19,10 @@ pub mod commands;
 pub mod tray;
 pub mod windows;
 
-use tauri::{AppHandle, Emitter};
+use std::sync::atomic::AtomicU64;
+use std::sync::Mutex;
+
+use tauri::{async_runtime::JoinHandle, AppHandle, Emitter};
 
 /// Label of the spotlight quickbar window.
 pub const QUICKBAR_LABEL: &str = "quickbar";
@@ -48,6 +51,17 @@ pub mod events {
     pub const HEALTH_REPORT: &str = "health-report";
     /// Payload: `bool` — whether the quickbar is pinned open.
     pub const PIN_CHANGED: &str = "pin-changed";
+}
+
+/// Tracks the one chat stream the spotlight is allowed to have in flight.
+///
+/// `generation` is bumped whenever a stream starts or is cancelled, so a task
+/// sitting between await points can tell that it has been superseded and stop
+/// delivering rather than racing the abort.
+#[derive(Default)]
+pub struct ChatState {
+    pub generation: AtomicU64,
+    pub task: Mutex<Option<JoinHandle<()>>>,
 }
 
 /// Emits an event to the quickbar window only.
@@ -155,7 +169,10 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
+        .manage(ChatState::default())
         .invoke_handler(tauri::generate_handler![
+            commands::stream_chat,
+            commands::cancel_chat,
             commands::capture_screen,
             commands::check_server_health,
             commands::hide_quickbar,
@@ -167,6 +184,7 @@ pub fn run() {
             commands::write_clipboard,
             commands::read_clipboard,
             commands::notify_user,
+            commands::open_external_url,
             commands::quit_app,
         ]);
 

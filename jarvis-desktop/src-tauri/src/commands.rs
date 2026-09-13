@@ -6,13 +6,15 @@
 //! structs. Failures come back as `Result::Err(String)` and surface in the
 //! frontend as a rejected promise.
 
+use std::sync::atomic::Ordering;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use serde::Serialize;
-use tauri::AppHandle;
+use serde::{Deserialize, Serialize};
+use tauri::{ipc::Channel, AppHandle, Manager, State};
 
-use crate::{windows, HUD_LABEL, JARVIS_SERVER_URL, LITELLM_URL, OLLAMA_URL};
+use crate::{windows, ChatState, HUD_LABEL, JARVIS_SERVER_URL, LITELLM_URL, OLLAMA_URL};
 
 /// JPEG quality for desktop captures. 82 keeps text legible while staying well
 /// under the size at which a base64 data URI becomes painful over IPC.
@@ -23,6 +25,13 @@ const JPEG_QUALITY: u8 = 82;
 const MAX_CAPTURE_WIDTH: u32 = 1920;
 /// Per-service timeout for [`check_server_health`].
 const HEALTH_TIMEOUT: Duration = Duration::from_millis(1_500);
+/// Connect timeout for the chat stream. There is deliberately no *total*
+/// timeout: a long answer is a long-lived response body, and `Client::timeout`
+/// would guillotine it mid-sentence.
+const CHAT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// Value of the `X-Jarvis-Client` header. The server accepts a request whose
+/// `Origin` is absent or unrecognised only when this marks it first-party.
+const JARVIS_CLIENT: &str = "hud";
 
 // ---------------------------------------------------------------------------
 // Payload types
@@ -85,6 +94,45 @@ pub struct HealthReport {
     pub services: Vec<ServiceStatus>,
 }
 
+/// One turn of the transcript, in the OpenAI shape the Jarvis server validates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+/// What the backend pushes down a chat [`Channel`].
+///
+/// A typed enum rather than raw strings so the terminal and failure cases are
+/// explicit: the frontend never has to infer "the stream ended" from silence.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "event", rename_all = "camelCase")]
+pub enum ChatEvent {
+    /// One complete line of the response body, newline stripped. SSE framing,
+    /// NDJSON and bare text all arrive this way and are parsed frontend-side.
+    Chunk { data: String },
+    /// The response body ended cleanly.
+    Done { status: u16 },
+    /// The request failed, or the server answered with a non-2xx.
+    Error { message: String },
+}
+
+/// Shared secret for `X-Jarvis-Token`, read once from the environment.
+///
+/// Keeping it in the backend means the token never enters WebView2 memory,
+/// where any script running in the HUD could reach it.
+fn jarvis_token() -> Option<&'static String> {
+    static TOKEN: OnceLock<Option<String>> = OnceLock::new();
+    TOKEN
+        .get_or_init(|| {
+            std::env::var("JARVIS_TOKEN")
+                .ok()
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+        })
+        .as_ref()
+}
+
 // ---------------------------------------------------------------------------
 // Small helpers shared across the crate
 // ---------------------------------------------------------------------------
@@ -113,7 +161,7 @@ pub fn notify(app: &AppHandle, title: &str, body: &str) {
 
 /// Grabs the primary display, encodes it as JPEG and returns a base64 data URI.
 ///
-/// Split out of the command so the `Win+Shift+S` hotkey can run it on a worker
+/// Split out of the command so the `Alt+Shift+S` hotkey can run it on a worker
 /// thread without going through the IPC layer.
 pub fn capture_primary_display() -> Result<CapturePayload, String> {
     use image::{codecs::jpeg::JpegEncoder, ExtendedColorType, ImageEncoder};
@@ -319,6 +367,191 @@ pub async fn check_server_health() -> Result<HealthReport, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Chat streaming
+// ---------------------------------------------------------------------------
+
+/// Aborts whatever stream is in flight, if any.
+fn abort_active_stream(state: &ChatState) {
+    if let Some(handle) = state
+        .task
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take()
+    {
+        handle.abort();
+    }
+}
+
+/// Opens a chat stream against the local Jarvis server and pushes each line of
+/// the response down `channel`.
+///
+/// The request is made from Rust rather than from the WebView on purpose:
+///
+/// * no CORS and no preflight — a native client should not be negotiating with
+///   a browser sandbox to reach its own loopback service;
+/// * `X-Jarvis-Token` stays in the backend instead of sitting in a JavaScript
+///   constant that any script in the HUD could read;
+/// * cancelling drops the socket immediately rather than abandoning a fetch.
+///
+/// Returns the generation number of the stream it started. Starting a stream
+/// cancels the previous one, so the spotlight can only ever have one in flight.
+#[tauri::command]
+pub fn stream_chat(
+    app: AppHandle,
+    state: State<'_, ChatState>,
+    prompt: String,
+    messages: Vec<ChatMessage>,
+    has_image: bool,
+    images: Vec<String>,
+    channel: Channel<ChatEvent>,
+) -> Result<u64, String> {
+    abort_active_stream(&state);
+    let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
+
+    let body = serde_json::json!({
+        "messages": messages,
+        "prompt": prompt,
+        "has_image": has_image,
+        "images": images,
+        "stream": true,
+        "auto": true,
+        "client": "jarvis-desktop",
+    });
+
+    let handle = tauri::async_runtime::spawn(async move {
+        let outcome = pump_chat(&app, generation, body, &channel).await;
+        if let Err(message) = outcome {
+            // A cancelled stream is not a failure worth reporting to the user.
+            if is_current(&app, generation) {
+                let _ = channel.send(ChatEvent::Error { message });
+            }
+        }
+    });
+
+    *state
+        .task
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(handle);
+
+    Ok(generation)
+}
+
+/// Cancels the in-flight stream, if there is one.
+#[tauri::command]
+pub fn cancel_chat(state: State<'_, ChatState>) {
+    // Bumping the generation makes any chunk still in flight stale, so a task
+    // that is between await points cannot deliver after the abort.
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    abort_active_stream(&state);
+}
+
+/// True while `generation` is still the stream the frontend is listening to.
+fn is_current(app: &AppHandle, generation: u64) -> bool {
+    app.state::<ChatState>().generation.load(Ordering::SeqCst) == generation
+}
+
+/// Drives one request to completion, forwarding whole lines as they arrive.
+async fn pump_chat(
+    app: &AppHandle,
+    generation: u64,
+    body: serde_json::Value,
+    channel: &Channel<ChatEvent>,
+) -> Result<(), String> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "X-Jarvis-Client",
+        reqwest::header::HeaderValue::from_static(JARVIS_CLIENT),
+    );
+    if let Some(token) = jarvis_token() {
+        let value = reqwest::header::HeaderValue::from_str(token).map_err(|_| {
+            "JARVIS_TOKEN contains characters that cannot go in a header".to_string()
+        })?;
+        headers.insert("X-Jarvis-Token", value);
+    }
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(CHAT_CONNECT_TIMEOUT)
+        .no_proxy()
+        .build()
+        .map_err(|e| format!("unable to build the HTTP client: {e}"))?;
+
+    let mut response = client
+        .post(format!("{JARVIS_SERVER_URL}/api/chat"))
+        .headers(headers)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {JARVIS_SERVER_URL}. Is it running?")
+            } else {
+                format!("chat request failed: {e}")
+            }
+        })?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let detail = response.text().await.unwrap_or_default();
+        let detail = detail.trim();
+        return Err(if detail.is_empty() {
+            format!("the server answered HTTP {}", status.as_u16())
+        } else {
+            format!("the server answered HTTP {}: {detail}", status.as_u16())
+        });
+    }
+
+    // Lines are assembled from raw bytes so a multi-byte character split across
+    // two network chunks is never decoded half-way.
+    let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
+
+    loop {
+        if !is_current(app, generation) {
+            return Ok(());
+        }
+
+        match response.chunk().await {
+            Ok(Some(bytes)) => {
+                buffer.extend_from_slice(&bytes);
+                while let Some(newline) = buffer.iter().position(|b| *b == b'\n') {
+                    let line: Vec<u8> = buffer.drain(..=newline).collect();
+                    let text = String::from_utf8_lossy(&line[..line.len() - 1])
+                        .trim_end_matches('\r')
+                        .to_string();
+                    // Blank lines are only SSE frame separators; dropping them
+                    // here saves an IPC hop per frame.
+                    if text.trim().is_empty() {
+                        continue;
+                    }
+                    if !is_current(app, generation) {
+                        return Ok(());
+                    }
+                    channel
+                        .send(ChatEvent::Chunk { data: text })
+                        .map_err(|e| format!("unable to deliver a chunk: {e}"))?;
+                }
+            }
+            Ok(None) => break,
+            Err(e) => return Err(format!("the stream broke: {e}")),
+        }
+    }
+
+    // Whatever is left without a trailing newline is still a line.
+    if !buffer.is_empty() {
+        let text = String::from_utf8_lossy(&buffer).trim().to_string();
+        if !text.is_empty() && is_current(app, generation) {
+            let _ = channel.send(ChatEvent::Chunk { data: text });
+        }
+    }
+
+    if is_current(app, generation) {
+        let _ = channel.send(ChatEvent::Done {
+            status: status.as_u16(),
+        });
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Window control
 // ---------------------------------------------------------------------------
 
@@ -388,6 +621,71 @@ pub fn read_clipboard(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub fn notify_user(app: AppHandle, title: Option<String>, body: String) {
     notify(&app, title.as_deref().unwrap_or("Jarvis"), &body);
+}
+
+/// Rejects anything that is not a plain, well-formed http(s) URL.
+///
+/// Links in the answer card are authored by a language model, so this is
+/// untrusted input on its way to a process spawn.
+fn validate_external_url(url: &str) -> Result<(), String> {
+    if url.len() > 2_048 {
+        return Err("refusing to open an implausibly long URL".to_string());
+    }
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("only http and https URLs can be opened".to_string());
+    }
+    // Whitespace and control characters are how an argument becomes two.
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(
+            "refusing to open a URL containing whitespace or control characters".to_string(),
+        );
+    }
+    let host = url
+        .split_once("//")
+        .map(|(_, rest)| rest.split(['/', '?', '#']).next().unwrap_or(""))
+        .unwrap_or("");
+    if host.is_empty() {
+        return Err("that URL has no host".to_string());
+    }
+    Ok(())
+}
+
+/// Opens an external link in the user's default browser.
+///
+/// Deliberately *not* `cmd /C start "" <url>`: `cmd.exe` re-parses its command
+/// line, and Rust's argument escaping targets the C runtime convention, not
+/// cmd's metacharacters. A model that emits `https://example.com/?a=1&calc`
+/// would get `&calc` treated as a second command. `rundll32` hands the URL to
+/// the protocol handler through `CreateProcess` with no shell in the path, and
+/// [`validate_external_url`] rejects anything unusual before we get that far.
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    let url = url.trim();
+    validate_external_url(url)?;
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut c = std::process::Command::new("rundll32.exe");
+        c.arg("url.dll,FileProtocolHandler").arg(url);
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut c = std::process::Command::new("open");
+        c.arg(url);
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(url);
+        c
+    };
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("unable to open {url}: {e}"))
 }
 
 /// Shuts the application down for real, releasing the global shortcuts first.

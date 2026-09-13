@@ -33,11 +33,11 @@ const CLOUD_ROUTE = { tier: "cloud", label: "Cloud", model: "jarvis-escalate" };
 const JARVIS_CLIENT_HEADER = "hud";
 
 /**
- * Optional shared secret. When the server is started with a token, put the same
- * value here and it travels as `X-Jarvis-Token`. Empty means the header is
- * omitted entirely.
+ * The shared secret is deliberately absent from this file. Chat requests are
+ * made by the Rust backend, which reads `JARVIS_TOKEN` from the environment, so
+ * the token never enters WebView2 memory where a script in the HUD could read
+ * it. See `stream_chat` in `commands.rs`.
  */
-const JARVIS_TOKEN = "";
 
 /** Clipboard context longer than this is trimmed in the attachment chip. */
 const CLIPBOARD_PREVIEW = 90;
@@ -133,7 +133,8 @@ const state = {
   buffer: "",
   /** Prompt currently in flight, kept for the retry path. */
   inFlight: null,
-  controller: null,
+  /** Cancels whichever transport is streaming; null when idle. */
+  abort: null,
   startedAt: 0,
   chunks: 0,
   pinned: false,
@@ -686,65 +687,101 @@ function updateStat() {
   dom.cardStat.textContent = `${state.chunks} chunks · ${seconds.toFixed(1)}s`;
 }
 
-/** Sends the prompt and streams the answer into the card. */
-async function send(promptText) {
-  const message = promptText.trim();
-  if (!message || state.phase === "streaming") return;
+/** Cancels the stream in flight, if there is one. */
+function abortStream() {
+  const abort = state.abort;
+  if (!abort) return;
+  state.abort = null;
+  abort();
+}
 
-  state.inFlight = message;
-  state.buffer = "";
-  state.chunks = 0;
-  state.startedAt = performance.now();
-  state.controller = new AbortController();
+/**
+ * Streams through the Rust backend over a Tauri channel.
+ *
+ * This is the real transport. Going through Rust means no CORS negotiation, no
+ * preflight round trip to reach a loopback service, and no auth token in
+ * JavaScript; cancelling drops the socket rather than abandoning a fetch.
+ */
+async function streamViaBackend(payload) {
+  const channel = new TAURI.core.Channel();
+  let closed = false;
 
-  setPhase("streaming");
-  openCard("Thinking…");
-  dom.cursor.hidden = false;
-  dom.stop.hidden = false;
-  dom.answer.innerHTML = "";
-  dom.cardStat.textContent = "";
-
-  // Stay open while the answer streams, even if focus wanders.
-  await setPinned(true, { silent: true });
-
-  // The server validates an OpenAI-shaped `messages` array and routes to its
-  // vision lane on `has_image`, so clipboard context rides as a system turn
-  // rather than a side-channel field.
-  const body = {
-    messages: [
-      ...(state.clipboard
-        ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
-        : []),
-      { role: "user", content: message },
-    ],
-    has_image: Boolean(state.capture),
-    images: state.capture ? [state.capture] : [],
-    stream: true,
-    auto: true,
-    client: "jarvis-desktop",
+  const close = (phase, statusText) => {
+    if (closed) return;
+    closed = true;
+    finishStream(phase, statusText);
   };
 
-  const headers = {
-    "Content-Type": "application/json",
-    Accept: "text/event-stream",
-    "X-Jarvis-Client": JARVIS_CLIENT_HEADER,
+  channel.onmessage = (message) => {
+    if (!message || closed) return;
+    switch (message.event) {
+      case "chunk":
+        // `consumeLine` returns true on the stream's own terminator, which can
+        // arrive before the body closes.
+        if (consumeLine(message.data)) {
+          invoke("cancel_chat");
+          close("done");
+        }
+        break;
+      case "error":
+        showError(String(message.message ?? "the stream failed"));
+        close("error");
+        refreshHealth();
+        break;
+      case "done":
+        close(state.phase === "error" ? "error" : "done");
+        break;
+      default:
+        console.warn("[jarvis] unknown chat event:", message);
+    }
   };
-  if (JARVIS_TOKEN) headers["X-Jarvis-Token"] = JARVIS_TOKEN;
+
+  state.abort = () => {
+    closed = true;
+    invoke("cancel_chat");
+    finishStream("done", "Stopped");
+  };
+
+  const started = await invoke("stream_chat", { ...payload, channel });
+  if (started === null && !closed) {
+    showError("The backend refused to start the stream. Check the app log.");
+    close("error");
+  }
+}
+
+/**
+ * Browser-preview transport: a plain streaming fetch, used only when the page
+ * is opened outside Tauri (`npm run dev` in a browser tab, or the headless
+ * screenshot harness). It is subject to CORS and carries no token.
+ */
+async function streamViaFetch(payload) {
+  const controller = new AbortController();
+  state.abort = () => controller.abort();
 
   try {
     const response = await fetch(CHAT_ENDPOINT, {
       method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: state.controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        "X-Jarvis-Client": JARVIS_CLIENT_HEADER,
+      },
+      body: JSON.stringify({
+        messages: payload.messages,
+        prompt: payload.prompt,
+        has_image: payload.hasImage,
+        images: payload.images,
+        stream: true,
+        auto: true,
+        client: "jarvis-desktop",
+      }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
-      // 400 and 403 are the two the Jarvis server returns for a malformed body
-      // and a rejected origin; naming them saves a round trip to the log.
       const hint =
         response.status === 403
-          ? " — the server rejected this origin. Add http://tauri.localhost to its ALLOWED_ORIGINS, or confirm X-Jarvis-Token."
+          ? " — the server rejected this origin."
           : response.status === 400
             ? " — the server rejected the request body."
             : "";
@@ -755,7 +792,6 @@ async function send(promptText) {
 
     dom.cardStatusText.textContent = "Streaming";
 
-    // A server that ignores `stream: true` just returns one JSON document.
     if (!response.body) {
       consumeLine(await response.text());
       finishStream("done");
@@ -771,10 +807,6 @@ async function send(promptText) {
       if (done) break;
 
       pending += decoder.decode(value, { stream: true });
-
-      // SSE frames are separated by a blank line, NDJSON by a single newline.
-      // Splitting on newlines handles both, because `consumeLine` ignores the
-      // blank separator.
       const lines = pending.split("\n");
       pending = lines.pop() || "";
 
@@ -792,7 +824,6 @@ async function send(promptText) {
     }
 
     if (pending.trim()) consumeLine(pending);
-
     finishStream(state.phase === "error" ? "error" : "done");
   } catch (error) {
     if (error && error.name === "AbortError") {
@@ -809,9 +840,51 @@ async function send(promptText) {
   }
 }
 
+/** Sends the prompt and streams the answer into the card. */
+async function send(promptText) {
+  const message = promptText.trim();
+  if (!message || state.phase === "streaming") return;
+
+  state.inFlight = message;
+  state.buffer = "";
+  state.chunks = 0;
+  state.startedAt = performance.now();
+
+  setPhase("streaming");
+  openCard("Thinking…");
+  dom.cursor.hidden = false;
+  dom.stop.hidden = false;
+  dom.answer.innerHTML = "";
+  dom.cardStat.textContent = "";
+
+  // Stay open while the answer streams, even if focus wanders.
+  await setPinned(true, { silent: true });
+
+  // Clipboard context rides as a system turn; the server validates an
+  // OpenAI-shaped `messages` array and routes on `has_image`.
+  const payload = {
+    prompt: message,
+    messages: [
+      ...(state.clipboard
+        ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
+        : []),
+      { role: "user", content: message },
+    ],
+    hasImage: Boolean(state.capture),
+    images: state.capture ? [state.capture] : [],
+  };
+
+  if (IS_TAURI) {
+    dom.cardStatusText.textContent = "Streaming";
+    await streamViaBackend(payload);
+  } else {
+    await streamViaFetch(payload);
+  }
+}
+
 /** Common teardown for every way a stream can end. */
 function finishStream(phase, statusText) {
-  state.controller = null;
+  state.abort = null;
   dom.cursor.hidden = true;
   dom.stop.hidden = true;
 
@@ -851,10 +924,7 @@ async function setPinned(pinned, { silent = false } = {}) {
 
 /** Clears the composer and hides the window. */
 async function dismiss() {
-  if (state.controller) {
-    state.controller.abort();
-    state.controller = null;
-  }
+  abortStream();
   dom.prompt.value = "";
   autoGrowPrompt();
   state.capture = null;
@@ -910,8 +980,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
     // The first Esc stops a running stream; a second one dismisses the window.
-    if (state.controller) {
-      state.controller.abort();
+    if (state.abort) {
+      abortStream();
       return;
     }
     dismiss();
@@ -925,9 +995,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-dom.stop.addEventListener("click", () => {
-  if (state.controller) state.controller.abort();
-});
+dom.stop.addEventListener("click", abortStream);
 
 dom.copy.addEventListener("click", async () => {
   const text = state.buffer.trim();
@@ -960,10 +1028,10 @@ dom.answer.addEventListener("click", (event) => {
   const anchor = event.target.closest("a[data-external]");
   if (!anchor) return;
   event.preventDefault();
-  if (TAURI && TAURI.opener && TAURI.opener.openUrl) {
-    TAURI.opener
-      .openUrl(anchor.href)
-      .catch((error) => console.error("[jarvis] unable to open link:", error));
+  if (IS_TAURI) {
+    // The backend validates the URL and hands it to the OS shell; a WebView
+    // `window.open` would either be swallowed or open inside the app.
+    invoke("open_external_url", { url: anchor.href });
   } else {
     window.open(anchor.href, "_blank", "noopener");
   }
