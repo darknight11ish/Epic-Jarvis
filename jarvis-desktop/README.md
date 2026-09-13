@@ -14,6 +14,39 @@ driving a WebView2 frontend.
 * **Vibrancy** — Windows 11 Acrylic behind the quickbar, Mica behind the HUD
   (Acrylic fallback on Windows 10).
 
+## Running against the backend — read this first
+
+The HUD window loads the bundled `jarvis_hud.html`, so its origin is
+`http://tauri.localhost`, not the server. Two things follow, and the first one
+is not optional:
+
+**1. The backend must be told this origin is legitimate.**
+
+```
+set JARVIS_HUD_ORIGINS=http://tauri.localhost,tauri://localhost
+python jarvis_hud.py
+```
+
+Without it every call from the HUD page is **403**. `_origin_ok()` only falls
+back to the `X-Jarvis-Client: hud` header when a request carries *no* `Origin`,
+and a cross-origin `fetch` from the webview always sends one — so the header
+fallback the page relies on in a browser does nothing here. This is set in the
+child's environment automatically once the app supervises the backend
+(build order step 4); until then it is a manual step.
+
+**2. The base URL and token come from the desktop shell, not the page.**
+
+They live in the settings store (`jarvis-desktop.json` in the app config dir),
+are read in Rust, and are pushed into the page as `JARVIS.set(base, token)` on
+page load. `JARVIS_HUD_BASE` and `JARVIS_TOKEN`/`HUD_TOKEN` are the environment
+fallbacks. Nothing hardcodes a port: `JARVIS_HUD_PORT` defaults to 4719 in
+`jarvis_hud.py` and `DEFAULT_BASE` in `commands.rs` matches it.
+
+One caveat worth knowing: the brief says to read these from the store "rather
+than `localStorage`", and the *source* is the store — but the shipped page's
+`JARVIS.set()` writes both to `localStorage` itself as it stores them. The
+shell controls where they come from; it cannot stop the page caching them.
+
 ## Global hotkeys
 
 | Shortcut | Action |

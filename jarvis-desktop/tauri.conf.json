@@ -38,18 +38,18 @@
       },
       {
         "label": "hud",
-        "title": "Jarvis HUD",
-        "url": "http://127.0.0.1:4719",
+        "title": "Jarvis",
+        "url": "jarvis_hud.html",
         "width": 1280,
         "height": 820,
         "minWidth": 960,
         "minHeight": 640,
         "center": true,
-        "decorations": false,
-        "transparent": true,
+        "decorations": true,
+        "transparent": false,
         "alwaysOnTop": false,
         "skipTaskbar": false,
-        "visible": false,
+        "visible": true,
         "resizable": true,
         "focus": true,
         "shadow": true,
@@ -83,7 +83,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:11434 http://127.0.0.1:4000; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'",
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:11434 http://127.0.0.1:4000; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'",
       "freezePrototype": true,
       "assetProtocol": {
         "enable": false,

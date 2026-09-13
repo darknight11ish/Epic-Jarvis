@@ -129,7 +129,7 @@ fn run_status_check(app: &AppHandle) {
     let handle = app.clone();
 
     tauri::async_runtime::spawn(async move {
-        match commands::check_server_health().await {
+        match commands::check_server_health(handle.clone()).await {
             Ok(report) => {
                 commands::notify(&handle, "Jarvis — Status Check", &report.summary);
                 crate::emit_all(&handle, events::HEALTH_REPORT, report);

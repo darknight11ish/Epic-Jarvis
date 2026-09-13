@@ -1,0 +1,1776 @@
+{
+  "spec": "jarvis-visual",
+  "version": 1,
+  "note": "One palette and one pattern vocabulary shared by every renderer. Android (Compose) and the Tauri desktop cannot share drawing code - one is Kotlin, one is JavaScript - so what they share is this DATA. Each renderer implements the 9 pattern kinds below and reads the same colours, so a face looks identical on both without either side owning the other's code.",
+  "palette": {
+    "families": [
+      {
+        "id": "ice",
+        "name": "Ice"
+      },
+      {
+        "id": "azure",
+        "name": "Azure"
+      },
+      {
+        "id": "indigo",
+        "name": "Indigo"
+      },
+      {
+        "id": "violet",
+        "name": "Violet"
+      },
+      {
+        "id": "magenta",
+        "name": "Magenta"
+      },
+      {
+        "id": "rose",
+        "name": "Rose"
+      },
+      {
+        "id": "ember",
+        "name": "Ember"
+      },
+      {
+        "id": "amber",
+        "name": "Amber"
+      },
+      {
+        "id": "verdant",
+        "name": "Verdant"
+      },
+      {
+        "id": "neutral",
+        "name": "Neutral"
+      }
+    ],
+    "steps": [
+      "deep",
+      "shade",
+      "core",
+      "bright",
+      "mist"
+    ],
+    "colors": [
+      {
+        "id": "ice-1",
+        "name": "Ice Deep",
+        "family": "ice",
+        "step": 1,
+        "hex": "#0a3a4a",
+        "css": "#0a3a4a",
+        "rgb": [
+          10,
+          58,
+          74
+        ],
+        "argb": "0xFF0A3A4A",
+        "argb_int": -16106934
+      },
+      {
+        "id": "ice-2",
+        "name": "Ice Shade",
+        "family": "ice",
+        "step": 2,
+        "hex": "#12657f",
+        "css": "#12657f",
+        "rgb": [
+          18,
+          101,
+          127
+        ],
+        "argb": "0xFF12657F",
+        "argb_int": -15571585
+      },
+      {
+        "id": "ice-3",
+        "name": "Ice Core",
+        "family": "ice",
+        "step": 3,
+        "hex": "#2ea8cc",
+        "css": "#2ea8cc",
+        "rgb": [
+          46,
+          168,
+          204
+        ],
+        "argb": "0xFF2EA8CC",
+        "argb_int": -13719348
+      },
+      {
+        "id": "ice-4",
+        "name": "Ice Bright",
+        "family": "ice",
+        "step": 4,
+        "hex": "#6fe3ff",
+        "css": "#6fe3ff",
+        "rgb": [
+          111,
+          227,
+          255
+        ],
+        "argb": "0xFF6FE3FF",
+        "argb_int": -9444353
+      },
+      {
+        "id": "ice-5",
+        "name": "Ice Mist",
+        "family": "ice",
+        "step": 5,
+        "hex": "#b8f4ff",
+        "css": "#b8f4ff",
+        "rgb": [
+          184,
+          244,
+          255
+        ],
+        "argb": "0xFFB8F4FF",
+        "argb_int": -4655873
+      },
+      {
+        "id": "azure-1",
+        "name": "Azure Deep",
+        "family": "azure",
+        "step": 1,
+        "hex": "#0c2a55",
+        "css": "#0c2a55",
+        "rgb": [
+          12,
+          42,
+          85
+        ],
+        "argb": "0xFF0C2A55",
+        "argb_int": -15979947
+      },
+      {
+        "id": "azure-2",
+        "name": "Azure Shade",
+        "family": "azure",
+        "step": 2,
+        "hex": "#14479a",
+        "css": "#14479a",
+        "rgb": [
+          20,
+          71,
+          154
+        ],
+        "argb": "0xFF14479A",
+        "argb_int": -15448166
+      },
+      {
+        "id": "azure-3",
+        "name": "Azure Core",
+        "family": "azure",
+        "step": 3,
+        "hex": "#2f74e0",
+        "css": "#2f74e0",
+        "rgb": [
+          47,
+          116,
+          224
+        ],
+        "argb": "0xFF2F74E0",
+        "argb_int": -13667104
+      },
+      {
+        "id": "azure-4",
+        "name": "Azure Bright",
+        "family": "azure",
+        "step": 4,
+        "hex": "#62a3ff",
+        "css": "#62a3ff",
+        "rgb": [
+          98,
+          163,
+          255
+        ],
+        "argb": "0xFF62A3FF",
+        "argb_int": -10312705
+      },
+      {
+        "id": "azure-5",
+        "name": "Azure Mist",
+        "family": "azure",
+        "step": 5,
+        "hex": "#b0d2ff",
+        "css": "#b0d2ff",
+        "rgb": [
+          176,
+          210,
+          255
+        ],
+        "argb": "0xFFB0D2FF",
+        "argb_int": -5188865
+      },
+      {
+        "id": "indigo-1",
+        "name": "Indigo Deep",
+        "family": "indigo",
+        "step": 1,
+        "hex": "#1a1a52",
+        "css": "#1a1a52",
+        "rgb": [
+          26,
+          26,
+          82
+        ],
+        "argb": "0xFF1A1A52",
+        "argb_int": -15066542
+      },
+      {
+        "id": "indigo-2",
+        "name": "Indigo Shade",
+        "family": "indigo",
+        "step": 2,
+        "hex": "#2b2b8f",
+        "css": "#2b2b8f",
+        "rgb": [
+          43,
+          43,
+          143
+        ],
+        "argb": "0xFF2B2B8F",
+        "argb_int": -13948017
+      },
+      {
+        "id": "indigo-3",
+        "name": "Indigo Core",
+        "family": "indigo",
+        "step": 3,
+        "hex": "#4a4ad4",
+        "css": "#4a4ad4",
+        "rgb": [
+          74,
+          74,
+          212
+        ],
+        "argb": "0xFF4A4AD4",
+        "argb_int": -11908396
+      },
+      {
+        "id": "indigo-4",
+        "name": "Indigo Bright",
+        "family": "indigo",
+        "step": 4,
+        "hex": "#7b7bff",
+        "css": "#7b7bff",
+        "rgb": [
+          123,
+          123,
+          255
+        ],
+        "argb": "0xFF7B7BFF",
+        "argb_int": -8684545
+      },
+      {
+        "id": "indigo-5",
+        "name": "Indigo Mist",
+        "family": "indigo",
+        "step": 5,
+        "hex": "#c0c0ff",
+        "css": "#c0c0ff",
+        "rgb": [
+          192,
+          192,
+          255
+        ],
+        "argb": "0xFFC0C0FF",
+        "argb_int": -4144897
+      },
+      {
+        "id": "violet-1",
+        "name": "Violet Deep",
+        "family": "violet",
+        "step": 1,
+        "hex": "#33115c",
+        "css": "#33115c",
+        "rgb": [
+          51,
+          17,
+          92
+        ],
+        "argb": "0xFF33115C",
+        "argb_int": -13430436
+      },
+      {
+        "id": "violet-2",
+        "name": "Violet Shade",
+        "family": "violet",
+        "step": 2,
+        "hex": "#551f9c",
+        "css": "#551f9c",
+        "rgb": [
+          85,
+          31,
+          156
+        ],
+        "argb": "0xFF551F9C",
+        "argb_int": -11198564
+      },
+      {
+        "id": "violet-3",
+        "name": "Violet Core",
+        "family": "violet",
+        "step": 3,
+        "hex": "#8340e0",
+        "css": "#8340e0",
+        "rgb": [
+          131,
+          64,
+          224
+        ],
+        "argb": "0xFF8340E0",
+        "argb_int": -8175392
+      },
+      {
+        "id": "violet-4",
+        "name": "Violet Bright",
+        "family": "violet",
+        "step": 4,
+        "hex": "#ae7bff",
+        "css": "#ae7bff",
+        "rgb": [
+          174,
+          123,
+          255
+        ],
+        "argb": "0xFFAE7BFF",
+        "argb_int": -5342209
+      },
+      {
+        "id": "violet-5",
+        "name": "Violet Mist",
+        "family": "violet",
+        "step": 5,
+        "hex": "#d9c0ff",
+        "css": "#d9c0ff",
+        "rgb": [
+          217,
+          192,
+          255
+        ],
+        "argb": "0xFFD9C0FF",
+        "argb_int": -2506497
+      },
+      {
+        "id": "magenta-1",
+        "name": "Magenta Deep",
+        "family": "magenta",
+        "step": 1,
+        "hex": "#4d0c40",
+        "css": "#4d0c40",
+        "rgb": [
+          77,
+          12,
+          64
+        ],
+        "argb": "0xFF4D0C40",
+        "argb_int": -11727808
+      },
+      {
+        "id": "magenta-2",
+        "name": "Magenta Shade",
+        "family": "magenta",
+        "step": 2,
+        "hex": "#8a1470",
+        "css": "#8a1470",
+        "rgb": [
+          138,
+          20,
+          112
+        ],
+        "argb": "0xFF8A1470",
+        "argb_int": -7728016
+      },
+      {
+        "id": "magenta-3",
+        "name": "Magenta Core",
+        "family": "magenta",
+        "step": 3,
+        "hex": "#cc2fa8",
+        "css": "#cc2fa8",
+        "rgb": [
+          204,
+          47,
+          168
+        ],
+        "argb": "0xFFCC2FA8",
+        "argb_int": -3395672
+      },
+      {
+        "id": "magenta-4",
+        "name": "Magenta Bright",
+        "family": "magenta",
+        "step": 4,
+        "hex": "#ff6fd0",
+        "css": "#ff6fd0",
+        "rgb": [
+          255,
+          111,
+          208
+        ],
+        "argb": "0xFFFF6FD0",
+        "argb_int": -36912
+      },
+      {
+        "id": "magenta-5",
+        "name": "Magenta Mist",
+        "family": "magenta",
+        "step": 5,
+        "hex": "#ffb8ea",
+        "css": "#ffb8ea",
+        "rgb": [
+          255,
+          184,
+          234
+        ],
+        "argb": "0xFFFFB8EA",
+        "argb_int": -18198
+      },
+      {
+        "id": "rose-1",
+        "name": "Rose Deep",
+        "family": "rose",
+        "step": 1,
+        "hex": "#521018",
+        "css": "#521018",
+        "rgb": [
+          82,
+          16,
+          24
+        ],
+        "argb": "0xFF521018",
+        "argb_int": -11399144
+      },
+      {
+        "id": "rose-2",
+        "name": "Rose Shade",
+        "family": "rose",
+        "step": 2,
+        "hex": "#8f1b28",
+        "css": "#8f1b28",
+        "rgb": [
+          143,
+          27,
+          40
+        ],
+        "argb": "0xFF8F1B28",
+        "argb_int": -7398616
+      },
+      {
+        "id": "rose-3",
+        "name": "Rose Core",
+        "family": "rose",
+        "step": 3,
+        "hex": "#d4384a",
+        "css": "#d4384a",
+        "rgb": [
+          212,
+          56,
+          74
+        ],
+        "argb": "0xFFD4384A",
+        "argb_int": -2869174
+      },
+      {
+        "id": "rose-4",
+        "name": "Rose Bright",
+        "family": "rose",
+        "step": 4,
+        "hex": "#ff7b86",
+        "css": "#ff7b86",
+        "rgb": [
+          255,
+          123,
+          134
+        ],
+        "argb": "0xFFFF7B86",
+        "argb_int": -33914
+      },
+      {
+        "id": "rose-5",
+        "name": "Rose Mist",
+        "family": "rose",
+        "step": 5,
+        "hex": "#ffc0c5",
+        "css": "#ffc0c5",
+        "rgb": [
+          255,
+          192,
+          197
+        ],
+        "argb": "0xFFFFC0C5",
+        "argb_int": -16187
+      },
+      {
+        "id": "ember-1",
+        "name": "Ember Deep",
+        "family": "ember",
+        "step": 1,
+        "hex": "#4d1f08",
+        "css": "#4d1f08",
+        "rgb": [
+          77,
+          31,
+          8
+        ],
+        "argb": "0xFF4D1F08",
+        "argb_int": -11723000
+      },
+      {
+        "id": "ember-2",
+        "name": "Ember Shade",
+        "family": "ember",
+        "step": 2,
+        "hex": "#8a3a0e",
+        "css": "#8a3a0e",
+        "rgb": [
+          138,
+          58,
+          14
+        ],
+        "argb": "0xFF8A3A0E",
+        "argb_int": -7718386
+      },
+      {
+        "id": "ember-3",
+        "name": "Ember Core",
+        "family": "ember",
+        "step": 3,
+        "hex": "#d4661c",
+        "css": "#d4661c",
+        "rgb": [
+          212,
+          102,
+          28
+        ],
+        "argb": "0xFFD4661C",
+        "argb_int": -2857444
+      },
+      {
+        "id": "ember-4",
+        "name": "Ember Bright",
+        "family": "ember",
+        "step": 4,
+        "hex": "#ff9b52",
+        "css": "#ff9b52",
+        "rgb": [
+          255,
+          155,
+          82
+        ],
+        "argb": "0xFFFF9B52",
+        "argb_int": -25774
+      },
+      {
+        "id": "ember-5",
+        "name": "Ember Mist",
+        "family": "ember",
+        "step": 5,
+        "hex": "#ffcfa8",
+        "css": "#ffcfa8",
+        "rgb": [
+          255,
+          207,
+          168
+        ],
+        "argb": "0xFFFFCFA8",
+        "argb_int": -12376
+      },
+      {
+        "id": "amber-1",
+        "name": "Amber Deep",
+        "family": "amber",
+        "step": 1,
+        "hex": "#4a3708",
+        "css": "#4a3708",
+        "rgb": [
+          74,
+          55,
+          8
+        ],
+        "argb": "0xFF4A3708",
+        "argb_int": -11913464
+      },
+      {
+        "id": "amber-2",
+        "name": "Amber Shade",
+        "family": "amber",
+        "step": 2,
+        "hex": "#8a680e",
+        "css": "#8a680e",
+        "rgb": [
+          138,
+          104,
+          14
+        ],
+        "argb": "0xFF8A680E",
+        "argb_int": -7706610
+      },
+      {
+        "id": "amber-3",
+        "name": "Amber Core",
+        "family": "amber",
+        "step": 3,
+        "hex": "#d4a41c",
+        "css": "#d4a41c",
+        "rgb": [
+          212,
+          164,
+          28
+        ],
+        "argb": "0xFFD4A41C",
+        "argb_int": -2841572
+      },
+      {
+        "id": "amber-4",
+        "name": "Amber Bright",
+        "family": "amber",
+        "step": 4,
+        "hex": "#ffb648",
+        "css": "#ffb648",
+        "rgb": [
+          255,
+          182,
+          72
+        ],
+        "argb": "0xFFFFB648",
+        "argb_int": -18872
+      },
+      {
+        "id": "amber-5",
+        "name": "Amber Mist",
+        "family": "amber",
+        "step": 5,
+        "hex": "#ffe0a0",
+        "css": "#ffe0a0",
+        "rgb": [
+          255,
+          224,
+          160
+        ],
+        "argb": "0xFFFFE0A0",
+        "argb_int": -8032
+      },
+      {
+        "id": "verdant-1",
+        "name": "Verdant Deep",
+        "family": "verdant",
+        "step": 1,
+        "hex": "#0a3d2a",
+        "css": "#0a3d2a",
+        "rgb": [
+          10,
+          61,
+          42
+        ],
+        "argb": "0xFF0A3D2A",
+        "argb_int": -16106198
+      },
+      {
+        "id": "verdant-2",
+        "name": "Verdant Shade",
+        "family": "verdant",
+        "step": 2,
+        "hex": "#126b47",
+        "css": "#126b47",
+        "rgb": [
+          18,
+          107,
+          71
+        ],
+        "argb": "0xFF126B47",
+        "argb_int": -15570105
+      },
+      {
+        "id": "verdant-3",
+        "name": "Verdant Core",
+        "family": "verdant",
+        "step": 3,
+        "hex": "#22a874",
+        "css": "#22a874",
+        "rgb": [
+          34,
+          168,
+          116
+        ],
+        "argb": "0xFF22A874",
+        "argb_int": -14505868
+      },
+      {
+        "id": "verdant-4",
+        "name": "Verdant Bright",
+        "family": "verdant",
+        "step": 4,
+        "hex": "#5fe0a8",
+        "css": "#5fe0a8",
+        "rgb": [
+          95,
+          224,
+          168
+        ],
+        "argb": "0xFF5FE0A8",
+        "argb_int": -10493784
+      },
+      {
+        "id": "verdant-5",
+        "name": "Verdant Mist",
+        "family": "verdant",
+        "step": 5,
+        "hex": "#b0f4d8",
+        "css": "#b0f4d8",
+        "rgb": [
+          176,
+          244,
+          216
+        ],
+        "argb": "0xFFB0F4D8",
+        "argb_int": -5180200
+      },
+      {
+        "id": "neutral-1",
+        "name": "Neutral Deep",
+        "family": "neutral",
+        "step": 1,
+        "hex": "#0a0e14",
+        "css": "#0a0e14",
+        "rgb": [
+          10,
+          14,
+          20
+        ],
+        "argb": "0xFF0A0E14",
+        "argb_int": -16118252
+      },
+      {
+        "id": "neutral-2",
+        "name": "Neutral Shade",
+        "family": "neutral",
+        "step": 2,
+        "hex": "#1e2833",
+        "css": "#1e2833",
+        "rgb": [
+          30,
+          40,
+          51
+        ],
+        "argb": "0xFF1E2833",
+        "argb_int": -14800845
+      },
+      {
+        "id": "neutral-3",
+        "name": "Neutral Core",
+        "family": "neutral",
+        "step": 3,
+        "hex": "#46566a",
+        "css": "#46566a",
+        "rgb": [
+          70,
+          86,
+          106
+        ],
+        "argb": "0xFF46566A",
+        "argb_int": -12167574
+      },
+      {
+        "id": "neutral-4",
+        "name": "Neutral Bright",
+        "family": "neutral",
+        "step": 4,
+        "hex": "#8fa3b8",
+        "css": "#8fa3b8",
+        "rgb": [
+          143,
+          163,
+          184
+        ],
+        "argb": "0xFF8FA3B8",
+        "argb_int": -7363656
+      },
+      {
+        "id": "neutral-5",
+        "name": "Neutral Mist",
+        "family": "neutral",
+        "step": 5,
+        "hex": "#dde7f2",
+        "css": "#dde7f2",
+        "rgb": [
+          221,
+          231,
+          242
+        ],
+        "argb": "0xFFDDE7F2",
+        "argb_int": -2234382
+      }
+    ]
+  },
+  "pattern_kinds": [
+    "solid",
+    "hue_sweep",
+    "step_cycle",
+    "breathe",
+    "pulse",
+    "gradient",
+    "comet",
+    "flicker",
+    "reactive",
+    "temperature",
+    "strobe"
+  ],
+  "patterns": [
+    {
+      "id": "solid",
+      "name": "Solid",
+      "kind": "solid",
+      "desc": "One colour, held. The quiet default.",
+      "params": {
+        "color": "ice-4"
+      }
+    },
+    {
+      "id": "rainbow",
+      "name": "Rainbow",
+      "kind": "hue_sweep",
+      "desc": "Full hue circle, continuously. Reads as 'working hard' without any text.",
+      "params": {
+        "period_s": 6.0,
+        "sat": 0.82,
+        "light": 0.62,
+        "span_deg": 360,
+        "offset_deg": 0
+      }
+    },
+    {
+      "id": "cycle",
+      "name": "Cycle",
+      "kind": "step_cycle",
+      "desc": "Steps through chosen palette colours, holding each. Discrete, not a blend.",
+      "params": {
+        "colors": [
+          "ice-4",
+          "violet-4",
+          "amber-4",
+          "verdant-4"
+        ],
+        "hold_s": 2.0,
+        "blend_s": 0.45
+      }
+    },
+    {
+      "id": "breathe",
+      "name": "Breathe",
+      "kind": "breathe",
+      "desc": "One colour, brightness rising and falling. Alive but resting.",
+      "params": {
+        "color": "ice-4",
+        "period_s": 4.5,
+        "depth": 0.45
+      }
+    },
+    {
+      "id": "pulse",
+      "name": "Pulse",
+      "kind": "pulse",
+      "desc": "A single sharp beat, then dark. A turn signal, not a strobe.",
+      "params": {
+        "color": "amber-4",
+        "period_s": 1.8,
+        "sharpness": 9.0
+      }
+    },
+    {
+      "id": "gradient",
+      "name": "Gradient",
+      "kind": "gradient",
+      "desc": "Slides back and forth between two colours.",
+      "params": {
+        "from": "azure-4",
+        "to": "magenta-4",
+        "period_s": 7.0
+      }
+    },
+    {
+      "id": "sweep",
+      "name": "Sweep",
+      "kind": "hue_sweep",
+      "desc": "Rainbow with the leash on \u2014 a narrow hue band instead of the whole circle.",
+      "params": {
+        "period_s": 5.0,
+        "sat": 0.7,
+        "light": 0.6,
+        "span_deg": 90,
+        "offset_deg": 180
+      }
+    },
+    {
+      "id": "comet",
+      "name": "Comet",
+      "kind": "comet",
+      "desc": "A bright head dragging a dim tail around the face.",
+      "params": {
+        "color": "ice-5",
+        "tail": "ice-1",
+        "period_s": 2.4
+      }
+    },
+    {
+      "id": "flicker",
+      "name": "Flicker",
+      "kind": "flicker",
+      "desc": "Irregular drift within one family, like a filament or a fire.",
+      "params": {
+        "family": "ember",
+        "rate_hz": 7.0,
+        "depth": 0.55
+      }
+    },
+    {
+      "id": "reactive",
+      "name": "Reactive",
+      "kind": "reactive",
+      "desc": "Colour follows your voice \u2014 quiet is cool, loud is hot.",
+      "params": {
+        "quiet": "azure-3",
+        "loud": "rose-4",
+        "gain": 1.6
+      }
+    },
+    {
+      "id": "temperature",
+      "name": "Temperature",
+      "kind": "temperature",
+      "desc": "Cool to hot by how busy it is. Reads like a gauge.",
+      "params": {
+        "cold": "ice-2",
+        "warm": "amber-4",
+        "hot": "rose-4",
+        "period_s": 9.0
+      }
+    },
+    {
+      "id": "strobe",
+      "name": "Strobe",
+      "kind": "strobe",
+      "desc": "Hard alternation between two colours. Use sparingly \u2014 it is loud.",
+      "params": {
+        "a": "rose-4",
+        "b": "neutral-1",
+        "period_s": 0.7
+      }
+    }
+  ],
+  "states": [
+    {
+      "id": "idle",
+      "name": "Idle",
+      "default": {
+        "pattern": "breathe",
+        "color": "ice-3"
+      }
+    },
+    {
+      "id": "listening",
+      "name": "Listening",
+      "default": {
+        "pattern": "solid",
+        "color": "ember-4"
+      }
+    },
+    {
+      "id": "thinking",
+      "name": "Thinking",
+      "default": {
+        "pattern": "rainbow",
+        "color": null
+      }
+    },
+    {
+      "id": "speaking",
+      "name": "Speaking",
+      "default": {
+        "pattern": "gradient",
+        "color": "ice-5"
+      }
+    },
+    {
+      "id": "approval",
+      "name": "Waiting on you",
+      "default": {
+        "pattern": "pulse",
+        "color": "amber-4"
+      },
+      "motion": "listening",
+      "motion_note": "Faces implement four motion tables, not seven. This state borrows the named movement and keeps its own bound colour and pattern."
+    },
+    {
+      "id": "standby",
+      "name": "Standby",
+      "default": {
+        "pattern": "breathe",
+        "color": "neutral-3"
+      },
+      "motion": "idle",
+      "motion_note": "Faces implement four motion tables, not seven. This state borrows the named movement and keeps its own bound colour and pattern."
+    },
+    {
+      "id": "error",
+      "name": "Error",
+      "default": {
+        "pattern": "strobe",
+        "color": "rose-4"
+      },
+      "motion": "thinking",
+      "motion_note": "Faces implement four motion tables, not seven. This state borrows the named movement and keeps its own bound colour and pattern."
+    }
+  ],
+  "faces": [
+    {
+      "id": "arc",
+      "name": "Arc",
+      "dim": "2d",
+      "geometry": "concentric rings",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "orbit",
+      "name": "Orbit",
+      "dim": "3d",
+      "geometry": "5 inclined orbits, depth sorted",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "geodesic",
+      "name": "Geodesic",
+      "dim": "3d",
+      "geometry": "subdivided icosahedron",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "spectrum",
+      "name": "Spectrum",
+      "dim": "3d",
+      "geometry": "32 extruded bars in a ring",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "tokamak",
+      "name": "Tokamak",
+      "dim": "3d",
+      "geometry": "parametric torus, shaded quads",
+      "integrates_per_frame": false,
+      "heavy": true,
+      "speed": {
+        "min": 0.1,
+        "max": 3.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 3
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800,
+        "gpu": true,
+        "note": "parametric torus: drawn as a smooth-shaded mesh with an analytic normal by the GPU. The CPU fallback fills flat quads and is visibly faceted."
+      }
+    },
+    {
+      "id": "swarm",
+      "name": "Swarm",
+      "dim": "3d",
+      "geometry": "boids with depth",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "coreplate",
+      "name": "Coreplate",
+      "dim": "3d",
+      "geometry": "layered armour plates",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "workbench",
+      "name": "Workbench",
+      "dim": "3d",
+      "geometry": "exploded assembly",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "membrane",
+      "name": "Membrane",
+      "dim": "3d",
+      "geometry": "Verlet spring-mass sheet",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800,
+        "gpu": true,
+        "note": "spring-mass sheet: simulated on the CPU, drawn as a triangle mesh by the GPU with a depth buffer. The CPU fallback fills one flat quad per cell and is visibly faceted above a thumbnail."
+      }
+    },
+    {
+      "id": "nucleus",
+      "name": "Nucleus",
+      "dim": "3d",
+      "geometry": "nucleon shell packing",
+      "integrates_per_frame": false,
+      "heavy": true,
+      "speed": {
+        "min": 0.1,
+        "max": 3.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 3
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800,
+        "gpu": true,
+        "note": "ray-marched signed distance field: rendered by a fragment shader at full pixel resolution where WebGL2 / GLES3 is available. The CPU fallback draws into a small buffer and upscales, so it is capped at 460 px there."
+      },
+      "render_cpu_fallback": {
+        "max_px": 460,
+        "target_fps": 45
+      }
+    },
+    {
+      "id": "comb",
+      "name": "Comb",
+      "dim": "3d",
+      "geometry": "hex lattice",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "iris",
+      "name": "Iris",
+      "dim": "3d",
+      "geometry": "overlapping aperture blades",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "shoal",
+      "name": "Shoal",
+      "dim": "3d",
+      "geometry": "schooling agents",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "accretion",
+      "name": "Accretion",
+      "dim": "3d",
+      "geometry": "random-walk accretion disc",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "cascade",
+      "name": "Cascade",
+      "dim": "3d",
+      "geometry": "falling particle columns",
+      "integrates_per_frame": true,
+      "heavy": false,
+      "speed": {
+        "min": 0.1,
+        "max": 4.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 4
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "rime",
+      "name": "Rime",
+      "dim": "3d",
+      "geometry": "crystal growth",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "orbital",
+      "name": "Orbital",
+      "dim": "3d",
+      "geometry": "electron probability cloud",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "fullerene",
+      "name": "Fullerene",
+      "dim": "3d",
+      "geometry": "truncated icosahedron cage",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "spiral",
+      "name": "Spiral",
+      "dim": "3d",
+      "geometry": "logarithmic arms",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    },
+    {
+      "id": "kirkwood",
+      "name": "Kirkwood",
+      "dim": "3d",
+      "geometry": "resonance gaps in a belt",
+      "integrates_per_frame": false,
+      "heavy": false,
+      "speed": {
+        "min": 0.05,
+        "max": 6.0,
+        "default": 1.0,
+        "curve": "log",
+        "substeps_max": 1
+      },
+      "render": {
+        "supersample_max": 2.0,
+        "target_fps": 60,
+        "max_px": 1800
+      }
+    }
+  ],
+  "frame_rate": {
+    "note": "High refresh is NOT symmetrical across the two renderers, and that asymmetry is the whole reason this block exists. On the web there is no API to ask for a higher rate - requestAnimationFrame already fires at whatever the display is running at, so the only work is measuring it and budgeting against the real number. On Android the opposite is true: many phones render an app at 60Hz until it explicitly asks for more.",
+    "targets": [
+      "auto",
+      "60",
+      "120",
+      "max"
+    ],
+    "default": "auto",
+    "pacing": {
+      "rule": "divisor",
+      "why": "If a face cannot hold the full rate, drop to a whole divisor (120 -> 60 -> 40 -> 30) rather than chasing an uneven number. Every frame then lands on a real vsync. A locked 60 on a 120Hz panel looks better than a floating 75.",
+      "min_fps": 30
+    },
+    "budget": {
+      "rule": "budget_ms = 1000 / (hz / stride)",
+      "downgrade_above": 1.45,
+      "upgrade_below": 0.55,
+      "why": "Thresholds are fractions of the measured budget, never fixed milliseconds. At 120Hz the budget is 8.3ms, so a governor tuned to 60Hz thinks a 20ms frame is healthy while the display is running at half rate."
+    },
+    "web": {
+      "detect": "median of requestAnimationFrame intervals over ~40-90 samples",
+      "snap_to": [
+        60,
+        75,
+        90,
+        100,
+        120,
+        144,
+        165,
+        240
+      ],
+      "request_api": null,
+      "note": "No shipping browser has a way to request a rate. The W3C VSYNC proposal (w3c/html#375) never shipped. Measure only."
+    },
+    "android": {
+      "detect": {
+        "supported_modes": "Display.getSupportedModes() -> Display.Mode[]  (API 23)",
+        "mode_rate": "Display.Mode.getRefreshRate(): Float  (API 23)",
+        "current_rate": "Display.getRefreshRate(): Float  (API 1)",
+        "alternatives": "Display.Mode.getAlternativeRefreshRates(): FloatArray  (API 31)",
+        "get_display": "Context.getDisplay()  (API 30). WindowManager.getDefaultDisplay() is deprecated from API 30."
+      },
+      "request": {
+        "recommended": "Surface.setFrameRate(frameRate, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS)  (3-arg: API 31; 2-arg: API 30)",
+        "compatibility_constant": "FRAME_RATE_COMPATIBILITY_DEFAULT - this is the one for UI and games. FRAME_RATE_COMPATIBILITY_FIXED_SOURCE is for VIDEO players and is the wrong choice here.",
+        "newest": "View.setRequestedFrameRate(Float) / REQUESTED_FRAME_RATE_CATEGORY_* (API 35), and the Compose `preferredFrameRate` Modifier. Feeds Adaptive Refresh Rate rather than pinning a number.",
+        "legacy": "WindowManager.LayoutParams.preferredDisplayModeId (API 23) still works but has been discouraged by Google since Android 11 - the platform cannot see the app's rendering intent. preferredRefreshRate changed semantics at API 34."
+      },
+      "clock": "Compose's frame clock is Choreographer-backed and is NOT capped - withFrameNanos inside a LaunchedEffect fires at whatever rate the system negotiated. Always advance animation by the frameTimeNanos delta, never by an assumed 1/120.",
+      "measure_achieved": "Average the deltas between successive withFrameNanos callbacks. For jank specifically use androidx.metrics JankStats (built on FrameMetrics, API 24+).",
+      "cannot_guarantee": [
+        "battery saver can cap the display refresh rate",
+        "LTPO / Adaptive Refresh Rate panels float the rate by content cadence",
+        "many OEMs drop to 60/90Hz at low screen brightness",
+        "thermal throttling",
+        "a higher-priority surface may have set a different rate",
+        "There is no API that reports WHY you did not get the rate you asked for. Detect the outcome with Display.getRefreshRate() and DisplayManager.DisplayListener.onDisplayChanged(), degrade, and never assume the requested rate was granted."
+      ]
+    }
+  },
+  "renderer": {
+    "note": "Most faces are meshes of a few thousand quads and a CPU rasteriser draws them fine. Three cannot be drawn sharply that way at phone resolution, and are rendered by a shader instead. The distinction is a property of the face, not of the client, so it is recorded here.",
+    "gpu_faces": {
+      "nucleus": {
+        "kind": "sdf_raymarch",
+        "why": "One full lighting solve per pixel. On a CPU it can only be computed into a small buffer and stretched, which is what read as low resolution: a 140 px buffer on a 1089 px display is a 7.8x upscale.",
+        "web": "WebGL2 fragment shader, one pass, full display resolution.",
+        "android": "RuntimeShader (AGSL) on API 33+, which takes essentially the same source; GLES 3.0 through a GLSurfaceView below that."
+      },
+      "membrane": {
+        "kind": "cpu_sim_gpu_mesh",
+        "why": "The physics is cheap and stays on the CPU. The drawing was the expensive part: one flat-filled quad per cell, so every cell was visible as a facet and the rim as a staircase.",
+        "web": "WebGL2 indexed triangle mesh, per-pixel normals, depth buffer, MSAA.",
+        "android": "GLES 3.0 indexed mesh; the Verlet step stays in Kotlin."
+      },
+      "tokamak": {
+        "kind": "gpu_mesh",
+        "why": "Flat-filled quads on a torus read as a disco ball at any grid a CPU can afford.",
+        "web": "WebGL2 indexed triangle mesh with the torus's analytic normal.",
+        "android": "GLES 3.0 indexed mesh."
+      }
+    },
+    "fallback": "Every GPU face keeps its CPU path and uses it whenever the context is missing, blocked or lost. A watchdog also gives the GPU back if a shader-rendered frame exceeds three times the frame budget (or 48 ms, whichever is larger) three times running - which is what happens on a software GL driver, where the CPU path is genuinely faster.",
+    "resolution": "Shader faces render at DEVICE pixels times renderer.gpu_scale, never at the supersampled backing store: past one fragment per screen pixel there is nothing left to see. CPU faces still supersample, because for them it is the only anti-aliasing available.",
+    "gpu_scale": {
+      "low": 0.62,
+      "medium": 0.8,
+      "high": 1.0,
+      "max": 1.0
+    },
+    "survey": {
+      "when": "2026-09-13",
+      "method": "All 20 faces rendered solo at 412x915 @2.75 dpr and timed, then looked at. The question was which ones a rasteriser cannot draw properly - not which ones could theoretically use a GPU.",
+      "finding": "Only three had a rendering defect, and all three are already converted. The other seventeen are line, stroke, point and glow art. Canvas antialiases those correctly at any resolution and draws most of them in well under a millisecond, so moving them to a shader would be a rewrite with no visual gain.",
+      "stays_on_canvas": [
+        "arc",
+        "orbit",
+        "geodesic",
+        "spectrum",
+        "swarm",
+        "coreplate",
+        "workbench",
+        "comb",
+        "iris",
+        "shoal",
+        "accretion",
+        "cascade",
+        "rime",
+        "fullerene"
+      ],
+      "stays_on_canvas_why": "Strokes, paths and radial gradients. A GPU port would mean re-expressing each shape as geometry for no sharpness the canvas does not already give."
+    },
+    "point_batch": {
+      "faces": [
+        "kirkwood",
+        "spiral",
+        "orbital"
+      ],
+      "what": "These three are particle fields: several hundred to three thousand additive discs. The per-particle cost is a colour string, a path and a fill. The batched path keeps the face's own projection maths exactly as it was and replaces only the handover - x, y, radius and colour in pixels - so the whole field is one draw call.",
+      "composite": "Additive. Every one of these faces already drew its particles with globalCompositeOperation 'lighter', so the pass accumulates the same way and is composited back the same way. The background survives underneath and anything the face draws afterwards still lands on top.",
+      "threshold": 160,
+      "threshold_why": "A GPU pass costs one full-surface clear and one blit whatever is in it. Below roughly 160 sprites that fixed cost exceeds the canvas calls it replaces, so small fields stay on canvas. The threshold decides, not the author, which is why a face can carry the batch unconditionally and still be right at every quality tier.",
+      "calibration": {
+        "why": "Whether the batch is faster cannot be settled by reasoning, and cannot be measured in a browser with no GPU. Measured in a software-GL container the batch was about 48 ms per frame SLOWER - and that 48 ms was constant whether the field held 500 sprites or 3000, so it was entirely the clear and the blit, nothing to do with the sprites. On a phone with a working GPU those are the parts that are nearly free.",
+        "how": "The first time a batchable face draws, it runs both ways in alternating blocks of 8 frames, discards the first frame of each block (shader compile, buffer resize, cold cache), takes the median of 3 blocks each way, and keeps the faster. Ties go to canvas: that is the path with no second surface, no blit, and no context to lose. The answer is remembered per face.",
+        "per_face_not_global": "The crossover depends on how many sprites a face draws and how large they are, and that differs by an order of magnitude across the kit."
+      }
+    }
+  },
+  "randomise": {
+    "note": "The rules the Randomise button follows. They are here rather than in the page's code because Android should offer the same button and produce the same kind of result. Random is seven unrelated colours and a strobing idle - that looks like a fault, not a design.",
+    "hue_ring": [
+      "ice",
+      "azure",
+      "indigo",
+      "violet",
+      "magenta",
+      "rose",
+      "ember",
+      "amber",
+      "verdant"
+    ],
+    "hue_ring_note": "Neutral is deliberately absent: a harmony is built on hues and neutral has none. Distance is measured around the ring, so ice and verdant are neighbours.",
+    "schemes": [
+      {
+        "id": "analogous",
+        "offsets": [
+          0,
+          1,
+          2,
+          -1,
+          3
+        ]
+      },
+      {
+        "id": "complementary",
+        "offsets": [
+          0,
+          4,
+          5,
+          1,
+          -1
+        ]
+      },
+      {
+        "id": "triad",
+        "offsets": [
+          0,
+          3,
+          6,
+          1,
+          4
+        ]
+      },
+      {
+        "id": "split",
+        "offsets": [
+          0,
+          4,
+          -4,
+          1,
+          5
+        ]
+      }
+    ],
+    "state_rules": {
+      "idle": {
+        "patterns": [
+          "breathe",
+          "solid",
+          "gradient"
+        ],
+        "steps": [
+          2,
+          3
+        ],
+        "why": "Seen for hours. Never a pattern that demands attention."
+      },
+      "standby": {
+        "patterns": [
+          "breathe",
+          "solid"
+        ],
+        "steps": [
+          1,
+          2
+        ],
+        "follows": "idle",
+        "why": "Idle asleep. Keeps idle's hue and only gets quieter - a hue of its own makes waking up look like a fault."
+      },
+      "listening": {
+        "patterns": [
+          "reactive",
+          "solid",
+          "breathe",
+          "pulse"
+        ],
+        "steps": [
+          3,
+          4
+        ],
+        "why": "Attentive and answering to the microphone."
+      },
+      "thinking": {
+        "patterns": [
+          "rainbow",
+          "cycle",
+          "sweep",
+          "comet",
+          "temperature"
+        ],
+        "steps": [
+          3,
+          4
+        ],
+        "why": "The one state allowed to be busy."
+      },
+      "speaking": {
+        "patterns": [
+          "gradient",
+          "sweep",
+          "breathe",
+          "pulse",
+          "comet"
+        ],
+        "steps": [
+          3,
+          4
+        ],
+        "why": "Rhythmic, not frantic."
+      },
+      "approval": {
+        "patterns": [
+          "pulse",
+          "breathe",
+          "flicker"
+        ],
+        "steps": [
+          4
+        ],
+        "families": [
+          "amber",
+          "verdant"
+        ],
+        "why": "Convention, never randomised: waiting on you is amber or green."
+      },
+      "error": {
+        "patterns": [
+          "strobe",
+          "flicker",
+          "pulse"
+        ],
+        "steps": [
+          4
+        ],
+        "families": [
+          "rose",
+          "ember"
+        ],
+        "why": "Convention, never randomised. A green alarm is a design you have to explain, and an alarm you have to explain is broken."
+      }
+    },
+    "separation": {
+      "applies_to": [
+        "idle",
+        "listening",
+        "thinking",
+        "speaking"
+      ],
+      "rule": "hue_ring_distance >= 2 OR abs(step difference) >= 2",
+      "why": "The four states you actually watch have to be tellable apart at a glance. The second clause is what makes an analogous scheme work: neighbouring hues ARE similar, so a designer separates them by brightness instead of picking different ones."
+    },
+    "timing": {
+      "note": "The same pattern does different jobs in different states, so its period is set by the state's energy, not left at the pattern default.",
+      "breathe": {
+        "standby": [
+          9,
+          13
+        ],
+        "calm": [
+          5,
+          7.5
+        ],
+        "active": [
+          2.6,
+          4.2
+        ]
+      },
+      "pulse": {
+        "error": [
+          0.7,
+          1.1
+        ],
+        "other": [
+          1.2,
+          2.2
+        ]
+      },
+      "hue_sweep": {
+        "thinking": [
+          3.2,
+          5.5
+        ],
+        "other": [
+          4.5,
+          8
+        ]
+      },
+      "strobe": {
+        "all": [
+          0.45,
+          0.8
+        ]
+      }
+    }
+  }
+}

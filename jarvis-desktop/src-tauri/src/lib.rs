@@ -37,8 +37,11 @@ pub const WIDGET_LABEL: &str = windows::WIDGET_LABEL;
 /// enough that a thermal spike is visible while it still matters.
 const TELEMETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3);
 
-/// Local Jarvis orchestrator (also the origin the HUD window loads).
-pub const JARVIS_SERVER_URL: &str = "http://127.0.0.1:4719";
+/// Default Jarvis orchestrator base. One value, defined in [`commands`], so a
+/// port change cannot be half-applied — and configuration overrides it at
+/// runtime via [`commands::jarvis_base`]. `JARVIS_HUD_PORT` defaults to 4719
+/// in `jarvis_hud.py`; nothing here assumes any other number.
+pub const JARVIS_SERVER_URL: &str = commands::DEFAULT_BASE;
 /// Local Ollama daemon.
 pub const OLLAMA_URL: &str = "http://127.0.0.1:11434";
 /// Local LiteLLM proxy.
@@ -285,9 +288,28 @@ fn summon_quick_note(app: &AppHandle) {
 /// Builds and runs the Tauri application. Blocks until the process exits.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // Build order step 3. Registered before anything else so a second launch
+    // is intercepted as early as possible: it raises the running window rather
+    // than standing up a second app against the same backend and the same
+    // SQLite approval queue.
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            println!("[jarvis] second launch folded into the running instance");
+            if let Some(hud) = app.get_webview_window(HUD_LABEL) {
+                let _ = hud.show();
+                let _ = hud.unminimize();
+                let _ = hud.set_focus();
+            }
+        }));
+    }
+
+    builder = builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
         .manage(ChatState::default())
         .manage(windows::WidgetState::default())
         .manage(RouteState::default())
@@ -297,6 +319,8 @@ pub fn run() {
             commands::decide_approval,
             commands::announce_approval,
             commands::set_route_lane,
+            commands::get_api_settings,
+            commands::set_api_settings,
             commands::resize_desktop_widget,
             commands::set_widget_always_on_top,
             commands::toggle_widget,
@@ -368,6 +392,38 @@ pub fn run() {
                 .build(),
         );
     }
+
+    // DESKTOP-BUILD §3.1 step 4. The page reads its API base and token from
+    // `JARVIS.set(base, token)`; the desktop shell is what calls it, sourcing
+    // both from the settings store rather than the page's own localStorage.
+    //
+    // Injected on page load rather than as an initialisation script, because
+    // `JARVIS` is defined by the page itself and does not exist yet when an
+    // init script runs. `typeof` guards the reference: `JARVIS` is a top-level
+    // `const`, which is a global *lexical* binding and never a property of
+    // `window`, so `window.JARVIS` would be undefined here.
+    builder = builder.on_page_load(|webview, payload| {
+        if payload.event() != tauri::webview::PageLoadEvent::Finished {
+            return;
+        }
+        if webview.label() != HUD_LABEL {
+            return;
+        }
+        let app = webview.app_handle();
+        let base = commands::jarvis_base(app);
+        let token = commands::jarvis_token_for(app).unwrap_or_default();
+        let script = format!(
+            "if (typeof JARVIS !== 'undefined' && JARVIS && typeof JARVIS.set === 'function') \
+             {{ JARVIS.set({}, {}); }}",
+            serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
+            serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into()),
+        );
+        if let Err(err) = webview.eval(&script) {
+            eprintln!("[jarvis] unable to configure the HUD page: {err}");
+        } else {
+            println!("[jarvis] HUD page configured for {base}");
+        }
+    });
 
     let app = builder
         .setup(|app| {

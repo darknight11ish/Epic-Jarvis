@@ -1,0 +1,2009 @@
+<title>Jarvis HUD</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:* http://localhost:*; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ------------------------------------------------------------------ *
+ * A HUD is an instrument, so this commits to one dark visual world
+ * rather than shipping a light theme it would never be read in.
+ * Every colour is still painted explicitly so it holds on any ground.
+ * ------------------------------------------------------------------ */
+:root{
+  --void:#04070c;
+  --plate:#0a1119;
+  --plate-2:#0e1822;
+  --line:#172836;
+  --line-hot:#24485e;
+
+  --ice:#6fe3ff;
+  --ice-deep:#1d5f7a;
+  --gold:#ffb648;
+  --text:#cfe4ee;
+  --dim:#6b8496;
+  --dimmer:#3f5566;
+
+  --ok:#5fe0a8;
+  --warn:#ffb648;
+  --crit:#ff6b5e;
+
+  --g-core:#ffffff;
+  --g-model:#ffb648;
+  --g-cluster:#6fe3ff;
+  --g-tool:#3fa9c9;
+  --g-fact:#8d7bff;
+  --g-source:#4d6b80;
+  --g-document:#5fe0a8;
+  --g-entity:#ff8fb0;
+  --g-project:#ffb648;
+  --g-skill:#c6f24e;
+  --g-persona:#ff6b5e;
+
+  --f-hud:"Chakra Petch", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "Consolas", monospace;
+}
+
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--void); color:var(--text);
+  font-family:var(--f-body); font-size:14px; line-height:1.5;
+  overflow:hidden; -webkit-font-smoothing:antialiased;
+}
+button{font:inherit; color:inherit; background:none; border:none; cursor:pointer;}
+:focus-visible{outline:2px solid var(--ice); outline-offset:2px;}
+
+/* ---------- shell ------------------------------------------------- */
+#shell{
+  display:grid; height:100dvh;
+  grid-template-columns:212px minmax(0,1fr) 248px;
+  background:
+    radial-gradient(1100px 620px at 50% 42%, #0a1a26 0%, var(--void) 62%);
+}
+.rail{
+  background:linear-gradient(180deg, var(--plate) 0%, #070d14 100%);
+  display:flex; flex-direction:column; min-height:0;
+}
+.rail.left{border-right:1px solid var(--line);}
+.rail.right{border-left:1px solid var(--line);}
+#stage{position:relative; min-width:0; min-height:0; display:flex; flex-direction:column;}
+
+/* ---------- shared HUD atoms -------------------------------------- */
+.hud-label{
+  font-family:var(--f-mono); font-size:10px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--dimmer);
+}
+.rail-section{padding:14px 14px 12px; border-bottom:1px solid var(--line);}
+.rail-section:last-child{border-bottom:none;}
+.mono{font-family:var(--f-mono); font-variant-numeric:tabular-nums;}
+
+/* ---------- identity ---------------------------------------------- */
+.brand{padding:16px 14px 14px; border-bottom:1px solid var(--line);}
+.brand h1{
+  margin:0; font-family:var(--f-hud); font-size:15px; font-weight:700;
+  letter-spacing:.34em; color:var(--ice);
+  text-shadow:0 0 18px rgba(111,227,255,.35);
+}
+.brand .sub{
+  margin-top:5px; font-family:var(--f-mono); font-size:9.5px;
+  letter-spacing:.14em; color:var(--dimmer); text-transform:uppercase;
+}
+
+/* ---------- nav ---------------------------------------------------- */
+.modes{display:flex; flex-direction:column; gap:4px; padding:12px 10px;}
+.mode{
+  display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:3px;
+  font-family:var(--f-hud); font-size:12.5px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--dim);
+  border:1px solid transparent; border-left:2px solid transparent; text-align:left;
+  transition:background .15s, color .15s, border-color .15s;
+}
+.mode:hover{color:var(--text); background:rgba(111,227,255,.05);}
+.mode[aria-selected="true"]{
+  color:var(--ice); background:rgba(111,227,255,.08);
+  border-color:rgba(111,227,255,.2); border-left-color:var(--ice);
+}
+.mode .glyph{width:14px; height:14px; flex-shrink:0;}
+
+/* ---------- lane switcher ------------------------------------------ */
+.lanes{display:flex; flex-direction:column; gap:5px; margin-top:9px;}
+.lane{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:7px 9px; border:1px solid var(--line); border-radius:3px;
+  background:var(--plate-2); font-family:var(--f-mono); font-size:11px;
+  color:var(--dim); transition:border-color .15s, color .15s;
+}
+.lane:hover{border-color:var(--line-hot); color:var(--text);}
+.lane[aria-pressed="true"]{
+  border-color:var(--gold); color:var(--gold);
+  background:linear-gradient(90deg, rgba(255,182,72,.14), rgba(255,182,72,.03));
+}
+.lane .tag{font-size:9px; letter-spacing:.1em; color:var(--dimmer); text-transform:uppercase;}
+.lane[aria-pressed="true"] .tag{color:rgba(255,182,72,.75);}
+
+/* ---------- status LEDs -------------------------------------------- */
+.leds{display:flex; flex-direction:column; gap:7px; margin-top:9px;}
+.led{display:flex; align-items:center; gap:8px; font-family:var(--f-mono); font-size:11px;}
+.led .dot{
+  width:7px; height:7px; border-radius:50%; flex-shrink:0;
+  background:var(--crit); box-shadow:0 0 8px currentColor; color:var(--crit);
+}
+.led.up .dot{background:var(--ok); color:var(--ok);}
+.led .name{color:var(--dim); flex:1;}
+.led .val{color:var(--dimmer); font-size:10px;}
+.led.up .val{color:var(--ok);}
+
+/* ---------- stage header ------------------------------------------- */
+.stage-bar{
+  display:flex; align-items:center; gap:12px; padding:12px 18px;
+  border-bottom:1px solid var(--line); flex-shrink:0; min-height:48px;
+}
+.stage-bar h2{
+  margin:0; font-family:var(--f-hud); font-size:12px; font-weight:600;
+  letter-spacing:.2em; text-transform:uppercase; color:var(--dim);
+}
+.stage-bar .spacer{flex:1;}
+.chip{
+  font-family:var(--f-mono); font-size:10px; letter-spacing:.08em;
+  padding:3px 8px; border-radius:2px; border:1px solid var(--line);
+  color:var(--dim); text-transform:uppercase; white-space:nowrap;
+}
+.chip.hot{border-color:var(--gold); color:var(--gold);}
+.chip.live{border-color:var(--ok); color:var(--ok);}
+
+.view{display:none; flex:1; min-height:0;}
+.view.on{display:flex;}
+
+/* ---------- TALK --------------------------------------------------- */
+#talk{flex-direction:column;}
+.reactor-wrap{
+  position:relative; display:flex; align-items:center; justify-content:center;
+  padding:10px 0 4px; flex-shrink:0;
+}
+#reactor{width:232px; height:232px; display:block;}
+.reactor-state{
+  position:absolute; bottom:-2px; left:50%; transform:translateX(-50%);
+  font-family:var(--f-mono); font-size:9.5px; letter-spacing:.28em;
+  text-transform:uppercase; color:var(--ice); white-space:nowrap;
+  text-shadow:0 0 14px rgba(111,227,255,.5);
+}
+
+#log{
+  flex:1; min-height:0; overflow-y:auto; overflow-x:hidden;
+  padding:16px 22px 8px; display:flex; flex-direction:column; gap:14px;
+  scrollbar-width:thin; scrollbar-color:var(--line-hot) transparent;
+}
+#log::-webkit-scrollbar{width:7px;}
+#log::-webkit-scrollbar-thumb{background:var(--line-hot); border-radius:4px;}
+
+.msg{max-width:70ch; display:flex; flex-direction:column; gap:5px;}
+.msg .who{
+  font-family:var(--f-mono); font-size:9.5px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--dimmer);
+}
+.msg .body{
+  padding:11px 14px; border-radius:3px; white-space:pre-wrap; overflow-wrap:anywhere;
+}
+.msg.user{align-self:flex-end; align-items:flex-end;}
+.msg.user .body{
+  background:var(--plate-2); border:1px solid var(--line);
+  border-right:2px solid var(--gold); color:var(--text);
+}
+.msg.jarvis .body{
+  background:linear-gradient(180deg, rgba(111,227,255,.055), rgba(111,227,255,.015));
+  border:1px solid rgba(111,227,255,.17); border-left:2px solid var(--ice);
+}
+.msg.system .body{
+  background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
+}
+.msg .body .cursor{
+  display:inline-block; width:7px; height:1em; vertical-align:-2px;
+  background:var(--ice); animation:blink 1s steps(2) infinite;
+}
+@keyframes blink{50%{opacity:0;}}
+
+.composer{
+  flex-shrink:0; padding:12px 18px 16px; border-top:1px solid var(--line);
+  display:flex; gap:9px; align-items:flex-end;
+}
+#input{
+  flex:1; min-width:0; resize:none; background:var(--plate-2);
+  border:1px solid var(--line); border-radius:3px; padding:11px 13px;
+  color:var(--text); font-family:var(--f-body); font-size:14px;
+  max-height:132px; line-height:1.45;
+}
+#input:focus{outline:none; border-color:var(--line-hot); background:#0f1a24;}
+#input::placeholder{color:var(--dimmer);}
+.act{
+  flex-shrink:0; width:44px; height:44px; border-radius:3px;
+  border:1px solid var(--line); background:var(--plate-2);
+  display:flex; align-items:center; justify-content:center;
+  transition:border-color .15s, color .15s, background .15s; color:var(--dim);
+}
+.act:hover{border-color:var(--line-hot); color:var(--text);}
+.act.primary{border-color:rgba(111,227,255,.3); color:var(--ice);}
+.act.primary:hover{background:rgba(111,227,255,.1);}
+.act[aria-pressed="true"]{
+  border-color:var(--crit); color:var(--crit); background:rgba(255,107,94,.12);
+  animation:hot 1.4s ease-in-out infinite;
+}
+@keyframes hot{50%{box-shadow:0 0 0 4px rgba(255,107,94,.1);}}
+.act svg{width:19px; height:19px;}
+
+/* ---------- BRAIN -------------------------------------------------- */
+#brain{position:relative;}
+#galaxy{position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab;}
+#galaxy.dragging{cursor:grabbing;}
+
+.brain-search{
+  position:absolute; top:14px; left:16px; z-index:3;
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap; max-width:calc(100% - 32px);
+}
+#gsearch{
+  width:210px; max-width:46vw; background:rgba(10,17,25,.92); border:1px solid var(--line);
+  border-radius:3px; padding:8px 11px; color:var(--text);
+  font-family:var(--f-mono); font-size:12px;
+}
+#gsearch:focus{outline:none; border-color:var(--ice);}
+#gsearch::placeholder{color:var(--dimmer);}
+.ghost{
+  padding:7px 11px; border:1px solid var(--line); border-radius:3px;
+  background:rgba(10,17,25,.92); font-family:var(--f-mono); font-size:11px;
+  color:var(--dim); white-space:nowrap;
+}
+.ghost:hover{border-color:var(--line-hot); color:var(--text);}
+
+.legend{
+  position:absolute; bottom:14px; left:16px; z-index:3;
+  background:rgba(6,11,17,.9); border:1px solid var(--line); border-radius:3px;
+  padding:10px 12px; display:flex; flex-direction:column; gap:5px;
+  backdrop-filter:blur(6px); max-height:44%; overflow-y:auto;
+}
+.legend-row{
+  display:flex; align-items:center; gap:8px; font-family:var(--f-mono);
+  font-size:10.5px; color:var(--dim); white-space:nowrap;
+}
+.legend-row .swatch{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+.legend-row .n{margin-left:auto; color:var(--dimmer); padding-left:14px;}
+
+.inspector{
+  position:absolute; top:14px; right:16px; z-index:4; width:290px; max-width:calc(100% - 32px);
+  background:rgba(6,11,17,.95); border:1px solid var(--line-hot); border-radius:3px;
+  padding:14px; backdrop-filter:blur(8px); display:none; max-height:72%; overflow-y:auto;
+}
+.inspector.on{display:block;}
+.inspector .kind{
+  font-family:var(--f-mono); font-size:9.5px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--ice); margin-bottom:6px;
+}
+.inspector h3{
+  margin:0 0 8px; font-family:var(--f-hud); font-size:15px; font-weight:600;
+  color:var(--text); text-wrap:balance; overflow-wrap:anywhere;
+}
+.inspector .meta{
+  font-family:var(--f-mono); font-size:10.5px; color:var(--dimmer);
+  margin-bottom:10px; overflow-wrap:anywhere;
+}
+.inspector .detail{
+  font-size:13px; color:var(--dim); max-height:190px; overflow-y:auto;
+  overflow-wrap:anywhere; border-top:1px solid var(--line); padding-top:9px;
+}
+.inspector .links{
+  margin-top:11px; display:flex; gap:7px; flex-wrap:wrap;
+}
+.inspector .close{
+  position:absolute; top:9px; right:10px; color:var(--dimmer); font-size:17px;
+  line-height:1; padding:2px 5px;
+}
+.inspector .close:hover{color:var(--text);}
+
+/* ---------- retrieval trace ------------------------------------------ */
+.trace-bar{
+  position:absolute; top:56px; left:16px; right:16px; z-index:3;
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  background:rgba(6,11,17,.93); border:1px solid var(--line-hot); border-radius:3px;
+  padding:9px 12px; backdrop-filter:blur(6px);
+}
+.trace-bar.off{display:none;}
+.trace-bar .q{
+  font-family:var(--f-body); font-size:13px; color:var(--text); flex:1; min-width:120px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.trace-bar .tally{font-family:var(--f-mono); font-size:10.5px; white-space:nowrap;}
+.trace-bar .tally.hit{color:var(--ice);}
+.trace-bar .tally.near{color:var(--gold);}
+
+.trail{
+  position:absolute; bottom:14px; right:16px; z-index:3; max-width:280px;
+  display:flex; flex-direction:column; gap:5px; align-items:flex-end;
+}
+.trail-chip{
+  font-family:var(--f-mono); font-size:10.5px; color:var(--dim); text-align:left;
+  background:rgba(6,11,17,.92); border:1px solid var(--line); border-radius:3px;
+  padding:5px 9px; max-width:100%; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; cursor:pointer;
+}
+.trail-chip:hover{border-color:var(--line-hot); color:var(--text);}
+.trail-chip[aria-pressed="true"]{border-color:var(--ice); color:var(--ice);}
+
+.trace-list{
+  position:absolute; top:104px; left:16px; z-index:3; width:290px;
+  max-width:calc(100% - 32px); max-height:52%; overflow-y:auto;
+  background:rgba(6,11,17,.93); border:1px solid var(--line); border-radius:3px;
+  padding:10px 12px; backdrop-filter:blur(6px);
+}
+.trace-list.off{display:none;}
+.trace-list h4{
+  font-family:var(--f-mono); font-size:9.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--dimmer); margin:0 0 7px; font-weight:400;
+}
+.trace-list h4.second{margin-top:13px; color:var(--gold);}
+.trace-row{
+  display:flex; gap:8px; align-items:baseline; padding:4px 0; cursor:pointer;
+  border-bottom:1px solid rgba(23,40,54,.5);
+}
+.trace-row:hover .t{color:var(--text);}
+.trace-row .s{
+  font-family:var(--f-mono); font-size:10px; color:var(--ice);
+  font-variant-numeric:tabular-nums; flex-shrink:0; width:26px;
+}
+.trace-row.near .s{color:var(--gold);}
+.trace-row .t{font-size:12px; color:var(--dim); line-height:1.35; overflow-wrap:anywhere;}
+
+.recall-strip{
+  display:inline-flex; gap:9px; align-items:center; margin-top:4px;
+  font-family:var(--f-mono); font-size:10px; color:var(--dimmer);
+  background:none; border:1px solid var(--line); border-radius:3px; padding:3px 8px;
+}
+.recall-strip:hover{border-color:var(--ice); color:var(--ice);}
+.recall-strip b{color:var(--ice); font-weight:400;}
+.recall-strip i{color:var(--gold); font-style:normal;}
+
+/* ---------- telemetry rail ------------------------------------------ */
+.readout{display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:5px 0;}
+.readout .k{font-family:var(--f-mono); font-size:10px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--dimmer);}
+.readout .v{font-family:var(--f-mono); font-size:12px; color:var(--text);
+  font-variant-numeric:tabular-nums; text-align:right; overflow-wrap:anywhere;}
+.readout .v.gold{color:var(--gold);}
+.readout .v.ice{color:var(--ice);}
+
+.meter{height:3px; background:var(--line); border-radius:2px; overflow:hidden; margin-top:7px;}
+.meter i{display:block; height:100%; background:linear-gradient(90deg,var(--ice-deep),var(--ice)); width:0%;
+  transition:width .4s ease;}
+
+#tools-used{display:flex; flex-wrap:wrap; gap:5px; margin-top:8px;}
+#tools-used:empty::after{
+  content:"none this turn"; font-family:var(--f-mono); font-size:10px; color:var(--dimmer);
+}
+.toolchip{
+  font-family:var(--f-mono); font-size:9.5px; padding:2px 6px; border-radius:2px;
+  background:rgba(63,169,201,.13); border:1px solid rgba(63,169,201,.3); color:var(--g-tool);
+}
+
+/* ---------- offline banner ------------------------------------------ */
+#banner{
+  flex-shrink:0; padding:8px 18px; background:rgba(255,182,72,.09);
+  border-bottom:1px solid rgba(255,182,72,.25); color:var(--gold);
+  font-family:var(--f-mono); font-size:11px; display:none; gap:8px; align-items:center;
+}
+#banner.on{display:flex;}
+#banner b{color:var(--gold); font-weight:500;}
+
+/* ---------- responsive ---------------------------------------------- */
+.rail-toggle{display:none;}
+@media (max-width:1080px){
+  #shell{grid-template-columns:188px minmax(0,1fr);}
+  .rail.right{
+    position:fixed; right:0; top:0; bottom:0; width:248px; z-index:20;
+    transform:translateX(100%); transition:transform .22s ease;
+    border-left:1px solid var(--line-hot); box-shadow:-18px 0 44px rgba(0,0,0,.55);
+  }
+  .rail.right.open{transform:none;}
+  .rail-toggle{display:flex;}
+}
+@media (max-width:720px){
+  #shell{grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr);}
+  .rail.left{
+    flex-direction:row; align-items:center; gap:6px; overflow-x:auto;
+    border-right:none; border-bottom:1px solid var(--line); padding:0 10px;
+  }
+  .rail.left .rail-section, .rail.left .brand{
+    border-bottom:none; border-right:1px solid var(--line);
+    padding:9px 12px; flex-shrink:0;
+  }
+  .rail.left .modes{flex-direction:row; padding:8px 4px;}
+  .rail.left .hide-sm{display:none;}
+  #reactor{width:150px; height:150px;}
+  #log{padding:12px 14px 6px;}
+  .msg{max-width:100%;}
+  .composer{padding:10px 12px 14px;}
+  .legend{max-height:34%; font-size:10px;}
+  .inspector{width:calc(100% - 32px);}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important; transition-duration:.001ms !important;}
+}
+
+/* ---- approval queue -------------------------------------------------- */
+#approvals{ display:flex; flex-direction:column; gap:10px; margin:0 0 14px; }
+.appr{
+  border:1px solid rgba(255,176,64,.55); border-left:3px solid #ffb040;
+  background:linear-gradient(180deg, rgba(255,176,64,.10), rgba(255,176,64,.03));
+  border-radius:10px; padding:12px 14px;
+}
+.appr .hdr{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.appr .who{ font-weight:650; letter-spacing:.01em; }
+.appr .tier{
+  font:600 10px/1 "IBM Plex Mono",monospace; text-transform:uppercase;
+  letter-spacing:.12em; padding:3px 7px; border-radius:5px;
+  background:rgba(255,176,64,.18); color:#ffc879;
+}
+.appr .det{
+  font:12px/1.5 "IBM Plex Mono",monospace; color:rgba(255,255,255,.72);
+  white-space:pre-wrap; word-break:break-word; margin:4px 0 10px;
+  max-height:8.5em; overflow:auto;
+}
+.appr .btns{ display:flex; gap:8px; }
+.appr button{
+  border-radius:7px; padding:7px 15px; font-weight:600; cursor:pointer;
+  border:1px solid transparent;
+}
+.appr .yes{ background:#2f7f4f; border-color:#3f9f63; color:#eafff0; }
+.appr .no { background:transparent; border-color:rgba(255,255,255,.28);
+            color:rgba(255,255,255,.82); }
+.appr .yes:hover{ background:#369159; }
+.appr .no:hover { border-color:#ff7f7f; color:#ffbcbc; }
+.appr.settled{ opacity:.45; border-left-color:#666; }
+
+/* ---- initiative & memory cards --------------------------------------- */
+#initiative{ display:flex; flex-direction:column; gap:10px; margin:0 0 14px; }
+.init{ border:1px solid rgba(120,180,255,.45); border-left:3px solid #7fb4ff;
+  background:linear-gradient(180deg, rgba(120,180,255,.08), rgba(120,180,255,.02));
+  border-radius:10px; padding:12px 14px; }
+.init.alert{ border-color:rgba(255,120,120,.55); border-left-color:#ff7f7f; }
+.init .hdr{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.init .who{ font-weight:650; }
+.init .kind{ font:600 10px/1 "IBM Plex Mono",monospace; text-transform:uppercase; letter-spacing:.12em;
+  padding:3px 7px; border-radius:5px; background:rgba(120,180,255,.18); color:#bcd8ff; }
+.init .det{ font:12px/1.5 "IBM Plex Sans",sans-serif; color:rgba(255,255,255,.78); white-space:pre-wrap; }
+.init ul{ margin:6px 0 0 18px; padding:0; }
+.init .btns{ display:flex; gap:8px; margin-top:10px; }
+.init button{ border-radius:7px; padding:6px 13px; font-weight:600; cursor:pointer; border:1px solid rgba(255,255,255,.28);
+  background:transparent; color:rgba(255,255,255,.85); }
+.init button.yes{ background:#2f5f8f; border-color:#3f7fbf; color:#eaf4ff; }
+</style>
+
+<div id="shell">
+
+  <!-- ============ LEFT RAIL ============ -->
+  <aside class="rail left">
+    <div class="brand">
+      <h1>J.A.R.V.I.S.</h1>
+      <div class="sub" id="brand-sub">local · standing by</div>
+    </div>
+
+    <div class="modes" role="tablist" aria-label="View">
+      <button class="mode" role="tab" aria-selected="true" data-view="talk">
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/>
+          <path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>
+        </svg>
+        Talk
+      </button>
+      <button class="mode" role="tab" aria-selected="false" data-view="brain">
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="9" r="2.2"/>
+          <circle cx="9" cy="18" r="2.2"/><circle cx="12" cy="11" r="1.6"/>
+          <path d="M7.7 8.4 10.6 10M16 9.6 13.5 10.6M10.7 12.3 9.6 15.9"/>
+        </svg>
+        Brain
+      </button>
+    </div>
+
+    <div class="rail-section hide-sm">
+      <div class="hud-label">Brain in use</div>
+      <div class="lanes" id="lanes"></div>
+    </div>
+
+    <div class="rail-section hide-sm">
+      <div class="hud-label">Systems</div>
+      <div class="leds">
+        <div class="led" id="led-jarvis"><span class="dot"></span><span class="name">jarvis</span><span class="val">—</span></div>
+        <div class="led" id="led-ollama"><span class="dot"></span><span class="name">ollama</span><span class="val">—</span></div>
+        <div class="led" id="led-proxy"><span class="dot"></span><span class="name">proxy</span><span class="val">—</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ STAGE ============ -->
+  <main id="stage">
+    <!-- The approval queue. Empty and invisible until something in
+         [autonomy.tiers] is set to "ask" and Jarvis tries to do it. -->
+    <div id="approvals" hidden></div>
+    <div id="initiative" hidden></div>
+
+    <div id="banner">
+      <b>Demo data.</b>
+      <span id="banner-text">Jarvis is not answering yet — run <span class="mono">uv run jarvis serve</span>, then reload.</span>
+    </div>
+
+    <div class="stage-bar">
+      <h2 id="stage-title">Conversation</h2>
+      <span class="spacer"></span>
+      <span class="chip" id="chip-model">local</span>
+      <span class="chip" id="chip-state">standing by</span>
+      <button class="ghost rail-toggle" id="rail-toggle">Telemetry</button>
+    </div>
+
+    <!-- ---- TALK ---- -->
+    <section class="view on" id="talk">
+      <div class="reactor-wrap">
+        <canvas id="reactor" width="420" height="420" aria-hidden="true"></canvas>
+        <div class="reactor-state" id="reactor-state">standing by</div>
+      </div>
+
+      <div id="log" role="log" aria-live="polite"></div>
+
+      <div class="composer">
+        <textarea id="input" rows="1" placeholder="Speak, or type here…"
+                  autocomplete="off" spellcheck="false"></textarea>
+        <button class="act" id="mic" aria-pressed="false" title="Hold to talk (or press Space)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="9" y="3" width="6" height="11" rx="3"/>
+            <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8.5 21h7"/>
+          </svg>
+        </button>
+        <button class="act primary" id="send" title="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M4 12h15M13 6l6 6-6 6"/>
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ---- BRAIN ---- -->
+    <section class="view" id="brain">
+      <canvas id="galaxy"></canvas>
+
+      <div class="brain-search">
+        <input id="gsearch" type="text" placeholder="search the brain…" autocomplete="off">
+        <button class="ghost" id="g-reset">reset view</button>
+        <button class="ghost" id="g-spin">pause spin</button>
+      </div>
+
+      <div class="trace-bar off" id="trace-bar">
+        <span class="q" id="trace-q">—</span>
+        <span class="tally hit" id="trace-hits">0 recalled</span>
+        <span class="tally near" id="trace-near">0 near</span>
+        <button class="ghost" id="trace-clear">clear</button>
+      </div>
+
+      <div class="trace-list off" id="trace-list"></div>
+
+      <div class="trail" id="trail"></div>
+
+      <div class="legend" id="legend"></div>
+
+      <div class="inspector" id="inspector">
+        <button class="close" id="insp-close" aria-label="Close">×</button>
+        <div class="kind" id="insp-kind">node</div>
+        <h3 id="insp-title">—</h3>
+        <div class="meta" id="insp-meta"></div>
+        <div class="detail" id="insp-detail"></div>
+        <div class="links">
+          <button class="ghost" id="insp-ask">ask jarvis about this</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ RIGHT RAIL ============ -->
+  <aside class="rail right" id="rail-right">
+    <div class="rail-section">
+      <div class="hud-label">Last exchange</div>
+      <div class="readout"><span class="k">answered by</span><span class="v gold" id="r-model">—</span></div>
+      <div class="readout"><span class="k">latency</span><span class="v" id="r-latency">—</span></div>
+      <div class="readout"><span class="k">tokens</span><span class="v" id="r-tokens">—</span></div>
+      <div class="readout"><span class="k">chosen by</span><span class="v" id="r-gate">—</span></div>
+      <div class="readout"><span class="k">complexity</span><span class="v ice" id="r-complexity">—</span></div>
+      <div class="meter"><i id="r-meter"></i></div>
+      <div class="readout" style="margin-top:6px"><span class="k">reason</span></div>
+      <div style="font-size:12px;color:var(--dim);line-height:1.4" id="r-why">—</div>
+    </div>
+
+    <div class="rail-section">
+      <div class="hud-label">Abilities used</div>
+      <div id="tools-used"></div>
+    </div>
+
+    <div class="rail-section">
+      <div class="hud-label">Memory</div>
+      <div class="readout"><span class="k">facts</span><span class="v" id="r-facts">—</span></div>
+      <div class="readout"><span class="k">documents</span><span class="v" id="r-docs">—</span></div>
+      <div class="readout"><span class="k">entities</span><span class="v" id="r-ents">—</span></div>
+      <div class="readout"><span class="k">abilities on</span><span class="v" id="r-tools">—</span></div>
+      <div class="readout"><span class="k">recalled</span><span class="v ice" id="r-mem">—</span></div>
+    </div>
+
+    <div class="rail-section">
+      <div class="hud-label">Free-tier budget</div>
+      <div class="readout"><span class="k">this minute</span><span class="v" id="r-rpm">—</span></div>
+      <div class="readout"><span class="k">today</span><span class="v" id="r-rpd">—</span></div>
+      <div class="meter"><i id="r-rpdbar"></i></div>
+    </div>
+
+    <div class="rail-section">
+      <div class="hud-label">Voice</div>
+      <div class="readout"><span class="k">listening</span><span class="v" id="r-stt">—</span></div>
+      <div class="readout"><span class="k">speaking</span><span class="v" id="r-tts">—</span></div>
+      <div class="readout"><span class="k">input level</span><span class="v" id="r-level">0</span></div>
+      <div class="meter"><i id="r-levelbar"></i></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ======================================================================= *
+ *  TRANSPORT
+ *
+ *  This page was written to be SERVED BY the Python backend, so every call
+ *  was a relative path and the browser's own origin did the rest. Two things
+ *  broke that.
+ *
+ *  A token. HUD_TOKEN is mandatory the moment the server binds anywhere but
+ *  loopback - which is what the phone needs - and none of the calls below
+ *  sent one. Against a token-gated server this whole page was 401.
+ *
+ *  A desktop shell. Bundled inside Tauri the page's origin becomes
+ *  http://tauri.localhost, relative paths resolve to the wrong place, and
+ *  only an absolute URL reaches the backend.
+ *
+ *  So: one base URL and one header, in one place. jfetch() is the only thing
+ *  below that knows either. Set them from the console, from the desktop
+ *  shell, or from a ?token= bootstrap; they persist per browser.
+ * ======================================================================= */
+const JARVIS = (() => {
+  const LS = (k, d) => { try { return localStorage.getItem(k) || d; } catch(e) { return d; } };
+  let base = LS("jarvis.base", "");
+  let token = LS("jarvis.token", "");
+  // Served by the backend itself? Then the page's own origin IS the API and
+  // nothing needs configuring - which keeps the browser case exactly as it
+  // was, with no token required on loopback.
+  const sameOrigin = location.protocol.startsWith("http") &&
+                     !/(^|\.)tauri\.localhost$/.test(location.hostname) &&
+                     location.hostname !== "";
+  if (!base && sameOrigin) base = "";
+  return {
+    get base(){ return base; },
+    get token(){ return token; },
+    set(b, t){
+      if (b !== undefined) { base = String(b || "").replace(/\/$/, "");
+        try { localStorage.setItem("jarvis.base", base); } catch(e){} }
+      if (t !== undefined) { token = String(t || "");
+        try { localStorage.setItem("jarvis.token", token); } catch(e){} }
+    },
+    url(path){ return (base || "") + path; },
+    headers(extra){
+      const h = Object.assign({"X-Jarvis-Client": "hud"}, extra || {});
+      // X-Jarvis-Client is NOT authentication - it only forces a preflight.
+      // The token is the thing that actually protects the backend.
+      if (token) h["X-Jarvis-Token"] = token;
+      return h;
+    },
+  };
+})();
+
+function jfetch(path, opts){
+  opts = opts || {};
+  return window.fetch(JARVIS.url(path), Object.assign({}, opts, {
+    cache: opts.cache || "no-store",
+    headers: JARVIS.headers(opts.headers),
+  }));
+}
+</script>
+<script>
+"use strict";
+
+/* ==================================================================
+ * State
+ * ================================================================== */
+const S = {
+  view: "talk",
+  online: false,
+  lane: "auto",
+  lanes: [],
+  state: "idle",              // idle | listening | thinking | speaking
+  level: 0,                   // mic amplitude 0..1
+  messages: [],
+  graph: null,
+  traces: [],
+  activeTrace: null,
+  reduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+};
+
+const GROUPS = {
+  core:     { label:"Core",      color:"#ffffff" },
+  model:    { label:"Brains",    color:"#ffb648" },
+  cluster:  { label:"Ability groups", color:"#6fe3ff" },
+  tool:     { label:"Abilities", color:"#3fa9c9" },
+  fact:     { label:"Facts",     color:"#8d7bff" },
+  source:   { label:"Sources",   color:"#4d6b80" },
+  document: { label:"Documents", color:"#5fe0a8" },
+  entity:   { label:"Knowledge", color:"#ff8fb0" },
+  project:  { label:"Projects",  color:"#ffb648" },
+  skill:    { label:"Skills",    color:"#c6f24e" },
+  persona:  { label:"Personas",  color:"#ff6b5e" }
+};
+
+const $ = id => document.getElementById(id);
+
+/* ==================================================================
+ * Demo brain — what you see when Jarvis is not running yet, so the
+ * page opens as a working instrument rather than an empty shell.
+ * ================================================================== */
+function demoGraph(){
+  const n = [], l = [];
+  const add = (id,label,group,extra={}) => { n.push(Object.assign({id,label,group},extra)); return id; };
+  const link = (a,b,kind="") => l.push({source:a,target:b,kind});
+
+  add("core","J.A.R.V.I.S.","core",{weight:6});
+  ["qwen3:8b","jarvis-escalate","jarvis-critic","jarvis-bulk"].forEach((m,i)=>{
+    add("model:"+m,m,"model",{weight:3,meta:i?"cloud lane · via proxy":"local · ollama"});
+    link("core","model:"+m,"runs");
+  });
+
+  const groups = {
+    "Reasoning":["think","calculator","llm"],
+    "Web + Research":["web_search","http_request","pdf_extract","get_weather"],
+    "Browser":["browser_navigate","browser_extract","browser_click","browser_screenshot","browser_axtree"],
+    "Memory":["memory_store","memory_search","memory_retrieve","knowledge_search"],
+    "Approval":["queue_action","check_permission","record_decision"],
+    "Code":["code_interpreter_docker"]
+  };
+  Object.entries(groups).forEach(([g,tools])=>{
+    add("cluster:"+g,g,"cluster",{weight:3}); link("core","cluster:"+g,"runs");
+    tools.forEach(t=>{ add("tool:"+t,t,"tool",{detail:"Enabled ability"}); link("cluster:"+g,"tool:"+t,"has"); });
+  });
+
+  const projects = [
+    ["Pixelforge",["LDtk","Rapier2D","PixiJS Tilemap"]],
+    ["Isoforge",["Rapier2D","matter-js"]],
+    ["Jimothy Runs",["three-mesh-bvh","glTF-Transform","Rapier3D"]],
+    ["Casino Tycoon",["Colyseus","geckos.io","spadille"]],
+    ["Coach Mac",["pokersolver","RLCard","OMPEval"]],
+    ["PocketSim Poker",["pokersolver","node-cards"]],
+    ["Inkwell",["Tiptap","compromise","Dexie.js"]],
+    ["Retainly",["whisper.cpp","YouTube.js","transformers.js"]]
+  ];
+  projects.forEach(([p,repos])=>{
+    add("kg:"+p,p,"project",{meta:"type: project"}); link("core","kg:"+p,"knows");
+    repos.forEach(r=>{
+      if(!n.find(x=>x.id==="kg:"+r)) add("kg:"+r,r,"entity",{meta:"type: repo"});
+      link("kg:"+p,"kg:"+r,"candidate");
+    });
+  });
+
+  [["licence rule","Nothing AGPL or GPL ships inside an app."],
+   ["local-first rule","Runs with no LLM or API at runtime."],
+   ["pixel-art rule","Structures get depth from the start, never flat first."]
+  ].forEach(([r,d])=>{ add("kg:"+r,r,"entity",{detail:d,meta:"type: rule"}); link("core","kg:"+r,"knows"); });
+
+  ["Mario builds browser games and poker trainers.",
+   "Prefers MIT and Apache licences.",
+   "Runs an RTX 2080 Super, 8GB VRAM.",
+   "Cloud escalation goes through a local LiteLLM proxy.",
+   "Wants plain language, or the term with its meaning beside it."
+  ].forEach((t,i)=>{
+    add("fact:"+i,t.slice(0,50),"fact",{detail:t,meta:"trust: auto · source: conversation"});
+    link("core","fact:"+i,"recalls");
+  });
+
+  ["jarvis","coach-mac","ops"].forEach(p=>{ add("persona:"+p,p,"persona"); link("core","persona:"+p,"runs"); });
+
+  return { nodes:n, links:l, counts:{demo:n.length}, demo:true };
+}
+
+/* ==================================================================
+ * Arc reactor
+ * ================================================================== */
+const reactor = (() => {
+  const cv = $("reactor"), ctx = cv.getContext("2d");
+  let t = 0, pulse = 0;
+
+  const PALETTE = {
+    idle:      { ring:"#1d5f7a", core:"#6fe3ff", glow:.42, speed:.20 },
+    listening: { ring:"#6fe3ff", core:"#a8f0ff", glow:.95, speed:.65 },
+    thinking:  { ring:"#ffb648", core:"#ffd79a", glow:.78, speed:1.25 },
+    speaking:  { ring:"#6fe3ff", core:"#ffffff", glow:1.0,  speed:.45 },
+    offline:   { ring:"#2e5f78", core:"#5e9ab4", glow:.34, speed:.10 }
+  };
+
+  function arcRing(cx, cy, r, segments, gap, width, color, alpha, rotate){
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(rotate);
+    ctx.strokeStyle = color; ctx.globalAlpha = alpha;
+    ctx.lineWidth = width; ctx.lineCap = "butt";
+    const step = (Math.PI*2)/segments;
+    for(let i=0;i<segments;i++){
+      ctx.beginPath();
+      ctx.arc(0,0,r, i*step, i*step + step - gap);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function frame(){
+    const p = PALETTE[S.online ? S.state : "offline"] || PALETTE.idle;
+    const w = cv.width, h = cv.height, cx = w/2, cy = h/2;
+    const R = Math.min(w,h)/2 - 18;
+
+    t += S.reduced ? 0.002 : 0.01 * (0.6 + p.speed);
+    // Amplitude drives the core when listening; a synthetic envelope when speaking.
+    const drive = S.state === "listening" ? S.level
+                : S.state === "speaking"  ? 0.42 + 0.32*Math.abs(Math.sin(t*6.2))
+                : S.state === "thinking"  ? 0.30 + 0.14*Math.sin(t*3.4)
+                : 0.16 + 0.05*Math.sin(t*1.3);
+    pulse += (drive - pulse) * 0.18;
+
+    ctx.clearRect(0,0,w,h);
+
+    // outer tick ring
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(t*0.35);
+    ctx.strokeStyle = p.ring; ctx.globalAlpha = .5; ctx.lineWidth = 2;
+    for(let i=0;i<72;i++){
+      const a = (i/72)*Math.PI*2;
+      const long = i % 6 === 0;
+      const r1 = R, r2 = R - (long ? 12 : 6);
+      ctx.globalAlpha = long ? .72 : .28;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*r1, Math.sin(a)*r1);
+      ctx.lineTo(Math.cos(a)*r2, Math.sin(a)*r2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // segmented rings, counter-rotating
+    arcRing(cx,cy,R-26, 6, .34, 5, p.ring, .85, -t*0.8);
+    arcRing(cx,cy,R-44, 12, .18, 3, p.core, .40,  t*1.4);
+    arcRing(cx,cy,R-62, 3, .55, 8, p.ring, .30, -t*0.5);
+
+    // amplitude spokes
+    const spokes = 60;
+    ctx.save(); ctx.translate(cx,cy);
+    ctx.strokeStyle = p.core; ctx.lineWidth = 2;
+    for(let i=0;i<spokes;i++){
+      const a = (i/spokes)*Math.PI*2;
+      const noise = Math.sin(i*2.1 + t*7) * .5 + .5;
+      const len = 8 + pulse * 40 * (0.35 + noise*0.65);
+      ctx.globalAlpha = .12 + pulse*.5;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*(R-78), Math.sin(a)*(R-78));
+      ctx.lineTo(Math.cos(a)*(R-78-len), Math.sin(a)*(R-78-len));
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // core
+    const coreR = 40 + pulse*16;
+    const g = ctx.createRadialGradient(cx,cy,2, cx,cy,coreR*2.3);
+    g.addColorStop(0, p.core);
+    g.addColorStop(.28, p.core + "cc");
+    g.addColorStop(.6, p.ring + "33");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.globalAlpha = p.glow;
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx,cy,coreR*2.3,0,Math.PI*2); ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = p.core;
+    ctx.beginPath(); ctx.arc(cx,cy,coreR*.42,0,Math.PI*2); ctx.fill();
+
+    // triangle plate, the one nod to the real reactor
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(-t*0.25);
+    ctx.strokeStyle = "#04070c"; ctx.lineWidth = 5; ctx.globalAlpha = .8;
+    ctx.beginPath();
+    for(let i=0;i<3;i++){
+      const a = (i/3)*Math.PI*2 - Math.PI/2;
+      const x = Math.cos(a)*coreR*.30, y = Math.sin(a)*coreR*.30;
+      i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+    }
+    ctx.closePath(); ctx.stroke(); ctx.restore();
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  return {
+    set(state){
+      S.state = state;
+      const words = { idle:"standing by", listening:"listening", thinking:"thinking", speaking:"speaking" };
+      const label = S.online ? (words[state] || state) : "offline";
+      $("reactor-state").textContent = label;
+      $("chip-state").textContent = label;
+      $("chip-state").className = "chip" + (state === "thinking" ? " hot" : state === "listening" ? " live" : "");
+    }
+  };
+})();
+
+/* ==================================================================
+ * Brain galaxy — hand-rolled 3D force graph, no libraries
+ * ================================================================== */
+const galaxy = (() => {
+  const cv = $("galaxy");
+  const ctx = cv.getContext("2d");
+  let nodes = [], links = [], adj = new Map();
+  let yaw = .5, pitch = -.25, dist = 900, zoom = 1;
+  let spin = true, dragging = false, lastX = 0, lastY = 0;
+  let focusId = null, hoverId = null, query = "";
+  let traceHits = null, traceNear = null;   // Map id -> score, or null
+  let camTarget = {x:0,y:0,z:0}, camAt = {x:0,y:0,z:0};
+  let dpr = 1, W = 0, H = 0, running = false;
+
+  let fitted = false;
+  function resize(){
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = cv.getBoundingClientRect();
+    W = r.width; H = r.height;
+    cv.width = Math.max(1, W*dpr); cv.height = Math.max(1, H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    // The brain view is hidden at boot, so the first real measurement is the
+    // first chance to frame the graph against actual pixels.
+    if(nodes.length && W > 0 && !fitted){ fitted = true; fitCamera(); }
+  }
+  new ResizeObserver(resize).observe(cv);
+
+  function load(graph){
+    const byId = new Map();
+    nodes = graph.nodes.map((n,i) => {
+      // Golden-spiral seed: an even shell, so the sim untangles fast.
+      const phi = Math.acos(1 - 2*(i+0.5)/graph.nodes.length);
+      const theta = Math.PI * (1 + Math.sqrt(5)) * (i+0.5);
+      const r = 260 + Math.random()*120;
+      const node = Object.assign({}, n, {
+        x: r*Math.sin(phi)*Math.cos(theta),
+        y: r*Math.sin(phi)*Math.sin(theta),
+        z: r*Math.cos(phi),
+        vx:0, vy:0, vz:0,
+        deg:0,
+        r: 3 + (n.weight || 1) * 1.1
+      });
+      byId.set(node.id, node);
+      return node;
+    });
+
+    links = graph.links
+      .map(l => ({ s: byId.get(l.source), t: byId.get(l.target), kind: l.kind }))
+      .filter(l => l.s && l.t);
+
+    adj = new Map();
+    links.forEach(l => {
+      l.s.deg++; l.t.deg++;
+      if(!adj.has(l.s.id)) adj.set(l.s.id, new Set());
+      if(!adj.has(l.t.id)) adj.set(l.t.id, new Set());
+      adj.get(l.s.id).add(l.t.id);
+      adj.get(l.t.id).add(l.s.id);
+    });
+    nodes.forEach(n => { n.r = 3 + Math.min(9, Math.sqrt(n.deg||1)*1.7) + (n.weight||0); });
+
+    for(let i=0;i<260;i++) step(0.9);   // pre-warm off-screen
+    fitCamera();
+    if(!running){ running = true; requestAnimationFrame(draw); }
+    buildLegend(graph);
+  }
+
+  // Pull the camera back far enough that the whole galaxy lands on screen,
+  // rather than opening half-cropped on a wide graph.
+  function fitCamera(){
+    if(!nodes.length) return;
+    let maxR = 0;
+    for(const n of nodes){
+      const d = Math.hypot(n.x, n.y, n.z);
+      if(d > maxR) maxR = d;
+    }
+    const span = Math.min(W || 900, H || 600);
+    zoom = Math.max(0.35, Math.min(1.6, (span * 0.40) / Math.max(160, maxR)));
+  }
+
+  // -- physics ---------------------------------------------------------
+  function step(alpha){
+    const n = nodes.length;
+    const REP = 5200, CENTER = 0.0016, DAMP = 0.86;
+
+    for(let i=0;i<n;i++){
+      const a = nodes[i];
+      for(let j=i+1;j<n;j++){
+        const b = nodes[j];
+        let dx = a.x-b.x, dy = a.y-b.y, dz = a.z-b.z;
+        let d2 = dx*dx + dy*dy + dz*dz;
+        if(d2 < 1) { d2 = 1; dx = Math.random()-0.5; dy = Math.random()-0.5; dz = Math.random()-0.5; }
+        if(d2 > 900000) continue;                 // far pairs barely matter
+        const f = REP / d2, d = Math.sqrt(d2);
+        const fx = dx/d*f, fy = dy/d*f, fz = dz/d*f;
+        a.vx += fx; a.vy += fy; a.vz += fz;
+        b.vx -= fx; b.vy -= fy; b.vz -= fz;
+      }
+    }
+
+    for(const l of links){
+      const a = l.s, b = l.t;
+      const dx = b.x-a.x, dy = b.y-a.y, dz = b.z-a.z;
+      const d = Math.sqrt(dx*dx+dy*dy+dz*dz) || 1;
+      const rest = 96;
+      const f = (d - rest) * 0.0085;
+      const fx = dx/d*f, fy = dy/d*f, fz = dz/d*f;
+      a.vx += fx; a.vy += fy; a.vz += fz;
+      b.vx -= fx; b.vy -= fy; b.vz -= fz;
+    }
+
+    for(const p of nodes){
+      p.vx -= p.x*CENTER; p.vy -= p.y*CENTER; p.vz -= p.z*CENTER;
+      p.vx *= DAMP; p.vy *= DAMP; p.vz *= DAMP;
+      p.x += p.vx*alpha; p.y += p.vy*alpha; p.z += p.vz*alpha;
+    }
+  }
+
+  // -- projection ------------------------------------------------------
+  function project(p){
+    const dx = p.x - camAt.x, dy = p.y - camAt.y, dz = p.z - camAt.z;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    let x = dx*cy - dz*sy, z = dx*sy + dz*cy;
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    let y = dy*cp - z*sp; z = dy*sp + z*cp;
+    const depth = z + dist;
+    if(depth < 40) return null;
+    const k = (dist * zoom) / depth;
+    return { x: W/2 + x*k, y: H/2 + y*k, k, depth };
+  }
+
+  function draw(){
+    if(nodes.length){
+      step(0.32);
+      if(spin && !dragging && !S.reduced) yaw += 0.0016;
+      camAt.x += (camTarget.x - camAt.x)*0.08;
+      camAt.y += (camTarget.y - camAt.y)*0.08;
+      camAt.z += (camTarget.z - camAt.z)*0.08;
+    }
+
+    ctx.clearRect(0,0,W,H);
+
+    const near = focusId ? (adj.get(focusId) || new Set()) : null;
+    const q = query.trim().toLowerCase();
+    const tracing = !!traceHits;
+
+    const proj = new Map();
+    for(const p of nodes){ const s = project(p); if(s) proj.set(p.id, s); }
+
+    // links first, behind everything
+    for(const l of links){
+      const a = proj.get(l.s.id), b = proj.get(l.t.id);
+      if(!a || !b) continue;
+      let alpha = 0.34;
+      let color = "#356f8c";
+      if(tracing){
+        // A link between two recalled notes is the interesting one: it is
+        // why the second one came back at all.
+        const a = traceHits.has(l.s.id), b = traceHits.has(l.t.id);
+        if(a && b){ alpha = 0.9; color = "#6fe3ff"; }
+        else if(a || b){ alpha = 0.3; color = "#2f6a86"; }
+        else alpha = 0.03;
+      }
+      if(focusId){
+        const on = l.s.id === focusId || l.t.id === focusId;
+        alpha = on ? 0.85 : 0.04;
+        if(on) color = "#6fe3ff";
+      }
+      if(q) alpha = 0.07;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = focusId && (l.s.id===focusId||l.t.id===focusId) ? 1.4 : 0.7;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    }
+
+    // nodes, far to near
+    const placed = [];
+    const order = nodes.filter(n => proj.has(n.id))
+                       .sort((a,b) => proj.get(b.id).depth - proj.get(a.id).depth);
+
+    for(const n of order){
+      const s = proj.get(n.id);
+      const g = GROUPS[n.group] || GROUPS.entity;
+      const hit = q && (n.label||"").toLowerCase().includes(q);
+      const isFocus = n.id === focusId;
+      const isNear = near && near.has(n.id);
+
+      const isHit  = tracing && traceHits.has(n.id);
+      const isMiss = tracing && traceNear.has(n.id);
+
+      let alpha = 1;
+      if(tracing) alpha = isHit ? 1 : isMiss ? 0.75 : 0.06;
+      if(focusId && !isFocus && !isNear) alpha = 0.1;
+      if(q) alpha = hit ? 1 : 0.08;
+
+      let r = Math.max(1.2, n.r * s.k * 1.05);
+      if(isHit) r *= 1.5;
+
+      if(isFocus || hit || n.group === "core" || isHit || isMiss){
+        ctx.globalAlpha = alpha * (isHit ? 0.5 : isMiss ? 0.3 : 0.35);
+        ctx.fillStyle = isHit ? "#6fe3ff" : isMiss ? "#ffb648" : g.color;
+        ctx.beginPath(); ctx.arc(s.x, s.y, r*(isHit?3.6:3.1), 0, Math.PI*2); ctx.fill();
+      }
+
+      ctx.globalAlpha = alpha * Math.min(1, 0.35 + s.k*0.9);
+      ctx.fillStyle = g.color;
+      ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2); ctx.fill();
+
+      // A recalled note wears a ring; a near-miss wears a dashed one. The
+      // difference is the whole point of the view.
+      if(isHit || isMiss){
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = isHit ? "#6fe3ff" : "#ffb648";
+        ctx.lineWidth = isHit ? 1.8 : 1;
+        if(isMiss) ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.arc(s.x, s.y, r + (isHit ? 5 : 3.5), 0, Math.PI*2); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      if(n.id === hoverId || isFocus){
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(s.x, s.y, r+3, 0, Math.PI*2); ctx.stroke();
+      }
+
+      // Labels stay rare on purpose — every node labelled is a fog. Anything
+      // that would collide with a label already drawn is simply dropped.
+      const always = n.group === "core" || n.group === "model"
+                  || n.group === "cluster" || n.group === "project";
+      const wanted = isFocus || n.id === hoverId || hit || isHit || isMiss
+                  || ((always || r > 6.5) && !focusId && !q && !tracing);
+      if(wanted){
+        const size = Math.max(10, Math.min(14, 10 + r*0.28));
+        ctx.font = `${size}px "IBM Plex Mono", monospace`;
+        const text = n.label || n.id;
+        const w = ctx.measureText(text).width;
+        const box = { x:s.x - w/2, y:s.y - r - 7 - size, w, h:size + 3 };
+        const priority = isFocus || n.id === hoverId || hit || isHit;
+        if(priority || !placed.some(b =>
+             box.x < b.x + b.w && box.x + box.w > b.x &&
+             box.y < b.y + b.h && box.y + box.h > b.y)){
+          placed.push(box);
+          ctx.globalAlpha = Math.min(1, alpha * 1.1);
+          ctx.fillStyle = priority ? "#ffffff" : "#9fb8c7";
+          ctx.textAlign = "center";
+          ctx.fillText(text, s.x, s.y - r - 7);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    requestAnimationFrame(draw);
+  }
+
+  // -- interaction -----------------------------------------------------
+  function pick(mx, my){
+    let best = null, bestD = 22;
+    for(const n of nodes){
+      const s = project(n);
+      if(!s) continue;
+      const d = Math.hypot(s.x-mx, s.y-my);
+      if(d < bestD){ bestD = d; best = n; }
+    }
+    return best;
+  }
+
+  cv.addEventListener("pointerdown", e => {
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    cv.classList.add("dragging"); cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener("pointermove", e => {
+    const r = cv.getBoundingClientRect();
+    if(dragging){
+      yaw   += (e.clientX - lastX) * 0.006;
+      pitch += (e.clientY - lastY) * 0.006;
+      pitch = Math.max(-1.4, Math.min(1.4, pitch));
+      lastX = e.clientX; lastY = e.clientY;
+    } else {
+      const n = pick(e.clientX - r.left, e.clientY - r.top);
+      hoverId = n ? n.id : null;
+      cv.style.cursor = n ? "pointer" : "grab";
+    }
+  });
+  cv.addEventListener("pointerup", e => {
+    const moved = Math.hypot(e.clientX-lastX, e.clientY-lastY);
+    dragging = false; cv.classList.remove("dragging");
+    if(moved < 4){
+      const r = cv.getBoundingClientRect();
+      const n = pick(e.clientX - r.left, e.clientY - r.top);
+      n ? focus(n) : clearFocus();
+    }
+  });
+  cv.addEventListener("wheel", e => {
+    e.preventDefault();
+    zoom = Math.max(0.28, Math.min(4.5, zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
+  }, {passive:false});
+
+  // pinch to zoom
+  let pinch = 0;
+  cv.addEventListener("touchmove", e => {
+    if(e.touches.length === 2){
+      const d = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY);
+      if(pinch) zoom = Math.max(0.28, Math.min(4.5, zoom * (d/pinch)));
+      pinch = d;
+      e.preventDefault();
+    }
+  }, {passive:false});
+  cv.addEventListener("touchend", () => { pinch = 0; });
+
+  function focus(n){
+    focusId = n.id;
+    camTarget = {x:n.x, y:n.y, z:n.z};
+    const g = GROUPS[n.group] || GROUPS.entity;
+    $("insp-kind").textContent = g.label;
+    $("insp-kind").style.color = g.color;
+    $("insp-title").textContent = n.label || n.id;
+    $("insp-meta").textContent = n.meta || `${(adj.get(n.id)||new Set()).size} connections`;
+    $("insp-detail").textContent = n.detail || "No stored detail for this node.";
+    $("inspector").classList.add("on");
+  }
+  function clearFocus(){
+    focusId = null; camTarget = {x:0,y:0,z:0};
+    $("inspector").classList.remove("on");
+  }
+
+  function buildLegend(graph){
+    const counts = {};
+    graph.nodes.forEach(n => counts[n.group] = (counts[n.group]||0)+1);
+    $("legend").innerHTML = Object.entries(GROUPS)
+      .filter(([k]) => counts[k])
+      .map(([k,g]) => `<div class="legend-row">
+          <span class="swatch" style="background:${g.color}"></span>
+          <span>${g.label}</span><span class="n">${counts[k]}</span>
+        </div>`).join("");
+  }
+
+  function setTrace(trace){
+    if(!trace){ traceHits = traceNear = null; return; }
+    traceHits = new Map((trace.hits || []).map(h => [h.id, h.score]));
+    traceNear = new Map((trace.near || []).map(h => [h.id, h.score]));
+    clearFocus();
+  }
+
+  function flyTo(id){
+    const n = nodes.find(x => x.id === id);
+    if(n) focus(n);
+  }
+
+  return {
+    load, resize, setTrace, flyTo,
+    reset(){ clearFocus(); yaw=.5; pitch=-.25; fitCamera(); },
+    search(v){ query = v; },
+    toggleSpin(){ spin = !spin; return spin; },
+    focused(){ return focusId ? nodes.find(n => n.id === focusId) : null; }
+  };
+})();
+
+/* ==================================================================
+ * Voice — browser speech in, browser speech out.
+ * Swap these two for the local pipeline (whisper + Kokoro) later by
+ * replacing startListening() and speak() only; nothing else changes.
+ * ================================================================== */
+const voice = (() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, listening = false, audioCtx = null, analyser = null, raf = 0, micStream = null;
+
+  if(SR){
+    rec = new SR();
+    rec.continuous = false; rec.interimResults = true; rec.lang = "en-US";
+    rec.onresult = e => {
+      let text = "";
+      for(let i = e.resultIndex; i < e.results.length; i++) text += e.results[i][0].transcript;
+      $("input").value = text;
+      if(e.results[e.results.length-1].isFinal){ stop(); send(); }
+    };
+    rec.onerror = () => stop();
+    rec.onend = () => { if(listening) stop(); };
+  }
+  $("r-stt").textContent = SR ? "ready" : "unsupported";
+
+  async function meter(){
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      micStream = stream;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for(let i=0;i<buf.length;i++){ const v = (buf[i]-128)/128; sum += v*v; }
+        S.level = Math.min(1, Math.sqrt(sum/buf.length) * 4.2);
+        $("r-level").textContent = Math.round(S.level*100);
+        $("r-levelbar").style.width = (S.level*100)+"%";
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+    }catch(err){
+      $("r-stt").textContent = "mic blocked";
+    }
+  }
+
+  function start(){
+    if(!rec || listening) return;
+    listening = true;
+    $("mic").setAttribute("aria-pressed","true");
+    reactor.set("listening");
+    if(!analyser) meter();
+    try{ rec.start(); }catch(e){}
+  }
+  function stop(){
+    if(!listening) return;
+    listening = false;
+    // Release the device: the old version left the track live, so the
+    // browser's mic-in-use light stayed on for the life of the tab.
+    try{ if(micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; } }catch(e){}
+    try{ if(raf){ cancelAnimationFrame(raf); raf = null; } }catch(e){}
+    try{ if(audioCtx && audioCtx.state !== "closed"){ audioCtx.close(); } }catch(e){}
+    $("mic").setAttribute("aria-pressed","false");
+    S.level = 0;
+    $("r-levelbar").style.width = "0%";
+    reactor.set("idle");
+    try{ rec.stop(); }catch(e){}
+  }
+
+  function speak(text){
+    if(!window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/[*_`#]/g,""));
+    // Match the Kokoro bm_george choice: British, male if one exists.
+    const voices = speechSynthesis.getVoices();
+    u.voice = voices.find(v => /en-GB/i.test(v.lang) && /male|daniel|george|arthur/i.test(v.name))
+           || voices.find(v => /en-GB/i.test(v.lang))
+           || voices.find(v => /^en/i.test(v.lang)) || null;
+    u.rate = 1.05; u.pitch = 0.92;
+    u.onstart = () => { reactor.set("speaking"); $("r-tts").textContent = "speaking"; };
+    u.onend   = () => { reactor.set("idle");     $("r-tts").textContent = "idle"; };
+    speechSynthesis.speak(u);
+  }
+
+  return { start, stop, speak, get listening(){ return listening; }, supported: !!SR };
+})();
+
+/* ==================================================================
+ * Retrieval trace - what the brain actually reached for
+ * ================================================================== */
+async function traceFor(question){
+  try{
+    const r = await jfetch("/api/retrieve?q=" + encodeURIComponent(question),
+                          {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    const data = await r.json();
+    if(!data.available || (!data.hits.length && !data.near.length)) return null;
+    const trace = {q: question, hits: data.hits, near: data.near, at: Date.now()};
+    S.traces.unshift(trace);
+    S.traces = S.traces.slice(0, 8);
+    renderTrail();
+    return trace;
+  }catch(e){ return null; }
+}
+
+function showTrace(trace){
+  S.activeTrace = trace;
+  galaxy.setTrace(trace);
+  const bar = $("trace-bar"), list = $("trace-list");
+  if(!trace){
+    bar.classList.add("off"); list.classList.add("off");
+    renderTrail();
+    return;
+  }
+  bar.classList.remove("off"); list.classList.remove("off");
+  $("trace-q").textContent = trace.q;
+  $("trace-hits").textContent = trace.hits.length + " recalled";
+  $("trace-near").textContent = trace.near.length + " near";
+
+  // Every value here is escaped. item.id includes knowledge-graph entity ids,
+  // which the MODEL writes via kg_add_entity - a stored XSS that fired the
+  // moment a question matched the poisoned entity, in the origin that holds
+  // the session cookie and can call /api/approve.
+  const row = (item, cls) =>
+    `<div class="trace-row ${cls}" data-node="${apprEscape(item.id)}">
+       <span class="s">${Number(item.score || 0).toFixed(2)}</span>
+       <span class="t">${apprEscape(item.text || "")}</span>
+     </div>`;
+
+  list.innerHTML =
+    `<h4>Recalled for this answer</h4>` +
+    (trace.hits.map(h => row(h,"hit")).join("") || '<div class="trace-row"><span class="t">nothing matched</span></div>') +
+    `<h4 class="second">Near misses — what it nearly used</h4>` +
+    (trace.near.map(h => row(h,"near")).join("") || '<div class="trace-row"><span class="t">nothing close</span></div>');
+
+  list.querySelectorAll(".trace-row[data-node]").forEach(el =>
+    el.addEventListener("click", () => galaxy.flyTo(el.dataset.node)));
+  renderTrail();
+}
+
+function renderTrail(){
+  const el = $("trail");
+  el.innerHTML = S.traces.map((t, i) =>
+    `<button class="trail-chip" data-i="${i}" aria-pressed="${t === S.activeTrace}">
+       ${t.q.replace(/</g,"&lt;").slice(0, 38)}
+     </button>`).join("");
+  el.querySelectorAll(".trail-chip").forEach(b =>
+    b.addEventListener("click", () => showTrace(S.traces[+b.dataset.i])));
+}
+
+/* ==================================================================
+ * Conversation
+ * ================================================================== */
+function attachRecall(node, trace){
+  if(!node || !trace) return;
+  const btn = document.createElement("button");
+  btn.className = "recall-strip";
+  btn.innerHTML = `<b>${trace.hits.length}</b> recalled · <i>${trace.near.length}</i> near`;
+  btn.title = "See what the brain reached for";
+  btn.addEventListener("click", () => { setView("brain"); showTrace(trace); });
+  node.parentElement.appendChild(btn);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+function addMessage(role, text){
+  const el = document.createElement("div");
+  el.className = "msg " + role;
+  const who = role === "user" ? "you" : role === "jarvis" ? "jarvis" : "system";
+  el.innerHTML = `<div class="who">${who}</div><div class="body"></div>`;
+  el.querySelector(".body").textContent = text;
+  $("log").appendChild(el);
+  $("log").scrollTop = $("log").scrollHeight;
+  return el.querySelector(".body");
+}
+
+const DEMO_REPLIES = [
+  "I am running in demo mode, sir — the assistant itself is not answering yet. Start it with `uv run jarvis serve` and reload this page, and I will route through the real model.",
+  "Not connected to the local model at the moment. The brain map beside this is live sample data, so you can still see how the view behaves.",
+  "Standing by. Once `jarvis serve` is up on port 8000 this panel talks to it directly — nothing else to configure."
+];
+
+let SEND_INFLIGHT = null;
+async function send(){
+  const text = $("input").value.trim();
+  if(!text) return;
+  // One turn at a time. Sending while a stream is still open pushed the
+  // second user turn into history ahead of the first assistant turn, and
+  // the next request carried an out-of-order transcript upstream.
+  if(SEND_INFLIGHT){ SEND_INFLIGHT.abort(); }
+  const ctrl = new AbortController();
+  SEND_INFLIGHT = ctrl;
+  const watchdog = setTimeout(() => ctrl.abort("timeout"), 300000);
+  $("input").value = "";
+  $("input").style.height = "auto";
+  const userNode = addMessage("user", text);
+  S.messages.push({role:"user", content:text});
+
+  // Retrieval runs alongside the answer, not after it, so the trace is ready
+  // by the time you think to look.
+  const tracePromise = traceFor(text);
+
+  reactor.set("thinking");
+  const started = performance.now();
+
+  if(!S.online){
+    await new Promise(r => setTimeout(r, 700));
+    const reply = DEMO_REPLIES[Math.floor(Math.random()*DEMO_REPLIES.length)];
+    addMessage("jarvis", reply);
+    reactor.set("idle");
+    tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
+    voice.speak(reply);
+    return;
+  }
+
+  const body = {
+    auto: S.lane === "auto",
+    lane: S.lane === "auto" ? null
+        : (S.lane === "local" ? (S.defaultModel || "local") : S.lane),
+    messages: S.messages.slice(-12),
+    stream: true,
+    temperature: 0.7,
+    max_tokens: 2048
+  };
+
+  let node = null, full = "";
+  try{
+    const res = await jfetch("/api/chat", {
+      method:"POST",
+      // X-Jarvis-Client is not decoration: a custom header forces a CORS
+      // preflight, which a drive-by page cannot satisfy, so the proxy can
+      // tell a real HUD request from one a visited website fired at
+      // 127.0.0.1 while you had Jarvis running.
+      headers:{"Content-Type":"application/json", "X-Jarvis-Client":"hud"},
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    if(!res.ok){
+      let msg = res.status + " " + res.statusText;
+      try{ const j = await res.json(); if(j.error) msg = j.error; }catch(e){}
+      throw new Error(msg);
+    }
+
+    // The proxy tells us which lane it picked and why.
+    try{
+      const routeRaw = res.headers.get("X-Jarvis-Route");
+      if(routeRaw){
+        const route = JSON.parse(routeRaw);
+        $("r-model").textContent = route.lane || "—";
+        $("r-gate").textContent = route.gate || "—";
+        $("r-why").textContent = route.reason || "—";
+        $("r-complexity").textContent = (route.complexity ?? 0).toFixed(2);
+        $("r-meter").style.width = Math.round((route.complexity || 0) * 100) + "%";
+        $("r-mem").textContent = route.injected_facts
+          ? route.injected_facts + " facts"
+          : (route.memory_side === "jarvis" ? "jarvis-side" : "none");
+        $("chip-model").textContent = route.lane;
+        $("chip-model").className = "chip" + (route.gate === "privacy" ? "" : " hot");
+      }
+    }catch(e){}
+
+    const ctype = res.headers.get("Content-Type") || "";
+    if(ctype.includes("text/event-stream") && res.body){
+      node = addMessage("jarvis","");
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "", finished = false;
+      while(true){
+        const {done, value} = await reader.read();
+        if(done) break;
+        buf += dec.decode(value, {stream:true});
+        const parts = buf.split("\n");
+        buf = parts.pop();
+        for(const line of parts){
+          const s = line.trim();
+          if(!s.startsWith("data:")) continue;
+          const payload = s.slice(5).trim();
+          if(payload === "[DONE]"){ finished = true; continue; }
+          try{
+            const j = JSON.parse(payload);
+            if(j.error) throw new Error(typeof j.error === "string" ? j.error : (j.error.message || "upstream error"));
+            if(j.choices?.[0]?.finish_reason) finished = true;
+            const d = j.choices?.[0]?.delta?.content;
+            if(d){ full += d; node.textContent = full; $("log").scrollTop = $("log").scrollHeight; }
+            if(j.model) $("r-model").textContent = j.model;
+          }catch(e){ if(e instanceof SyntaxError) continue; throw e; }
+        }
+      }
+      // The proxy speaks HTTP/1.0 with a close-delimited body, so a stream
+      // cut by an upstream failure looks EXACTLY like a normal end-of-body.
+      // Without [DONE] or a finish_reason, what we have is a fragment, and a
+      // fragment must not be committed to history as an answer.
+      if(!finished){
+        if(node) node.textContent = full + (full ? " " : "") + "[interrupted]";
+        throw new Error("the answer was cut off before it finished");
+      }
+    } else {
+      const j = await res.json();
+      if(j.error) throw new Error(j.error);
+      full = j.choices?.[0]?.message?.content || "(empty reply)";
+      addMessage("jarvis", full);
+      $("r-model").textContent = j.model || "—";
+      if(j.usage) $("r-tokens").textContent = j.usage.total_tokens ?? "—";
+      if(j.complexity){
+        $("r-complexity").textContent = j.complexity.tier || "—";
+        $("r-meter").style.width = Math.round((j.complexity.score||0)*100) + "%";
+      }
+      const calls = j.choices?.[0]?.message?.tool_calls || [];
+      $("tools-used").innerHTML = calls
+        .map(c => `<span class="toolchip">${apprEscape(c.function?.name || "tool")}</span>`).join("");
+    }
+    S.messages.push({role:"assistant", content:full});
+    clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
+    $("r-latency").textContent = Math.round(performance.now()-started) + " ms";
+    tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
+    voice.speak(full);
+  }catch(err){
+    clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
+    // Do not leave a user turn with no answer in history: the next request
+    // would carry two consecutive user messages upstream.
+    const last = S.messages[S.messages.length - 1];
+    if(last && last.role === "user" && last.content === text) S.messages.pop();
+    const why = err && err.name === "AbortError" ? "the request was cancelled or timed out" : (err.message || String(err));
+    addMessage("system", "Could not reach Jarvis: " + why);
+    reactor.set("idle");
+    return;
+  }
+  if(S.state !== "speaking") reactor.set("idle");
+}
+
+/* ==================================================================
+ * Wiring
+ * ================================================================== */
+function setView(v){
+  S.view = v;
+  document.querySelectorAll(".mode").forEach(b =>
+    b.setAttribute("aria-selected", String(b.dataset.view === v)));
+  $("talk").classList.toggle("on", v === "talk");
+  $("brain").classList.toggle("on", v === "brain");
+  $("stage-title").textContent = v === "talk" ? "Conversation" : "Brain map";
+  if(v === "brain") requestAnimationFrame(() => galaxy.resize());
+}
+document.querySelectorAll(".mode").forEach(b =>
+  b.addEventListener("click", () => setView(b.dataset.view)));
+
+$("send").addEventListener("click", send);
+$("input").addEventListener("keydown", e => {
+  if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); }
+});
+$("input").addEventListener("input", e => {
+  e.target.style.height = "auto";
+  e.target.style.height = Math.min(132, e.target.scrollHeight) + "px";
+});
+
+$("mic").addEventListener("click", () => voice.listening ? voice.stop() : voice.start());
+document.addEventListener("keydown", e => {
+  if(e.code === "Space" && document.activeElement !== $("input") && !e.repeat){
+    e.preventDefault(); voice.start();
+  }
+});
+document.addEventListener("keyup", e => {
+  if(e.code === "Space" && document.activeElement !== $("input")) voice.stop();
+});
+
+$("gsearch").addEventListener("input", e => galaxy.search(e.target.value));
+$("g-reset").addEventListener("click", () => { galaxy.reset(); $("gsearch").value=""; galaxy.search(""); });
+$("g-spin").addEventListener("click", e => {
+  e.target.textContent = galaxy.toggleSpin() ? "pause spin" : "resume spin";
+});
+$("insp-close").addEventListener("click", () => { galaxy.reset(); });
+$("trace-clear").addEventListener("click", () => showTrace(null));
+$("insp-ask").addEventListener("click", () => {
+  const n = galaxy.focused();
+  if(!n) return;
+  setView("talk");
+  $("input").value = `Tell me about "${n.label}" and how it relates to what I'm building.`;
+  $("input").focus();
+});
+$("rail-toggle").addEventListener("click", () => $("rail-right").classList.toggle("open"));
+
+function renderLanes(){
+  const all = [{id:"auto", label:"auto", tag:"routed"},
+               {id:"local", label:S.defaultModel || "local model", tag:"ollama"}]
+    .concat(S.lanes.map(l => ({id:l, label:l.replace("jarvis-",""), tag:"cloud"})));
+  $("lanes").innerHTML = all.map(l =>
+    `<button class="lane" data-lane="${l.id}" aria-pressed="${l.id===S.lane}">
+       <span>${apprEscape(l.label)}</span><span class="tag">${apprEscape(l.tag)}</span>
+     </button>`).join("");
+  $("lanes").querySelectorAll(".lane").forEach(b =>
+    b.addEventListener("click", () => {
+      S.lane = b.dataset.lane;
+      renderLanes();
+      $("chip-model").textContent = b.querySelector("span").textContent;
+      $("chip-model").className = "chip" + (S.lane === "local" ? "" : " hot");
+    }));
+}
+
+function led(id, up, label){
+  const el = $(id);
+  el.classList.toggle("up", !!up);
+  el.querySelector(".val").textContent = label || (up ? "up" : "down");
+}
+
+async function boot(){
+  setView("talk");
+
+  let status = null;
+  try{
+    const r = await jfetch("/api/status", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    status = await r.json();
+  }catch(e){ status = null; }
+
+  if(status){
+    S.online = !!status.jarvis;
+    S.lanes = status.lanes || [];
+    S.defaultModel = status.default_model || "local model";
+    led("led-jarvis", status.jarvis, status.jarvis ? "up" : "not running");
+    led("led-ollama", status.ollama);
+    led("led-proxy",  status.proxy);
+    $("r-tools").textContent = status.tools || "—";
+    if(status.budget && status.budget.day_limit){
+      $("r-rpm").textContent = `${status.budget.minute_used}/${status.budget.minute_limit}`;
+      $("r-rpd").textContent = `${status.budget.day_used}/${status.budget.day_limit}`;
+      $("r-rpdbar").style.width =
+        Math.round(100*status.budget.day_used/status.budget.day_limit) + "%";
+    }
+    S.jarvisMemory = !!status.jarvis_injects_memory;
+    $("brand-sub").textContent = S.online ? "online · local first" : "offline · start jarvis serve";
+  } else {
+    led("led-jarvis", false, "no hud server");
+    led("led-ollama", false, "—");
+    led("led-proxy",  false, "—");
+    S.lanes = ["jarvis-escalate","jarvis-critic","jarvis-bulk"];
+    S.defaultModel = "qwen3:8b";
+    $("brand-sub").textContent = "demo · not connected";
+  }
+
+  renderLanes();
+  $("chip-model").textContent = S.defaultModel;
+  reactor.set("idle");
+
+  if(!S.online){
+    $("banner").classList.add("on");
+    $("banner-text").innerHTML = status
+      ? 'Jarvis is not answering on port 8000 yet — run <span class="mono">uv run jarvis serve</span>, then reload.'
+      : 'Serving without the HUD server — run <span class="mono">python jarvis_hud.py</span> on your desktop for live data.';
+    addMessage("system", status
+      ? "HUD server is up, but the assistant is not answering on port 8000 yet. Everything below is sample data."
+      : "Running as a preview. On your desktop, start it with python jarvis_hud.py to connect to the real Jarvis.");
+  } else {
+    addMessage("jarvis", "Systems online, sir. Local model loaded and the brain map is current. What are we working on?");
+    if(S.jarvisMemory){
+      addMessage("system",
+        "Routing is holding everything on the local model. Jarvis is injecting " +
+        "your stored facts server-side into every request, so escalating would " +
+        "send them to a free-tier cloud model. Set agent.context_from_memory = " +
+        "false in config.toml and the HUD will handle recall itself — relevance " +
+        "scored, and local turns only.");
+    }
+  }
+
+  // Brain map
+  let graph = null;
+  try{
+    const r = await jfetch("/api/graph", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    graph = await r.json();
+    if(!graph.nodes || graph.nodes.length < 3) graph = demoGraph();
+  }catch(e){ graph = demoGraph(); }
+
+  S.graph = graph;
+  const c = graph.counts || {};
+  $("r-facts").textContent = c.facts ?? "—";
+  $("r-docs").textContent  = c.documents ?? "—";
+  $("r-ents").textContent  = c.knowledge ?? "—";
+
+  galaxy.resize();
+  galaxy.load(graph);
+}
+
+boot();
+
+/* ---------------------------------------------------------------------- *
+ *  Approval queue
+ *  Anything in [autonomy.tiers] set to "ask" now stops inside OpenJarvis
+ *  and waits here. The tool call is genuinely blocked while this is on
+ *  screen - not a notification about something already done.
+ * ---------------------------------------------------------------------- */
+const APPR = { seen:new Set(), timer:null };
+
+function apprEscape(t){
+  return String(t).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function apprPoll(){
+  if(APPR.inflight || document.hidden) return;
+  APPR.inflight = true;
+  let data;
+  try{
+    const r = await jfetch("/api/pending", {
+      cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    if(r.status === 401){
+      // The session cookie is gone. Spinning silently here means Jarvis
+      // blocks on approvals nobody can see. Say so, once.
+      if(!APPR.warned){
+        APPR.warned = true;
+        const box = document.getElementById("approvals");
+        if(box){ box.hidden = false; box.innerHTML =
+          '<div class="appr"><div class="hdr"><span class="who">Session expired</span></div>'
+          + '<div class="det">Reload this page as /?token=YOUR_TOKEN to keep approving actions.</div></div>'; }
+      }
+      return;
+    }
+    if(!r.ok) return;
+    data = await r.json();
+  }catch(e){ return; }
+  finally{ APPR.inflight = false; }
+
+  const box = document.getElementById("approvals");
+  if(!box) return;
+  const list = (data && data.pending) || [];
+  box.hidden = list.length === 0;
+  const want = new Set(list.map(p => p.id));
+
+  // Drop cards whose action has been settled elsewhere (the phone, a timeout).
+  [...box.children].forEach(el => { if(!want.has(el.dataset.id)) el.remove(); });
+
+  for(const p of list){
+    if(box.querySelector(`[data-id="${CSS.escape(String(p.id))}"]`)) continue;
+    let detail = p.detail || "";
+    try{ detail = JSON.stringify(JSON.parse(detail), null, 2); }catch(e){}
+    const el = document.createElement("div");
+    el.className = "appr"; el.dataset.id = p.id;
+    el.innerHTML =
+      `<div class="hdr"><span class="who">Jarvis wants to: ${apprEscape(p.action)}</span>`
+      + `<span class="tier">${apprEscape(p.tier)}</span></div>`
+      + `<div class="det">${apprEscape(apprDescribe(p, detail))}</div>`
+      + `<div class="btns"><button class="yes">Approve</button>`
+      + `<button class="no">Deny</button></div>`;
+    el.querySelector(".yes").onclick = () => apprDecide(p.id, true, el);
+    el.querySelector(".no").onclick  = () => apprDecide(p.id, false, el);
+    box.appendChild(el);
+  }
+}
+
+function apprDescribe(p, detail){
+  // The human must see the COMMAND. A first version rendered `detail`
+  // whenever it was non-empty, and the gate's detail was {"classified":true},
+  // so a person approving `rm -rf ~/Documents` was shown a boolean.
+  let d = null;
+  try{ d = JSON.parse(detail); }catch(e){}
+  if(d && d.tool){
+    return `${d.tool}\n${d.args || ""}`;
+  }
+  if(d && d.prompt) return d.prompt;
+  if(p.prompt) return p.prompt;
+  return detail || "(no detail)";
+}
+
+async function apprDecide(id, ok, el){
+  el.classList.add("settled");
+  el.querySelectorAll("button").forEach(b => b.disabled = true);
+  try{
+    const r = await fetch(ok ? "/api/approve" : "/api/deny", {
+      method:"POST",
+      headers:{"Content-Type":"application/json", "X-Jarvis-Client":"hud"},
+      body: JSON.stringify({id, by:"hud"})});
+    const j = await r.json();
+    // 409 means it already timed out or was answered elsewhere. Say so rather
+    // than letting the tap look like it approved something.
+    if(!j.ok) el.querySelector(".det").textContent =
+      "This request is no longer waiting — " + (j.error || "already decided.");
+  }catch(e){}
+  setTimeout(() => { el.remove(); apprPoll(); }, 1200);
+}
+
+document.addEventListener("visibilitychange", () => { if(!document.hidden) apprPoll(); });
+apprPoll();
+
+/* ---------------------------------------------------------------------- *
+ *  Initiative: heartbeat findings, trigger events, the daily sleep-time
+ *  card, and memory proposals waiting for review. Polled with the same
+ *  guards as the approval queue.
+ * ---------------------------------------------------------------------- */
+const INIT = { inflight:false, shown:new Set() };
+
+function initCard(html, cls){
+  const box = document.getElementById("initiative");
+  if(!box) return null;
+  const el = document.createElement("div"); el.className = "init " + (cls||"");
+  el.innerHTML = html; box.appendChild(el); box.hidden = false; return el;
+}
+
+async function initPoll(){
+  if(INIT.inflight || document.hidden) return;
+  INIT.inflight = true;
+  try{
+    const r = await jfetch("/api/initiative", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    if(r.ok){
+      const j = await r.json();
+      for(const it of (j.items || [])){
+        if(it.kind === "sleep_time_reminder"){
+          const el = initCard(
+            `<div class="hdr"><span class="who">${apprEscape(it.title)}</span><span class="kind">once a day</span></div>`
+            + `<div class="det">${apprEscape(it.what)}</div>`
+            + `<div class="det"><b>For:</b><ul>${it.pro.map(x=>`<li>${apprEscape(x)}</li>`).join("")}</ul></div>`
+            + `<div class="det"><b>Against:</b><ul>${it.con.map(x=>`<li>${apprEscape(x)}</li>`).join("")}</ul></div>`
+            + `<div class="det">${apprEscape(it.how)}</div>`
+            + `<div class="btns"><button class="no">Not now</button></div>`);
+          if(el) el.querySelector(".no").onclick = () => el.remove();
+        } else if(it.level){                       // a heartbeat finding
+          const el = initCard(
+            `<div class="hdr"><span class="who">${apprEscape(it.message)}</span><span class="kind">${apprEscape(it.check)}</span></div>`
+            + `<div class="btns"><button class="no">Dismiss</button></div>`, it.level === "alert" ? "alert" : "");
+          if(el) el.querySelector(".no").onclick = () => el.remove();
+        } else if(it.summary){                     // a trigger event
+          const el = initCard(
+            `<div class="hdr"><span class="who">${apprEscape(it.summary)}</span><span class="kind">${apprEscape(it.kind)}</span></div>`
+            + `<div class="btns"><button class="no">Dismiss</button></div>`);
+          if(el) el.querySelector(".no").onclick = () => el.remove();
+        }
+      }
+    }
+    const m = await jfetch("/api/memory/pending", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    if(m.ok){
+      const j = await m.json();
+      for(const p of (j.pending || [])){
+        if(INIT.shown.has(p.id)) continue;
+        INIT.shown.add(p.id);
+        const el = initCard(
+          `<div class="hdr"><span class="who">Remember this?</span><span class="kind">memory</span></div>`
+          + `<div class="det">${apprEscape(p.text)}${p.replaces ? "\n(replaces: " + apprEscape(p.replaces) + ")" : ""}</div>`
+          + `<div class="btns"><button class="yes">Keep</button><button class="no">Forget</button></div>`);
+        if(!el) continue;
+        const decide = async (accept) => {
+          el.querySelectorAll("button").forEach(b => b.disabled = true);
+          try{ await jfetch("/api/memory/decide", {method:"POST",
+            headers:{"Content-Type":"application/json","X-Jarvis-Client":"hud"},
+            body: JSON.stringify({id:p.id, accept})}); }catch(e){}
+          el.remove();
+        };
+        el.querySelector(".yes").onclick = () => decide(true);
+        el.querySelector(".no").onclick  = () => decide(false);
+      }
+    }
+  }catch(e){}
+  finally{ INIT.inflight = false; }
+}
+initPoll();
+
+/* ---------------------------------------------------------------------- *
+ *  THE EVENT STREAM
+ *
+ *  This page used to poll: /api/pending once a second and /api/initiative
+ *  every five, for ever, whether or not anything had changed and whether or
+ *  not the backend was even up. On a desktop that is merely wasteful. On a
+ *  phone sharing the same backend it is a radio wake-up every second, which
+ *  is the single most expensive thing a background app can do.
+ *
+ *  The server grew an event bus for exactly this. It is a doorbell, not a
+ *  state store: an event says something changed and the client re-fetches
+ *  the thing that changed. So the poll functions below are unchanged - they
+ *  are just called when there is a reason to, instead of on a timer.
+ *
+ *  The slow timer that remains is a safety net, not the mechanism. If the
+ *  stream is healthy it costs one request every half minute; if the stream
+ *  is dead it is the only thing still working.
+ * ---------------------------------------------------------------------- */
+const STREAM = { es: null, backoff: 1000, lastId: 0, live: false };
+
+function streamUrl(){
+  // EventSource cannot set headers - there is no API for it - so a token has
+  // to ride in the query string here even though every other call sends it
+  // as X-Jarvis-Token. That is acceptable on a loopback or tailnet server
+  // with no proxy in front of it, and it is the reason native clients are
+  // told to use their own HTTP client for this stream rather than copying
+  // this line.
+  let u = JARVIS.url("/api/events");
+  const q = [];
+  if (STREAM.lastId) q.push("since=" + STREAM.lastId);
+  if (JARVIS.token) q.push("token=" + encodeURIComponent(JARVIS.token));
+  return q.length ? u + "?" + q.join("&") : u;
+}
+
+function subscribe(){
+  if (typeof EventSource === "undefined") return;      // very old webview
+  try { if (STREAM.es) STREAM.es.close(); } catch(e){}
+  let es;
+  try { es = new EventSource(streamUrl()); } catch(e){ return; }
+  STREAM.es = es;
+
+  es.onopen = () => { STREAM.backoff = 1000; STREAM.live = true; };
+
+  es.onmessage = (m) => {
+    STREAM.live = true;
+    if (m.lastEventId) STREAM.lastId = +m.lastEventId || STREAM.lastId;
+    let d = {};
+    try { d = JSON.parse(m.data || "{}"); } catch(e){ return; }
+    const kind = d.kind || m.type;
+    // hello.stale means we were away long enough to fall off the back of the
+    // server's ring buffer. Everything local is suspect; re-read all of it
+    // rather than assume we only missed the tail.
+    if (kind === "hello" && d.stale) { apprPoll(); initPoll(); return; }
+    if (kind === "approval") apprPoll();
+    else if (kind === "finding") initPoll();
+    else if (kind === "activity" && typeof onActivity === "function") onActivity(d);
+  };
+
+  es.onerror = () => {
+    STREAM.live = false;
+    try { es.close(); } catch(e){}
+    // Back off to half a minute rather than hammering a backend that is down.
+    STREAM.backoff = Math.min(30000, Math.round(STREAM.backoff * 1.8));
+    setTimeout(subscribe, STREAM.backoff);
+  };
+}
+
+// The safety net. Deliberately slow: if the stream is working this is nearly
+// free, and if it is not, this is what keeps the page usable.
+setInterval(() => { apprPoll(); initPoll(); }, 30000);
+subscribe();
+</script>

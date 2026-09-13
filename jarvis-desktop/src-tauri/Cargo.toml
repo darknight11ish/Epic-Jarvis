@@ -23,6 +23,12 @@ tauri = { version = "2", features = ["tray-icon", "image-ico", "image-png"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-notification = "2"
+# §3.1/§4: the API base URL and the pairing token persist here, not in the
+# page's localStorage. Read from Rust so the token reaches the webview only as
+# a JARVIS.set() call at page load.
+tauri-plugin-store = "2"
+# Build order step 3: starting the app twice focuses the running window.
+tauri-plugin-single-instance = "2"
 window-vibrancy = "0.5"
 screenshots = "0.8"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }

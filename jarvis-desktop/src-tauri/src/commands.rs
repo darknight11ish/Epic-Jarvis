@@ -14,7 +14,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
-use crate::{windows, ChatState, HUD_LABEL, JARVIS_SERVER_URL, LITELLM_URL, OLLAMA_URL};
+use crate::{windows, ChatState, HUD_LABEL, LITELLM_URL, OLLAMA_URL};
 
 /// JPEG quality for desktop captures. 82 keeps text legible while staying well
 /// under the size at which a base64 data URI becomes painful over IPC.
@@ -98,6 +98,82 @@ pub struct HealthReport {
     /// One-line summary, also used as the tray notification body.
     pub summary: String,
     pub services: Vec<ServiceStatus>,
+}
+
+/// Where the desktop shell keeps the API base URL and the pairing token.
+///
+/// A store file rather than the page's `localStorage`, per DESKTOP-BUILD §3.1:
+/// the port can change without a rebuild, and reading it from Rust means the
+/// token reaches the webview only as the `JARVIS.set()` call at page load.
+pub const SETTINGS_STORE: &str = "jarvis-desktop.json";
+
+/// Default API base. `JARVIS_HUD_PORT` defaults to 4719 in `jarvis_hud.py`;
+/// this is the matching default, and the store overrides it.
+pub const DEFAULT_BASE: &str = "http://127.0.0.1:4719";
+
+/// The API base URL: the store first, then `JARVIS_HUD_BASE`, then the default.
+///
+/// Read rather than baked in, because the port is configuration — the last
+/// resync turned on a wrong one having been hardcoded.
+pub fn jarvis_base(app: &AppHandle) -> String {
+    use tauri_plugin_store::StoreExt;
+
+    app.store(SETTINGS_STORE)
+        .ok()
+        .and_then(|store| store.get("base"))
+        .and_then(|v| v.as_str().map(str::to_string))
+        .or_else(|| std::env::var("JARVIS_HUD_BASE").ok())
+        .map(|b| b.trim().trim_end_matches('/').to_string())
+        .filter(|b| !b.is_empty())
+        .unwrap_or_else(|| DEFAULT_BASE.to_string())
+}
+
+/// The pairing token: the store first, then the environment.
+pub fn jarvis_token_for(app: &AppHandle) -> Option<String> {
+    use tauri_plugin_store::StoreExt;
+
+    app.store(SETTINGS_STORE)
+        .ok()
+        .and_then(|store| store.get("token"))
+        .and_then(|v| v.as_str().map(str::to_string))
+        .or_else(|| jarvis_token().cloned())
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+}
+
+/// Reports the base and whether a token is configured — never the token
+/// itself, so a log or a screenshot of this cannot leak it.
+#[tauri::command]
+pub fn get_api_settings(app: AppHandle) -> serde_json::Value {
+    serde_json::json!({
+        "base": jarvis_base(&app),
+        "hasToken": jarvis_token_for(&app).is_some(),
+        "store": SETTINGS_STORE,
+    })
+}
+
+/// Persists the base URL and, optionally, the token.
+#[tauri::command]
+pub fn set_api_settings(
+    app: AppHandle,
+    base: Option<String>,
+    token: Option<String>,
+) -> Result<(), String> {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("unable to open the settings store: {e}"))?;
+    if let Some(base) = base {
+        let base = base.trim().trim_end_matches('/').to_string();
+        store.set("base", serde_json::Value::String(base));
+    }
+    if let Some(token) = token {
+        store.set("token", serde_json::Value::String(token.trim().to_string()));
+    }
+    store
+        .save()
+        .map_err(|e| format!("unable to write the settings store: {e}"))
 }
 
 /// Shared secret for `X-Jarvis-Token`, read once from the environment.
@@ -295,7 +371,7 @@ async fn probe(
 /// structured report. All three are probed concurrently, so the command costs
 /// roughly one timeout in the worst case rather than three.
 #[tauri::command]
-pub async fn check_server_health() -> Result<HealthReport, String> {
+pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String> {
     let client = reqwest::Client::builder()
         .timeout(HEALTH_TIMEOUT)
         .connect_timeout(HEALTH_TIMEOUT)
@@ -309,7 +385,7 @@ pub async fn check_server_health() -> Result<HealthReport, String> {
             &client,
             "jarvis",
             "Jarvis Core",
-            format!("{JARVIS_SERVER_URL}/api/status"),
+            format!("{}/api/status", jarvis_base(&app)),
         ),
         probe(
             &client,
@@ -374,14 +450,14 @@ fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::Client, Str
 }
 
 /// `X-Jarvis-Client` and, when configured, `X-Jarvis-Token`.
-fn jarvis_headers() -> Result<reqwest::header::HeaderMap, String> {
+fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, String> {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "X-Jarvis-Client",
         reqwest::header::HeaderValue::from_static(JARVIS_CLIENT),
     );
-    if let Some(token) = jarvis_token() {
-        let value = reqwest::header::HeaderValue::from_str(token).map_err(|_| {
+    if let Some(token) = jarvis_token_for(app) {
+        let value = reqwest::header::HeaderValue::from_str(&token).map_err(|_| {
             "JARVIS_TOKEN/HUD_TOKEN contains characters that cannot go in a header".to_string()
         })?;
         headers.insert("X-Jarvis-Token", value);
@@ -415,6 +491,8 @@ pub async fn stream_chat(
     on_event: Channel<String>,
 ) -> Result<(), String> {
     let cancel = app.state::<ChatState>().begin();
+    let base = jarvis_base(&app);
+    let headers = jarvis_headers(&app)?;
 
     let mut payload = serde_json::json!({
         "messages": messages,
@@ -432,7 +510,7 @@ pub async fn stream_chat(
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
     // lands before this future is polled still wins the race.
     let outcome = tokio::select! {
-        result = pump_chat(payload, &on_event) => result,
+        result = pump_chat(base, headers, payload, &on_event) => result,
         _ = cancel.notified() => Ok(()),
     };
 
@@ -450,16 +528,21 @@ pub fn cancel_chat(state: State<'_, ChatState>) {
 }
 
 /// Drives one request to completion, forwarding whole lines as they arrive.
-async fn pump_chat(payload: serde_json::Value, on_event: &Channel<String>) -> Result<(), String> {
+async fn pump_chat(
+    base: String,
+    headers: reqwest::header::HeaderMap,
+    payload: serde_json::Value,
+    on_event: &Channel<String>,
+) -> Result<(), String> {
     let mut response = jarvis_client(None)?
-        .post(format!("{JARVIS_SERVER_URL}/api/chat"))
-        .headers(jarvis_headers()?)
+        .post(format!("{base}/api/chat"))
+        .headers(headers)
         .json(&payload)
         .send()
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {JARVIS_SERVER_URL}. Is it running?")
+                format!("could not reach the Jarvis server at {base}. Is it running?")
             } else {
                 format!("chat request failed: {e}")
             }
@@ -468,13 +551,11 @@ async fn pump_chat(payload: serde_json::Value, on_event: &Channel<String>) -> Re
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        // 409 is the approval gate, not a failure: the body describes what the
-        // agent wants to do. Forward it so the frontend renders the card
-        // through its normal parsing path.
-        if status == reqwest::StatusCode::CONFLICT {
-            let _ = on_event.send(body);
-            return Ok(());
-        }
+        // This used to treat 409 as an approval gate. It is not: the server
+        // returns 409 only from /api/approve and /api/deny, meaning "already
+        // decided, expired, or unknown id". /api/chat never sends one, so the
+        // special case was inventing a protocol. Gates arrive inside the
+        // stream as `tier: "ask"` instead.
         let body = body.trim();
         return Err(if body.is_empty() {
             format!("the server answered HTTP {}", status.as_u16())
@@ -540,14 +621,14 @@ pub async fn decide_approval(
 
     let endpoint = if approved { "approve" } else { "deny" };
     let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
-        .post(format!("{JARVIS_SERVER_URL}/api/{endpoint}"))
-        .headers(jarvis_headers()?)
+        .post(format!("{}/api/{endpoint}", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
         .json(&serde_json::json!({ "id": id, "by": "desktop_spotlight" }))
         .send()
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {JARVIS_SERVER_URL}")
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
             } else {
                 format!("unable to {endpoint} `{id}`: {e}")
             }
@@ -772,7 +853,7 @@ pub fn prefill_quickbar(app: AppHandle, target: String) -> Result<(), String> {
 /// `stream: false` and returns whatever the server replies, so the widget can
 /// flash a confirmation without standing up a stream it would only close.
 #[tauri::command]
-pub async fn capture_note(target: String, text: String) -> Result<String, String> {
+pub async fn capture_note(app: AppHandle, target: String, text: String) -> Result<String, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("nothing to capture".to_string());
@@ -801,14 +882,14 @@ pub async fn capture_note(target: String, text: String) -> Result<String, String
     });
 
     let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
-        .post(format!("{JARVIS_SERVER_URL}/api/chat"))
-        .headers(jarvis_headers()?)
+        .post(format!("{}/api/chat", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
         .json(&payload)
         .send()
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {JARVIS_SERVER_URL}")
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
             } else {
                 format!("capture failed: {e}")
             }
