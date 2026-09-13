@@ -22,15 +22,15 @@ jobs:
         run: |
           set -uo pipefail
           BOM=https://dl.google.com/dl/android/maven2/androidx/compose/compose-bom/2026.08.00/compose-bom-2026.08.00.pom
-          echo "### Compose BOM 2026.08.00" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Compose BOM 2026.08.00" | tee -a "$GITHUB_STEP_SUMMARY"
           code=$(curl -sS -o bom.pom -w '%{http_code}' "$BOM" || echo 000)
           echo "HTTP $code"
           if [ "$code" != "200" ]; then
-            echo "- BOM **does not exist** on Google Maven (HTTP $code)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- BOM **does not exist** on Google Maven (HTTP $code)" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           # The BOM's dependencyManagement block is the authoritative pairing.
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
           import re, pathlib
           pom = pathlib.Path("bom.pom").read_text()
           deps = re.findall(
@@ -47,28 +47,33 @@ jobs:
           set -uo pipefail
           U=https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/9.4.0/gradle-9.4.0.pom
           code=$(curl -sS -o /dev/null -w '%{http_code}' "$U" || echo 000)
-          echo "### AGP 9.4.0" >> "$GITHUB_STEP_SUMMARY"
-          echo "- gradle-9.4.0.pom -> HTTP **$code**" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Latest AGP on Google Maven" >> "$GITHUB_STEP_SUMMARY"
+          echo "### AGP 9.4.0" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "- gradle-9.4.0.pom -> HTTP **$code**" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "### Latest AGP on Google Maven" | tee -a "$GITHUB_STEP_SUMMARY"
           curl -sS https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/maven-metadata.xml \
             | grep -o '<latest>[^<]*</latest>\|<release>[^<]*</release>' \
-            | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY" || true
+            | sed 's/^/- /' | tee -a "$GITHUB_STEP_SUMMARY" || true
+
+          echo "### Compose BOM versions available" | tee -a "$GITHUB_STEP_SUMMARY"
+          curl -sS https://dl.google.com/dl/android/maven2/androidx/compose/compose-bom/maven-metadata.xml \
+            | grep -o '<latest>[^<]*</latest>\|<release>[^<]*</release>' \
+            | sed 's/^/- /' | tee -a "$GITHUB_STEP_SUMMARY" || true
 
       - name: Which API level added WindowManager.LayoutParams.preferredDisplayModeId
         run: |
           set -uo pipefail
-          echo "### preferredDisplayModeId by API level" >> "$GITHUB_STEP_SUMMARY"
+          echo "### preferredDisplayModeId by API level" | tee -a "$GITHUB_STEP_SUMMARY"
           yes | sdkmanager "platforms;android-21" "platforms;android-22" "platforms;android-23" >/dev/null 2>&1 || true
           for api in 21 22 23 36; do
             JAR="$ANDROID_HOME/platforms/android-$api/android.jar"
             if [ ! -f "$JAR" ]; then
-              echo "- API $api: android.jar not installed" >> "$GITHUB_STEP_SUMMARY"
+              echo "- API $api: android.jar not installed" | tee -a "$GITHUB_STEP_SUMMARY"
               continue
             fi
             if javap -p -classpath "$JAR" 'android.view.WindowManager$LayoutParams' 2>/dev/null \
                  | grep -q preferredDisplayModeId; then
-              echo "- API $api: **present**" >> "$GITHUB_STEP_SUMMARY"
+              echo "- API $api: **present**" | tee -a "$GITHUB_STEP_SUMMARY"
             else
-              echo "- API $api: absent" >> "$GITHUB_STEP_SUMMARY"
+              echo "- API $api: absent" | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           done
