@@ -6,6 +6,7 @@
 //! structs. Failures come back as `Result::Err(String)` and surface in the
 //! frontend as a rejected promise.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -34,6 +35,9 @@ const JARVIS_CLIENT: &str = "hud";
 /// Approval decisions are a single small round trip, so they do get a total
 /// timeout — unlike the chat stream.
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(10);
+/// A widget quick-capture is not streamed, but the model still has to answer,
+/// so it gets a longer leash than an approval.
+const CAPTURE_TIMEOUT: Duration = Duration::from_secs(45);
 
 // ---------------------------------------------------------------------------
 // Payload types
@@ -524,7 +528,11 @@ async fn pump_chat(payload: serde_json::Value, on_event: &Channel<String>) -> Re
 /// `{"id": …, "by": "desktop_spotlight"}` so the server can attribute the
 /// decision to the machine the human was actually sitting at.
 #[tauri::command]
-pub async fn decide_approval(id: String, approved: bool) -> Result<serde_json::Value, String> {
+pub async fn decide_approval(
+    app: AppHandle,
+    id: String,
+    approved: bool,
+) -> Result<serde_json::Value, String> {
     let id = id.trim();
     if id.is_empty() {
         return Err("that approval has no id to answer".to_string());
@@ -555,8 +563,267 @@ pub async fn decide_approval(id: String, approved: bool) -> Result<serde_json::V
         ));
     }
 
+    // Every window that showed the gate needs to know it is answered — the
+    // widget and the quickbar can both be displaying the same one.
+    crate::emit_all(
+        &app,
+        crate::events::APPROVAL_RESOLVED,
+        serde_json::json!({ "id": id, "approved": approved }),
+    );
+
     Ok(serde_json::from_str(&body)
         .unwrap_or_else(|_| serde_json::json!({ "ok": true, "endpoint": endpoint, "raw": body })))
+}
+
+/// Records the route lane the quickbar last saw, so the widget's pill can show
+/// it without running a stream of its own.
+#[tauri::command]
+pub fn set_route_lane(app: AppHandle, lane: String) {
+    let state = app.state::<crate::RouteState>();
+    let mut slot = state
+        .lane
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *slot = Some(lane);
+}
+
+/// Broadcasts a pending approval to every window.
+///
+/// The quickbar spots gates in its own stream; the widget has no stream of its
+/// own, so the discovery is relayed through the backend rather than window to
+/// window. Emitting from Rust also means no window needs the capability to emit
+/// events itself.
+#[tauri::command]
+pub fn announce_approval(app: AppHandle, approval: serde_json::Value) {
+    crate::emit_all(&app, crate::events::APPROVAL_REQUESTED, approval);
+}
+
+// ---------------------------------------------------------------------------
+// Desktop telemetry
+// ---------------------------------------------------------------------------
+
+/// One sample of machine state, pushed to the widget on a timer.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopTelemetry {
+    pub cpu_percent: f32,
+    pub ram_used_mb: u64,
+    pub ram_total_mb: u64,
+    pub gpu_temp_c: Option<u32>,
+    pub gpu_util_percent: Option<u32>,
+    pub vram_used_mb: Option<u64>,
+    pub vram_total_mb: Option<u64>,
+    /// `"local"` or `"cloud"`, mirroring the quickbar's route badge.
+    pub route_lane: Option<String>,
+    pub sampled_at: u128,
+}
+
+/// What `nvidia-smi` reports, with each field absent when the driver omits it.
+#[derive(Debug, Clone, Copy, Default)]
+struct GpuSample {
+    temp_c: Option<u32>,
+    util_percent: Option<u32>,
+    vram_used_mb: Option<u64>,
+    vram_total_mb: Option<u64>,
+}
+
+/// Set to false the first time `nvidia-smi` is missing, so a machine without an
+/// NVIDIA GPU does not pay for a failed process spawn every few seconds.
+static GPU_PROBE_ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Reads temperature, utilisation and VRAM from `nvidia-smi`.
+///
+/// A process spawn rather than a crate: NVML bindings would add a dependency
+/// and a runtime DLL requirement to read four numbers that the driver already
+/// prints. `CREATE_NO_WINDOW` matters — without it a console window flashes on
+/// every sample, which on a 3-second timer is unusable.
+fn sample_gpu() -> Option<GpuSample> {
+    if !GPU_PROBE_ENABLED.load(Ordering::Relaxed) {
+        return None;
+    }
+
+    let mut command = std::process::Command::new("nvidia-smi");
+    command.args([
+        "--query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total",
+        "--format=csv,noheader,nounits",
+    ]);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = match command.output() {
+        Ok(output) if output.status.success() => output,
+        _ => {
+            GPU_PROBE_ENABLED.store(false, Ordering::Relaxed);
+            return None;
+        }
+    };
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let row = text.lines().next()?;
+    let mut fields = row.split(',').map(|f| f.trim());
+
+    Some(GpuSample {
+        temp_c: fields.next().and_then(|v| v.parse().ok()),
+        util_percent: fields.next().and_then(|v| v.parse().ok()),
+        vram_used_mb: fields.next().and_then(|v| v.parse().ok()),
+        vram_total_mb: fields.next().and_then(|v| v.parse().ok()),
+    })
+}
+
+/// Samples CPU, RAM and (when present) the GPU.
+///
+/// The [`System`] handle is reused across calls because `sysinfo` derives CPU
+/// percentages from the delta between two refreshes; a fresh one every tick
+/// would report zero forever.
+pub fn sample_telemetry(
+    system: &mut sysinfo::System,
+    route_lane: Option<String>,
+) -> DesktopTelemetry {
+    system.refresh_cpu_usage();
+    system.refresh_memory();
+
+    let gpu = sample_gpu().unwrap_or_default();
+
+    DesktopTelemetry {
+        cpu_percent: system.global_cpu_usage(),
+        ram_used_mb: system.used_memory() / (1024 * 1024),
+        ram_total_mb: system.total_memory() / (1024 * 1024),
+        gpu_temp_c: gpu.temp_c,
+        gpu_util_percent: gpu.util_percent,
+        vram_used_mb: gpu.vram_used_mb,
+        vram_total_mb: gpu.vram_total_mb,
+        route_lane,
+        sampled_at: now_ms(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Desktop widget
+// ---------------------------------------------------------------------------
+
+/// Expands or collapses the widget. `height` carries the frontend's measured
+/// content height when it has one.
+#[tauri::command]
+pub fn resize_desktop_widget(
+    app: AppHandle,
+    expanded: bool,
+    height: Option<f64>,
+) -> Result<(), String> {
+    windows::resize_widget(&app, expanded, height)
+}
+
+/// Floats the widget above everything (`true`) or lets active windows cover it.
+#[tauri::command]
+pub fn set_widget_always_on_top(app: AppHandle, always_on_top: bool) -> Result<(), String> {
+    windows::set_widget_always_on_top(&app, always_on_top)
+}
+
+/// Shows or hides the widget. Returns its new visibility.
+#[tauri::command]
+pub fn toggle_widget(app: AppHandle) -> Result<bool, String> {
+    windows::toggle_widget(&app)
+}
+
+/// Persists the widget's geometry immediately instead of waiting for the next
+/// flush — used when the frontend knows the user has finished dragging.
+#[tauri::command]
+pub fn save_widget_position(app: AppHandle, x: Option<f64>, y: Option<f64>) -> Result<(), String> {
+    let state = app.state::<windows::WidgetState>();
+    if let (Some(x), Some(y)) = (x, y) {
+        state.update(|prefs| {
+            prefs.x = Some(x);
+            prefs.y = Some(y);
+        });
+    }
+    state.flush(&app);
+    Ok(())
+}
+
+/// The widget's persisted geometry and mode, so it can paint its toggles
+/// correctly on first load.
+#[tauri::command]
+pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
+    app.state::<windows::WidgetState>().snapshot()
+}
+
+/// Summons the quickbar with a note prefix already armed.
+///
+/// The widget cannot emit Tauri events itself without a broader capability
+/// grant, so it asks the backend to do it — which also keeps one code path for
+/// "arm a note", shared with the `Alt+Shift+N` hotkey.
+#[tauri::command]
+pub fn prefill_quickbar(app: AppHandle, target: String) -> Result<(), String> {
+    let target = match target.trim().to_ascii_lowercase().as_str() {
+        "joplin" | "vault" => "joplin",
+        _ => "logseq",
+    };
+    windows::show_quickbar(&app)?;
+    crate::emit_quickbar(&app, crate::events::QUICK_NOTE_SUMMON, target);
+    Ok(())
+}
+
+/// Files a note without opening the quickbar.
+///
+/// The widget's capture field is a one-shot: it posts the turn with
+/// `stream: false` and returns whatever the server replies, so the widget can
+/// flash a confirmation without standing up a stream it would only close.
+#[tauri::command]
+pub async fn capture_note(target: String, text: String) -> Result<String, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err("nothing to capture".to_string());
+    }
+    let target = match target.trim().to_ascii_lowercase().as_str() {
+        "joplin" | "vault" => "joplin",
+        _ => "logseq",
+    };
+    let instruction = if target == "joplin" {
+        "Route this turn to the Joplin personal vault via create_joplin_note."
+    } else {
+        "Route this turn to the Logseq daily journal via append_logseq_journal. \
+         Capture it verbatim unless asked to summarise."
+    };
+
+    let payload = serde_json::json!({
+        "messages": [
+            { "role": "system", "content": instruction },
+            { "role": "user", "content": text },
+        ],
+        "has_image": false,
+        "images": [],
+        "stream": false,
+        "auto": true,
+        "note_target": target,
+    });
+
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{JARVIS_SERVER_URL}/api/chat"))
+        .headers(jarvis_headers()?)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {JARVIS_SERVER_URL}")
+            } else {
+                format!("capture failed: {e}")
+            }
+        })?;
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!(
+            "the server answered HTTP {} to the capture: {}",
+            status.as_u16(),
+            body.trim()
+        ));
+    }
+    Ok(body)
 }
 
 // ---------------------------------------------------------------------------

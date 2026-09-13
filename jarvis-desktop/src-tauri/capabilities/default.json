@@ -1,8 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Least-privilege IPC surface for the local Jarvis windows. The frontend reaches every privileged operation (capture, health, clipboard, notifications, window control) through app-defined commands in commands.rs, which are not permission-gated, so no clipboard-manager, notification or global-shortcut plugin permissions are granted here. There is deliberately no `remote` block: the HUD window loads http://127.0.0.1:4719 over plain HTTP, and without a remote grant that origin gets no IPC at all, so an XSS on the HUD web app cannot reach the host.",
-  "windows": ["quickbar", "hud"],
+  "description": "Least-privilege IPC surface for the local Jarvis windows (quickbar, HUD, desktop widget). The frontend reaches every privileged operation \u2014 capture, health, chat streaming, approvals, clipboard, notifications, widget geometry \u2014 through app-defined commands in commands.rs, which are not permission-gated, so no clipboard-manager, notification or global-shortcut plugin permissions are granted here. There is deliberately no `remote` block: the HUD window loads http://127.0.0.1:4719 over plain HTTP, and without a remote grant that origin gets no IPC at all, so an XSS on the HUD web app cannot reach the host.",
+  "windows": [
+    "quickbar",
+    "hud",
+    "widget"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

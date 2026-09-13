@@ -548,6 +548,8 @@ function applyRoute(route) {
   dom.routeTier.textContent = state.route.label;
   dom.routeModel.textContent = state.route.model;
   dom.route.title = `Serving from ${state.route.label.toLowerCase()} - ${state.route.model}`;
+  // The widget shows the same lane; it has no stream to learn it from.
+  invoke("set_route_lane", { lane: state.route.tier });
 }
 
 /**
@@ -768,6 +770,17 @@ function openApproval(approval) {
   dom.stop.hidden = true;
   // The turn is not streaming any more, it is waiting on a person.
   if (!dom.card.hidden) dom.cardStatusText.textContent = "Paused for approval";
+
+  // The widget has no stream of its own, so the discovery is relayed through
+  // the backend, which broadcasts it to every window.
+  invoke("announce_approval", {
+    approval: {
+      id: approval.id,
+      action: approval.action,
+      target: approval.target,
+      detail: approval.preview,
+    },
+  });
 
   // A gate must survive the user clicking away to read what it is about.
   setPinned(true, { silent: true });
@@ -1342,6 +1355,16 @@ listen("capture-failed", (event) => {
 });
 
 listen("health-report", (event) => applyHealth(event.payload));
+
+listen("approval-resolved", (event) => {
+  const resolved = event.payload;
+  if (!state.approval) return;
+  if (resolved && resolved.id && String(resolved.id) !== state.approval.id) return;
+  // Answered somewhere else — most likely the desktop widget.
+  closeApproval();
+  setPhase("done");
+  paint({ immediate: true });
+});
 
 listen("pin-changed", (event) => {
   state.pinned = Boolean(event.payload);

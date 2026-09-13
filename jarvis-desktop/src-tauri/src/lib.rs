@@ -22,13 +22,20 @@ pub mod windows;
 
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Notify;
 
 /// Label of the spotlight quickbar window.
 pub const QUICKBAR_LABEL: &str = "quickbar";
 /// Label of the full HUD window.
 pub const HUD_LABEL: &str = "hud";
+/// Label of the always-on-desktop widget.
+pub const WIDGET_LABEL: &str = windows::WIDGET_LABEL;
+
+/// How often the widget's telemetry is sampled and broadcast. Three seconds is
+/// slow enough that the `nvidia-smi` spawn costs nothing in practice, and fast
+/// enough that a thermal spike is visible while it still matters.
+const TELEMETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// Local Jarvis orchestrator (also the origin the HUD window loads).
 pub const JARVIS_SERVER_URL: &str = "http://127.0.0.1:4719";
@@ -54,6 +61,12 @@ pub mod events {
     pub const PIN_CHANGED: &str = "pin-changed";
     /// Payload: `&str` — the note target to pre-arm, `"logseq"` or `"joplin"`.
     pub const QUICK_NOTE_SUMMON: &str = "quick-note-summon";
+    /// Payload: [`crate::commands::DesktopTelemetry`].
+    pub const DESKTOP_TELEMETRY: &str = "desktop-telemetry";
+    /// Payload: the normalised approval — `id`, `action`, `detail`.
+    pub const APPROVAL_REQUESTED: &str = "approval-requested";
+    /// Payload: `{ id, approved }`.
+    pub const APPROVAL_RESOLVED: &str = "approval-resolved";
 }
 
 /// Cancellation handle for the one chat stream the spotlight may have running.
@@ -143,6 +156,8 @@ struct Hotkeys {
     capture_screen: tauri_plugin_global_shortcut::Shortcut,
     /// `Alt+Shift+N` — summon the bar pre-armed for a Logseq journal note.
     quick_note: tauri_plugin_global_shortcut::Shortcut,
+    /// `Alt+Shift+W` — show or hide the desktop widget.
+    toggle_widget: tauri_plugin_global_shortcut::Shortcut,
 }
 
 #[cfg(desktop)]
@@ -154,6 +169,7 @@ impl Hotkeys {
             ingest_clipboard: Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyJ),
             capture_screen: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS),
             quick_note: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyN),
+            toggle_widget: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyW),
         }
     }
 }
@@ -207,6 +223,45 @@ fn capture_desktop(app: &AppHandle) {
     });
 }
 
+/// The route lane last seen on a stream, mirrored into the widget's pill.
+#[derive(Default)]
+pub struct RouteState {
+    pub lane: Mutex<Option<String>>,
+}
+
+/// Samples the machine every [`TELEMETRY_INTERVAL`] and pushes the result to the
+/// widget, then flushes any geometry the user changed by dragging.
+///
+/// Sampling is skipped while the widget is hidden: nobody is reading the
+/// numbers, and the GPU probe is a process spawn.
+fn spawn_telemetry_loop(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut system = sysinfo::System::new_all();
+
+        loop {
+            tokio::time::sleep(TELEMETRY_INTERVAL).await;
+
+            // A drag is persisted even while the widget is collapsed or hidden.
+            app.state::<windows::WidgetState>().flush(&app);
+
+            if !windows::widget_is_visible(&app) {
+                continue;
+            }
+
+            let lane = app
+                .state::<RouteState>()
+                .lane
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone();
+            let sample = commands::sample_telemetry(&mut system, lane);
+            if let Err(err) = app.emit_to(WIDGET_LABEL, events::DESKTOP_TELEMETRY, sample) {
+                eprintln!("[jarvis] unable to push telemetry: {err}");
+            }
+        }
+    });
+}
+
 /// Default note target for the quick-capture hotkey.
 ///
 /// Logseq is the dev/agent journal and the one a keystroke-speed capture almost
@@ -234,10 +289,21 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
         .manage(ChatState::default())
+        .manage(windows::WidgetState::default())
+        .manage(RouteState::default())
         .invoke_handler(tauri::generate_handler![
             commands::stream_chat,
             commands::cancel_chat,
             commands::decide_approval,
+            commands::announce_approval,
+            commands::set_route_lane,
+            commands::resize_desktop_widget,
+            commands::set_widget_always_on_top,
+            commands::toggle_widget,
+            commands::save_widget_position,
+            commands::get_widget_prefs,
+            commands::prefill_quickbar,
+            commands::capture_note,
             commands::capture_screen,
             commands::check_server_health,
             commands::hide_quickbar,
@@ -265,6 +331,7 @@ pub fn run() {
         let ingest = hotkeys.ingest_clipboard;
         let capture = hotkeys.capture_screen;
         let quick_note = hotkeys.quick_note;
+        let widget = hotkeys.toggle_widget;
 
         builder = builder.plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -292,6 +359,10 @@ pub fn run() {
                         capture_desktop(app);
                     } else if shortcut == &quick_note {
                         summon_quick_note(app);
+                    } else if shortcut == &widget {
+                        if let Err(err) = windows::toggle_widget(app) {
+                            eprintln!("[jarvis] widget toggle failed: {err}");
+                        }
                     }
                 })
                 .build(),
@@ -307,6 +378,17 @@ pub fn run() {
             if let Err(err) = windows::setup_windows(&handle) {
                 eprintln!("[jarvis] window setup reported: {err}");
             }
+
+            // Desktop widget: put it back where the user left it, then start
+            // the telemetry broadcast that keeps its panel live.
+            let widget_prefs = windows::load_widget_prefs(&handle);
+            handle
+                .state::<windows::WidgetState>()
+                .update(|prefs| *prefs = widget_prefs.clone());
+            if let Err(err) = windows::setup_widget(&handle, &widget_prefs) {
+                eprintln!("[jarvis] widget setup reported: {err}");
+            }
+            spawn_telemetry_loop(handle.clone());
 
             // Notification-area icon and context menu.
             if let Err(err) = tray::create_tray(&handle) {
@@ -326,6 +408,7 @@ pub fn run() {
                     ("Win+Shift+J", hotkeys.ingest_clipboard),
                     ("Alt+Shift+S", hotkeys.capture_screen),
                     ("Alt+Shift+N", hotkeys.quick_note),
+                    ("Alt+Shift+W", hotkeys.toggle_widget),
                 ] {
                     match handle.global_shortcut().register(shortcut) {
                         Ok(()) => println!("[jarvis] hotkey {label} registered"),

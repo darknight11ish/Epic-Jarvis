@@ -7,6 +7,9 @@ driving a WebView2 frontend.
   summoned with `Alt+Space`. Streams answers from the local Jarvis server into
   an expandable card that the native window grows to fit.
 * **HUD** — a 1280×820 frameless window pointed at `http://127.0.0.1:4719`.
+* **Widget** — a 320px glass pane that lives on the desktop: a 44px mini-pill
+  that expands to a telemetry panel, pending approval gates and a one-shot
+  capture field.
 * **Tray** — Toggle Spotlight · Toggle HUD Window · Status Check · Quit.
 * **Vibrancy** — Windows 11 Acrylic behind the quickbar, Mica behind the HUD
   (Acrylic fallback on Windows 10).
@@ -19,6 +22,7 @@ driving a WebView2 frontend.
 | `Win` + `Shift` + `J` | Read the clipboard and inject it into the quickbar as context. |
 | `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
 | `Alt` + `Shift` + `N` | Summon the bar pre-armed for a Logseq journal note (`#log `). |
+| `Alt` + `Shift` + `W` | Show or hide the desktop widget. |
 
 Capture is **not** bound to `Win+Shift+S`: the shell owns that for the Snipping
 Tool, so `RegisterHotKey` returns ERROR_HOTKEY_ALREADY_REGISTERED (1409) and the
@@ -34,7 +38,10 @@ jarvis-desktop/
 ├── src/                      # WebView2 frontend (no bundler, no framework)
 │   ├── index.html            # spotlight markup
 │   ├── style.css             # AMOLED dark theme
-│   └── main.js               # streaming, markdown, events, window sizing
+│   ├── main.js               # streaming, markdown, events, window sizing
+│   ├── widget.html           # desktop widget markup
+│   ├── widget.css            # widget glass styling
+│   └── widget.js             # widget state machine and event wiring
 └── src-tauri/
     ├── Cargo.toml
     ├── build.rs
@@ -96,6 +103,13 @@ Commands exposed to the frontend (`invoke("<name>", …)`):
 | `write_clipboard` / `read_clipboard` | Clipboard access. |
 | `notify_user` | Raise a Windows toast. |
 | `open_external_url` | Validate an http(s) URL and hand it to the OS shell. |
+| `resize_desktop_widget` | Expand/collapse the widget, or match a measured content height. |
+| `set_widget_always_on_top` | Float the widget, or let active windows cover it. |
+| `toggle_widget` | Show or hide the widget. |
+| `save_widget_position` / `get_widget_prefs` | Persist and read the widget's geometry and mode. |
+| `prefill_quickbar` | Summon the spotlight with a note prefix armed. |
+| `capture_note` | File a note without opening the spotlight (`stream: false`). |
+| `announce_approval` / `set_route_lane` | Relay state between windows through the backend. |
 | `quit_app` | Release the hotkeys and exit. |
 
 Events emitted to the frontend: `focus-input`, `clipboard-inject`,
@@ -219,3 +233,58 @@ a chunk flips the badge between **Local / qwen3:8b** and
 Opening `index.html` in a plain browser (no Tauri) falls back to a streaming
 `fetch`, purely so the UI can be iterated on outside the app. That path is
 subject to CORS and sends no token.
+
+## Desktop widget
+
+A separate `widget` window, 320px wide, transparent and frameless, with Acrylic
+behind it. It starts visible and is remembered between runs.
+
+**Collapsed (44px).** Connection dot, GPU temperature, the active route pill,
+`#log` / `#jop` quick-capture buttons, a pin toggle and the expand chevron. The
+whole bar is a `data-tauri-drag-region`, so it drags from anywhere.
+
+**Expanded.** Three meters (VRAM, CPU, GPU), any pending approval gate, and a
+one-line capture field with a target switch. The window is sized from the
+measured content rather than a fixed number, coalesced to one resize per 60ms
+for the same DWM reason the spotlight throttles.
+
+### Meter semantics
+
+VRAM warns at 80% and turns red at 92% — running out is a real failure. CPU and
+GPU *utilisation* are never coloured as warnings: a GPU at 95% during inference
+is the machine working. The GPU bar's **length** is load, but its **colour** is
+temperature (amber at 78°C, red at 87°C), which is the GPU number actually
+worth reacting to.
+
+### Telemetry
+
+Sampled in Rust every 3 seconds and pushed to the widget alone, and only while
+it is visible. CPU and RAM come from `sysinfo`; GPU temperature, utilisation and
+VRAM come from `nvidia-smi --query-gpu=… --format=csv`, spawned with
+`CREATE_NO_WINDOW` — without that flag a console flashes on every sample. The
+first failed spawn disables the GPU probe permanently, so a machine without an
+NVIDIA card pays nothing, and those meters render as `n/a` rather than zero.
+
+### Pinning
+
+The pin toggle switches between always-on-top and letting active windows cover
+the widget. That second mode is not true desktop parenting: re-parenting to the
+shell's `WorkerW` needs raw Win32 and breaks Acrylic on several builds, so the
+widget still surfaces if you click it or Alt+Tab past it.
+
+### Position persistence
+
+Geometry, expanded state, pin mode and visibility live in `widget.json` beside
+`config.json` in the app config dir — four scalars written from Rust, so a store
+plugin would add a dependency and a capability grant to buy nothing. Dragging
+emits a `Moved` event per mouse move, so position is held in memory and flushed
+by the telemetry tick; a restored position that lands on a monitor that is no
+longer attached is discarded rather than parking the widget off-screen.
+
+### Approvals in two places
+
+The spotlight finds gates in its own stream and relays them through
+`announce_approval`, which the backend broadcasts to every window — the widget
+has no stream to find them in. `decide_approval` broadcasts `approval-resolved`
+after a successful decision, so answering in one window closes the card in the
+other.

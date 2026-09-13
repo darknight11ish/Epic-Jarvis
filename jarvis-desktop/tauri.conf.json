@@ -54,6 +54,32 @@
         "focus": true,
         "shadow": true,
         "theme": "Dark"
+      },
+      {
+        "label": "widget",
+        "title": "Jarvis Desktop Widget",
+        "url": "widget.html",
+        "width": 320,
+        "height": 44,
+        "minWidth": 320,
+        "maxWidth": 320,
+        "minHeight": 44,
+        "maxHeight": 320,
+        "x": 40,
+        "y": 40,
+        "center": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "shadow": false,
+        "focus": false,
+        "dragDropEnabled": false,
+        "theme": "Dark"
       }
     ],
     "security": {
@@ -67,7 +93,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": [
+      "msi",
+      "nsis"
+    ],
     "publisher": "Jarvis Labs",
     "copyright": "Copyright (c) 2026 Jarvis Labs",
     "category": "Productivity",
@@ -88,7 +117,9 @@
       "allowDowngrades": true,
       "nsis": {
         "installMode": "perMachine",
-        "languages": ["English"],
+        "languages": [
+          "English"
+        ],
         "compression": "lzma"
       }
     }

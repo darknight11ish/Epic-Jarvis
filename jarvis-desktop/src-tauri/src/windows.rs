@@ -8,11 +8,17 @@
 //!    quickbar, including the focus-loss listener that dismisses the bar when
 //!    the user clicks away (unless it has been pinned open).
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewWindow, WindowEvent};
 
 use crate::{events, HUD_LABEL, QUICKBAR_LABEL};
+
+/// Label of the always-on-desktop widget.
+pub const WIDGET_LABEL: &str = "widget";
 
 /// When set, losing focus does not dismiss the quickbar. The frontend raises it
 /// while an answer is streaming or while the user is interacting with the card.
@@ -28,6 +34,20 @@ const QUICKBAR_WIDTH: f64 = 750.0;
 /// little above the true centre is the classic spotlight position and keeps the
 /// expanding answer card from running off the bottom of the screen.
 const QUICKBAR_VERTICAL_ANCHOR: f64 = 0.24;
+
+/// Fixed logical width of the desktop widget.
+const WIDGET_WIDTH: f64 = 320.0;
+/// Height of the collapsed mini-pill.
+const WIDGET_COLLAPSED_HEIGHT: f64 = 44.0;
+/// Height of the expanded card when the frontend does not measure itself.
+const WIDGET_EXPANDED_HEIGHT: f64 = 220.0;
+/// Ceiling, matching `maxHeight` in `tauri.conf.json`.
+///
+/// 240 fits the telemetry panel and the capture row, but an approval card adds
+/// roughly another 110px, and clipping the Approve button would be a
+/// correctness bug, not a cosmetic one — so the ceiling is set where the
+/// tallest legitimate layout ends rather than where the common one does.
+const WIDGET_MAX_HEIGHT: f64 = 320.0;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -116,6 +136,22 @@ pub fn apply_hud_effects(window: &WebviewWindow) -> Result<(), String> {
             format!("Mica ({mica_err}) and Acrylic ({acrylic_err}) both unavailable on the HUD")
         }),
     }
+}
+
+/// Acrylic behind the desktop widget, a shade darker and denser than the
+/// quickbar's: the widget sits on the desktop for hours rather than seconds, so
+/// it reads better as a solid pane of smoked glass than as a floating one.
+#[cfg(target_os = "windows")]
+pub fn apply_widget_effects(window: &WebviewWindow) -> Result<(), String> {
+    use window_vibrancy::apply_acrylic;
+
+    apply_acrylic(window, Some((8, 12, 16, 210)))
+        .map_err(|e| format!("Acrylic unavailable on the widget: {e}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn apply_widget_effects(_window: &WebviewWindow) -> Result<(), String> {
+    Ok(())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -308,4 +344,263 @@ pub fn toggle_hud(app: &AppHandle) -> Result<bool, String> {
             .map_err(|e| format!("unable to focus the HUD: {e}"))?;
         Ok(true)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Desktop widget
+// ---------------------------------------------------------------------------
+
+/// Widget geometry and mode, persisted between runs.
+///
+/// A small JSON file rather than a store plugin: the widget needs four scalars,
+/// and everything here is written from Rust, so a plugin would add a dependency
+/// and a capability grant to buy nothing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WidgetPrefs {
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    pub expanded: bool,
+    /// `true` floats above everything; `false` lets active windows cover it.
+    pub always_on_top: bool,
+    pub visible: bool,
+}
+
+impl Default for WidgetPrefs {
+    fn default() -> Self {
+        Self {
+            x: None,
+            y: None,
+            expanded: false,
+            always_on_top: true,
+            visible: true,
+        }
+    }
+}
+
+/// In-memory copy of [`WidgetPrefs`], flushed to disk by the telemetry tick.
+///
+/// Dragging emits a `Moved` event per mouse move; writing the file on each one
+/// would hammer the disk for a value only the next launch reads.
+#[derive(Default)]
+pub struct WidgetState {
+    prefs: Mutex<WidgetPrefs>,
+    dirty: AtomicBool,
+}
+
+impl WidgetState {
+    pub fn snapshot(&self) -> WidgetPrefs {
+        self.prefs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    /// Applies `edit` to the stored prefs and marks them for the next flush.
+    pub fn update(&self, edit: impl FnOnce(&mut WidgetPrefs)) {
+        let mut prefs = self
+            .prefs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        edit(&mut prefs);
+        self.dirty.store(true, Ordering::Relaxed);
+    }
+
+    /// Writes the prefs out if anything changed since the last flush.
+    pub fn flush(&self, app: &AppHandle) {
+        if !self.dirty.swap(false, Ordering::Relaxed) {
+            return;
+        }
+        let prefs = self.snapshot();
+        if let Err(err) = write_widget_prefs(app, &prefs) {
+            eprintln!("[jarvis] unable to persist widget prefs: {err}");
+        }
+    }
+}
+
+fn widget_prefs_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("unable to resolve the app config dir: {e}"))?;
+    Ok(dir.join("widget.json"))
+}
+
+fn write_widget_prefs(app: &AppHandle, prefs: &WidgetPrefs) -> Result<(), String> {
+    let path = widget_prefs_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("unable to create {}: {e}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(prefs)
+        .map_err(|e| format!("unable to serialize widget prefs: {e}"))?;
+    std::fs::write(&path, json).map_err(|e| format!("unable to write {}: {e}", path.display()))
+}
+
+/// Loads persisted prefs, falling back to defaults for a missing or corrupt
+/// file — a bad `widget.json` must never stop the app from starting.
+pub fn load_widget_prefs(app: &AppHandle) -> WidgetPrefs {
+    widget_prefs_path(app)
+        .ok()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|raw| serde_json::from_str::<WidgetPrefs>(&raw).ok())
+        .unwrap_or_default()
+}
+
+/// True when the point lies inside some monitor's bounds.
+///
+/// Guards against restoring the widget onto a monitor that has since been
+/// unplugged, which would park it somewhere the user cannot reach.
+fn position_is_visible(window: &WebviewWindow, x: f64, y: f64) -> bool {
+    let Ok(monitors) = window.available_monitors() else {
+        return false;
+    };
+    monitors.iter().any(|monitor| {
+        let scale = monitor.scale_factor();
+        let origin = monitor.position().to_logical::<f64>(scale);
+        let size = monitor.size().to_logical::<f64>(scale);
+        // Require the widget's top-left corner plus a margin to land on-screen,
+        // so it can never be restored with only a sliver visible.
+        x >= origin.x - 8.0
+            && y >= origin.y - 8.0
+            && x + 48.0 <= origin.x + size.width
+            && y + 24.0 <= origin.y + size.height
+    })
+}
+
+/// Restores geometry and mode, and wires the listener that tracks dragging.
+pub fn setup_widget(app: &AppHandle, prefs: &WidgetPrefs) -> Result<(), String> {
+    let window = app
+        .get_webview_window(WIDGET_LABEL)
+        .ok_or_else(|| format!("window `{WIDGET_LABEL}` was not found"))?;
+
+    apply_widget_effects(&window)?;
+
+    if let (Some(x), Some(y)) = (prefs.x, prefs.y) {
+        if position_is_visible(&window, x, y) {
+            let _ = window.set_position(LogicalPosition::new(x, y));
+        } else {
+            eprintln!("[jarvis] saved widget position is off-screen; using the default corner");
+        }
+    }
+
+    let height = if prefs.expanded {
+        WIDGET_EXPANDED_HEIGHT
+    } else {
+        WIDGET_COLLAPSED_HEIGHT
+    };
+    let _ = window.set_size(LogicalSize::new(WIDGET_WIDTH, height));
+    let _ = window.set_always_on_top(prefs.always_on_top);
+    if prefs.visible {
+        let _ = window.show();
+    } else {
+        let _ = window.hide();
+    }
+
+    // Track drags in memory; the telemetry tick flushes them to disk.
+    let handle = app.clone();
+    window.on_window_event(move |event| match event {
+        WindowEvent::Moved(position) => {
+            let scale = handle
+                .get_webview_window(WIDGET_LABEL)
+                .and_then(|w| w.scale_factor().ok())
+                .unwrap_or(1.0);
+            let logical = position.to_logical::<f64>(scale);
+            handle.state::<WidgetState>().update(|prefs| {
+                prefs.x = Some(logical.x);
+                prefs.y = Some(logical.y);
+            });
+        }
+        WindowEvent::CloseRequested { api, .. } => {
+            // The widget is a desktop fixture: closing it hides it, and the
+            // choice is remembered.
+            api.prevent_close();
+            if let Some(widget) = handle.get_webview_window(WIDGET_LABEL) {
+                let _ = widget.hide();
+            }
+            handle
+                .state::<WidgetState>()
+                .update(|prefs| prefs.visible = false);
+        }
+        _ => {}
+    });
+
+    Ok(())
+}
+
+/// Grows or collapses the widget.
+///
+/// `height` lets the frontend pass its own measured content height; without it
+/// the two canonical heights are used. Always clamped to the window's declared
+/// bounds so a bad measurement cannot produce a 4000px pill.
+pub fn resize_widget(app: &AppHandle, expanded: bool, height: Option<f64>) -> Result<(), String> {
+    let window = app
+        .get_webview_window(WIDGET_LABEL)
+        .ok_or_else(|| format!("window `{WIDGET_LABEL}` was not found"))?;
+
+    let target = match height {
+        Some(value) if value.is_finite() => value,
+        _ if expanded => WIDGET_EXPANDED_HEIGHT,
+        _ => WIDGET_COLLAPSED_HEIGHT,
+    }
+    .clamp(WIDGET_COLLAPSED_HEIGHT, WIDGET_MAX_HEIGHT);
+
+    app.state::<WidgetState>()
+        .update(|prefs| prefs.expanded = expanded);
+
+    window
+        .set_size(LogicalSize::new(WIDGET_WIDTH, target))
+        .map_err(|e| format!("unable to resize the widget: {e}"))
+}
+
+/// Switches between floating above everything and sitting behind active windows.
+///
+/// `false` is the "pin to desktop" mode: the widget stops being topmost, so any
+/// focused application covers it. It is not re-parented to the desktop's
+/// `WorkerW` — that needs raw Win32 and breaks Acrylic on several builds — so it
+/// still surfaces when clicked or Alt+Tabbed past.
+pub fn set_widget_always_on_top(app: &AppHandle, always_on_top: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window(WIDGET_LABEL)
+        .ok_or_else(|| format!("window `{WIDGET_LABEL}` was not found"))?;
+
+    window
+        .set_always_on_top(always_on_top)
+        .map_err(|e| format!("unable to change the widget's stacking: {e}"))?;
+    app.state::<WidgetState>()
+        .update(|prefs| prefs.always_on_top = always_on_top);
+    Ok(())
+}
+
+/// Shows or hides the widget. Returns its new visibility.
+pub fn toggle_widget(app: &AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window(WIDGET_LABEL)
+        .ok_or_else(|| format!("window `{WIDGET_LABEL}` was not found"))?;
+
+    let visible = window
+        .is_visible()
+        .map_err(|e| format!("unable to query widget visibility: {e}"))?;
+
+    if visible {
+        window
+            .hide()
+            .map_err(|e| format!("unable to hide the widget: {e}"))?;
+    } else {
+        window
+            .show()
+            .map_err(|e| format!("unable to show the widget: {e}"))?;
+    }
+
+    app.state::<WidgetState>()
+        .update(|prefs| prefs.visible = !visible);
+    Ok(!visible)
+}
+
+/// True when the widget is on screen — the telemetry loop uses this to stay
+/// quiet while nobody can see the numbers.
+pub fn widget_is_visible(app: &AppHandle) -> bool {
+    app.get_webview_window(WIDGET_LABEL)
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false)
 }
