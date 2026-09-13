@@ -8,6 +8,7 @@ import com.jarvis.assistant.audio.AudioPlayer
 import com.jarvis.assistant.audio.AudioStreamer
 import com.jarvis.assistant.data.JarvisSettings
 import com.jarvis.assistant.data.PendingNoteStore
+import com.jarvis.assistant.data.repository.WidgetDataRepository
 import com.jarvis.assistant.network.ApprovalDecisionMessage
 import com.jarvis.assistant.network.ApprovalRequestEvent
 import com.jarvis.assistant.network.ApprovalResolvedEvent
@@ -24,6 +25,8 @@ import com.jarvis.assistant.network.HelloMessage
 import com.jarvis.assistant.network.InterruptMessage
 import com.jarvis.assistant.network.JarvisWebSocketManager
 import com.jarvis.assistant.network.OutboundMessage
+import com.jarvis.assistant.network.PingMessage
+import com.jarvis.assistant.network.PongEvent
 import com.jarvis.assistant.network.QuickNoteMessage
 import com.jarvis.assistant.network.StatusEvent
 import com.jarvis.assistant.network.TelemetryRequestEvent
@@ -96,6 +99,13 @@ object JarvisRuntime {
     private val _blockingError = MutableStateFlow<String?>(null)
     val blockingError: StateFlow<String?> = _blockingError.asStateFlow()
 
+    /** Last measured round trip to the desktop, or null before the first pong. */
+    private val _latencyMs = MutableStateFlow<Long?>(null)
+    val latencyMs: StateFlow<Long?> = _latencyMs.asStateFlow()
+
+    /** Lets widgets read state without booting the socket from a cold process. */
+    val isInitialized: Boolean get() = started
+
     /** Decisions taken while the socket was down, replayed on reconnect. */
     private val outbox = ConcurrentLinkedQueue<OutboundMessage>()
 
@@ -124,6 +134,8 @@ object JarvisRuntime {
                 if (state == ConnectionState.CONNECTED) onConnected()
             }
         }
+
+        WidgetDataRepository.observe(appContext, scope)
 
         connect()
     }
@@ -183,6 +195,13 @@ object JarvisRuntime {
         }
 
         flushPendingNotes()
+        measureLatency()
+    }
+
+    /** Fire-and-forget probe; the reply updates [latencyMs] when it lands. */
+    fun measureLatency() {
+        if (!started) return
+        socket.send(PingMessage(System.currentTimeMillis()))
     }
 
     /**
@@ -272,6 +291,13 @@ object JarvisRuntime {
             is DesktopTelemetryEvent -> _desktopTelemetry.value = event
 
             is StatusEvent -> _statusText.value = event.text
+
+            is PongEvent -> {
+                val rtt = System.currentTimeMillis() - event.sentAtMs
+                // A negative or absurd value means the clocks disagree, not that
+                // the link is fast; showing it would be worse than showing none.
+                _latencyMs.value = rtt.takeIf { it in 0..60_000 }
+            }
         }
     }
 

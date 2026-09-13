@@ -133,6 +133,44 @@
                 android:value="@string/fgs_special_use_reason" />
         </service>
 
+        <!-- Home screen widgets. updatePeriodMillis=0 throughout: these are
+             redrawn by state changes, never by a polling clock. -->
+        <receiver
+            android:name=".widget.approval.ApprovalWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_approval_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_approval_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.launcher.QuickLauncherReceiver"
+            android:exported="true"
+            android:label="@string/widget_launcher_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_launcher_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.telemetry.TelemetryReceiver"
+            android:exported="true"
+            android:label="@string/widget_telemetry_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_telemetry_info" />
+        </receiver>
+
         <!-- Lock-screen Approve / Reject taps land here. -->
         <receiver
             android:name=".notifications.ApprovalActionReceiver"

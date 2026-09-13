@@ -65,6 +65,7 @@ enum class CaptureTarget(val wire: String, val label: String) {
 fun QuickCaptureSheet(
     connected: Boolean,
     initialText: String = "",
+    initialTarget: CaptureTarget = CaptureTarget.LOGSEQ,
     micActive: Boolean,
     micPermissionGranted: Boolean,
     queuedCount: Int,
@@ -75,7 +76,7 @@ fun QuickCaptureSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val focusRequester = remember { FocusRequester() }
 
-    var target by rememberSaveable { mutableStateOf(CaptureTarget.LOGSEQ) }
+    var target by rememberSaveable(initialTarget) { mutableStateOf(initialTarget) }
     // Keyed on the seed so a fresh share replaces the field rather than
     // appending to whatever the last capture left behind.
     var text by rememberSaveable(initialText) { mutableStateOf(initialText) }

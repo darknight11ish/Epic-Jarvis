@@ -138,6 +138,26 @@ data class DesktopTelemetryEvent(
     @SerialName("vram_used_mb") val vramUsedMb: Double? = null,
     @SerialName("vram_total_mb") val vramTotalMb: Double? = null,
     @SerialName("ram_percent") val ramPercent: Double? = null,
+    /** `local` or `cloud`. */
+    @SerialName("route_lane") val routeLane: String? = null,
+    /** Model actually serving, e.g. `qwen3:8b` or `jarvis-escalate`. */
+    val model: String? = null,
+) : InboundEvent {
+    val isCloudRoute: Boolean get() = routeLane.equals("cloud", ignoreCase = true)
+}
+
+/**
+ * Round-trip probe.
+ *
+ * OkHttp's protocol-level ping keeps the NAT mapping warm but never exposes its
+ * timing, so measuring the link needs a frame the app can see both ends of.
+ * Sent on connect and on widget refresh rather than on a timer — a background
+ * heartbeat purely to decorate a widget is not worth the radio wake.
+ */
+@Serializable
+@SerialName("pong")
+data class PongEvent(
+    @SerialName("sent_at_ms") val sentAtMs: Long,
 ) : InboundEvent
 
 /** Free-form transcript / status line for the HUD. */
@@ -223,6 +243,12 @@ data class DeviceCommandResultMessage(
  * desktop: a note queued offline and replayed an hour later still belongs in the
  * journal entry for the moment it was written.
  */
+@Serializable
+@SerialName("ping")
+data class PingMessage(
+    @SerialName("sent_at_ms") val sentAtMs: Long,
+) : OutboundMessage
+
 @Serializable
 @SerialName("quick_note")
 data class QuickNoteMessage(

@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jarvis.assistant.network.ConnectionState
 import com.jarvis.assistant.service.JarvisForegroundService
+import com.jarvis.assistant.ui.capture.CaptureTarget
 import com.jarvis.assistant.ui.capture.QuickCaptureSheet
 import com.jarvis.assistant.ui.screens.HudActions
 import com.jarvis.assistant.ui.screens.HudScreen
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
 
     private val captureOpen = mutableStateOf(false)
     private val captureSeed = mutableStateOf("")
+    private val captureTarget = mutableStateOf(CaptureTarget.LOGSEQ)
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -90,6 +92,7 @@ class MainActivity : ComponentActivity() {
                     QuickCaptureSheet(
                         connected = connection == ConnectionState.CONNECTED,
                         initialText = captureSeed.value,
+                        initialTarget = captureTarget.value,
                         micActive = micActive,
                         micPermissionGranted = micGranted,
                         queuedCount = queued,
@@ -168,6 +171,10 @@ class MainActivity : ComponentActivity() {
      */
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == ACTION_QUICK_CAPTURE) {
+            captureTarget.value = when (intent.getStringExtra(EXTRA_CAPTURE_TARGET)) {
+                CaptureTarget.JOPLIN.wire -> CaptureTarget.JOPLIN
+                else -> CaptureTarget.LOGSEQ
+            }
             captureOpen.value = true
             return
         }
@@ -180,6 +187,7 @@ class MainActivity : ComponentActivity() {
 
         val wantsMic = intent?.action == Intent.ACTION_ASSIST ||
             intent?.action == ACTION_START_LISTENING ||
+            intent?.action == ACTION_START_VOICE ||
             intent?.action == "android.intent.action.VOICE_COMMAND"
         if (!wantsMic) return
 
@@ -216,5 +224,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_START_LISTENING = "com.jarvis.assistant.START_LISTENING"
         const val ACTION_QUICK_CAPTURE = "com.jarvis.assistant.QUICK_CAPTURE"
+        const val ACTION_START_VOICE = "com.jarvis.assistant.START_VOICE"
+        const val EXTRA_CAPTURE_TARGET = "capture_target"
     }
 }

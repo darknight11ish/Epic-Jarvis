@@ -15,6 +15,13 @@
     <string name="tile_subtitle_reconnecting">Reconnecting</string>
     <string name="tile_subtitle_offline">Offline — will queue</string>
 
+    <string name="widget_approval_name">Jarvis Approvals</string>
+    <string name="widget_approval_desc">Review and approve pending autonomy requests.</string>
+    <string name="widget_launcher_name">Jarvis Quick Launch</string>
+    <string name="widget_launcher_desc">Status indicator and one-tap voice or note capture.</string>
+    <string name="widget_telemetry_name">Jarvis Workstation Telemetry</string>
+    <string name="widget_telemetry_desc">Desktop GPU, VRAM, and CPU telemetry.</string>
+
     <string name="action_approve">Approve</string>
     <string name="action_reject">Reject</string>
 </resources>

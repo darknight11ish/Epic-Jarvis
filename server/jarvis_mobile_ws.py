@@ -502,6 +502,17 @@ class MobileEndpoint:
             if not isinstance(event, dict):
                 continue
 
+            if event.get("type") == "ping":
+                # Echo the phone's own clock reading back untouched: it measures
+                # the round trip itself, so the two clocks need not agree.
+                sent_at = event.get("sent_at_ms")
+                if isinstance(sent_at, int):
+                    try:
+                        client.send_json({"type": "pong", "sent_at_ms": sent_at})
+                    except WebSocketClosed:
+                        return
+                continue
+
             if event.get("type") == "approval_decision":
                 ok, reason = self._verifier.verify(event, is_pending=self._is_pending)
                 if not ok:
