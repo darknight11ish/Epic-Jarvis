@@ -242,16 +242,30 @@ jobs:
           # that through word splitting is what broke the first version of this
           # check: the tests had passed, and the assertion written to prove they
           # ran is what failed the job.
-          reports=$(find app/build -path '*ndroidTest*' -name 'TEST-*.xml' 2>/dev/null | wc -l)
-          if [ "$reports" -lt 1 ]; then
+          #
+          # Deduplicated by FILENAME, because AGP writes the same report to
+          # more than one directory under androidTest-results and counting
+          # every match double-counts: the first run of this check reported 16
+          # tests when 8 ran. The filename encodes the device — `TEST-smoke(AVD)
+          # - 14.xml` — so one name is one device's report, which is exactly
+          # the granularity wanted: two real devices give two names, the same
+          # report written twice gives one.
+          #
+          # And the paths are printed, because a number with nothing behind it
+          # is what let a doubled count look like a passing check.
+          reports=$(find app/build -path '*ndroidTest*' -name 'TEST-*.xml' -printf '%f\t%p\n' 2>/dev/null \
+                    | sort -t"$(printf '\t')" -u -k1,1 | cut -f2- || true)
+          if [ -z "$reports" ]; then
             echo "::error::No instrumentation results were written — nothing ran on the device."
+            find app/build -name 'TEST-*.xml' 2>/dev/null || true
             exit 1
           fi
+          echo "Counting:"; printf '%s\n' "$reports" | sed 's/^/  /'
           # `|| echo 0` because this step runs under -e with pipefail: a report
           # with no `tests=` attribute is exactly the case being guarded
           # against, and it must reach the check below rather than kill the
           # step with grep's exit status.
-          total=$(find app/build -path '*ndroidTest*' -name 'TEST-*.xml' -print0 2>/dev/null \
+          total=$(printf '%s\n' "$reports" | tr '\n' '\0' \
                   | xargs -0 -r grep -ho 'tests="[0-9]*"' \
                   | grep -o '[0-9]*' | paste -sd+ - | bc || echo 0)
           echo "Tests run on the device: ${total:-0}"
