@@ -172,6 +172,17 @@ object JarvisRuntime {
     /** What the brain screen shows. Fetched on demand, never polled. */
     val brain: StateFlow<BrainSnapshot> = _brain.asStateFlow()
 
+    private val _absent = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Routes whose subsystem answered "not running here".
+     *
+     * Distinct from "empty", and the difference is the whole reason it exists:
+     * an inbox with no undo shelf because the undo module is off, and an inbox
+     * with an empty undo shelf, look identical and mean opposite things.
+     */
+    val absent: StateFlow<Set<String>> = _absent.asStateFlow()
+
     /** Non-null when something needs saying on screen and nowhere else will say it. */
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
@@ -264,6 +275,15 @@ object JarvisRuntime {
     }
 
     fun noticeFor(e: ApiError): String = describe(e)
+
+    /**
+     * Whether the backend reports a capability.
+     *
+     * §2: a capability that is false means **hide the UI for it**, not show a
+     * button that 404s. Absent is also false — a server that predates a feature
+     * does not report it at all.
+     */
+    fun can(name: String): Boolean = _version.value?.can(name) ?: false
 
     fun clearNotice() { _notice.value = null }
 
@@ -378,7 +398,21 @@ object JarvisRuntime {
     }
 
     suspend fun refreshPending() {
-        api.pending().onOk { _pending.value = it }
+        when (val r = api.pending()) {
+            is ApiResult.Ok -> {
+                _pending.value = r.value
+                _absent.value = _absent.value - "approvals"
+            }
+            is ApiResult.Failed ->
+                // Gating switched off on the desktop. An empty approvals list
+                // would say "nothing is waiting for you", which is true and
+                // deeply misleading: nothing CAN wait, because nothing is
+                // asking.
+                if (r.error == ApiError.NotAvailable) {
+                    _pending.value = emptyList()
+                    _absent.value = _absent.value + "approvals"
+                }
+        }
     }
 
     suspend fun refreshAttention() {
@@ -394,9 +428,18 @@ object JarvisRuntime {
      * every event would undo the battery saving the single stream bought.
      */
     suspend fun refreshInbox() {
-        api.digest().onOk { _digest.value = it }
-        api.undo().onOk { _undo.value = it }
-        api.jobs().onOk { _jobs.value = it }
+        val missing = mutableSetOf<String>()
+        fun <T> note(key: String, result: ApiResult<T>, apply: (T) -> Unit) {
+            when (result) {
+                is ApiResult.Ok -> apply(result.value)
+                is ApiResult.Failed ->
+                    if (result.error == ApiError.NotAvailable) missing += key
+            }
+        }
+        note("digest", api.digest()) { _digest.value = it }
+        note("undo", api.undo()) { _undo.value = it }
+        note("jobs", api.jobs()) { _jobs.value = it }
+        _absent.value = missing
     }
 
     /**

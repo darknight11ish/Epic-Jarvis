@@ -166,6 +166,7 @@ class MainActivity : FragmentActivity() {
         val undo by JarvisRuntime.undo.collectAsState()
         val jobs by JarvisRuntime.jobs.collectAsState()
         val brain by JarvisRuntime.brain.collectAsState()
+        val absent by JarvisRuntime.absent.collectAsState()
         val streaming by chat.streaming.collectAsState()
         val voicePhase by voice.phase.collectAsState()
         val voiceStatus by voice.status.collectAsState()
@@ -207,8 +208,14 @@ class MainActivity : FragmentActivity() {
         // call it before offering a microphone at all, and the refusing
         // defaults mean a failure hides the button rather than showing one
         // that posts audio into a 404.
-        LaunchedEffect(link, paired) {
-            if (paired && link == LinkState.CONNECTED) voice.refreshStatus()
+        LaunchedEffect(link, paired, version) {
+            // Gated on the capability before the call, not just on the answer.
+            // §2 says a capability reporting false means hide the UI for it —
+            // asking a backend without a voice path for its voice status is the
+            // request-that-404s that rule exists to prevent.
+            if (paired && link == LinkState.CONNECTED && JarvisRuntime.can("voice")) {
+                voice.refreshStatus()
+            }
         }
 
         // A notification tap goes straight home, so the card is where the
@@ -361,6 +368,7 @@ class MainActivity : FragmentActivity() {
                         voiceOffered = voiceStatus.canPushToTalk,
                         transcript = transcript,
                         voiceNotice = voiceNotice,
+                        approvalsOff = "approvals" in absent,
                     ),
                     // A lambda, so a streamed token redraws the reply and
                     // nothing else. Passing the string rebuilt HomeState on

@@ -88,6 +88,14 @@ data class HomeState(
     /** What the desktop heard, so a mis-hearing is visible rather than silent. */
     val transcript: String?,
     val voiceNotice: String?,
+    /**
+     * The desktop is running without its approval gate.
+     *
+     * Said out loud rather than shown as an empty list: "nothing is waiting for
+     * you" and "nothing can wait for you, because nothing is asking" are
+     * opposite facts that look identical.
+     */
+    val approvalsOff: Boolean,
 )
 
 @Immutable
@@ -148,6 +156,21 @@ fun HomeScreen(
 
             if (state.notice != null) {
                 item(key = "notice") { Notice(state.notice, actions.onDismissNotice) }
+            }
+
+            if (state.approvalsOff) {
+                item(key = "approvals-off") {
+                    Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
+                        Kicker("Approvals are off", color = chrome.warnInk)
+                        Gap(6)
+                        Text(
+                            "The desktop is running without its permission gate, so nothing " +
+                                "will ever arrive here to approve.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = chrome.textMid,
+                        )
+                    }
+                }
             }
 
             if (state.pending.isNotEmpty()) {
