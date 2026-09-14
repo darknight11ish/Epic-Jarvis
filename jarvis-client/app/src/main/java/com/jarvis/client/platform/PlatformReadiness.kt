@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import com.jarvis.client.service.EventService
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * The four items in ANDROID-BUILD.md §3.1, reported rather than assumed.
@@ -47,10 +48,51 @@ object PlatformReadiness {
      * bug in the other app sent a bearer token to a public host in the clear.
      */
     fun cleartextPermitted(host: String): Boolean {
-        val h = host.trim().lowercase().substringBefore(':').trim('/')
-        if (h.isEmpty()) return false
+        val url = parsed(host) ?: return false
+        // https is not cleartext at all, so the policy simply does not apply and
+        // warning about it would be a false alarm.
+        if (!url.isHttp) return true
+        val h = url.host
         if (h in CLEARTEXT_EXACT) return true
         return CLEARTEXT_SUFFIXES.any { h.endsWith(it) }
+    }
+
+    /**
+     * The host OkHttp will actually dial, parsed rather than split.
+     *
+     * The previous version took `substringBefore(':')`, and a colon is not where
+     * a host ends. It got four cases wrong, and the one that mattered was not
+     * the malicious one:
+     *
+     * - `http://desktop.ts.net:4719` — a form [ClientSettings.baseUrl] expressly
+     *   accepts — reduced to `"http"`, so the screen told the owner their host
+     *   was NOT permitted and to go and find a MagicDNS name they had already
+     *   typed. A false alarm on the one screen whose job is to stop people
+     *   chasing phantom network faults.
+     * - `https://desktop.ts.net` warned about cleartext for a connection that
+     *   does not use any.
+     * - `evil.com/foo.ts.net` and `foo.ts.net:8080@evil.com` both reported
+     *   permitted while OkHttp would dial `evil.com`. The platform still refuses
+     *   those connections, so this failed safe — but it is the identical shape
+     *   to the bug that, in the other app, put a bearer token on the wire to a
+     *   public host, and the comment above already cites it.
+     *
+     * Hand-splitting a URL is what produced all four. This asks the same parser
+     * the request will use.
+     */
+    private data class Parsed(val host: String, val isHttp: Boolean)
+
+    private fun parsed(raw: String): Parsed? {
+        val t = raw.trim().trim('/')
+        if (t.isEmpty()) return null
+        val withScheme = when {
+            t.startsWith("http://", ignoreCase = true) ||
+                t.startsWith("https://", ignoreCase = true) -> t
+            // Matches ClientSettings.baseUrl(), which assumes http for a bare host.
+            else -> "http://$t"
+        }
+        val url = runCatching { withScheme.toHttpUrlOrNull() }.getOrNull() ?: return null
+        return Parsed(url.host.lowercase(), url.scheme.equals("http", ignoreCase = true))
     }
 
     /**
