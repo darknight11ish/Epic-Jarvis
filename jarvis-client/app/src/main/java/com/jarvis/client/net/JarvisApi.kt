@@ -100,6 +100,18 @@ inline fun <T, R> ApiResult<T>.map(block: (T) -> R): ApiResult<R> = when (this) 
  * that the guess lived inside a class needing a Context and a socket, so
  * nothing cheap could ever have contradicted it.
  */
+/**
+ * Keys whose array is, by name, a record of things already dealt with.
+ *
+ * The positional fallback exists so a route that renames its key degrades to
+ * working rather than to empty. These names say the opposite: they are not the
+ * route's list under a new name, they are a different list that happens to be
+ * the only one present. Guessing here is worse than failing, because every list
+ * model in this file defaults its fields and so decodes whatever it is handed.
+ */
+private val ALREADY_HANDLED_KEYS =
+    setOf("history", "archive", "archived", "done", "completed", "handled", "past")
+
 internal fun <T> parseListBody(
     text: String,
     serializer: KSerializer<T>,
@@ -136,9 +148,22 @@ internal fun <T> parseListBody(
         // The positional fallback, and only when it cannot be ambiguous. With
         // two arrays present there is no principled way to choose, and choosing
         // wrong here means showing the wrong list as if it were the right one.
-        val arrays = obj.values.filterIsInstance<JsonArray>()
-        if (arrays.size == 1) {
-            val nested = runCatching { JarvisJson.decodeFromJsonElement(serializer, arrays[0]) }
+        //
+        // "Unambiguous" is not the same as "the only array". A body carrying
+        // just `history` has exactly one array and is still the wrong answer:
+        // `PendingItem` needs only an id, so a list of already-decided requests
+        // decodes cleanly and is indistinguishable downstream from a live
+        // queue. The owner would be shown items settled days ago as if they
+        // were waiting, and approving one would post a verdict on a closed
+        // request. Counting the arrays caught the two-array case and let this
+        // one straight through.
+        //
+        // A route whose list genuinely is called `history` names it in its own
+        // `unwrap` list, and the loop above takes it before this is reached.
+        val arrays = obj.entries.filter { it.value is JsonArray }
+        val only = arrays.singleOrNull()
+        if (only != null && only.key.lowercase() !in ALREADY_HANDLED_KEYS) {
+            val nested = runCatching { JarvisJson.decodeFromJsonElement(serializer, only.value) }
             if (nested.isSuccess) return ApiResult.Ok(nested.getOrThrow())
         }
     }
@@ -167,6 +192,29 @@ class JarvisApi(
         // timeouts below cover the ordinary endpoints.
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .retryOnConnectionFailure(true)
+        .build()
+
+    /**
+     * The client `/api/events` is read on. Everything else about it is [client].
+     *
+     * A stream with no read timeout cannot fail. That is fine while the peer is
+     * alive and fatal when it is not: a phone that loses its radio mid-stream
+     * leaves TCP half-open, no FIN ever arrives, and the blocking read parks for
+     * ever. The watchdog upstream notices the silence and latches the link
+     * stale, which refuses every approval — but nothing tears the socket down,
+     * so no reconnect is attempted, and the only thing that clears staleness is
+     * a frame that can no longer arrive. The link was condemned until the app
+     * was reopened, and the phone reported "Not connected" while sitting on a
+     * socket it believed was fine.
+     *
+     * 90s is four missed keepalives at the server's ~20s cadence, so a desktop
+     * with nothing to say is never mistaken for a dead one, while a genuinely
+     * dead socket now fails its read, reconnects through the normal backoff,
+     * and clears itself. Deliberately not applied to [client]: `/api/chat`
+     * streams for as long as a reply takes and has no keepalive to pace it.
+     */
+    val streamClient: OkHttpClient = client.newBuilder()
+        .readTimeout(90, TimeUnit.SECONDS)
         .build()
 
     private val shortCall: OkHttpClient = client.newBuilder()

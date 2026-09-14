@@ -3,13 +3,17 @@ package com.jarvis.client.net
 import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import okhttp3.Request
 import okhttp3.Response
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.coroutineContext
 import kotlin.math.min
 
@@ -61,14 +65,33 @@ class EventStream(private val api: JarvisApi) {
         var attempt = 0
         var retryMs = DEFAULT_RETRY_MS
 
-        // Held so awaitClose can shut the socket. `SseParser.parse` is a
+        // Held so a cancellation can shut the socket. `SseParser.parse` is a
         // blocking readLine loop with no cancellation check, so cancelling this
         // flow did not stop it: the coroutine stayed parked on the socket until
         // the server next wrote. A stop-then-start inside that window passed
         // the `isActive` guard upstream and opened a SECOND live /api/events
         // connection, with both writing `lastEventId` — so the persisted resume
         // point could go backwards.
-        var live: Response? = null
+        //
+        // The close has to come from a coroutine that is NOT the one parked on
+        // the socket, and that is what was missing. `awaitClose` below sits
+        // after the reconnect loop, and the loop only ends when `isActive` is
+        // read at the top — which cannot happen until the blocking read returns
+        // on its own. So the close that was meant to unblock the read was
+        // reachable only after the read had already unblocked, and by then the
+        // `finally` had cleared the handle. It was a no-op in every path.
+        //
+        // A child coroutine is cancelled the instant its parent is, whatever
+        // the parent is doing, so this one is not parked on anything and can do
+        // the close that makes the read throw.
+        val live = AtomicReference<Response?>(null)
+        launch(Dispatchers.IO) {
+            try {
+                awaitCancellation()
+            } finally {
+                runCatching { live.getAndSet(null)?.close() }
+            }
+        }
 
         while (coroutineContext.isActive) {
             val base = api.baseUrl()
@@ -91,8 +114,8 @@ class EventStream(private val api: JarvisApi) {
                         .apply { resumeFrom?.let { header("Last-Event-ID", it) } }
                         .build()
                 }
-                response = api.client.newCall(req).execute()
-                live = response
+                response = api.streamClient.newCall(req).execute()
+                live.set(response)
 
                 if (!response.isSuccessful) {
                     val reason = when (response.code) {
@@ -188,11 +211,11 @@ class EventStream(private val api: JarvisApi) {
                 delay(backoff(attempt, retryMs))
             } finally {
                 runCatching { response?.close() }
-                live = null
+                live.set(null)
             }
         }
 
-        awaitClose { runCatching { live?.close() } }
+        awaitClose { runCatching { live.getAndSet(null)?.close() } }
     }
 
     /** Saturating, so a large `retry` cannot overflow into a negative delay. */

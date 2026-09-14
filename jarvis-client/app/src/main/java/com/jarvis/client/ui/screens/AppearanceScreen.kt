@@ -199,7 +199,13 @@ fun AppearanceScreen(
                             // API §6's own rule: the phone's picker shows only the
                             // faces Android actually renders, not all twenty with
                             // most of them missing.
-                            "Six of the desktop's twenty. The rest are shader faces this app does not draw.",
+                            //
+                            // Counted from the list rather than written out. This
+                            // line said "Six" while Faces.all held eight: adding a
+                            // face is one edit, and prose is not something a drift
+                            // test can check, so the caption told the owner a
+                            // number contradicted by the grid directly above it.
+                            "${Faces.all.size} of the desktop's twenty. The rest are shader faces this app does not draw.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,
                         )

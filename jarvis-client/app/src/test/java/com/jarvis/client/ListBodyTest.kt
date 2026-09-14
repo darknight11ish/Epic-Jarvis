@@ -136,6 +136,22 @@ class ListBodyTest {
         assertTrue(r is ApiResult.Failed)
     }
 
+    /**
+     * The same rule, on a different name, so the guard is a set and not one
+     * special case. `history` was the shape the server actually sends; these
+     * are the names that mean the same thing and would decode just as cleanly.
+     */
+    @Test
+    fun `a lone settled-records array is refused whatever it is called`() {
+        for (key in listOf("archive", "archived", "done", "completed", "handled", "past")) {
+            val body = """{"available": true, "$key": [{"id": "a1"}]}"""
+            val r = parseListBody(
+                body, ListSerializer(PendingItem.serializer()), JarvisApi.PENDING_KEYS,
+            )
+            assertTrue("`$key` alone must not be read as the pending queue", r is ApiResult.Failed)
+        }
+    }
+
     /** One unrecognised array is still unambiguous, so it is still accepted. */
     @Test
     fun `a single array under an unknown key is still read`() {

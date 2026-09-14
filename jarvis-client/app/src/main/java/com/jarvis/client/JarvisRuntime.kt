@@ -374,7 +374,18 @@ object JarvisRuntime {
                 // re-enabled the approval buttons this gate exists to hold.
                 val since = SystemClock.elapsedRealtime() - lastFrameAt
                 if (_link.value == LinkState.CONNECTED && since > KEEPALIVE_GAP_MS) {
-                    // The socket has not failed, so nothing else will tell us.
+                    // This marks the link stale; it does not repair it. The
+                    // repair is the 90s read timeout on `streamClient` — before
+                    // that existed this branch was the whole response to a
+                    // half-open socket, and it was not a response at all: the
+                    // approvals were refused, the socket was left parked, no
+                    // reconnect was attempted, and the only line that clears
+                    // staleness needs a frame that was never coming. The gate
+                    // held shut for ever on a link nothing was trying to fix.
+                    //
+                    // The two are deliberately staggered: 70s here so the owner
+                    // is told the link is doubtful before anything is torn
+                    // down, 90s there so the socket recycles shortly after.
                     Log.w(TAG, "no frame for ${since}ms; treating the link as stale")
                     _stale.value = true
                     _linkDetail.value = "No keepalive for ${since / 1000}s"

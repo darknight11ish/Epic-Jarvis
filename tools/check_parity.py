@@ -32,13 +32,21 @@ PHONE_PATH = "jarvis-client/app/src/main/java/com/jarvis/client"
 
 ROUTE = re.compile(r"/api/[a-zA-Z0-9/_-]+")
 
-# Every route the desktop calls, and what the phone does about it.
+# Every route the desktop MENTIONS, and what the phone does about it.
+#
+# Mentions, not calls. The extractor is a regex over the desktop's Rust source,
+# so it cannot tell a live request from a string constant naming a route that
+# does not exist yet. Read a "todo" here as "this name appears on the desktop
+# side" and check the call site before concluding the backend serves it. That
+# distinction is not pedantic: this table asserted that /api/appearance already
+# existed, on the strength of a `const ROUTE` in a module whose own first
+# heading is "The route does not exist yet".
 #
 # "ported"       - the phone calls it too; the check verifies that is still true
 # "deliberate"   - a decision was made NOT to port it; the reason is the point
 # "todo"         - portable and wanted, nobody has done it yet
 CLASSIFICATION = {
-    "/api/appearance": ("todo", "Sync the face, theme and state bindings. The route already exists - see docs/APPEARANCE-SYNC-PROPOSAL.md, which was written believing it did not."),
+    "/api/appearance": ("todo", "Sync the face, theme and state bindings. NOT a live route: appearance.rs declares the name in a const and documents that the backend answers neither verb. Blocked on the backend, not on the phone - see docs/APPEARANCE-SYNC-PROPOSAL.md."),
     "/api/approve": ("ported", ""),
     "/api/attention": ("ported", ""),
     "/api/attention/mute": ("ported", ""),
