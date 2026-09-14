@@ -15,6 +15,7 @@
 import {
   applyTheme,
   followTheme,
+  followZoom,
   onLink,
   reconnect,
   start as startLink,
@@ -244,6 +245,9 @@ if (themePicker) {
 followTheme((theme) => {
   if (themePicker) themePicker.value = theme;
 });
+
+// This window is user-resizable, so nothing needs to re-measure after a step.
+followZoom();
 
 startLink();
 

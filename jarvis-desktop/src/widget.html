@@ -35,6 +35,10 @@
       the frame always hugs the content exactly.
     -->
     <div id="widget-shell" class="widget-shell">
+      <!-- The window had no heading, so its heading list was empty and there
+           was nothing to tell a screen reader which of the four Jarvis windows
+           it had landed in. -->
+      <h1 class="sr-only">Jarvis widget</h1>
       <!-- ── Compact bar: always visible, doubles as the drag handle ────── -->
       <header class="widget-bar" data-tauri-drag-region>
         <div class="status-indicator" data-tauri-drag-region>

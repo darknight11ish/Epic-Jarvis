@@ -97,6 +97,7 @@ import {
   riskLine,
   setMuted,
   followTheme,
+  followZoom,
   start as startLink,
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode } from "./voice.js";
@@ -787,6 +788,12 @@ function applyHealth(report) {
     if (!dot) continue;
     dot.dataset.online = String(Boolean(service.online));
     dot.title = `${service.name}: ${service.detail}`;
+    // Shape and hue are for the eye; this is the same fact for a screen
+    // reader, which was previously told only the service's name.
+    dot.setAttribute(
+      "aria-label",
+      `${service.name}: ${service.online ? "online" : "not answering"}`
+    );
   }
 
   const core = report.services.find((service) => service.id === "jarvis");
@@ -795,9 +802,9 @@ function applyHealth(report) {
       tier: "offline",
       label: "Offline",
       model: null,
-      why: link.error
-        ? `No event stream: ${link.error}`
-        : "No event stream. Jarvis is not answering on 127.0.0.1:4719.",
+      why: core.detail
+        ? `Jarvis is not answering: ${core.detail}`
+        : "Jarvis is not answering on 127.0.0.1:4719.",
     });
   } else if (state.route.tier === "offline") {
     applyRoute(DEFAULT_ROUTE);
@@ -2093,6 +2100,10 @@ focusInput();
 // One stream, owned by Rust, fanned out to all three surfaces. This window
 // subscribes; it does not connect, and it does not poll.
 followTheme();
+// Ctrl+= / Ctrl+- / Ctrl+0. Every size here is in `px` and a Tauri window
+// has no browser chrome, so without this there is no way to make the text
+// bigger anywhere in the app. The window re-measures after each step.
+followZoom(() => syncWindowHeight());
 startVoice(dom.root);
 startLink();
 
@@ -2104,6 +2115,10 @@ onLink((link) => {
   const dot = dom.services.querySelector('[data-service="jarvis"]');
   if (dot) {
     dot.dataset.online = String(link.connected);
+    dot.setAttribute(
+      "aria-label",
+      `Core: ${link.connected ? "event stream live" : "not answering"}`
+    );
     dot.title = link.connected
       ? `Jarvis: event stream live${link.activity === "idle" ? "" : ` · ${link.activity}`}`
       : `Jarvis: ${link.error || "no event stream"}`;
@@ -2122,7 +2137,16 @@ onLink((link) => {
   syncWindowHeight();
 
   if (!link.connected && state.route.tier !== "offline") {
-    applyRoute({ tier: "offline", label: "Offline", model: "core unreachable" });
+    applyRoute({
+      tier: "offline",
+      label: "Offline",
+      // "core unreachable" was a message sitting in the slot that names a
+      // model. The reason belongs in the tooltip; the slot stays empty.
+      model: null,
+      why: link.error
+        ? `No event stream: ${link.error}`
+        : "No event stream. Jarvis is not answering on 127.0.0.1:4719.",
+    });
   } else if (link.connected && state.route.tier === "offline") {
     applyRoute(DEFAULT_ROUTE);
   }

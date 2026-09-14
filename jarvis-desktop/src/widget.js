@@ -24,6 +24,7 @@ import {
   onQueue,
   riskLine,
   followTheme,
+  followZoom,
   start as startLink,
 } from "./jarvis-link.js";
 
@@ -296,6 +297,14 @@ function applyHealth(report) {
   dom.netDot.classList.toggle("online", online === report.services.length);
   dom.netDot.classList.toggle("partial", online > 0 && online < report.services.length);
   dom.netDot.title = report.summary || "Core connection";
+  // The shape and the hue are for the eye. This is the same fact in words.
+  const word = online === report.services.length
+    ? "all local services answered"
+    : online > 0
+      ? "some local services answered"
+      : "no local service answered";
+  dom.netDot.setAttribute("role", "img");
+  dom.netDot.setAttribute("aria-label", `Connection: ${word}`);
 
   const core = report.services.find((s) => s.id === "jarvis");
   if (core && !core.online) applyLane("offline");
@@ -601,6 +610,9 @@ listen("approval-resolved", (event) => {
 
   // One stream, owned by Rust, fanned out to all three surfaces.
   followTheme();
+  // The widget measures itself and asks Rust to match, so a zoom step has to
+  // re-measure or the frame keeps the old height around the new text.
+  followZoom(() => syncSize());
 startLink();
 
   onLink((link) => {

@@ -684,8 +684,33 @@ body {
   font-size: 11px;
 }
 
+/* Disabled is not invisible.
+
+   WCAG exempts a disabled control from its contrast minimum, which is how
+   these ended up at 0.45-0.6 opacity: technically permitted, and in practice
+   a reader cannot tell what the control they cannot use would have done.
+   0.62 with the colour drained is the compromise: still plainly inert - the
+   desaturation says that on its own, without relying on lightness - and still
+   readable at 3:1 or better. `tests/disabled.mjs` measures it. */
+/* Disabled is not invisible.
+
+   WCAG exempts a disabled control from its contrast minimum, which is how
+   these ended up at 0.45-0.6 opacity: technically permitted, and in practice
+   a reader cannot tell what the control they cannot use would have done. A
+   fade also fails unevenly — the same 0.62 that measured 4:1 on the dark
+   themes measured 2.25:1 on `paper`, because fading toward a light ground
+   removes more contrast than fading toward a dark one.
+
+   So: no fade. The control drops its fill and its accent and takes the
+   theme's own faint-text colour, which every theme already guarantees against
+   its surfaces. It reads as inert because it has no colour left, not because
+   it is dim. `tests/disabled.mjs` measures all four themes. */
 .btn:disabled {
-  opacity: 0.45;
+  opacity: 1;
+  background: var(--surface-raised);
+  border-color: var(--hairline);
+  color: var(--text-faint);
+  box-shadow: none;
   cursor: default;
 }
 

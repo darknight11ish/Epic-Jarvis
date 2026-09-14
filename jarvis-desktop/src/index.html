@@ -38,6 +38,13 @@
          It used to be here, so a screen reader re-announced the textarea, the
          chips and the entire answer on every streamed repaint. -->
     <main id="shell" class="shell">
+      <!-- The page had no heading of any level. A screen reader's heading list
+           — one of the two ways people navigate a page without reading it —
+           was empty, and "Ask Jarvis" existed only as a label on the textarea.
+           It is `sr-only` because the window is a 44px bar: the heading is
+           structure, not decoration, and the visible equivalent is the reactor
+           and the input beside it. -->
+      <h1 class="sr-only">Jarvis</h1>
       <!-- ── Input row ─────────────────────────────────────────────────── -->
       <div class="bar" id="bar" data-tauri-drag-region>
         <div class="reactor" id="reactor" aria-hidden="true">
@@ -216,6 +223,10 @@
             <li>
               <span class="primer-keys"><code>#joplin</code></span>
               <span>File it in the Joplin vault, or search it</span>
+            </li>
+            <li>
+              <span class="primer-keys"><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd></span>
+              <span>Bigger or smaller text, everywhere. <kbd>Ctrl</kbd>+<kbd>0</kbd> resets</span>
             </li>
           </ul>
           <p class="primer-foot">

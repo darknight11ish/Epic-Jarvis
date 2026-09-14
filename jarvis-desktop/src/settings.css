@@ -147,7 +147,14 @@ input:focus, textarea:focus {
 }
 
 .btn:hover:not(:disabled) { background: rgba(111, 227, 255, 0.2); }
-.btn:disabled { opacity: 0.45; cursor: default; }
+.btn:disabled {
+  opacity: 1;
+  background: var(--surface-raised);
+  border-color: var(--hairline);
+  color: var(--text-faint);
+  box-shadow: none;
+  cursor: default;
+}
 .btn.ghost { background: transparent; }
 .btn.small { padding: 3px 9px; font-size: 11px; margin-left: auto; }
 

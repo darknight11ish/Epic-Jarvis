@@ -410,18 +410,68 @@ fn shade(c: Rgb, dim: f64) -> Rgb {
     }
 }
 
+/// The outline drawn around the disc, and why there are two of them.
+///
+/// The notification area is the one surface whose backdrop the app does not
+/// choose and cannot read: Windows 11 ships a light taskbar and a dark one, an
+/// accent-coloured one, and whatever wallpaper shows through the acrylic. A
+/// bare coloured disc is therefore always at risk — `standby` on a light
+/// taskbar, and `banked`, which the spec dims to 0.45 and which measured
+/// 1.72:1 against near-white.
+///
+/// One outline cannot solve this. Whatever colour it is, some taskbar matches
+/// it: an edge chosen to oppose the FILL was the first attempt here, and it
+/// measured 1.03:1 the moment a dim blue disc got a near-white ring and the
+/// taskbar was white.
+///
+/// Two do solve it. The band is split: dark on the outside, light just inside
+/// it. On a light taskbar the dark ring draws the silhouette; on a dark one the
+/// dark ring disappears and the light ring draws it, 0.8 px in — 0.4 px after
+/// the shell's downscale, which nobody can see. Whichever way the taskbar goes,
+/// one of the two rings has contrast against it.
+///
+/// The dim stays. It is what `banked` MEANS, and a dimmed disc inside a legible
+/// outline still reads as dimmed.
+const INK_DARK: Rgb = Rgb {
+    r: 12,
+    g: 14,
+    b: 18,
+};
+/// Not pure white: that flares on an OLED taskbar and reads as a halo rather
+/// than an edge.
+const INK_LIGHT: Rgb = Rgb {
+    r: 236,
+    g: 240,
+    b: 245,
+};
+
 /// Draws the disc into an RGBA buffer.
 ///
 /// Supersampled 3×3 per pixel: at 32 px a hard-edged circle downscaled by the
 /// shell to 16 px reads as a ragged blob, and the notification area is the one
 /// place where a few hundred float operations at 2 Hz is not worth optimising.
 fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> Image<'static> {
+    Image::new_owned(draw_pixels(a, b, filled, notches), ICON_SIZE, ICON_SIZE)
+}
+
+/// The pixel loop, split out from [`draw`] so it can be tested.
+///
+/// `Image` is a Tauri type and a test that wanted one would need an app handle;
+/// a buffer of RGBA bytes needs nothing, and it is the part with the geometry
+/// in it.
+fn draw_pixels(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> Vec<u8> {
     let size = ICON_SIZE as f64;
     let centre = size / 2.0;
     // Leave a pixel of margin so the disc is not clipped by the shell's own
     // rounding of the icon rectangle.
     let outer = centre - 1.5;
     let inner = if filled { 0.0 } else { outer - 4.5 };
+    // 1.6 px at 32, which the shell downscales to 0.8 px at 16 — a visible
+    // edge rather than a border, which is all this needs to be.
+    let stroke = 1.6f64;
+    let edge_from = outer - stroke;
+    // Where the dark half hands over to the light one.
+    let ink_split = outer - stroke / 2.0;
 
     // The notch ring. `state_transforms.states.banked.overlay_spec` puts it
     // between 0.86 and 0.99 of the face radius, starting at twelve o'clock and
@@ -458,11 +508,19 @@ fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> I
             let mut covered = 0.0f64;
             let mut edge = 0.0f64;
             let mut notch = 0.0f64;
+            let mut outline = 0.0f64;
+            let mut outline_dark = 0.0f64;
             for sy in 0..3 {
                 for sx in 0..3 {
                     let px = x as f64 + (sx as f64 + 0.5) / 3.0;
                     let py = y as f64 + (sy as f64 + 0.5) / 3.0;
                     let d = ((px - centre).powi(2) + (py - centre).powi(2)).sqrt();
+                    if d <= outer && d >= edge_from {
+                        outline += 1.0 / 9.0;
+                        if d >= ink_split {
+                            outline_dark += 1.0 / 9.0;
+                        }
+                    }
                     if d <= outer && d >= inner {
                         covered += 1.0 / 9.0;
                         // The outer third of the radius takes the darker of the
@@ -506,7 +564,7 @@ fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> I
                     }
                 }
             }
-            if covered <= 0.0 && notch <= 0.0 {
+            if covered <= 0.0 && notch <= 0.0 && outline <= 0.0 {
                 pixels.extend_from_slice(&[0, 0, 0, 0]);
                 continue;
             }
@@ -527,22 +585,39 @@ fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> I
             // introducing a colour of its own.
             let lit = notch.clamp(0.0, 1.0);
             let mark = ring.map(|(_, _, _, colour)| colour).unwrap_or(a);
-            let out = |hot: u8, cool: u8, tick: u8| {
+            // Order matters: disc, then the outline over it, then the notch
+            // ring over both. The notches sit at 0.86-0.99 of the radius, which
+            // is inside the outline band — and they are the one mark that must
+            // never be swallowed, because they are the count.
+            let rim_ink = outline.clamp(0.0, 1.0);
+            // Which of the two rings this pixel mostly belongs to. A pixel
+            // straddling the split takes the majority rather than a blend of
+            // the two, because a mid-grey between them contrasts with neither
+            // taskbar, which is the whole failure being fixed.
+            let ink = if outline > 0.0 && outline_dark / outline >= 0.5 {
+                INK_DARK
+            } else {
+                INK_LIGHT
+            };
+            let out = |hot: u8, cool: u8, tick: u8, pen: u8| {
                 let base = blend(hot, cool) as f64;
-                (base * (1.0 - lit) + f64::from(tick) * lit)
+                let edged = base * (1.0 - rim_ink) + f64::from(pen) * rim_ink;
+                (edged * (1.0 - lit) + f64::from(tick) * lit)
                     .round()
                     .clamp(0.0, 255.0) as u8
             };
             pixels.extend_from_slice(&[
-                out(a.r, b.r, mark.r),
-                out(a.g, b.g, mark.g),
-                out(a.b, b.b, mark.b),
-                (covered.max(notch) * 255.0).round().clamp(0.0, 255.0) as u8,
+                out(a.r, b.r, mark.r, ink.r),
+                out(a.g, b.g, mark.g, ink.g),
+                out(a.b, b.b, mark.b, ink.b),
+                (covered.max(notch).max(outline) * 255.0)
+                    .round()
+                    .clamp(0.0, 255.0) as u8,
             ]);
         }
     }
 
-    Image::new_owned(pixels, ICON_SIZE, ICON_SIZE)
+    pixels
 }
 
 /// Re-resolves an animated pattern at [`ANIMATION_TICK`] and repaints only when
@@ -938,6 +1013,21 @@ fn run_status_check(app: &AppHandle) {
 mod tests {
     use super::*;
 
+    /// Relative luminance, WCAG's definition, 0..1.
+    ///
+    /// Used to choose an outline that survives whichever taskbar the owner runs.
+    fn luma(c: Rgb) -> f64 {
+        let ch = |v: u8| {
+            let s = f64::from(v) / 255.0;
+            if s <= 0.03928 {
+                s / 12.92
+            } else {
+                ((s + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
+    }
+
     fn link() -> LinkState {
         LinkState {
             connected: true,
@@ -1172,6 +1262,98 @@ mod tests {
         assert_eq!(
             waiting_label(&budgeted),
             "3 things waiting to be told · 2 of 6 interruptions left"
+        );
+    }    /// Contrast ratio between two opaque colours, WCAG's formula.
+    fn ratio(x: Rgb, y: Rgb) -> f64 {
+        let (a, b) = (luma(x), luma(y));
+        let (hi, lo) = if a > b { (a, b) } else { (b, a) };
+        (hi + 0.05) / (lo + 0.05)
+    }
+
+    /// Composites a pixel of the icon over a taskbar of a known colour.
+    fn over(px: &[u8], bg: Rgb) -> Rgb {
+        let alpha = f64::from(px[3]) / 255.0;
+        let mix = |fg: u8, back: u8| {
+            (f64::from(fg) * alpha + f64::from(back) * (1.0 - alpha)).round() as u8
+        };
+        Rgb {
+            r: mix(px[0], bg.r),
+            g: mix(px[1], bg.g),
+            b: mix(px[2], bg.b),
+        }
+    }
+
+    fn pixel(buf: &[u8], x: u32, y: u32) -> &[u8] {
+        let i = ((y * ICON_SIZE + x) * 4) as usize;
+        &buf[i..i + 4]
+    }
+
+    /// Two rings, opposed, so neither taskbar can hide both.
+    #[test]
+    fn the_two_rings_oppose_each_other() {
+        assert!(luma(INK_LIGHT) > 0.8, "the inner ring is not light");
+        assert!(luma(INK_DARK) < 0.02, "the outer ring is not dark");
+    }
+
+    /// The finding this exists for: `banked` is dimmed to 0.45 by the spec and
+    /// measured 1.72:1 against a light taskbar. The disc may stay dim — that is
+    /// what banked means — but the icon must still have a silhouette.
+    ///
+    /// Measured the way the eye does it: the strongest edge anywhere on the
+    /// icon, against each of the two taskbars Windows ships. A fixed probe
+    /// coordinate was the first attempt and it measured the antialiasing at
+    /// the outer edge rather than the ring, reporting 1.03:1 for a design that
+    /// actually holds at 14:1.
+    #[test]
+    fn the_icon_has_an_edge_against_both_taskbars() {
+        const WHITE: Rgb = Rgb { r: 243, g: 243, b: 243 };
+        const BLACK: Rgb = Rgb { r: 32, g: 32, b: 32 };
+
+        /// The strongest contrast any pixel of the icon reaches against `bg`.
+        fn strongest(buf: &[u8], bg: Rgb) -> f64 {
+            let mut best = 1.0f64;
+            for chunk in buf.chunks_exact(4) {
+                if chunk[3] == 0 {
+                    continue;
+                }
+                best = best.max(ratio(over(chunk, bg), bg));
+            }
+            best
+        }
+
+        // Every state's resolved colour, dimmed as `paint` dims it. The two
+        // extremes are what matter: the dimmest (banked, 0.45) and a pale one.
+        for (name, fill) in [
+            ("banked", shade(Rgb { r: 108, g: 211, b: 249 }, 0.45)),
+            ("standby", shade(Rgb { r: 107, g: 125, b: 148 }, 0.6)),
+            ("speaking", Rgb { r: 214, g: 242, b: 255 }),
+            ("error", Rgb { r: 247, g: 59, b: 59 }),
+        ] {
+            let buf = draw_pixels(fill, fill, true, None);
+            for (bg, label) in [(WHITE, "a light taskbar"), (BLACK, "a dark one")] {
+                let r = strongest(&buf, bg);
+                assert!(
+                    r >= 3.0,
+                    "{name} on {label}: the strongest edge measures {r:.2}:1, under 3:1"
+                );
+            }
+        }
+    }
+
+    /// The notch ring is the count. It must not be swallowed by the outline it
+    /// now overlaps — notches sit at 0.86-0.99 of the radius, the outline at
+    /// 0.89-1.0 of it.
+    #[test]
+    fn a_notch_still_reads_over_the_outline() {
+        let dim = shade(Rgb { r: 108, g: 211, b: 249 }, 0.45);
+        let hot = Rgb { r: 108, g: 211, b: 249 };
+        let buf = draw_pixels(dim, dim, true, Some((1, 12, hot)));
+        // Notch 0 is straight up, at the top of the ring.
+        let top = pixel(&buf, ICON_SIZE / 2, 2);
+        let side = pixel(&buf, ICON_SIZE / 2 + 14, ICON_SIZE / 2);
+        assert!(
+            ratio(over(top, Rgb { r: 32, g: 32, b: 32 }), over(side, Rgb { r: 32, g: 32, b: 32 })) > 1.6,
+            "the notch is indistinguishable from the outline beside it"
         );
     }
 }

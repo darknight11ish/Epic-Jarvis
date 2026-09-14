@@ -424,6 +424,99 @@ export function followTheme(onChange) {
     .catch((error) => console.error("[jarvis] could not read the theme:", error));
 }
 
+/* ==========================================================================
+   Text size
+   ========================================================================== */
+
+/** The steps Ctrl+= and Ctrl+- walk, and the one Ctrl+0 returns to. */
+const ZOOM_STEPS = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
+const ZOOM_KEY = "jarvis.zoom";
+
+function storedZoom() {
+  try {
+    const value = Number(localStorage.getItem(ZOOM_KEY));
+    return ZOOM_STEPS.includes(value) ? value : 1;
+  } catch (error) {
+    return 1;
+  }
+}
+
+/**
+ * Sets this window's zoom and remembers it.
+ *
+ * Every size in these stylesheets is in `px`, which is a decision that only
+ * works if the reader has a way to scale the whole surface — and a Tauri
+ * WebView2 window ships with none: there is no browser chrome, so Ctrl+= and
+ * Ctrl+- reach nothing. Someone who needs 150% text had no control anywhere in
+ * the app.
+ *
+ * This is that control. It scales layout with the text, which is the behaviour
+ * a fixed-`px` design needs — a font-size-only scale would put 24px text in a
+ * 22px row. The windows measure their own content and ask Rust to resize, so
+ * the frames follow.
+ */
+export function setZoom(factor) {
+  const zoom = ZOOM_STEPS.includes(factor) ? factor : 1;
+  try {
+    localStorage.setItem(ZOOM_KEY, String(zoom));
+  } catch (error) {
+    /* the zoom still applies for this session */
+  }
+  if (IS_TAURI && TAURI.webview) {
+    try {
+      TAURI.webview.getCurrentWebview().setZoom(zoom);
+    } catch (error) {
+      console.error("[jarvis] could not set the zoom:", error);
+    }
+  }
+  return zoom;
+}
+
+/** The zoom this window is at. */
+export function currentZoom() {
+  return storedZoom();
+}
+
+/**
+ * Restores the remembered zoom and binds Ctrl+= / Ctrl+- / Ctrl+0.
+ *
+ * `onChange` runs after each step so a surface that measures itself can
+ * re-measure — the quickbar and the widget both size their native window to
+ * their content, and neither notices a zoom on its own.
+ */
+export function followZoom(onChange) {
+  const apply = (zoom) => {
+    setZoom(zoom);
+    // The zoom lands asynchronously in the webview, so a measurement taken now
+    // is of the old layout. Two frames is enough for WebView2 to have relaid
+    // out; measuring early is how the window ends up one step behind.
+    if (onChange) requestAnimationFrame(() => requestAnimationFrame(() => onChange(zoom)));
+  };
+  apply(storedZoom());
+
+  window.addEventListener("keydown", (event) => {
+    if (!event.ctrlKey || event.altKey || event.metaKey) return;
+    // `=` and `+` are the same key; `NumpadAdd` is the other one. Matching on
+    // `key` alone misses the numeric keypad, which is where a lot of people
+    // who use zoom actually press it.
+    const inKey = event.key;
+    const code = event.code;
+    let next = null;
+    const at = ZOOM_STEPS.indexOf(storedZoom());
+    if (inKey === "=" || inKey === "+" || code === "NumpadAdd") {
+      next = ZOOM_STEPS[Math.min(ZOOM_STEPS.length - 1, at + 1)];
+    } else if (inKey === "-" || inKey === "_" || code === "NumpadSubtract") {
+      next = ZOOM_STEPS[Math.max(0, at - 1)];
+    } else if (inKey === "0" || code === "Numpad0") {
+      next = 1;
+    }
+    if (next === null) return;
+    event.preventDefault();
+    apply(next);
+    announce(`Text size ${Math.round(next * 100)} percent.`);
+  });
+}
+
 /**
  * The one live region a window speaks through.
  *

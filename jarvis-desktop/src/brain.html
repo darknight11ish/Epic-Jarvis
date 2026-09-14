@@ -42,17 +42,23 @@
           </svg>
         </div>
 
-        <ul class="rail-nav" role="tablist">
+        <!-- A tablist is ONE tab stop, and the arrow keys move between the
+             tabs inside it. That is not a preference: a screen reader in
+             browse mode announces "tab, 1 of 6" and expects arrows to work, and
+             a keyboard user expects Tab to leave the rail rather than walk it.
+             `tabindex` below is the roving half — only the selected tab is
+             reachable by Tab — and `brain.js` moves it with the selection. -->
+        <ul class="rail-nav" id="rail-nav" role="tablist" aria-label="Brain views" aria-orientation="vertical">
           <li>
             <button class="rail-item" role="tab" id="tab-galaxy" data-goto="galaxy"
-                    aria-selected="true" aria-controls="view-galaxy">
+                    aria-selected="true" aria-controls="view-galaxy" tabindex="0">
               <span class="rail-glyph" aria-hidden="true">◍</span>
               <span class="rail-label">Galaxy</span>
             </button>
           </li>
           <li>
             <button class="rail-item" role="tab" id="tab-live" data-goto="live"
-                    aria-selected="false" aria-controls="view-live">
+                    aria-selected="false" aria-controls="view-live" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">≋</span>
               <span class="rail-label">Live</span>
               <span class="rail-count" id="count-live" hidden></span>
@@ -60,14 +66,14 @@
           </li>
           <li>
             <button class="rail-item" role="tab" id="tab-faculties" data-goto="faculties"
-                    aria-selected="false" aria-controls="view-faculties">
+                    aria-selected="false" aria-controls="view-faculties" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">◆</span>
               <span class="rail-label">Faculties</span>
             </button>
           </li>
           <li>
             <button class="rail-item" role="tab" id="tab-work" data-goto="work"
-                    aria-selected="false" aria-controls="view-work">
+                    aria-selected="false" aria-controls="view-work" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">▤</span>
               <span class="rail-label">Work</span>
               <span class="rail-count" id="count-work" hidden></span>
@@ -75,7 +81,7 @@
           </li>
           <li>
             <button class="rail-item" role="tab" id="tab-trust" data-goto="trust"
-                    aria-selected="false" aria-controls="view-trust">
+                    aria-selected="false" aria-controls="view-trust" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">⛨</span>
               <span class="rail-label">Trust</span>
               <span class="rail-count" id="count-trust" hidden></span>
@@ -83,7 +89,7 @@
           </li>
           <li>
             <button class="rail-item" role="tab" id="tab-watch" data-goto="watch"
-                    aria-selected="false" aria-controls="view-watch">
+                    aria-selected="false" aria-controls="view-watch" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">◈</span>
               <span class="rail-label">Watch</span>
               <span class="rail-count" id="count-watch" hidden></span>

@@ -728,22 +728,43 @@ html[data-state="error"] .pulse {
   letter-spacing: 0.2px;
 }
 
+/* Three states, three SHAPES, not three hues.
+   Green-vs-red is the single most common thing a colour-blind reader cannot
+   read, and these dots were the only thing on the surface saying whether a
+   local service is up. Colour still carries it for everyone who can see it;
+   the shape carries it for everyone else, and the `title` carries the words.
+
+     unknown  a hollow ring     — not probed yet
+     online   a filled disc     — answered
+     offline  a filled square   — did not answer
+*/
 .service i {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--text-faint);
-  transition: background 200ms var(--ease);
+  border: 1.5px solid var(--text-faint);
+  background: transparent;
+  transition:
+    background 200ms var(--ease),
+    border-color 200ms var(--ease),
+    border-radius 200ms var(--ease);
 }
 
 .service[data-online="true"] i {
+  border-color: var(--ok);
   background: var(--ok);
-  box-shadow: 0 0 7px rgba(61, 220, 151, 0.6);
+  box-shadow: 0 0 7px var(--ok-edge);
 }
 
 .service[data-online="false"] i {
+  /* A square, at the same optical weight as the disc. Squares read as heavier
+     than circles of the same box, so this one is a touch smaller. */
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  border-color: var(--bad);
   background: var(--bad);
-  box-shadow: 0 0 7px rgba(255, 107, 122, 0.55);
+  box-shadow: 0 0 7px var(--bad-fill);
 }
 
 .keys {
@@ -1213,8 +1234,33 @@ html[data-state="error"] .pulse {
   background: var(--ok-fill);
 }
 
+/* Disabled is not invisible.
+
+   WCAG exempts a disabled control from its contrast minimum, which is how
+   these ended up at 0.45-0.6 opacity: technically permitted, and in practice
+   a reader cannot tell what the control they cannot use would have done.
+   0.62 with the colour drained is the compromise: still plainly inert - the
+   desaturation says that on its own, without relying on lightness - and still
+   readable at 3:1 or better. `tests/disabled.mjs` measures it. */
+/* Disabled is not invisible.
+
+   WCAG exempts a disabled control from its contrast minimum, which is how
+   these ended up at 0.45-0.6 opacity: technically permitted, and in practice
+   a reader cannot tell what the control they cannot use would have done. A
+   fade also fails unevenly — the same 0.62 that measured 4:1 on the dark
+   themes measured 2.25:1 on `paper`, because fading toward a light ground
+   removes more contrast than fading toward a dark one.
+
+   So: no fade. The control drops its fill and its accent and takes the
+   theme's own faint-text colour, which every theme already guarantees against
+   its surfaces. It reads as inert because it has no colour left, not because
+   it is dim. `tests/disabled.mjs` measures all four themes. */
 .approval-button:disabled {
-  opacity: 0.5;
+  opacity: 1;
+  background: var(--surface-raised);
+  border-color: var(--hairline);
+  color: var(--text-faint);
+  box-shadow: none;
   cursor: default;
 }
 

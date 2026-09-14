@@ -158,23 +158,38 @@ body {
   color: var(--accent-text);
 }
 
+/* Three states, three SHAPES. Green / amber / red is unreadable to a
+   red-green colour-blind reader, and this dot is the only thing in the
+   collapsed widget that says whether the local services answered.
+
+     all up    a filled disc
+     some up   a filled diamond (a square, turned)
+     none up   a filled square
+*/
 .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
   background: var(--bad);
-  box-shadow: 0 0 6px rgba(255, 107, 122, 0.6);
+  box-shadow: 0 0 6px var(--bad-fill);
   transition:
     background 200ms var(--ease),
+    border-radius 200ms var(--ease),
+    transform 200ms var(--ease),
     box-shadow 200ms var(--ease);
 }
 
 .dot.online {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   background: var(--ok);
   box-shadow: 0 0 6px var(--ok);
 }
 
 .dot.partial {
+  border-radius: 1px;
+  transform: rotate(45deg);
   background: var(--gold);
   box-shadow: 0 0 6px var(--gold);
 }
@@ -464,10 +479,6 @@ body {
   box-shadow: 0 0 0 2px rgba(111, 227, 255, 0.35);
 }
 
-.btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
 
 .btn-approve {
   background: var(--ok);
@@ -486,6 +497,30 @@ body {
 
 .btn-deny:hover:not(:disabled) {
   background: rgba(255, 107, 122, 0.14);
+}
+
+/* Disabled is not invisible.
+
+   WCAG exempts a disabled control from its contrast minimum, which is how
+   these ended up at 0.45-0.6 opacity: technically permitted, and in practice
+   a reader cannot tell what the control they cannot use would have done. A
+   fade also fails unevenly — the same 0.62 that measured 4:1 on the dark
+   themes measured 2.25:1 on `paper`, because fading toward a light ground
+   removes more contrast than fading toward a dark one.
+
+   So: no fade. The control drops its fill and its accent and takes the
+   theme's own faint-text colour, which every theme already guarantees against
+   its surfaces. It reads as inert because it has no colour left, not because
+   it is dim. `tests/disabled.mjs` measures all four themes. */
+.btn:disabled,
+.btn-approve:disabled,
+.btn-deny:disabled {
+  opacity: 1;
+  background: var(--surface-raised);
+  border-color: var(--hairline);
+  color: var(--text-faint);
+  box-shadow: none;
+  cursor: default;
 }
 
 /* --------------------------------------------------------------------------
@@ -546,7 +581,7 @@ body {
 }
 
 .capture-input:disabled {
-  opacity: 0.6;
+  opacity: 0.68;
 }
 
 .send-btn {

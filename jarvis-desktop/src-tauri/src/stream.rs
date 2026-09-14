@@ -132,6 +132,13 @@ impl Default for LinkState {
 pub struct StreamState {
     link: Mutex<LinkState>,
     pending: Mutex<Vec<serde_json::Value>>,
+    /// False until the first successful read of `/api/pending`.
+    ///
+    /// The desktop toasts an arriving gate, and on the very first read every
+    /// gate already in the queue would look like an arrival — five toasts at
+    /// launch for five decisions the owner may have parked days ago. The first
+    /// read establishes the baseline and says nothing.
+    seeded: std::sync::atomic::AtomicBool,
 }
 
 impl StreamState {
@@ -678,14 +685,58 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
         .unwrap_or_default();
 
     let state = app.state::<StreamState>();
-    {
+    let seeded = state
+        .seeded
+        .swap(true, std::sync::atomic::Ordering::Relaxed);
+    let arrived: Vec<serde_json::Value> = {
         let mut slot = state
             .pending
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let known: std::collections::HashSet<String> = slot
+            .iter()
+            .filter_map(|item| item["id"].as_str().map(str::to_owned))
+            .collect();
+        let fresh = items
+            .iter()
+            .filter(|item| {
+                item["id"]
+                    .as_str()
+                    .is_some_and(|id| !known.contains(id))
+            })
+            .cloned()
+            .collect();
         *slot = items.clone();
-    }
+        fresh
+    };
     publish_link(app, |link| link.approvals = items.len());
+
+    // The ping. A gate that arrives while the owner is in another window
+    // produced nothing they could perceive without looking: the tray icon went
+    // amber, and that was the whole signal. A screen reader heard it only if
+    // the spotlight happened to be the focused window, because the live region
+    // is in the page.
+    //
+    // One toast per gate, and only for ids this process has not already seen —
+    // `/api/pending` is re-read on connect, on resume and on every `approval`
+    // event, and a re-read is not an arrival. `seeded` suppresses the first
+    // read entirely: a queue that was already waiting when the app started is
+    // not five things arriving at once.
+    //
+    // The toast says what wants a decision and never offers one. There is no
+    // action on it, because an action on a notification is a decision made
+    // without the risk line, the `raised` block or the source in front of you.
+    for item in arrived.iter().filter(|_| seeded) {
+        let what = item["action"]
+            .as_str()
+            .or_else(|| item["prompt"].as_str())
+            .unwrap_or("an action");
+        crate::commands::notify(
+            app,
+            "Jarvis is waiting on you",
+            &format!("{what} — nothing runs until you decide."),
+        );
+    }
 
     crate::emit_all(
         app,

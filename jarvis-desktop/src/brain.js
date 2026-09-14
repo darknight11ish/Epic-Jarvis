@@ -22,6 +22,7 @@
 import {
   announce,
   currentLink,
+  followZoom,
   surfaceState,
   onEvent,
   onLink,
@@ -65,6 +66,7 @@ const dom = {
   refresh: $("refresh"),
   toast: $("toast"),
   themePicker: $("theme-picker"),
+  rail: $("rail-nav"),
 
   canvas: $("graph-canvas"),
   graphEmpty: $("graph-empty"),
@@ -272,7 +274,12 @@ async function showView(name, { reload = true } = {}) {
   for (const key of Object.keys(VIEWS)) {
     const tab = $(`tab-${key}`);
     const view = $(`view-${key}`);
-    if (tab) tab.setAttribute("aria-selected", String(key === name));
+    if (tab) {
+      tab.setAttribute("aria-selected", String(key === name));
+      // Roving tabindex: exactly one tab is in the document's tab order, and
+      // it is the selected one. Without this the six buttons are six stops.
+      tab.tabIndex = key === name ? 0 : -1;
+    }
     if (view) view.hidden = key !== name;
   }
 
@@ -1764,10 +1771,38 @@ function applyTheme(name, { persist = true } = {}) {
    Wiring
    ========================================================================== */
 
-for (const key of Object.keys(VIEWS)) {
+const TAB_ORDER = Object.keys(VIEWS);
+
+for (const key of TAB_ORDER) {
   const tab = $(`tab-${key}`);
   if (tab) tab.addEventListener("click", () => showView(key));
 }
+
+/**
+ * The rail is a `tablist`, and a tablist is one Tab stop with the arrows moving
+ * inside it. It shipped as six separate Tab stops, which is the pattern the
+ * role explicitly is not: a screen reader announces "tab, 1 of 6" and then the
+ * arrows do nothing, and a keyboard user has to press Tab six times to get past
+ * the navigation to the thing they came for.
+ *
+ * Vertical rail, so Up/Down are the axis and Left/Right are accepted too —
+ * costs nothing and saves the reader guessing which one this rail thinks it is.
+ */
+dom.rail?.addEventListener("keydown", (event) => {
+  const STEP = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
+  const here = TAB_ORDER.indexOf(state.view);
+  let next = null;
+  if (event.key in STEP) next = (here + STEP[event.key] + TAB_ORDER.length) % TAB_ORDER.length;
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = TAB_ORDER.length - 1;
+  if (next === null || here < 0) return;
+  event.preventDefault();
+  // Selection follows focus, which is the right choice for a tablist whose
+  // panels are already loaded: it is what a reader expects, and the alternative
+  // (arrow to move, Enter to open) makes them press two keys for every view.
+  showView(TAB_ORDER[next]);
+  $(`tab-${TAB_ORDER[next]}`)?.focus();
+});
 
 dom.refresh.addEventListener("click", async () => {
   // Drop the cached layout so a refresh really re-lays out — and note that
@@ -1854,6 +1889,12 @@ window.addEventListener("resize", () => {
 // because `matchMedia` was read once inside `startLayout`.
 matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => {
   if (state.view === "galaxy" && state.graph) startLayout();
+});
+
+// The canvas is sized in device pixels from its CSS box, so a zoom step has to
+// re-measure it or the graph is drawn at the old scale inside the new box.
+followZoom(() => {
+  if (state.view === "galaxy") fitCanvas();
 });
 
 /* ---- The one stream ------------------------------------------------------ */
