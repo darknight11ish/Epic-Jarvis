@@ -18,7 +18,18 @@ permissions = [
   "allow-get-pending-approvals",
   "allow-refresh-link",
   "allow-check-server-health",
+  # Reading the theme is not privileged and every window needs it on load, or
+  # it paints the wrong palette until something tells it otherwise.
+  "allow-get-theme",
 ]
+
+# Choosing the theme. Two windows offer a picker — settings and the Brain — and
+# `set_theme` fans the choice out to all four surfaces, so a third window
+# holding this grant would gain nothing and widen the surface for no reason.
+[[set]]
+identifier = "theme-write"
+description = "Change the theme for every window."
+permissions = ["allow-set-theme"]
 
 # Answering a gate is a decision with consequences, so it is separate from
 # reading the stream. The quickbar and the widget both render approvals and
@@ -103,3 +114,47 @@ permissions = [
   "allow-start-backend",
   "allow-stop-backend",
 ]
+
+# ---------------------------------------------------------------------------
+# The Brain window, and only the Brain window.
+#
+# Split into three sets rather than one, because reading what Jarvis knows,
+# putting a file back, and replacing the model that answers every question are
+# three different powers. A capability file can grant the first without the
+# third, which is the whole reason the ACL exists.
+# ---------------------------------------------------------------------------
+
+# One fan-out read over a fixed allowlist in brain.rs. The window names
+# sections, never URLs, so this grant cannot reach an endpoint that file did
+# not decide it may reach — and a unit test asserts every entry in that list is
+# a GET that changes nothing.
+[[set]]
+identifier = "brain-read"
+description = "Read the memory graph, models, compute, skills, jobs, the undo shelf, the ledger, content risk and the watchlist. Read-only."
+permissions = ["allow-brain-read"]
+
+# Reverting and cancelling. Every one of these moves toward a state the owner
+# already had, or stops something that has not finished — which is why they sit
+# together and apart from the set below.
+[[set]]
+identifier = "brain-act"
+description = "Revert an undo entry, cancel a Long Fuse job, stop a message inside its send window, and manage the GitHub watchlist."
+permissions = [
+  "allow-brain-revert-undo",
+  "allow-brain-cancel-job",
+  "allow-brain-cancel-hold",
+  "allow-brain-watch-add",
+  "allow-brain-watch-remove",
+  "allow-brain-watch-seen",
+]
+
+# Changing what Jarvis is made of. Removing a skill takes an ability away for
+# good, and switching a model replaces the weights that answer every question
+# the owner asks. Neither is undoable from the same screen that did it —
+# rollback exists for models, but nothing reinstalls a removed skill, because
+# installing runs the scanner and the gate and there is deliberately no route
+# that skips them.
+[[set]]
+identifier = "brain-faculties"
+description = "Remove a skill; install, switch or roll back a model. Privileged: keep this to the Brain window."
+permissions = ["allow-brain-remove-skill", "allow-brain-model"]

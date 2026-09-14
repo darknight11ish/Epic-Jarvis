@@ -17,6 +17,7 @@
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
 pub mod attention;
+pub mod brain;
 pub mod commands;
 pub mod proctree;
 pub mod sidecar;
@@ -74,6 +75,10 @@ pub mod events {
     pub const DESKTOP_TELEMETRY: &str = "desktop-telemetry";
     /// Payload: `{ id, approved }`.
     pub const APPROVAL_RESOLVED: &str = "approval-resolved";
+    /// Payload: `String` — the theme id. Sent to every window so four
+    /// surfaces on screen together never disagree about which palette is in
+    /// force.
+    pub const THEME_CHANGED: &str = "theme-changed";
     /// Payload: none. Open the daily brief. Sent by the tray's waiting row and
     /// by the widget — the panel itself lives in the quickbar, because the HUD
     /// window is the backend's own page and not ours to add sections to.
@@ -501,12 +506,23 @@ pub fn run() {
             stream::get_pending_approvals,
             stream::refresh_link,
             attention::get_digest,
+            brain::brain_read,
+            brain::brain_revert_undo,
+            brain::brain_cancel_job,
+            brain::brain_cancel_hold,
+            brain::brain_watch_add,
+            brain::brain_watch_remove,
+            brain::brain_watch_seen,
+            brain::brain_remove_skill,
+            brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,
             sidecar::supervisor_status,
             sidecar::set_supervision,
             sidecar::start_backend,
             sidecar::stop_backend,
+            commands::get_theme,
+            commands::set_theme,
             commands::get_api_settings,
             commands::set_api_settings,
             commands::resize_desktop_widget,

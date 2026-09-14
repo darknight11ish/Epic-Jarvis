@@ -31,11 +31,26 @@ fn main() {
             "get_digest",
             "mark_digest_seen",
             "set_attention_muted",
+            // The Brain. One fan-out read over a fixed allowlist, then one
+            // command per power it can exercise.
+            "brain_read",
+            "brain_revert_undo",
+            "brain_cancel_job",
+            "brain_cancel_hold",
+            "brain_watch_add",
+            "brain_watch_remove",
+            "brain_watch_seen",
+            "brain_remove_skill",
+            "brain_model",
             // Backend supervision — settings window only
             "supervisor_status",
             "set_supervision",
             "start_backend",
             "stop_backend",
+            // The theme. Readable everywhere, writable from the two windows
+            // that offer a picker.
+            "get_theme",
+            "set_theme",
             // Connection settings — settings window only
             "get_api_settings",
             "set_api_settings",

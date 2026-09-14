@@ -82,6 +82,7 @@ const ID_WAITING: &str = "waiting";
 const ID_MUTE: &str = "mute";
 const ID_BACKEND: &str = "backend";
 const ID_SHOW_HUD: &str = "show-hud";
+const ID_SHOW_BRAIN: &str = "show-brain";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
 const ID_RECONNECT: &str = "reconnect";
@@ -178,6 +179,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     )?;
 
     let show_hud = MenuItem::with_id(app, ID_SHOW_HUD, "Show HUD Window", true, None::<&str>)?;
+    let show_brain = MenuItem::with_id(app, ID_SHOW_BRAIN, "Open the Brain", true, None::<&str>)?;
     let toggle_spotlight = MenuItem::with_id(
         app,
         ID_TOGGLE_SPOTLIGHT,
@@ -215,6 +217,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &backend,
             &PredefinedMenuItem::separator(app)?,
             &show_hud,
+            &show_brain,
             &toggle_spotlight,
             &toggle_widget,
             &PredefinedMenuItem::separator(app)?,
@@ -749,6 +752,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             if let Err(err) = windows::show_hud(app) {
                 eprintln!("[jarvis] tray: HUD unavailable: {err}");
                 commands::notify(app, "Jarvis", &format!("HUD unavailable: {err}"));
+            }
+        }
+
+        ID_SHOW_BRAIN => {
+            if let Err(err) = windows::show_brain(app) {
+                eprintln!("[jarvis] tray: the Brain would not open: {err}");
+                commands::notify(app, "Jarvis", &format!("Brain unavailable: {err}"));
             }
         }
 

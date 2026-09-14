@@ -1,0 +1,960 @@
+/* ==========================================================================
+   The Brain
+   --------------------------------------------------------------------------
+   A rail and a stage. The rail never moves, the stage swaps.
+
+   Not one literal colour in this file — every value comes from theme.css, and
+   `scripts/check-tokens.mjs` fails the build if one creeps back in. That is
+   the whole reason a theme switch can reach this window at all.
+
+   Density is deliberately tighter than the quickbar's. The quickbar is glanced
+   at for three seconds; this is read for minutes, and a spotlight's breathing
+   room becomes scrolling here.
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-window);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.brain {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  height: 100%;
+}
+
+/* ==========================================================================
+   Rail
+   ========================================================================== */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 10px 12px;
+  border-right: var(--hairline) solid var(--border);
+  background: var(--surface-1);
+  min-height: 0;
+}
+
+.rail-mark {
+  display: grid;
+  place-items: center;
+  padding-bottom: 2px;
+}
+
+.rail-mark svg {
+  width: 34px;
+  height: 34px;
+  fill: none;
+  stroke-width: 1.2;
+}
+
+.mark-core {
+  fill: var(--accent);
+  stroke: none;
+}
+
+.mark-ring {
+  stroke: var(--accent-dim);
+}
+
+.mark-ring-outer {
+  stroke: var(--border-strong);
+}
+
+.rail-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+}
+
+.rail-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: var(--hairline) solid transparent;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-instant) var(--ease),
+    color var(--dur-instant) var(--ease);
+}
+
+.rail-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Selected state carries three channels, not one: the accent colour, a filled
+   background, and a bar down the leading edge. Colour alone would leave a
+   deuteranopic reader guessing which of six tabs is open. */
+.rail-item[aria-selected="true"] {
+  background: var(--accent-faint);
+  border-color: var(--border-accent);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rail-glyph {
+  width: 16px;
+  text-align: center;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.rail-item[aria-selected="false"] .rail-glyph {
+  color: var(--text-faint);
+}
+
+.rail-label {
+  flex: 1;
+}
+
+.rail-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-chip);
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.rail-foot {
+  border-top: var(--hairline) solid var(--border);
+  padding-top: 10px;
+}
+
+.rail-theme select {
+  width: 100%;
+  padding: 6px 8px;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Main
+   ========================================================================== */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 18px 12px;
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+.topbar-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.topbar-sub {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: center;
+}
+
+.link-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-chip);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.link-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bad);
+}
+
+.link-pill[data-connected="true"] i {
+  background: var(--ok);
+}
+
+/* Connectivity is also carried by the border, so it survives a colour-blind
+   reader and a greyscale screenshot. */
+.link-pill[data-connected="true"] {
+  border-color: var(--border-accent);
+  color: var(--text);
+}
+
+.banner {
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  border: var(--hairline) solid var(--border-strong);
+  border-left-width: 2px;
+  border-left-color: var(--warn);
+  border-radius: var(--radius-control);
+  background: var(--warn-faint);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ==========================================================================
+   Galaxy
+   ========================================================================== */
+
+.galaxy-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: var(--hairline) solid var(--border);
+  flex-wrap: wrap;
+}
+
+.search {
+  width: 220px;
+  flex: none;
+}
+
+.field {
+  padding: 6px 10px;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.field::placeholder {
+  color: var(--text-faint);
+}
+
+.legend {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* A legend entry is a filter. Pressed state is the border and the opacity, not
+   only the swatch — the swatch is the one thing a colour-blind reader cannot
+   use to tell on from off. */
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px 2px 6px;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.legend-item[aria-pressed="false"] {
+  opacity: 0.42;
+  text-decoration: line-through;
+}
+
+.legend-item[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--node-source);
+}
+
+.legend-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.galaxy-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.stat {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.galaxy-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+#graph-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+#graph-canvas:active {
+  cursor: grabbing;
+}
+
+.galaxy-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.inspector {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 300px;
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  padding: 12px 14px 14px;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-pane);
+}
+
+.inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.node-kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  padding: 1px 7px;
+}
+
+.inspector-title {
+  margin: 8px 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.inspector-sub {
+  margin: 12px 0 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.inspector-facts,
+.kv {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  font-size: 12px;
+}
+
+.inspector-facts dt,
+.kv dt {
+  color: var(--text-faint);
+}
+
+.inspector-facts dd,
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inspector-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.inspector-links button {
+  width: 100%;
+  text-align: left;
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inspector-links button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* ==========================================================================
+   Panes — faculties, work, trust, watch
+   ========================================================================== */
+
+.view-panes,
+.view-live {
+  overflow-y: auto;
+}
+
+.panes,
+.live-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 14px;
+  padding: 16px 18px 22px;
+  align-content: start;
+  /* `start` rather than `stretch`: a one-line budget card stretched to match
+     the card beside it left a tall empty box, which reads as content that
+     failed to load. */
+  align-items: start;
+}
+
+/* The trace is the tallest thing here and the only one that benefits from
+   width, so it takes the full row underneath the two status cards. */
+.card-trace {
+  grid-column: 1 / -1;
+}
+
+.card {
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-1);
+  padding: 13px 15px 15px;
+  min-width: 0;
+}
+
+.card-wide {
+  grid-column: 1 / -1;
+}
+
+.card h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 9px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.card-tools {
+  display: flex;
+  gap: 6px;
+}
+
+.note {
+  margin: 0 0 10px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* ---- Rows ---------------------------------------------------------------
+   One row shape for jobs, undo entries, skills, models, topics and findings.
+   They are all "a thing, some facts about it, and maybe one action", and
+   giving each its own layout would be six ways to read the same sentence. */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.row-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: var(--hairline) solid var(--border);
+}
+
+.row-item:first-child {
+  border-top: none;
+}
+
+.row-tag {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* State is a word first and a colour second, so the tag still reads in
+   greyscale and to a colour-blind user. */
+.row-tag[data-state="running"],
+.row-tag[data-state="present"] {
+  color: var(--accent);
+  border-color: var(--border-accent);
+}
+
+.row-tag[data-state="done"],
+.row-tag[data-state="ok"] {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.row-tag[data-state="failed"],
+.row-tag[data-state="bad"] {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.row-tag[data-state="waiting"],
+.row-tag[data-state="warn"] {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.row-main {
+  min-width: 0;
+}
+
+.row-title {
+  overflow-wrap: anywhere;
+}
+
+.row-meta {
+  display: block;
+  color: var(--text-faint);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--text-faint);
+  font-size: 12px;
+  padding: 6px 0;
+}
+
+/* ---- Buttons ------------------------------------------------------------ */
+
+.btn {
+  padding: 5px 12px;
+  border: var(--hairline) solid var(--border-accent);
+  border-radius: var(--radius-control);
+  background: var(--accent-faint);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--dur-instant) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+
+.btn.ghost {
+  border-color: var(--border-strong);
+  background: none;
+  color: var(--text-muted);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Destructive actions get the word and the colour. `danger` is never the only
+   signal — every caller also asks for confirmation in words. */
+.btn.danger {
+  border-color: var(--bad);
+  background: var(--bad-faint);
+  color: var(--text);
+}
+
+.btn.small {
+  padding: 3px 9px;
+  font-size: 11px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.icon-btn {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-control);
+}
+
+.icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* ==========================================================================
+   Live
+   ========================================================================== */
+
+.now {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+/* The face is the server's composed state, not this window's phase — the same
+   answer the tray paints. `banked` is dimmed and still, exactly as the spec
+   asks every client to draw it. */
+.now-face {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-faint);
+}
+
+.now-face[data-face="idle"] {
+  background: var(--node-cluster);
+}
+.now-face[data-face="listening"] {
+  background: var(--warn);
+}
+.now-face[data-face="thinking"] {
+  background: var(--info);
+}
+.now-face[data-face="speaking"] {
+  background: var(--accent);
+}
+.now-face[data-face="error"] {
+  background: var(--bad);
+}
+.now-face[data-face="banked"] {
+  background: var(--text-faint);
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.now-activity {
+  display: block;
+  font-size: 15px;
+  text-transform: capitalize;
+}
+
+.now-power {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.budget {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+/* One pip per interruption. A bar would say "62% used"; pips say "four left",
+   which is the number the owner actually reasons about. */
+.pip {
+  flex: 1;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--surface-active);
+}
+
+.pip[data-spent="false"] {
+  background: var(--accent);
+}
+
+.budget[data-blocked="true"] .pip[data-spent="false"] {
+  background: var(--text-faint);
+}
+
+.trace {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.trace li {
+  display: grid;
+  grid-template-columns: 62px 84px 1fr;
+  gap: 8px;
+  padding: 2px 0;
+  border-top: var(--hairline) solid var(--border);
+}
+
+.trace li:first-child {
+  border-top: none;
+}
+
+.trace-time {
+  color: var(--text-faint);
+}
+
+.trace-kind {
+  color: var(--accent);
+}
+
+.trace-body {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.trace-note {
+  margin: 0;
+}
+
+/* ==========================================================================
+   Watch form
+   ========================================================================== */
+
+.watch-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0 14px;
+  border-bottom: var(--hairline) solid var(--border);
+  margin-bottom: 10px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.row.end {
+  justify-content: flex-end;
+}
+
+.lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-faint);
+  flex: 1;
+  min-width: 130px;
+}
+
+.lbl.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-width: 0;
+  color: var(--text-muted);
+}
+
+.hint {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Toast
+   ========================================================================== */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  max-width: 620px;
+  padding: 9px 15px;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12.5px;
+  box-shadow: var(--shadow-pane);
+  animation: toast-in var(--dur-settle) var(--ease-out) both;
+}
+
+.toast[data-tone="bad"] {
+  border-color: var(--bad);
+}
+
+.toast[data-tone="ok"] {
+  border-color: var(--ok);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
+/* ==========================================================================
+   Focus
+   --------------------------------------------------------------------------
+   One ring, on the token that the contrast check holds above 3:1 against every
+   surface in every theme.
+   ========================================================================== */
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+
+/* The canvas takes focus so the graph is keyboard-reachable; its ring goes
+   inside, because an offset ring on a full-bleed element is clipped. */
+#graph-canvas:focus-visible {
+  outline-offset: -3px;
+}
+
+/* ==========================================================================
+   Scrollbars
+   ========================================================================== */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-chip);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ==========================================================================
+   Reduced motion
+   --------------------------------------------------------------------------
+   The duration tokens collapse in theme.css; this switches off the keyframe
+   animation and tells the graph to stop simulating, which a duration token
+   cannot reach.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+
+  * {
+    scroll-behavior: auto !important;
+  }
+}

@@ -369,6 +369,48 @@ pub fn show_settings(app: &AppHandle) -> Result<(), String> {
     .map_err(|e| format!("unable to open settings: {e}"))
 }
 
+pub const BRAIN_LABEL: &str = "brain";
+
+/// Opens the Brain — the memory graph, the live trace and every faculty the
+/// backend exposes.
+///
+/// Built on demand for the same reason as settings: most sessions never open
+/// it, and a hidden window costs a WebView2 process for as long as the app
+/// runs. This one costs more than most — the graph canvas holds every node the
+/// memory store knows about — so it is emphatically not declared in
+/// `tauri.conf.json`.
+///
+/// Larger minimum than settings because the galaxy is the point: a force-
+/// directed graph in a 520px column is a hairball, and shrinking it below this
+/// makes the window look broken rather than cramped.
+pub fn show_brain(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(BRAIN_LABEL) {
+        window
+            .show()
+            .map_err(|e| format!("unable to show the Brain: {e}"))?;
+        let _ = window.unminimize();
+        return window
+            .set_focus()
+            .map_err(|e| format!("unable to focus the Brain: {e}"));
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        BRAIN_LABEL,
+        tauri::WebviewUrl::App("brain.html".into()),
+    )
+    .title("Jarvis — Brain")
+    .inner_size(1180.0, 820.0)
+    .min_inner_size(880.0, 600.0)
+    .center()
+    .resizable(true)
+    .focused(true)
+    .theme(Some(tauri::Theme::Dark))
+    .build()
+    .map(|_| ())
+    .map_err(|e| format!("unable to open the Brain: {e}"))
+}
+
 /// Shows the HUD and brings it forward, whatever state it was in.
 ///
 /// Separate from [`toggle_hud`] because the tray's "Show HUD Window" and its

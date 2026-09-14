@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "jarvis-link",
+    "theme-write",
     "settings-surface"
   ]
 }

@@ -144,6 +144,53 @@ pub fn jarvis_token_for(app: &AppHandle) -> Option<String> {
         .filter(|t| !t.is_empty())
 }
 
+/// Every theme `theme.css` defines. Validated here rather than trusted from
+/// the window, so a page cannot persist a value that resolves to no palette
+/// and leaves every surface on the fallback colours.
+pub const THEMES: &[&str] = &["deep-space", "ember", "paper", "high-contrast"];
+
+/// The chosen theme, or the default when nothing has been chosen or the stored
+/// value is one this build no longer ships.
+#[tauri::command]
+pub fn get_theme(app: AppHandle) -> String {
+    use tauri_plugin_store::StoreExt;
+
+    app.store(SETTINGS_STORE)
+        .ok()
+        .and_then(|store| store.get("theme"))
+        .and_then(|v| v.as_str().map(str::to_string))
+        .filter(|t| THEMES.contains(&t.as_str()))
+        .unwrap_or_else(|| THEMES[0].to_string())
+}
+
+/// Persists the theme and tells every open window at once.
+///
+/// The fan-out is the point. Four surfaces can be on screen together, and a
+/// theme that changed in the window you clicked while the widget stayed cyan
+/// would look like a bug rather than a setting.
+#[tauri::command]
+pub fn set_theme(app: AppHandle, theme: String) -> Result<String, String> {
+    use tauri_plugin_store::StoreExt;
+
+    let theme = theme.trim().to_string();
+    if !THEMES.contains(&theme.as_str()) {
+        return Err(format!(
+            "`{theme}` is not a theme this build ships ({})",
+            THEMES.join(", ")
+        ));
+    }
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("settings store unavailable: {e}"))?;
+    store.set("theme", serde_json::Value::String(theme.clone()));
+    store
+        .save()
+        .map_err(|e| format!("could not save the theme: {e}"))?;
+
+    crate::emit_all(&app, crate::events::THEME_CHANGED, theme.clone());
+    Ok(theme)
+}
+
 /// Reports the base and whether a token is configured — never the token
 /// itself, so a log or a screenshot of this cannot leak it.
 #[tauri::command]
