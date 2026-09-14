@@ -707,9 +707,7 @@ fn save_resume(app: &AppHandle, force: bool) {
     }
     {
         let mut last = LAST.lock().unwrap_or_else(|p| p.into_inner());
-        // `Option::is_none_or` would read better and is stable since 1.82;
-        // this crate's MSRV is 1.77.2.
-        let due = last.map_or(true, |at| at.elapsed() >= RESUME_SAVE_INTERVAL);
+        let due = last.is_none_or(|at| at.elapsed() >= RESUME_SAVE_INTERVAL);
         if !force && !due {
             return;
         }

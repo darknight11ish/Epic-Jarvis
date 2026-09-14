@@ -19,7 +19,8 @@
     "lint": "cd src-tauri && cargo clippy --all-targets -- -D warnings",
     "check": "cd src-tauri && cargo check",
     "tauri": "tauri",
-    "test": "cd src-tauri && cargo test"
+    "test": "cd src-tauri && cargo test",
+    "notices": "cd src-tauri && cargo-license --avoid-dev-deps --filter-platform x86_64-pc-windows-msvc -d"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0"

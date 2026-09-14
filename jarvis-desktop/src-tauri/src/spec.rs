@@ -12,7 +12,7 @@
 //!
 //! So there is not one hex literal in the tray. [`resolve`] below is a
 //! line-by-line port of the `resolve(bind, t, amp, seed)` in
-//! `jarvis-reactor-kit.html`, reading the same `jarvis-visual-spec.json` the
+//! `docs/reference/jarvis-reactor-kit.html`, reading the same `jarvis-visual-spec.json` the
 //! faces read — which the spec itself names as the contract:
 //!
 //! > resolve(binding, t, amp, seed) -> { a, b } is implemented identically in

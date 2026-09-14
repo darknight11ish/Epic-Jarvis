@@ -1,0 +1,63 @@
+# The 21 unit tests in this repo had nothing to run them until now, and the
+# checks below are exactly the ones that were being typed by hand — including
+# the two that would have caught real bugs: `cargo test` covers the ported
+# colour engine, the SSE frame parser and the process-tree killer, and the
+# markdown suite covers a parser that ran on every streamed token.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    # The product is a Windows app. Checking it anywhere else would type-check
+    # the wrong half of every `#[cfg(windows)]`.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: jarvis-desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: jarvis-desktop/src-tauri
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jarvis-desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # No bundler and no test framework: the pages are plain ES modules, so a
+      # parse check is what there is. It would have caught nothing in this
+      # repo's history — the frontend bugs were behavioural — but it is the
+      # floor, and the markdown suite below is the part that matters.
+      - run: for f in src/*.js; do node --check "$f"; done
+        shell: bash
+      - run: node scripts/markdown-test.mjs
+
+  audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jarvis-desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-deny
+      - run: cargo deny check licenses advisories

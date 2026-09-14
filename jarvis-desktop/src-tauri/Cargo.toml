@@ -6,7 +6,7 @@ authors = ["Jarvis Labs"]
 license = "MIT"
 repository = "https://github.com/darknight111/Epic-Jarvis"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.89"
 build = "build.rs"
 
 # `main.rs` is a two-line shim over this library so the same orchestration code

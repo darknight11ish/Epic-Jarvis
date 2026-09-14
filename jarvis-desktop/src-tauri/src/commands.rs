@@ -169,6 +169,7 @@ pub fn set_api_settings(
         .map_err(|e| format!("unable to open the settings store: {e}"))?;
     if let Some(base) = base {
         let base = base.trim().trim_end_matches('/').to_string();
+        validate_base(&base)?;
         store.set("base", serde_json::Value::String(base));
     }
     if let Some(token) = token {
@@ -177,6 +178,45 @@ pub fn set_api_settings(
     store
         .save()
         .map_err(|e| format!("unable to write the settings store: {e}"))
+}
+
+/// Checks a base URL before it is persisted.
+///
+/// This matters more than it looks. Every Rust-side request is built as
+/// `format!("{base}/api/…")` and carries `X-Jarvis-Token` — and those requests
+/// are made by reqwest, not the webview, so the CSP's `connect-src` does not
+/// apply to them and `.no_proxy()` means nothing on the network sees them
+/// either. A base pointing anywhere at all would therefore send the token, the
+/// conversation and a full-desktop screenshot to that host, and keep doing it
+/// after a restart.
+///
+/// It deliberately does NOT require loopback. The server supports binding off
+/// the loopback interface — that is what `HUD_TOKEN` exists for, and what a
+/// phone on a tailnet needs — so an allowlist of `127.0.0.1` would break a
+/// supported deployment. What it enforces is shape: a bare origin, nothing
+/// else, so the value cannot smuggle a path, a query, credentials or
+/// whitespace into every URL the client builds.
+fn validate_base(base: &str) -> Result<(), String> {
+    if base.is_empty() {
+        return Ok(()); // clearing it falls back to the default
+    }
+    let rest = base
+        .strip_prefix("http://")
+        .or_else(|| base.strip_prefix("https://"))
+        .ok_or_else(|| "the base URL must start with http:// or https://".to_string())?;
+    if rest.is_empty() {
+        return Err("the base URL has no host".to_string());
+    }
+    if rest.contains('/') || rest.contains('?') || rest.contains('#') {
+        return Err("the base URL must be an origin only — no path, query or fragment".to_string());
+    }
+    if rest.contains('@') {
+        return Err("the base URL must not carry credentials".to_string());
+    }
+    if rest.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("the base URL contains whitespace or control characters".to_string());
+    }
+    Ok(())
 }
 
 /// Shared secret for `X-Jarvis-Token`, read once from the environment.

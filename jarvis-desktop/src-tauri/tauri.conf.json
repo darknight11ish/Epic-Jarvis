@@ -95,7 +95,7 @@
         "type": "downloadBootstrapper",
         "silent": true
       },
-      "allowDowngrades": true,
+      "allowDowngrades": false,
       "nsis": {
         "installMode": "perMachine",
         "languages": [
@@ -103,6 +103,10 @@
         ],
         "compression": "lzma"
       }
-    }
+    },
+    "licenseFile": "../../LICENSE",
+    "resources": [
+      "../../THIRD-PARTY-NOTICES.txt"
+    ]
   }
 }
