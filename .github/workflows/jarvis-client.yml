@@ -51,7 +51,31 @@ jobs:
           if ! ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee test.log; then
             echo "::group::Kotlin errors"
             grep -E "^e: |Unresolved reference|Argument type mismatch|None of the following candidates|Compilation error" test.log | head -80 \
-              || echo "(no compiler diagnostics found; see the full log above)"
+              || echo "(none - so this is a TEST failure, not a compile failure)"
+            echo "::endgroup::"
+            # Which tests failed, and why. Gradle prints the assertion above a
+            # hundred lines of its own stack trace, so a failing test used to
+            # read as "no compiler diagnostics found" and nothing else - the
+            # names were in the log and effectively unfindable.
+            echo "::group::Failing tests"
+            grep -E "FAILED$|^[A-Za-z].*> .* FAILED" test.log | head -40 || true
+            results=app/build/test-results/testDebugUnitTest
+            for f in "$results"/TEST-*.xml; do
+              [ -e "$f" ] || continue
+              python3 - "$f" <<'PYEOF' || true
+          import sys, xml.etree.ElementTree as ET
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except Exception:
+              sys.exit(0)
+          for case in root.iter("testcase"):
+              for bad in list(case.findall("failure")) + list(case.findall("error")):
+                  msg = (bad.get("message") or "").strip().splitlines()
+                  head = msg[0] if msg else bad.get("type", "failed")
+                  print(f'  {case.get("classname")}.{case.get("name")}')
+                  print(f'      {head[:300]}')
+          PYEOF
+            done
             echo "::endgroup::"
             exit 1
           fi

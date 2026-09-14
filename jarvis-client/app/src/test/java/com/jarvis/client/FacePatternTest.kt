@@ -311,15 +311,20 @@ class FacePatternTest {
 
         var held = 0
         val fps = 120
-        // 4 Hz: the colour flips every eighth of a second.
+        // 4 Hz means the colour flips every EIGHTH of a second, so the
+        // half-period multiplier is 8, not 4. Written as `t * 4` this produced
+        // a 2 Hz wave: exactly three transitions in the second, which is the
+        // budget rather than over it, so nothing was refused and the test
+        // failed while the governor was working. Eight gives eight transitions
+        // against a budget of three.
         for (frame in 0 until fps) {
             val t = frame / fps.toFloat()
-            val on = ((t * 4f).toInt() % 2) == 0
+            val on = ((t * 8f).toInt() % 2) == 0
             val asked = Swatch(if (on) bright else dark, dark)
             if (gov.govern(asked, t) !== asked) held += 1
         }
         assertTrue(
-            "a 4Hz full-swing flash ran for a second and the governor never held a frame",
+            "a 4 Hz full-swing flash ran for a second and the governor never held a frame",
             held > 0,
         )
     }
