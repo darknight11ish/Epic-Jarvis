@@ -16,6 +16,12 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1-step0"
+
+        // There was no instrumentation runner, so there was nowhere to put a
+        // test that actually starts the app. That is the gap that let a crash
+        // in onCreate ship green: the suite compiled the APK and ran unit
+        // tests, and never once launched it.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // The shared debug key, committed at the repository root. Without it AGP mints
@@ -129,4 +135,13 @@ dependencies {
     implementation("com.squareup.okio:okio:3.6.0")
 
     testImplementation("junit:junit:4.13.2")
+
+    // Deliberately just enough to launch the activity and read its lifecycle
+    // state. No Compose test rule: the reactor runs an unbounded
+    // withFrameNanos loop, and Compose's test clock treats a running animation
+    // as "not idle", so a ComposeTestRule would sit waiting for a face that is
+    // never going to stop. ActivityScenario has no such coupling.
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
