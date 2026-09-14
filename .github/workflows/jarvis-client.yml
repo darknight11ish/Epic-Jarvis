@@ -326,7 +326,7 @@ jobs:
           notes=$(printf '%s\n' \
             "Debug build of \`jarvis-client\` from commit \`$short\` on \`$GITHUB_REF_NAME\`." \
             "" \
-            "**This is the client that speaks the real Jarvis API** - SSE on \`/api/events\` plus REST, authenticated with \`X-Jarvis-Token\`. The \`android-latest\` release is the older app, which speaks a protocol the backend does not implement." \
+            "The only app. It speaks the real Jarvis API - SSE on \`/api/events\` plus REST, authenticated with \`X-Jarvis-Token\`." \
             "" \
             "Started on an Android 34 emulator before publishing, so it at least opens." \
             "" \

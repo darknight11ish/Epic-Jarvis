@@ -159,16 +159,3 @@ jobs:
       # client, and a module that still compiles is a much easier thing to port
       # from than one that rotted quietly. The run artifact is still produced
       # for anyone who actually wants this APK.
-      - name: Retire the old rolling release
-        # One-shot, and removed in the commit after it runs. Idempotent anyway:
-        # deleting a release that is already gone is not an error here.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -uo pipefail
-          if gh release view android-latest >/dev/null 2>&1; then
-            gh release delete android-latest --cleanup-tag --yes
-            echo "Deleted the android-latest release and its tag."
-          else
-            echo "android-latest is already gone; nothing to do."
-          fi
