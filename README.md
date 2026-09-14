@@ -12,9 +12,24 @@ Two apps live here, and each has its own workflow and its own Gradle root:
 | `jarvis-android/` — the full companion (approvals, duplex audio, widgets, assistant role) | **Build Android APK** | `jarvis-android-debug-apk` |
 | `jarvis-client/` — the rewrite against `ANDROID-BUILD.md`, currently step 0 | **Jarvis client** | `jarvis-client-debug-apk` |
 
-Go to **Actions**, pick the workflow, and run it — or just push; each is scoped
-to its own directory. Download the APK from the run's **Artifacts** section and
-install it with `adb install -r <file>.apk`.
+### Getting the APK onto a phone
+
+**Easiest — the Releases page.** Every `jarvis-android` build publishes to a
+rolling prerelease tagged `android-latest`:
+
+> https://github.com/darknight111/Epic-Jarvis/releases/tag/android-latest
+
+That is a plain `.apk` at a stable URL. Open it on the phone, tap the file, and
+allow your browser to install unknown apps — or download it on a computer and
+`adb install -r jarvis-android-<sha>.apk`.
+
+**The other way — run artifacts.** Actions → the workflow → a run → the
+**Artifacts** box at the bottom. This gives a `.zip` that has to be unpacked
+first, and note that **the GitHub mobile app cannot download run artifacts at
+all** — that path needs a browser.
+
+Builds are signed with the committed debug key (`keystore/`), so a new build
+installs over an old one in place and the pairing secret survives.
 
 Unit tests gate both builds, and the workflows assert that the test task
 actually matched sources: Gradle reports `NO-SOURCE` and exits 0 for a module
