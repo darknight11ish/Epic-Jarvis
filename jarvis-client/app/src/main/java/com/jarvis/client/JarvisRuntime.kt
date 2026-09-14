@@ -7,6 +7,10 @@ import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Attention
+import com.jarvis.client.net.DigestItem
+import com.jarvis.client.net.HoldRecord
+import com.jarvis.client.net.JobRecord
+import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.onOk
@@ -111,6 +115,18 @@ object JarvisRuntime {
 
     private val _attention = MutableStateFlow(Attention())
     val attention: StateFlow<Attention> = _attention.asStateFlow()
+
+    private val _digest = MutableStateFlow<List<DigestItem>>(emptyList())
+    val digest: StateFlow<List<DigestItem>> = _digest.asStateFlow()
+
+    private val _undo = MutableStateFlow<List<UndoEntry>>(emptyList())
+    val undo: StateFlow<List<UndoEntry>> = _undo.asStateFlow()
+
+    private val _jobs = MutableStateFlow<List<JobRecord>>(emptyList())
+    val jobs: StateFlow<List<JobRecord>> = _jobs.asStateFlow()
+
+    private val _holds = MutableStateFlow<List<HoldRecord>>(emptyList())
+    val holds: StateFlow<List<HoldRecord>> = _holds.asStateFlow()
 
     /** Non-null when something needs saying on screen and nowhere else will say it. */
     private val _notice = MutableStateFlow<String?>(null)
@@ -280,6 +296,77 @@ object JarvisRuntime {
     suspend fun refreshAttention() {
         // Not every server exposes this; a 404 simply means no budget to show.
         api.attention().onOk { _attention.value = it }
+    }
+
+    /**
+     * The shelf, the brief and the background work.
+     *
+     * Fetched on demand rather than kept live: none of it is urgent by design —
+     * that is the whole point of a digest — and three more endpoints polled on
+     * every event would undo the battery saving the single stream bought.
+     */
+    suspend fun refreshInbox() {
+        api.digest().onOk { _digest.value = it }
+        api.undo().onOk { _undo.value = it }
+        api.jobs().onOk { _jobs.value = it }
+        api.holds().onOk { _holds.value = it }
+    }
+
+    suspend fun revert(entry: UndoEntry): ApiResult<Unit> {
+        val result = api.revert(entry.id)
+        when (result) {
+            is ApiResult.Ok -> refreshInbox()
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
+        return result
+    }
+
+    suspend fun cancelJob(job: JobRecord): ApiResult<Unit> {
+        val result = api.cancelJob(job.id)
+        when (result) {
+            is ApiResult.Ok -> refreshInbox()
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
+        return result
+    }
+
+    /**
+     * Stops a message inside its send window.
+     *
+     * A 409 here means the window closed and it went. Saying anything other
+     * than that would be the lie the hold queue exists to avoid, so it is
+     * reported plainly rather than as a generic failure.
+     */
+    suspend fun cancelHold(hold: HoldRecord): ApiResult<Unit> {
+        val result = api.cancelHold(hold.handle)
+        when (result) {
+            is ApiResult.Ok -> {
+                _notice.value = "Stopped before it sent."
+                refreshInbox()
+            }
+            is ApiResult.Failed -> {
+                _notice.value = if (result.error == ApiError.AlreadyHandled) {
+                    "Too late — that message has already gone. There is no unsend."
+                } else {
+                    describe(result.error)
+                }
+                refreshInbox()
+            }
+        }
+        return result
+    }
+
+    /** Marks the brief read. Marking read is not approving anything in it. */
+    suspend fun markDigestSeen() {
+        api.digestSeen().onOk { refreshInbox() }
+    }
+
+    suspend fun setMuted(muted: Boolean) {
+        val result = if (muted) api.mute() else api.unmute()
+        when (result) {
+            is ApiResult.Ok -> refreshAttention()
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
     }
 
     // -------------------------------------------------------- decisions ----

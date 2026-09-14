@@ -1,15 +1,18 @@
 package com.jarvis.client.ui.approval
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,16 +27,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.ui.T
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * One pending approval.
@@ -52,6 +61,8 @@ fun ApprovalCard(
     onDeny: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
+    val offset = remember(item.id) { Animatable(0f) }
     var showDetail by rememberSaveable(item.id) { mutableStateOf(false) }
     var showContext by rememberSaveable(item.id) { mutableStateOf(false) }
 
@@ -68,9 +79,47 @@ fun ApprovalCard(
     val expired = expiry != null && now >= expiry
     val canDecide = blocker == null && !expired
 
+    // Swipe-to-approve, for exactly one class of item.
+    //
+    // A swipe is a gesture people make without reading. That is fine for
+    // "switch to the other model", where rollback is one tap and nothing left
+    // the machine. It is not fine for sending an email. The test is a single
+    // server-computed field and nothing else - not re-derived here, not cached
+    // against an id, and refused outright for anything carrying `raised`.
+    val swipeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
+    val swipeModifier = if (canDecide && item.swipeable) {
+        Modifier.pointerInput(item.id) {
+            detectHorizontalDragGestures(
+                onDragEnd = {
+                    scope.launch {
+                        when {
+                            offset.value > swipeThresholdPx -> {
+                                offset.animateTo(size.width.toFloat())
+                                onApprove()
+                            }
+                            offset.value < -swipeThresholdPx -> {
+                                offset.animateTo(-size.width.toFloat())
+                                onDeny()
+                            }
+                            else -> offset.animateTo(0f)
+                        }
+                    }
+                },
+                onDragCancel = { scope.launch { offset.animateTo(0f) } },
+            ) { change, drag ->
+                change.consume()
+                scope.launch { offset.snapTo(offset.value + drag) }
+            }
+        }
+    } else {
+        Modifier
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .offset { IntOffset(offset.value.roundToInt(), 0) }
+            .then(swipeModifier)
             .background(T.Plate, RoundedCornerShape(14.dp))
             .border(1.dp, T.Warn.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
             .padding(14.dp),
@@ -115,7 +164,11 @@ fun ApprovalCard(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = item.risk.why,
+                    text = if (item.swipeable) {
+                        "Swipe right to approve, left to deny — ${item.risk.why}"
+                    } else {
+                        item.risk.why
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = T.Dim,
                     modifier = Modifier.weight(1f),

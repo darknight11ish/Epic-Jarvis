@@ -46,6 +46,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Not a power tile: the API has no endpoint that sets power mode, and a
+             tile that appeared to switch Jarvis to Quiet and silently did nothing
+             would be worse than no tile. This one carries the link's real state
+             and mutes spoken interruptions, which /api/attention/mute supports. -->
+        <service
+            android:name=".service.LinkTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"

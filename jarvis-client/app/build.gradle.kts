@@ -121,6 +121,10 @@ dependencies {
     // socket held open for an hour with no read timeout, and chat wants a
     // chunked body cancelled mid-flight to interrupt generation - both are
     // one-liners here.
+    // A fingerprint instead of a tap for irreversible and outbound decisions -
+    // the one item on the brief's list a browser genuinely cannot do.
+    implementation("androidx.biometric:biometric:1.1.0")
+
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okio:okio:3.6.0")
 

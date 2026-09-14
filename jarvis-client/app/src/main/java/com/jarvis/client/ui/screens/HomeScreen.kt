@@ -68,6 +68,7 @@ data class HomeActions(
     val onReconnect: () -> Unit,
     val onDismissNotice: () -> Unit,
     val onOpenReadiness: () -> Unit,
+    val onOpenInbox: () -> Unit,
     val blockerFor: (PendingItem) -> String?,
 )
 
@@ -211,6 +212,13 @@ private fun LinkBar(state: HomeState, actions: HomeActions) {
                 modifier = Modifier.androidxClickable(actions.onReconnect).padding(6.dp),
             )
         } else {
+            Text(
+                "Inbox",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (state.attention.pending > 0) T.Warn else T.Dim,
+                modifier = Modifier.androidxClickable(actions.onOpenInbox).padding(6.dp),
+            )
+            Spacer(Modifier.width(4.dp))
             Text(
                 "Checks",
                 style = MaterialTheme.typography.labelSmall,

@@ -109,6 +109,12 @@ class JarvisApi(
     suspend fun undo(): ApiResult<List<UndoEntry>> =
         get("/api/undo", ListSerializer(UndoEntry.serializer()), unwrap = "items")
 
+    suspend fun jobs(): ApiResult<List<JobRecord>> =
+        get("/api/jobs", ListSerializer(JobRecord.serializer()), unwrap = "items")
+
+    suspend fun holds(): ApiResult<List<HoldRecord>> =
+        get("/api/holds", ListSerializer(HoldRecord.serializer()), unwrap = "items")
+
     // ----------------------------------------------------------- writes ----
 
     suspend fun approve(id: String): ApiResult<Unit> = decide("/api/approve", id)
@@ -123,13 +129,41 @@ class JarvisApi(
 
     private suspend fun decide(path: String, id: String): ApiResult<Unit> = postId(path, id)
 
+    suspend fun cancelJob(id: String): ApiResult<Unit> = postId("/api/jobs/cancel", id)
+
+    /**
+     * Stops a message inside its send window. 409 once released — there is no
+     * unsend after that, and a client that reported success anyway would be
+     * telling exactly the lie this feature exists to avoid.
+     */
+    suspend fun cancelHold(handle: String): ApiResult<Unit> =
+        postJson("/api/holds/cancel", """{"handle":${quote(handle)}}""")
+
+    /** Mutes spoken interruptions until tomorrow. There is no "mute forever". */
+    suspend fun mute(): ApiResult<Unit> = postJson("/api/attention/mute", "{}")
+
+    suspend fun unmute(): ApiResult<Unit> = postJson("/api/attention/unmute", "{}")
+
+    /**
+     * Marks the brief read. Marking read is **not** approving anything in it —
+     * the digest lists approvals and cannot decide them.
+     */
+    suspend fun digestSeen(ids: List<String>? = null): ApiResult<Unit> {
+        val body = if (ids == null) "{}" else {
+            """{"ids":[${ids.joinToString(",") { quote(it) }}]}"""
+        }
+        return postJson("/api/digest/seen", body)
+    }
+
     private suspend fun postId(path: String, id: String): ApiResult<Unit> =
+        postJson(path, """{"id":${quote(id)}}""")
+
+    private suspend fun postJson(path: String, json: String): ApiResult<Unit> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(
                 ApiError.Unreachable("No desktop address set"),
             )
-            val body = """{"id":${quote(id)}}"""
-                .toRequestBody("application/json".toMediaType())
+            val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching { shortCall.newCall(req).execute() }
                 .fold(

@@ -186,6 +186,30 @@ data class UndoEntry(
     @SerialName("at_ms") val atMs: Long = 0,
 )
 
+@Serializable
+data class JobRecord(
+    val id: String,
+    val label: String = "",
+    val state: String = "",
+    /** 0..1 where the server knows; absent for open-ended work. */
+    val progress: Float? = null,
+    /**
+     * The permissions the job was approved with, frozen for its life. A job can
+     * never gain more while it runs: approving something on Tuesday is not
+     * approving it on Wednesday.
+     */
+    val capabilities: List<String> = emptyList(),
+    val private: Boolean = false,
+)
+
+/** A message inside its send window. The only honest "unsend" there is. */
+@Serializable
+data class HoldRecord(
+    val handle: String,
+    val label: String = "",
+    @SerialName("releases_at_ms") val releasesAtMs: Long? = null,
+)
+
 // ---------------------------------------------------------------- events ---
 
 /**

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,6 +31,8 @@ import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.EventService
 import com.jarvis.client.ui.T
+import com.jarvis.client.ui.approval.BiometricGate
+import com.jarvis.client.ui.screens.InboxScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
 import com.jarvis.client.ui.screens.HomeState
@@ -63,6 +66,7 @@ class MainActivity : ComponentActivity() {
             val chat = remember { ChatSession(JarvisRuntime.api) }
 
             var showReadiness by rememberSaveable { mutableStateOf(false) }
+            var showInbox by rememberSaveable { mutableStateOf(false) }
             var paired by remember { mutableStateOf(JarvisRuntime.isPaired()) }
             var busy by remember { mutableStateOf(false) }
             var draft by rememberSaveable { mutableStateOf("") }
@@ -78,6 +82,10 @@ class MainActivity : ComponentActivity() {
             val notice by JarvisRuntime.notice.collectAsState()
             val reply by chat.reply.collectAsState()
             val streaming by chat.streaming.collectAsState()
+            val digest by JarvisRuntime.digest.collectAsState()
+            val undo by JarvisRuntime.undo.collectAsState()
+            val jobs by JarvisRuntime.jobs.collectAsState()
+            val holds by JarvisRuntime.holds.collectAsState()
 
             val root = Modifier
                 .fillMaxSize()
@@ -85,6 +93,30 @@ class MainActivity : ComponentActivity() {
                 .windowInsetsPadding(WindowInsets.systemBars)
 
             when {
+                showInbox -> {
+                    LaunchedEffect(Unit) { JarvisRuntime.refreshInbox() }
+                    InboxScreen(
+                        attention = attention,
+                        digest = digest,
+                        undo = undo,
+                        jobs = jobs,
+                        holds = holds,
+                        onOpenApproval = {
+                            // The brief cannot decide an approval. Tapping a row
+                            // leaves the digest and opens the normal gate card.
+                            showInbox = false
+                            scope.launch { JarvisRuntime.refreshPending() }
+                        },
+                        onRevert = { scope.launch { JarvisRuntime.revert(it) } },
+                        onCancelJob = { scope.launch { JarvisRuntime.cancelJob(it) } },
+                        onCancelHold = { scope.launch { JarvisRuntime.cancelHold(it) } },
+                        onMarkSeen = { scope.launch { JarvisRuntime.markDigestSeen() } },
+                        onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
+                        onBack = { showInbox = false },
+                        modifier = root,
+                    )
+                }
+
                 showReadiness -> {
                     val host by JarvisRuntime.settings.host.collectAsState()
                     val items = remember(tick, host) {
@@ -157,9 +189,23 @@ class MainActivity : ComponentActivity() {
                                 scope.launch { chat.send(text) }
                             },
                             onInterrupt = { chat.cancel() },
+                            // A fingerprint instead of a tap for anything that
+                            // leaves the machine, cannot be undone, or arrived
+                            // with a rush latch on it. The phone is the surface
+                            // most likely to be handed to someone or left
+                            // unlocked, and this is the class of action where
+                            // "whoever is holding it" and "the owner" need to
+                            // be different answers.
                             onApprove = { item ->
-                                scope.launch { JarvisRuntime.decide(item, approve = true) }
+                                scope.launch {
+                                    if (confirmed(item)) {
+                                        JarvisRuntime.decide(item, approve = true)
+                                    }
+                                }
                             },
+                            // Denying is the safe direction and is never gated:
+                            // a gate on refusing would make the cautious answer
+                            // the slow one.
                             onDeny = { item ->
                                 scope.launch { JarvisRuntime.decide(item, approve = false) }
                             },
@@ -169,6 +215,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onDismissNotice = { JarvisRuntime.clearNotice() },
                             onOpenReadiness = { showReadiness = true },
+                            onOpenInbox = { showInbox = true },
                             blockerFor = { item: PendingItem ->
                                 JarvisRuntime.decisionBlocker(item)
                             },
@@ -177,6 +224,23 @@ class MainActivity : ComponentActivity() {
                     modifier = root,
                 )
             }
+        }
+    }
+
+    /**
+     * @return true when the decision may proceed.
+     *
+     * An unavailable biometric is not a refusal: declining to let the owner
+     * answer their own desktop because no fingerprint is enrolled would be a
+     * lock on the wrong door, and the pairing token already authorises the
+     * request. A *dismissed* prompt is a refusal, and nothing is sent.
+     */
+    private suspend fun confirmed(item: PendingItem): Boolean {
+        if (!BiometricGate.required(item)) return true
+        return when (BiometricGate.confirm(this, item)) {
+            BiometricGate.Outcome.CONFIRMED -> true
+            BiometricGate.Outcome.UNAVAILABLE -> true
+            BiometricGate.Outcome.CANCELLED -> false
         }
     }
 
