@@ -37,6 +37,31 @@ await check("a first run shows what the bar can do", async () => {
   await page.close();
 });
 
+await check("the primer names the hotkeys Rust actually registers", async () => {
+  // The first version of this list said Alt+Shift+N attached the clipboard.
+  // `lib.rs` binds Alt+Shift+N to the Logseq note and Win+Shift+J to the
+  // clipboard, so the primer built to stop the app lying was lying — and no
+  // test could have caught it, because it checked the copy against itself.
+  // This checks it against the registration table instead.
+  const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
+  const table = rust.slice(rust.indexOf('("Alt+Space", hotkeys.toggle_quickbar)'));
+  const bound = [...table.slice(0, 600).matchAll(/\("([A-Za-z+]+)", hotkeys\.(\w+)\)/g)]
+    .map((m) => m[1]);
+  assert.ok(bound.length >= 5, `only found ${bound.length} registered hotkeys`);
+
+  const page = await K.open(browser, base, "index.html", {});
+  const shown = await page.evaluate(() =>
+    [...document.querySelectorAll("#primer .primer-keys")]
+      .map((k) => [...k.querySelectorAll("kbd")].map((b) => b.textContent.trim()).join("+"))
+      .filter(Boolean));
+  await page.close();
+
+  for (const combo of bound) {
+    assert.ok(shown.includes(combo),
+      `Rust registers ${combo} and the primer does not list it (it lists ${shown.join(", ")})`);
+  }
+});
+
 await check("the primer gets out of the way", async () => {
   const page = await K.open(browser, base, "index.html", { pending: [K.APPROVAL_RAISED] });
   // A gate is open: the primer is the least important thing on screen.

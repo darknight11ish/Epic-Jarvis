@@ -10,7 +10,8 @@ driving a WebView2 frontend.
 * **Widget** — a 320px glass pane that lives on the desktop: a 44px mini-pill
   that expands to a telemetry panel, pending approval gates and a one-shot
   capture field.
-* **Tray** — Toggle Spotlight · Toggle HUD Window · Status Check · Quit.
+* **Tray** — five groups: what Jarvis is, what is waiting on you, the four
+  windows, the machinery, and Quit. See the menu sketch in `src-tauri/src/tray.rs`.
 * **Vibrancy** — Windows 11 Acrylic behind the quickbar, Mica behind the HUD
   (Acrylic fallback on Windows 10).
 
@@ -55,6 +56,7 @@ shell controls where they come from; it cannot stop the page caching them.
 | `Win` + `Shift` + `J` | Read the clipboard and inject it into the quickbar as context. |
 | `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
 | `Alt` + `Shift` + `N` | Summon the bar pre-armed for a Logseq journal note (`#log `). |
+| `Ctrl` + `+` / `-` / `0` | Text size, per window. Not a global hotkey — the window must have focus. |
 | `Alt` + `Shift` + `W` | Show or hide the desktop widget. |
 
 Capture is **not** bound to `Win+Shift+S`: the shell owns that for the Snipping
@@ -90,33 +92,56 @@ jarvis-desktop/
 
 ### A note on `tauri.conf.json`
 
-The config lives at the **project root**. The Tauri CLI and
-`tauri::generate_context!()` both read `src-tauri/tauri.conf.json`, so the npm
-scripts copy it into place first:
+It lives at `src-tauri/tauri.conf.json`, which is where the Tauri CLI and
+`tauri::generate_context!()` both look. There is one copy and no sync step.
 
-```jsonc
-"dev":   "npm run sync:config && tauri dev",
-"build": "npm run sync:config && tauri build",
-```
-
-The copy is git-ignored — edit the root file only. If you invoke `cargo` or
-`tauri` directly, run `npm run sync:config` once beforehand.
+(An earlier version of this section described a root-level config copied into
+place by a `sync:config` npm script. Neither ever existed in this repo.)
 
 ## Building
 
-Prerequisites: Rust (MSVC toolchain), Node 18+, and the WebView2 runtime
-(present on Windows 11; the installer bundles a bootstrapper otherwise).
+### Prerequisites
+
+Run `powershell -ExecutionPolicy Bypass -File scripts\verify-windows.ps1`
+first — it reports which of these are present and nothing else, changing
+nothing.
+
+| | Why |
+|---|---|
+| **Visual Studio Build Tools**, "Desktop development with C++" | Supplies `link.exe`. Rust on Windows links through MSVC and cannot build without it. This is the one people miss. |
+| **Rust**, MSVC toolchain | `rustup default stable-x86_64-pc-windows-msvc` |
+| **Node 18+** | For the Tauri CLI. Nothing is bundled — there is no bundler. |
+| **WebView2 runtime** | Present on Windows 11. The installer carries a bootstrapper for Windows 10. |
+| **Python** | Only for the Jarvis backend itself, not for the desktop build. |
+
+### Build
 
 ```bash
 npm install
-npm run dev            # hot-reloading dev build
+npm run dev            # hot-reloading dev build — start here
 npm run build          # release build + MSI and NSIS installers
 npm run bundle:msi     # MSI only
 npm run lint           # cargo clippy -D warnings
+npm test               # the Rust unit tests
 ```
 
-The backend is verified to compile and pass clippy for
-`x86_64-pc-windows-msvc`.
+`npm run build` writes the installers to
+`src-tauri/target/release/bundle/msi/` and `.../nsis/`. The NSIS one installs
+per-machine, so it will ask for elevation.
+
+Everything in `src/` is copied verbatim — `frontendDist` is `../src` and there
+is no build step for the frontend, so `npm run dev` picks up an edit to a
+`.js` or `.css` file on reload.
+
+### First run
+
+The app has no window at startup by design: it lives in the notification area.
+Look for the tray icon, or press `Alt`+`Space`.
+
+If nothing happens on `Alt`+`Space`, the hotkey was refused — PowerToys Run
+claims the same combination. The app raises a Windows notification naming the
+combinations it could not register; `verify-windows.ps1` also reports whether a
+known contender is running.
 
 ## IPC surface
 
