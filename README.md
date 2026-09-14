@@ -35,6 +35,25 @@ all** — that path needs a browser.
 Builds are signed with the committed debug key (`keystore/`), so a new build
 installs over an old one in place and the pairing token survives.
 
+## Design
+
+`jarvis-client` reads the shared visual spec, which lives here as
+`jarvis-client/app/src/test/resources/jarvis-visual-spec.json` so that
+`SpecDriftTest` can assert against it — palette, pattern params, state
+defaults, flash limits and frame rates. A spec change is a build failure
+rather than a quiet re-colour on one client. `face/Palette.kt` is generated
+from it by `tools/gen_palette.py`; do not edit it by hand.
+
+- [`docs/UI-AUDIT-2026-09-14.md`](docs/UI-AUDIT-2026-09-14.md) — what six
+  reviewers found, what was fixed, what was priced and refused, the six
+  backend gaps, and the six places the spec disagrees with itself.
+- [`docs/SHARED-LOOK.md`](docs/SHARED-LOOK.md) — what the phone and the desktop
+  must agree on, written as a contract. For the desktop thread.
+
+Six themes ship, switchable in **Look**. Themes own the chrome and never a
+state colour; the accent is derived from the idle binding rather than chosen,
+so re-rolling the face's colours moves the whole interface with it.
+
 ## Building
 
 APKs are built in CI, since the Android SDK is not vendored here. Unit tests
