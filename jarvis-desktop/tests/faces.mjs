@@ -255,6 +255,74 @@ await check("CONTROL: a state the spec does not have is ignored, not thrown on",
   assert.deepEqual(errs, [], errs.join(" | "));
 });
 
+await check("a face can be chosen, and the choice is saved", async () => {
+  // Until now nothing in the UI set `face`: the field existed, was sent as
+  // null every time, and the "full editor" could bind states but not pick the
+  // thing being bound.
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.locator("#grid .card canvas").first().click();
+  await page.waitForTimeout(400);
+  await page.locator("#solo-use").click();
+  // The solo view is a full overlay and Save is behind it.
+  await page.locator("#solo-close").click();
+  await page.waitForTimeout(200);
+  await page.locator("#save").click();
+  await page.waitForTimeout(300);
+  const saved = await page.evaluate(() =>
+    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  await page.close();
+  const spec = JSON.parse(read("src/jarvis-visual-spec.json"));
+  assert.ok(saved.face, "no face was saved");
+  assert.ok(spec.faces.some((f) => f.id === saved.face),
+    `saved a face the spec does not have: ${saved.face}`);
+});
+
+await check("choosing the same face again clears the choice", async () => {
+  // No choice is not the same as choosing the default: an absent `face` leaves
+  // each client on its own, and a phone whose default differs should keep it.
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.locator("#grid .card canvas").first().click();
+  await page.waitForTimeout(400);
+  await page.locator("#solo-use").click();
+  await page.locator("#solo-use").click();
+  // The solo view is a full overlay and Save is behind it.
+  await page.locator("#solo-close").click();
+  await page.waitForTimeout(200);
+  await page.locator("#save").click();
+  await page.waitForTimeout(300);
+  const saved = await page.evaluate(() =>
+    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  await page.close();
+  assert.equal(saved.face, null, `face was ${JSON.stringify(saved.face)}`);
+});
+
+await check("the window says where a face choice actually lands", async () => {
+  // Nothing on this desktop draws a spec face — the tray is a disc and the
+  // spotlight has its own SVG reactor — so a chosen face reaches the phone
+  // and changes nothing here. Saying so is the difference between a feature
+  // and a lie.
+  const page = await open();
+  await page.waitForTimeout(1500);
+  const text = await page.evaluate(() => document.body.innerText);
+  await page.close();
+  assert.match(text, /nothing on this desktop draws one yet/i,
+    "the page does not say that a chosen face does not apply here");
+});
+
+await check("CONTROL: the tray reads the saved bindings, not just the spec", async () => {
+  // The bug this pass found: the editor edited a document nothing else read.
+  const tray = read("src-tauri/src/tray.rs");
+  assert.match(tray, /AppearanceState>\(\)\s*\n?\s*\.binding\(id\)/,
+    "binding_for still reads the spec alone");
+  assert.match(tray, /pub fn on_appearance_changed/,
+    "nothing repaints the tray when the document changes");
+  const rust = read("src-tauri/src/appearance.rs");
+  assert.match(rust, /fn adopt\(/, "no path puts a saved document into the cache");
+  assert.match(rust, /pub fn adopt_at_startup/, "the stored document is not loaded at startup");
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe faces window holds");

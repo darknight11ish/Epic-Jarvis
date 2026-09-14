@@ -144,6 +144,12 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <button class="chip" id="reset">reset all</button>
     <button class="chip" id="save">save</button>
     <span class="mono" id="save-state" style="margin-left:10px;color:var(--dim)">—</span>
+  </div>
+  <div class="row" style="padding-top:0">
+    <span class="mono" style="color:var(--dimmer);font-size:11px">
+      Colours and patterns apply here — the tray icon follows them. A chosen
+      FACE applies on the phone: nothing on this desktop draws one yet.
+    </span>
     <span class="mono" id="scheme-read"></span>
     <span class="spacer"></span>
     <span class="mono" id="clock">detecting display…</span>
@@ -159,6 +165,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <span class="mono" id="solo-read">—</span>
     <span class="spacer"></span>
     <div class="sp" style="max-width:210px"><input type="range" id="solo-speed" min="0" max="100" value="50" aria-label="Speed"><span class="v" id="solo-speed-v">1.00×</span></div>
+    <button class="chip" id="solo-use">use this face</button>
     <button class="chip" id="solo-close">close</button>
   </div>
   <div class="solo-stage"><canvas id="solo-canvas"></canvas></div>
@@ -3612,7 +3619,9 @@ function openSolo(theme){
   SOLO.ss = 2;                                  // always full pixel density
   SOLO.detail = Math.max(1.9, Q.detail);        // the full detail budget
   box.hidden = false;
+  SOLO_ON_SCREEN = theme.id;
   $("solo-name").textContent = theme.name;
+  syncFaceChoice();
   const f = FACE[theme.id];
   $("solo-read").textContent = `${f.geometry} · ${f.integrates_per_frame ? "sub-stepped" : f.dim}`;
   const fit = () => {
@@ -4076,8 +4085,19 @@ function currentDocument() {
   return { face: SOLO_FACE || null, bindings };
 }
 
-/** The face last opened solo, which is the only "chosen one" this page has. */
+/** The face the owner has chosen, or null to leave each client on its default. */
 let SOLO_FACE = null;
+/** Whichever face the solo view is showing, which is what "use this" means. */
+let SOLO_ON_SCREEN = null;
+
+/** Keeps the chooser honest about what is already chosen. */
+function syncFaceChoice() {
+  const b = $("solo-use");
+  if (!b) return;
+  const chosen = SOLO_ON_SCREEN && SOLO_ON_SCREEN === SOLO_FACE;
+  b.textContent = chosen ? "✓ in use" : "use this face";
+  b.setAttribute("aria-pressed", String(Boolean(chosen)));
+}
 
 function applyDocument(doc) {
   if (!doc || !doc.bindings) return;
@@ -4090,6 +4110,7 @@ function applyDocument(doc) {
   }
   if (doc.face) SOLO_FACE = doc.face;
   syncUI();
+  syncFaceChoice();
 }
 
 async function loadAppearance() {
@@ -4123,5 +4144,21 @@ async function saveAppearance() {
 }
 
 $("save").onclick = saveAppearance;
+
+$("solo-use").onclick = () => {
+  if (!SOLO_ON_SCREEN) return;
+  // Toggle, so the owner can go back to "no choice" — which is not the same as
+  // choosing the default face. An absent `face` leaves each client on its own,
+  // and a phone whose default differs should keep it.
+  SOLO_FACE = SOLO_FACE === SOLO_ON_SCREEN ? null : SOLO_ON_SCREEN;
+  syncFaceChoice();
+  // "close and press save", not "press save": the solo view is a full overlay
+  // and the save button is behind it, so the shorter instruction cannot be
+  // followed from where the person reading it is standing.
+  saveState(SOLO_FACE
+    ? `${SOLO_FACE} chosen — close, then press save`
+    : "no face chosen — close, then press save");
+};
+
 loadAppearance();
 </script>

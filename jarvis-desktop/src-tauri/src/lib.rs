@@ -473,6 +473,7 @@ pub fn run() {
         // if a fallible call above it ever returned early.
         .manage(hotkeys::HotkeyState::default())
         .manage(update::UpdateState::default())
+        .manage(appearance::AppearanceState::default())
         .invoke_handler(tauri::generate_handler![
             // Eight commands used to be registered here with no caller in any
             // window: capture_screen, is_quickbar_pinned, notify_user,
@@ -692,6 +693,10 @@ pub fn run() {
             // installed by it. Spawned and forgotten: a slow endpoint must not
             // hold up the window, the tray or the event stream.
             update::spawn_startup_check(&handle);
+
+            // The owner's face, before the tray's first paint. Local read only:
+            // a network fetch here would hold the icon behind a socket timeout.
+            appearance::adopt_at_startup(&handle);
 
             // Bind the accelerators. A failure here is not fatal: another
             // application may already own a combination, and Jarvis still works

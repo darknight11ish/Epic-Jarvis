@@ -304,7 +304,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(handle_menu_event)
         .on_tray_icon_event(handle_tray_icon_event);
 
-    if let Some(icon) = render_icon(&link) {
+    if let Some(icon) = render_icon(app, &link) {
         builder = builder.icon(icon);
     } else if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
@@ -367,11 +367,27 @@ fn spec_state(link: &LinkState) -> &'static str {
     }
 }
 
-fn binding_for(link: &LinkState) -> Binding {
+fn binding_for(app: &AppHandle, link: &LinkState) -> Binding {
     let id = spec_state(link);
-    spec::state_binding(id)
+    // The owner's choice first, the spec's default second. This used to read
+    // the spec alone, which meant the Faces window edited a document the tray
+    // never looked at: you could rebind `idle`, press save, be told it was
+    // saved, and watch the icon carry on exactly as before.
+    app.state::<crate::appearance::AppearanceState>()
+        .binding(id)
+        .or_else(|| spec::state_binding(id))
         .or_else(|| spec::state_binding("idle"))
         .unwrap_or_default()
+}
+
+/// Repaints after the appearance document changes.
+///
+/// The colour cache in [`Painted`] is keyed on the resolved colour, so a
+/// rebind that happens to resolve to the same 8-bit value is correctly a
+/// no-op; anything else redraws on the next call.
+pub fn on_appearance_changed(app: &AppHandle) {
+    let link = app.state::<crate::stream::StreamState>().link();
+    repaint(app, &link);
 }
 
 /// Seconds since the process started, which is the `t` the pattern engine wants.
@@ -396,17 +412,17 @@ fn clock() -> f64 {
 /// Giving "disconnected" a colour of its own would mean choosing one, and the
 /// spec has no binding for it — a hollow icon says "nothing is coming through"
 /// without claiming to know what Jarvis is doing.
-fn render_icon(link: &LinkState) -> Option<Image<'static>> {
-    Some(paint(link))
+fn render_icon(app: &AppHandle, link: &LinkState) -> Option<Image<'static>> {
+    Some(paint(app, link))
 }
 
 /// Resolves the state and draws it, dim and notches included.
 ///
 /// One function so the animation tick, the first paint and `repaint` cannot
 /// disagree about what the icon should look like.
-fn paint(link: &LinkState) -> Image<'static> {
+fn paint(app: &AppHandle, link: &LinkState) -> Image<'static> {
     let state = spec_state(link);
-    let resolved = spec::resolve(&binding_for(link), clock(), 0.0, 0.0);
+    let resolved = spec::resolve(&binding_for(app, link), clock(), 0.0, 0.0);
     let dim = spec::state_dim(state);
     // `notches` is the overlay the spec puts on `banked`, and its source is
     // named there: "the number of items waiting in the digest
@@ -655,7 +671,7 @@ fn spawn_animation(app: AppHandle) {
         loop {
             tokio::time::sleep(ANIMATION_TICK).await;
             let link = app.state::<crate::stream::StreamState>().link();
-            if !spec::is_animated(&binding_for(&link)) {
+            if !spec::is_animated(&binding_for(&app, &link)) {
                 continue;
             }
             repaint(&app, &link);
@@ -669,7 +685,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
         return;
     };
     let state = spec_state(link);
-    let resolved = spec::resolve(&binding_for(link), clock(), 0.0, 0.0);
+    let resolved = spec::resolve(&binding_for(app, link), clock(), 0.0, 0.0);
     {
         let painted = app.state::<Painted>();
         let mut slot = painted
@@ -685,7 +701,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
         }
         *slot = Some(key);
     }
-    if let Err(err) = tray.set_icon(Some(paint(link))) {
+    if let Err(err) = tray.set_icon(Some(paint(app, link))) {
         eprintln!("[jarvis] tray: unable to set the icon: {err}");
     }
     if let Err(err) = tray.set_tooltip(Some(tooltip(link))) {
