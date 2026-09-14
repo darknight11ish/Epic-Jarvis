@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- initialLayout is required: without it AppWidgetHostView cannot inflate
+     anything before the first Glance update lands, and the launcher shows
+     "Problem loading widget". aapt does not enforce it. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:description="@string/widget_launcher_desc"
+    android:minWidth="260dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:resizeMode="horizontal"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

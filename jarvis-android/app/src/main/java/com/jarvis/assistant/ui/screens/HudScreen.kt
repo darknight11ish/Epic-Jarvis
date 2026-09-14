@@ -1,0 +1,474 @@
+package com.jarvis.assistant.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.jarvis.assistant.network.ApprovalRequestEvent
+import com.jarvis.assistant.network.ConnectionState
+import com.jarvis.assistant.network.DesktopTelemetryEvent
+import com.jarvis.assistant.ui.approval.ApprovalCard
+import com.jarvis.assistant.ui.theme.JarvisAmber
+import com.jarvis.assistant.ui.theme.JarvisBlack
+import com.jarvis.assistant.ui.theme.JarvisCyan
+import com.jarvis.assistant.ui.theme.JarvisGreen
+import com.jarvis.assistant.ui.theme.JarvisOutline
+import com.jarvis.assistant.ui.theme.JarvisRed
+import com.jarvis.assistant.ui.theme.JarvisSurface
+import com.jarvis.assistant.ui.theme.JarvisTextMuted
+import kotlin.math.roundToInt
+
+/**
+ * Everything the screen needs, hoisted into one immutable snapshot.
+ *
+ * [Immutable] is load-bearing and not decoration. `approvals` is a `List`, which
+ * Compose treats as unstable because the interface carries no immutability
+ * guarantee, and one unstable parameter makes the whole class unstable — under
+ * strong skipping that means identity comparison, and this is rebuilt on every
+ * recomposition, so nothing downstream could ever skip. Every telemetry frame
+ * recomposed every visible approval card and its diff. The annotation is honest
+ * here: the list is only ever replaced wholesale by the runtime, never mutated.
+ */
+@Immutable
+data class HudState(
+    val connection: ConnectionState,
+    val serverAddress: String,
+    val micActive: Boolean,
+    val micPermissionGranted: Boolean,
+    val desktop: DesktopTelemetryEvent?,
+    val approvals: List<ApprovalRequestEvent>,
+    val statusText: String?,
+    val lastError: String?,
+    /** True once Android has been told to stop dozing this app. */
+    val batteryExempt: Boolean,
+    /** Set when signing or the target address blocks an action outright. */
+    val blockingError: String?,
+    val hasSharedSecret: Boolean,
+    val hasAuthToken: Boolean,
+)
+
+/** Stable so the callbacks do not invalidate every card that captures them. */
+@Immutable
+data class HudActions(
+    val onServerAddressChange: (String) -> Unit,
+    val onReconnect: () -> Unit,
+    val onToggleMic: () -> Unit,
+    val onApprove: (String) -> Unit,
+    val onReject: (String) -> Unit,
+    val onRequestBatteryExemption: () -> Unit,
+    val onSharedSecretChange: (String) -> Unit,
+    val onAuthTokenChange: (String) -> Unit,
+)
+
+@Composable
+fun HudScreen(state: HudState, actions: HudActions, modifier: Modifier = Modifier) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(JarvisBlack)
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item(key = "header") {
+            Spacer(Modifier.height(20.dp))
+            ConnectionHeader(state.connection, state.lastError)
+        }
+
+        item(key = "server") {
+            ServerAddressField(
+                address = state.serverAddress,
+                onCommit = actions.onServerAddressChange,
+                onReconnect = actions.onReconnect,
+            )
+        }
+
+        state.blockingError?.let { message ->
+            item(key = "blocking-error") {
+                WarningCard(text = message, actionLabel = null, onAction = null)
+            }
+        }
+
+        item(key = "pairing") {
+            SectionLabel("PAIRING")
+            SecretField(
+                label = "Signing secret",
+                isSet = state.hasSharedSecret,
+                onCommit = actions.onSharedSecretChange,
+            )
+            Spacer(Modifier.height(8.dp))
+            SecretField(
+                label = "Auth token (optional)",
+                isSet = state.hasAuthToken,
+                onCommit = actions.onAuthTokenChange,
+            )
+        }
+
+        if (!state.batteryExempt) {
+            item(key = "battery") {
+                WarningCard(
+                    text = "Android may sleep the link while locked. Allow unrestricted background battery usage.",
+                    actionLabel = "Fix",
+                    onAction = actions.onRequestBatteryExemption,
+                )
+            }
+        }
+
+        if (!state.micPermissionGranted) {
+            item(key = "mic-permission") {
+                WarningCard(
+                    text = "Microphone access is denied, so voice input is unavailable.",
+                    actionLabel = null,
+                    onAction = null,
+                )
+            }
+        }
+
+        item(key = "desktop") {
+            SectionLabel("DESKTOP")
+            DesktopTelemetryRow(state.desktop)
+        }
+
+        if (state.approvals.isNotEmpty()) {
+            item(key = "approvals-label") { SectionLabel("PENDING APPROVALS") }
+            items(state.approvals, key = { it.id }) { request ->
+                ApprovalCard(
+                    request = request,
+                    onApprove = { actions.onApprove(request.id) },
+                    onReject = { actions.onReject(request.id) },
+                    // A decision taken with the link down clears the card and buzzes
+                    // "confirm" while nothing has been sent. Say so instead.
+                    linkReady = state.connection == ConnectionState.CONNECTED &&
+                        state.hasSharedSecret,
+                )
+            }
+        }
+
+        state.statusText?.let { status ->
+            item(key = "status") {
+                SectionLabel("STATUS")
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = JarvisTextMuted,
+                )
+            }
+        }
+
+        item(key = "mic") {
+            Spacer(Modifier.height(8.dp))
+            MicButton(
+                active = state.micActive,
+                enabled = state.micPermissionGranted,
+                onToggle = actions.onToggleMic,
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun ConnectionHeader(state: ConnectionState, lastError: String?) {
+    val (label, tint) = when (state) {
+        ConnectionState.CONNECTED -> "CONNECTED" to JarvisGreen
+        ConnectionState.RECONNECTING -> "RECONNECTING" to JarvisAmber
+        ConnectionState.OFFLINE -> "OFFLINE" to JarvisRed
+    }
+
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(10.dp)
+                    .background(tint, CircleShape),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "JARVIS",
+                style = MaterialTheme.typography.titleLarge,
+                color = JarvisCyan,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = tint,
+            )
+        }
+        if (state != ConnectionState.CONNECTED && !lastError.isNullOrBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = lastError,
+                style = MaterialTheme.typography.labelSmall,
+                color = JarvisTextMuted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ServerAddressField(
+    address: String,
+    onCommit: (String) -> Unit,
+    onReconnect: () -> Unit,
+) {
+    var draft by rememberSaveable(address) { mutableStateOf(address) }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            label = { Text("Desktop address", style = MaterialTheme.typography.labelSmall) },
+            textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    keyboard?.hide()
+                    onCommit(draft)
+                },
+            ),
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = JarvisCyan,
+                unfocusedBorderColor = JarvisOutline,
+                focusedContainerColor = JarvisSurface,
+                unfocusedContainerColor = JarvisSurface,
+            ),
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(
+            onClick = {
+                keyboard?.hide()
+                if (draft.trim() != address) onCommit(draft) else onReconnect()
+            },
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = JarvisSurface,
+                contentColor = JarvisCyan,
+            ),
+        ) {
+            Text("Link", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+/**
+ * Write-only: a stored secret is never read back into the UI, so a shoulder-surfer
+ * or a screenshot cannot recover it. The field reports only whether one is set.
+ */
+@Composable
+private fun SecretField(label: String, isSet: Boolean, onCommit: (String) -> Unit) {
+    var draft by rememberSaveable { mutableStateOf("") }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            label = {
+                Text(
+                    text = if (isSet) "$label — set" else label,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            },
+            placeholder = {
+                Text(
+                    text = if (isSet) "Enter a new value to replace" else "Not set",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            },
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    keyboard?.hide()
+                    onCommit(draft)
+                    draft = ""
+                },
+            ),
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = JarvisCyan,
+                unfocusedBorderColor = if (isSet) JarvisGreen.copy(alpha = 0.5f) else JarvisAmber,
+                focusedContainerColor = JarvisSurface,
+                unfocusedContainerColor = JarvisSurface,
+            ),
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(
+            onClick = {
+                keyboard?.hide()
+                onCommit(draft)
+                draft = ""
+            },
+            enabled = draft.isNotEmpty(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = JarvisSurface,
+                contentColor = JarvisCyan,
+                disabledContainerColor = JarvisSurface,
+                disabledContentColor = JarvisTextMuted,
+            ),
+        ) {
+            Text("Save", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun DesktopTelemetryRow(telemetry: DesktopTelemetryEvent?) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatTile("CPU", telemetry?.cpuPercent?.let { "${it.roundToInt()}%" }, Modifier.weight(1f))
+        StatTile("GPU", telemetry?.gpuTempC?.let { "${it.roundToInt()}°C" }, Modifier.weight(1f))
+        StatTile("VRAM", formatVram(telemetry), Modifier.weight(1f))
+    }
+}
+
+private fun formatVram(telemetry: DesktopTelemetryEvent?): String? {
+    val used = telemetry?.vramUsedMb ?: return null
+    val total = telemetry.vramTotalMb
+    return if (total != null && total > 0) {
+        "${(used / 1024).roundToInt()}/${(total / 1024).roundToInt()}G"
+    } else {
+        "${used.roundToInt()}M"
+    }
+}
+
+@Composable
+private fun StatTile(label: String, value: String?, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(JarvisSurface, RoundedCornerShape(12.dp))
+            .border(1.dp, JarvisOutline, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = JarvisTextMuted)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = value ?: "—",
+            style = MaterialTheme.typography.titleMedium,
+            color = if (value == null) JarvisTextMuted else JarvisCyan,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun WarningCard(text: String, actionLabel: String?, onAction: (() -> Unit)?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(JarvisSurface, RoundedCornerShape(12.dp))
+            .border(1.dp, JarvisAmber.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = JarvisTextMuted,
+            modifier = Modifier.weight(1f),
+        )
+        if (actionLabel != null && onAction != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = actionLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = JarvisAmber,
+                modifier = Modifier
+                    // A bare clickable Text is announced by TalkBack as static
+                    // text, and at labelSmall the target is about 27dp tall. This
+                    // is the only in-app route to the battery-exemption dialog.
+                    .clickable(onClick = onAction, role = Role.Button)
+                    .minimumInteractiveComponentSize()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = JarvisTextMuted,
+        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun MicButton(active: Boolean, enabled: Boolean, onToggle: () -> Unit) {
+    val container: Color = if (active) JarvisCyan else JarvisSurface
+    val content: Color = if (active) JarvisBlack else JarvisCyan
+
+    Button(
+        onClick = onToggle,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = container,
+            contentColor = content,
+            disabledContainerColor = JarvisSurface,
+            disabledContentColor = JarvisTextMuted,
+        ),
+    ) {
+        Text(
+            text = if (active) "LISTENING — TAP TO STOP" else "TAP TO TALK",
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+}

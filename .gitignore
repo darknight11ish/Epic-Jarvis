@@ -1,0 +1,31 @@
+# Gradle / Android
+.gradle/
+build/
+local.properties
+captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+# ...except the shared debug key. It is deliberately committed so every build
+# signs with the same certificate and `adb install -r` upgrades in place rather
+# than forcing an uninstall that wipes the pairing secret. See keystore/README.md.
+!keystore/debug.keystore
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Node (React Native / Capacitor)
+node_modules/
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Python bytecode from the desktop endpoint module and its tests.
+__pycache__/
+*.py[cod]
