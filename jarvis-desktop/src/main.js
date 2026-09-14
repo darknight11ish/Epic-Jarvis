@@ -203,6 +203,8 @@ const state = {
   approval: null,
   /** True while a decision is in flight, so a double tap cannot send twice. */
   deciding: false,
+  /** The id of the gate a decision was sent for, so it cannot be sent twice. */
+  decided: null,
   route: { ...DEFAULT_ROUTE },
 };
 
@@ -279,18 +281,49 @@ function renderMarkdown(source) {
   const html = [];
 
   let index = 0;
+  // Every branch below must consume at least one line. This is the guarantee
+  // that it does, rather than a promise that it does: an iteration that
+  // consumes nothing is an infinite loop, and `renderMarkdown` runs on every
+  // streamed token in a frameless always-on-top window. If a future edit ever
+  // reintroduces a line that matches no branch, it is rendered as text and the
+  // parser moves on.
+  let previous = -1;
   while (index < lines.length) {
+    if (index === previous) {
+      html.push(`<p>${renderInline(lines[index].trim())}</p>`);
+      index += 1;
+      continue;
+    }
+    previous = index;
+
     const line = lines[index];
 
     // Fenced code - also handles the unterminated fence of a live stream.
-    const fence = line.match(/^\s*```([\w+-]*)\s*$/);
+    //
+    // The opening fence accepts ANY info string, and three OR MORE markers of
+    // either kind. It used to demand a bare `[\w+-]*` language and exactly
+    // three backticks, which meant "```c#", "``` js", "````", "~~~" and
+    // '```js title="a.js"' matched neither this branch nor the paragraph
+    // branch below - whose guard excludes every line starting with a fence.
+    // `index` then never advanced and the loop spun for ever, freezing a
+    // window that has no titlebar and no taskbar entry. A model writing a C#
+    // snippet was enough to trigger it, on every streamed token.
+    const fence = line.match(/^\s*(`{3,}|~{3,})\s*([^`]*)$/);
     if (fence) {
-      const language = fence[1]
-        ? ` class="language-${escapeHtml(fence[1])}"`
-        : "";
+      // Only the first word of the info string is the language; CommonMark
+      // lets the rest be anything and highlighters ignore it.
+      const info = (fence[2].trim().split(/\s+/)[0] || "").replace(
+        /[^\w+#.-]/g,
+        ""
+      );
+      const language = info ? ` class="language-${escapeHtml(info)}"` : "";
+      // A fence closes only on the same marker, at least as long. Otherwise
+      // "````" inside a ``` block would end it early.
+      const marker = fence[1][0];
+      const closer = new RegExp(`^\\s*${marker}{${fence[1].length},}\\s*$`);
       const body = [];
       index += 1;
-      while (index < lines.length && !/^\s*```\s*$/.test(lines[index])) {
+      while (index < lines.length && !closer.test(lines[index])) {
         body.push(lines[index]);
         index += 1;
       }
@@ -441,7 +474,7 @@ function renderMarkdown(source) {
     while (
       index < lines.length &&
       lines[index].trim() &&
-      !/^\s*(#{1,4}\s|>|```|[-*+]\s|\d+[.)]\s)/.test(lines[index])
+      !/^\s*(#{1,4}\s|>|`{3,}|~{3,}|[-*+]\s|\d+[.)]\s)/.test(lines[index])
     ) {
       paragraph.push(lines[index].trim());
       index += 1;
@@ -770,8 +803,21 @@ function decorateDiff(container) {
  * Called only from the queue subscription — never from the chat stream.
  */
 function openApproval(approval) {
-  state.approval = approval;
+  refreshApproval(approval);
   setPhase("approval");
+
+  if (!dom.card.hidden) dom.cardStatusText.textContent = "Paused for approval";
+
+  // Only a gate the user has not seen yet earns the window and the keyboard.
+  setPinned(true, { silent: true });
+  focusInput({ selectAll: false });
+  dom.approvalApprove.focus();
+  syncWindowHeight();
+}
+
+/** Paints a gate's contents without touching focus, pinning or the phase. */
+function refreshApproval(approval) {
+  state.approval = approval;
 
   dom.approvalAction.textContent = approval.action;
   const target = approval.detail && typeof approval.detail === "object"
@@ -794,18 +840,13 @@ function openApproval(approval) {
 
   syncApprovalButtons();
   dom.approval.hidden = false;
-
-  if (!dom.card.hidden) dom.cardStatusText.textContent = "Paused for approval";
-
-  setPinned(true, { silent: true });
-  focusInput({ selectAll: false });
-  dom.approvalApprove.focus();
   syncWindowHeight();
 }
 
 /** Clears the gate. Called when it leaves the queue, however it left. */
 function closeApproval() {
   state.approval = null;
+  state.decided = null;
   dom.approval.hidden = true;
   dom.approvalPreview.innerHTML = "";
   syncWindowHeight();
@@ -840,7 +881,13 @@ function syncApprovalButtons() {
 async function decideApproval(approved) {
   const approval = state.approval;
   if (!approval || state.deciding) return;
+  // `deciding` is released in `finally`, but the card only closes when the
+  // backend broadcasts the resolution - so between those two moments a second
+  // Ctrl+Enter used to send the same decision again. The id latch closes that
+  // window; it is cleared when a different gate opens.
+  if (state.decided === approval.id) return;
 
+  state.decided = approval.id;
   state.deciding = true;
   syncApprovalButtons();
   dom.approvalHint.textContent = approved ? "Approving…" : "Denying…";
@@ -1001,6 +1048,16 @@ async function streamViaBackend(payload) {
     if (consumeLine(line)) {
       settled = true;
       invoke("cancel_chat");
+      // This used to stop here. Every `finishStream` call site is guarded by
+      // `if (settled) return`, so a stream that ended with its own terminator
+      // - which is every stream, the server proxies OpenAI-style
+      // `data: [DONE]` - left the card in the `streaming` phase for ever: the
+      // window never un-pinned, Escape aborted instead of dismissing, and the
+      // re-entrancy guard in `send()` then silently discarded every prompt
+      // after the first. Only the Stop button and a stream with no terminator
+      // ever finished. `streamViaFetch` always did this correctly, which is
+      // why browser preview never showed it.
+      finishStream(state.phase === "error" ? "error" : "done");
     }
   };
 
@@ -1117,9 +1174,22 @@ async function streamViaFetch(payload) {
 /** Sends the prompt and streams the answer into the card. */
 async function send(promptText) {
   const message = promptText.trim();
-  if (!message || state.phase === "streaming") return;
-
+  if (!message) return;
+  // Guard on the live stream handle, not on the phase. The phase is moved to
+  // `approval` and then `done` by the approval flow while the stream is still
+  // open, so a phase check let a second `stream_chat` start alongside the
+  // first - two channels writing into one buffer, and `state.abort` pointing
+  // only at the newer one, so Stop could never reach the older.
+  // `state.abort` is only assigned once the transport starts, and `send` has
+  // an `await` before then, so the handle alone is not a synchronous latch.
+  // `inFlight` is - it is set on the same tick as the guard, and cleared in
+  // `finishStream`, which is the single funnel every ending passes through.
+  if (state.abort || state.inFlight) return;
   state.inFlight = message;
+
+  // An answered gate belongs to the turn that is ending, not the next one.
+  if (state.approval) closeApproval();
+
   state.buffer = "";
   state.chunks = 0;
   state.startedAt = performance.now();
@@ -1167,6 +1237,7 @@ async function send(promptText) {
 /** Common teardown for every way a stream can end. */
 function finishStream(phase, statusText) {
   state.abort = null;
+  state.inFlight = null;
   dom.cursor.hidden = true;
   dom.stop.hidden = true;
 
@@ -1323,8 +1394,13 @@ dom.clipboardRemove.addEventListener("click", () => {
   focusInput({ selectAll: false });
 });
 
-// Links inside the answer open in the real browser, never inside the WebView.
-dom.answer.addEventListener("click", (event) => {
+// Links open in the real browser, never inside the WebView.
+//
+// Bound to the shell rather than to `#answer`: the approval preview renders
+// model-authored text through the same linkifier, and a click there was a real
+// navigation that took the window off index.html with no way back - the app
+// was gone until relaunch.
+document.addEventListener("click", (event) => {
   const anchor = event.target.closest("a[data-external]");
   if (!anchor) return;
   event.preventDefault();
@@ -1463,10 +1539,20 @@ onQueue((queue) => {
     }
     return;
   }
-  if (state.approval && state.approval.id === open.id) {
-    // Same gate, re-read: `risk` is derived per read and must never be cached
-    // against an id, so the card takes the new copy rather than keeping its own.
-    openApproval(open);
+  // A re-read of the same gate must refresh it in place, not reopen it.
+  // These two branches used to be the identical statement - the `if` was dead
+  // code - so every queue re-read stole focus from the input mid-typing and
+  // re-pinned the window, and a stale read that still carried an already
+  // answered id put its card back with live buttons.
+  const same = state.approval && state.approval.id === open.id;
+  if (same) {
+    // `risk` is derived per read and must never be cached against an id, so
+    // the card takes the new copy - but quietly.
+    refreshApproval(open);
+    return;
+  }
+  if (state.decided === open.id) {
+    // Answered here; the resolution broadcast just has not landed yet.
     return;
   }
   openApproval(open);

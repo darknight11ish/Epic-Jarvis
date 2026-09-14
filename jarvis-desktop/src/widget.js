@@ -474,7 +474,15 @@ listen("health-report", (event) => applyHealth(event.payload));
 // `approval-requested` is gone: it was the quickbar telling this window what
 // it had found in a chat chunk, which made two surfaces the authority on the
 // same queue. The queue below is read once, by Rust, from /api/pending.
-listen("approval-resolved", () => closeApproval());
+listen("approval-resolved", (event) => {
+  // Check the id. This used to close unconditionally, so resolving one gate
+  // hid a different one that was still pending - and the queue re-read that
+  // followed then force-expanded a widget the user may have collapsed.
+  const resolved = event.payload;
+  if (!state.approval) return;
+  if (resolved && resolved.id && String(resolved.id) !== state.approval.id) return;
+  closeApproval();
+});
 
 /* ==========================================================================
    Boot
