@@ -137,7 +137,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Create an AVD and start booting it
+      - name: Create an AVD
         working-directory: .
         run: |
           set -euo pipefail
@@ -146,20 +146,13 @@ jobs:
                                "platforms;android-34" "platform-tools" "emulator"
           echo no | avdmanager create avd -n smoke \
             -k "system-images;android-34;default;x86_64" --force
+          # Worth knowing which way this is going to go: with KVM the boot is
+          # a couple of minutes, without it the image is emulated instruction
+          # by instruction and there is no useful timeout to pick.
+          ls -l /dev/kvm 2>&1 || echo "::warning::/dev/kvm is not present - the emulator will be very slow"
 
-          # Backgrounded on purpose: a cold boot is minutes, and the Gradle
-          # step below is minutes, so they should be the same minutes.
-          # swiftshader_indirect because a CI runner has no GPU — the faces are
-          # Canvas work and the glow is a cached bitmap, so nothing needs one.
-          # If that ever stops being true, this job is exactly where it should
-          # be discovered.
-          nohup "$ANDROID_HOME/emulator/emulator" -avd smoke \
-            -no-window -no-audio -no-boot-anim -no-snapshot \
-            -gpu swiftshader_indirect -accel auto > "$RUNNER_TEMP/emulator.log" 2>&1 &
-          echo "emulator starting"
-
-      # Compiles before waiting on the device, so a Kotlin error still fails in
-      # about two minutes rather than after a boot.
+      # Compiled before the device is needed, so a Kotlin error still fails in
+      # about a minute rather than after a boot.
       - name: Compile the app and the test
         run: |
           set -uo pipefail
@@ -172,18 +165,43 @@ jobs:
             exit 1
           fi
 
-      - name: Wait for the device
-        working-directory: .
+      # Start, wait and test in ONE step, deliberately.
+      #
+      # The first version started the emulator in its own step and used it in
+      # the next, which is the obvious way to overlap the boot with the build —
+      # and it does not work: the runner tears down a step's process group when
+      # the step finishes, so the emulator died the moment the step that
+      # launched it returned. `adb wait-for-device` then blocked for fifteen
+      # minutes on a device that was never coming, which looked exactly like a
+      # slow boot. Keeping it in one shell keeps it alive.
+      - name: Start the emulator and launch the app
         run: |
-          set -euo pipefail
-          adb wait-for-device
-          timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
+          set -uo pipefail
+          "$ANDROID_HOME/emulator/emulator" -avd smoke \
+            -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+            -camera-back none -camera-front none -memory 2048 \
+            -gpu swiftshader_indirect -accel auto > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          EMU=$!
+
+          finish() {
+            echo "::group::Emulator log"
+            tail -120 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
+            echo "::endgroup::"
+            kill "$EMU" 2>/dev/null || true
+          }
+          trap finish EXIT
+
+          if ! timeout 300 adb wait-for-device; then
+            echo "::error::The emulator never registered with adb."
+            exit 1
+          fi
+          if ! timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'; then
+            echo "::error::The emulator registered but never finished booting."
+            exit 1
+          fi
           adb shell input keyevent 82 || true
           adb devices
 
-      - name: Launch the app
-        run: |
-          set -uo pipefail
           if ! ./gradlew connectedDebugAndroidTest --stacktrace 2>&1 | tee smoke.log; then
             echo "::group::What the device said"
             # The assertion message carries the stack trace the app itself

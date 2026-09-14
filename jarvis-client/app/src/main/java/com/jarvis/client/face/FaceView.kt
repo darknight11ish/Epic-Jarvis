@@ -354,9 +354,15 @@ class FaceHost {
         val tapLive = sinceTap in 0f..Spec.TAP_FLINCH_S
         val tapK = if (tapLive) 1f - (sinceTap / Spec.TAP_FLINCH_S) else 0f
 
-        val flinch = if (tapLive && tapAt != null) {
-            val a = tapAt!!
-            val d = Offset(0.5f * faceWidth - a.x, 0.5f * faceWidth - a.y)
+        // Read once into a local rather than null-checked and then forced. The
+        // field is written from the pointer handler and read from the frame
+        // loop; both are the main thread today, so the `!!` could not actually
+        // fire — but the compiler cannot prove that, which is exactly why it
+        // demanded the `!!`, and a local makes it true instead of merely
+        // likely. Last one in the codebase.
+        val at = tapAt
+        val flinch = if (tapLive && at != null) {
+            val d = Offset(0.5f * faceWidth - at.x, 0.5f * faceWidth - at.y)
             val len = max(1f, hypot(d.x, d.y))
             val push = faceWidth * Spec.TAP_FLINCH_FRAC * tapK
             Offset(d.x / len * push, d.y / len * push)
