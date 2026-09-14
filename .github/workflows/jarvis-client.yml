@@ -260,6 +260,40 @@ jobs:
             # recorded, so this is usually already the answer; logcat is the
             # fallback for anything that never reached the handler.
             grep -E "FAILED|something threw|AssertionError|Caused by" smoke.log | head -40 || true
+
+            # And the instrumentation report, because none of the above is in
+            # stdout. Gradle prints "There were failing tests. See the report
+            # at: file://..." and nothing else - a local path, on a runner that
+            # is about to be destroyed. The first time this job went red the
+            # whole failure read as one Gradle exception with no test name in
+            # it, and the HTML report was only reachable as a build artifact
+            # from a blob host. The names are in the XML sitting right here.
+            #
+            # Python walks the tree itself rather than `for f in $(find ...)`.
+            # The instrumentation report is named after the device - the file
+            # is `TEST-smoke(AVD) - 14.xml`, spaces and parentheses included -
+            # and word-splitting that is what broke the test-count check two
+            # commits below this one. Not repeating it here.
+            python3 - <<'PYEOF' || true
+          import os, xml.etree.ElementTree as ET
+          for root_dir, _, names in os.walk("app/build"):
+              if "ndroidTest" not in root_dir:
+                  continue
+              for name in names:
+                  if not (name.startswith("TEST-") and name.endswith(".xml")):
+                      continue
+                  try:
+                      tree = ET.parse(os.path.join(root_dir, name)).getroot()
+                  except Exception:
+                      continue
+                  for case in tree.iter("testcase"):
+                      for bad in list(case.findall("failure")) + list(case.findall("error")):
+                          print(f'  {case.get("classname")}.{case.get("name")}')
+                          body = (bad.text or bad.get("message") or "").strip()
+                          for line in body.splitlines()[:25]:
+                              print(f'      {line}')
+          PYEOF
+
             adb logcat -d -b crash | tail -150 || true
             echo "::endgroup::"
             exit 1
