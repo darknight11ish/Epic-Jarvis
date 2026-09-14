@@ -106,6 +106,11 @@ fun FaceView(
             } else {
                 withFrameNanos { now ->
                     if (last == 0L) last = now
+                    // Measured on the surface that actually matters, rather
+                    // than assumed: the panel drops rate on its own for battery
+                    // saver, brightness and heat, and a face driven by an
+                    // assumed delta runs at the wrong speed the moment it does.
+                    com.jarvis.client.platform.DisplayRate.sample(now - last)
                     val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                     last = now
                     // Resting states draw at 30 rather than the display rate.

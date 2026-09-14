@@ -31,6 +31,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
@@ -98,6 +99,12 @@ class MainActivity : FragmentActivity() {
         readApprovalIntent(intent)
 
         setContent { App() }
+
+        // Ask AFTER setContent, so there is a decor view to vote through on
+        // API 35+. A high-refresh panel renders an app at 60 until it asks,
+        // so every carefully paced frame in the reactor was landing on half
+        // the vsyncs the hardware had available.
+        DisplayRate.request(this, window.peekDecorView())
     }
 
     /**
@@ -453,6 +460,9 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         permissionTick.intValue += 1
+        // The rate can change under us — battery saver, brightness, heat — and
+        // nothing reports why, so re-read rather than trust the request.
+        DisplayRate.refresh(this)
         if (JarvisRuntime.isPaired()) {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }

@@ -27,8 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.ReadinessItem
 import com.jarvis.client.ui.T
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
 /**
  * The four §3.1 items, reported rather than assumed — plus the two the audit
@@ -75,6 +78,7 @@ fun ReadinessScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f),
         ) {
+            item(key = "frame-rate") { FrameRateCard() }
             items(items, key = { it.title }) { ReadinessCard(it) }
         }
 
@@ -129,5 +133,75 @@ private fun ReadinessCard(item: ReadinessItem) {
         }
         Spacer(Modifier.height(6.dp))
         Text(item.detail, style = MaterialTheme.typography.bodySmall, color = T.Dim)
+    }
+}
+
+
+/**
+ * The frame-rate readout §11 asks for, on the screen that is already this
+ * app's debug surface.
+ *
+ * Three numbers rather than one, because they answer different questions.
+ * *Panel* is what the display is doing. *Asked for* is what was requested —
+ * and the gap between those two is the whole reason this exists, since nothing
+ * on Android reports why a request was refused. *Face* is what the reactor
+ * actually sustained: below the panel means the draw is the limit, level with
+ * it means the draw is not.
+ */
+@Composable
+private fun FrameRateCard() {
+    val panel by DisplayRate.panelHz.collectAsState()
+    val asked by DisplayRate.requestedHz.collectAsState()
+    val achieved by DisplayRate.achievedHz.collectAsState()
+    val modes by DisplayRate.modes.collectAsState()
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(T.Plate, RoundedCornerShape(12.dp))
+            .padding(14.dp),
+    ) {
+        Text("Frame rate", style = MaterialTheme.typography.titleSmall, color = T.Ink)
+        Spacer(Modifier.height(8.dp))
+        RateRow("Panel", panel)
+        RateRow("Asked for", asked)
+        RateRow("Face", achieved)
+        if (modes.size > 1) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "This screen offers " + modes.joinToString(", ") { "%.0f".format(it) } + " Hz.",
+                style = MaterialTheme.typography.bodySmall,
+                color = T.Dim,
+            )
+        }
+        if (asked > 0f && panel > 0f && panel + 1f < asked) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                // Battery saver, an LTPO panel floating by content cadence, low
+                // brightness on many OEM builds, or heat. There is no API that
+                // says which, so this says what it can and does not guess.
+                "The display did not grant the rate that was asked for. Battery saver, " +
+                    "screen brightness or heat can all cap it, and Android does not report which.",
+                style = MaterialTheme.typography.bodySmall,
+                color = T.Warn,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RateRow(label: String, hz: Float) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = T.Dim,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            if (hz <= 0f) "—" else "%.1f Hz".format(hz),
+            style = MaterialTheme.typography.bodyMedium,
+            color = T.Ink,
+        )
     }
 }
