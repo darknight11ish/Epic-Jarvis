@@ -90,6 +90,19 @@ jobs:
             echo "Latest: $(curl -sS 'https://dl.google.com/dl/android/maven2/androidx/activity/activity-compose/maven-metadata.xml' | grep -o '<latest>[^<]*</latest>' | sed 's|</\?latest>||g')"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Last, and compact: the resolution dump below runs to well over a thousand
+      # lines, which buries everything above it in the run log.
+      - name: Answers
+        run: |
+          echo "=============== PROBE ANSWERS ==============="
+          cat "$GITHUB_STEP_SUMMARY"
+          echo "============= END PROBE ANSWERS ============="
+
+  resolved:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -98,13 +111,15 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # androidx.activity is not managed by the Compose BOM, so this is where a
+      # stale pin shows up as a real number rather than a guess.
       - name: What jarvis-client actually resolves
         working-directory: jarvis-client
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew :app:dependencies --configuration debugRuntimeClasspath \
-            | grep -E 'androidx\.(activity|core|lifecycle|compose\.(ui|foundation|runtime))' \
-            | sed 's/^/    /' \
-            | sort -u \
-            | tee -a "$GITHUB_STEP_SUMMARY"
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath > deps.txt
+          echo "=============== TOP-LEVEL RESOLUTION ==============="
+          grep -E '^\+--- |^\\--- ' deps.txt | sort -u
+          echo "=============== ANDROIDX ACTIVITY ==============="
+          grep -E 'androidx\.activity' deps.txt | sort -u | head -20
