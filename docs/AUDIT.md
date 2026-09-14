@@ -13,6 +13,39 @@ Chromium via Playwright against the real pages; the Python backend's own
 `jarvis_events.stream()` used to generate wire bytes; the vendored crate sources
 in `~/.cargo/registry` read directly rather than from documentation.
 
+---
+
+## Status
+
+Fixed and verified in commits `46fd1ca`, `11bf501`, `eed30e5`, `137cef9` and
+`b0nt` (this one). Every fix was checked by re-running the reviewer's own repro
+or by a new test, not by inspection.
+
+**All six ship blockers are closed.** So is every item in the correctness table,
+the whole frontend table except the markdown-quality bugs, and every item in
+build/dependencies/licensing.
+
+**Still open, and why:**
+
+* **Everything Windows-only** — the Acrylic tint being discarded, the mixed-DPI
+  widget position, `Alt+Space` and the `MOD_WIN` hotkey, transparent-window
+  hit-testing, `rundll32` → `ShellExecuteExW`, dropping the redundant
+  `window-vibrancy` direct dependency in favour of `WebviewWindow::set_effects`.
+  Several are a few lines, and all of them are cheap to get wrong and
+  impossible to confirm from here.
+* **An app ACL manifest** (`src-tauri/permissions/`). The eight unused commands
+  are unregistered and `set_api_settings` now validates its input, but
+  `set_supervision` still persists an arbitrary program that `start_backend`
+  runs. Writing a permissions manifest blind risks an app that will not start
+  and cannot be debugged from here.
+* **Markdown quality** — tables needing a preceding blank line, lazy list
+  continuations splitting a list, ordered lists restarting at 1, no `start`
+  attribute. Cosmetic; the parser no longer hangs and no longer corrupts hrefs.
+* **The quickbar can still measure past its 720 clamp** with a long answer and
+  an open gate. Needs a CSS height budget shared between the card body and the
+  approval preview.
+* **Signing, updater, MSI-vs-NSIS** — decisions, not defects.
+
 **The standing caveat is unchanged and is the reason half of this list exists:
 nothing has ever run on Windows.** No MSVC linker, no WebView2, no DWM, no
 `RegisterHotKey`, no Job Object, no `nvidia-smi`.

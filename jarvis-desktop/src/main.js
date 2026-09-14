@@ -236,13 +236,40 @@ function escapeHtml(text) {
 function renderInline(text) {
   let out = escapeHtml(text);
 
+  // Placeholders carry a per-call nonce. A fixed `@@JARVISCODE0@@` was
+  // predictable, so model output containing that literal string was
+  // substituted with an unrelated code span — or with `<code>undefined</code>`
+  // when the index did not exist. Not an escape, but not what the model wrote.
+  const nonce = Math.random().toString(36).slice(2, 10);
+
   // Inline code is lifted out first so its contents survive the emphasis
   // passes untouched, then restored at the end.
   const codeSpans = [];
   out = out.replace(/`([^`\n]+)`/g, (_match, code) => {
     codeSpans.push(code);
-    return `@@JARVISCODE${codeSpans.length - 1}@@`;
+    return `@@C${nonce}${codeSpans.length - 1}@@`;
   });
+
+  // URLs are lifted out for the same reason, and for a sharper one: `__` and
+  // `*` inside a URL used to be rewritten as emphasis BEFORE linkification saw
+  // them, so `https://x.com/a__b__c` yielded href="https://x.com/a" — a
+  // different but perfectly valid URL. That href is what `open_external_url`
+  // hands to the OS shell, so a link could point somewhere the text did not
+  // say. Stashing the destination first makes the emphasis passes blind to it.
+  const urls = [];
+  const stash = (url) => {
+    urls.push(url);
+    return `@@U${nonce}${urls.length - 1}@@`;
+  };
+  out = out
+    .replace(
+      /(\[[^\]]*\]\()(https?:\/\/[^\s)]+)(\))/g,
+      (_match, open, url, close) => open + stash(url) + close
+    )
+    .replace(
+      /(^|[\s(])(https?:\/\/[^\s<)]+)/g,
+      (_match, lead, url) => lead + stash(url)
+    );
 
   // Strong runs first and non-greedily, so `**bold *italic* tail**` keeps its
   // inner emphasis instead of failing to match on the nested asterisks. The
@@ -251,29 +278,34 @@ function renderInline(text) {
   out = out
     .replace(/\*\*\*([\s\S]+?)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/__([\s\S]+?)__/g, "<strong>$1</strong>")
+    // `__` needs word boundaries or it eats identifiers: `user__name__id` used
+    // to render as `user<strong>name</strong>id`.
+    .replace(/(^|[^\w])__([\s\S]+?)__(?!\w)/g, "$1<strong>$2</strong>")
     .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*/g, "$1<em>$2</em>")
     .replace(/~~([\s\S]+?)~~/g, "<s>$1</s>");
 
   // Only http(s) links are linkified; anything else stays plain text so model
   // output can never produce a `javascript:` or `file:` href.
+  const urlPattern = new RegExp(`@@U${nonce}(\\d+)@@`, "g");
   out = out
     .replace(
-      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      '<a href="$2" data-external="true">$1</a>'
+      new RegExp(`\\[([^\\]]+)\\]\\(@@U${nonce}(\\d+)@@\\)`, "g"),
+      (_match, label, index) =>
+        `<a href="${urls[Number(index)]}" data-external="true">${label}</a>`
     )
-    .replace(
-      /(^|[\s(])(https?:\/\/[^\s<)]+)/g,
-      '$1<a href="$2" data-external="true">$2</a>'
-    );
+    .replace(urlPattern, (_match, index) => {
+      const url = urls[Number(index)];
+      return `<a href="${url}" data-external="true">${url}</a>`;
+    });
 
   out = out.replace(
-    /@@JARVISCODE(\d+)@@/g,
+    new RegExp(`@@C${nonce}(\\d+)@@`, "g"),
     (_match, index) => `<code>${codeSpans[Number(index)]}</code>`
   );
 
   return out;
 }
+
 
 /** Block-level renderer: fences, headings, lists, quotes, rules, tables. */
 function renderMarkdown(source) {

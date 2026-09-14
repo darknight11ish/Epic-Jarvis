@@ -247,4 +247,30 @@
 
   window.EventSource = ShellEventSource;
   console.info("[jarvis] EventSource is served by the shell's single stream");
+
+  /* ---------------------------------------------------------------- *
+   * 3. Fonts, served locally
+   *
+   * The vendored page links Chakra Petch and IBM Plex from
+   * fonts.googleapis.com. In a browser served by the backend that is the
+   * page author's call; in a packaged desktop app it means every window
+   * open leaks the user's IP to Google, and the typography falls back to
+   * system fonts with no network.
+   *
+   * The app CSP no longer lists either Google origin, so the page's own
+   * <link> is refused before a request leaves the webview — no fork of
+   * jarvis_hud.html required, and nothing to re-apply when the next copy
+   * of it arrives. This supplies the replacement: the same families,
+   * bundled under the SIL OFL (see fonts/OFL.txt), from disk.
+   * ---------------------------------------------------------------- */
+  function localFonts() {
+    if (document.getElementById("jarvis-local-fonts")) return;
+    var link = document.createElement("link");
+    link.id = "jarvis-local-fonts";
+    link.rel = "stylesheet";
+    link.href = "fonts/fonts.css";
+    (document.head || document.documentElement).appendChild(link);
+  }
+  if (document.head) localFonts();
+  else document.addEventListener("DOMContentLoaded", localFonts, { once: true });
 })();

@@ -160,6 +160,49 @@ for (const input of hostile) {
 }
 
 /* -------------------------------------------------------------------------
+ * The URL must survive the emphasis passes intact.
+ *
+ * `__` and `*` inside a URL used to be rewritten before linkification saw
+ * them, so the href ended up pointing somewhere the text did not say — and
+ * that href is what `open_external_url` hands to the OS shell.
+ * ---------------------------------------------------------------------- */
+const hrefOf = (html) => (html.match(/href="([^"]*)"/) || [])[1];
+const urlCases = [
+  ["Read https://x.com/a__b__c now.", "https://x.com/a__b__c"],
+  ["[docs](https://example.com/a__b__c)", "https://example.com/a__b__c"],
+  ["See https://e.com/x**y**z", "https://e.com/x**y**z"],
+  ["[l](https://e.com/p?a=1&b=2)", "https://e.com/p?a=1&amp;b=2"],
+];
+for (const [input, expected] of urlCases) {
+  check(
+    `href intact: ${JSON.stringify(input).slice(0, 40)}`,
+    hrefOf(renderMarkdown(input)) === expected,
+    `expected ${expected}, got ${hrefOf(renderMarkdown(input))}`
+  );
+}
+check(
+  "identifiers are not emphasised",
+  !renderMarkdown("The field is user__name__id.").includes("<strong>"),
+  renderMarkdown("The field is user__name__id.")
+);
+
+/* -------------------------------------------------------------------------
+ * Placeholders are per-call, so model output cannot collide with them.
+ * ---------------------------------------------------------------------- */
+check(
+  "placeholder collision is inert",
+  renderMarkdown("Use `alpha` then literally @@JARVISCODE0@@ here.").includes(
+    "@@JARVISCODE0@@"
+  ),
+  renderMarkdown("Use `alpha` then literally @@JARVISCODE0@@ here.")
+);
+check(
+  "unmatched placeholder is not substituted",
+  !renderMarkdown("Model writes @@JARVISCODE0@@ alone.").includes("undefined"),
+  renderMarkdown("Model writes @@JARVISCODE0@@ alone.")
+);
+
+/* -------------------------------------------------------------------------
  * Fuzz. No input may fail to terminate — that is the structural guarantee the
  * parser now carries, and the only way to keep it is to keep trying to break it.
  * ---------------------------------------------------------------------- */
@@ -181,7 +224,7 @@ for (let i = 0; i < ROUNDS; i++) {
   }
 }
 
-const total = previouslyHung.length + cases.length + hostile.length;
+const total = previouslyHung.length + cases.length + hostile.length + urlCases.length + 3;
 if (failures) {
   console.error(`\n${failures} failure(s) across ${total} cases + ${ROUNDS} fuzz inputs`);
   process.exit(1);

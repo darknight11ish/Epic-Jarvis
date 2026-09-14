@@ -76,7 +76,14 @@
         </section>
 
         <!-- Pending autonomy gate -->
-        <section class="approval-card" id="approval-card" hidden>
+        <section
+          class="approval-card"
+          id="approval-card"
+          hidden
+          role="alertdialog"
+          aria-live="assertive"
+          aria-label="Approval required"
+        >
           <div class="approval-header">
             <span class="warn-badge">APPROVAL REQUIRED</span>
             <span class="action-name mono" id="appr-action">--</span>
@@ -94,7 +101,13 @@
 
         <!-- One-shot capture -->
         <section class="capture-row">
-          <div class="capture-target mono" id="capture-target" data-target="logseq">#log</div>
+          <button
+            type="button"
+            class="capture-target mono"
+            id="capture-target"
+            data-target="logseq"
+            aria-label="Capture target: Logseq journal. Activate to switch to the Joplin vault."
+          >#log</button>
           <input
             id="capture-input"
             class="capture-input"
@@ -103,7 +116,12 @@
             autocomplete="off"
             placeholder="Capture a note…"
           />
-          <button class="icon-btn send-btn" id="btn-capture-send" title="File it (↵)">↵</button>
+          <button
+            class="icon-btn send-btn"
+            id="btn-capture-send"
+            title="File it (↵)"
+            aria-label="File this capture"
+          >↵</button>
         </section>
 
         <p class="widget-flash" id="widget-flash" hidden></p>

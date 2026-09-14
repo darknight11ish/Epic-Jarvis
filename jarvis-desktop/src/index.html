@@ -12,7 +12,10 @@
       transparent; the shell is what you actually see, and main.js measures it
       to drive the native window resize as the answer card grows.
     -->
-    <main id="shell" class="shell" aria-live="polite">
+    <!-- aria-live belongs on the region that changes, not on the whole UI.
+         It used to be here, so a screen reader re-announced the textarea, the
+         chips and the entire answer on every streamed repaint. -->
+    <main id="shell" class="shell">
       <!-- ── Input row ─────────────────────────────────────────────────── -->
       <div class="bar" id="bar" data-tauri-drag-region>
         <div class="reactor" id="reactor" aria-hidden="true">
@@ -116,7 +119,14 @@
       </div>
 
       <!-- ── Approval gate ─────────────────────────────────────────────── -->
-      <section class="approval" id="approval" hidden aria-live="assertive">
+      <section
+        class="approval"
+        id="approval"
+        hidden
+        role="alertdialog"
+        aria-live="assertive"
+        aria-label="Approval required"
+      >
         <header class="approval-head">
           <span class="approval-badge" aria-hidden="true">
             <svg viewBox="0 0 16 16" focusable="false">
@@ -159,7 +169,12 @@
         </header>
 
         <div class="card-body" id="card-body">
-          <article class="markdown" id="answer"></article>
+          <article
+            class="markdown"
+            id="answer"
+            aria-live="polite"
+            aria-atomic="false"
+          ></article>
           <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
         </div>
 

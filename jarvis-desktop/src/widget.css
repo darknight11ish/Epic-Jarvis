@@ -450,8 +450,12 @@ body {
   gap: 6px;
 }
 
+/* Now a <button> rather than a <div>, so the Logseq/Joplin switch is reachable
+   from the keyboard. Buttons do not inherit the page font, hence the resets. */
 .capture-target {
   flex: 0 0 auto;
+  font-family: var(--font-mono);
+  line-height: 1.2;
   padding: 3px 6px;
   border: 1px solid rgba(111, 227, 255, 0.22);
   border-radius: 5px;
