@@ -323,3 +323,23 @@ select:focus-visible {
 .hotkey[data-bound="false"] .hotkey-state {
   color: var(--bad-text);
 }
+
+/* The release notes are published text: arbitrary length, and not ours. A
+   disclosure keeps them out of the way of the button. */
+.update-notes {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.update-notes summary {
+  cursor: pointer;
+  color: var(--accent-text);
+}
+
+.update-notes .note {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}

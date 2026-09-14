@@ -292,7 +292,12 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },
 ];
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse }) {
+export const UPDATE_NONE = {
+  current: "0.1.0", available: null, notes: null, date: null,
+  error: null, supported: true, check_on_start: true,
+};
+
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -329,6 +334,18 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "stream_chat": return null;
           case "get_theme": return theme || "deep-space";
           case "get_hotkeys": return window.__hotkeys;
+          case "update_status": return window.__update;
+          case "check_for_update":
+            window.__calls.push(["__checked"]);
+            window.__update = { ...window.__update, ...(window.__found || {}) };
+            return window.__update;
+          case "set_update_check_on_start":
+            window.__update = { ...window.__update, check_on_start: args.enabled };
+            return args.enabled;
+          case "install_update":
+            if (window.__installFails) throw new Error(window.__installFails);
+            window.__calls.push(["__installed"]);
+            return window.__update.available;
           case "reset_hotkeys":
             window.__hotkeys = window.__hotkeys.map((h) => ({
               ...h, accelerator: h.default, registered: true, error: null,
@@ -394,6 +411,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     }
   }
   window.__hotkeys = JSON.parse(JSON.stringify(hotkeys));
+  window.__update = JSON.parse(JSON.stringify(update));
+  window.__found = found || null;
+  window.__installFails = installFails || null;
   window.__refuse = refuse || [];
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
@@ -423,7 +443,8 @@ export async function open(browser, base, file, data, viewport) {
   await page.addInitScript(bridge, {
     link: {}, pending: [], attention: ATTENTION_CLEAR, digest: DIGEST,
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
-    hotkeys: HOTKEYS, refuse: [], ...data,
+    hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
+    installFails: null, ...data,
   });
   await page.goto(`${base}/${file}`);
   await page.waitForTimeout(500);

@@ -55,6 +55,10 @@ fn main() {
             "get_api_settings",
             "set_api_settings",
             // Widget geometry and capture
+            "update_status",
+            "check_for_update",
+            "set_update_check_on_start",
+            "install_update",
             "get_hotkeys",
             "set_hotkeys",
             "reset_hotkeys",

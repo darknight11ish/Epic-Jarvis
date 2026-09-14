@@ -89,7 +89,7 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper",
@@ -108,5 +108,16 @@
     "resources": [
       "../../THIRD-PARTY-NOTICES.txt"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/darknight111/Epic-Jarvis/releases/latest/download/latest.json"
+      ],
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

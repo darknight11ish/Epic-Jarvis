@@ -123,6 +123,15 @@ permissions = [
   "allow-get-hotkeys",
   "allow-set-hotkeys",
   "allow-reset-hotkeys",
+  # Updates. `install_update` replaces the running executable, which is the
+  # largest single thing this app can do to the machine — so it lives here,
+  # behind the window a person has to open deliberately, and it is a separate
+  # command from the check rather than a flag on it. Nothing else in the build
+  # can reach it, and no timer calls it.
+  "allow-update-status",
+  "allow-check-for-update",
+  "allow-set-update-check-on-start",
+  "allow-install-update",
   "allow-get-api-settings",
   "allow-set-api-settings",
   "allow-supervisor-status",

@@ -150,6 +150,38 @@ claims the same combination. The app raises a Windows notification naming the
 combinations it could not register; `verify-windows.ps1` also reports whether a
 known contender is running.
 
+## Updating
+
+Jarvis Desktop can look at its own GitHub releases and tell you when a newer
+build exists. **It will not install one.** Checking is a single outbound HTTPS
+GET carrying nothing but the request — no identifier, no telemetry, no account
+— and installing is a button in Settings → Updates, pressed by a person. That
+is the same rule the rest of the app follows for every action it can take, and
+an update replaces the executable, so it applies here most of all.
+
+### Turning it on
+
+The updater is inert until you publish a signed release. One-time setup:
+
+```powershell
+npm run tauri signer generate -- -w $HOME\.tauri\jarvis.key
+```
+
+Put the **public** key in `src-tauri/tauri.conf.json` under
+`plugins.updater.pubkey`. Keep the private key and its password out of the
+repository; `tauri build` reads them from `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+
+With `pubkey` empty — which is how it ships — the app says so in Settings and
+disables the Check button, rather than offering one that can only ever fail.
+
+Then publish a release containing the installers and the generated
+`latest.json`, at the endpoint in `tauri.conf.json`.
+
+A download whose signature does not verify is refused before anything is
+executed, so a replaced artifact, a hijacked DNS answer or a proxy rewriting
+the response all fail closed.
+
 ## IPC surface
 
 Commands exposed to the frontend (`invoke("<name>", …)`):

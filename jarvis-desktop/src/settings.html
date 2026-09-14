@@ -97,6 +97,37 @@
       </section>
 
       <section class="card">
+        <h2>Updates</h2>
+        <p class="note">
+          Jarvis Desktop can look at its GitHub releases and tell you when a
+          newer build exists. It will not install one. Checking sends a single
+          request carrying nothing but the request itself — no identifier, no
+          telemetry, no account — and installing is the button below, pressed
+          by you. An update replaces the program, which is the largest single
+          change anything here can make to this machine, and nothing in Jarvis
+          does that on a timer.
+        </p>
+
+        <label class="row">
+          <span class="label">Look for updates when Jarvis starts</span>
+          <input id="update-auto" type="checkbox" />
+        </label>
+
+        <p class="state" id="update-state">—</p>
+
+        <div class="row">
+          <button class="btn" id="update-check" type="button">Check now</button>
+          <button class="btn" id="update-install" type="button" hidden>Install</button>
+          <span class="status" id="update-status" role="status"></span>
+        </div>
+
+        <details class="update-notes" id="update-notes" hidden>
+          <summary>Release notes</summary>
+          <p class="note" id="update-notes-body"></p>
+        </details>
+      </section>
+
+      <section class="card">
         <h2>Shortcuts</h2>
         <p class="note">
           Global accelerators: they work whatever window has focus, which also

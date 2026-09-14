@@ -21,6 +21,7 @@
 //! Reconnect the event stream
 //! Run a status check
 //! Settings…
+//! Jarvis Desktop 0.1.0                     (status, or "Update available")
 //! ─────────────────────────────
 //! Quit Jarvis
 //! ```
@@ -101,6 +102,7 @@ const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
 const ID_RECONNECT: &str = "reconnect";
 const ID_SETTINGS: &str = "settings";
+const ID_UPDATE: &str = "update";
 const ID_STATUS_CHECK: &str = "status-check";
 const ID_QUIT: &str = "quit";
 
@@ -119,6 +121,8 @@ struct Rows {
     waiting: MenuItem<tauri::Wry>,
     mute: MenuItem<tauri::Wry>,
     backend: MenuItem<tauri::Wry>,
+    /// Shown only while a newer version is known to exist.
+    update: MenuItem<tauri::Wry>,
 }
 
 /// The colour last pushed to the shell, so an unchanged frame costs nothing.
@@ -211,6 +215,18 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
+    // Status and action in one row, the way `backend` is: it names the version
+    // running — which the menu never showed and people do look for — and
+    // becomes clickable only when there is something newer. `MenuItem` has no
+    // `set_visible` in Tauri 2.11, so a row that appears and disappears is not
+    // available; a row that says something true either way is better anyway.
+    let update = MenuItem::with_id(
+        app,
+        ID_UPDATE,
+        format!("Jarvis Desktop {}", app.package_info().version),
+        false,
+        None::<&str>,
+    )?;
     let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings…", true, None::<&str>)?;
     let status_check = MenuItem::with_id(
         app,
@@ -251,6 +267,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &reconnect,
             &status_check,
             &settings,
+            &update,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -267,6 +284,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             waiting,
             mute,
             backend,
+            update,
         });
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
@@ -801,6 +819,33 @@ fn first_sentence(text: &str) -> String {
 
 /// Called by the stream whenever the link state moves. Re-labels the rows and
 /// repaints the icon.
+/// Shows or hides the update row. Called by `update.rs` when a check answers.
+///
+/// The row is a way IN to Settings, never an install: an update replaces the
+/// executable, and that decision belongs on a surface with the version and the
+/// release notes in front of the person making it, not on a context menu.
+pub fn on_update_status(app: &AppHandle, available: Option<&str>) {
+    let current = app.package_info().version.to_string();
+    if let Some(rows) = app
+        .state::<TrayHandles>()
+        .inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+    {
+        match available {
+            Some(v) => {
+                let _ = rows.update.set_text(format!("Update available — {v}…"));
+                let _ = rows.update.set_enabled(true);
+            }
+            None => {
+                let _ = rows.update.set_text(format!("Jarvis Desktop {current}"));
+                let _ = rows.update.set_enabled(false);
+            }
+        }
+    }
+}
+
 pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
     if let Some(rows) = app
         .state::<TrayHandles>()
@@ -923,7 +968,10 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 
         ID_BACKEND => run_backend_action(app),
 
-        ID_SETTINGS => {
+        // Opens the window. It does NOT install: the tray cannot, by design —
+        // an update replaces the executable and that decision belongs on a
+        // surface with the version and the release notes in front of you.
+        ID_UPDATE | ID_SETTINGS => {
             if let Err(err) = windows::show_settings(app) {
                 eprintln!("[jarvis] tray: settings unavailable: {err}");
                 commands::notify(app, "Jarvis", &format!("Settings unavailable: {err}"));

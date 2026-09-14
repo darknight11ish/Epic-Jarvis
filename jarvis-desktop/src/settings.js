@@ -49,6 +49,14 @@ const dom = {
   backendStatus: $("backend-status"),
   backendState: $("backend-state"),
 
+  updateAuto: $("update-auto"),
+  updateState: $("update-state"),
+  updateCheck: $("update-check"),
+  updateInstall: $("update-install"),
+  updateStatus: $("update-status"),
+  updateNotes: $("update-notes"),
+  updateNotesBody: $("update-notes-body"),
+
   hotkeyRows: $("hotkey-rows"),
   saveHotkeys: $("save-hotkeys"),
   resetHotkeys: $("reset-hotkeys"),
@@ -501,3 +509,113 @@ dom.resetHotkeys.addEventListener("click", async () => {
 });
 
 loadHotkeys();
+
+
+/* ==========================================================================
+   Updates
+   --------------------------------------------------------------------------
+   Check, report, and install only on a press. There is deliberately no path
+   through this file that installs without one — `check_for_update` and
+   `install_update` are separate commands in Rust for the same reason, so that
+   no later edit can turn a check into an install by passing a flag.
+   ========================================================================== */
+
+function paintUpdate(status) {
+  if (!status) return;
+  dom.updateAuto.checked = Boolean(status.check_on_start);
+  dom.updateAuto.disabled = !status.supported;
+
+  const notes = String(status.notes || "").trim();
+  dom.updateNotes.hidden = !notes;
+  dom.updateNotesBody.textContent = notes;
+
+  if (!status.supported) {
+    // A Check button that can only ever fail invites someone to keep pressing
+    // it, so say what is actually true about this build instead.
+    dom.updateState.textContent =
+      `Version ${status.current}. This build has no update key, so it cannot ` +
+      `verify a download and will not offer one.`;
+    dom.updateCheck.disabled = true;
+    dom.updateInstall.hidden = true;
+    return;
+  }
+
+  dom.updateCheck.disabled = false;
+  if (status.available) {
+    dom.updateState.textContent =
+      `Version ${status.available} is available. You are running ${status.current}` +
+      (status.date ? ` · published ${status.date}` : "") + ".";
+    dom.updateInstall.hidden = false;
+    dom.updateInstall.textContent = `Install ${status.available}`;
+  } else {
+    dom.updateInstall.hidden = true;
+    dom.updateState.textContent = status.error
+      ? `Version ${status.current}. ${status.error}`
+      : `Version ${status.current} — the newest published.`;
+  }
+}
+
+async function loadUpdate() {
+  try {
+    paintUpdate(await invoke("update_status"));
+  } catch (error) {
+    report(dom.updateStatus, String(error.message || error), "bad");
+  }
+}
+
+dom.updateCheck.addEventListener("click", async () => {
+  report(dom.updateStatus, "Checking…", "");
+  try {
+    const status = await invoke("check_for_update");
+    paintUpdate(status);
+    const said = status.available
+      ? `Version ${status.available} is available.`
+      : status.error || "Nothing newer.";
+    report(dom.updateStatus, said, status.available ? "ok" : "");
+    announce(said);
+  } catch (error) {
+    report(dom.updateStatus, String(error.message || error), "bad");
+  }
+});
+
+dom.updateInstall.addEventListener("click", async () => {
+  // No confirmation dialog, because the button is the confirmation: it only
+  // appears once a check has found something, and it names the version.
+  report(dom.updateStatus, "Downloading and verifying…", "");
+  dom.updateInstall.disabled = true;
+  dom.updateCheck.disabled = true;
+  try {
+    const version = await invoke("install_update");
+    report(dom.updateStatus, `${version} installed. Restart Jarvis to run it.`, "ok");
+    announce(dom.updateStatus.textContent, "assertive");
+  } catch (error) {
+    // A signature that does not verify lands here, and it is the one failure
+    // that must not read as a routine network problem.
+    report(dom.updateStatus, String(error.message || error), "bad");
+    announce(dom.updateStatus.textContent, "assertive");
+    dom.updateInstall.disabled = false;
+  } finally {
+    dom.updateCheck.disabled = false;
+  }
+});
+
+dom.updateAuto.addEventListener("change", async () => {
+  try {
+    await invoke("set_update_check_on_start", { enabled: dom.updateAuto.checked });
+    report(
+      dom.updateStatus,
+      dom.updateAuto.checked
+        ? "Jarvis will look once at startup."
+        : "Jarvis will not look on its own.",
+      "ok"
+    );
+  } catch (error) {
+    report(dom.updateStatus, String(error.message || error), "bad");
+    dom.updateAuto.checked = !dom.updateAuto.checked;
+  }
+});
+
+// The startup check finishes after this window may already be open.
+if (IS_TAURI) TAURI.event.listen("update-status", (event) => paintUpdate(event.payload));
+
+loadUpdate();

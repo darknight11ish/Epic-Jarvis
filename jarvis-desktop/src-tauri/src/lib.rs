@@ -26,6 +26,7 @@ pub mod spec;
 pub mod sse;
 pub mod stream;
 pub mod tray;
+pub mod update;
 pub mod windows;
 
 use std::sync::{Arc, Mutex};
@@ -87,6 +88,9 @@ pub mod events {
     /// by the widget — the panel itself lives in the quickbar, because the HUD
     /// window is the backend's own page and not ours to add sections to.
     pub const SHOW_DIGEST: &str = "show-digest";
+    /// Payload: [`crate::update::Status`] — the result of an update check.
+    /// Carries no action: nothing that receives this may install anything.
+    pub const UPDATE_STATUS: &str = "update-status";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -467,6 +471,7 @@ pub fn run() {
         // shortcut handler reads it and would panic on an unregistered state
         // if a fallible call above it ever returned early.
         .manage(hotkeys::HotkeyState::default())
+        .manage(update::UpdateState::default())
         .invoke_handler(tauri::generate_handler![
             // Eight commands used to be registered here with no caller in any
             // window: capture_screen, is_quickbar_pinned, notify_user,
@@ -504,6 +509,10 @@ pub fn run() {
             commands::set_theme,
             commands::get_api_settings,
             commands::set_api_settings,
+            update::update_status,
+            update::check_for_update,
+            update::set_update_check_on_start,
+            update::install_update,
             hotkeys::get_hotkeys,
             hotkeys::set_hotkeys,
             hotkeys::reset_hotkeys,
@@ -675,6 +684,11 @@ pub fn run() {
             // the tray colour, the approval queue in all three windows, the
             // online pill — is fed from here and nowhere else.
             stream::spawn(handle.clone());
+
+            // One outbound GET, if the owner left it on, and nothing is
+            // installed by it. Spawned and forgotten: a slow endpoint must not
+            // hold up the window, the tray or the event stream.
+            update::spawn_startup_check(&handle);
 
             // Bind the accelerators. A failure here is not fatal: another
             // application may already own a combination, and Jarvis still works
