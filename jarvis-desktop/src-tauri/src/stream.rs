@@ -93,8 +93,14 @@ pub struct LinkState {
     /// Activity: `idle`, `listening`, `thinking`, `speaking`, `working`,
     /// `error`. What Jarvis is doing. The visual spec binds colour to this one.
     pub activity: String,
-    /// How many approvals are waiting on a human.
+    /// How many approvals are waiting on a human. Not the digest count —
+    /// see [`crate::attention::Attention::pending`] for that one.
     pub approvals: usize,
+    /// The interruption budget, the digest count and the server's `banked`
+    /// flag. Carried on the link rather than in a channel of its own so that
+    /// the tray, the quickbar and the widget cannot disagree about how many
+    /// things are waiting: one struct, one broadcast, one repaint.
+    pub attention: crate::attention::Attention,
     /// Why the stream is down, when it is. `None` while connected.
     pub error: Option<String>,
 }
@@ -113,6 +119,7 @@ impl Default for LinkState {
             power_set_by: None,
             activity: "idle".to_string(),
             approvals: 0,
+            attention: crate::attention::Attention::default(),
             error: None,
         }
     }
@@ -169,6 +176,7 @@ fn same_link(a: &LinkState, b: &LinkState) -> bool {
         && a.power_set_by == b.power_set_by
         && a.activity == b.activity
         && a.approvals == b.approvals
+        && a.attention == b.attention
         && a.error == b.error
 }
 
@@ -476,9 +484,26 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 println!("[jarvis] resume point unusable; re-reading all state");
                 prime_from_version(app, base).await;
                 refresh_pending(app, base).await;
+                crate::attention::refresh(app, base).await;
                 publish_link(app, |link| link.stale = false);
                 crate::emit_all(app, crate::events::JARVIS_RESYNC, ());
+            } else {
+                // A clean resume still needs one read. The `attention` event
+                // only fires on a change, so a desktop that connects to a
+                // quiet system would sit on `known: false` — and therefore on
+                // "waiting: unknown" — until the budget happened to move.
+                crate::attention::refresh(app, base).await;
             }
+        }
+
+        // The one event kind that carries its own state rather than ringing a
+        // doorbell. §4 documents the payload and the update order says "use
+        // the event, poll only on resume"; `_publish_state` sends it only when
+        // one of the five fields actually moves, so applying it directly costs
+        // nothing and re-fetching would cost a round trip per change.
+        "attention" => {
+            let data = event.data.clone();
+            publish_link(app, |link| link.attention.apply_event(&data));
         }
 
         // The doorbell. §3 rule 1: the event says something changed, so read
@@ -672,7 +697,7 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
 /// Applies a link change and, if anything moved, tells every window and repaints
 /// the tray. One function so a caller cannot update the state and forget one of
 /// the two consumers.
-fn publish_link<F: FnOnce(&mut LinkState)>(app: &AppHandle, edit: F) {
+pub(crate) fn publish_link<F: FnOnce(&mut LinkState)>(app: &AppHandle, edit: F) {
     let Some(next) = app.state::<StreamState>().update(edit) else {
         return;
     };

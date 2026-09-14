@@ -25,6 +25,12 @@ fn main() {
             "get_pending_approvals",
             "refresh_link",
             "decide_approval",
+            // The interruption budget and the daily brief. Reads and two
+            // writes; the tray calls the same functions in-process, so it
+            // needs no grant.
+            "get_digest",
+            "mark_digest_seen",
+            "set_attention_muted",
             // Backend supervision — settings window only
             "supervisor_status",
             "set_supervision",

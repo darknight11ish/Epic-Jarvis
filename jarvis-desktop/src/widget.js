@@ -91,6 +91,9 @@ const dom = {
 
   apprCard: $("approval-card"),
   apprRisk: $("appr-risk"),
+  apprRaised: $("appr-raised"),
+  apprRaisedChip: $("appr-raised-chip"),
+  apprRaisedQuote: $("appr-raised-quote"),
   apprAction: $("appr-action"),
   apprDetail: $("appr-detail"),
   btnApprYes: $("btn-appr-yes"),
@@ -334,6 +337,15 @@ function openApproval(approval) {
   dom.apprDetail.textContent = approvalDetail(approval);
   dom.apprRisk.textContent = riskLine(approval.risk);
   dom.apprRisk.dataset.reversible = approval.risk ? approval.risk.reversible : "no";
+
+  // Why this is being asked at all. `text` already carries its own "(4th time
+  // today)" when the source has tripped this repeatedly; nothing here counts.
+  // Both strings are hostile text by definition and go in as textContent.
+  const raised = approval.raised;
+  dom.apprRaised.hidden = !raised;
+  dom.apprRaisedChip.textContent = raised ? raised.text : "";
+  dom.apprRaisedQuote.textContent = raised && raised.quote ? `“${raised.quote}”` : "";
+  dom.apprRaisedQuote.hidden = !(raised && raised.quote);
   dom.apprCard.hidden = false;
   syncApprovalButtons();
   // A gate is the one thing worth opening the widget for on its own — but only

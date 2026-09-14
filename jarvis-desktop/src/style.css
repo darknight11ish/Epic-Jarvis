@@ -1229,3 +1229,274 @@ html[data-state="approval"] .pulse {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+   Attention: the interruption budget and the daily brief
+   --------------------------------------------------------------------------
+   Quieter than the approval gate on purpose. The gate is a decision that has
+   stopped something; this is a list of things that have already happened and
+   are waiting to be mentioned. Making it as loud as the gate would teach the
+   eye to discount both.
+
+   `data-banked="true"` is the state where the budget is spent: the panel goes
+   flat and grey, matching what the reactor does, so the two surfaces are
+   plainly describing the same fact.
+   ========================================================================== */
+
+.attention {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hairline);
+  border-left: 2px solid var(--accent-dim);
+  background: linear-gradient(
+    180deg,
+    rgba(56, 240, 255, 0.05),
+    rgba(56, 240, 255, 0.015) 60%,
+    transparent
+  );
+  animation: card-in 200ms var(--ease) both;
+}
+
+.attention[data-banked="true"] {
+  border-left-color: rgba(139, 148, 163, 0.5);
+  background: linear-gradient(
+    180deg,
+    rgba(139, 148, 163, 0.06),
+    transparent 70%
+  );
+}
+
+.attention-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 14px 8px 16px;
+}
+
+.attention-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.attention-title strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.attention-budget {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.attention-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.digest {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 4px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.digest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.digest-row:first-child {
+  border-top: none;
+}
+
+.digest-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The kind, not the priority. An item's own text never moves it up this list
+   and never changes how it is drawn — the rank is the server's and it is by
+   consequence, so the badge says what a thing *is*. */
+.digest-kind {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  padding: 1px 6px;
+}
+
+.digest-row[data-kind="approval"] .digest-kind {
+  color: var(--warn);
+  border-color: rgba(255, 200, 96, 0.4);
+}
+
+.digest-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.digest-source {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.digest-body {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.digest-open {
+  align-self: flex-start;
+  font-size: 11px;
+}
+
+.attention-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 14px 10px 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* "Marking read approves nothing" lives here, in the same eyeline as the
+   button, because the one thing a reader might assume about a Mark-read
+   control is exactly the thing it does not do. */
+.attention-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   `raised` — why this approval exists at all
+   --------------------------------------------------------------------------
+   Rose rather than amber. The gate around it is amber and means "decide
+   this"; this block means "something tried to make you decide it faster",
+   which is a different claim and has to survive being read at a glance next
+   to the other one.
+
+   The quote is the attacker's own words, shown in real quotation marks. The
+   context is text from the page being judged, so it sits behind a disclosure
+   and is never on screen unless it was asked for. Nothing in here clears the
+   latch: it lasts ten minutes, and a button to undo a safety rule under time
+   pressure is the control this whole feature exists to avoid.
+   ========================================================================== */
+
+.raised {
+  margin: 0 14px 8px 16px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 107, 122, 0.35);
+  border-left-width: 2px;
+  border-radius: var(--radius-card);
+  background: rgba(255, 107, 122, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.raised-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.raised-chip {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--bad);
+}
+
+/* Named, never quoted: this is an identifier the server chose, not content. */
+.raised-source {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+/* The tier the table would have given, and the one it got instead. Rendered
+   from a data attribute so the fact travels with the element rather than
+   needing its own node. */
+.raised[data-tiers]::after {
+  content: "tier " attr(data-tiers);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
+.raised-quote {
+  margin: 0;
+  padding: 0 0 0 8px;
+  border-left: 2px solid rgba(255, 107, 122, 0.4);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.raised-context summary {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.raised-context summary::before {
+  content: "▸ ";
+  color: var(--text-faint);
+}
+
+.raised-context[open] summary::before {
+  content: "▾ ";
+}
+
+.raised-context-body {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-height: 120px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  /* Not prose the app is speaking. Sunken so it reads as quoted material. */
+  background: var(--surface-sunken);
+  border-radius: 8px;
+  padding: 6px 8px;
+}

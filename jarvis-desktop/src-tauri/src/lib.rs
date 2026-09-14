@@ -16,6 +16,7 @@
 //! | `quickbar` | 750×80 frameless transparent spotlight bar, always on top    |
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
+pub mod attention;
 pub mod commands;
 pub mod proctree;
 pub mod sidecar;
@@ -73,6 +74,10 @@ pub mod events {
     pub const DESKTOP_TELEMETRY: &str = "desktop-telemetry";
     /// Payload: `{ id, approved }`.
     pub const APPROVAL_RESOLVED: &str = "approval-resolved";
+    /// Payload: none. Open the daily brief. Sent by the tray's waiting row and
+    /// by the widget — the panel itself lives in the quickbar, because the HUD
+    /// window is the backend's own page and not ours to add sections to.
+    pub const SHOW_DIGEST: &str = "show-digest";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -82,7 +87,9 @@ pub mod events {
 
     /// Payload: `{ kind, id, data }` — one frame off the server's event bus,
     /// verbatim. `kind` is `hello`, `approval`, `finding`, `power`, `persona`,
-    /// `model`, `voice` or `activity`.
+    /// `model`, `voice`, `activity`, `attention` or `job`. (JARVIS-API §3 lists
+    /// only the first seven; `activity`, `attention` and `job` are all
+    /// published by the backend and documented elsewhere in §4.)
     pub const JARVIS_EVENT: &str = "jarvis-event";
     /// Payload: [`crate::stream::LinkState`] — whether the stream is up, what
     /// Jarvis is doing, and how many approvals are waiting.
@@ -493,6 +500,9 @@ pub fn run() {
             stream::get_link_state,
             stream::get_pending_approvals,
             stream::refresh_link,
+            attention::get_digest,
+            attention::mark_digest_seen,
+            attention::set_attention_muted,
             sidecar::supervisor_status,
             sidecar::set_supervision,
             sidecar::start_backend,

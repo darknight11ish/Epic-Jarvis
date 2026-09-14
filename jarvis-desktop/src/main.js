@@ -83,10 +83,14 @@ const RESIZE_INTERVAL_MS = 150;
 
 import {
   currentLink,
+  currentQueue,
   decide as decideOnBackend,
+  fetchDigest,
+  markDigestSeen,
   onLink,
   onQueue,
   riskLine,
+  setMuted,
   start as startLink,
 } from "./jarvis-link.js";
 
@@ -156,6 +160,21 @@ const dom = {
   approvalHint: $("approval-hint"),
   approvalApprove: $("approval-approve"),
   approvalDeny: $("approval-deny"),
+  approvalRaised: $("approval-raised"),
+  raisedChip: $("raised-chip"),
+  raisedSource: $("raised-source"),
+  raisedQuote: $("raised-quote"),
+  raisedContextWrap: $("raised-context-wrap"),
+  raisedContext: $("raised-context"),
+
+  attention: $("attention"),
+  attentionCount: $("attention-count"),
+  attentionBudget: $("attention-budget"),
+  attentionMute: $("attention-mute"),
+  attentionClose: $("attention-close"),
+  attentionNote: $("attention-note"),
+  digest: $("digest"),
+  digestSeen: $("digest-seen"),
 
   attachments: $("attachments"),
   captureChip: $("attachment-capture"),
@@ -205,6 +224,12 @@ const state = {
   deciding: false,
   /** The id of the gate a decision was sent for, so it cannot be sent twice. */
   decided: null,
+  /** The digest as last read, in the server's order. Never re-sorted. */
+  digest: null,
+  /** True once the panel has been opened, so it stays open while it is used. */
+  attentionOpen: false,
+  /** True while a digest read is in flight, so a repaint cannot stack them. */
+  digestLoading: false,
   route: { ...DEFAULT_ROUTE },
 };
 
@@ -858,6 +883,8 @@ function refreshApproval(approval) {
   dom.approvalTarget.hidden = !target;
   if (target) dom.approvalTarget.textContent = String(target);
 
+  renderRaised(approval.raised);
+
   dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
   decorateDiff(dom.approvalPreview);
 
@@ -875,12 +902,314 @@ function refreshApproval(approval) {
   syncWindowHeight();
 }
 
+/* ==========================================================================
+   Attention: the interruption budget and the daily brief
+   --------------------------------------------------------------------------
+   Two counts live near each other here and they must not be confused.
+
+     link.approvals            things waiting for a DECISION — the gate queue
+     link.attention.pending    things waiting to be TOLD to you — the digest
+
+   The second is the tray badge and the notch count on the reactor's rim. A
+   finished job adds to it and makes no sound, which is the whole point of the
+   budget: the code path that finishes a job is not the code path that checks
+   whether Jarvis may speak.
+   ========================================================================== */
+
+/** Paints the panel from the link, and opens or closes it as the count moves. */
+function syncAttention() {
+  const a = currentLink().attention;
+
+  // Nothing has been read yet — say so rather than showing a confident zero
+  // over a digest that was never fetched.
+  if (!a.known) {
+    dom.attention.hidden = true;
+    return;
+  }
+
+  const visible = state.attentionOpen || a.pending > 0;
+  const wasHidden = dom.attention.hidden;
+  dom.attention.hidden = !visible;
+  if (!visible) {
+    state.digest = null;
+    syncWindowHeight();
+    return;
+  }
+
+  dom.attentionCount.textContent =
+    a.pending === 0
+      ? "Nothing waiting"
+      : a.pending === 1
+        ? "1 thing waiting to be told"
+        : `${a.pending} things waiting to be told`;
+
+  // Why nothing is being said out loud, when nothing is. `blockedBy` is the
+  // server's own words — Quiet, Standby, a locked session, or muted — and it
+  // outranks the count, because a budget with three left and a locked session
+  // is still a budget of zero.
+  dom.attentionBudget.textContent = a.blockedBy
+    ? `Silent — ${a.blockedBy}`
+    : `${a.remaining} of ${a.limit} spoken interruptions left today`;
+  dom.attention.dataset.banked = String(a.banked);
+
+  // Worded with its end date in both directions. There is no mute without one.
+  dom.attentionMute.textContent = a.muted
+    ? "Unmute"
+    : "Mute until tomorrow";
+  dom.attentionMute.title = a.muted
+    ? "Let Jarvis speak again today"
+    : "Jarvis stays silent until tomorrow. There is no mute without an end.";
+
+  if (wasHidden || state.digest === null) loadDigest();
+  syncWindowHeight();
+}
+
+/** Reads the brief. Called when the panel opens and when the count moves. */
+async function loadDigest() {
+  if (state.digestLoading) return;
+  state.digestLoading = true;
+  try {
+    const brief = await fetchDigest();
+    // `{"available": false}` means the arbiter is not installed. §7 says hide
+    // the UI for a false capability rather than show an empty one.
+    if (brief && brief.available === false) {
+      state.digest = { items: [], unavailable: true };
+    } else {
+      state.digest = brief || { items: [] };
+    }
+  } catch (error) {
+    console.error("[jarvis] digest unavailable:", error);
+    state.digest = { items: [], error: String(error.message || error) };
+  } finally {
+    state.digestLoading = false;
+    renderDigest();
+  }
+}
+
+/**
+ * Renders the brief in the order it arrived.
+ *
+ * **Nothing here sorts.** `jarvis_arbiter._rank` orders by what kind of thing
+ * an item is and then by a priority its producer set — deliberately never by
+ * urgency, because an item that could move itself up the list by saying it was
+ * urgent would implement the attack `jarvis_content_risk` exists to catch. A
+ * client that re-sorted would hand that ranking back to whoever wrote the text.
+ */
+function renderDigest() {
+  const brief = state.digest;
+  dom.digest.replaceChildren();
+
+  if (!brief || brief.unavailable) {
+    dom.attentionNote.textContent = brief
+      ? "The digest is not available on this backend."
+      : "Reading the brief…";
+    dom.digestSeen.hidden = true;
+    syncWindowHeight();
+    return;
+  }
+  if (brief.error) {
+    dom.attentionNote.textContent = brief.error;
+    dom.digestSeen.hidden = true;
+    syncWindowHeight();
+    return;
+  }
+
+  const items = Array.isArray(brief.items) ? brief.items : [];
+  for (const item of items) {
+    dom.digest.append(digestRow(item));
+  }
+
+  const shown = items.length;
+  const total = Number(brief.count || shown);
+  dom.attentionNote.textContent =
+    shown === 0
+      ? "Nothing in the brief."
+      : total > shown
+        ? `Showing ${shown} of ${total}. Marking read approves nothing.`
+        : "Marking read approves nothing.";
+  dom.digestSeen.hidden = shown === 0;
+  syncWindowHeight();
+}
+
+/**
+ * One row of the brief.
+ *
+ * An approval row arrives with `opens_card: true` and an empty body — the
+ * server deliberately does not send the detail here, and there is no route
+ * that decides one from the digest. So the row is a link into the gate, not a
+ * decision. This is also why there is no select-all, no bulk action and no
+ * approve-all anywhere on this panel: if a decision is worth a gate, it is
+ * worth one tap each, and batching is how a gesture stops being a decision.
+ */
+function digestRow(item) {
+  const li = document.createElement("li");
+  li.className = "digest-row";
+  li.dataset.kind = String(item.kind || "note");
+  li.dataset.priority = String(item.priority || "normal");
+
+  const head = document.createElement("div");
+  head.className = "digest-head";
+
+  const kind = document.createElement("span");
+  kind.className = "digest-kind";
+  kind.textContent = String(item.kind || "note");
+  head.append(kind);
+
+  const title = document.createElement("span");
+  title.className = "digest-title";
+  title.textContent = String(item.title || "(untitled)");
+  head.append(title);
+
+  if (item.source) {
+    const source = document.createElement("span");
+    source.className = "digest-source";
+    source.textContent = String(item.source);
+    head.append(source);
+  }
+  li.append(head);
+
+  if (item.opens_card) {
+    // Not a decision — a way to reach the one place a decision can be made.
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "text-button digest-open";
+    open.textContent = "Open the approval";
+    open.addEventListener("click", () => openDigestApproval(item));
+    li.append(open);
+  } else if (item.body) {
+    const body = document.createElement("p");
+    body.className = "digest-body";
+    body.textContent = String(item.body);
+    li.append(body);
+  }
+
+  return li;
+}
+
+/**
+ * Opens the gate for a digest row.
+ *
+ * The digest's `ref` is the approval id. The card is rendered from the *queue*
+ * rather than from the digest row, because the queue is where `risk` and
+ * `raised` live — the digest carries neither, on purpose. If the item is no
+ * longer in the queue it has already been answered, and saying so is better
+ * than opening an empty card.
+ */
+function openDigestApproval(item) {
+  const id = String(item.ref || item.id || "");
+  const match = currentQueue().items.find((row) => row.id === id);
+  if (!match) {
+    dom.attentionNote.textContent =
+      "That one has already been answered — it will drop off the brief.";
+    return;
+  }
+  state.attentionOpen = false;
+  dom.attention.hidden = true;
+  openApproval(match);
+}
+
+/** Mutes or unmutes, then lets the refreshed link repaint the panel. */
+async function toggleMute() {
+  const a = currentLink().attention;
+  dom.attentionMute.disabled = true;
+  try {
+    await setMuted(!a.muted);
+  } catch (error) {
+    console.error("[jarvis] mute failed:", error);
+    dom.attentionNote.textContent = String(error.message || error);
+  } finally {
+    dom.attentionMute.disabled = false;
+  }
+}
+
+/**
+ * Marks the whole brief read.
+ *
+ * **This approves nothing**, and the button says so next to it. The server's
+ * `mark_digest_delivered` stamps a delivery time; every approval in the brief
+ * is still pending afterwards and still needs its own card.
+ */
+async function markBriefRead() {
+  dom.digestSeen.disabled = true;
+  try {
+    await markDigestSeen([]);
+    state.digest = null;
+  } catch (error) {
+    console.error("[jarvis] marking the digest read failed:", error);
+    dom.attentionNote.textContent = String(error.message || error);
+  } finally {
+    dom.digestSeen.disabled = false;
+  }
+}
+
+/**
+ * Renders `raised` — the reason this is on screen at all.
+ *
+ * Four rules from JARVIS-API §4, and each one is a decision rather than a
+ * style:
+ *
+ * - `text` is a chip. It already carries "(4th time today)" when the source has
+ *   tripped this repeatedly; nothing here counts anything, because the count is
+ *   the server's and a client that recounted would drift.
+ * - `quote` goes inline, in quotation marks. Those are the attacker's words and
+ *   showing them is the entire point — a card that said "this looked suspicious"
+ *   teaches nothing.
+ * - `context` is text from the page or document being judged, so it is never
+ *   shown without the user asking. Hence a closed `<details>`, collapsed again
+ *   on every render so the previous card's disclosure does not carry over.
+ * - `source` is named, never quoted. It is an identifier the server chose, not
+ *   content, and quoting it would suggest otherwise.
+ *
+ * All three strings go in through `textContent`. They are hostile text by
+ * definition; the markdown renderer never sees them.
+ *
+ * There is deliberately no control here that clears the latch. It lasts ten
+ * minutes, and the alternative is a button whose whole purpose is to undo a
+ * safety rule under time pressure.
+ */
+function renderRaised(raised) {
+  if (!raised) {
+    dom.approvalRaised.hidden = true;
+    dom.raisedChip.textContent = "";
+    dom.raisedQuote.textContent = "";
+    dom.raisedContext.textContent = "";
+    return;
+  }
+
+  dom.raisedChip.textContent = raised.text || "This text tried to rush you";
+  dom.raisedChip.dataset.code = raised.code || "rushed";
+
+  dom.raisedSource.textContent = raised.source ? `from ${raised.source}` : "";
+  dom.raisedSource.hidden = !raised.source;
+
+  // Quoted with real quotation marks rather than a CSS pseudo-element, so the
+  // words stay quoted when the card is copied or read by a screen reader.
+  dom.raisedQuote.textContent = raised.quote ? `“${raised.quote}”` : "";
+  dom.raisedQuote.hidden = !raised.quote;
+
+  dom.raisedContext.textContent = raised.context || "";
+  dom.raisedContextWrap.hidden = !raised.context;
+  dom.raisedContextWrap.open = false;
+
+  // The tier move, when the server reported one. It is the concrete fact —
+  // "this would not have asked you at all" — and it is what makes the chip
+  // more than a warning label.
+  if (raised.fromTier && raised.toTier && raised.fromTier !== raised.toTier) {
+    dom.approvalRaised.dataset.tiers = `${raised.fromTier} → ${raised.toTier}`;
+  } else {
+    delete dom.approvalRaised.dataset.tiers;
+  }
+
+  dom.approvalRaised.hidden = false;
+}
+
 /** Clears the gate. Called when it leaves the queue, however it left. */
 function closeApproval() {
   state.approval = null;
   state.decided = null;
   dom.approval.hidden = true;
   dom.approvalPreview.innerHTML = "";
+  renderRaised(null);
   syncWindowHeight();
 }
 
@@ -1565,6 +1894,7 @@ onLink((link) => {
   lastConnected = link.connected;
 
   syncApprovalButtons();
+  syncAttention();
 });
 
 onQueue((queue) => {
@@ -1587,7 +1917,9 @@ onQueue((queue) => {
   const same = state.approval && state.approval.id === open.id;
   if (same) {
     // `risk` is derived per read and must never be cached against an id, so
-    // the card takes the new copy - but quietly.
+    // the card takes the new copy - but quietly. `raised` is stored on the
+    // row rather than derived, but it is re-read here for the same reason:
+    // one source, every time.
     refreshApproval(open);
     return;
   }
@@ -1597,6 +1929,26 @@ onQueue((queue) => {
   }
   openApproval(open);
 });
+
+dom.attentionMute.addEventListener("click", toggleMute);
+dom.digestSeen.addEventListener("click", markBriefRead);
+dom.attentionClose.addEventListener("click", () => {
+  // Closing hides the panel until something new arrives or the tray asks for
+  // it again. It does not mark anything read: those are different actions and
+  // conflating them would silently clear a brief nobody looked at.
+  state.attentionOpen = false;
+  dom.attention.hidden = true;
+  syncWindowHeight();
+});
+
+// The tray's "N things waiting" row and the widget both open the brief here.
+if (IS_TAURI) {
+  TAURI.event.listen("show-digest", () => {
+    state.attentionOpen = true;
+    state.digest = null;
+    syncAttention();
+  });
+}
 
 console.info(
   `[jarvis] spotlight ready - backend ${IS_TAURI ? "connected" : "absent (browser preview)"}`

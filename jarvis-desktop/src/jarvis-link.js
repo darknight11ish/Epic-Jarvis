@@ -38,8 +38,32 @@ let link = {
   powerSetBy: null,
   activity: "idle",
   approvals: 0,
+  attention: emptyAttention(),
   error: null,
 };
+
+/**
+ * The interruption budget before anything has been read.
+ *
+ * `known: false` is the field that matters. Every count here is zero, and a
+ * zero that means "not asked yet" would draw an empty digest and a cleared
+ * badge over a queue nobody has looked at — so a surface renders "unknown"
+ * until this flips.
+ */
+function emptyAttention() {
+  return {
+    known: false,
+    limit: 0,
+    remaining: 0,
+    spent: 0,
+    muted: false,
+    blockedBy: null,
+    pending: 0,
+    banked: false,
+    digestHour: 18,
+    digestDue: false,
+  };
+}
 
 /** The approval queue as the backend last read it. */
 let queue = { count: 0, items: [] };
@@ -70,7 +94,27 @@ function normaliseLink(payload) {
     powerSetBy: payload.power_set_by || null,
     activity: String(payload.activity || "idle"),
     approvals: Number(payload.approvals || 0),
+    attention: normaliseAttention(payload.attention),
     error: payload.error || null,
+  };
+}
+
+/** Rust's `Attention`, in the frontend's spelling. */
+function normaliseAttention(raw) {
+  if (!raw || typeof raw !== "object") return emptyAttention();
+  return {
+    known: raw.known === true,
+    limit: Number(raw.limit || 0),
+    remaining: Number(raw.remaining || 0),
+    spent: Number(raw.spent || 0),
+    muted: raw.muted === true,
+    blockedBy: raw.blocked_by || null,
+    pending: Number(raw.pending || 0),
+    // Read, never derived. `remaining === 0 && pending > 0` is the server's
+    // rule today and the server is the only thing allowed to change it.
+    banked: raw.banked === true,
+    digestHour: Number(raw.digest_hour ?? 18),
+    digestDue: raw.digest_due === true,
   };
 }
 
@@ -104,6 +148,7 @@ export function normaliseApproval(row) {
   }
 
   const risk = row.risk && typeof row.risk === "object" ? row.risk : null;
+  const raised = row.raised && typeof row.raised === "object" ? row.raised : null;
 
   return {
     id,
@@ -123,12 +168,135 @@ export function normaliseApproval(row) {
           classified: risk.classified === true,
         }
       : null,
+    // Why this is being asked about at all, when the tier table said
+    // otherwise: outside text tried to rush the reader and the tier went up.
+    // Usually null.
+    //
+    // Unlike `risk`, this IS stored on the row server-side, on purpose — the
+    // rush latch expires after ten minutes but the reason the card exists does
+    // not, and an item that loses its explanation while waiting is worse than
+    // one that never had it.
+    raised: raised
+      ? {
+          code: String(raised.code || "rushed"),
+          // The chip. Already carries "(4th time today)" when the source has
+          // tripped this more than once — `jarvis_content_risk.chip_from`
+          // builds the ordinal, so nothing here counts anything.
+          text: String(raised.text || ""),
+          // The attacker's words. Shown in quotation marks, inline, because
+          // showing them is the entire point.
+          quote: String(raised.quote || ""),
+          // Text from the page or the document being judged, so it is never
+          // shown until the user asks for it.
+          context: String(raised.context || ""),
+          // Named, never quoted.
+          source: String(raised.source || ""),
+          fromTier: String(raised.from_tier || ""),
+          toTier: String(raised.to_tier || ""),
+          countToday: Number(raised.count_today || 1),
+        }
+      : null,
   };
+}
+
+/**
+ * Whether an approval may be answered by a gesture rather than a decision.
+ *
+ * Two conditions, and both have to hold:
+ *
+ * 1. `risk.swipeOk`, exactly as the server computed it. JARVIS-API §5: branch
+ *    on this field and nothing else, do not re-derive it from `reversible` and
+ *    `reach`, do not add exceptions, do not cache it against an id.
+ * 2. Nothing `raised` it. An item carrying `raised` is on the card *because*
+ *    outside text tried to make the reader go faster, so the one response that
+ *    must not be available is the fast one — whatever `swipe_ok` says.
+ *
+ * Exported rather than inlined so that a future swipe, a bulk selection or a
+ * keyboard shortcut cannot each arrive at their own answer. There is no swipe
+ * on the desktop today; this exists so the first one cannot get it wrong.
+ */
+export function quickActionable(approval) {
+  if (!approval || !approval.risk) return false;
+  if (approval.raised) return false;
+  return approval.risk.swipeOk === true;
 }
 
 /** The link as last reported. */
 export function currentLink() {
   return link;
+}
+
+/** The interruption budget as last reported. */
+export function currentAttention() {
+  return link.attention;
+}
+
+/**
+ * What the reactor should show — the desktop's single copy of
+ * `jarvis_arbiter.face_state`.
+ *
+ * JARVIS-API §5 says the server resolves this and warns that a client which
+ * re-derives it "will disagree with the server the first time the two drift".
+ * No route serves the resolved value, so composing it is unavoidable; what is
+ * avoidable is composing it in three places. Rust has the same function for
+ * the tray (`attention::face_state`) and this is the one for the windows.
+ *
+ * `banked` is taken from the server, never recomputed.
+ */
+export function faceState(state = link) {
+  const activity = String((state && state.activity) || "idle");
+  const banked = Boolean(state && state.attention && state.attention.banked);
+  // Banked replaces a RESTING face only. Mid-sentence is foreground and keeps
+  // its own state: the budget governs what Jarvis starts, not what it is in
+  // the middle of.
+  if (activity === "idle" && banked) return "banked";
+  // `working` has no binding in the spec; the nearest bound state is
+  // `thinking` — busy, and not talking. Anything the server adds later that
+  // this build has never heard of falls to `idle` rather than being passed
+  // through to a `resolve()` that would silently return the fallback colour.
+  if (activity === "working") return "thinking";
+  const BOUND = ["idle", "listening", "thinking", "speaking", "error"];
+  return BOUND.includes(activity) ? activity : "idle";
+}
+
+/**
+ * Mutes or unmutes spoken interruptions until tomorrow.
+ *
+ * There is no "mute forever" — not here and not in the API. A mute with no end
+ * is how a feature gets switched off once and never reconsidered.
+ */
+export async function setMuted(muted) {
+  if (!IS_TAURI) throw new Error("no desktop backend to send that to");
+  return TAURI.core.invoke("set_attention_muted", { muted: Boolean(muted) });
+}
+
+/**
+ * The daily brief, ranked server-side by consequence.
+ *
+ * **Do not re-sort what comes back.** `jarvis_arbiter._rank` orders by what
+ * kind of thing an item is and then by a priority its producer set — never by
+ * urgency, because an item that could move itself up the list by saying it was
+ * urgent would implement the attack the content-risk scanner exists to catch.
+ */
+export async function fetchDigest() {
+  if (!IS_TAURI) throw new Error("no desktop backend to read the digest from");
+  return TAURI.core.invoke("get_digest");
+}
+
+/**
+ * Marks digest rows read. **This approves nothing.**
+ *
+ * `mark_digest_delivered` stamps a delivery time and nothing else. There is no
+ * route in the API that decides an approval in bulk, and there is no control
+ * anywhere in this app that offers to — each one opens its own gate card.
+ *
+ * An empty list means the whole brief.
+ */
+export async function markDigestSeen(ids = []) {
+  if (!IS_TAURI) throw new Error("no desktop backend to mark the digest on");
+  return TAURI.core.invoke("mark_digest_seen", {
+    ids: Array.isArray(ids) ? ids.map(String) : [],
+  });
 }
 
 /** The approval queue as last read, newest state first. */

@@ -78,6 +78,8 @@ const ID_STATUS_ACTIVITY: &str = "status-activity";
 const ID_STATUS_POWER: &str = "status-power";
 const ID_STATUS_POWER_SWITCH: &str = "status-power-switch";
 const ID_APPROVALS: &str = "approvals";
+const ID_WAITING: &str = "waiting";
+const ID_MUTE: &str = "mute";
 const ID_BACKEND: &str = "backend";
 const ID_SHOW_HUD: &str = "show-hud";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
@@ -99,6 +101,8 @@ struct Rows {
     activity: MenuItem<tauri::Wry>,
     power: MenuItem<tauri::Wry>,
     approvals: MenuItem<tauri::Wry>,
+    waiting: MenuItem<tauri::Wry>,
+    mute: MenuItem<tauri::Wry>,
     backend: MenuItem<tauri::Wry>,
 }
 
@@ -112,7 +116,7 @@ struct Rows {
 /// `windows_subsystem = "windows"`, so that panic went to a stderr that does
 /// not exist: no tray, no stream, no approvals, and nothing on screen to say so.
 #[derive(Default)]
-pub struct Painted(Mutex<Option<Rgb>>);
+pub struct Painted(Mutex<Option<(Rgb, u32, &'static str)>>);
 
 /// Builds the tray icon, its menu and the event handlers.
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -148,6 +152,19 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         link.approvals > 0,
         None::<&str>,
     )?;
+
+    // The digest count. Separate from the approvals row because the two count
+    // different things: an approval is waiting on a decision right now, a
+    // digest item is waiting to be *told* to you. Folding them into one number
+    // would make "3 waiting" mean neither.
+    let waiting = MenuItem::with_id(
+        app,
+        ID_WAITING,
+        waiting_label(&link),
+        link.attention.pending > 0,
+        None::<&str>,
+    )?;
+    let mute = MenuItem::with_id(app, ID_MUTE, mute_label(&link), true, None::<&str>)?;
 
     // One row that is status and action at once: it says what the backend is
     // and, when there is something to do about it, does it.
@@ -193,6 +210,8 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &power,
             &power_switch,
             &approvals,
+            &waiting,
+            &mute,
             &backend,
             &PredefinedMenuItem::separator(app)?,
             &show_hud,
@@ -215,6 +234,8 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             activity,
             power,
             approvals,
+            waiting,
+            mute,
             backend,
         });
 
@@ -273,15 +294,24 @@ fn spec_state(link: &LinkState) -> &'static str {
     if link.approvals > 0 {
         return "approval";
     }
-    match link.activity.as_str() {
-        "listening" => "listening",
-        "thinking" => "thinking",
-        "speaking" => "speaking",
-        "working" => "thinking",
-        _ => match link.power.as_str() {
-            "standby" | "quiet" => "standby",
-            _ => "idle",
-        },
+
+    // The activity states are composed by `attention::face_state`, which is
+    // `jarvis_arbiter.face_state` line for line: it is the only place that
+    // decides whether a resting face becomes `banked`, and it takes the
+    // server's own `banked` flag rather than recomputing it.
+    let composed = crate::attention::face_state(&link.activity, link.attention.banked);
+    if composed != "idle" {
+        return composed;
+    }
+
+    // Resting. Power decides between standby and idle — except that `banked`
+    // has already claimed the resting face above, which is the right order:
+    // "things are waiting silently" is more worth a glance than "asleep", and
+    // the two never contradict each other because a banked system with budget
+    // to spend is not a state the arbiter can produce.
+    match link.power.as_str() {
+        "standby" | "quiet" => "standby",
+        _ => "idle",
     }
 }
 
@@ -315,8 +345,45 @@ fn clock() -> f64 {
 /// spec has no binding for it — a hollow icon says "nothing is coming through"
 /// without claiming to know what Jarvis is doing.
 fn render_icon(link: &LinkState) -> Option<Image<'static>> {
+    Some(paint(link))
+}
+
+/// Resolves the state and draws it, dim and notches included.
+///
+/// One function so the animation tick, the first paint and `repaint` cannot
+/// disagree about what the icon should look like.
+fn paint(link: &LinkState) -> Image<'static> {
+    let state = spec_state(link);
     let resolved = spec::resolve(&binding_for(link), clock(), 0.0, 0.0);
-    Some(draw(resolved.a, resolved.b, link.connected))
+    let dim = spec::state_dim(state);
+    // `notches` is the overlay the spec puts on `banked`, and its source is
+    // named there: "the number of items waiting in the digest
+    // (jarvis_arbiter.pending_count)" — which is `attention.pending`, not the
+    // approval queue.
+    let notches = spec::notch_overlay(state)
+        // The undimmed hot colour marks the ring: see `draw`.
+        .map(|max| (link.attention.pending as usize, max, resolved.a));
+    draw(
+        shade(resolved.a, dim),
+        shade(resolved.b, dim),
+        link.connected,
+        notches,
+    )
+}
+
+/// Applies a state transform's `dim`. A plain multiply on the linearised value
+/// would be more correct and less legible: these are small icons and the spec's
+/// dims are chosen against what the faces look like on screen, which is sRGB.
+fn shade(c: Rgb, dim: f64) -> Rgb {
+    if dim >= 1.0 {
+        return c;
+    }
+    let f = |v: u8| (f64::from(v) * dim).round().clamp(0.0, 255.0) as u8;
+    Rgb {
+        r: f(c.r),
+        g: f(c.g),
+        b: f(c.b),
+    }
 }
 
 /// Draws the disc into an RGBA buffer.
@@ -324,7 +391,7 @@ fn render_icon(link: &LinkState) -> Option<Image<'static>> {
 /// Supersampled 3×3 per pixel: at 32 px a hard-edged circle downscaled by the
 /// shell to 16 px reads as a ragged blob, and the notification area is the one
 /// place where a few hundred float operations at 2 Hz is not worth optimising.
-fn draw(a: Rgb, b: Rgb, filled: bool) -> Image<'static> {
+fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> Image<'static> {
     let size = ICON_SIZE as f64;
     let centre = size / 2.0;
     // Leave a pixel of margin so the disc is not clipped by the shell's own
@@ -332,11 +399,41 @@ fn draw(a: Rgb, b: Rgb, filled: bool) -> Image<'static> {
     let outer = centre - 1.5;
     let inner = if filled { 0.0 } else { outer - 4.5 };
 
+    // The notch ring. `state_transforms.states.banked.overlay_spec` puts it
+    // between 0.86 and 0.99 of the face radius, starting at twelve o'clock and
+    // running clockwise, one notch per waiting item, up to `max_notches` with
+    // an overflow mark beyond that.
+    //
+    // Positions sit on the fixed `max` grid rather than being spread evenly
+    // across however many there are, so the ring reads as a gauge filling up:
+    // three notches always occupy the same three o'clock positions, and a
+    // fourth arriving adds one rather than shifting all of them.
+    //
+    // At 32 px — downscaled by the shell to 16 or 20 — twelve of these read as
+    // a textured rim rather than a countable set. That is the honest limit of
+    // the medium and it is the right signal anyway: the icon says *things are
+    // banked and roughly how many*, and the exact number is one hover away in
+    // the tooltip and one click away in the menu.
+    let ring = notches.and_then(|(count, max, colour)| {
+        let max = max.max(1);
+        (count > 0).then(|| {
+            let overflow = count > max;
+            (count.min(max), max, overflow, colour)
+        })
+    });
+    let notch_from = outer * 0.86;
+    let notch_to = outer * 0.99;
+    // Half the angular width of one tick, chosen so the mark is about 1.6 px
+    // wide at the ring's radius: narrow enough to leave a clear gap on a 30°
+    // pitch, wide enough to survive the downscale.
+    let notch_half = 0.12f64;
+
     let mut pixels = Vec::with_capacity((ICON_SIZE * ICON_SIZE * 4) as usize);
     for y in 0..ICON_SIZE {
         for x in 0..ICON_SIZE {
             let mut covered = 0.0f64;
             let mut edge = 0.0f64;
+            let mut notch = 0.0f64;
             for sy in 0..3 {
                 for sx in 0..3 {
                     let px = x as f64 + (sx as f64 + 0.5) / 3.0;
@@ -351,23 +448,72 @@ fn draw(a: Rgb, b: Rgb, filled: bool) -> Image<'static> {
                             edge += 1.0 / 9.0;
                         }
                     }
+                    if let Some((count, max, overflow, _)) = ring {
+                        if d >= notch_from && d <= notch_to {
+                            // atan2 measured clockwise from twelve o'clock, so
+                            // notch 0 is straight up and the count runs the way
+                            // a clock does.
+                            let angle = (px - centre).atan2(centre - py);
+                            let pitch = std::f64::consts::TAU / max as f64;
+                            for i in 0..count {
+                                // The last tick doubles in width when there are
+                                // more items than the ring can show: an extra
+                                // mark somewhere else on the ring would read as
+                                // one more item, which is the opposite of what
+                                // an overflow means.
+                                let half = if overflow && i + 1 == count {
+                                    notch_half * 2.0
+                                } else {
+                                    notch_half
+                                };
+                                let mut delta = angle - i as f64 * pitch;
+                                // Wrap into (-π, π] so the tick at twelve
+                                // o'clock is not split across the seam.
+                                delta = delta.rem_euclid(std::f64::consts::TAU);
+                                if delta > std::f64::consts::PI {
+                                    delta -= std::f64::consts::TAU;
+                                }
+                                if delta.abs() <= half {
+                                    notch += 1.0 / 9.0;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            if covered <= 0.0 {
+            if covered <= 0.0 && notch <= 0.0 {
                 pixels.extend_from_slice(&[0, 0, 0, 0]);
                 continue;
             }
-            let rim = (edge / covered).clamp(0.0, 1.0);
+            let rim = if covered > 0.0 {
+                (edge / covered).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
             let blend = |hot: u8, cool: u8| {
                 (hot as f64 * (1.0 - rim) + cool as f64 * rim)
                     .round()
                     .clamp(0.0, 255.0) as u8
             };
+            // A notch is drawn in the state's UNDIMMED colour, over whatever
+            // the disc put there. `banked` is dimmed to 0.45, so the ring needs
+            // to escape that dim to be legible — and using the same hue at full
+            // strength keeps it inside the palette the spec bound, rather than
+            // introducing a colour of its own.
+            let lit = notch.clamp(0.0, 1.0);
+            let mark = ring.map(|(_, _, _, colour)| colour).unwrap_or(a);
+            let out = |hot: u8, cool: u8, tick: u8| {
+                let base = blend(hot, cool) as f64;
+                (base * (1.0 - lit) + f64::from(tick) * lit)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            };
             pixels.extend_from_slice(&[
-                blend(a.r, b.r),
-                blend(a.g, b.g),
-                blend(a.b, b.b),
-                (covered * 255.0).round().clamp(0.0, 255.0) as u8,
+                out(a.r, b.r, mark.r),
+                out(a.g, b.g, mark.g),
+                out(a.b, b.b, mark.b),
+                (covered.max(notch) * 255.0).round().clamp(0.0, 255.0) as u8,
             ]);
         }
     }
@@ -395,6 +541,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
+    let state = spec_state(link);
     let resolved = spec::resolve(&binding_for(link), clock(), 0.0, 0.0);
     {
         let painted = app.state::<Painted>();
@@ -402,12 +549,16 @@ fn repaint(app: &AppHandle, link: &LinkState) {
             .0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if *slot == Some(resolved.a) {
+        // The notch count is part of the key. Keying on the colour alone meant
+        // a fourth item arriving while banked — same still colour, one more
+        // notch — was skipped as an unchanged frame, so the ring never grew.
+        let key = (resolved.a, link.attention.pending, state);
+        if *slot == Some(key) {
             return;
         }
-        *slot = Some(resolved.a);
+        *slot = Some(key);
     }
-    if let Err(err) = tray.set_icon(Some(draw(resolved.a, resolved.b, link.connected))) {
+    if let Err(err) = tray.set_icon(Some(paint(link))) {
         eprintln!("[jarvis] tray: unable to set the icon: {err}");
     }
     if let Err(err) = tray.set_tooltip(Some(tooltip(link))) {
@@ -454,6 +605,41 @@ fn approvals_label(link: &LinkState) -> String {
     }
 }
 
+/// How many things are banked, and — when nothing can be said out loud — why.
+///
+/// This is `attention.pending`, the digest count, which is also the notch count
+/// on the reactor's rim. `blocked_by` is what makes the row worth reading: "3
+/// waiting" and "3 waiting · standby" are different situations, and the second
+/// one explains why the machine has gone quiet.
+fn waiting_label(link: &LinkState) -> String {
+    if !link.attention.known {
+        return "Waiting: unknown".to_string();
+    }
+    let head = match link.attention.pending {
+        0 => "Nothing waiting to be told".to_string(),
+        1 => "1 thing waiting to be told".to_string(),
+        n => format!("{n} things waiting to be told"),
+    };
+    match link.attention.blocked_by.as_deref() {
+        Some(reason) if link.attention.pending > 0 => format!("{head} · {reason}"),
+        _ if link.attention.pending > 0 => format!(
+            "{head} · {} of {} interruptions left",
+            link.attention.remaining, link.attention.limit
+        ),
+        _ => head,
+    }
+}
+
+/// The mute row. Worded with its end date every time, because the API has no
+/// mute without one and a row that just said "Mute" would imply otherwise.
+fn mute_label(link: &LinkState) -> String {
+    if link.attention.muted {
+        "Unmute spoken interruptions".to_string()
+    } else {
+        "Mute spoken interruptions until tomorrow".to_string()
+    }
+}
+
 /// The backend row's label and whether it is clickable.
 ///
 /// Supervision is off by default and stays off unless the user turns it on, so
@@ -480,6 +666,9 @@ fn tooltip(link: &LinkState) -> String {
         parts.push(power_label(link));
         if link.approvals > 0 {
             parts.push(approvals_label(link));
+        }
+        if link.attention.pending > 0 {
+            parts.push(waiting_label(link));
         }
     }
     parts.push("Alt+Space".to_string());
@@ -517,6 +706,12 @@ pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
         // Nothing to open when the queue is empty, and a menu row that opens an
         // empty list is worse than one that is plainly unavailable.
         let _ = rows.approvals.set_enabled(link.approvals > 0);
+        let _ = rows.waiting.set_text(waiting_label(link));
+        let _ = rows.waiting.set_enabled(link.attention.pending > 0);
+        let _ = rows.mute.set_text(mute_label(link));
+        // Muting is a write, and a write against a backend that has not been
+        // read yet is a guess about which direction to write in.
+        let _ = rows.mute.set_enabled(link.attention.known && link.connected);
         // The pid check is a `try_wait`, so this also notices a backend that
         // exited on its own between one event and the next.
         let (label, enabled) = backend_row(app);
@@ -567,6 +762,38 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             if let Err(err) = windows::toggle_widget(app) {
                 eprintln!("[jarvis] tray: widget toggle failed: {err}");
             }
+        }
+
+        // The brief is a list with consequence ranking and disclosures, not a
+        // menu, so the row opens the surface that can render one. That is the
+        // quickbar rather than the HUD: the HUD window loads the backend's own
+        // `jarvis_hud.html`, which is not ours to add sections to.
+        ID_WAITING => {
+            if let Err(err) = windows::show_quickbar(app) {
+                eprintln!("[jarvis] tray: quickbar unavailable: {err}");
+                commands::notify(app, "Jarvis", &format!("Quickbar unavailable: {err}"));
+                return;
+            }
+            crate::emit_quickbar(app, events::SHOW_DIGEST, ());
+        }
+
+        // Mute is a toggle against the server, and its direction comes from
+        // what the server last said rather than from a local flag — two windows
+        // and a tray sharing one budget must not each keep their own idea of
+        // whether it is muted.
+        ID_MUTE => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let muted = app
+                    .state::<crate::stream::StreamState>()
+                    .link()
+                    .attention
+                    .muted;
+                if let Err(err) = crate::attention::set_attention_muted(app.clone(), !muted).await {
+                    eprintln!("[jarvis] tray: mute failed: {err}");
+                    commands::notify(&app, "Jarvis", &first_sentence(&err));
+                }
+            });
         }
 
         ID_BACKEND => run_backend_action(app),
@@ -702,6 +929,92 @@ mod tests {
         assert_eq!(spec_state(&l), "error");
     }
 
+    /// `banked` replaces a resting face and nothing else — the server's own
+    /// rule, and the reason it is composed in one place rather than per
+    /// surface.
+    #[test]
+    fn banked_takes_the_resting_face_only() {
+        let mut l = link();
+        l.attention.known = true;
+        l.attention.banked = true;
+        l.attention.pending = 3;
+        assert_eq!(spec_state(&l), "banked");
+
+        // Foreground wins: the budget governs what Jarvis starts, not what it
+        // is in the middle of.
+        l.activity = "speaking".into();
+        assert_eq!(spec_state(&l), "speaking");
+        l.activity = "idle".into();
+
+        // So does something waiting on a decision, and so does an error.
+        l.approvals = 1;
+        assert_eq!(spec_state(&l), "approval");
+        l.approvals = 0;
+        l.activity = "error".into();
+        assert_eq!(spec_state(&l), "error");
+        l.activity = "idle".into();
+
+        // Standby is the resting face when nothing is banked, and banked wins
+        // over it when something is: "things are waiting silently" is worth
+        // more of a glance than "asleep".
+        l.power = "standby".into();
+        assert_eq!(spec_state(&l), "banked");
+        l.attention.banked = false;
+        assert_eq!(spec_state(&l), "standby");
+    }
+
+    /// The dim is a shell transform the spec asks every client to apply once.
+    /// Banked at full brightness is just idle in a different hue.
+    #[test]
+    fn banked_is_dimmed_and_notched() {
+        assert_eq!(spec::state_dim("banked"), 0.45);
+        assert_eq!(spec::state_dim("standby"), 0.6);
+        assert_eq!(spec::state_dim("idle"), 1.0, "idle carries no transform");
+        assert_eq!(spec::notch_overlay("banked"), Some(12));
+        assert_eq!(spec::notch_overlay("idle"), None);
+        assert_eq!(spec::notch_overlay("approval"), None, "approval pings, not notches");
+    }
+
+    /// The notch ring has to actually change the pixels, and it has to change
+    /// them *more* as items arrive — the bug this guards is a cached frame that
+    /// skips the repaint because the colour did not move.
+    #[test]
+    fn notches_grow_with_the_count() {
+        let hot = Rgb { r: 255, g: 220, b: 180 };
+        let cool = Rgb { r: 40, g: 30, b: 20 };
+        let lit = |count: usize| {
+            draw(
+                shade(hot, 0.45),
+                shade(cool, 0.45),
+                true,
+                (count > 0).then_some((count, 12, hot)),
+            )
+            .rgba()
+            .chunks(4)
+            // Count pixels brighter than the dimmed disc can be: those are ring.
+            .filter(|px| px[3] > 0 && px[0] as u16 > (255.0 * 0.45) as u16 + 20)
+            .count()
+        };
+        let none = lit(0);
+        let one = lit(1);
+        let four = lit(4);
+        assert_eq!(none, 0, "a dimmed disc with no notches has no bright pixels");
+        assert!(one > 0, "one waiting item must draw one notch");
+        assert!(
+            four > one * 2,
+            "four notches ({four} px) should be well clear of one ({one} px)"
+        );
+
+        // Over the maximum the ring stops counting and marks the overflow
+        // rather than wrapping around and reading as a smaller number.
+        let twelve = lit(12);
+        let fifty = lit(50);
+        assert!(
+            fifty > twelve,
+            "the overflow mark must be visible: 50 drew {fifty} px, 12 drew {twelve}"
+        );
+    }
+
     /// `working` is an activity with no state bound to it. This test is the
     /// alarm: if the spec ever grows a `working` state, it should stop passing
     /// and this mapping should stop guessing.
@@ -728,6 +1041,7 @@ mod tests {
             "approval",
             "standby",
             "error",
+            "banked",
         ] {
             assert!(spec::has_state(id), "`{id}` is not a spec state");
         }
@@ -737,7 +1051,7 @@ mod tests {
     /// — the three things a wrong buffer layout would break.
     #[test]
     fn icon_is_a_disc_on_transparency() {
-        let image = draw(Rgb { r: 255, g: 0, b: 0 }, Rgb { r: 0, g: 0, b: 128 }, true);
+        let image = draw(Rgb { r: 255, g: 0, b: 0 }, Rgb { r: 0, g: 0, b: 128 }, true, None);
         assert_eq!(image.width(), ICON_SIZE);
         assert_eq!(image.height(), ICON_SIZE);
         let rgba = image.rgba();
@@ -762,6 +1076,7 @@ mod tests {
             Rgb { r: 255, g: 0, b: 0 },
             Rgb { r: 0, g: 0, b: 128 },
             false,
+            None,
         );
         let rgba = hollow.rgba();
         let mid = (((ICON_SIZE / 2) * ICON_SIZE + ICON_SIZE / 2) * 4) as usize;
@@ -775,6 +1090,9 @@ mod tests {
         let cold = LinkState::default();
         assert_eq!(activity_label(&cold), "Jarvis — connecting…");
         assert_eq!(approvals_label(&cold), "Approvals: unknown while offline");
+        // Nothing has been read, so the row says so rather than "nothing
+        // waiting" over a digest that was never fetched.
+        assert_eq!(waiting_label(&cold), "Waiting: unknown");
 
         let down = LinkState {
             error: Some(
@@ -789,5 +1107,29 @@ mod tests {
         quiet.power = "quiet".into();
         quiet.power_set_by = Some("override".into());
         assert_eq!(power_label(&quiet), "Power: quiet · set by hand");
+
+        // The mute row names its end date in both directions, because the API
+        // has no mute without one.
+        let mut budgeted = link();
+        budgeted.attention.known = true;
+        assert!(mute_label(&budgeted).contains("until tomorrow"));
+        budgeted.attention.muted = true;
+        assert_eq!(mute_label(&budgeted), "Unmute spoken interruptions");
+
+        // A blocked budget explains itself on the row rather than leaving the
+        // user to wonder why nothing is being said.
+        budgeted.attention.pending = 3;
+        budgeted.attention.blocked_by = Some("muted until tomorrow".into());
+        assert_eq!(
+            waiting_label(&budgeted),
+            "3 things waiting to be told · muted until tomorrow"
+        );
+        budgeted.attention.blocked_by = None;
+        budgeted.attention.limit = 6;
+        budgeted.attention.remaining = 2;
+        assert_eq!(
+            waiting_label(&budgeted),
+            "3 things waiting to be told · 2 of 6 interruptions left"
+        );
     }
 }

@@ -78,6 +78,16 @@ pub struct Binding {
     pub to: Option<String>,
     pub family: Option<String>,
     pub colors: Option<Vec<String>>,
+    /// Per-binding overrides of the pattern's own parameters — the kit's
+    /// `Object.assign({}, P.params, bind.params || {})`.
+    ///
+    /// Not decoration. The second face audit moved three states off the
+    /// pattern defaults and expressed the difference entirely here: `thinking`
+    /// is `sweep` narrowed to a 58° cool band at 246°, `speaking` is `reactive`
+    /// with a `loud` slot and a gain, and `error` is `pulse` at period 1.1 and
+    /// sharpness 4.0. Ignore this map and every one of them renders as the
+    /// pattern's generic default — a 360° rainbow where a cool band belongs.
+    pub params: serde_json::Map<String, serde_json::Value>,
 }
 
 /// The parsed spec, built once.
@@ -161,6 +171,7 @@ fn spec() -> &'static Spec {
                                 .filter_map(|v| v.as_str().map(str::to_string))
                                 .collect()
                         }),
+                        params: default["params"].as_object().cloned().unwrap_or_default(),
                     },
                 );
             }
@@ -309,7 +320,20 @@ pub fn resolve(bind: &Binding, t: f64, amp: f64, seed: f64) -> Resolved {
             },
         };
     };
-    let q = &pattern.params;
+    // `const q = Object.assign({}, P.params, bind.params || {})` — the
+    // binding's own parameters win over the pattern's defaults, key by key.
+    // Cloning the pattern's map per call is a few dozen bytes at 2 Hz on the
+    // tray; sharing a reference would mean threading two maps through every
+    // lookup below and losing the line-for-line match with the kit.
+    let q = &if bind.params.is_empty() {
+        pattern.params.clone()
+    } else {
+        let mut merged = pattern.params.clone();
+        for (key, value) in &bind.params {
+            merged.insert(key.clone(), value.clone());
+        }
+        merged
+    };
 
     // `pick = id => hexOf(bind.color || id)` — the binding's colour overrides
     // the pattern's own, which is how one pattern serves several states.
@@ -413,9 +437,19 @@ pub fn resolve(bind: &Binding, t: f64, amp: f64, seed: f64) -> Resolved {
             }
         }
 
+        // The bound colour WINS — the rule the second face audit added. Before
+        // it, binding ice-5 to a gradient still swung to the pattern's own
+        // magenta-4, which is why nineteen of the twenty speaking tiles came
+        // out pink. A gradient with a bound colour and no explicit `to` now
+        // runs between that colour and its own darker step; the pattern's
+        // two-hue default applies only when nothing is bound at all.
         "gradient" => {
             let a0 = hex_of(bind.color.as_deref().or_else(|| text(q, "from")));
-            let b0 = hex_of(bind.to.as_deref().or_else(|| text(q, "to")));
+            let b0 = match (bind.to.as_deref(), bind.color.as_deref()) {
+                (Some(to), _) => hex_of(Some(to)),
+                (None, Some(_)) => lift(a0, -0.38),
+                (None, None) => hex_of(text(q, "to")),
+            };
             let k = (t / num(q, "period_s", 7.0) * std::f64::consts::TAU).sin() * 0.5 + 0.5;
             Resolved {
                 a: mix(a0, b0, k),
@@ -514,6 +548,47 @@ pub fn resolve(bind: &Binding, t: f64, amp: f64, seed: f64) -> Resolved {
 /// Whether a pattern's output depends on `t`. The tray uses this to decide
 /// whether re-resolving is worth a timer at all: `solid` never changes, so a
 /// state bound to it costs one resolve for as long as it lasts.
+/// The shell-level dim a state carries, from `state_transforms.states.<id>`.
+///
+/// The spec is explicit that these four states are transforms rather than
+/// tables — a clock multiplier, a direction, a dim and at most one overlay,
+/// "applied by the SHELL on top of a borrowed table … so all twenty faces
+/// behave identically and each client implements this once instead of twenty
+/// times". The tray is a shell like any other, so it applies the dim rather
+/// than painting `banked` at the same brightness as `idle`.
+///
+/// Returns 1.0 for the states that carry no transform.
+pub fn state_dim(state_id: &str) -> f64 {
+    static DIMS: OnceLock<HashMap<String, f64>> = OnceLock::new();
+    *DIMS
+        .get_or_init(|| {
+            let root: serde_json::Value = serde_json::from_str(SPEC_JSON).unwrap_or_default();
+            let mut out = HashMap::new();
+            if let Some(states) = root["state_transforms"]["states"].as_object() {
+                for (id, entry) in states {
+                    if let Some(dim) = entry["dim"].as_f64() {
+                        out.insert(id.clone(), dim);
+                    }
+                }
+            }
+            out
+        })
+        .get(state_id)
+        .unwrap_or(&1.0)
+}
+
+/// Whether a state draws the rim ring of notches, and how many it may draw
+/// before it switches to an overflow mark — `state_transforms.states.<id>`
+/// `overlay: "notches"` and its `overlay_spec.max_notches`.
+pub fn notch_overlay(state_id: &str) -> Option<usize> {
+    let root: serde_json::Value = serde_json::from_str(SPEC_JSON).ok()?;
+    let entry = &root["state_transforms"]["states"][state_id];
+    if entry["overlay"].as_str() != Some("notches") {
+        return None;
+    }
+    Some(entry["overlay_spec"]["max_notches"].as_u64().unwrap_or(12) as usize)
+}
+
 pub fn is_animated(bind: &Binding) -> bool {
     spec()
         .patterns
@@ -531,7 +606,7 @@ mod tests {
     /// The spec must parse and carry the seven states DESKTOP-BUILD §6 names,
     /// because the tray's state mapping resolves against these ids.
     #[test]
-    fn spec_parses_with_its_seven_states() {
+    fn spec_parses_with_its_eight_states() {
         for id in [
             "idle",
             "listening",
@@ -540,11 +615,93 @@ mod tests {
             "approval",
             "standby",
             "error",
+            // Added by the second face audit. Not a mood: things are waiting
+            // and Jarvis is not going to say them out loud.
+            "banked",
         ] {
             assert!(has_state(id), "spec is missing the `{id}` state");
         }
+        assert_eq!(spec().states.len(), 8, "spec should carry 8 states");
         assert_eq!(spec().patterns.len(), 12, "spec should carry 12 patterns");
         assert_eq!(spec().colors.len(), 50, "spec should carry 50 colours");
+    }
+
+    /// The three states the audit moved off their pattern's defaults express
+    /// the whole difference in `default.params`. If the merge is dropped they
+    /// still resolve to *something*, which is why this asserts the parameters
+    /// arrived rather than that a colour looks right.
+    #[test]
+    fn state_params_reach_the_binding() {
+        let thinking = state_binding("thinking").expect("thinking is a state");
+        assert_eq!(thinking.pattern, "sweep");
+        assert_eq!(num(&thinking.params, "offset_deg", -1.0), 246.0);
+        assert_eq!(num(&thinking.params, "span_deg", -1.0), 58.0);
+
+        let error = state_binding("error").expect("error is a state");
+        assert_eq!(num(&error.params, "sharpness", -1.0), 4.0);
+
+        let speaking = state_binding("speaking").expect("speaking is a state");
+        assert_eq!(text(&speaking.params, "loud"), Some("ice-5"));
+    }
+
+    /// A bound parameter must beat the pattern's own. `pulse` ships
+    /// `sharpness: 9`; `error` binds 4.0, which is a visibly slower, fatter
+    /// pulse. Resolving the two must not agree at the same phase.
+    #[test]
+    fn binding_params_override_the_pattern() {
+        let bound = state_binding("error").expect("error is a state");
+        let unbound = Binding {
+            pattern: bound.pattern.clone(),
+            color: bound.color.clone(),
+            ..Default::default()
+        };
+        // A quarter through `pulse`'s own 1.8 s period the two sharpnesses are
+        // far apart; if `params` were ignored these would be identical.
+        let t = 0.45;
+        assert_ne!(
+            resolve(&bound, t, 0.0, 0.0),
+            resolve(&unbound, t, 0.0, 0.0),
+            "error's bound pulse params were ignored"
+        );
+    }
+
+    /// The gradient rule the second face audit added: a bound colour wins over
+    /// the pattern's own two hues. `gradient` ships `from: azure-4`,
+    /// `to: magenta-4`; binding ice-5 with no `to` must never reach magenta.
+    #[test]
+    fn a_bound_gradient_colour_never_swings_to_magenta() {
+        let bind = Binding {
+            pattern: "gradient".to_string(),
+            color: Some("ice-5".to_string()),
+            ..Default::default()
+        };
+        let magenta = hex_of(Some("magenta-4"));
+        for i in 0..200 {
+            let t = i as f64 * 0.07;
+            let out = resolve(&bind, t, 0.0, 0.0);
+            for c in [out.a, out.b] {
+                // Magenta's defining feature here is that red and blue both
+                // sit far above green. ice-5 can never produce that.
+                let (r, g, b) = (c.r as i16, c.g as i16, c.b as i16);
+                assert!(
+                    !(r > g + 40 && b > g + 40),
+                    "a bound gradient reached the pattern's magenta at t={t}: {c:?} \
+                     (magenta-4 is {magenta:?})"
+                );
+            }
+        }
+
+        // …and an explicit `to` still wins, because that is a deliberate
+        // two-hue binding rather than a leftover default.
+        let two_hue = Binding {
+            to: Some("magenta-4".to_string()),
+            ..bind.clone()
+        };
+        assert_ne!(
+            resolve(&bind, 1.75, 0.0, 0.0),
+            resolve(&two_hue, 1.75, 0.0, 0.0),
+            "an explicit `to` should still be honoured"
+        );
     }
 
     /// `idle` is `breathe` on `ice-3` (#2ea8cc). Breathe only lifts and darkens

@@ -29,6 +29,23 @@ identifier = "approvals"
 description = "Answer a pending approval gate."
 permissions = ["allow-decide-approval"]
 
+# The daily brief and the interruption budget. Granted to the quickbar alone,
+# because that is the only window that renders the panel — the HUD loads the
+# backend's own page and the widget is 320px wide.
+#
+# `mark_digest_seen` and `set_attention_muted` are writes, but neither can
+# approve anything: marking read stamps a delivery time, and muting has a fixed
+# end at midnight. There is deliberately no bulk-decide route in the API to
+# grant even if a window asked for one.
+[[set]]
+identifier = "attention-surface"
+description = "Read the daily brief, mark it read, and mute spoken interruptions until tomorrow. Approves nothing."
+permissions = [
+  "allow-get-digest",
+  "allow-mark-digest-seen",
+  "allow-set-attention-muted",
+]
+
 # ---------------------------------------------------------------------------
 # The spotlight. Streaming, its own geometry, the clipboard, and the shell-free
 # external link opener.

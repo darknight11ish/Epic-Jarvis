@@ -88,6 +88,15 @@
             <span class="warn-badge">APPROVAL REQUIRED</span>
             <span class="action-name mono" id="appr-action">--</span>
           </div>
+          <!-- Outside text tried to rush the reader and the tier went up.
+               The chip and the quote; the surrounding context stays on the
+               quickbar's card, because this window is 320px wide and a
+               disclosure nobody can read is worse than a pointer to the one
+               that can. Never a control that clears the latch. -->
+          <div class="appr-raised" id="appr-raised" hidden>
+            <span class="appr-raised-chip" id="appr-raised-chip"></span>
+            <span class="appr-raised-quote" id="appr-raised-quote"></span>
+          </div>
           <p class="appr-detail" id="appr-detail">--</p>
           <!-- What getting the answer wrong costs. `risk` is derived by the
                gate at read time and is the only thing that tells send_email

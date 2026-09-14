@@ -118,6 +118,41 @@
         </div>
       </div>
 
+      <!-- ── Attention: the interruption budget and the daily brief ─────
+           `pending` is what is waiting to be *told* to you, which is not the
+           same as the approval queue below — that is what is waiting for a
+           decision. The two counts are kept apart on purpose.
+
+           There is no approve-all control in here, and there must never be
+           one: approval rows carry `opens_card` and no detail, and clicking
+           one opens its own gate. ────────────────────────────────────────── -->
+      <section class="attention" id="attention" hidden aria-label="Waiting to be told">
+        <header class="attention-head">
+          <div class="attention-title">
+            <strong id="attention-count">Nothing waiting</strong>
+            <span class="attention-budget" id="attention-budget"></span>
+          </div>
+          <div class="attention-actions">
+            <button class="text-button" type="button" id="attention-mute"></button>
+            <button class="text-button" type="button" id="attention-close" title="Hide">
+              Close
+            </button>
+          </div>
+        </header>
+
+        <!-- Rendered in the order the server sent. `jarvis_arbiter._rank`
+             orders by consequence and never by urgency; re-sorting here would
+             hand the ranking back to whoever wrote the text. -->
+        <ol class="digest" id="digest"></ol>
+
+        <footer class="attention-foot">
+          <span class="attention-note" id="attention-note"></span>
+          <button class="text-button" type="button" id="digest-seen">
+            Mark the brief read
+          </button>
+        </footer>
+      </section>
+
       <!-- ── Approval gate ─────────────────────────────────────────────── -->
       <section
         class="approval"
@@ -140,6 +175,25 @@
           </div>
           <span class="approval-target" id="approval-target" hidden></span>
         </header>
+
+        <!-- ── Why this is being asked at all ─────────────────────────
+             Only rendered when the server sent `raised`: outside text tried
+             to rush the reader and the tier went up because of it. The quote
+             is the attacker's own words and showing them is the entire point;
+             the context is text from the page being judged, so it stays behind
+             a disclosure until asked for. There is deliberately no control
+             here that clears the latch. ───────────────────────────────── -->
+        <div class="raised" id="approval-raised" hidden>
+          <div class="raised-head">
+            <span class="raised-chip" id="raised-chip"></span>
+            <span class="raised-source" id="raised-source"></span>
+          </div>
+          <blockquote class="raised-quote" id="raised-quote"></blockquote>
+          <details class="raised-context" id="raised-context-wrap">
+            <summary>Show the surrounding text</summary>
+            <p class="raised-context-body" id="raised-context"></p>
+          </details>
+        </div>
 
         <div class="approval-preview markdown" id="approval-preview"></div>
 

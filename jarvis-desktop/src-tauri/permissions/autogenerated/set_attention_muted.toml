@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-attention-muted"
+description = "Enables the set_attention_muted command without any pre-configured scope."
+commands.allow = ["set_attention_muted"]
+
+[[permission]]
+identifier = "deny-set-attention-muted"
+description = "Denies the set_attention_muted command without any pre-configured scope."
+commands.deny = ["set_attention_muted"]
