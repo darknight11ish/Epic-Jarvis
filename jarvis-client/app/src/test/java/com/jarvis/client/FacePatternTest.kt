@@ -4,7 +4,12 @@ import androidx.compose.ui.graphics.Color
 import com.jarvis.client.face.Binding
 import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.FlashGovernor
+import com.jarvis.client.face.Palette
+import com.jarvis.client.face.Params
+import com.jarvis.client.face.Pattern
 import com.jarvis.client.face.PatternKind
+import com.jarvis.client.face.StrobeBudget
+import com.jarvis.client.face.resolve
 import com.jarvis.client.face.Spec
 import com.jarvis.client.face.Swatch
 import com.jarvis.client.face.relLuma
@@ -42,7 +47,7 @@ class FacePatternTest {
         // Nineteen of twenty speaking faces rendered pink because the pattern's
         // two-hue default won over the bound ice. A bound colour with no
         // explicit `to` must run between itself and its own darker step.
-        val bound = Binding(PatternKind.GRADIENT, Spec.ICE_4)
+        val bound = Binding(Pattern.GRADIENT, Palette.ICE_4)
         for (i in 0..40) {
             val out = resolveRaw(bound, i * 0.25f, 0f)
             val hue = hueOf(out.a)
@@ -52,10 +57,96 @@ class FacePatternTest {
     }
 
     @Test
-    fun `an unbound gradient may use its own two hues`() {
-        val unbound = Binding(PatternKind.GRADIENT, null)
-        val out = resolveRaw(unbound, 0f, 0f)
-        assertNotEquals(0f, out.a.red + out.a.green + out.a.blue)
+    fun `an unbound gradient uses the pattern's own two hues`() {
+        // This test used to assert only that the result was not black, which it
+        // passed while running ice-4 to ice-3 - the generic fallback, not the
+        // pattern's azure-4 to magenta-4. Assert the hues the spec names.
+        val unbound = Binding(Pattern.GRADIENT)
+        var lowest = 360f
+        var highest = 0f
+        for (i in 0..280) {
+            val hue = hueOf(resolveRaw(unbound, i * 0.05f, 0f).a)
+            if (hue >= 0f) { lowest = min(lowest, hue); highest = max(highest, hue) }
+        }
+        // azure-4 is ~216 degrees, magenta-4 ~318. Ice would sit near 190 and
+        // never reach 300.
+        assertTrue("unbound gradient never reached magenta (top hue $highest)", highest > 300f)
+        assertTrue("unbound gradient never reached azure (lowest hue $lowest)", lowest in 190f..230f)
+    }
+
+    @Test
+    fun `rule one merges the pattern's params under the binding's`() {
+        // sweep and rainbow are the same KIND and differ only in params. With
+        // one generic default shared by every pattern, a bound sweep rendered as
+        // a full rainbow: span fell back to 360 instead of the pattern's 90.
+        assertEquals(90f, Binding(Pattern.SWEEP).merged.spanDeg)
+        assertEquals(360f, Binding(Pattern.RAINBOW).merged.spanDeg)
+        assertEquals(5f, Binding(Pattern.SWEEP).merged.periodS)
+        assertEquals(6f, Binding(Pattern.RAINBOW).merged.periodS)
+        // And an override still wins.
+        assertEquals(2f, Binding(Pattern.SWEEP, params = Params(periodS = 2f)).merged.periodS)
+        // while leaving its neighbours on the pattern's own values.
+        assertEquals(90f, Binding(Pattern.SWEEP, params = Params(periodS = 2f)).merged.spanDeg)
+    }
+
+    @Test
+    fun `standby breathes at the pattern's own period`() {
+        // It was 11 seconds - the midpoint of randomise.timing.breathe.standby,
+        // a rule for GENERATING bindings applied by mistake to a shipped one.
+        // The desktop resolved 4.5 and the two clients rendered different greys.
+        assertEquals(4.5f, Bindings.DEFAULTS.of(FaceState.STANDBY).merged.periodS)
+    }
+
+    @Test
+    fun `a comet's tail is the pattern's colour, not a darkened head`() {
+        // Derived from the head, the two collapsed to the same value at the loop
+        // extreme and the comet had no visible tail at all.
+        val comet = Binding(Pattern.COMET)
+        assertEquals(Palette.ICE_1, comet.merged.tail)
+        val head = resolveRaw(comet, 1.2f, 0f).a
+        val tail = resolveRaw(comet, 0f, 0f).b
+        assertTrue("head and tail collapsed to the same colour", relLuma(head) - relLuma(tail) > 0.05f)
+    }
+
+    @Test
+    fun `a strobe stops itself after the spec's limit`() {
+        // limits.flash.strobe_max_s. Nothing enforced it, and the state most
+        // likely to strobe is error, which lasts until somebody fixes it.
+        val strobe = Binding(Pattern.STROBE)
+        val budget = StrobeBudget()
+        val governor = FlashGovernor()
+        var t = 0f
+        var last = resolve(strobe, t, 0f, governor, budget)
+        // Past the limit the output must stop changing.
+        while (t < Spec.STROBE_MAX_S + 1f) { t += 0.1f; last = resolve(strobe, t, 0f, governor, budget) }
+        val settled = last
+        repeat(20) { t += 0.1f; last = resolve(strobe, t, 0f, governor, budget) }
+        assertEquals("a spent strobe kept flashing", relLuma(settled.a), relLuma(last.a), 0.001f)
+        assertTrue("a spent strobe froze on its dark phase", relLuma(last.a) > 0.05f)
+    }
+
+    @Test
+    fun `flicker cannot be bound above the photosensitivity cap`() {
+        val wild = Binding(Pattern.FLICKER, params = Params(rateHz = 40f))
+        // Count opposing luminance transitions over four seconds. The cap exists
+        // so the 2.3x harmonic lands just under three a second.
+        var dir = 0
+        var transitions = 0
+        var prev = relLuma(resolveRaw(wild, 0f, 0f).a)
+        for (i in 1..2400) {
+            val t = i / 600f
+            val y = relLuma(resolveRaw(wild, t, 0f).a)
+            val d = y - prev
+            if (abs(d) >= Spec.FLASH_MIN_LUMA_DELTA) {
+                val nd = if (d > 0) 1 else -1
+                if (nd != dir) { transitions++; dir = nd }
+                prev = y
+            }
+        }
+        assertTrue(
+            "$transitions opposing transitions in 4s is over the limit",
+            transitions <= Spec.FLASH_MAX_TRANSITIONS_PER_S * 4,
+        )
     }
 
     @Test

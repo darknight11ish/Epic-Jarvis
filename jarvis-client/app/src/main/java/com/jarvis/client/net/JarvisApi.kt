@@ -46,6 +46,15 @@ inline fun <T> ApiResult<T>.onOk(block: (T) -> Unit): ApiResult<T> {
 }
 
 /**
+ * Turns a wire shape into the shape the app wants, leaving failures untouched.
+ * The two are not always the same class — see [AttentionResponse].
+ */
+inline fun <T, R> ApiResult<T>.map(block: (T) -> R): ApiResult<R> = when (this) {
+    is ApiResult.Ok -> ApiResult.Ok(block(value))
+    is ApiResult.Failed -> this
+}
+
+/**
  * The REST half of the contract. The SSE half is [EventStream].
  *
  * One OkHttp client for both, so the connection pool and the tailnet route are
@@ -101,7 +110,7 @@ class JarvisApi(
         get("/api/pending", ListSerializer(PendingItem.serializer()), unwrap = "items")
 
     suspend fun attention(): ApiResult<Attention> =
-        get("/api/attention", Attention.serializer())
+        get("/api/attention", AttentionResponse.serializer()).map { it.flatten() }
 
     suspend fun digest(): ApiResult<List<DigestItem>> =
         get("/api/digest", ListSerializer(DigestItem.serializer()), unwrap = "items")

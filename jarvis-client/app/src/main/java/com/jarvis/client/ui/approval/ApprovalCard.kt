@@ -296,14 +296,10 @@ private fun RaisedChip(
                 color = T.Dim,
             )
         }
-        if (raised.countToday > 1) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "${raised.countToday}${ordinal(raised.countToday)} time today",
-                style = MaterialTheme.typography.labelSmall,
-                color = T.Warn,
-            )
-        }
+        // No repeat of the count here. The scanner folds it into `text` already
+        // — the API's own example is "Tier raised — this text tried to rush you
+        // (4th time today)" — so rendering it again said the same thing twice in
+        // two different wordings, which reads like two separate warnings.
         if (raised.context.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
             Text(
@@ -329,10 +325,3 @@ private fun RaisedChip(
     }
 }
 
-private fun ordinal(n: Int): String = when {
-    n % 100 in 11..13 -> "th"
-    n % 10 == 1 -> "st"
-    n % 10 == 2 -> "nd"
-    n % 10 == 3 -> "rd"
-    else -> "th"
-}

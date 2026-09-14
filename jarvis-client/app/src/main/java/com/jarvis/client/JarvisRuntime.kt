@@ -24,6 +24,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /** Whether the event stream is up. Separate from whether Jarvis is busy. */
@@ -128,8 +130,21 @@ object JarvisRuntime {
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
 
+    private val _face = MutableStateFlow(FaceState.IDLE)
+
+    /**
+     * The face state as a flow rather than a function call.
+     *
+     * It has to be observable: the reconnect grace below expires on a timer, and
+     * a plain function only gets re-read when some *other* piece of state
+     * happens to change. A face that stays wrong until the next unrelated event
+     * is the same bug as a face that never updates.
+     */
+    val face: StateFlow<FaceState> = _face.asStateFlow()
+
     private var streamJob: Job? = null
     private var watchdog: Job? = null
+    private var faceJob: Job? = null
 
     @Volatile private var lastFrameAt = 0L
 
@@ -142,6 +157,21 @@ object JarvisRuntime {
         api = JarvisApi(settings, tokens)
         stream = EventStream(api)
         started = true
+
+        faceJob = scope.launch {
+            combine(_link, _activity, _power, _pending, _attention) { _, _, _, _, _ -> }
+                .collectLatest {
+                    _face.value = resolveFace()
+                    if (_link.value != LinkState.CONNECTED) {
+                        // Re-evaluate once the grace window is up, so a reconnect
+                        // that does not come back does eventually show as an
+                        // error. collectLatest cancels this the moment anything
+                        // changes, so a reconnect that succeeds never reaches it.
+                        delay(RECONNECT_GRACE_MS)
+                        _face.value = resolveFace()
+                    }
+                }
+        }
     }
 
     /** True once there is somewhere to talk to and something to talk with. */
@@ -186,6 +216,7 @@ object JarvisRuntime {
 
     fun startStream() {
         if (!started || streamJob?.isActive == true) return
+        if (linkDownSince == 0L) linkDownSince = System.currentTimeMillis()
         _link.value = LinkState.RECONNECTING
 
         streamJob = scope.launch {
@@ -198,6 +229,7 @@ object JarvisRuntime {
                     is EventStream.Signal.Open -> onOpen(signal.hello)
                     is EventStream.Signal.Event -> onEvent(signal.event.kind)
                     is EventStream.Signal.Down -> {
+                        if (linkDownSince == 0L) linkDownSince = System.currentTimeMillis()
                         _link.value =
                             if (signal.attempt == 0) LinkState.RECONNECTING else LinkState.OFFLINE
                         _linkDetail.value = signal.reason
@@ -224,12 +256,14 @@ object JarvisRuntime {
     fun stopStream() {
         streamJob?.cancel(); streamJob = null
         watchdog?.cancel(); watchdog = null
+        if (linkDownSince == 0L) linkDownSince = System.currentTimeMillis()
         _link.value = LinkState.OFFLINE
         _stale.value = true
     }
 
     private suspend fun onOpen(hello: com.jarvis.client.net.HelloPayload?) {
         _link.value = LinkState.CONNECTED
+        linkDownSince = 0L
         _linkDetail.value = null
 
         if (hello?.stale == true) {
@@ -421,18 +455,49 @@ object JarvisRuntime {
      * state. The budget governs what Jarvis *starts*, never what it is in the
      * middle of.
      */
-    fun faceState(): FaceState {
-        if (_link.value != LinkState.CONNECTED) return FaceState.ERROR
+    fun faceState(): FaceState = _face.value
+
+    private fun resolveFace(nowMs: Long = System.currentTimeMillis()): FaceState {
+        if (_link.value != LinkState.CONNECTED) {
+            // A dropped radio on a train is not Jarvis being broken, and the
+            // spec's error face is a *reversed* motion — a deliberately alarming
+            // thing to show for a three-second blip between two cell towers.
+            // Inside the grace window the face holds whatever it was doing; the
+            // link bar already says "Reconnecting" in words, which is the honest
+            // place for that news.
+            //
+            // Time since the link dropped, not which enum we are in: the stream
+            // reports OFFLINE from the second retry onward, and it is still
+            // retrying, so branching on the enum would put the error face up
+            // about a second after the first failure.
+            val down = linkDownSince
+            if (down != 0L && nowMs - down > RECONNECT_GRACE_MS) return FaceState.ERROR
+        }
         val act = _activity.value
         val resting = act == Activity.IDLE
         return when {
+            // Precedence, highest first: an error, then anything waiting on the
+            // human, then what Jarvis is doing, then whether it is awake at all.
+            //
+            // Approval sits above activity and above banked, both deliberately.
+            // Above activity because a question for the human outranks Jarvis
+            // talking to itself. Above banked because banked is the state that
+            // exists to be ignored and approval is the state that exists to pull
+            // the eye — and they are separate queues, so `banked == true` with
+            // something pending is entirely reachable. Ordered the other way
+            // round, an approval arriving while banked rendered as a stopped
+            // grey disc, on the device most likely to be the only one in the
+            // room.
             act == Activity.ERROR -> FaceState.ERROR
+            _pending.value.isNotEmpty() -> FaceState.APPROVAL
             act == Activity.LISTENING -> FaceState.LISTENING
             act == Activity.THINKING || act == Activity.WORKING -> FaceState.THINKING
             act == Activity.SPEAKING -> FaceState.SPEAKING
             resting && _attention.value.banked -> FaceState.BANKED
-            resting && _pending.value.isNotEmpty() -> FaceState.APPROVAL
-            resting && _power.value == "standby" -> FaceState.STANDBY
+            // Quiet is a power mode that suppresses speech, which is what
+            // standby renders. Leaving it on IDLE said "ready to talk" about a
+            // machine that would not.
+            resting && (_power.value == "standby" || _power.value == "quiet") -> FaceState.STANDBY
             else -> FaceState.IDLE
         }
     }
@@ -446,4 +511,15 @@ object JarvisRuntime {
      */
     private const val KEEPALIVE_GAP_MS = 70_000L
     private const val WATCHDOG_TICK_MS = 10_000L
+
+    /**
+     * How long a reconnect may run before the face admits something is wrong.
+     * Long enough to cover a handover between cell towers or a screen-off doze
+     * wakeup; short enough that a desktop that has actually gone away does not
+     * keep pretending to think.
+     */
+    private const val RECONNECT_GRACE_MS = 12_000L
+
+    /** When the link was last lost, or 0 while it is up. */
+    @Volatile private var linkDownSince = 0L
 }

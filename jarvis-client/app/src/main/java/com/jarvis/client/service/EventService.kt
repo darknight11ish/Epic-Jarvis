@@ -62,6 +62,12 @@ class EventService : Service() {
             ) { link, activity, pending -> Triple(link, activity, pending.size) }
                 .collect { (link, activity, count) ->
                     startInForeground(link, activity, count)
+                    // The status line is not an alert — it is IMPORTANCE_LOW and
+                    // silent by design. Anything actually waiting for a decision
+                    // needs its own notification, on its own channel, or the
+                    // whole reason this service holds the stream open in the
+                    // background is wasted battery.
+                    ApprovalNotifier.sync(this@EventService, JarvisRuntime.pending.value)
                 }
         }
     }
@@ -79,6 +85,9 @@ class EventService : Service() {
     override fun onDestroy() {
         watcher?.cancel()
         watcher = null
+        // Nothing is listening for these any more, and a decision request that
+        // outlives the connection that could deliver the answer is a trap.
+        ApprovalNotifier.clear(this)
         JarvisRuntime.stopStream()
         super.onDestroy()
     }

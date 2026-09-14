@@ -197,10 +197,19 @@ private fun LinkBar(state: HomeState, actions: HomeActions) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = T.Ink)
         Spacer(Modifier.weight(1f))
         if (state.attention.pending > 0) {
+            // "N banked" was wrong twice over. `pending` is the digest count —
+            // the notch count for the rim ring — and `banked` is a separate
+            // boolean that is false most of the time, so this said "banked"
+            // about a system that was not. The desktop's own phrasing, which
+            // says what the number counts.
             Text(
-                "${state.attention.pending} banked",
+                if (state.attention.pending == 1) {
+                    "1 thing waiting to be told"
+                } else {
+                    "${state.attention.pending} things waiting to be told"
+                },
                 style = MaterialTheme.typography.labelSmall,
-                color = T.Dim,
+                color = if (state.attention.banked) T.Dim else T.Dim,
             )
             Spacer(Modifier.width(10.dp))
         }

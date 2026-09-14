@@ -113,7 +113,11 @@ fun InboxScreen(
                         )
                     }
                     Switch(
-                        checked = attention.blockedBy == "muted",
+                        // `muted` is its own field on the budget. `blocked_by` says why the
+                        // budget is zero — "quiet", "standby", a locked session — and is
+                        // null most of the time, so a switch reading it was a switch that
+                        // could never be on.
+                        checked = attention.muted,
                         onCheckedChange = onSetMuted,
                         colors = SwitchDefaults.colors(
                             checkedTrackColor = T.Warn.copy(alpha = 0.4f),
@@ -125,6 +129,7 @@ fun InboxScreen(
 
             if (digest.isNotEmpty()) {
                 item(key = "digest-label") {
+                    Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "TODAY'S BRIEF",
@@ -141,6 +146,15 @@ fun InboxScreen(
                                 .minimumInteractiveComponentSize()
                                 .padding(6.dp),
                         )
+                    }
+                    // In the same eyeline as the button, deliberately. The brief
+                    // lists approvals; "read" and "approved" are one plausible
+                    // misreading apart, and that misreading is irreversible.
+                    Text(
+                        "Marking read approves nothing.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = T.Dim,
+                    )
                     }
                 }
                 // Already ranked by consequence. Rendered in the order it

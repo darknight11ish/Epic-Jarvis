@@ -19,4 +19,10 @@
 
     <string name="channel_link_name">Jarvis link</string>
     <string name="channel_link_desc">Ongoing connection to your Jarvis backend.</string>
+    <string name="channel_approval_name">Approvals</string>
+    <string name="channel_approval_desc">A decision is waiting. This channel makes
+        a sound: it is the only thing that tells you an approval arrived while the
+        app was closed.</string>
+    <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
+    <string name="approvals_waiting">%1$d approvals waiting</string>
 </resources>

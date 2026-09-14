@@ -112,73 +112,156 @@ class FlashGovernor {
  * The pattern engine — the thing that makes a face ignorant of which state
  * Jarvis is in. Port this before any face.
  *
+ * Reads [Binding.merged], never the binding's raw params: that merge IS rule 1,
+ * and reading around it is how a bound `sweep` becomes a full rainbow.
+ *
  * @param amp the smoothed drive: the microphone while listening, Jarvis's own
  *   voice while speaking. Never the raw level; the shell owns the envelope.
  */
-fun resolveRaw(bind: Binding, t: Float, amp: Float): Swatch = when (bind.kind) {
-    PatternKind.SOLID -> {
-        val a = bind.color ?: Spec.ICE_4
-        Swatch(a, lift(a, -0.55f))
-    }
+fun resolveRaw(bind: Binding, t: Float, amp: Float): Swatch {
+    val q = bind.merged
+    val periodS = (q.periodS ?: 4.5f).coerceAtLeast(0.05f)
 
-    PatternKind.HUE_SWEEP -> {
-        val ph = (t / bind.periodS) % 1f
-        val h = bind.offsetDeg + if (bind.spanDeg >= 360f) {
-            ph * 360f
-        } else {
-            sin(ph * PI2) * bind.spanDeg * 0.5f
+    return when (bind.kind) {
+        PatternKind.SOLID -> {
+            val a = bind.tint ?: Palette.ICE_4
+            Swatch(a, lift(a, -0.55f))
         }
-        Swatch(
-            hsl(h, bind.sat, bind.light),
-            hsl(h + 28f, bind.sat * 0.9f, bind.light * 0.55f),
-        )
-    }
 
-    PatternKind.BREATHE -> {
-        val base = bind.color ?: Spec.ICE_4
-        val e = (sin(t / bind.periodS * PI2) * 0.5f + 0.5f) * bind.depth
-        Swatch(lift(base, e * 0.8f - bind.depth * 0.25f), lift(base, -0.6f + e * 0.3f))
-    }
+        PatternKind.HUE_SWEEP -> {
+            val span = q.spanDeg ?: 360f
+            val sat = q.sat ?: 0.8f
+            val light = q.light ?: 0.62f
+            val ph = (t / periodS) % 1f
+            val h = (q.offsetDeg ?: 0f) + if (span >= 360f) {
+                ph * 360f
+            } else {
+                sin(ph * PI2) * span * 0.5f
+            }
+            Swatch(hsl(h, sat, light), hsl(h + 28f, sat * 0.9f, light * 0.55f))
+        }
 
-    PatternKind.PULSE -> {
-        val base = bind.color ?: Spec.AMBER_4
-        val ph = max(0f, sin(t / bind.periodS * PI2))
-        val e = ph.pow(bind.sharpness)
-        Swatch(lift(base, e * 0.75f), lift(base, -0.7f + e * 0.4f))
-    }
+        PatternKind.STEP_CYCLE -> {
+            // Holds each colour, then blends to the next. The blend is the only
+            // part that moves, which is what makes this readable at a glance and
+            // cheap on the flash budget.
+            val ring = q.colors?.takeIf { it.isNotEmpty() } ?: listOf(bind.tint ?: Palette.ICE_4)
+            val hold = (q.holdS ?: 2f).coerceAtLeast(0.05f)
+            val blend = (q.blendS ?: 0.45f).coerceAtLeast(0f)
+            val step = hold + blend
+            val total = step * ring.size
+            val u = ((t % total) + total) % total
+            val i = (u / step).toInt().coerceIn(0, ring.size - 1)
+            val within = u - i * step
+            val k = if (blend <= 0f) 0f else ((within - hold) / blend).coerceIn(0f, 1f)
+            val a = mix(ring[i], ring[(i + 1) % ring.size], k)
+            Swatch(a, lift(a, -0.55f))
+        }
 
-    PatternKind.GRADIENT -> {
-        // The bound colour WINS. Before this rule, binding ice-5 to a gradient
-        // still swung to the pattern's own magenta — which is why nineteen of
-        // the twenty speaking tiles in the audit were pink. A bound colour with
-        // no explicit `to` runs between the colour and its own darker step; the
-        // two-hue default applies only when nothing is bound.
-        val a = bind.color ?: Spec.ICE_4
-        val b = bind.to ?: if (bind.color != null) lift(a, -0.38f) else Spec.ICE_3
-        val k = sin(t / bind.periodS * PI2) * 0.5f + 0.5f
-        Swatch(mix(a, b, k), mix(b, a, k))
-    }
+        PatternKind.BREATHE -> {
+            val base = bind.tint ?: Palette.ICE_4
+            val depth = q.depth ?: 0.45f
+            val e = (sin(t / periodS * PI2) * 0.5f + 0.5f) * depth
+            Swatch(lift(base, e * 0.8f - depth * 0.25f), lift(base, -0.6f + e * 0.3f))
+        }
 
-    PatternKind.REACTIVE -> {
-        val a = bind.color ?: Spec.ICE_4
-        val b = bind.loud ?: Spec.ICE_5
-        val k = (amp * bind.gain).coerceIn(0f, 1f)
-        val out = mix(a, b, k)
-        Swatch(out, lift(out, -0.55f))
-    }
+        PatternKind.PULSE -> {
+            val base = bind.tint ?: Palette.AMBER_4
+            val ph = max(0f, sin(t / periodS * PI2))
+            val e = ph.pow(q.sharpness ?: 9f)
+            Swatch(lift(base, e * 0.75f), lift(base, -0.7f + e * 0.4f))
+        }
 
-    PatternKind.COMET -> {
-        val head = bind.color ?: Spec.ICE_5
-        val tail = lift(head, -0.75f)
-        val k = (t / bind.periodS) % 1f
-        val e = (1f - abs(k * 2f - 1f)).pow(3)
-        Swatch(mix(tail, head, e), tail)
-    }
+        PatternKind.GRADIENT -> {
+            // The bound colour WINS. Before this rule, binding ice-5 to a
+            // gradient still swung to the pattern's own magenta — which is why
+            // nineteen of the twenty speaking tiles in the audit were pink. A
+            // bound colour with no explicit `to` runs between the colour and its
+            // own darker step; the two-hue default applies only when nothing is
+            // bound, and those two hues are the pattern's own azure→magenta.
+            val a = bind.color ?: q.from ?: Palette.AZURE_4
+            val b = q.to?.takeIf { bind.color == null || bind.params.to != null }
+                ?: if (bind.color != null) lift(a, -0.38f) else Palette.MAGENTA_4
+            val k = sin(t / periodS * PI2) * 0.5f + 0.5f
+            Swatch(mix(a, b, k), mix(b, a, k))
+        }
 
-    PatternKind.STROBE -> {
-        val on = ((t / bind.periodS) % 1f) < 0.5f
-        val a = if (on) (bind.color ?: Spec.ROSE_4) else Spec.BACKGROUND
-        Swatch(a, lift(a, -0.5f))
+        PatternKind.COMET -> {
+            val head = bind.tint ?: Palette.ICE_5
+            // The tail is the pattern's own colour, not a darkened head. Derived
+            // from the head, the two collapsed to the same value at the loop
+            // extreme and the comet had no tail at all.
+            val tail = q.tail ?: lift(head, -0.75f)
+            val k = (t / periodS) % 1f
+            val e = (1f - abs(k * 2f - 1f)).pow(3)
+            Swatch(mix(tail, head, e), tail)
+        }
+
+        PatternKind.FLICKER -> {
+            // Rate is clamped to limits.flash.flicker_rate_hz_max before it
+            // reaches the oscillator, not merely validated somewhere else: this
+            // is the only path to a colour, so the clamp belongs here.
+            val rate = (q.rateHz ?: 1.2f).coerceIn(0.05f, Spec.FLICKER_RATE_HZ_MAX)
+            val depth = (q.depth ?: 0.25f).coerceIn(0f, 1f)
+            val family = q.family ?: "ember"
+            val base = bind.tint ?: Palette.byId["$family-4"] ?: Palette.EMBER_4
+            // Two components, the stated rate and its 2.3x harmonic — the
+            // harmonic is what the spec's limit is actually sized against.
+            val n = sin(t * rate * PI2) * 0.6f +
+                sin(t * rate * Spec.FLICKER_HARMONIC * PI2) * 0.4f
+            val e = n * 0.5f * depth
+            Swatch(lift(base, e), lift(base, -0.6f + e * 0.5f))
+        }
+
+        PatternKind.REACTIVE -> {
+            val a = bind.color ?: q.quiet ?: Palette.AZURE_3
+            val b = q.loud ?: Palette.ROSE_4
+            val k = (amp * (q.gain ?: 1.6f)).coerceIn(0f, 1f)
+            val out = mix(a, b, k)
+            Swatch(out, lift(out, -0.55f))
+        }
+
+        PatternKind.TEMPERATURE -> {
+            // Cold → warm → hot and back. One axis, three stops, so it reads as
+            // a gauge rather than as a colour show.
+            val cold = q.cold ?: Palette.ICE_2
+            val warm = q.warm ?: Palette.AMBER_4
+            val hot = q.hot ?: Palette.ROSE_4
+            val u = sin(t / periodS * PI2) * 0.5f + 0.5f
+            val a = if (u < 0.5f) mix(cold, warm, u * 2f) else mix(warm, hot, (u - 0.5f) * 2f)
+            Swatch(a, lift(a, -0.55f))
+        }
+
+        PatternKind.STROBE -> {
+            val on = ((t / periodS) % 1f) < 0.5f
+            // The off phase is the pattern's own neutral-1, not the renderer
+            // background. Strobing to the background made the face vanish
+            // entirely on half the cycle, which reads as crashed rather than as
+            // alarmed.
+            val a = if (on) (bind.tint ?: Palette.ROSE_4) else (q.to ?: Palette.NEUTRAL_1)
+            Swatch(a, lift(a, -0.5f))
+        }
+    }
+}
+
+/**
+ * How long a strobe has been running, so [resolve] can stop it.
+ *
+ * `limits.flash.strobe_max_s` says a strobe must never run more than two
+ * seconds at full face width. Nothing enforced that: a binding could strobe for
+ * as long as its state lasted, and error states last until someone fixes them.
+ * Kept per surface alongside the governor, for the same reason the governor is.
+ */
+class StrobeBudget {
+    private var startedAt: Float? = null
+
+    fun reset() { startedAt = null }
+
+    /** True when this strobe has run past its limit and must be held. */
+    fun spent(isStrobe: Boolean, t: Float): Boolean {
+        if (!isStrobe) { startedAt = null; return false }
+        val began = startedAt ?: t.also { startedAt = it }
+        return t - began > Spec.STROBE_MAX_S
     }
 }
 
@@ -186,8 +269,25 @@ fun resolveRaw(bind: Binding, t: Float, amp: Float): Swatch = when (bind.kind) {
  * The only path to a colour, so a hand-written binding cannot get past the
  * flash limits.
  */
-fun resolve(bind: Binding, t: Float, amp: Float, governor: FlashGovernor): Swatch =
-    governor.govern(resolveRaw(bind, t, amp), t)
+fun resolve(
+    bind: Binding,
+    t: Float,
+    amp: Float,
+    governor: FlashGovernor,
+    strobe: StrobeBudget? = null,
+): Swatch {
+    val raw = resolveRaw(bind, t, amp)
+    // A spent strobe freezes on its lit phase. Freezing on the dark phase would
+    // leave the face looking switched off, and the state that most often strobes
+    // is the one that most needs to stay visible.
+    val capped = if (strobe?.spent(bind.kind == PatternKind.STROBE, t) == true) {
+        val lit = bind.tint ?: Palette.ROSE_4
+        Swatch(lit, lift(lit, -0.5f))
+    } else {
+        raw
+    }
+    return governor.govern(capped, t)
+}
 
 const val PI2 = (Math.PI * 2).toFloat()
 

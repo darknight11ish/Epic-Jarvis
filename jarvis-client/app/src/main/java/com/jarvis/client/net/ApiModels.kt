@@ -163,15 +163,62 @@ data class DigestItem(
 
 // ------------------------------------------------------------ attention ----
 
-@Serializable
+/**
+ * The interruption budget as the UI needs it: flat.
+ *
+ * Deliberately NOT the wire shape. `GET /api/attention` nests the budget one
+ * level down and the `attention` *event* publishes the same numbers flat, so a
+ * single class modelling both is a class that is wrong for one of them. It was
+ * wrong for the route: every field but `pending` and `banked` sat at the top
+ * level here, defaulted, and `ignoreUnknownKeys` meant the parse succeeded and
+ * quietly returned 0 of 0 for ever. A budget line that always reads "0 of 0
+ * spoken interruptions left today" says the budget is exhausted, which is the
+ * one thing it must never say by accident.
+ */
 data class Attention(
     val remaining: Int = 0,
     val limit: Int = 0,
-    @SerialName("blocked_by") val blockedBy: String? = null,
+    val spent: Int = 0,
+    /**
+     * Non-null when the budget is zero regardless of the count — Quiet,
+     * Standby, a locked session, or muted.
+     */
+    val blockedBy: String? = null,
+    /** Its own fact, not a value of [blockedBy]. */
+    val muted: Boolean = false,
     /** The notch count for the reactor's rim ring. */
     val pending: Int = 0,
     val banked: Boolean = false,
 )
+
+/** The nested wire shape of `GET /api/attention`. */
+@Serializable
+data class AttentionBudget(
+    val limit: Int = 0,
+    val spent: Int = 0,
+    val remaining: Int = 0,
+    @SerialName("blocked_by") val blockedBy: String? = null,
+    val muted: Boolean = false,
+)
+
+@Serializable
+data class AttentionResponse(
+    val budget: AttentionBudget = AttentionBudget(),
+    val pending: Int = 0,
+    val banked: Boolean = false,
+    @SerialName("digest_hour") val digestHour: Int? = null,
+    @SerialName("digest_due") val digestDue: Boolean = false,
+) {
+    fun flatten(): Attention = Attention(
+        remaining = budget.remaining,
+        limit = budget.limit,
+        spent = budget.spent,
+        blockedBy = budget.blockedBy,
+        muted = budget.muted,
+        pending = pending,
+        banked = banked,
+    )
+}
 
 // ----------------------------------------------------------------- undo ----
 

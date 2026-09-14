@@ -20,16 +20,17 @@ import com.jarvis.client.FaceState
  */
 object Spec {
 
-    // palette.colors — the entries this client names. Full ARGB, as the spec
-    // exports them for exactly this purpose.
-    val ICE_3 = Color(0xFF2EA8CC)
-    val ICE_4 = Color(0xFF6FE3FF)
-    val ICE_5 = Color(0xFFB8F4FF)
-    val EMBER_4 = Color(0xFFFF9B52)
-    val AMBER_4 = Color(0xFFFFB648)
-    val ROSE_4 = Color(0xFFFF7B86)
-    val NEUTRAL_3 = Color(0xFF46566A)
-    val NEUTRAL_4 = Color(0xFF8FA3B8)
+    // The palette lives in Palette.kt now, generated from the spec JSON rather
+    // than typed in by hand. These aliases stay so existing call sites keep
+    // reading; new code should name Palette directly.
+    val ICE_3 = Palette.ICE_3
+    val ICE_4 = Palette.ICE_4
+    val ICE_5 = Palette.ICE_5
+    val EMBER_4 = Palette.EMBER_4
+    val AMBER_4 = Palette.AMBER_4
+    val ROSE_4 = Palette.ROSE_4
+    val NEUTRAL_3 = Palette.NEUTRAL_3
+    val NEUTRAL_4 = Palette.NEUTRAL_4
 
     /** renderer.background — one background for all faces, replacing each face's own. */
     val BACKGROUND = Color(0xFF04070C)
@@ -90,6 +91,27 @@ object Spec {
     const val FLASH_MIN_LUMA_DELTA = 0.10f
 
     /**
+     * limits.flash.strobe_max_s — a strobe may not run longer than this at full
+     * face width. Enforced by [StrobeBudget]; nothing enforced it before, and
+     * the state most likely to strobe is error, which lasts until someone fixes
+     * whatever is wrong.
+     */
+    const val STROBE_MAX_S = 2.0f
+
+    /**
+     * limits.flash.flicker_rate_hz_max and flicker_harmonic.
+     *
+     * 1.3 is already the harmonic-adjusted cap: 1.3 x 2.3 = 2.99, just under
+     * the three opposing transitions a second the guidance allows. Worth
+     * flagging upstream that `why_these_numbers` says "the stated rate must
+     * stay below the limit divided by 2.3", which would cap it at 0.57 and make
+     * the spec's own flicker default of 1.2 Hz illegal. The numbers are
+     * self-consistent; the sentence explaining them is not.
+     */
+    const val FLICKER_RATE_HZ_MAX = 1.3f
+    const val FLICKER_HARMONIC = 2.3f
+
+    /**
      * state_transforms.states — the four borrowed states, as a clock
      * multiplier, a direction, a dim and at most one overlay. Applied by the
      * shell on top of a borrowed motion table so all faces behave identically
@@ -130,33 +152,166 @@ object Spec {
     }
 }
 
-/** A pattern kind from `pattern_kinds`. Only the ones a default uses are here. */
-enum class PatternKind { SOLID, HUE_SWEEP, BREATHE, PULSE, GRADIENT, REACTIVE, COMET, STROBE }
+/**
+ * The eleven kinds from `pattern_kinds`.
+ *
+ * All eleven, not the eight a shipped default happens to use: `randomise` can
+ * roll `cycle` or `temperature` for thinking and `flicker` for approval or
+ * error, so a picker on eight kinds is a Randomise button that silently cannot
+ * produce three of its own outcomes.
+ */
+enum class PatternKind {
+    SOLID, HUE_SWEEP, STEP_CYCLE, BREATHE, PULSE, GRADIENT,
+    COMET, FLICKER, REACTIVE, TEMPERATURE, STROBE,
+}
 
 /**
- * One state's binding: which pattern, which colour, and the pattern's params.
+ * A pattern's parameters. Every field is nullable, and that is the whole point.
+ *
+ * Null means *unset*, which is what lets rule 1 work: the pattern's own params
+ * are the base and the binding overrides them key by key. The previous shape
+ * gave every field one generic default shared by all twelve patterns, so an
+ * unset key fell back to 4.5 seconds and a 360° span whatever pattern it
+ * belonged to — a bound `sweep` rendered as a full rainbow, and an unbound
+ * `gradient` ran ice→ice instead of azure→magenta. It happened to be invisible
+ * because the eight shipped bindings hardcode their merged result; it would
+ * have become visible on the first pattern anyone picked.
+ */
+data class Params(
+    val color: Color? = null,
+    val periodS: Float? = null,
+    val depth: Float? = null,
+    val sharpness: Float? = null,
+    val spanDeg: Float? = null,
+    val offsetDeg: Float? = null,
+    val sat: Float? = null,
+    val light: Float? = null,
+    val from: Color? = null,
+    val to: Color? = null,
+    val tail: Color? = null,
+    val quiet: Color? = null,
+    val loud: Color? = null,
+    val gain: Float? = null,
+    val colors: List<Color>? = null,
+    val holdS: Float? = null,
+    val blendS: Float? = null,
+    val family: String? = null,
+    val rateHz: Float? = null,
+    val cold: Color? = null,
+    val warm: Color? = null,
+    val hot: Color? = null,
+) {
+    /**
+     * Rule 1, as `shell.html` writes it:
+     * `Object.assign({}, P.params, bind.params || {})`.
+     *
+     * Receiver wins; [base] fills the gaps.
+     */
+    fun over(base: Params): Params = Params(
+        color = color ?: base.color,
+        periodS = periodS ?: base.periodS,
+        depth = depth ?: base.depth,
+        sharpness = sharpness ?: base.sharpness,
+        spanDeg = spanDeg ?: base.spanDeg,
+        offsetDeg = offsetDeg ?: base.offsetDeg,
+        sat = sat ?: base.sat,
+        light = light ?: base.light,
+        from = from ?: base.from,
+        to = to ?: base.to,
+        tail = tail ?: base.tail,
+        quiet = quiet ?: base.quiet,
+        loud = loud ?: base.loud,
+        gain = gain ?: base.gain,
+        colors = colors ?: base.colors,
+        holdS = holdS ?: base.holdS,
+        blendS = blendS ?: base.blendS,
+        family = family ?: base.family,
+        rateHz = rateHz ?: base.rateHz,
+        cold = cold ?: base.cold,
+        warm = warm ?: base.warm,
+        hot = hot ?: base.hot,
+    )
+}
+
+/**
+ * The spec's twelve patterns over eleven kinds.
+ *
+ * `rainbow` and `sweep` are both `hue_sweep` and differ only in their params,
+ * which is exactly why a binding must carry the pattern and not just the kind:
+ * with only the kind there is nothing to merge against and the two are the same
+ * pattern.
+ */
+enum class Pattern(val id: String, val kind: PatternKind, val params: Params) {
+    SOLID("solid", PatternKind.SOLID, Params(color = Palette.ICE_4)),
+    RAINBOW(
+        "rainbow", PatternKind.HUE_SWEEP,
+        Params(periodS = 6f, sat = 0.82f, light = 0.62f, spanDeg = 360f, offsetDeg = 0f),
+    ),
+    CYCLE(
+        "cycle", PatternKind.STEP_CYCLE,
+        Params(
+            colors = listOf(Palette.ICE_4, Palette.VIOLET_4, Palette.AMBER_4, Palette.VERDANT_4),
+            holdS = 2f, blendS = 0.45f,
+        ),
+    ),
+    BREATHE("breathe", PatternKind.BREATHE, Params(color = Palette.ICE_4, periodS = 4.5f, depth = 0.45f)),
+    PULSE("pulse", PatternKind.PULSE, Params(color = Palette.AMBER_4, periodS = 1.8f, sharpness = 9f)),
+    GRADIENT(
+        "gradient", PatternKind.GRADIENT,
+        Params(from = Palette.AZURE_4, to = Palette.MAGENTA_4, periodS = 7f),
+    ),
+    SWEEP(
+        "sweep", PatternKind.HUE_SWEEP,
+        Params(periodS = 5f, sat = 0.7f, light = 0.6f, spanDeg = 90f, offsetDeg = 180f),
+    ),
+    COMET("comet", PatternKind.COMET, Params(color = Palette.ICE_5, tail = Palette.ICE_1, periodS = 2.4f)),
+    FLICKER("flicker", PatternKind.FLICKER, Params(family = "ember", rateHz = 1.2f, depth = 0.25f)),
+    REACTIVE(
+        "reactive", PatternKind.REACTIVE,
+        Params(quiet = Palette.AZURE_3, loud = Palette.ROSE_4, gain = 1.6f),
+    ),
+    TEMPERATURE(
+        "temperature", PatternKind.TEMPERATURE,
+        Params(cold = Palette.ICE_2, warm = Palette.AMBER_4, hot = Palette.ROSE_4, periodS = 9f),
+    ),
+    STROBE(
+        "strobe", PatternKind.STROBE,
+        Params(color = Palette.ROSE_4, to = Palette.NEUTRAL_1, periodS = 0.8f),
+    ),
+    ;
+
+    companion object {
+        fun byId(id: String): Pattern? = entries.firstOrNull { it.id == id }
+    }
+}
+
+/**
+ * One state's binding: which pattern, which colour, and any param overrides.
  *
  * `color` is nullable because `hue_sweep` derives its own hue and a bound colour
- * would fight it.
+ * would fight it. [merged] is the only thing the resolver should read.
  */
 data class Binding(
-    val kind: PatternKind,
-    val color: Color?,
-    val periodS: Float = 4.5f,
-    val depth: Float = 0.45f,
-    val sharpness: Float = 9f,
-    val spanDeg: Float = 360f,
-    val offsetDeg: Float = 0f,
-    val sat: Float = 0.8f,
-    val light: Float = 0.62f,
-    val loud: Color? = null,
-    val gain: Float = 1.6f,
-    val to: Color? = null,
-)
+    val pattern: Pattern,
+    val color: Color? = null,
+    val params: Params = Params(),
+) {
+    val kind: PatternKind get() = pattern.kind
+
+    /** Rule 1 applied: this binding's params over the pattern's own. */
+    val merged: Params get() = params.over(pattern.params)
+
+    /** The bound colour, or the pattern's own. */
+    val tint: Color? get() = color ?: merged.color
+}
 
 /**
- * The per-state bindings. Defaults are the spec's `states[].default`, including
- * the three the second audit corrected.
+ * The per-state bindings.
+ *
+ * These are the spec's `states[].default`, verbatim — pattern and colour only,
+ * with params supplied only where the spec supplies them. Every other value now
+ * comes from the pattern via rule 1, which is the point: a default that repeats
+ * a pattern's own param is a value that can drift from it, and one of them did.
  */
 data class Bindings(val byState: Map<FaceState, Binding>) {
 
@@ -165,34 +320,38 @@ data class Bindings(val byState: Map<FaceState, Binding>) {
     companion object {
         val DEFAULTS = Bindings(
             mapOf(
-                FaceState.IDLE to Binding(PatternKind.BREATHE, Spec.ICE_3, periodS = 4.5f),
+                FaceState.IDLE to Binding(Pattern.BREATHE, Palette.ICE_3),
                 // Ember stays: it is the product's established look. Listening is
                 // made unmistakable by MOTION instead — the mic envelope scales
-                // the whole face.
-                FaceState.LISTENING to Binding(PatternKind.SOLID, Spec.EMBER_4),
+                // the whole face. See colour_science: ember-4 against approval's
+                // amber-4 is only 4.5 ΔE to a deuteranope, so hue is not carrying
+                // this distinction and was never asked to.
+                FaceState.LISTENING to Binding(Pattern.SOLID, Palette.EMBER_4),
                 // A narrow cool sweep, hue 217-275. The full rainbow had no
                 // identity — sixteen faces red, three green, one violet in one
                 // gallery — and its first replacement bottomed out on cyan,
                 // which is idle's hue, so a thinking face caught at that phase
                 // read as idle.
                 FaceState.THINKING to Binding(
-                    PatternKind.HUE_SWEEP, null,
-                    offsetDeg = 246f, spanDeg = 58f, periodS = 5f, sat = 0.72f, light = 0.62f,
+                    Pattern.SWEEP, null,
+                    Params(offsetDeg = 246f, spanDeg = 58f, periodS = 5f, sat = 0.72f, light = 0.62f),
                 ),
                 // Was gradient azure→magenta, whose own colours beat the bound
                 // ice and rendered speaking pink on nineteen of twenty faces.
                 FaceState.SPEAKING to Binding(
-                    PatternKind.REACTIVE, Spec.ICE_4, loud = Spec.ICE_5, gain = 1.4f,
+                    Pattern.REACTIVE, Palette.ICE_4,
+                    Params(loud = Palette.ICE_5, gain = 1.4f),
                 ),
-                FaceState.APPROVAL to Binding(PatternKind.PULSE, Spec.AMBER_4, periodS = 1.8f),
-                FaceState.STANDBY to Binding(PatternKind.BREATHE, Spec.NEUTRAL_3, periodS = 11f),
+                FaceState.APPROVAL to Binding(Pattern.PULSE, Palette.AMBER_4),
+                FaceState.STANDBY to Binding(Pattern.BREATHE, Palette.NEUTRAL_3),
                 // A pulse on rose that never leaves rose. Was strobe to
                 // near-black, so any glance on the off phase saw nothing and
                 // read as crashed.
                 FaceState.ERROR to Binding(
-                    PatternKind.PULSE, Spec.ROSE_4, periodS = 1.1f, sharpness = 4f,
+                    Pattern.PULSE, Palette.ROSE_4,
+                    Params(periodS = 1.1f, sharpness = 4f),
                 ),
-                FaceState.BANKED to Binding(PatternKind.SOLID, Spec.NEUTRAL_4),
+                FaceState.BANKED to Binding(Pattern.SOLID, Palette.NEUTRAL_4),
             ),
         )
     }

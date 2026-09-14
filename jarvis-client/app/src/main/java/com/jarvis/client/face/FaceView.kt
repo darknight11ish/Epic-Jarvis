@@ -125,6 +125,13 @@ class FaceHost {
 
     private val governor = FlashGovernor()
 
+    /**
+     * Per surface, like the governor and for the same reason: a strobe budget
+     * shared between faces would stop one face because another had been
+     * strobing.
+     */
+    private val strobeBudget = StrobeBudget()
+
     private var t = 0f
     private var angle = 0f
     private var tableAngle = 0f
@@ -258,7 +265,7 @@ class FaceHost {
         tableAngle += dt * rate * faceSpeed
 
         // Colour: resolve the target, then crossfade from what is on screen.
-        val target = resolve(bindings.of(state), t, drive, governor)
+        val target = resolve(bindings.of(state), t, drive, governor, strobeBudget)
         colEase = min(1f, colEase + dt / Spec.COLOR_EASE_S)
         val delayed = if (state == FaceState.APPROVAL) {
             // The ring is seen to arrive before the colour follows: the knock
