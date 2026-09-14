@@ -216,3 +216,18 @@ select:focus-visible {
   font-size: 12.5px;
   line-height: 1.55;
 }
+
+/* The shared live region in jarvis-link.js is an off-screen element with this
+   class. It has to exist in every window that calls `announce()`, or the
+   announcement is visible text in the corner of the page. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

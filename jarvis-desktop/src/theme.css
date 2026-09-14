@@ -126,16 +126,23 @@
      One colour per node group in `/api/graph`. Kept in the contract rather
      than in brain.css so a theme owns the galaxy too — it is the largest
      coloured surface in the product. */
-  --node-core: #38f0ff;
-  --node-model: #7cc4ff;
-  --node-tool: #3ddc97;
-  --node-skill: #ffc860;
-  --node-persona: #ff9ad2;
-  --node-fact: #b98bff;
-  --node-document: #8ea0b8;
-  --node-cluster: #5fd8e8;
-  --node-source: #6b7a8f;
-  --node-entity: #d9a7ff;
+  /* FIVE hues, not ten, and a group is (hue x form) — see `drawNode` in
+     brain.js. Ten hues cannot encode ten categories: the previous set measured
+     CIEDE2000 6.0 between `core` and `cluster` in NORMAL vision and 1.0 under
+     deuteranopia, and high-contrast gave those two the same value outright. A
+     search over the whole HSL space found no ten that work, so the tenth
+     channel is shape: five colours, each drawn as a filled disc or a hollow
+     ring. Form survives greyscale, colour blindness and a 6px dot.
+
+     These are search results, not picks. Every pair clears CIEDE2000 20 as the
+     worst of normal, deuteranopia and protanopia, against a target of 15.
+     Hand-tuning toward the spec's own families was tried and measured 1.7,
+     because ice/indigo and amber/ember collide under CVD. */
+  --node-h1: #66ccaa; /* structure */
+  --node-h2: #3b7af7; /* provenance */
+  --node-h3: #f7f73b; /* knowledge */
+  --node-h4: #6cd3f9; /* capability */
+  --node-h5: #f73b3b; /* agents */
   --edge: rgba(140, 165, 190, 0.22);
   --edge-active: rgba(56, 240, 255, 0.65);
 
@@ -206,7 +213,7 @@
   --surface-sunken: #0d0906;
   --text: #f8f2ec;
   --text-muted: #c2b0a2;
-  --text-faint: #a3907f;
+  --text-faint: #a69382;
   --text-on-accent: #2a1405;
   --accent: #ff964a;
   --accent-bright: #ffd0a8;
@@ -214,10 +221,14 @@
   --accent-faint: rgba(255, 150, 74, 0.12);
   --focus-ring: #ffb877;
   --accent-text: #ffd0a8;
-  --node-core: #ff964a;
-  --node-cluster: #ffb877;
   --edge-active: rgba(255, 150, 74, 0.65);
   --glow-accent: 0 0 0 1px var(--accent-dim), 0 0 22px rgba(255, 150, 74, 0.18);
+  --node-h1: #66ccaa; /* structure */
+  --node-h2: #3b7af7; /* provenance */
+  --node-h3: #f7f73b; /* knowledge */
+  --node-h4: #6cd3f9; /* capability */
+  --node-h5: #f73b3b; /* agents */
+
 }
 
 /* Paper — genuinely light, not an inversion. The surfaces are opaque here on
@@ -236,7 +247,7 @@
   --border-accent: rgba(0, 110, 140, 0.4);
   --text: #10161f;
   --text-muted: #48566b;
-  --text-faint: #5c6b80;
+  --text-faint: #59687d;
   --text-on-accent: #ffffff;
   --accent: #00697f;
   --accent-bright: #005263;
@@ -244,23 +255,16 @@
   --accent-faint: rgba(0, 105, 127, 0.1);
   --focus-ring: #005263;
   --ok: #17694a;
-  --warn: #8a5800;
+  /* Deep burnt orange, not amber. #8a5800 separated from --bad by only 4.7
+     CIEDE2000 under deuteranopia — on a light background a warning and an
+     error were the same colour to one reader in twelve. This measures 10.0. */
+  --warn: #632303;
   --bad: #b3202f;
   --info: #5b34a8;
   --ok-faint: rgba(23, 105, 74, 0.12);
   --warn-faint: rgba(138, 88, 0, 0.13);
   --bad-faint: rgba(179, 32, 47, 0.1);
   --info-faint: rgba(91, 52, 168, 0.1);
-  --node-core: #00697f;
-  --node-model: #1d5fa8;
-  --node-tool: #17694a;
-  --node-skill: #8a5800;
-  --node-persona: #a52d78;
-  --node-fact: #5b34a8;
-  --node-document: #4b5a6e;
-  --node-cluster: #0d7f96;
-  --node-source: #5c6b80;
-  --node-entity: #7a3fb8;
   --edge: rgba(30, 55, 85, 0.28);
   --edge-active: rgba(0, 105, 127, 0.7);
   --ok-fill: rgba(23, 105, 74, 0.12);
@@ -276,6 +280,12 @@
   --shadow-card: 0 1px 2px rgba(16, 34, 60, 0.1), 0 6px 20px rgba(16, 34, 60, 0.1);
   --shadow-pane: 0 20px 56px rgba(16, 34, 60, 0.18);
   --glow-accent: 0 0 0 1px var(--accent-dim), 0 0 0 4px var(--accent-faint);
+  --node-h1: #257e6d; /* structure */
+  --node-h2: #056cc7; /* provenance */
+  --node-h3: #c74605; /* knowledge */
+  --node-h4: #030377; /* capability */
+  --node-h5: #6b0f22; /* agents */
+
 }
 
 /* High contrast — for reading across a room, and for anyone the other themes
@@ -310,16 +320,6 @@
   --warn-faint: rgba(255, 210, 87, 0.16);
   --bad-faint: rgba(255, 138, 149, 0.16);
   --info-faint: rgba(208, 169, 255, 0.16);
-  --node-core: #63f7ff;
-  --node-model: #9dc9ff;
-  --node-tool: #5cff9d;
-  --node-skill: #ffd257;
-  --node-persona: #ffaadd;
-  --node-fact: #d0a9ff;
-  --node-document: #c3ccd9;
-  --node-cluster: #63f7ff;
-  --node-source: #a9b4c4;
-  --node-entity: #e0c0ff;
   --edge: rgba(220, 230, 245, 0.45);
   --edge-active: #63f7ff;
   --ok-fill: rgba(92, 255, 157, 0.18);
@@ -336,6 +336,12 @@
   --radius-card: 8px;
   --radius-control: 6px;
   --stroke-hair: 2px;
+  --node-h1: #affdd4; /* structure */
+  --node-h2: #b8dcf5; /* provenance */
+  --node-h3: #fafa4c; /* knowledge */
+  --node-h4: #a87efc; /* capability */
+  --node-h5: #d67e71; /* agents */
+
 }
 
 /* ==========================================================================

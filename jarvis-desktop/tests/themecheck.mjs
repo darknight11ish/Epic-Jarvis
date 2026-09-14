@@ -24,23 +24,24 @@ const PAIRS = [
   ["--accent", "--bg-window", 3.0, "accent as a boundary"],
   ["--accent", "--surface-1", 3.0, "accent on a card"],
   ["--text-on-accent", "--accent", 4.5, "text on an accent fill"],
-  ["--ok", "--surface-1", 3.0, "the ok state"],
-  ["--warn", "--surface-1", 3.0, "the warn state"],
-  ["--bad", "--surface-1", 3.0, "the bad state"],
-  ["--info", "--surface-1", 3.0, "the info state"],
   ["--focus-ring", "--bg-window", 3.0, "the focus ring on the window"],
   ["--focus-ring", "--surface-1", 3.0, "the focus ring on a card"],
   // The galaxy: every node colour has to be distinguishable from the canvas.
-  ["--node-core", "--bg-window", 3.0, "graph: core"],
-  ["--node-model", "--bg-window", 3.0, "graph: model"],
-  ["--node-tool", "--bg-window", 3.0, "graph: tool"],
-  ["--node-skill", "--bg-window", 3.0, "graph: skill"],
-  ["--node-persona", "--bg-window", 3.0, "graph: persona"],
-  ["--node-fact", "--bg-window", 3.0, "graph: fact"],
-  ["--node-document", "--bg-window", 3.0, "graph: document"],
-  ["--node-cluster", "--bg-window", 3.0, "graph: cluster"],
-  ["--node-source", "--bg-window", 3.0, "graph: source"],
-  ["--node-entity", "--bg-window", 3.0, "graph: entity"],
+  ["--node-h1", "--bg-window", 3.0, "graph hue 1"],
+  ["--node-h2", "--bg-window", 3.0, "graph hue 2"],
+  ["--node-h3", "--bg-window", 3.0, "graph hue 3"],
+  ["--node-h4", "--bg-window", 3.0, "graph hue 4"],
+  ["--node-h5", "--bg-window", 3.0, "graph hue 5"],
+  // Semantic colours render as 9.5px uppercase text on `.row-tag`, which is
+  // body text and needs 4.5 — the 3.0 floor they used to carry was the
+  // non-text floor and was simply the wrong number for how they are used.
+  ["--ok", "--surface-1", 4.5, "the ok state as text"],
+  ["--warn", "--surface-1", 4.5, "the warn state as text"],
+  ["--bad", "--surface-1", 4.5, "the bad state as text"],
+  ["--info", "--surface-1", 4.5, "the info state as text"],
+  ["--text-faint", "--surface-2", 4.5, "faint text on a raised card"],
+  ["--text-muted", "--surface-2", 4.5, "muted text on a raised card"],
+  ["--text-faint", "--surface-sunken", 4.5, "placeholder text in a field"],
 ];
 
 const THEMES = ["default", "ember", "paper", "high-contrast"];

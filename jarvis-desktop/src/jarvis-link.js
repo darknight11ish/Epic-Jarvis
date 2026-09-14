@@ -424,6 +424,88 @@ export function followTheme(onChange) {
     .catch((error) => console.error("[jarvis] could not read the theme:", error));
 }
 
+/**
+ * The one live region a window speaks through.
+ *
+ * Two bugs made every announcement in this app unreliable, and both are
+ * structural rather than a missing attribute.
+ *
+ * First: four regions were WRITTEN TO WHILE HIDDEN and then unhidden — the
+ * approval gate in the quickbar and the widget, the Brain's toast, the Brain's
+ * inspector. `[hidden] { display: none !important }` removes an element from
+ * the accessibility tree, and a live region has to be present and observed
+ * BEFORE its contents change for the change to be reported. Writing while
+ * removed and then inserting the whole populated subtree is the canonical way
+ * to get silence.
+ *
+ * Second: the streaming answer carried `aria-live="polite"` while `paint()`
+ * reassigned its whole `innerHTML`. `aria-relevant` defaults to `additions
+ * text`, so every repaint re-added the entire answer so far and queued it. A
+ * long reply left a screen reader still speaking paragraph one after the
+ * visual answer had finished, with no way to interrupt it into a coherent
+ * state.
+ *
+ * So: one element, created at load, never hidden, off-screen. Everything that
+ * needs to be spoken goes through `announce()`. The visual surfaces become
+ * ordinary markup with no live semantics at all.
+ */
+let announcer = null;
+
+/**
+ * Builds the two regions, EAGERLY.
+ *
+ * Lazily was the same bug one level up: the first `announce()` would create
+ * the element and write to it in the same tick, so the region was not present
+ * and observed before its contents changed — which is the exact condition that
+ * makes a live region silent. It has to exist before anything needs it.
+ */
+function buildAnnouncer() {
+  if (announcer || !document.body) return;
+  announcer = { polite: null, assertive: null };
+  for (const level of ["polite", "assertive"]) {
+    const node = document.createElement("div");
+    node.className = "sr-only";
+    node.setAttribute("aria-live", level);
+    // `additions text` is the default, and it is what re-announced the whole
+    // streaming answer on every repaint. Only additions are wanted here.
+    node.setAttribute("aria-relevant", "additions");
+    node.setAttribute("aria-atomic", "true");
+    document.body.append(node);
+    announcer[level] = node;
+  }
+}
+
+if (typeof document !== "undefined") {
+  if (document.body) buildAnnouncer();
+  else document.addEventListener("DOMContentLoaded", buildAnnouncer, { once: true });
+}
+
+function announcerFor(politeness) {
+  buildAnnouncer();
+  if (!announcer) return null;
+  return announcer[politeness === "assertive" ? "assertive" : "polite"];
+}
+
+/**
+ * Says something once.
+ *
+ * `assertive` is for a decision that has stopped work — an approval gate — and
+ * for nothing else. Everything else is polite, because an assertive region
+ * interrupts whatever the user was reading.
+ */
+export function announce(message, politeness = "polite") {
+  const text = String(message || "").trim();
+  if (!text) return;
+  const node = announcerFor(politeness);
+  if (!node) return;
+  // Re-setting identical text is not a mutation and would not be spoken, so a
+  // repeated message needs the region cleared first.
+  node.textContent = "";
+  requestAnimationFrame(() => {
+    node.textContent = text;
+  });
+}
+
 let started = false;
 
 /**

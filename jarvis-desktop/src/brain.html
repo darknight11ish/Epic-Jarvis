@@ -16,7 +16,12 @@
     <script>
       try {
         var t = localStorage.getItem("jarvis.theme");
-        if (t) document.documentElement.setAttribute("data-theme", t);
+        // Validated here and not only in applyTheme: a stale or hand-edited
+        // value would otherwise paint an unmatched [data-theme] and then flip
+        // 80ms later, which is the flash this exists to prevent.
+        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+          document.documentElement.setAttribute("data-theme", t);
+        }
       } catch (e) {
         /* private mode, cleared site data — the default theme is correct */
       }
@@ -140,7 +145,7 @@
                  node count is set by how much the owner's memory store knows
                  rather than by anything the UI controls. -->
             <canvas id="graph-canvas" tabindex="0"
-                    aria-label="Memory graph. Use the node list beside it for a readable view."></canvas>
+                    aria-label="Memory graph, drawn on a canvas. Arrow keys pan, plus and minus zoom, 0 fits. To select a node, use the search field; the panel that opens reports it and lists what it connects to."></canvas>
 
             <div class="galaxy-empty" id="graph-empty" hidden>
               <p id="graph-empty-text">Reading the graph…</p>
@@ -150,13 +155,13 @@
                  everything selectable by clicking a node is reachable through
                  the search field and this panel, which a canvas alone can
                  never be. -->
-            <aside class="inspector" id="inspector" hidden aria-live="polite">
+            <aside class="inspector" id="inspector" hidden>
               <header class="inspector-head">
                 <span class="node-kind" id="node-kind"></span>
                 <button class="icon-btn" type="button" id="inspector-close"
                         title="Close">✕<span class="sr-only">Close</span></button>
               </header>
-              <h2 class="inspector-title" id="node-label"></h2>
+              <h2 class="inspector-title" id="node-label" tabindex="-1"></h2>
               <dl class="inspector-facts" id="node-facts"></dl>
               <h3 class="inspector-sub">Connected</h3>
               <ul class="inspector-links" id="node-links"></ul>
@@ -357,7 +362,10 @@
       </div>
     </div>
 
-    <div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
+    <!-- No live attributes: this element is hidden when it is written and shown
+         afterwards, which is the pattern that stays silent. The message goes
+         through the shared region in jarvis-link.js, which is always present. -->
+    <div class="toast" id="toast" hidden></div>
 
     <script type="module" src="brain.js"></script>
   </body>

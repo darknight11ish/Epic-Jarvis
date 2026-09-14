@@ -17,6 +17,7 @@
    ========================================================================== */
 
 import {
+  announce,
   currentLink,
   decide as decideOnBackend,
   onLink,
@@ -333,6 +334,14 @@ function approvalDetail(approval) {
  * out for itself: one list, one moment, three surfaces showing the same thing.
  */
 function openApproval(approval) {
+  // The gate no longer claims `alertdialog`, so it announces itself — with the
+  // risk line, which is the part that changes the decision.
+  if (!state.approval || state.approval.id !== approval.id) {
+    announce(
+      `Approval required: ${approval.action}. ${riskLine(approval.risk)}.`,
+      "assertive"
+    );
+  }
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
   dom.apprAction.textContent = approval.action;
@@ -416,6 +425,10 @@ let flashTimer = null;
 
 /** Shows a transient one-line status under the capture field. */
 function flash(message, tone) {
+  // `#widget-flash` is hidden when it is written and revealed afterwards,
+  // which is the pattern that reliably says nothing. The shared region is
+  // always present, so this is the half that actually speaks.
+  announce(message);
   dom.flash.textContent = message;
   if (tone) dom.flash.dataset.tone = tone;
   else delete dom.flash.dataset.tone;

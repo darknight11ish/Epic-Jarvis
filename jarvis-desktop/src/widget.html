@@ -102,10 +102,12 @@
           class="approval-card"
           id="approval-card"
           hidden
-          role="alertdialog"
-          aria-live="assertive"
-          aria-label="Approval required"
+          role="group"
+          aria-labelledby="appr-action"
         >
+          <!-- Same reasoning as the quickbar: no modality, no focus trap, so
+               no `alertdialog`. Announced through the shared live region
+               instead, which also fixes writing to a hidden region. -->
           <div class="approval-header">
             <span class="warn-badge">APPROVAL REQUIRED</span>
             <span class="action-name mono" id="appr-action">--</span>

@@ -20,6 +20,7 @@
  */
 
 import {
+  announce,
   currentLink,
   surfaceState,
   onEvent,
@@ -133,6 +134,7 @@ async function invoke(command, args = {}) {
 
 let toastTimer = null;
 function toast(message, tone = "") {
+  announce(String(message), tone === "bad" ? "assertive" : "polite");
   dom.toast.textContent = String(message);
   dom.toast.dataset.tone = tone;
   dom.toast.hidden = false;
@@ -1016,17 +1018,38 @@ function repaintTrace() {
    controls, so O(n²) is a cliff somebody eventually falls off.
    ========================================================================== */
 
-const GROUP_TOKENS = {
-  core: "--node-core",
-  model: "--node-model",
-  tool: "--node-tool",
-  skill: "--node-skill",
-  persona: "--node-persona",
-  fact: "--node-fact",
-  document: "--node-document",
-  cluster: "--node-cluster",
-  source: "--node-source",
+/**
+ * A group is a hue AND a form, because ten hues cannot encode ten categories.
+ *
+ * The old ten-colour map measured CIEDE2000 6.0 between `core` and `cluster`
+ * in normal vision — under the visual spec's own "obviously different at arm's
+ * length" line before any colour blindness — and 1.0 under deuteranopia, which
+ * is the spec's own word for indistinguishable. High contrast gave the two the
+ * same hex outright.
+ *
+ * Five hues each carry two groups, told apart by whether the node is a filled
+ * disc or a hollow ring. The pairs are semantically adjacent, so a misread
+ * costs the least: a cluster mistaken for the core is a smaller error than a
+ * cluster mistaken for a document. Form is not a theme concern — it is a fact
+ * about what the group is — so it lives here and not in theme.css.
+ */
+const GROUP_STYLE = {
+  core: ["--node-h1", "disc"],
+  cluster: ["--node-h1", "ring"],
+  model: ["--node-h2", "disc"],
+  source: ["--node-h2", "ring"],
+  fact: ["--node-h3", "disc"],
+  document: ["--node-h3", "ring"],
+  tool: ["--node-h4", "disc"],
+  skill: ["--node-h4", "ring"],
+  persona: ["--node-h5", "disc"],
+  entity: ["--node-h5", "ring"],
 };
+
+/** Unknown groups get the last hue as a ring, which reads as "other". */
+function styleFor(group) {
+  return GROUP_STYLE[group] || ["--node-h5", "ring"];
+}
 
 const view = { x: 0, y: 0, scale: 1 };
 let sim = null;
@@ -1047,10 +1070,29 @@ const colourCache = new Map();
 function colourFor(group) {
   let hit = colourCache.get(group);
   if (hit !== undefined) return hit;
-  const token = GROUP_TOKENS[group] || "--node-entity";
+  const token = styleFor(group)[0];
   hit = getComputedStyle(dom.root).getPropertyValue(token).trim() || "#888";
   colourCache.set(group, hit);
   return hit;
+}
+
+/** Draws one node in its group's form. A ring is stroked, a disc is filled. */
+function drawNode(ctx, x, y, r, group, colour) {
+  if (styleFor(group)[1] === "ring") {
+    // Stroked inside the radius so a ring and a disc of the same group read as
+    // the same size — otherwise the ring looks like a bigger node.
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = Math.max(1.4, r * 0.42);
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(1, r - ctx.lineWidth / 2), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    return;
+  }
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 /**
@@ -1165,7 +1207,15 @@ function buildLegend(counts) {
     item.type = "button";
     item.setAttribute("aria-pressed", String(!hiddenGroups.has(group)));
     const sw = el("span", "legend-swatch");
-    sw.style.background = colourFor(group);
+    const [, form] = styleFor(group);
+    sw.dataset.form = form;
+    if (form === "ring") {
+      sw.style.background = "transparent";
+      sw.style.borderColor = colourFor(group);
+    } else {
+      sw.style.background = colourFor(group);
+      sw.style.borderColor = "transparent";
+    }
     item.append(sw, el("span", "", group), el("span", "legend-count", present[group]));
     item.addEventListener("click", () => {
       if (hiddenGroups.has(group)) hiddenGroups.delete(group);
@@ -1199,12 +1249,34 @@ function startLayout() {
   let carried = 0;
   let last = 0;
 
-  // Reduced motion means no assembly animation: run the whole simulation in
-  // one blocking pass and paint the settled result once.
+  // Reduced motion means no visible ASSEMBLY. It does not mean no time.
+  //
+  // This used to run all 320 ticks in one synchronous `while` loop, which is
+  // the same total work the animated path does — delivered as a frozen window.
+  // The node count is set by how much the owner's memory store knows, so on a
+  // large graph that is a multi-second hang, and the person who gets it is the
+  // one who asked for less motion because motion makes them unwell.
+  //
+  // Same chunking, same yielding, nothing drawn until it has settled.
   if (reduced) {
-    while (tick++ < total) step(g, 1 - tick / total);
-    fitToContent();
-    draw();
+    dom.graphEmpty.hidden = false;
+    dom.graphEmptyText.textContent = "Laying out the graph…";
+    const slice = () => {
+      const until = performance.now() + 8;
+      while (tick < total && performance.now() < until) {
+        step(g, 1 - tick / total);
+        tick++;
+      }
+      if (tick < total) {
+        sim = requestAnimationFrame(slice);
+        return;
+      }
+      sim = null;
+      dom.graphEmpty.hidden = true;
+      fitToContent();
+      draw();
+    };
+    sim = requestAnimationFrame(slice);
     return;
   }
 
@@ -1438,11 +1510,11 @@ function draw() {
     const [x, y] = T(n);
     const r = radiusOf(n) * Math.max(0.55, Math.min(1.6, view.scale));
     const dim = focus && !near.has(n.id);
-    ctx.globalAlpha = dim ? 0.2 : 1;
-    ctx.fillStyle = colourFor(n.group);
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
+    // 0.45, not 0.2. At 0.2 a dimmed node measured 1.11:1 against the canvas —
+    // invisible, while `nodeAt` still hit-tested it, so you could click a node
+    // you could not see. De-emphasis, not erasure.
+    ctx.globalAlpha = dim ? 0.45 : 1;
+    drawNode(ctx, x, y, r, n.group, colourFor(n.group));
     if (n === selected) {
       ctx.strokeStyle = text;
       ctx.lineWidth = 2;
@@ -1488,7 +1560,10 @@ function draw() {
     }
     placed.push(box);
     ctx.fillStyle = near.has(n.id) || !focus ? text : faint;
-    ctx.globalAlpha = focus && !near.has(n.id) ? 0.25 : 1;
+    // 0.55, not 0.25: at 0.25 these measured 1.43:1 and simply vanished — and
+    // they are the orientation landmarks, so they disappeared exactly when
+    // someone was exploring.
+    ctx.globalAlpha = focus && !near.has(n.id) ? 0.55 : 1;
     ctx.fillText(label, x, top);
   }
   ctx.globalAlpha = 1;
@@ -1556,11 +1631,23 @@ function select(node) {
     b.addEventListener("click", () => {
       select(other);
       centreOn(other);
+      // `select` calls `replaceChildren` on this list, so the button that was
+      // just activated is removed from the document while it holds focus and
+      // focus falls to <body>. A keyboard user lost their place on every hop
+      // and had to tab from the top of the window again.
+      dom.nodeLabel.focus({ preventScroll: true });
     });
     li.append(b);
     dom.nodeLinks.append(li);
   }
   dom.inspector.hidden = false;
+  // A canvas has no accessibility tree, so selecting a node is otherwise a
+  // silent event. This is the only thing that tells a screen-reader user
+  // anything happened.
+  announce(
+    `${node.label}, ${node.group}, ${node.deg} ` +
+      `${node.deg === 1 ? "connection" : "connections"}.`
+  );
   draw();
 }
 
@@ -1761,6 +1848,12 @@ dom.watchSeen.addEventListener("click", async () => {
 
 window.addEventListener("resize", () => {
   if (state.view === "galaxy") fitCanvas();
+});
+
+// Toggling the OS setting used to have no effect until the next refresh,
+// because `matchMedia` was read once inside `startLayout`.
+matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => {
+  if (state.view === "galaxy" && state.graph) startLayout();
 });
 
 /* ---- The one stream ------------------------------------------------------ */

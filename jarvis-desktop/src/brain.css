@@ -327,7 +327,9 @@ body {
 }
 
 .legend-item[aria-pressed="false"] {
-  opacity: 0.42;
+  /* 0.62, not 0.42: at 0.42 the label measured 2.38:1, and a filter you have
+     switched off is a control you still need to be able to read. */
+  opacity: 0.62;
   text-decoration: line-through;
 }
 
@@ -336,11 +338,15 @@ body {
   color: var(--text);
 }
 
+/* The swatch carries the FORM as well as the hue, because matching a dot on
+   the canvas to a chip in the legend is otherwise a pure colour-matching task
+   — the one operation that fails for the readers this encoding exists for. */
 .legend-swatch {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--node-source);
+  border: 2px solid transparent;
+  box-sizing: border-box;
 }
 
 .legend-count {

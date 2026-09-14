@@ -182,6 +182,9 @@
         <!-- Something is still waiting after Esc put it away. Not a decision
              surface — a way back to the card, so parking can never lose one. -->
         <div class="parked" id="parked" hidden>
+        <!-- Announced through the shared region on transition, not by a live
+             attribute here: this element is hidden when the message is
+             written, which is exactly the pattern that stays silent. -->
           <span id="parked-text"></span>
           <button class="text-button" type="button" id="parked-show">Show it</button>
         </div>
@@ -192,10 +195,27 @@
           id="approval"
           hidden
           tabindex="-1"
-          role="alertdialog"
-          aria-live="assertive"
-          aria-label="Approval required"
+          role="group"
+          aria-labelledby="approval-kicker approval-action"
         >
+          <!--
+            `role="group"`, not `alertdialog`, and this is the honest markup
+            rather than a downgrade.
+
+            `alertdialog` tells a screen reader "a modal dialog is demanding a
+            response", and readers are trained by that to expect Tab to be
+            bounded and Esc to close. None of it is true here: there is no
+            `aria-modal`, no focus trap, focus is deliberately NOT moved (a
+            stray Enter used to approve), the rest of the page stays reachable,
+            and Esc parks rather than dismisses. Claiming the role taught the
+            wrong model of the one surface where the user's model matters most.
+
+            The announcement it used to buy is now made explicitly through the
+            shared live region, which says what the action is AND what it
+            costs — more than the role ever conveyed. `aria-labelledby` also
+            puts the action into the accessible name, which the old
+            `aria-label="Approval required"` overrode.
+          -->
           <header class="approval-head">
             <span class="approval-badge" aria-hidden="true">
               <svg viewBox="0 0 16 16" focusable="false">
@@ -204,7 +224,7 @@
               </svg>
             </span>
             <div class="approval-title">
-              <span class="approval-kicker">Jarvis wants to</span>
+              <span class="approval-kicker" id="approval-kicker">Jarvis wants to</span>
               <strong id="approval-action">run an action</strong>
             </div>
             <!-- Which of how many. Answering one and having the next appear
@@ -243,10 +263,12 @@
                  aside and the hint says so. Enter still works on whichever
                  button has focus, which is simply what a button does. -->
             <span class="approval-hint" id="approval-hint">Nothing runs until you decide.</span>
-            <button class="approval-button approval-deny" type="button" id="approval-deny">
+            <button class="approval-button approval-deny" type="button" id="approval-deny"
+                  aria-describedby="approval-hint">
               Deny
             </button>
-            <button class="approval-button approval-approve" type="button" id="approval-approve">
+            <button class="approval-button approval-approve" type="button" id="approval-approve"
+                  aria-describedby="approval-hint">
               Approve
             </button>
           </footer>
@@ -267,12 +289,16 @@
           </header>
 
           <div class="card-body" id="card-body">
-            <article
-              class="markdown"
-              id="answer"
-              aria-live="polite"
-              aria-atomic="false"
-            ></article>
+            <!--
+              No `aria-live` here, deliberately. `paint()` reassigns this
+              element's whole innerHTML, and `aria-relevant` defaults to
+              `additions text` — so every repaint re-added the ENTIRE answer so
+              far and queued it. A long reply left a screen reader minutes
+              behind the screen, with no way to interrupt it into a coherent
+              state. The stream is announced once when it starts and once when
+              it finishes, through the shared region in jarvis-link.js.
+            -->
+            <article class="markdown" id="answer"></article>
             <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
           </div>
 

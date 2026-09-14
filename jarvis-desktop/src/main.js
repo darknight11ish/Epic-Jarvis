@@ -83,6 +83,7 @@ const RESIZE_INTERVAL_MS = 150;
 
 import {
   currentLink,
+  announce,
   currentQueue,
   decide as decideOnBackend,
   fetchDigest,
@@ -924,6 +925,14 @@ function openApproval(approval) {
   // the destructive button" that is safe on a surface that appears by itself.
   // The gate is announced instead: `role="alertdialog"` with `aria-live` on the
   // section carries it to a screen reader without stealing anything.
+  // What the role used to imply, said explicitly and with the part that
+  // actually matters — what getting it wrong costs.
+  announce(
+    `Approval required: ${approval.action}. ${riskLine(approval.risk)}. ` +
+      "Approve and Deny are in the gate; Escape puts it aside.",
+    "assertive"
+  );
+
   setPinned(true, { silent: true });
   if (!dom.prompt.value.trim() && document.activeElement !== dom.prompt) {
     // Nothing half-typed and the composer is not where the user is looking:
@@ -1293,8 +1302,10 @@ function renderRaised(raised) {
  */
 function parkApproval() {
   if (!state.approval) return;
+  const action = state.approval.action;
   state.parked.add(state.approval.id);
   closeApproval();
+  announce(`Put aside: ${action}. It is still waiting; nothing was decided.`);
   syncParkedBar();
   focusInput({ selectAll: false });
 }
@@ -1681,6 +1692,7 @@ async function send(promptText) {
   state.startedAt = performance.now();
 
   setPhase("streaming");
+  announce("Working on it.");
   openCard("Thinking…");
   dom.cursor.hidden = false;
   dom.stop.hidden = false;
@@ -1748,6 +1760,20 @@ function finishStream(phase, statusText) {
 
   updateStat();
   paint({ immediate: true });
+
+  // Once, at the end. The answer element carries no live region any more —
+  // announcing a growing buffer per repaint is what left a screen reader
+  // minutes behind the screen. The word count is the useful part: it tells
+  // someone how much there is before they start reading it.
+  if (phase !== "error") {
+    const words = state.buffer.trim().split(/\s+/).filter(Boolean).length;
+    announce(
+      words
+        ? `Answer complete, ${words} ${words === 1 ? "word" : "words"}.`
+        : "The server closed the stream without sending content."
+    );
+  }
+
   // The stream is over, so settle the window on its final height immediately
   // rather than waiting out the throttle.
   commitWindowHeight();
