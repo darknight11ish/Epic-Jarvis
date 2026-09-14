@@ -222,6 +222,10 @@ class MainActivity : FragmentActivity() {
         // delivers ~50 levels a second and this must not recompose anything.
         val micLevelState = voice.micLevel.collectAsState()
         val micLevel = remember { derivedStateOf { micLevelState.value ?: 0f } }
+        // Kept nullable all the way to the face: null is "no voice is playing",
+        // which is what makes the face fall back to its own envelope, and 0f is
+        // "a voice is playing and is silent", which does not.
+        val speechLevel = voice.speaker.level.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
         val idleColour = bindings.of(FaceState.IDLE).tint ?: com.jarvis.client.face.Palette.ICE_3
@@ -422,6 +426,7 @@ class MainActivity : FragmentActivity() {
                     // composer while the face drew at 60fps on the same thread.
                     reply = { chat.reply.value },
                     micLevel = micLevel,
+                    speechLevel = speechLevel,
                     actions = remember {
                         HomeActions(
                             onDraftChange = { draft = it },

@@ -98,6 +98,67 @@ object Wav {
         return out.toByteArray()
     }
 
+    /**
+     * The PCM of a WAV, bounded by the `data` chunk's own declared length.
+     *
+     * This lives here rather than in [Speaker] for the reason at the top of
+     * this file: a decoder that reads the wrong bytes does not fail, it
+     * produces audio that is merely *wrong*, and the only way to know is to
+     * feed it a file whose right answer is known. Two things it does not
+     * assume: that `data` starts at byte 44, and that it runs to the end of
+     * the file. `LIST`/`INFO` after `data` is common, and reading past the
+     * chunk plays the metadata as a click at the end of every sentence.
+     */
+    fun decode(wav: ByteArray): ShortArray {
+        val start = chunkOffset(wav, "data") ?: 44.coerceAtMost(wav.size)
+        val declared = if (start >= 8) le32(wav, start - 4) else -1
+        val end = if (declared > 0) minOf(start + declared, wav.size) else wav.size
+        val n = ((end - start) / 2).coerceAtLeast(0)
+        return ShortArray(n) { i ->
+            val o = start + i * 2
+            ((wav[o].toInt() and 0xFF) or (wav[o + 1].toInt() shl 8)).toShort()
+        }
+    }
+
+    /**
+     * The sample rate from the `fmt ` chunk, found the same way `data` is.
+     *
+     * Bytes 24..27 are the canonical position and reading them directly was
+     * what this did — which contradicted the chunk scan two functions up: an
+     * engine that can add a chunk before `data` can add one before `fmt `, and
+     * then those four bytes belong to something else. What comes back is not
+     * obviously wrong, it is a plausible integer, and it goes straight into
+     * `AudioTrack.Builder`, which throws on a rate it cannot serve. So the
+     * chunk is located, and a rate outside what any device will accept is
+     * refused here rather than by the exception.
+     */
+    fun rateOf(wav: ByteArray): Int {
+        val fmt = chunkOffset(wav, "fmt ") ?: return SAMPLE_RATE
+        if (fmt + 8 > wav.size) return SAMPLE_RATE
+        val rate = le32(wav, fmt + 4)
+        return if (rate in 4_000..192_000) rate else SAMPLE_RATE
+    }
+
+    /** Offset of a chunk's payload, or null if the file does not contain it. */
+    private fun chunkOffset(wav: ByteArray, want: String): Int? {
+        if (wav.size < 12) return null
+        var i = 12
+        while (i + 8 <= wav.size) {
+            val id = String(wav, i, 4, Charsets.US_ASCII)
+            val size = le32(wav, i + 4)
+            if (id == want) return i + 8
+            // A negative size is a malformed file; advancing by it would walk
+            // backwards and loop here forever.
+            if (size < 0) return null
+            i += 8 + size + (size and 1) // chunks are word-aligned
+        }
+        return null
+    }
+
+    private fun le32(b: ByteArray, o: Int): Int =
+        (b[o].toInt() and 0xFF) or ((b[o + 1].toInt() and 0xFF) shl 8) or
+            ((b[o + 2].toInt() and 0xFF) shl 16) or ((b[o + 3].toInt() and 0xFF) shl 24)
+
     /** Root-mean-square of a buffer, 0..1. Drives the face's listening envelope. */
     fun rms(buffer: ShortArray, count: Int = buffer.size): Float {
         if (count <= 0) return 0f

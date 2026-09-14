@@ -129,14 +129,30 @@ class VoiceSession(
     /** Release of the button. The capture ends and the utterance goes. */
     fun release() { releaseRequested = true }
 
-    /** Slide-away, or a second thought. Nothing is sent and nothing is kept. */
+    /**
+     * Slide-away, or a second thought. Nothing is sent and nothing is kept.
+     *
+     * The phase is cleared twice on purpose. Once now, because the button must
+     * go idle the instant the finger leaves it and a cancelled HTTP call does
+     * not unwind instantly; and once when the coroutine has actually finished,
+     * because between those two moments it may still run as far as its next
+     * suspension point and write a phase of its own. Without the second write a
+     * cancel landing in that window leaves the UI stuck in VERIFYING with
+     * nothing on the way back.
+     */
     fun cancel() {
         releaseRequested = true
-        job?.cancel()
+        val running = job
         job = null
+        speaker.stop()
         _micLevel.value = null
         _phase.value = Phase.OFF
-        speaker.stop()
+        if (running == null) return
+        running.invokeOnCompletion {
+            _micLevel.value = null
+            _phase.value = Phase.OFF
+        }
+        running.cancel()
     }
 
     private suspend fun deliver(wav: ByteArray, source: String) {

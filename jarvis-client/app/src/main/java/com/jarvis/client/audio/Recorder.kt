@@ -86,20 +86,37 @@ class Recorder(private val context: Context) {
             return@withContext Result.Refused(Failure.Unavailable)
         }
 
-        val captured = ArrayList<Short>(rate * 4)
-        val buffer = ShortArray(minBuf.coerceAtLeast(1024))
         val maxSamples = (maxSeconds * rate).toInt()
+        // A primitive array grown by doubling rather than an ArrayList<Short>.
+        // The list looks equivalent and is not: every sample would be boxed,
+        // and the Short cache only covers -128..127, so an audio signal misses
+        // it on essentially every sample. Thirty seconds at 48 kHz is 1.4
+        // million short-lived objects — tens of megabytes of garbage collected
+        // while the microphone is open, which is the one moment in this app
+        // where a GC pause is audible.
+        var captured = ShortArray(minOf(maxSamples, rate * 4).coerceAtLeast(1024))
+        var count = 0
+        val buffer = ShortArray(minBuf.coerceAtLeast(1024))
 
         try {
             recorder.startRecording()
-            while (!stopWhen() && captured.size < maxSamples) {
+            while (!stopWhen() && count < maxSamples) {
                 val n = recorder.read(buffer, 0, buffer.size)
                 // read() returns a NEGATIVE error code rather than throwing.
                 // Treating "<= 0" as end-of-stream is what keeps a revoked
                 // permission or a stolen microphone from spinning forever.
                 if (n <= 0) break
                 onLevel(Wav.rms(buffer, n))
-                for (i in 0 until n) captured.add(buffer[i])
+                // Never past the cap: a final buffer that straddles it is
+                // truncated rather than allowed to overshoot.
+                val take = minOf(n, maxSamples - count)
+                if (count + take > captured.size) {
+                    var size = captured.size
+                    while (size < count + take) size *= 2
+                    captured = captured.copyOf(minOf(size, maxSamples))
+                }
+                System.arraycopy(buffer, 0, captured, count, take)
+                count += take
             }
         } catch (e: IllegalStateException) {
             Log.w(TAG, "capture failed", e)
@@ -110,14 +127,13 @@ class Recorder(private val context: Context) {
             onLevel(0f)
         }
 
-        val seconds = captured.size / rate.toFloat()
+        val seconds = count / rate.toFloat()
         // The server refuses below 0.2s — a gate handed 50ms of hiss produces a
         // number, and that number means nothing. Refusing here saves a round
         // trip and says the same thing sooner.
         if (seconds < MIN_SECONDS) return@withContext Result.Refused(Failure.TooShort)
 
-        val pcm = ShortArray(captured.size) { captured[it] }
-        val resampled = Wav.resample(pcm, rate)
+        val resampled = Wav.resample(captured.copyOf(count), rate)
         Result.Captured(Wav.encode(resampled), resampled.size / Wav.SAMPLE_RATE.toFloat())
     }
 

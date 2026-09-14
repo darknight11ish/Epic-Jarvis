@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
-import android.os.Build
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -46,8 +45,8 @@ class Speaker(private val context: Context) {
     /** Plays a WAV the desktop synthesised. Real levels, straight off the samples. */
     suspend fun play(wav: ByteArray) = withContext(Dispatchers.IO) {
         cancelled = false
-        val pcm = runCatching { decodePcm(wav) }.getOrNull() ?: return@withContext
-        val rate = runCatching { readRate(wav) }.getOrDefault(Wav.SAMPLE_RATE)
+        val pcm = runCatching { Wav.decode(wav) }.getOrNull() ?: return@withContext
+        val rate = runCatching { Wav.rateOf(wav) }.getOrDefault(Wav.SAMPLE_RATE)
         val minBuf = AudioTrack.getMinBufferSize(
             rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(4096)
@@ -169,33 +168,6 @@ class Speaker(private val context: Context) {
             }
         }
     }
-
-    /** Skips the 44-byte canonical header. Good enough for our own server's output. */
-    private fun decodePcm(wav: ByteArray): ShortArray {
-        val start = dataOffset(wav)
-        val n = (wav.size - start) / 2
-        return ShortArray(n) { i ->
-            val o = start + i * 2
-            ((wav[o].toInt() and 0xFF) or (wav[o + 1].toInt() shl 8)).toShort()
-        }
-    }
-
-    /** Finds the `data` chunk rather than assuming 44 — engines add chunks. */
-    private fun dataOffset(wav: ByteArray): Int {
-        var i = 12
-        while (i + 8 < wav.size) {
-            val id = String(wav, i, 4, Charsets.US_ASCII)
-            val size = (wav[i + 4].toInt() and 0xFF) or ((wav[i + 5].toInt() and 0xFF) shl 8) or
-                ((wav[i + 6].toInt() and 0xFF) shl 16) or ((wav[i + 7].toInt() and 0xFF) shl 24)
-            if (id == "data") return i + 8
-            i += 8 + size
-        }
-        return 44.coerceAtMost(wav.size)
-    }
-
-    private fun readRate(wav: ByteArray): Int =
-        (wav[24].toInt() and 0xFF) or ((wav[25].toInt() and 0xFF) shl 8) or
-            ((wav[26].toInt() and 0xFF) shl 16) or ((wav[27].toInt() and 0xFF) shl 24)
 
     private companion object {
         const val TAG = "JarvisSpeaker"

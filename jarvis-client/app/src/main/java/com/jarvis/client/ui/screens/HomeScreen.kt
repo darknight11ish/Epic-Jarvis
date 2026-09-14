@@ -133,6 +133,16 @@ fun HomeScreen(
     reply: () -> String,
     /** Read in the draw phase only — see VoiceButton. */
     micLevel: State<Float>,
+    /**
+     * Jarvis's own voice while he is speaking, null when he is not.
+     *
+     * Nullable rather than zeroed, and the difference is the whole point: the
+     * face treats null as "no level is coming" and substitutes its own
+     * speech-shaped envelope, so a flat 0f would read as a voice that is
+     * playing and perfectly silent and hold the reactor still through every
+     * answer.
+     */
+    speechLevel: State<Float?>,
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -151,7 +161,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item(key = "face") {
-                FaceBlock(state, actions)
+                FaceBlock(state, actions, micLevel, speechLevel)
             }
 
             if (state.notice != null) {
@@ -205,7 +215,12 @@ fun HomeScreen(
  * *Jarvis*, so it is the right door to what Jarvis is doing.
  */
 @Composable
-private fun FaceBlock(state: HomeState, actions: HomeActions) {
+private fun FaceBlock(
+    state: HomeState,
+    actions: HomeActions,
+    micLevel: State<Float>,
+    speechLevel: State<Float?>,
+) {
     val chrome = LocalChrome.current
     Box(
         Modifier
@@ -221,6 +236,19 @@ private fun FaceBlock(state: HomeState, actions: HomeActions) {
             bindings = state.bindings,
             notches = state.attention.pending,
             modifier = Modifier.size(260.dp),
+            // Both levels were being measured and thrown away. The recorder
+            // computes an RMS per audio buffer and the speaker one per chunk,
+            // precisely so the reactor breathes with the real voice rather than
+            // with a generator — and neither reached the face, because these
+            // two parameters defaulted to `{ null }` and no caller passed them.
+            // So the reactor has been running the synthetic envelope through
+            // every word either end has ever said.
+            //
+            // Lambdas rather than values: they are read from the frame loop, in
+            // a coroutine, where a snapshot read subscribes nothing. Fifty
+            // levels a second reach the face and recompose nothing at all.
+            micLevel = { micLevel.value },
+            speechLevel = { speechLevel.value },
         )
         Column(
             Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp),
