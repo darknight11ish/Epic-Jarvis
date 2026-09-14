@@ -145,56 +145,30 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      # Also publish to a rolling prerelease, because a run artifact is not
-      # reachable from a phone: the GitHub mobile app cannot download Actions
-      # artifacts at all, and the browser path hands you a zip that then has to be
-      # unpacked before anything can be installed. A release asset is a plain .apk
-      # at a stable URL that any browser can fetch and Android can install directly.
+      # This workflow no longer publishes a release, and the reason is not
+      # tidiness. `android-latest` sat next to `client-latest` with a nearly
+      # identical name, and only one of them can talk to the backend:
+      # jarvis-android speaks a WebSocket protocol invented before
+      # JARVIS-API.md existed, and none of its endpoints are implemented
+      # server-side. Two similar links where one silently cannot work is a trap
+      # rather than a choice, and installing the wrong one reads as "my phone is
+      # broken" rather than "wrong app".
       #
-      # Not fatal if it fails. A repository whose default workflow permission is
-      # read-only refuses this with a 403, and that should not turn a green build
-      # red - the artifact above still works. The warning says which setting to
-      # change.
-      - name: Publish the APK to a rolling release
-        id: release
-        continue-on-error: true
+      # The module itself stays, and so does the build above. Its duplex audio,
+      # lock-screen approvals and Glance widgets are worth porting into the real
+      # client, and a module that still compiles is a much easier thing to port
+      # from than one that rotted quietly. The run artifact is still produced
+      # for anyone who actually wants this APK.
+      - name: Retire the old rolling release
+        # One-shot, and removed in the commit after it runs. Idempotent anyway:
+        # deleting a release that is already gone is not an error here.
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: android-latest
         run: |
-          set -euo pipefail
-          short="${GITHUB_SHA::7}"
-          mv artifacts/app-debug.apk "artifacts/jarvis-android-$short.apk"
-
-          notes=$(printf '%s\n' \
-            "Debug build of \`jarvis-android\` from commit \`$short\` on \`$GITHUB_REF_NAME\`." \
-            "" \
-            "Download the \`.apk\` below and install it:" \
-            "" \
-            '```' \
-            "adb install -r jarvis-android-$short.apk" \
-            '```' \
-            "" \
-            "Or open this page on the phone, tap the \`.apk\`, and allow your browser to install unknown apps." \
-            "" \
-            "Signed with the committed debug key, so this installs over a previous build in place and keeps the pairing secret. This tag is rolling - it always points at the most recent build.")
-
-          # Recreate rather than edit: the tag has to move to the new commit, and
-          # delete-then-create is the one form of that which behaves the same
-          # whether or not the release already exists.
-          gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
-          gh release create "$TAG" artifacts/*.apk \
-            --prerelease \
-            --target "$GITHUB_SHA" \
-            --title "Jarvis Android - latest debug build" \
-            --notes "$notes"
-
-          echo "Published: $(gh release view "$TAG" --json url --jq .url)"
-
-      - name: Explain a failed release
-        if: steps.release.outcome == 'failure'
-        run: |
-          echo "::warning::Could not publish the release. If this was a 403, set" \
-               "Settings -> Actions -> General -> Workflow permissions to" \
-               "'Read and write permissions'. The APK is still available as the" \
-               "jarvis-android-debug-apk run artifact."
+          set -uo pipefail
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release delete android-latest --cleanup-tag --yes
+            echo "Deleted the android-latest release and its tag."
+          else
+            echo "android-latest is already gone; nothing to do."
+          fi

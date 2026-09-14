@@ -7,21 +7,31 @@ Epic Javis based on openjarvis  and greatly enhanced .
 | --- | --- | --- |
 | Speaks | **The real API** — SSE on `/api/events` plus REST, `X-Jarvis-Token` | A WebSocket protocol invented before `JARVIS-API.md` existed |
 | Talks to Jarvis | **Yes** | No — none of its endpoints exist on the backend |
-| Has | Pairing, event stream, chat, approvals with `risk`/`raised`, the reactor face | Duplex audio, lock-screen approvals, Glance widgets, quick capture |
-| Release | `client-latest` | `android-latest` |
+| Has | Pairing, event stream, chat, approvals with `risk`/`raised`, the reactor face, push-to-talk | Duplex audio, lock-screen approvals, Glance widgets, quick capture |
+| Release | `client-latest` | **none — deliberately** |
 
-**Install `jarvis-client`.** `jarvis-android` is architecturally sound and
-thoroughly tested, and it is pointed at a server that is not there. Its audio
-pipeline, notification path and widgets are worth porting across once the
-transport underneath them is right; its protocol is not.
+**There is one app to install, and it is `jarvis-client`.**
+
+`jarvis-android` no longer publishes a release. That is not tidiness: it used to
+sit on the releases page beside `client-latest` under a nearly identical name,
+and only one of the two can reach the backend. Two similar links where one
+silently cannot work is a trap, and installing the wrong one reads as "my phone
+is broken" rather than "wrong app".
+
+The module itself stays, and CI still builds it. It is architecturally sound and
+thoroughly tested, and pointed at a server that is not there — its duplex audio,
+lock-screen approvals and widgets are worth porting across once the transport
+underneath them is right. A module that still compiles is far easier to port
+from than one that rotted quietly. Its APK is still produced as a run artifact
+for anyone who actually wants it.
 
 ## Getting the APK onto a phone
 
 **Easiest — the Releases page.** Every build publishes to a rolling prerelease:
 
-> **Client (the one that works):** https://github.com/darknight111/Epic-Jarvis/releases/tag/client-latest
+> https://github.com/darknight111/Epic-Jarvis/releases/tag/client-latest
 >
-> Older app: https://github.com/darknight111/Epic-Jarvis/releases/tag/android-latest
+> That is the only release. There is deliberately no second one to pick wrong.
 
 That is a plain `.apk` at a stable URL. Open it on the phone, tap the file, and
 allow your browser to install unknown apps — or download it on a computer and
