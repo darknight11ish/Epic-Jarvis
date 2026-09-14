@@ -1,85 +1,41 @@
 name: Build Android APK
 
+# Builds jarvis-android, and only jarvis-android.
+#
+# This used to be a generic detector that worked out whether the repo held a
+# Gradle, Flutter, React Native or Capacitor project. That was right when the
+# repo might contain any of them; it is wrong now that it holds two Gradle roots,
+# because the detector picked one with `find … | head -n1` — readdir order, not a
+# choice. It returned jarvis-client in a local checkout and jarvis-android on the
+# runner, so which app the "epic-jarvis-debug-apk" artifact contained was decided
+# by the filesystem. The path filter below says what this workflow is for; the
+# working directory now says the same thing.
+
 on:
   workflow_dispatch:
     inputs:
-      build_type:
-        description: "Build type to assemble"
-        type: choice
-        options: [debug, release]
-        default: debug
       java_version:
         description: "JDK version used for the Gradle build"
         default: "17"
   push:
     branches: ["**"]
     # The desktop endpoint has no bearing on the APK.
-    # Scoped to the old client: jarvis-client/ has its own workflow and a
-    # different AGP, so one detect step cannot serve both roots.
     paths: ["jarvis-android/**", ".github/workflows/android-apk.yml"]
 
+# No workflow here needs to write anything back to the repository.
+permissions:
+  contents: read
+
 concurrency:
-  group: apk-${{ github.ref }}
+  group: android-apk-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PROJECT_DIR: jarvis-android
+
 jobs:
-  # Works out what kind of project was imported, so the same workflow can build
-  # a plain Gradle app, Flutter, React Native or Capacitor without being retuned.
-  detect:
-    runs-on: ubuntu-latest
-    outputs:
-      kind: ${{ steps.detect.outputs.kind }}
-      dir: ${{ steps.detect.outputs.dir }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Detect project type
-        id: detect
-        run: |
-          set -euo pipefail
-          kind=none
-          dir=.
-          if [ -f pubspec.yaml ] && grep -q '^[[:space:]]*flutter:' pubspec.yaml; then
-            kind=flutter
-          elif ls capacitor.config.* >/dev/null 2>&1 && [ -d android ]; then
-            kind=capacitor
-            dir=android
-          elif [ -f package.json ] && [ -d android ]; then
-            kind=react-native
-            dir=android
-          elif ls ./*.gradle* >/dev/null 2>&1; then
-            kind=gradle
-          else
-            # A Gradle project living in a subdirectory, e.g. jarvis-android/.
-            settings=$(find . -maxdepth 3 -name 'settings.gradle*' -not -path '*/build/*' | head -n1)
-            if [ -n "$settings" ]; then
-              kind=gradle
-              dir=$(dirname "$settings")
-            fi
-          fi
-          echo "kind=$kind" >> "$GITHUB_OUTPUT"
-          echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          echo "Detected project type: $kind (gradle dir: $dir)"
-
-      # An ordinary push before the app is imported should stay green; only an
-      # explicit "build me an APK" run has the right to fail here.
-      - name: No Android project present
-        if: steps.detect.outputs.kind == 'none'
-        run: |
-          msg="No Android project found. Expected a Gradle build (build.gradle[.kts] at the repo root or in android/), a Flutter pubspec.yaml, or a React Native / Capacitor project with an android/ directory."
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "::error::$msg"
-            exit 1
-          fi
-          echo "::notice::$msg Skipping the APK build."
-
   build:
-    needs: detect
-    if: needs.detect.outputs.kind != 'none'
     runs-on: ubuntu-latest
-    env:
-      BUILD_TYPE: ${{ inputs.build_type || 'debug' }}
-      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -91,87 +47,54 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Set up Node
-        if: needs.detect.outputs.kind == 'react-native' || needs.detect.outputs.kind == 'capacitor'
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install JS dependencies
-        if: needs.detect.outputs.kind == 'react-native' || needs.detect.outputs.kind == 'capacitor'
-        run: npm ci || npm install
-
-      - name: Sync Capacitor web assets
-        if: needs.detect.outputs.kind == 'capacitor'
-        run: npx cap sync android
-
-      - name: Set up Flutter
-        if: needs.detect.outputs.kind == 'flutter'
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      # Optional release signing. Without these secrets a release build still
-      # runs, it just produces an unsigned APK.
-      - name: Decode release keystore
-        id: keystore
-        if: env.BUILD_TYPE == 'release' && env.KEYSTORE_BASE64 != ''
-        run: |
-          set -euo pipefail
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-          echo "path=$RUNNER_TEMP/release.keystore" >> "$GITHUB_OUTPUT"
-
-      - name: Build Flutter APK
-        if: needs.detect.outputs.kind == 'flutter'
-        run: flutter build apk --"$BUILD_TYPE"
-
-      # Unit tests gate the APK: shipping an artifact whose logic is broken is
-      # worse than failing here.
+      # Unit tests gate the APK. The assertion on the results directory is the
+      # point: `testDebugUnitTest` reports NO-SOURCE and exits 0 when it is
+      # pointed at a module with no test sources, so a green check here used to
+      # be compatible with nothing having run at all.
       - name: Run unit tests
-        if: needs.detect.outputs.kind != 'flutter'
-        working-directory: ${{ needs.detect.outputs.dir }}
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           set -euo pipefail
-          if [ -f ./gradlew ]; then
-            chmod +x ./gradlew
-            ./gradlew testDebugUnitTest --stacktrace
-          else
-            gradle testDebugUnitTest --stacktrace
+          chmod +x ./gradlew
+          ./gradlew testDebugUnitTest --stacktrace
+          results=app/build/test-results/testDebugUnitTest
+          if ! ls "$results"/TEST-*.xml >/dev/null 2>&1; then
+            echo "::error::No test results in $results — the test task matched no sources."
+            exit 1
+          fi
+          echo "Test classes executed:"
+          ls -1 "$results"/TEST-*.xml
+          # Belt and braces: a results file can exist with zero tests in it.
+          total=$(grep -ho 'tests="[0-9]*"' "$results"/TEST-*.xml \
+                  | grep -o '[0-9]*' | paste -sd+ - | bc)
+          echo "Total tests: ${total:-0}"
+          if [ "${total:-0}" -lt 1 ]; then
+            echo "::error::Test results contain zero tests."
+            exit 1
           fi
 
       - name: Upload test reports
-        if: failure() && needs.detect.outputs.kind != 'flutter'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-reports
-          path: ${{ needs.detect.outputs.dir }}/**/build/reports/tests/**
+          name: jarvis-android-test-reports
+          path: ${{ env.PROJECT_DIR }}/app/build/reports/tests/**
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Build Gradle APK
-        if: needs.detect.outputs.kind != 'flutter'
-        working-directory: ${{ needs.detect.outputs.dir }}
-        env:
-          SIGNING_STORE_FILE: ${{ steps.keystore.outputs.path }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      # Debug only. The app is sideloaded over adb and never listed, so there is
+      # no distribution channel a release build would serve — and the keystore
+      # plumbing that used to live here fed four SIGNING_* variables into a build
+      # that contained no signingConfig to read them, producing an unsigned APK
+      # that cannot be installed while CI and the README both called it signed.
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           set -euo pipefail
-          case "$BUILD_TYPE" in
-            debug)   task=assembleDebug ;;
-            release) task=assembleRelease ;;
-            *) echo "::error::Unknown build type '$BUILD_TYPE'"; exit 1 ;;
-          esac
-          if [ -f ./gradlew ]; then
-            chmod +x ./gradlew
-            ./gradlew "$task" --stacktrace
-          else
-            gradle "$task" --stacktrace
-          fi
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --stacktrace
 
-      - name: Collect APKs
+      - name: Collect APK
         run: |
           set -euo pipefail
           mkdir -p artifacts
@@ -180,7 +103,7 @@ jobs:
             cp "$apk" artifacts/
             echo "Found $apk"
             found=1
-          done < <(find . -path ./artifacts -prune -o -name '*.apk' -print)
+          done < <(find "$PROJECT_DIR" -name '*.apk' -print)
           if [ "$found" -eq 0 ]; then
             echo "::error::The build reported success but produced no .apk file."
             exit 1
@@ -189,7 +112,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: epic-jarvis-${{ env.BUILD_TYPE }}-apk
+          name: jarvis-android-debug-apk
           path: artifacts/*.apk
           if-no-files-found: error
           retention-days: 30

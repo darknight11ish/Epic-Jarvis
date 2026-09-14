@@ -7,6 +7,9 @@ on:
       - "jarvis-client/**"
       - ".github/workflows/jarvis-client.yml"
 
+permissions:
+  contents: read
+
 concurrency:
   group: jarvis-client-${{ github.ref }}
   cancel-in-progress: true
@@ -27,6 +30,36 @@ jobs:
           cache: gradle
 
       - uses: android-actions/setup-android@v3
+
+      # The client had no test step at all. It now has tests, and the same
+      # results-directory assertion as the other workflow, so "no test sources"
+      # cannot pass for green.
+      - name: Run unit tests
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew testDebugUnitTest --stacktrace
+          results=app/build/test-results/testDebugUnitTest
+          if ! ls "$results"/TEST-*.xml >/dev/null 2>&1; then
+            echo "::error::No test results in $results — the test task matched no sources."
+            exit 1
+          fi
+          total=$(grep -ho 'tests="[0-9]*"' "$results"/TEST-*.xml \
+                  | grep -o '[0-9]*' | paste -sd+ - | bc)
+          echo "Total tests: ${total:-0}"
+          if [ "${total:-0}" -lt 1 ]; then
+            echo "::error::Test results contain zero tests."
+            exit 1
+          fi
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-client-test-reports
+          path: jarvis-client/app/build/reports/tests/**
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Assemble debug APK
         run: |

@@ -34,11 +34,24 @@ class AudioPlayer {
     private var queue: Channel<ByteArray>? = null
     private var currentSampleRate = DEFAULT_SAMPLE_RATE
 
+    /**
+     * Identifies the stream currently being played. [finish] captures it and its
+     * joiner only tears down if it is still current, so a reply that starts while
+     * the previous one is still draining is not killed by the previous one's
+     * teardown.
+     */
+    private var streamToken = 0
+
     val isPlaying: Boolean get() = playing.get()
 
     @Synchronized
     fun start(sampleRate: Int = DEFAULT_SAMPLE_RATE, channels: Int = 1) {
-        if (playing.get() && sampleRate == currentSampleRate) return
+        // Always begins a new stream. The old early-return for a matching sample
+        // rate meant that a reply arriving while the previous one was still draining
+        // was dropped in full: start() did nothing, the still-open `queue` field
+        // pointed at a closed channel, and every chunk of the new reply was logged
+        // as "playback queue full". Cutting the tail of the previous reply short is
+        // the lesser loss, and the desktop has already moved on by then anyway.
         stopInternal(flush = true)
 
         val channelCount = if (channels >= 2) 2 else 1
@@ -89,29 +102,48 @@ class AudioPlayer {
         track = newTrack
         queue = channel
         playing.set(true)
+        streamToken += 1
 
         writer = scope.launch {
             var buffered = 0
             var started = false
 
-            for (chunk in channel) {
-                if (!playing.get()) break
-                var offset = 0
-                while (offset < chunk.size && playing.get()) {
-                    val written = newTrack.write(chunk, offset, chunk.size - offset)
-                    if (written <= 0) break
-                    offset += written
-                    buffered += written
-                    if (!started && buffered >= prerollBytes) {
-                        started = true
-                        runCatching { newTrack.play() }
+            try {
+                for (chunk in channel) {
+                    if (!playing.get()) break
+                    var offset = 0
+                    while (offset < chunk.size && playing.get()) {
+                        // Guarded: the caller can pause and flush this track from
+                        // another thread to silence a barge-in immediately, and a
+                        // write that lands after that must not escape the coroutine.
+                        // Nothing here holds a CoroutineExceptionHandler, so an
+                        // escaping throw would reach the default handler.
+                        val written = runCatching {
+                            newTrack.write(chunk, offset, chunk.size - offset)
+                        }.getOrDefault(-1)
+                        if (written <= 0) break
+                        offset += written
+                        buffered += written
+                        if (!started && buffered >= prerollBytes) {
+                            started = true
+                            runCatching { newTrack.play() }
+                        }
                     }
                 }
-            }
 
-            // A reply shorter than the preroll still has to be heard.
-            if (!started && playing.get() && buffered > 0) {
-                runCatching { newTrack.play() }
+                // A reply shorter than the preroll still has to be heard.
+                if (!started && playing.get() && buffered > 0) {
+                    runCatching { newTrack.play() }
+                }
+            } finally {
+                // This coroutine owns the track for its whole life and is the only
+                // thing that releases it. Releasing from the caller while a blocking
+                // write was in flight was a use-after-release on a native object:
+                // survivable on today's platform, because write() returns
+                // ERROR_INVALID_OPERATION rather than throwing, but it is not a
+                // property worth depending on.
+                runCatching { newTrack.stop() }
+                runCatching { newTrack.release() }
             }
         }
     }
@@ -128,11 +160,17 @@ class AudioPlayer {
     @Synchronized
     fun finish() {
         queue?.close()
+        // Stop accepting: a chunk arriving after the end event belongs to a stream
+        // that is over, and resurrecting the closed channel here is what used to
+        // swallow the following reply.
+        queue = null
         val pending = writer
+        val token = streamToken
         scope.launch {
             pending?.join()
             synchronized(this@AudioPlayer) {
-                if (playing.get()) stopInternal(flush = false)
+                // Only tear down if no new stream has started in the meantime.
+                if (token == streamToken && playing.get()) stopInternal(flush = false)
             }
         }
     }
@@ -150,17 +188,20 @@ class AudioPlayer {
 
     private fun stopInternal(flush: Boolean) {
         playing.set(false)
+        streamToken += 1
         queue?.close()
         queue = null
         writer?.cancel()
         writer = null
+        // Pause and flush here so a barge-in silences the speaker now rather than
+        // after the track's remaining buffer has drained. Both are safe to call
+        // while the writer is mid-write; stop() and release() are not, so they stay
+        // with the writer coroutine, which exits as soon as its write returns.
         track?.let { t ->
             runCatching {
                 if (t.playState != AudioTrack.PLAYSTATE_STOPPED) t.pause()
                 if (flush) t.flush()
-                t.stop()
             }
-            runCatching { t.release() }
         }
         track = null
     }

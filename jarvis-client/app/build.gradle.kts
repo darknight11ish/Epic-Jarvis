@@ -21,11 +21,12 @@ android {
     buildTypes {
         debug { isMinifyEnabled = false }
         release {
+            // Minify off and proguardFiles listed anyway advertises a shrink that
+            // does not happen. This module has no serialization runtime and no
+            // reflective entry points yet, so the rules file is genuinely empty of
+            // anything load-bearing; when step 2 adds the SSE client and its models,
+            // turn this on rather than adding keeps that nothing verifies.
             isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
         }
     }
 
@@ -66,6 +67,14 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
+    // Used directly (LazyColumn, background, KeyboardOptions) rather than relied on
+    // as a material3 transitive.
+    implementation("androidx.compose.foundation:foundation")
+
+    // The serialization compiler plugin is applied in build.gradle.kts but no
+    // runtime was declared, so the first @Serializable anyone wrote would have
+    // failed to resolve rather than working. Step 2's event models need it.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     testImplementation("junit:junit:4.13.2")
 }

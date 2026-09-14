@@ -21,3 +21,7 @@ node_modules/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Python bytecode from the desktop endpoint module and its tests.
+__pycache__/
+*.py[cod]

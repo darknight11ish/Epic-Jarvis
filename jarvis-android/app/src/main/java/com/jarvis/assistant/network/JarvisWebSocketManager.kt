@@ -5,14 +5,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -21,9 +22,24 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
 
 enum class ConnectionState { OFFLINE, RECONNECTING, CONNECTED }
+
+/**
+ * One frame off the wire, in arrival order.
+ *
+ * Text and binary share a single stream deliberately. Carrying them on two flows
+ * loses the ordering between them, and that ordering is load-bearing: the tail of
+ * a reply is binary PCM followed by a text `audio_stream_end`, so an independently
+ * collected end event clears the stream tag while frames are still queued and the
+ * last of every reply is discarded. The head has the mirror problem.
+ */
+sealed interface SocketSignal {
+    class Event(val event: InboundEvent) : SocketSignal
+    class Binary(val frame: ByteArray) : SocketSignal
+}
 
 /**
  * Persistent link to the desktop server.
@@ -33,10 +49,15 @@ enum class ConnectionState { OFFLINE, RECONNECTING, CONNECTED }
  * Without traffic the NAT mapping is reclaimed and inbound approval requests
  * stall until the next radio wake; carrier CGNAT gateways commonly reap idle
  * mappings at 30 seconds, so the interval has to sit comfortably under that.
+ *
+ * The whole dial/backoff/teardown state machine runs under [lock]. It is touched
+ * from the main thread, from OkHttp's reader thread and from binder threads, and
+ * every field in it is a read-modify-write.
  */
 class JarvisWebSocketManager private constructor() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val lock = Any()
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .pingInterval(PING_SECONDS, TimeUnit.SECONDS)
@@ -49,20 +70,20 @@ class JarvisWebSocketManager private constructor() {
     private val _state = MutableStateFlow(ConnectionState.OFFLINE)
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
 
-    private val _events = MutableSharedFlow<InboundEvent>(
-        replay = 0,
-        extraBufferCapacity = 128,
-    )
-    val events: SharedFlow<InboundEvent> = _events.asSharedFlow()
-
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
-    private val _binaryAudio = MutableSharedFlow<ByteArray>(
-        replay = 0,
-        extraBufferCapacity = 256,
-    )
-    val binaryAudio: SharedFlow<ByteArray> = _binaryAudio.asSharedFlow()
+    /**
+     * Bounded, and the producer blocks rather than discarding when it fills.
+     *
+     * The previous buffer dropped on overflow with a log line, which meant a burst
+     * of base64 audio chunks could push an `approval_request` out of the buffer: the
+     * user never saw the prompt and the desktop waited on a gate nobody could answer.
+     * Blocking the reader thread instead closes the TCP window and makes the desktop
+     * slow down, which is the correct place for the pressure to land.
+     */
+    private val signals = Channel<SocketSignal>(capacity = SIGNAL_BUFFER)
+    val incoming: Flow<SocketSignal> = signals.receiveAsFlow()
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var url: String? = null
@@ -75,44 +96,58 @@ class JarvisWebSocketManager private constructor() {
      * Monotonic dial counter. Every [Listener] remembers the generation it was
      * created for and ignores its own callbacks once superseded, so cancelling a
      * socket to re-dial elsewhere cannot trigger a reconnect back to the old URL.
+     *
+     * Bumped by every path that invalidates the current socket — including
+     * [openSocket] and [disconnect], both of which used to leave it alone. Leaving
+     * it alone let a late `onFailure` from the previous generation schedule a second
+     * dial at the *current* generation, so two sockets were live and both listeners
+     * believed they were current: duplicated approvals and doubled audio.
      */
-    @Volatile private var generation = 0
+    private val generation = AtomicInteger(0)
 
     /** Idempotent: re-dials only when the target URL or token actually changed. */
     fun connect(wsUrl: String, token: String? = null) {
-        val normalizedToken = token?.takeIf { it.isNotBlank() }
-        if (!shutdown && url == wsUrl && authToken == normalizedToken && socket != null) return
-        url = wsUrl
-        authToken = normalizedToken
-        shutdown = false
-        attempt = 0
-        redial()
+        synchronized(lock) {
+            val normalizedToken = token?.takeIf { it.isNotBlank() }
+            val sameTarget = url == wsUrl && authToken == normalizedToken
+            // A reconnect already armed for this same target is progress, not a reason
+            // to start over. Re-dialling here reset `attempt` on every caller, so the
+            // backoff never grew past its first step for as long as anything polled
+            // connect() — which onResume and every queued send do.
+            if (!shutdown && sameTarget && (socket != null || reconnectJob?.isActive == true)) return
+            url = wsUrl
+            authToken = normalizedToken
+            shutdown = false
+            attempt = 0
+            redial()
+        }
     }
 
     fun disconnect() {
-        shutdown = true
-        reconnectJob?.cancel()
-        reconnectJob = null
-        socket?.close(NORMAL_CLOSURE, "client shutdown")
-        socket = null
-        _state.value = ConnectionState.OFFLINE
+        synchronized(lock) {
+            shutdown = true
+            generation.incrementAndGet()
+            reconnectJob?.cancel()
+            reconnectJob = null
+            socket?.cancel()
+            socket = null
+            _state.value = ConnectionState.OFFLINE
+        }
     }
 
     /** Forces a fresh dial, e.g. after the user edits the server address. */
     fun reconnectNow() {
-        if (url == null) return
-        shutdown = false
-        attempt = 0
-        redial()
+        synchronized(lock) {
+            if (url == null) return
+            shutdown = false
+            attempt = 0
+            redial()
+        }
     }
 
     private fun redial() {
-        generation += 1
         reconnectJob?.cancel()
         reconnectJob = null
-        val stale = socket
-        socket = null
-        stale?.cancel()
         openSocket()
     }
 
@@ -137,41 +172,69 @@ class JarvisWebSocketManager private constructor() {
         }
     }
 
+    /** Caller must hold [lock]. */
     private fun openSocket() {
         val target = url ?: return
+        if (shutdown) return
+        val gen = generation.incrementAndGet()
+        val stale = socket
+        socket = null
+        stale?.cancel()
+
         _state.value = ConnectionState.RECONNECTING
         val request = Request.Builder()
             .url(target)
             .apply { authToken?.let { header("Authorization", "Bearer $it") } }
             .build()
-        socket = client.newWebSocket(request, Listener(generation))
+        val ws = client.newWebSocket(request, Listener(gen))
+        // Re-check under the same lock: disconnect() may have bumped the generation
+        // while newWebSocket was dialling, and an orphan socket here is exactly how
+        // the plaintext refusal used to end up with a live link behind it.
+        if (gen == generation.get() && !shutdown) socket = ws else ws.cancel()
     }
 
     private fun scheduleReconnect() {
-        if (shutdown) return
-        if (reconnectJob?.isActive == true) return
-        val backoff = min(BASE_BACKOFF_MS shl min(attempt, 5), MAX_BACKOFF_MS)
-        attempt += 1
-        _state.value = ConnectionState.RECONNECTING
-        reconnectJob = scope.launch {
-            delay(backoff)
-            if (!shutdown) openSocket()
+        synchronized(lock) {
+            if (shutdown) return
+            if (reconnectJob?.isActive == true) return
+            val backoff = min(BASE_BACKOFF_MS shl min(attempt, 5), MAX_BACKOFF_MS)
+            attempt += 1
+            _state.value = ConnectionState.RECONNECTING
+            reconnectJob = scope.launch {
+                delay(backoff)
+                synchronized(lock) { if (!shutdown) openSocket() }
+            }
         }
+    }
+
+    /**
+     * Hands a frame to the consumer, blocking this reader thread if the consumer is
+     * behind. Dropping is not an option here — see [signals].
+     */
+    private fun dispatch(signal: SocketSignal) {
+        if (signals.trySend(signal).isSuccess) return
+        runBlocking { signals.send(signal) }
     }
 
     private inner class Listener(private val gen: Int) : WebSocketListener() {
 
-        private val current: Boolean get() = gen == generation
+        private val current: Boolean get() = gen == generation.get()
 
         override fun onOpen(webSocket: WebSocket, response: Response) {
             if (!current) {
                 webSocket.cancel()
                 return
             }
-            socket = webSocket
-            attempt = 0
-            _lastError.value = null
-            _state.value = ConnectionState.CONNECTED
+            synchronized(lock) {
+                if (gen != generation.get()) {
+                    webSocket.cancel()
+                    return
+                }
+                socket = webSocket
+                attempt = 0
+                _lastError.value = null
+                _state.value = ConnectionState.CONNECTED
+            }
             Log.i(TAG, "connected to ${webSocket.request().url}")
         }
 
@@ -184,17 +247,13 @@ class JarvisWebSocketManager private constructor() {
                 Log.w(TAG, "dropping unparseable frame: ${e.message}")
                 return
             }
-            if (!_events.tryEmit(event)) {
-                Log.w(TAG, "event buffer full, dropped ${event::class.simpleName}")
-            }
+            dispatch(SocketSignal.Event(event))
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
             if (!current) return
             if (bytes.size < 2) return
-            if (!_binaryAudio.tryEmit(bytes.toByteArray())) {
-                Log.w(TAG, "binary audio buffer full, dropped ${bytes.size} bytes")
-            }
+            dispatch(SocketSignal.Binary(bytes.toByteArray()))
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -203,24 +262,16 @@ class JarvisWebSocketManager private constructor() {
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             if (!current) return
-            if (socket === webSocket) socket = null
-            if (shutdown) {
-                _state.value = ConnectionState.OFFLINE
-            } else {
-                scheduleReconnect()
-            }
+            synchronized(lock) { if (socket === webSocket) socket = null }
+            if (shutdown) _state.value = ConnectionState.OFFLINE else scheduleReconnect()
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             if (!current) return
-            if (socket === webSocket) socket = null
+            synchronized(lock) { if (socket === webSocket) socket = null }
             _lastError.value = t.message ?: t::class.java.simpleName
             Log.w(TAG, "socket failure: ${_lastError.value}")
-            if (shutdown) {
-                _state.value = ConnectionState.OFFLINE
-            } else {
-                scheduleReconnect()
-            }
+            if (shutdown) _state.value = ConnectionState.OFFLINE else scheduleReconnect()
         }
     }
 
@@ -230,6 +281,9 @@ class JarvisWebSocketManager private constructor() {
         private const val BASE_BACKOFF_MS = 1_000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val NORMAL_CLOSURE = 1000
+
+        /** ~5s of 20ms audio frames, so an ordinary reply never touches the producer. */
+        private const val SIGNAL_BUFFER = 256
 
         @Volatile private var instance: JarvisWebSocketManager? = null
 

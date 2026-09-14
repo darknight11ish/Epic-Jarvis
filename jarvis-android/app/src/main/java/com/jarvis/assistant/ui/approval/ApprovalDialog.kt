@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +22,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -42,6 +46,7 @@ import com.jarvis.assistant.ui.theme.JarvisRed
 import com.jarvis.assistant.ui.theme.JarvisSurface
 import com.jarvis.assistant.ui.theme.JarvisTextMuted
 import com.jarvis.assistant.ui.theme.JarvisTextPrimary
+import kotlinx.coroutines.delay
 
 /**
  * The approval card, in plain and note-edit forms.
@@ -56,11 +61,32 @@ fun ApprovalCard(
     onApprove: () -> Unit,
     onReject: () -> Unit,
     modifier: Modifier = Modifier,
+    /** False when the link is down or unpaired, so a decision cannot be delivered. */
+    linkReady: Boolean = true,
 ) {
-    val diff = remember(request.id) {
+    // Keyed on the whole request, not on its id. The runtime replaces an approval
+    // that reuses an id, and the LazyColumn key is the id too, so keying the parsed
+    // diff on the id alone left the card rendering the superseded diff while Approve
+    // submitted a decision on the revised request — approving something unread.
+    val diff = remember(request) {
         request.note?.let { NoteDiff.forPayload(it.diff, it.before, it.after) }
     }
     val summary = remember(diff) { diff?.let { NoteDiff.summarize(it) } }
+
+    // `expires_at_ms` was parsed and never read, so an expired card stayed tappable
+    // and re-signed with a fresh decided_at_ms that passed the desktop's skew check.
+    val expiresAt = request.expiresAtMs
+    var now by remember(request.id) { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(request.id, expiresAt) {
+        if (expiresAt == null) return@LaunchedEffect
+        while (System.currentTimeMillis() < expiresAt) {
+            now = System.currentTimeMillis()
+            delay(1_000)
+        }
+        now = System.currentTimeMillis()
+    }
+    val expired = expiresAt != null && now >= expiresAt
+    val canDecide = linkReady && !expired
 
     // Default to showing the diff when there is one: it is the thing being
     // approved, so it should not need a tap to reveal.
@@ -122,10 +148,33 @@ fun ApprovalCard(
             }
         }
 
+        val blocked = when {
+            expired -> "Expired — ask the desktop to raise this again."
+            !linkReady -> "Not connected. A decision taken now would not reach the desktop."
+            else -> null
+        }
+        if (blocked != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = blocked,
+                style = MaterialTheme.typography.labelMedium,
+                color = JarvisRed,
+            )
+        } else if (expiresAt != null) {
+            Spacer(Modifier.height(8.dp))
+            val secondsLeft = ((expiresAt - now) / 1000).coerceAtLeast(0)
+            Text(
+                text = "Expires in ${secondsLeft / 60}m ${secondsLeft % 60}s",
+                style = MaterialTheme.typography.labelSmall,
+                color = JarvisTextMuted,
+            )
+        }
+
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = onApprove,
+                enabled = canDecide,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -136,6 +185,7 @@ fun ApprovalCard(
 
             Button(
                 onClick = onReject,
+                enabled = canDecide,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -205,16 +255,21 @@ private fun NoteBody(
 private fun DiffView(lines: List<DiffLine>, modifier: Modifier = Modifier) {
     val horizontal = rememberScrollState()
 
-    Column(
+    // Lazy rather than a scrolling Column: a whole-document rewrite can be a
+    // thousand lines, and composing every one of them to show thirty froze the HUD
+    // the moment the approval arrived. Clipped before the background so an added or
+    // removed first/last line does not square off the card's rounded corners.
+    LazyColumn(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(max = 340.dp)
-            .background(Color.Black, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black)
             .border(1.dp, JarvisOutline, RoundedCornerShape(8.dp))
-            .verticalScroll(rememberScrollState())
             .padding(vertical = 6.dp),
     ) {
-        lines.forEach { line ->
+        items(lines.size) { index ->
+            val line = lines[index]
             val (tint, prefix, background) = when (line.kind) {
                 DiffKind.ADDED -> Triple(JarvisGreen, "+", JarvisGreen.copy(alpha = 0.10f))
                 DiffKind.REMOVED -> Triple(JarvisRed, "−", JarvisRed.copy(alpha = 0.10f))

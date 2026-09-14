@@ -42,6 +42,7 @@ class ApprovalWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val pending = WidgetDataRepository.getPendingApprovals()
         val unpaired = WidgetDataRepository.isUnpaired()
+        val deliverable = WidgetDataRepository.canDecideNow()
         val extra = (pending.size - 1).coerceAtLeast(0)
 
         provideContent {
@@ -55,6 +56,9 @@ class ApprovalWidget : GlanceAppWidget() {
                 when {
                     pending.isEmpty() -> EmptyState()
                     unpaired -> UnpairedState()
+                    // The runtime refuses to sign a decision it cannot deliver, so
+                    // buttons here would buzz and do nothing.
+                    !deliverable -> OfflineState()
                     else -> ActiveApproval(pending.first(), extra)
                 }
             }
@@ -103,6 +107,34 @@ class ApprovalWidget : GlanceAppWidget() {
             )
             Spacer(GlanceModifier.height(2.dp))
             Text("Tap to set one in the HUD", style = JarvisGlanceTheme.Label)
+        }
+    }
+
+    /**
+     * Pending approvals exist but the link is down.
+     *
+     * Showing Approve and Deny here would be a tap that appears to answer and does
+     * not: the decision cannot be signed and delivered while the event stream is
+     * stale, so the widget names the reason and opens the HUD instead.
+     */
+    @Composable
+    private fun OfflineState() {
+        Column(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .clickable(actionStartActivity<MainActivity>()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Approvals pending — desktop unreachable",
+                style = TextStyle(
+                    color = JarvisGlanceTheme.StatusBad,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+            Spacer(GlanceModifier.height(2.dp))
+            Text("Tap to open the HUD and reconnect", style = JarvisGlanceTheme.Label)
         }
     }
 

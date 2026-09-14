@@ -6,6 +6,7 @@ import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.net.URI
 import java.util.UUID
 
 /**
@@ -26,10 +27,22 @@ class JarvisSettings(context: Context) {
     private val _handsFree = MutableStateFlow(prefs.getBoolean(KEY_HANDS_FREE, false))
     val handsFree: StateFlow<Boolean> = _handsFree.asStateFlow()
 
-    /** Stable per-install identifier the desktop pairs against. */
+    private val deviceIdLock = Any()
+
+    /**
+     * Stable per-install identifier the desktop pairs against.
+     *
+     * Minted under a lock and committed synchronously. A plain get-or-create races
+     * on first run: the connect coroutine and an approval tap can both find nothing
+     * stored and mint different UUIDs, and a decision then carries a `device_id`
+     * that does not match the one in `hello` — the desktop rejects the HMAC and the
+     * cause is invisible from the phone.
+     */
     val deviceId: String
-        get() = prefs.getString(KEY_DEVICE_ID, null) ?: UUID.randomUUID().toString().also {
-            prefs.edit { putString(KEY_DEVICE_ID, it) }
+        get() = synchronized(deviceIdLock) {
+            prefs.getString(KEY_DEVICE_ID, null) ?: UUID.randomUUID().toString().also {
+                prefs.edit(commit = true) { putString(KEY_DEVICE_ID, it) }
+            }
         }
 
     private val _hasSecret = MutableStateFlow(!prefs.getString(KEY_SECRET, "").isNullOrEmpty())
@@ -114,12 +127,22 @@ class JarvisSettings(context: Context) {
             }
         }
 
+        /**
+         * The host of [url], or null when it cannot be determined unambiguously.
+         *
+         * Parsed with [URI] rather than by hand. Splitting the authority on ':'
+         * looks equivalent and is not: it reads the userinfo of
+         * `ws://100.64.0.1:8080@evil.com/` as the host, so a public target passes
+         * [isCleartextTargetPrivate] while OkHttp — which parses correctly — dials
+         * evil.com in the clear carrying the bearer token, every approval and the
+         * microphone uplink.
+         *
+         * Anything [URI] cannot resolve to a server-based host returns null, which
+         * every caller treats as "refuse".
+         */
         fun hostOf(url: String): String? {
-            val schemeEnd = url.indexOf("://").takeIf { it >= 0 }?.plus(3) ?: return null
-            val rest = url.substring(schemeEnd)
-            val authority = rest.substringBefore('/')
-            if (authority.startsWith("[")) return authority.substringAfter('[').substringBefore(']')
-            return authority.substringBefore(':').takeUnless { it.isEmpty() }
+            val host = runCatching { URI(url).host }.getOrNull() ?: return null
+            return host.trim('[', ']').takeUnless { it.isEmpty() }
         }
 
         fun normalizeToWebSocketUrl(raw: String): String {

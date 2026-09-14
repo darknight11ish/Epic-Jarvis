@@ -40,6 +40,8 @@ class JarvisForegroundService : Service() {
     private var watcher: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
+    @Volatile private var lastState: ConnectionState = ConnectionState.RECONNECTING
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -48,6 +50,15 @@ class JarvisForegroundService : Service() {
 
         startInForeground(ConnectionState.RECONNECTING, micActive = false)
         acquireWakeLock()
+
+        // Synchronous, so the runtime can promote the service to the `microphone`
+        // type and learn whether the platform allowed it *before* AudioRecord is
+        // opened. Driving this off the micActive flow instead is too late: the
+        // collector is dispatched through a channel, so the promotion lands after
+        // startRecording() has already been evaluated by the audio policy.
+        JarvisRuntime.micForegroundPromoter = { wantsMic ->
+            startInForeground(lastState, micActive = wantsMic)
+        }
 
         watcher = scope.launch {
             combine(
@@ -73,11 +84,18 @@ class JarvisForegroundService : Service() {
     override fun onDestroy() {
         watcher?.cancel()
         watcher = null
+        JarvisRuntime.micForegroundPromoter = null
         releaseWakeLock()
         super.onDestroy()
     }
 
-    private fun startInForeground(state: ConnectionState, micActive: Boolean) {
+    /**
+     * @return true when the requested foreground type was actually applied. A false
+     * here for a microphone request means the platform refused, and the caller must
+     * not capture: see the catch block.
+     */
+    private fun startInForeground(state: ConnectionState, micActive: Boolean): Boolean {
+        lastState = state
         val wantsMicType = micActive && JarvisRuntime.hasMicPermission()
         val type = if (wantsMicType) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
@@ -103,16 +121,31 @@ class JarvisForegroundService : Service() {
             .setContentIntent(contentIntent())
             .build()
 
-        try {
+        return try {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+            true
         } catch (e: Exception) {
-            // A denied permission must not take the whole link down.
+            // A denied permission must not take the whole link down, so the service
+            // stays up under its uncapped specialUse type.
             Log.e(TAG, "startForeground(type=$type) rejected", e)
             if (wantsMicType) {
+                // But capture must stop. `microphone` is a while-in-use type and the
+                // platform throws when one is started from the background; silently
+                // downgrading and carrying on left AudioRecord running under a
+                // non-microphone service, which the platform mutes — an ongoing
+                // notification reading "Listening" while the desktop received an
+                // endless stream of silence, recorded only in logcat.
                 runCatching {
-                    ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, specialUseType())
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        notification,
+                        specialUseType(),
+                    )
                 }
+                if (JarvisRuntime.micActive.value) JarvisRuntime.stopMic()
             }
+            false
         }
     }
 

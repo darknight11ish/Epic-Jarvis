@@ -113,6 +113,30 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                // Remembered: HudActions is a parameter of every card on the screen,
+                // and rebuilding it inside setContent handed each of them a new
+                // identity on every recomposition, so nothing could skip. The
+                // lambdas close over JarvisRuntime and this Activity, both of which
+                // outlive the composition.
+                val hudActions = remember {
+                    HudActions(
+                        onServerAddressChange = JarvisRuntime::updateServerAddress,
+                        onReconnect = JarvisRuntime::reconnectNow,
+                        onToggleMic = {
+                            if (JarvisRuntime.hasMicPermission()) {
+                                JarvisRuntime.toggleMic()
+                            } else {
+                                requestRuntimePermissions()
+                            }
+                        },
+                        onApprove = { id -> JarvisRuntime.submitApprovalDecision(id, true) },
+                        onReject = { id -> JarvisRuntime.submitApprovalDecision(id, false) },
+                        onRequestBatteryExemption = ::requestBatteryExemption,
+                        onSharedSecretChange = JarvisRuntime::updateSharedSecret,
+                        onAuthTokenChange = JarvisRuntime::updateAuthToken,
+                    )
+                }
+
                 HudScreen(
                     state = HudState(
                         connection = connection,
@@ -128,22 +152,7 @@ class MainActivity : ComponentActivity() {
                         hasSharedSecret = hasSecret,
                         hasAuthToken = hasToken,
                     ),
-                    actions = HudActions(
-                        onServerAddressChange = JarvisRuntime::updateServerAddress,
-                        onReconnect = JarvisRuntime::reconnectNow,
-                        onToggleMic = {
-                            if (JarvisRuntime.hasMicPermission()) {
-                                JarvisRuntime.toggleMic()
-                            } else {
-                                requestRuntimePermissions()
-                            }
-                        },
-                        onApprove = { id -> JarvisRuntime.submitApprovalDecision(id, true) },
-                        onReject = { id -> JarvisRuntime.submitApprovalDecision(id, false) },
-                        onRequestBatteryExemption = ::requestBatteryExemption,
-                        onSharedSecretChange = JarvisRuntime::updateSharedSecret,
-                        onAuthTokenChange = JarvisRuntime::updateAuthToken,
-                    ),
+                    actions = hudActions,
                     modifier = Modifier
                         .fillMaxSize()
                         .background(JarvisBlack)
@@ -202,7 +211,10 @@ class MainActivity : ComponentActivity() {
     private fun requestRuntimePermissions() {
         val wanted = buildList {
             add(Manifest.permission.RECORD_AUDIO)
-            add(Manifest.permission.CAMERA)
+            // No CAMERA. The only camera-adjacent feature is the torch, and
+            // CameraManager.setTorchMode needs no permission — so this prompt bought
+            // nothing and shared a batch with RECORD_AUDIO, where declining it cost
+            // the user the microphone.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }

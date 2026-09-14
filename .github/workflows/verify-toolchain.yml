@@ -1,111 +1,110 @@
 name: Verify toolchain claims
 
-# Settles the items ANDROID-BUILD.md flags UNVERIFIED. Runs on demand because
-# the answers only change when the brief does.
+# Settles questions that cannot be answered from the dev container: its egress
+# policy blocks dl.google.com and services.gradle.org, and there is no Android
+# SDK there. Runners have both, so the answers are measured rather than assumed.
+#
+# Everything is teed to stdout as well as the step summary — the run log does not
+# carry the summary, so results written only there are unreadable from the CLI.
+
 on:
   workflow_dispatch:
   push:
     paths: [".github/workflows/verify-toolchain.yml"]
 
+permissions:
+  contents: read
+
 jobs:
-  verify:
+  probe:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      # Needed to pin every `uses:` to an immutable commit rather than a tag that
+      # its owner can move under us — with a keystore or any other secret in job
+      # scope, a retagged third-party action reads it straight out of environ.
+      - name: Resolve action tags to commit SHAs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "## Action tag → commit SHA"
+            echo
+            echo '| action | tag | sha |'
+            echo '| --- | --- | --- |'
+            for spec in \
+              "actions/checkout:v4" \
+              "actions/setup-java:v4" \
+              "actions/upload-artifact:v4" \
+              "android-actions/setup-android:v3"; do
+              repo="${spec%:*}"; tag="${spec##*:}"
+              sha=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+                    "https://api.github.com/repos/$repo/git/ref/tags/$tag" \
+                    | python3 -c 'import sys,json; d=json.load(sys.stdin); o=d.get("object",{}); print(o.get("sha","?"))')
+              # An annotated tag resolves to a tag object; dereference it.
+              typ=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+                    "https://api.github.com/repos/$repo/git/ref/tags/$tag" \
+                    | python3 -c 'import sys,json; print(json.load(sys.stdin).get("object",{}).get("type","?"))')
+              if [ "$typ" = "tag" ]; then
+                sha=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
+                      "https://api.github.com/repos/$repo/git/tags/$sha" \
+                      | python3 -c 'import sys,json; print(json.load(sys.stdin).get("object",{}).get("sha","?"))')
+              fi
+              echo "| $repo | $tag | $sha |"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Committing a wrong checksum breaks every build, so these are read from
+      # Gradle rather than guessed.
+      - name: Gradle distribution checksums
+        run: |
+          {
+            echo
+            echo "## Gradle distribution SHA-256"
+            echo
+            for v in 8.11.1 9.6.0; do
+              sum=$(curl -sSL "https://services.gradle.org/distributions/gradle-$v-bin.zip.sha256" || echo unavailable)
+              echo "- gradle-$v-bin.zip: \`$sum\`"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # androidx.activity is not managed by the Compose BOM, so pairing a 2026
+      # Compose runtime with activity-compose 1.9.3 (Nov 2024) is a real pin, not
+      # a cosmetic one — under targetSdk 36, where edge-to-edge enforcement
+      # changed and MainActivity calls enableEdgeToEdge().
+      - name: Published androidx.activity versions
+        shell: bash {0}
+        run: |
+          {
+            echo
+            echo "## androidx.activity:activity-compose — published versions"
+            echo
+            curl -sS "https://dl.google.com/dl/android/maven2/androidx/activity/activity-compose/maven-metadata.xml" \
+              | grep -o '<version>[^<]*</version>' \
+              | sed 's|</\?version>||g' \
+              | tail -30 \
+              | tr '\n' ' '
+            echo
+            echo
+            echo "Latest: $(curl -sS 'https://dl.google.com/dl/android/maven2/androidx/activity/activity-compose/maven-metadata.xml' | grep -o '<latest>[^<]*</latest>' | sed 's|</\?latest>||g')"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       - uses: android-actions/setup-android@v3
 
-      - name: Compose BOM 2026.08.00 -> androidx.compose.foundation
+      - name: What jarvis-client actually resolves
+        working-directory: jarvis-client
         run: |
-          set -uo pipefail
-          BOM=https://dl.google.com/dl/android/maven2/androidx/compose/compose-bom/2026.08.00/compose-bom-2026.08.00.pom
-          echo "### Compose BOM 2026.08.00" | tee -a "$GITHUB_STEP_SUMMARY"
-          code=$(curl -sS -o bom.pom -w '%{http_code}' "$BOM" || echo 000)
-          echo "HTTP $code"
-          if [ "$code" != "200" ]; then
-            echo "- BOM **does not exist** on Google Maven (HTTP $code)" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          # The BOM's dependencyManagement block is the authoritative pairing.
-          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
-          import re, pathlib
-          pom = pathlib.Path("bom.pom").read_text()
-          deps = re.findall(
-              r"<artifactId>(foundation[^<]*)</artifactId>\s*<version>([^<]+)</version>", pom)
-          if deps:
-              for a, v in sorted(set(deps)):
-                  print(f"- `androidx.compose.foundation:{a}` -> **{v}**")
-          else:
-              print("- no foundation artifact found in the BOM")
-          PY
-
-      - name: Does AGP 9.4.0 exist?
-        run: |
-          set -uo pipefail
-          U=https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/9.4.0/gradle-9.4.0.pom
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "$U" || echo 000)
-          echo "### AGP 9.4.0" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "- gradle-9.4.0.pom -> HTTP **$code**" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "### Latest AGP on Google Maven" | tee -a "$GITHUB_STEP_SUMMARY"
-          curl -sS https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/maven-metadata.xml \
-            | grep -o '<latest>[^<]*</latest>\|<release>[^<]*</release>' \
-            | sed 's/^/- /' | tee -a "$GITHUB_STEP_SUMMARY" || true
-
-          echo "### Compose BOM versions available" | tee -a "$GITHUB_STEP_SUMMARY"
-          curl -sS https://dl.google.com/dl/android/maven2/androidx/compose/compose-bom/maven-metadata.xml \
-            | grep -o '<latest>[^<]*</latest>\|<release>[^<]*</release>' \
-            | sed 's/^/- /' | tee -a "$GITHUB_STEP_SUMMARY" || true
-
-      - name: Which API level added WindowManager.LayoutParams.preferredDisplayModeId
-        run: |
-          set -uo pipefail
-          echo "### preferredDisplayModeId by API level" | tee -a "$GITHUB_STEP_SUMMARY"
-          yes | sdkmanager "platforms;android-21" "platforms;android-22" "platforms;android-23" >/dev/null 2>&1 || true
-          for api in 21 22 23 36; do
-            JAR="$ANDROID_HOME/platforms/android-$api/android.jar"
-            if [ ! -f "$JAR" ]; then
-              echo "- API $api: android.jar not installed" | tee -a "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            if javap -p -classpath "$JAR" 'android.view.WindowManager$LayoutParams' 2>/dev/null \
-                 | grep -q preferredDisplayModeId; then
-              echo "- API $api: **present**" | tee -a "$GITHUB_STEP_SUMMARY"
-            else
-              echo "- API $api: absent" | tee -a "$GITHUB_STEP_SUMMARY"
-            fi
-          done
-
-      - name: Which Compose BOM works with compileSdk 36
-        # bash without -e: a BOM that is not published, or a POM that does not
-        # mention ui-android, must skip that row rather than end the survey.
-        shell: bash {0}
-        run: |
-          set -uo pipefail
-          echo "### Compose BOM -> compose version -> minCompileSdk" | tee -a "$GITHUB_STEP_SUMMARY"
-          BASE=https://dl.google.com/dl/android/maven2
-          for bom in 2026.09.00 2026.08.00 2026.07.00 2026.06.00 2026.05.00 \
-                     2026.04.00 2026.03.00 2026.02.00 2026.01.00 \
-                     2025.12.01 2025.11.00 2025.10.01 2025.09.00; do
-            pom=$(curl -sS --fail "$BASE/androidx/compose/compose-bom/$bom/compose-bom-$bom.pom" 2>/dev/null)
-            if [ -z "$pom" ]; then
-              echo "- BOM $bom: not published" | tee -a "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            ver=$(printf '%s' "$pom" \
-                  | grep -A2 '<artifactId>ui-android</artifactId>' \
-                  | grep -o '<version>[^<]*' | head -1 | cut -d'>' -f2)
-            if [ -z "$ver" ]; then
-              echo "- BOM $bom: no ui-android entry" | tee -a "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            curl -sS --fail -o ui.aar \
-              "$BASE/androidx/compose/ui/ui-android/$ver/ui-android-$ver.aar" 2>/dev/null
-            min=$(unzip -p ui.aar META-INF/com/android/build/gradle/aar-metadata.properties 2>/dev/null \
-                  | grep '^minCompileSdk=' | cut -d= -f2 | tr -d '\r')
-            echo "- BOM $bom -> compose ${ver} -> minCompileSdk ${min:-unknown}" \
-              | tee -a "$GITHUB_STEP_SUMMARY"
-            rm -f ui.aar
-          done
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath \
+            | grep -E 'androidx\.(activity|core|lifecycle|compose\.(ui|foundation|runtime))' \
+            | sed 's/^/    /' \
+            | sort -u \
+            | tee -a "$GITHUB_STEP_SUMMARY"

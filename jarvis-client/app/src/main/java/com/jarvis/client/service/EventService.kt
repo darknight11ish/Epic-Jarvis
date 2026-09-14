@@ -5,6 +5,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -42,19 +43,32 @@ class EventService : Service() {
 
     /**
      * Android 14+ requires onTimeout to be handled for timed foreground service
-     * types. specialUse is not one of them, so this should never fire - it is
-     * here so that if the type is ever changed back to a capped one, the app
-     * stops itself instead of being killed with a RemoteServiceException.
+     * types. specialUse is not one of them, so neither of these should ever fire -
+     * they are here so that if the type is ever changed back to a capped one, the
+     * app stops itself instead of being killed with a RemoteServiceException.
+     *
+     * Both overloads, because they are not interchangeable: the one-argument form
+     * is dispatched only for shortService, and the dataSync/mediaProcessing budget
+     * on Android 15+ calls the two-argument one (API 35). With only the former
+     * overridden, the safety net this comment describes was not armed on any device
+     * this app runs on - the whole range is API 33-36.
      */
     override fun onTimeout(startId: Int) {
         Log.w(TAG, "foreground service timed out; the service type is capped after all")
         stopSelf()
     }
 
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        if (Build.VERSION.SDK_INT >= 35) {
+            Log.w(TAG, "foreground service type $fgsType timed out")
+        }
+        stopSelf()
+    }
+
     private fun startInForeground() {
         val notification: Notification =
             NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(getString(R.string.app_name))
                 .setContentText("Not connected yet")
                 .setOngoing(true)
@@ -73,14 +87,30 @@ class EventService : Service() {
             )
         } catch (e: Exception) {
             // POST_NOTIFICATIONS denied does not stop the service, but other
-            // failures do. Report rather than dying silently.
+            // failures do.
+            //
+            // The common case here is a sticky restart: the system reclaimed the
+            // process, restarted the service with the app in the background, and a
+            // background foreground-service start is not on the exemption list. That
+            // used to end the link permanently with one logcat line. Record it where
+            // the readiness screen can show it, so the phone can say the link is
+            // down and why rather than appearing to work.
             Log.e(TAG, "startForeground refused", e)
+            lastStartFailure = e.javaClass.simpleName
             stopSelf()
         }
     }
 
     companion object {
         private const val TAG = "JarvisEventService"
+
+        /**
+         * Set when the platform refused to let the service go foreground. Read by
+         * the readiness screen; null while nothing has gone wrong.
+         */
+        @Volatile
+        @JvmStatic
+        var lastStartFailure: String? = null
         const val CHANNEL_ID = "jarvis_link"
         private const val NOTIFICATION_ID = 0x4A56
         const val ACTION_STOP = "com.jarvis.client.STOP_LINK"

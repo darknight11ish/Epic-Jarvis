@@ -25,7 +25,14 @@ android {
             applicationIdSuffix = ""
         }
         release {
-            isMinifyEnabled = false
+            // Shrinking is on, so proguard-rules.pro is actually exercised. It was
+            // listed here while isMinifyEnabled was false, which meant the
+            // kotlinx-serialization keeps and the OkHttp -dontwarns in it had never
+            // once been applied — the release block advertised a shrink it did not
+            // do, and the rules would have been validated for the first time on the
+            // day someone turned it on.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -63,19 +70,24 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-service:2.8.7")
 
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.animation:animation")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // Declared, not inherited. LazyColumn, background and KeyboardOptions are used
+    // directly throughout the UI and arrive only as an `api` transitive of
+    // material3; that compiles today and stops compiling silently if material3
+    // ever narrows what it exposes.
+    implementation("androidx.compose.foundation:foundation")
 
     implementation("androidx.glance:glance:1.1.1")
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.glance:glance-material3:1.1.1")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Same reasoning: JarvisWebSocketManager imports okio.ByteString directly.
+    implementation("com.squareup.okio:okio:3.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 

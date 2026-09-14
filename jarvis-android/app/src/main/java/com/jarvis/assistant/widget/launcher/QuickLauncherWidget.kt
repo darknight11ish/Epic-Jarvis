@@ -24,7 +24,6 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import com.jarvis.assistant.JarvisRuntime
 import com.jarvis.assistant.MainActivity
 import com.jarvis.assistant.data.repository.WidgetDataRepository
 import com.jarvis.assistant.widget.PillButton
@@ -37,10 +36,13 @@ class QuickLauncherWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
+        // Deliberately does not probe latency here. Doing so was a feedback loop:
+        // the pong wrote a new round-trip time, the repository observed it and
+        // called updateAll, which re-ran this function, which probed again. Round
+        // trips jitter by a millisecond nearly every time, so nothing upstream
+        // conflated it away. The value shown is whatever the last connect or the
+        // last real traffic measured.
         val status = WidgetDataRepository.getConnectionStatus()
-        // A widget redraw is itself an event, so probe here rather than running
-        // a background timer purely to keep a number fresh.
-        if (JarvisRuntime.isInitialized) JarvisRuntime.measureLatency()
 
         provideContent {
             Row(

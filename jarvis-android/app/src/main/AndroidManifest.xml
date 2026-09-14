@@ -13,14 +13,18 @@
 
     <!-- Power: stay reachable while the screen is off. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- Device control. -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.FLASHLIGHT" />
+    <!-- Torch uses CameraManager.setTorchMode, which requires no permission.
+         CAMERA was declared and requested here and never used: it appeared in
+         the same runtime batch as RECORD_AUDIO, so declining "Jarvis wants
+         camera access" cost the user the microphone. android.permission.FLASHLIGHT
+         is not a platform permission and was silently ignored. -->
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -111,10 +115,15 @@
             android:exported="true"
             android:permission="android.permission.BIND_VOICE_INTERACTION" />
 
+        <!-- No android:permission. BIND_VOICE_INTERACTION is signature-level and
+             exists so only the system can bind a VoiceInteractionService; requiring
+             it on a RecognitionService means every third-party SpeechRecognizer
+             client is refused with ERROR_CLIENT and no callbacks, which made the
+             advertised recognizer role unusable. RecognitionService documents no
+             bind permission, and BIND_SPEECH_RECOGNIZER is not in the public SDK. -->
         <service
             android:name=".service.JarvisRecognitionService"
-            android:exported="true"
-            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.speech.RecognitionService" />
             </intent-filter>
@@ -122,6 +131,16 @@
                 android:name="android.speech"
                 android:resource="@xml/recognition_service" />
         </service>
+
+        <receiver
+            android:name=".service.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Keeps the WebSocket and the duplex audio pipeline alive in the background. -->
         <service

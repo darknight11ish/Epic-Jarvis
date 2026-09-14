@@ -74,20 +74,47 @@ class AudioStreamer(
             return false
         }
 
+        // Inside the try, and before `running` is set: startRecording throws when
+        // the microphone is held exclusively elsewhere (an in-progress call, a
+        // concurrent-capture denial). Outside it, that throw propagated out of a
+        // Compose click handler or a binder callback and left the native mic handle
+        // open with isRecording still reporting true.
+        try {
+            recorder.startRecording()
+        } catch (e: Exception) {
+            Log.e(TAG, "startRecording rejected", e)
+            runCatching { recorder.release() }
+            return false
+        }
+        if (recorder.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+            Log.e(TAG, "AudioRecord did not enter the recording state")
+            runCatching { recorder.release() }
+            return false
+        }
+
         record = recorder
         running.set(true)
-        recorder.startRecording()
 
         job = scope.launch {
             val buffer = ByteArray(CHUNK_BYTES)
-            while (running.get()) {
-                val read = recorder.read(buffer, 0, buffer.size)
-                if (read > 0) {
-                    onChunk(buffer, read)
-                } else if (read < 0) {
-                    Log.e(TAG, "AudioRecord.read error $read")
-                    break
+            try {
+                while (running.get()) {
+                    // Guarded for the same reason as the playback write: stop() can
+                    // land while this is blocked in the native call, and nothing in
+                    // this scope would catch an escaping throw.
+                    val read = runCatching { recorder.read(buffer, 0, buffer.size) }
+                        .getOrDefault(-1)
+                    if (read > 0) {
+                        onChunk(buffer, read)
+                    } else if (read < 0) {
+                        Log.e(TAG, "AudioRecord.read error $read")
+                        break
+                    }
                 }
+            } finally {
+                // This coroutine owns the recorder and is the only thing that
+                // releases it, so a release can never land under an in-flight read.
+                runCatching { recorder.release() }
             }
         }
         return true
@@ -95,12 +122,15 @@ class AudioStreamer(
 
     fun stop() {
         if (!running.compareAndSet(true, false)) return
+        // stop() is safe to call while the reader is blocked in read() and is what
+        // unblocks it; release() is left to the reader's own finally.
+        record?.let { recorder ->
+            runCatching {
+                if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) recorder.stop()
+            }
+        }
         job?.cancel()
         job = null
-        record?.let { recorder ->
-            runCatching { if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) recorder.stop() }
-            runCatching { recorder.release() }
-        }
         record = null
     }
 

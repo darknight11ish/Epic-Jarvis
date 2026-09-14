@@ -1,8 +1,11 @@
 package com.jarvis.client
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -37,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,7 +81,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val tick = permissionTick.intValue
-            var host by remember { mutableStateOf("") }
+            // rememberSaveable: a rotation, or process death behind the permission
+            // dialog, wiped the typed host and snapped the readiness list back to
+            // "No host set yet" — on the one screen whose job is capturing it.
+            var host by rememberSaveable { mutableStateOf("") }
             val items = remember(tick, host) { PlatformReadiness.report(this, host) }
 
             Column(
@@ -132,7 +139,12 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.height(12.dp))
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!PlatformReadiness.notificationsGranted(this@MainActivity)) {
+                    // Derived from the already-remembered list rather than re-read
+                    // from PackageManager in composition: a bare system read has no
+                    // snapshot subscription and only refreshed here because `tick`
+                    // happened to be read in the same restart scope.
+                    val notificationsItem = items.firstOrNull { it.title == "Notifications" }
+                    if (notificationsItem?.state == ReadinessItem.State.WARN) {
                         Button(
                             onClick = {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -148,6 +160,19 @@ class MainActivity : ComponentActivity() {
                                 contentColor = Warn,
                             ),
                         ) { Text("Allow notifications") }
+                    }
+
+                    val batteryItem = items.firstOrNull { it.title == "Background restart" }
+                    if (batteryItem?.state == ReadinessItem.State.WARN) {
+                        Button(
+                            onClick = { requestBatteryExemption() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Plate,
+                                contentColor = Warn,
+                            ),
+                        ) { Text("Keep link alive") }
                     }
 
                     Button(
@@ -168,8 +193,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Notification permission can be changed in Settings while we are away.
+        // Notification permission and the battery exemption can both be changed in
+        // Settings while we are away.
         permissionTick.intValue += 1
+    }
+
+    /**
+     * Opens the platform's own exemption dialog. Never granted silently, and the
+     * screen keeps reporting the real state either way.
+     */
+    private fun requestBatteryExemption() {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            .setData(Uri.parse("package:$packageName"))
+        runCatching { startActivity(intent) }.onFailure {
+            // Some builds hide the per-app dialog; fall back to the list.
+            runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        }
     }
 }
 

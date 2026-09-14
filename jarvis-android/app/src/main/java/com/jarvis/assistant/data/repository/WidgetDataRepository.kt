@@ -9,7 +9,6 @@ import com.jarvis.assistant.widget.approval.ApprovalWidget
 import com.jarvis.assistant.widget.launcher.QuickLauncherWidget
 import com.jarvis.assistant.widget.telemetry.TelemetryWidget
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -94,6 +93,18 @@ object WidgetDataRepository {
     fun isUnpaired(): Boolean =
         JarvisRuntime.isInitialized && JarvisRuntime.settings.sharedSecret.isEmpty()
 
+    /**
+     * Whether a decision tapped on the home screen could actually be delivered.
+     *
+     * The runtime refuses to sign one when the link is down, so offering the buttons
+     * anyway means a tap that buzzes and does nothing. The widget says "offline"
+     * instead.
+     */
+    fun canDecideNow(): Boolean =
+        JarvisRuntime.isInitialized &&
+            JarvisRuntime.socket.state.value == ConnectionState.CONNECTED &&
+            !isUnpaired()
+
     private fun toItem(event: ApprovalRequestEvent) = ApprovalItem(
         id = event.id,
         action = event.title,
@@ -112,8 +123,12 @@ object WidgetDataRepository {
         val app = context.applicationContext
 
         scope.launch {
+            // Distinct on the rendered content, not on the ids. The runtime replaces
+            // an approval that reuses an id, so an id-only comparison reported "no
+            // change" for a revised request and the widget kept offering Approve and
+            // Deny against text the user was no longer looking at.
             JarvisRuntime.pendingApprovals
-                .map { list -> list.map(ApprovalRequestEvent::id) }
+                .map { list -> list.map { ApprovalFingerprint(it) } }
                 .distinctUntilChanged()
                 .collect { ApprovalWidget().updateAll(app) }
         }
@@ -126,16 +141,37 @@ object WidgetDataRepository {
         }
 
         scope.launch {
-            combine(
-                JarvisRuntime.socket.state,
-                JarvisRuntime.latencyMs,
-            ) { state, latency -> state to latency }
-                .distinctUntilChanged()
+            // Connection state only. Folding latency in here meant every pong
+            // redrew both widgets, and with the launcher widget probing on redraw
+            // that closed a loop that never settled.
+            JarvisRuntime.socket.state
                 .collect {
                     QuickLauncherWidget().updateAll(app)
                     // Connectivity gates the telemetry card's live/stale styling.
                     TelemetryWidget().updateAll(app)
                 }
         }
+    }
+
+    /**
+     * What the approval widget actually renders, so equality means "nothing on the
+     * widget would look different" rather than "the same request ids are pending".
+     */
+    private data class ApprovalFingerprint(
+        val id: String,
+        val title: String,
+        val summary: String,
+        val tier: String,
+        val action: String?,
+        val expiresAtMs: Long?,
+    ) {
+        constructor(event: ApprovalRequestEvent) : this(
+            id = event.id,
+            title = event.title,
+            summary = event.summary,
+            tier = event.tier,
+            action = event.action,
+            expiresAtMs = event.expiresAtMs,
+        )
     }
 }

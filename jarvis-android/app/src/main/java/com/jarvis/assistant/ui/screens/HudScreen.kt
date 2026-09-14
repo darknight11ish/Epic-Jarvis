@@ -23,10 +23,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
@@ -59,9 +62,15 @@ import kotlin.math.roundToInt
 /**
  * Everything the screen needs, hoisted into one immutable snapshot.
  *
- * Passing a single stable value keeps recomposition scoped to the cards whose
- * numbers actually moved rather than the whole tree on every telemetry frame.
+ * [Immutable] is load-bearing and not decoration. `approvals` is a `List`, which
+ * Compose treats as unstable because the interface carries no immutability
+ * guarantee, and one unstable parameter makes the whole class unstable — under
+ * strong skipping that means identity comparison, and this is rebuilt on every
+ * recomposition, so nothing downstream could ever skip. Every telemetry frame
+ * recomposed every visible approval card and its diff. The annotation is honest
+ * here: the list is only ever replaced wholesale by the runtime, never mutated.
  */
+@Immutable
 data class HudState(
     val connection: ConnectionState,
     val serverAddress: String,
@@ -79,6 +88,8 @@ data class HudState(
     val hasAuthToken: Boolean,
 )
 
+/** Stable so the callbacks do not invalidate every card that captures them. */
+@Immutable
 data class HudActions(
     val onServerAddressChange: (String) -> Unit,
     val onReconnect: () -> Unit,
@@ -165,6 +176,10 @@ fun HudScreen(state: HudState, actions: HudActions, modifier: Modifier = Modifie
                     request = request,
                     onApprove = { actions.onApprove(request.id) },
                     onReject = { actions.onReject(request.id) },
+                    // A decision taken with the link down clears the card and buzzes
+                    // "confirm" while nothing has been sent. Say so instead.
+                    linkReady = state.connection == ConnectionState.CONNECTED &&
+                        state.hasSharedSecret,
                 )
             }
         }
@@ -411,7 +426,11 @@ private fun WarningCard(text: String, actionLabel: String?, onAction: (() -> Uni
                 style = MaterialTheme.typography.labelSmall,
                 color = JarvisAmber,
                 modifier = Modifier
-                    .clickable(onClick = onAction)
+                    // A bare clickable Text is announced by TalkBack as static
+                    // text, and at labelSmall the target is about 27dp tall. This
+                    // is the only in-app route to the battery-exemption dialog.
+                    .clickable(onClick = onAction, role = Role.Button)
+                    .minimumInteractiveComponentSize()
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
         }

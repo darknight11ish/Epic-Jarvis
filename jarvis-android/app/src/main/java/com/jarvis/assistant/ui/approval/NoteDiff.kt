@@ -24,6 +24,16 @@ object NoteDiff {
      */
     const val MAX_LINES = 600
 
+    /**
+     * Hard ceiling on lines handed to the renderer, whoever produced them. Above
+     * this a diff is not something a person reads on a handset; it is something
+     * they scroll past before tapping Approve.
+     */
+    const val MAX_RENDERED_LINES = 1_200
+
+    private val TRUNCATION_MARKER =
+        DiffLine(DiffKind.GAP, "@@ diff truncated at $MAX_RENDERED_LINES lines @@")
+
     /** Unchanged lines kept either side of a change, so edits have context. */
     private const val CONTEXT_LINES = 3
 
@@ -33,6 +43,13 @@ object NoteDiff {
     )
 
     /** Parses a unified diff the desktop already computed. */
+    /**
+     * A desktop-supplied unified diff, capped.
+     *
+     * `between` has always bounded its own output; this path had no cap at all, so a
+     * whole-document rewrite arrived as however many lines the desktop felt like
+     * sending and every one of them was rendered.
+     */
     fun fromUnified(diff: String): List<DiffLine> = diff
         .split('\n')
         .asSequence()
@@ -48,7 +65,9 @@ object NoteDiff {
                 else -> DiffLine(DiffKind.CONTEXT, line)
             }
         }
+        .take(MAX_RENDERED_LINES)
         .toList()
+        .let { if (it.size < MAX_RENDERED_LINES) it else it + TRUNCATION_MARKER }
 
     /** Computes a diff between two whole documents. */
     fun between(before: String, after: String): List<DiffLine> {

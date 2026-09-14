@@ -29,6 +29,9 @@ class QuickCaptureTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
+        // SystemUI can re-bind or re-request listening without an intervening
+        // onStopListening, which left two collectors racing on the same Tile.
+        watcher?.cancel()
         JarvisRuntime.initialize(this)
         // The tile is only visible while listening, so the collector lives
         // exactly as long as anyone can see the result.

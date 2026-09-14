@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.content.ContextCompat
+import com.jarvis.client.service.EventService
 
 /**
  * The four items in ANDROID-BUILD.md §3.1, reported rather than assumed.
@@ -30,12 +32,38 @@ object PlatformReadiness {
      * parsed config back, so a mismatch here is a lie on the readiness screen
      * rather than a runtime failure.
      */
-    private val CLEARTEXT_SUFFIXES = listOf(".ts.net", "ts.net", "localhost", "127.0.0.1")
+    private val CLEARTEXT_EXACT = setOf("ts.net", "localhost", "127.0.0.1")
+    private val CLEARTEXT_SUFFIXES = listOf(".ts.net")
 
+    /**
+     * Mirrors what `<domain includeSubdomains="true">ts.net</domain>` actually
+     * matches: the domain itself and labels beneath it, and nothing else.
+     *
+     * The previous predicate held a bare `"ts.net"` and tested it with `endsWith`,
+     * so `notmyts.net` and `evilts.net` — registrable public domains that have
+     * nothing to do with Tailscale — reported "permitted" on the one screen whose
+     * whole job is to make this policy legible. It failed in the safe direction,
+     * because the platform would still refuse the connection, but the same shape of
+     * bug in the other app sent a bearer token to a public host in the clear.
+     */
     fun cleartextPermitted(host: String): Boolean {
         val h = host.trim().lowercase().substringBefore(':').trim('/')
         if (h.isEmpty()) return false
-        return CLEARTEXT_SUFFIXES.any { h == it || h.endsWith(it) }
+        if (h in CLEARTEXT_EXACT) return true
+        return CLEARTEXT_SUFFIXES.any { h.endsWith(it) }
+    }
+
+    /**
+     * Whether the app is exempt from battery optimisation.
+     *
+     * This is the exemption that lets the service go foreground from the background,
+     * which is what a sticky restart after the system reclaims the process needs.
+     * Without it, one reclaim ends the link permanently.
+     */
+    fun batteryExempt(context: Context): Boolean {
+        val pm = ContextCompat.getSystemService(context, PowerManager::class.java) ?: return false
+        return runCatching { pm.isIgnoringBatteryOptimizations(context.packageName) }
+            .getOrDefault(false)
     }
 
     fun notificationsGranted(context: Context): Boolean =
@@ -79,6 +107,34 @@ object PlatformReadiness {
             },
             state = if (notificationsGranted(context)) {
                 ReadinessItem.State.OK
+            } else {
+                ReadinessItem.State.WARN
+            },
+        ),
+        ReadinessItem(
+            title = "Background restart",
+            detail = if (batteryExempt(context)) {
+                "Exempt from battery optimisation, so the service can be restarted " +
+                    "by the system after the process is reclaimed."
+            } else {
+                "Not exempt. If Android reclaims the process, the sticky restart " +
+                    "happens in the background, startForeground is refused, and the " +
+                    "link stops for good until you reopen the app."
+            },
+            state = if (batteryExempt(context)) {
+                ReadinessItem.State.OK
+            } else {
+                ReadinessItem.State.WARN
+            },
+        ),
+        ReadinessItem(
+            title = "Link service",
+            detail = EventService.lastStartFailure?.let {
+                "The service was refused by the platform ($it) and stopped itself. " +
+                    "Grant the battery-optimisation exemption above and start it again."
+            } ?: "No start failures recorded.",
+            state = if (EventService.lastStartFailure == null) {
+                ReadinessItem.State.INFO
             } else {
                 ReadinessItem.State.WARN
             },
