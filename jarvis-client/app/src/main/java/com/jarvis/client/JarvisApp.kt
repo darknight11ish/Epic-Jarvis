@@ -4,12 +4,21 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.core.content.ContextCompat
+import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
 
 class JarvisApp : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        // First, before anything that could fail. A startup crash in a
+        // sideloaded app otherwise leaves nothing behind but "it closed".
+        CrashLog.install(this) {
+            runCatching {
+                if (JarvisRuntime.isInitialized) JarvisRuntime.tokens.token() else null
+            }.getOrNull()
+        }
         val manager = ContextCompat.getSystemService(this, NotificationManager::class.java)
             ?: return
 

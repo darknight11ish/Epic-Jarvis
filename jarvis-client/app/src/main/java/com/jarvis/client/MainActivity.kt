@@ -31,6 +31,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
@@ -41,6 +42,7 @@ import com.jarvis.client.ui.approval.BiometricGate
 import com.jarvis.client.ui.rememberNavState
 import com.jarvis.client.ui.screens.AppearanceScreen
 import com.jarvis.client.ui.screens.BrainScreen
+import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
 import com.jarvis.client.ui.screens.HomeState
@@ -70,6 +72,12 @@ class MainActivity : FragmentActivity() {
     /** The approval a notification asked us to open, or null. */
     private val focusApproval = mutableStateOf<String?>(null)
 
+    /** Set when the runtime itself failed to start. Shown instead of the app. */
+    private val startupError = mutableStateOf<String?>(null)
+
+    /** The previous run's crash, read once at launch. */
+    private val lastCrash = mutableStateOf<String?>(null)
+
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { permissionTick.intValue += 1 }
@@ -95,7 +103,15 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        JarvisRuntime.initialize(this)
+
+        // Caught rather than allowed to kill the activity. Everything the
+        // runtime builds — the Keystore, the preferences, the HTTP client —
+        // can fail on a device in a way it cannot here, and "the app closed"
+        // is the least useful thing it could say about that.
+        runCatching { JarvisRuntime.initialize(this) }
+            .onFailure { startupError.value = it.stackTraceToString() }
+
+        lastCrash.value = CrashLog.read(this)
         readApprovalIntent(intent)
 
         setContent { App() }
@@ -127,6 +143,36 @@ class MainActivity : FragmentActivity() {
 
     @Composable
     private fun App() {
+        // Before anything else, and before touching the runtime: if startup
+        // failed, everything below this would fail with it.
+        startupError.value?.let { trace ->
+            CrashScreen(
+                title = "Jarvis could not start",
+                detail = trace,
+                onDismiss = { finish() },
+            )
+            return
+        }
+        if (!JarvisRuntime.isInitialized) {
+            CrashScreen(
+                title = "Jarvis could not start",
+                detail = "The runtime reported that it never initialised, and did not say why.",
+                onDismiss = { finish() },
+            )
+            return
+        }
+        lastCrash.value?.let { trace ->
+            CrashScreen(
+                title = "Jarvis stopped unexpectedly",
+                detail = trace,
+                onDismiss = {
+                    CrashLog.clear(this@MainActivity)
+                    lastCrash.value = null
+                },
+            )
+            return
+        }
+
         val scope = rememberCoroutineScope()
         // Both live in the runtime now: the voice loop drives chat from
         // outside any activity, and a `remember` does not survive a rotation —

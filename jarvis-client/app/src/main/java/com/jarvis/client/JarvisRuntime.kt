@@ -209,16 +209,32 @@ object JarvisRuntime {
     fun initialize(context: Context) {
         if (started) return
         val app = context.applicationContext
-        settings = ClientSettings(app)
-        tokens = TokenStore(app)
-        appearance = AppearanceStore(app)
-        chat = ChatSession(api)
-        voice = VoiceSession(app, api, scope) { text ->
-            chat.send(text)
-            chat.reply.value.takeIf { it.isNotBlank() }
+
+        // Built as LOCALS first, then published to the lateinit fields.
+        //
+        // Not style. The previous version assigned `chat = ChatSession(api)`
+        // two lines above `api = JarvisApi(...)`, and because `api` is
+        // lateinit the compiler had nothing to say about it — so every cold
+        // start threw UninitializedPropertyAccessException out of the first
+        // line of onCreate and the app closed before it drew anything.
+        // Locals make the compiler enforce the order, so the whole class of
+        // bug cannot come back the next time something is inserted here.
+        val clientSettings = ClientSettings(app)
+        val tokenStore = TokenStore(app)
+        val jarvisApi = JarvisApi(clientSettings, tokenStore)
+        val chatSession = ChatSession(jarvisApi)
+        val voiceSession = VoiceSession(app, jarvisApi, scope) { text ->
+            chatSession.send(text)
+            chatSession.reply.value.takeIf { it.isNotBlank() }
         }
-        api = JarvisApi(settings, tokens)
-        stream = EventStream(api)
+
+        settings = clientSettings
+        tokens = tokenStore
+        api = jarvisApi
+        appearance = AppearanceStore(app)
+        chat = chatSession
+        voice = voiceSession
+        stream = EventStream(jarvisApi)
         started = true
 
         faceJob = scope.launch {
