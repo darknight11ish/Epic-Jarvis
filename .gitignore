@@ -7,6 +7,10 @@ captures/
 *.aab
 *.keystore
 *.jks
+# ...except the shared debug key. It is deliberately committed so every build
+# signs with the same certificate and `adb install -r` upgrades in place rather
+# than forcing an uninstall that wipes the pairing secret. See keystore/README.md.
+!keystore/debug.keystore
 .cxx/
 
 # IDE

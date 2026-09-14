@@ -19,6 +19,29 @@ android {
         versionName = "1.0"
     }
 
+    // The shared debug key, committed at the repository root. Without it AGP mints
+    // ~/.android/debug.keystore per machine, and a CI runner is a fresh machine
+    // every run - so each build was signed with a different certificate and
+    // `adb install -r` over the previous one failed with
+    // INSTALL_FAILED_UPDATE_INCOMPATIBLE. The only way through was `adb uninstall`,
+    // which wipes the pairing secret, the auth token, the device id and anything
+    // still queued offline.
+    //
+    // Guarded on existence rather than assumed: a checkout of this module alone,
+    // without the repository around it, falls back to AGP's generated key and still
+    // builds.
+    signingConfigs {
+        getByName("debug") {
+            val shared = rootProject.file("../keystore/debug.keystore")
+            if (shared.exists()) {
+                storeFile = shared
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
