@@ -95,22 +95,38 @@ object BiometricGate {
                 },
             )
 
-            val info = BiometricPrompt.PromptInfo.Builder()
-                .setTitle(item.title)
-                // The consequence, in the server's own words, on the prompt
-                // itself — so the last thing seen before confirming is what
-                // this costs if it is wrong.
-                .setSubtitle(item.risk.why.ifBlank { item.summary })
-                .setNegativeButtonText("Cancel")
-                .setAllowedAuthenticators(ALLOWED)
-                .setConfirmationRequired(true)
-                .build()
-
-            runCatching { prompt.authenticate(info) }
-                .onFailure {
-                    Log.w(TAG, "could not show the biometric prompt", it)
-                    if (cont.isActive) cont.resume(Outcome.UNAVAILABLE)
-                }
+            // No negative button, and that is not a style choice.
+            // PromptInfo.Builder.build() THROWS IllegalArgumentException when a
+            // negative button is set alongside DEVICE_CREDENTIAL — the system
+            // supplies its own "Use PIN" affordance and the two cannot
+            // coexist. This had both, and build() sat outside the runCatching
+            // below, so the most important safety control in the app threw on
+            // every single use, on exactly the devices that have a fingerprint
+            // enrolled. canAuthenticate() reports SUCCESS first, so the guard
+            // above waved it straight through to the throw.
+            //
+            // Cancelling is still possible: the system prompt has its own
+            // dismiss, and a dismissal arrives as ERROR_USER_CANCELED, which
+            // is already handled as CANCELLED.
+            runCatching {
+                val info = BiometricPrompt.PromptInfo.Builder()
+                    .setTitle(item.title)
+                    // The consequence, in the server's own words, on the
+                    // prompt itself — so the last thing seen before confirming
+                    // is what this costs if it is wrong.
+                    .setSubtitle(item.risk.why.ifBlank { item.summary })
+                    .setAllowedAuthenticators(ALLOWED)
+                    .setConfirmationRequired(true)
+                    .build()
+                prompt.authenticate(info)
+            }.onFailure {
+                // UNAVAILABLE rather than CANCELLED: the owner refused
+                // nothing, the prompt never appeared. Treating a platform
+                // failure as a refusal would silently drop decisions the owner
+                // never saw.
+                Log.w(TAG, "could not show the biometric prompt", it)
+                if (cont.isActive) cont.resume(Outcome.UNAVAILABLE)
+            }
 
             cont.invokeOnCancellation { runCatching { prompt.cancelAuthentication() } }
         }
@@ -125,4 +141,12 @@ object BiometricGate {
      */
     private const val ALLOWED = BiometricManager.Authenticators.BIOMETRIC_STRONG or
         BiometricManager.Authenticators.DEVICE_CREDENTIAL
+
+    /**
+     * DEVICE_CREDENTIAL stays in deliberately. Without it, a phone with no
+     * enrolled fingerprint reports the gate unavailable, and an unavailable
+     * gate lets the decision through — so removing the PIN fallback in the
+     * name of strictness would wave through exactly the devices with the
+     * weakest possession factor.
+     */
 }

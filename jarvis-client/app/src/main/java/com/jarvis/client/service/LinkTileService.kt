@@ -51,7 +51,7 @@ class LinkTileService : TileService() {
                 JarvisRuntime.attention,
             ) { link, activity, attention -> Triple(link, activity, attention) }
                 .collect { (link, activity, attention) ->
-                    render(link, activity, attention.blockedBy == "muted", attention.pending)
+                    render(link, activity, attention.muted, attention.pending)
                 }
         }
     }
@@ -80,7 +80,11 @@ class LinkTileService : TileService() {
             openApp()
             return
         }
-        val muted = JarvisRuntime.attention.value.blockedBy == "muted"
+        // `muted` is its own field on the budget. `blocked_by` says WHY the
+        // budget is zero — "quiet", "standby", a locked session — and is null
+        // most of the time, so reading it here meant the tile believed it was
+        // never muted: every tap sent mute, and it could never unmute.
+        val muted = JarvisRuntime.attention.value.muted
         scope.launch { JarvisRuntime.setMuted(!muted) }
     }
 
