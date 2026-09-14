@@ -183,3 +183,16 @@ permissions = [
 identifier = "brain-faculties"
 description = "Remove a skill; install, switch or roll back a model. Privileged: keep this to the Brain window."
 permissions = ["allow-brain-remove-skill", "allow-brain-model"]
+
+# ---------------------------------------------------------------------------
+# The faces window: read and write the appearance document.
+#
+# This is the one thing that window persists, and it is shared rather than
+# local — the server holds it so the phone sees the same choice. It changes how
+# Jarvis LOOKS and nothing else: it cannot approve anything, start anything, or
+# reach the connection settings.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "appearance"
+description = "Read and write which face Jarvis wears and how each state looks. Cosmetic; approves nothing."
+permissions = ["allow-get-appearance", "allow-set-appearance"]

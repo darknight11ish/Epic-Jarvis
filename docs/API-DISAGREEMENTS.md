@@ -202,3 +202,28 @@ shapes the proxy might use.
 **Not a doc bug**, a real gap. A `tool_calls` array on the non-streaming chat
 response, or a small `POST /api/note` that returns the created id, would let a
 client tell the truth in one word instead of six.
+
+---
+
+## 11. There is nowhere to store a choice both clients can see
+
+**Read:** `brain/routes.rs` (`/api/config` is in `READ_ROUTES`); the desktop's
+own note that it "is a read here and a 501 on the server".
+
+`jarvis-visual-spec.json` opens by saying the two renderers cannot share
+drawing code, so what they share is data. That is the right design and it works
+for the spec itself, which both clients bundle. It does not work for a *choice*
+made against that spec: which face Jarvis wears, and how each of the eight
+states looks. A choice has to live somewhere both clients can read **and
+write**, and there is no such place.
+
+`/api/config` is the obvious candidate and is read-only — 501 on write. Nothing
+else in the API stores client-authored configuration at all.
+
+So the Faces window saves locally and says so on screen rather than implying
+the phone followed. `docs/APPEARANCE-API.md` is the route it already speaks:
+`GET`/`POST /api/appearance`, a document of `{face, bindings, updated}`,
+last-write-wins. The desktop needs no change once it answers.
+
+**Not a doc bug** — a gap, and a small one to close. It is also the only thing
+standing between the face picker and working from either device.

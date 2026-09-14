@@ -142,6 +142,8 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <div class="sp" style="max-width:200px"><input type="range" id="allspeed" min="0" max="100" value="50" aria-label="All speeds"><span class="v" id="allspeed-v">1.00×</span></div>
     <button class="chip" id="randomise">randomise</button>
     <button class="chip" id="reset">reset all</button>
+    <button class="chip" id="save">save</button>
+    <span class="mono" id="save-state" style="margin-left:10px;color:var(--dim)">—</span>
     <span class="mono" id="scheme-read"></span>
     <span class="spacer"></span>
     <span class="mono" id="clock">detecting display…</span>
@@ -4031,4 +4033,95 @@ function boot(){
 }
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
 else boot();
+
+/* ==========================================================================
+   Persistence
+   --------------------------------------------------------------------------
+   The kit was a page: it edited in memory and you copied the export out by
+   hand. In the app the bindings are a document, and the document is shared —
+   the server holds it so the phone wears the same face. `appearance.rs` has
+   the reasoning; this is the half that knows what BIND is.
+   ========================================================================== */
+
+const TAURI = globalThis.__TAURI__;
+const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
+
+function saveState(text, tone) {
+  const el = $("save-state");
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = tone === "bad" ? "#ff8a95" : tone === "ok" ? "#5cff9d" : "var(--dim)";
+}
+
+/** BIND, minus anything that is the spec's default, as the stored document. */
+function currentDocument() {
+  const bindings = {};
+  for (const st of SPEC.states) {
+    const b = BIND[st.id];
+    if (!b || !b.pattern) continue;
+    const out = { pattern: b.pattern };
+    // A hue-generating pattern ignores the colour, so storing one would tell
+    // the phone it matters. `kind === "hue_sweep"` is the same test the palette
+    // hint above the swatches already uses — the kit carries the previous
+    // colour forward onto the new pattern, so BIND really does hold one here.
+    const kind = (SPEC.patterns.find((x) => x.id === b.pattern) || {}).kind;
+    if (b.color && kind !== "hue_sweep") out.color = b.color;
+    const params = {};
+    for (const [k, v] of Object.entries(b)) {
+      if (k !== "pattern" && k !== "color") params[k] = v;
+    }
+    if (Object.keys(params).length) out.params = params;
+    bindings[st.id] = out;
+  }
+  return { face: SOLO_FACE || null, bindings };
+}
+
+/** The face last opened solo, which is the only "chosen one" this page has. */
+let SOLO_FACE = null;
+
+function applyDocument(doc) {
+  if (!doc || !doc.bindings) return;
+  for (const [state, binding] of Object.entries(doc.bindings)) {
+    // Ignore a state this build has never heard of rather than throwing: the
+    // phone may be a version ahead.
+    if (!BIND[state] || !binding || !binding.pattern) continue;
+    BIND[state] = Object.assign({ pattern: binding.pattern }, binding.params || {},
+                                binding.color ? { color: binding.color } : {});
+  }
+  if (doc.face) SOLO_FACE = doc.face;
+  syncUI();
+}
+
+async function loadAppearance() {
+  if (!IS_TAURI) { saveState("browser preview — nothing is saved"); return; }
+  try {
+    const loaded = await TAURI.core.invoke("get_appearance");
+    applyDocument(loaded);
+    if (loaded.source === "default") saveState("nothing saved yet");
+    else if (loaded.shared) saveState("loaded from Jarvis — the phone sees this too", "ok");
+    else saveState(loaded.note || "loaded from this machine only");
+  } catch (error) {
+    saveState(String((error && error.message) || error), "bad");
+  }
+}
+
+async function saveAppearance() {
+  if (!IS_TAURI) { saveState("browser preview — nothing is saved"); return; }
+  saveState("saving…");
+  try {
+    const loaded = await TAURI.core.invoke("set_appearance", {
+      appearance: currentDocument(),
+    });
+    // Shared and saved are different facts and the window says which. A picker
+    // that claimed to have changed the phone when it had not would be worse
+    // than one that admits it could not.
+    if (loaded.shared) saveState("saved to Jarvis — the phone sees this too", "ok");
+    else saveState(loaded.note || "saved on this machine only");
+  } catch (error) {
+    saveState(String((error && error.message) || error), "bad");
+  }
+}
+
+$("save").onclick = saveAppearance;
+loadAppearance();
 </script>

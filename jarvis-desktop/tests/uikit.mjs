@@ -297,7 +297,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -334,6 +334,19 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "stream_chat": return null;
           case "get_theme": return theme || "deep-space";
           case "get_hotkeys": return window.__hotkeys;
+          case "get_appearance": return window.__appearance;
+          case "set_appearance": {
+            window.__calls.push(["__saved", args.appearance]);
+            const shared = !window.__noRoute;
+            return {
+              ...args.appearance,
+              updated: 1,
+              source: shared ? "server" : "local",
+              shared,
+              note: shared ? undefined
+                : "Saved on this machine. This backend has no /api/appearance, so the phone will not see it.",
+            };
+          }
           case "update_status": return window.__update;
           case "check_for_update":
             window.__calls.push(["__checked"]);
@@ -412,6 +425,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   }
   window.__hotkeys = JSON.parse(JSON.stringify(hotkeys));
   window.__update = JSON.parse(JSON.stringify(update));
+  window.__appearance = JSON.parse(JSON.stringify(appearance));
+  window.__noRoute = Boolean(noRoute);
   window.__found = found || null;
   window.__installFails = installFails || null;
   window.__refuse = refuse || [];
@@ -444,7 +459,9 @@ export async function open(browser, base, file, data, viewport) {
     link: {}, pending: [], attention: ATTENTION_CLEAR, digest: DIGEST,
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
-    installFails: null, ...data,
+    installFails: null, noRoute: false,
+    appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
+    ...data,
   });
   await page.goto(`${base}/${file}`);
   await page.waitForTimeout(500);

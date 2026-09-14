@@ -157,6 +157,104 @@ await check("CONTROL: the window is reachable and narrowly permitted", async () 
   }
 });
 
+/* ── The bindings are a document, and it is shared ───────────────────────── */
+
+await check("what the editor saves is what the spec can read back", async () => {
+  const page = await open();
+  await page.waitForTimeout(2500);
+  // Bind `banked` to something deliberate, then save and inspect the document.
+  await page.locator('#states .chip[data-s="banked"]').click();
+  await page.locator('#patterns .chip[data-p="solid"]').click();
+  await page.locator("#save").click();
+  await page.waitForTimeout(300);
+  const saved = await page.evaluate(() =>
+    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  await page.close();
+  assert.ok(saved, "save sent nothing");
+  const spec = JSON.parse(read("src/jarvis-visual-spec.json"));
+  const ids = new Set(spec.states.map((s) => s.id));
+  const patterns = new Set(spec.patterns.map((p) => p.id));
+  for (const [state, binding] of Object.entries(saved.bindings)) {
+    assert.ok(ids.has(state), `saved a state the spec does not have: ${state}`);
+    assert.ok(patterns.has(binding.pattern),
+      `saved a pattern the spec does not have: ${binding.pattern}`);
+  }
+  assert.equal(saved.bindings.banked.pattern, "solid");
+});
+
+await check("a hue-generating pattern is saved without a colour", async () => {
+  // `rainbow` ignores the colour. Writing one would tell the phone it matters.
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.locator('#states .chip[data-s="idle"]').click();
+  await page.locator('#patterns .chip[data-p="rainbow"]').click();
+  await page.locator("#save").click();
+  await page.waitForTimeout(300);
+  const saved = await page.evaluate(() =>
+    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  await page.close();
+  assert.equal(saved.bindings.idle.pattern, "rainbow");
+  assert.ok(!("color" in saved.bindings.idle),
+    `a colour was stored anyway: ${JSON.stringify(saved.bindings.idle)}`);
+});
+
+await check("it says whether the phone will see the change", async () => {
+  // Saved and shared are different facts. Claiming the phone changed when it
+  // did not is worse than admitting the route is missing.
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.locator("#save").click();
+  await page.waitForTimeout(300);
+  const shared = await page.locator("#save-state").innerText();
+  await page.close();
+  assert.match(shared, /phone sees this too/i, `said "${shared}"`);
+});
+
+await check("with no backend route it says so instead of claiming success", async () => {
+  const page = await K.open(browser, base, "faces.html", { noRoute: true },
+    { width: 1300, height: 950 });
+  await page.waitForTimeout(2500);
+  await page.locator("#save").click();
+  await page.waitForTimeout(300);
+  const said = await page.locator("#save-state").innerText();
+  await page.close();
+  assert.match(said, /this machine/i, `said "${said}"`);
+  assert.doesNotMatch(said, /phone sees this too/i,
+    "it claimed the phone would see a change that went nowhere");
+});
+
+await check("a saved document is applied when the window reopens", async () => {
+  const page = await K.open(browser, base, "faces.html", {
+    appearance: {
+      face: "orbit", updated: 1, source: "server", shared: true,
+      bindings: { idle: { pattern: "pulse", color: "violet-4" } },
+    },
+  }, { width: 1300, height: 950 });
+  await page.waitForTimeout(2500);
+  const bound = await page.evaluate(() => {
+    document.querySelector('#states .chip[data-s="idle"]').click();
+    const on = document.querySelector('#patterns .chip[aria-pressed="true"]');
+    return on ? on.dataset.p : null;
+  });
+  await page.close();
+  assert.equal(bound, "pulse", "the stored binding was not applied");
+});
+
+await check("CONTROL: a state the spec does not have is ignored, not thrown on", async () => {
+  // The phone may be a version ahead. Refusing the whole document over one
+  // unknown key would make the older client unusable.
+  const page = await K.open(browser, base, "faces.html", {
+    appearance: {
+      face: null, updated: 1, source: "server", shared: true,
+      bindings: { idle: { pattern: "solid", color: "ice-3" }, daydreaming: { pattern: "solid" } },
+    },
+  }, { width: 1300, height: 950 });
+  await page.waitForTimeout(2500);
+  const errs = page.__errors.filter((e) => !/favicon/i.test(e));
+  await page.close();
+  assert.deepEqual(errs, [], errs.join(" | "));
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe faces window holds");

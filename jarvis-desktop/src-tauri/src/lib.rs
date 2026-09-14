@@ -16,6 +16,7 @@
 //! | `quickbar` | 750×80 frameless transparent spotlight bar, always on top    |
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
+pub mod appearance;
 pub mod attention;
 pub mod brain;
 pub mod commands;
@@ -509,6 +510,8 @@ pub fn run() {
             commands::set_theme,
             commands::get_api_settings,
             commands::set_api_settings,
+            appearance::get_appearance,
+            appearance::set_appearance,
             update::update_status,
             update::check_for_update,
             update::set_update_check_on_start,

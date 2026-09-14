@@ -55,6 +55,8 @@ fn main() {
             "get_api_settings",
             "set_api_settings",
             // Widget geometry and capture
+            "get_appearance",
+            "set_appearance",
             "update_status",
             "check_for_update",
             "set_update_check_on_start",
