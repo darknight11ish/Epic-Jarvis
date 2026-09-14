@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FF000000</color>
+    <!--
+      The disc's own ground, measured off the source artwork rather than
+      guessed: the mean of the dark pixels just inside the crop edge, so the
+      foreground's feathered rim meets the background layer with no seam.
+
+      Not pure black. The artwork's ground is a cold near-black with a blue
+      cast, and dropping it to #000 left a visible ring where the feather ran
+      out.
+    -->
+    <color name="ic_launcher_background">#FF0C101C</color>
 </resources>
