@@ -65,9 +65,16 @@ jobs:
 
       - name: Assemble debug APK
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          set -o pipefail
           chmod +x ./gradlew
-          ./gradlew assembleDebug --stacktrace
+          if ! ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log; then
+            echo "::group::Kotlin errors"
+            grep -E "^e: |^w: .*error|Unresolved reference|Compilation error" build.log | head -80 \
+              || echo "(no compiler diagnostics found; see the full log above)"
+            echo "::endgroup::"
+            exit 1
+          fi
 
       - name: Collect APK
         run: |

@@ -9,6 +9,7 @@ import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.JarvisApi
+import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo

@@ -5,6 +5,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /**
  * The wire shapes from JARVIS-API.md.
@@ -19,6 +21,21 @@ val JarvisJson = Json {
     isLenient = true
     encodeDefaults = true
     explicitNulls = false
+}
+
+/**
+ * Reads a capability entry as present-or-not.
+ *
+ * The doc shows both shapes: `approvals: true` and `voice: {...}`. A sub-object
+ * means the capability exists and carries detail, so an empty one is the only
+ * object that counts as absent. Anything unrecognised is false, which is the
+ * fail-closed direction: a client that hides a feature it could have shown is a
+ * smaller failure than one that offers a button that 404s.
+ */
+private fun JsonElement.asCapabilityFlag(): Boolean = when (this) {
+    is JsonPrimitive -> booleanOrNull ?: (isString && content.isNotEmpty() && content != "false")
+    is JsonObject -> isNotEmpty()
+    else -> false
 }
 
 // ------------------------------------------------------------- handshake ----
