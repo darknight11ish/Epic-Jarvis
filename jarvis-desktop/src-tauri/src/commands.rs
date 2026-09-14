@@ -738,6 +738,30 @@ pub async fn decide_approval(
         return Err("that approval has no id to answer".to_string());
     }
 
+    // Rule 4 - "block acting when the event stream is stale" - was enforced
+    // in the webview and nowhere else: `syncApprovalButtons` in main.js,
+    // the same guard in widget.js, and `jarvis-link.js`. This command is the
+    // thing that actually sends the decision, and it posted unconditionally.
+    // A disabled button is a courtesy, not a gate: any window holding the
+    // `approvals` capability reaches this directly, and a page that has not
+    // re-read its link state reaches it by accident.
+    //
+    // Stale means the queue could not be confirmed live, and answering a
+    // queue you cannot confirm is how one action gets decided twice. The
+    // server's 409 catches the second decision, but that is a backstop for a
+    // race, not a licence to send a decision we already know is unfounded.
+    //
+    // Found by the jarvis-client branch, which had the same shape on its own
+    // side: its `decisionBlocker` was consulted by `decide()` and by nothing
+    // else, so `revert` went out ungated. See docs/CROSS-CLIENT-CONTRACT.md.
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "the event stream is stale, so the approval queue cannot be confirmed live - \
+             nothing can be answered until it reconnects"
+                .to_string(),
+        );
+    }
+
     let endpoint = if approved { "approve" } else { "deny" };
     let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
         .post(format!("{}/api/{endpoint}", jarvis_base(&app)))

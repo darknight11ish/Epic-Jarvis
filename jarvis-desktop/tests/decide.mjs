@@ -140,6 +140,28 @@ await check("CONTROL: the widget's buttons do work", async () => {
   assert.equal(sent[0].approved, true);
 });
 
+/* ── The gate that is not in the webview ─────────────────────────────────── */
+
+// Every check above drives the buttons, and buttons are a courtesy. The Rust
+// command is what actually posts the decision, and it is reachable from any
+// window holding the `approvals` capability without going through a button at
+// all. The jarvis-client branch found the same shape on its own side — a
+// staleness gate consulted by one caller out of seven — and raised it in
+// docs/CROSS-CLIENT-CONTRACT.md. This is a source assertion because the Rust
+// cannot be linked here: no MSVC linker, no GTK for the host target.
+await check("the Rust command refuses a stale queue too, not just the buttons", async () => {
+  const src = await (await import("node:fs/promises")).readFile(
+    new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  const fn = src.slice(src.indexOf("pub async fn decide_approval"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /StreamState>\(\)\.link\(\)\.stale/,
+    "decide_approval posts without consulting the link state");
+  const gate = body.indexOf(".stale");
+  const post = body.indexOf(".post(");
+  assert.ok(gate > 0 && gate < post,
+    "the staleness check must come before the request, not after it");
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\none action, one decision");
