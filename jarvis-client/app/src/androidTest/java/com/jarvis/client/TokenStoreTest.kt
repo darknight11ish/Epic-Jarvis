@@ -119,4 +119,25 @@ class TokenStoreTest {
         assertEquals("", store.token())
         assertFalse("the unreadable blob was left in place", store.hasToken())
     }
+
+    /**
+     * The same outcome by the other route, so the two are not one accident.
+     *
+     * The blob above is 22 bytes — too short to hold a 12-byte IV and a
+     * 16-byte tag — so it is refused structurally, before the Keystore is
+     * touched. This one is long enough to reach the cipher and fail its tag
+     * check there. Both mean "no key will ever open this", and both must drop
+     * the blob; only the first is decidable without the Keystore, and the
+     * guard that decides it was written a constant too loose, which is what
+     * sent a permanently-dead blob down the transient path.
+     */
+    @Test
+    fun aLongEnoughButUndecryptableBlobIsAlsoDropped() {
+        val garbage = ByteArray(48) { (it * 7 + 3).toByte() }
+        val blob = android.util.Base64.encodeToString(garbage, android.util.Base64.NO_WRAP)
+        prefs().edit().putString("token_blob", blob).commit()
+        assertTrue(store.hasToken())
+        assertEquals("", store.token())
+        assertFalse("a blob that failed its tag check was left in place", store.hasToken())
+    }
 }

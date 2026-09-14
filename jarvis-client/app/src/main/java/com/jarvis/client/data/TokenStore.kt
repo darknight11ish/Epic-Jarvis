@@ -131,7 +131,21 @@ class TokenStore(context: Context) {
 
     private fun decrypt(blob: String): String {
         val packed = Base64.decode(blob, Base64.NO_WRAP)
-        require(packed.size > IV_BYTES) { "ciphertext too short" }
+        // IV + at least the GCM tag. `> IV_BYTES` was one constant too loose:
+        // it let a 13-byte blob through and handed the cipher a one-byte
+        // "ciphertext", so a blob that can never be opened by ANY key failed
+        // inside AndroidKeyStore instead of here.
+        //
+        // That distinction is the whole point. Where it fails decides whether
+        // the token is kept or dropped: the exception AndroidKeyStore raises
+        // for a too-short GCM input is provider-specific, and at least one of
+        // the candidates is also what an unavailable key throws - so treating
+        // it as permanent would reopen the bug where a reboot, before the
+        // first unlock, silently unpaired the phone. Structural validity is
+        // decidable here, without the Keystore and without guessing, and
+        // `require` throws IllegalArgumentException, which is already on the
+        // permanent list.
+        require(packed.size >= IV_BYTES + TAG_BITS / 8) { "ciphertext too short" }
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(
             Cipher.DECRYPT_MODE,
