@@ -1926,7 +1926,14 @@
    "flicker_harmonic": 2.3,
    "why_these_numbers": "Three opposing transitions per second is the standard threshold. 0.10 relative luminance is the swing below which a transition is not counted. flicker's implementation adds a harmonic at 2.3x its stated rate, so the stated rate must stay below the limit divided by 2.3.",
    "scope": "per surface",
-   "scope_why": "The governor keeps one window per SURFACE (and one for the UI swatches). A single page-wide window, fed by every surface in turn, saw twenty faces with twenty clocks as one face flashing between twenty colours, spent its budget on those cross-surface transitions and then held one face's colour on another. Found 14 Sep by the specimen rig; on the live grid it was the same fault with less contrast. A client that draws several reactors (a picker) must give each its own governor; a client that draws one needs one."
+   "scope_why": "The governor keeps one window per SURFACE (and one for the UI swatches). A single page-wide window, fed by every surface in turn, saw twenty faces with twenty clocks as one face flashing between twenty colours, spent its budget on those cross-surface transitions and then held one face's colour on another. Found 14 Sep by the specimen rig; on the live grid it was the same fault with less contrast. A client that draws several reactors (a picker) must give each its own governor; a client that draws one needs one.",
+   "enforced_in": {
+    "randomiser": "will not generate parameters that break these limits (rate_hz clamped to flicker_rate_hz_max at generation)",
+    "resolve": "_resolveRaw() clamps rate_hz to flicker_rate_hz_max and strobe period_s to 2/max_transitions_per_s AT THE POINT OF USE - so the limit holds for a hand-written binding, a future randomiser, or a spec that is missing the key",
+    "governor": "lumaGovernor() holds the last on-screen colour when a fourth opposing transition would land inside one second, per surface",
+    "build_check": "replays every pattern at both parameter extremes"
+   },
+   "found_14_sep": "The Android port checked shell.html against this file and found the third place was not enforcing. _resolveRaw() carried a SECOND copy of every pattern default as inline literals (`q.rate_hz || 7`), eleven of twenty had drifted from the spec, and `||` treats an explicit 0 as absent - so a binding carrying `rate_hz: 0` resolved to 7Hz, and 7 x the 2.3 harmonic is 16.1Hz, inside the photosensitive band this limit exists to exclude. Unreachable in normal use (the spec's params merge first) and the governor caught it downstream, so it was never an exposure - but two of the three places agreed and the third did not. Fixed by deleting the duplicated defaults entirely, reading every number through pnum() with `??`, and clamping the two safety-bearing parameters at the point of use. Measured after: rate_hz 0 -> 0 opposing transitions/s, rate_hz 40 -> 1/s, strobe period_s 0 -> 2.67/s, all under the limit of 3. The first version of the strobe clamp floored the period at 1/max_transitions_per_s and still ran at 5.67/s, because a strobe makes TWO transitions per period; the floor is 2/max_transitions_per_s."
   }
  },
  "state_transforms": {
@@ -2155,8 +2162,10 @@
     "coreplate never white",
     "spectrum bar cap",
     "iris catchlight",
-    "flash governor per surface (bug found by the re-render)"
+    "flash governor per surface (bug found by the re-render)",
+    "pattern-default duplication removed from _resolveRaw + flash limits clamped at the point of use (found by the Android port checking shell.html against the spec)"
    ]
   }
- ]
+ ],
+ "patterns_note": "Pattern defaults live HERE and only here. A renderer must read them from this file and must not carry its own copy - shell.html did, and they drifted. hue_sweep is the proof the shape was wrong rather than merely stale: rainbow and sweep share the kind with different span/sat/offset, so no single inline literal can be right for both."
 }

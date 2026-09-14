@@ -99,11 +99,21 @@ object Spec {
     const val STROBE_MAX_S = 2.0f
 
     /**
-     * The strobe pattern's own safety note: "period_s below 0.4 would exceed
-     * the transition budget". Clamped where the period is read, not merely
-     * documented.
+     * The shortest strobe period that stays inside the transition budget.
+     *
+     * `2 / max_transitions_per_s`, which is 0.667s — **not** the 0.4 the
+     * strobe pattern's own `safety` prose gives. A strobe makes TWO opposing
+     * transitions per period, not one, so 0.4s is 5 transitions a second
+     * against a limit of 3. I took 0.4 from that sentence and shipped it; the
+     * spec's `enforced_in.resolve` says `2/max_transitions_per_s` and the
+     * arithmetic agrees with the spec, not with the prose.
+     *
+     * The desktop hit the same factor of two from the other side — its first
+     * clamp used `1/max_transitions_per_s` and still ran at 5.67/s — and only
+     * measuring caught it. Hence the test that counts transitions rather than
+     * asserting this constant.
      */
-    const val STROBE_MIN_PERIOD_S = 0.4f
+    const val STROBE_MIN_PERIOD_S = 2f / FLASH_MAX_TRANSITIONS_PER_S
 
     /**
      * limits.flash.flicker_rate_hz_max and flicker_harmonic.

@@ -201,6 +201,29 @@ class SpecDriftTest {
     }
 
     @Test
+    fun `the strobe floor is the spec's, not the prose's`() {
+        // The strobe pattern's own `safety` string says "period_s below 0.4
+        // would exceed the transition budget". It is wrong by a factor of two
+        // — a strobe makes TWO opposing transitions per period — and I shipped
+        // 0.4 because I read that sentence instead of doing the arithmetic.
+        // limits.flash.enforced_in.resolve names the real floor.
+        val flash = spec.getValue("limits").jsonObject.getValue("flash").jsonObject
+        val max = flash.getValue("max_transitions_per_s").jsonPrimitive.int
+        assertEquals(2f / max, Spec.STROBE_MIN_PERIOD_S, 1e-6f)
+    }
+
+    @Test
+    fun `the spec names where each flash limit is enforced`() {
+        // Added 14 Sep after this client found the third enforcement point was
+        // not enforcing. If the block goes away, so has the guarantee.
+        val flash = spec.getValue("limits").jsonObject.getValue("flash").jsonObject
+        val where = flash.getValue("enforced_in").jsonObject
+        for (key in listOf("randomiser", "resolve", "governor", "build_check")) {
+            assertTrue("enforced_in is missing '$key'", key in where)
+        }
+    }
+
+    @Test
     fun `the resting frame rates match the spec`() {
         val fps = spec.getValue("frame_rate").jsonObject.getValue("state_fps").jsonObject
         for ((id, value) in fps) {

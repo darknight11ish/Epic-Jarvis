@@ -7,6 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import okhttp3.Call
@@ -32,6 +35,15 @@ sealed interface ApiError {
     /** The endpoint is not on this server. Usually means a capability is off. */
     data object NotFound : ApiError
 
+    /**
+     * The route answered, and said the subsystem behind it is not running —
+     * gating switched off, no job runner, no ledger. Distinct from an empty
+     * list on purpose: "there is no approval queue here" and "the approval
+     * queue is empty" are different sentences and only one of them is
+     * reassuring.
+     */
+    data object NotAvailable : ApiError
+
     data class Server(val code: Int, val body: String) : ApiError
     data class Malformed(val detail: String) : ApiError
 }
@@ -53,6 +65,62 @@ inline fun <T> ApiResult<T>.onOk(block: (T) -> Unit): ApiResult<T> {
 inline fun <T, R> ApiResult<T>.map(block: (T) -> R): ApiResult<R> = when (this) {
     is ApiResult.Ok -> ApiResult.Ok(block(value))
     is ApiResult.Failed -> this
+}
+
+/**
+ * Finds the list in the body, without requiring a particular key.
+ *
+ * This was wrong, and wrong in the way that matters most. The doc shows
+ * `/api/pending` as a bare array in one place and wrapped in another, so the
+ * client accepted both and guessed `items` for the wrapper. The server does
+ * neither: reading `jarvis_hud.py`, `/api/pending` answers
+ * `{"available": true, "pending": [...], "history": [...]}`, and four of the
+ * five list routes use a different key each — `pending`, `digest`, `shelf`,
+ * `jobs`. Only `/api/initiative`, which this client does not read as a list,
+ * uses `items`.
+ *
+ * So approvals would have arrived and the phone would have said nothing was
+ * waiting. That is the single worst way to be wrong about this endpoint and it
+ * would have looked exactly like a quiet backend.
+ *
+ * The fix is not a better guess. A bare array still works; otherwise the
+ * preferred keys are tried in order and, failing those, **the first
+ * array-valued property in the object is used**. That cannot be wrong about a
+ * key because it does not require one, and it survives the next route that
+ * picks a fifth name.
+ *
+ * Top-level and internal so a test can reach it. The reason this shipped is
+ * that the guess lived inside a class needing a Context and a socket, so
+ * nothing cheap could ever have contradicted it.
+ */
+internal fun <T> parseListBody(
+    text: String,
+    serializer: KSerializer<T>,
+    unwrap: List<String>,
+): ApiResult<T> {
+    val direct = runCatching { JarvisJson.decodeFromString(serializer, text) }
+    if (direct.isSuccess) return ApiResult.Ok(direct.getOrThrow())
+
+    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+    if (obj != null) {
+        // `available: false` means the subsystem behind the route is not
+        // running — gating switched off, no job runner. That is not an empty
+        // list and must not read as one: "there is no approval queue here" and
+        // "the approval queue is empty" are different sentences, and only one
+        // of them is reassuring.
+        val available = (obj["available"] as? JsonPrimitive)?.booleanOrNull
+        if (available == false) return ApiResult.Failed(ApiError.NotAvailable)
+
+        val candidates = unwrap.asSequence().mapNotNull { obj[it] } +
+            obj.values.asSequence().filterIsInstance<JsonArray>()
+        for (inner in candidates) {
+            val nested = runCatching { JarvisJson.decodeFromJsonElement(serializer, inner) }
+            if (nested.isSuccess) return ApiResult.Ok(nested.getOrThrow())
+        }
+    }
+    return ApiResult.Failed(
+        ApiError.Malformed(direct.exceptionOrNull()?.message ?: "unrecognised response"),
+    )
 }
 
 /**
@@ -108,19 +176,19 @@ class JarvisApi(
         get("/api/status", StatusInfo.serializer())
 
     suspend fun pending(): ApiResult<List<PendingItem>> =
-        get("/api/pending", ListSerializer(PendingItem.serializer()), unwrap = "items")
+        get("/api/pending", ListSerializer(PendingItem.serializer()), PENDING_KEYS)
 
     suspend fun attention(): ApiResult<Attention> =
         get("/api/attention", AttentionResponse.serializer()).map { it.flatten() }
 
     suspend fun digest(): ApiResult<List<DigestItem>> =
-        get("/api/digest", ListSerializer(DigestItem.serializer()), unwrap = "items")
+        get("/api/digest", ListSerializer(DigestItem.serializer()), DIGEST_KEYS)
 
     suspend fun undo(): ApiResult<List<UndoEntry>> =
-        get("/api/undo", ListSerializer(UndoEntry.serializer()), unwrap = "items")
+        get("/api/undo", ListSerializer(UndoEntry.serializer()), UNDO_KEYS)
 
     suspend fun jobs(): ApiResult<List<JobRecord>> =
-        get("/api/jobs", ListSerializer(JobRecord.serializer()), unwrap = "items")
+        get("/api/jobs", ListSerializer(JobRecord.serializer()), JOB_KEYS)
 
     // ----------------------------------------------------------- writes ----
 
@@ -257,7 +325,7 @@ class JarvisApi(
     private suspend fun <T> get(
         path: String,
         serializer: KSerializer<T>,
-        unwrap: String? = null,
+        unwrap: List<String> = emptyList(),
     ): ApiResult<T> = withContext(Dispatchers.IO) {
         val target = url(path) ?: return@withContext ApiResult.Failed(
             ApiError.Unreachable("No desktop address set"),
@@ -276,29 +344,11 @@ class JarvisApi(
             )
     }
 
-    /**
-     * Accepts either a bare array or an object carrying it under [unwrap].
-     * The doc shows `/api/pending` both ways in different places, and a client
-     * that guesses wrong reports "no approvals" — the most dangerous possible
-     * way to be wrong about this particular endpoint.
-     */
-    private fun <T> parse(text: String, serializer: KSerializer<T>, unwrap: String?): ApiResult<T> {
-        val direct = runCatching { JarvisJson.decodeFromString(serializer, text) }
-        if (direct.isSuccess) return ApiResult.Ok(direct.getOrThrow())
-        if (unwrap != null) {
-            val nested = runCatching {
-                val obj = JarvisJson.parseToJsonElement(text)
-                val inner = (obj as? kotlinx.serialization.json.JsonObject)?.get(unwrap)
-                    ?: error("no '$unwrap' key")
-                JarvisJson.decodeFromJsonElement(serializer, inner)
-            }
-            if (nested.isSuccess) return ApiResult.Ok(nested.getOrThrow())
-        }
-        Log.w(TAG, "unparseable body: ${text.take(200)}")
-        return ApiResult.Failed(
-            ApiError.Malformed(direct.exceptionOrNull()?.message ?: "unrecognised response"),
-        )
-    }
+    private fun <T> parse(
+        text: String,
+        serializer: KSerializer<T>,
+        unwrap: List<String>,
+    ): ApiResult<T> = parseListBody(text, serializer, unwrap)
 
     private fun errorFor(resp: Response): ApiError = when (resp.code) {
         401, 403 -> ApiError.BadToken
@@ -308,6 +358,17 @@ class JarvisApi(
 
     companion object {
         private const val TAG = "JarvisApi"
+
+        /**
+         * The keys each list route actually uses, read from `jarvis_hud.py`
+         * rather than from the prose. Tried in order; if none is present the
+         * parser falls back to the first array in the object, so a route that
+         * renames its key degrades to working rather than to empty.
+         */
+        val PENDING_KEYS = listOf("pending", "items")
+        val DIGEST_KEYS = listOf("digest", "items", "entries")
+        val UNDO_KEYS = listOf("shelf", "undo", "items")
+        val JOB_KEYS = listOf("jobs", "items")
 
         const val TOKEN_HEADER = "X-Jarvis-Token"
         const val CLIENT_HEADER = "X-Jarvis-Client"

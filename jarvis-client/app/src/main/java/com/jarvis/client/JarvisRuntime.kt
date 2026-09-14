@@ -232,6 +232,8 @@ object JarvisRuntime {
         ApiError.NotFound ->
             "Reached something at that address, but it is not a Jarvis server."
         ApiError.AlreadyHandled -> "Already handled elsewhere."
+        ApiError.NotAvailable ->
+            "That part of Jarvis is not running on the desktop right now."
         is ApiError.Unreachable ->
             "Cannot reach the desktop: ${e.detail}. Check Tailscale is up on both ends."
         is ApiError.Server -> "The desktop answered ${e.code}."

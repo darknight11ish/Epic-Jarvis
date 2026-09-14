@@ -126,6 +126,34 @@ class FacePatternTest {
     }
 
     @Test
+    fun `a strobe cannot be bound faster than the transition budget`() {
+        // Measured, not asserted against the constant — which is the whole
+        // lesson. The floor shipped at 0.4s because that is what the strobe
+        // pattern's `safety` prose says, and 0.4s is FIVE opposing transitions
+        // a second against a limit of three: a strobe makes two per period,
+        // not one. The desktop hit the same factor of two from the other side.
+        // A test that counts them cannot be fooled by either sentence.
+        val wild = Binding(Pattern.STROBE, params = Params(periodS = 0f))
+        var dir = 0
+        var transitions = 0
+        var prev = relLuma(resolveRaw(wild, 0f, 0f).a)
+        for (i in 1..2400) {
+            val t = i / 600f
+            val y = relLuma(resolveRaw(wild, t, 0f).a)
+            val d = y - prev
+            if (abs(d) >= Spec.FLASH_MIN_LUMA_DELTA) {
+                val nd = if (d > 0) 1 else -1
+                if (nd != dir) { transitions++; dir = nd }
+                prev = y
+            }
+        }
+        assertTrue(
+            "$transitions opposing transitions in 4s exceeds the budget",
+            transitions <= Spec.FLASH_MAX_TRANSITIONS_PER_S * 4,
+        )
+    }
+
+    @Test
     fun `flicker cannot be bound above the photosensitivity cap`() {
         val wild = Binding(Pattern.FLICKER, params = Params(rateHz = 40f))
         // Count opposing luminance transitions over four seconds. The cap exists
