@@ -84,10 +84,17 @@ inline fun <T, R> ApiResult<T>.map(block: (T) -> R): ApiResult<R> = when (this) 
  * would have looked exactly like a quiet backend.
  *
  * The fix is not a better guess. A bare array still works; otherwise the
- * preferred keys are tried in order and, failing those, **the first
- * array-valued property in the object is used**. That cannot be wrong about a
- * key because it does not require one, and it survives the next route that
- * picks a fifth name.
+ * preferred keys are tried in order and, failing those, the object's single
+ * array-valued property is used — **only when there is exactly one**.
+ *
+ * That last clause is load-bearing and was missing. `/api/pending` answers
+ * `{"available", "pending", "history"}`, and a server that omits an empty
+ * `pending` leaves `history` as the first array the scan meets. It decodes
+ * cleanly, because `PendingItem` needs only an `id`, so the phone would show
+ * items *already decided* as waiting for a decision, and approving one would
+ * post a verdict on a request closed days ago. That is worse than the bug this
+ * function was written to fix: the original produced an empty list, which is
+ * visibly wrong; this produced a full and plausible one.
  *
  * Top-level and internal so a test can reach it. The reason this shipped is
  * that the guess lived inside a class needing a Context and a socket, so
@@ -98,23 +105,40 @@ internal fun <T> parseListBody(
     serializer: KSerializer<T>,
     unwrap: List<String>,
 ): ApiResult<T> {
+    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+
+    // Checked BEFORE the direct decode, not after.
+    //
+    // `available: false` means the subsystem behind the route is not running —
+    // gating switched off, no job runner. That is not an empty list and must
+    // not read as one: "there is no approval queue here" and "the approval
+    // queue is empty" are different sentences, and only one is reassuring.
+    //
+    // It used to be checked only if the direct decode had already failed. Every
+    // non-list model defaults every field, so the direct decode never fails for
+    // them and the check was dead code: `/api/attention` answering
+    // `{"available": false}` decoded to an all-zero budget and the UI read
+    // "0 of 0 spoken interruptions left today" — the one thing ApiModels says
+    // it must never say by accident.
+    if ((obj?.get("available") as? JsonPrimitive)?.booleanOrNull == false) {
+        return ApiResult.Failed(ApiError.NotAvailable)
+    }
+
     val direct = runCatching { JarvisJson.decodeFromString(serializer, text) }
     if (direct.isSuccess) return ApiResult.Ok(direct.getOrThrow())
 
-    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
     if (obj != null) {
-        // `available: false` means the subsystem behind the route is not
-        // running — gating switched off, no job runner. That is not an empty
-        // list and must not read as one: "there is no approval queue here" and
-        // "the approval queue is empty" are different sentences, and only one
-        // of them is reassuring.
-        val available = (obj["available"] as? JsonPrimitive)?.booleanOrNull
-        if (available == false) return ApiResult.Failed(ApiError.NotAvailable)
-
-        val candidates = unwrap.asSequence().mapNotNull { obj[it] } +
-            obj.values.asSequence().filterIsInstance<JsonArray>()
-        for (inner in candidates) {
-            val nested = runCatching { JarvisJson.decodeFromJsonElement(serializer, inner) }
+        for (key in unwrap) {
+            val named = obj[key] ?: continue
+            val nested = runCatching { JarvisJson.decodeFromJsonElement(serializer, named) }
+            if (nested.isSuccess) return ApiResult.Ok(nested.getOrThrow())
+        }
+        // The positional fallback, and only when it cannot be ambiguous. With
+        // two arrays present there is no principled way to choose, and choosing
+        // wrong here means showing the wrong list as if it were the right one.
+        val arrays = obj.values.filterIsInstance<JsonArray>()
+        if (arrays.size == 1) {
+            val nested = runCatching { JarvisJson.decodeFromJsonElement(serializer, arrays[0]) }
             if (nested.isSuccess) return ApiResult.Ok(nested.getOrThrow())
         }
     }
@@ -248,22 +272,18 @@ class JarvisApi(
             )
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
-            runCatching { shortCall.newCall(req).execute() }
-                .fold(
-                    onSuccess = { resp ->
-                        resp.use {
-                            when {
-                                it.isSuccessful -> ApiResult.Ok(Unit)
-                                // Routine whenever the desktop and the phone are
-                                // both open, so it is a named outcome rather than
-                                // a generic failure the UI would render as red.
-                                it.code == 409 -> ApiResult.Failed(ApiError.AlreadyHandled)
-                                else -> ApiResult.Failed(errorFor(it))
-                            }
-                        }
-                    },
-                    onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
-                )
+            runCatching {
+                shortCall.newCall(req).execute().use {
+                    when {
+                        it.isSuccessful -> ApiResult.Ok(Unit)
+                        // Routine whenever the desktop and the phone are
+                        // both open, so it is a named outcome rather than
+                        // a generic failure the UI would render as red.
+                        it.code == 409 -> ApiResult.Failed(ApiError.AlreadyHandled)
+                        else -> ApiResult.Failed(errorFor(it))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
         }
 
     /**
@@ -285,24 +305,20 @@ class JarvisApi(
             ApiError.Unreachable("No desktop address set"),
         )
         val req = Request.Builder().url(target).get().authed().build()
-        runCatching { shortCall.newCall(req).execute() }
-            .fold(
-                onSuccess = { resp ->
-                    resp.use {
-                        if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
-                        val text = it.body?.string().orEmpty()
-                        runCatching {
-                            when (val el = JarvisJson.parseToJsonElement(text)) {
-                                is JsonObject -> ApiResult.Ok(el)
-                                // A bare array is still worth showing; wrap it so
-                                // one renderer handles both.
-                                else -> ApiResult.Ok(JsonObject(mapOf("items" to el)))
-                            }
-                        }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
+        runCatching {
+            shortCall.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val text = it.body?.string().orEmpty()
+                runCatching {
+                    when (val el = JarvisJson.parseToJsonElement(text)) {
+                        is JsonObject -> ApiResult.Ok(el)
+                        // A bare array is still worth showing; wrap it so
+                        // one renderer handles both.
+                        else -> ApiResult.Ok(JsonObject(mapOf("items" to el)))
                     }
-                },
-                onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
-            )
+                }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
     }
 
     // ------------------------------------------------------------ voice ----
@@ -339,21 +355,17 @@ class JarvisApi(
         )
         val body = wav.toRequestBody("audio/wav".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
-        runCatching { client.newCall(req).execute() }
-            .fold(
-                onSuccess = { resp ->
-                    resp.use {
-                        if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
-                        val text = it.body?.string().orEmpty()
-                        runCatching { JarvisJson.decodeFromString(Heard.serializer(), text) }
-                            .fold(
-                                { h -> ApiResult.Ok(h) },
-                                { e -> ApiResult.Failed(ApiError.Malformed(e.message ?: "bad verdict")) },
-                            )
-                    }
-                },
-                onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
-            )
+        runCatching {
+            client.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val text = it.body?.string().orEmpty()
+                runCatching { JarvisJson.decodeFromString(Heard.serializer(), text) }
+                    .fold(
+                        { h -> ApiResult.Ok(h) },
+                        { e -> ApiResult.Failed(ApiError.Malformed(e.message ?: "bad verdict")) },
+                    )
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
     }
 
     /**
@@ -372,19 +384,15 @@ class JarvisApi(
         val req = Request.Builder().url(target).post(body).authed()
             .header("Accept", "audio/wav")
             .build()
-        runCatching { client.newCall(req).execute() }
-            .fold(
-                onSuccess = { resp ->
-                    resp.use {
-                        when {
-                            it.code == 503 -> ApiResult.Ok(null)
-                            it.isSuccessful -> ApiResult.Ok(it.body?.bytes())
-                            else -> ApiResult.Failed(errorFor(it))
-                        }
-                    }
-                },
-                onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
-            )
+        runCatching {
+            client.newCall(req).execute().use {
+                when {
+                    it.code == 503 -> ApiResult.Ok(null)
+                    it.isSuccessful -> ApiResult.Ok(it.body?.bytes())
+                    else -> ApiResult.Failed(errorFor(it))
+                }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
     }
 
     /**
@@ -423,17 +431,13 @@ class JarvisApi(
             ApiError.Unreachable("No desktop address set"),
         )
         val req = Request.Builder().url(target).get().authed().build()
-        runCatching { shortCall.newCall(req).execute() }
-            .fold(
-                onSuccess = { resp ->
-                    resp.use {
-                        if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
-                        val text = it.body?.string().orEmpty()
-                        parse(text, serializer, unwrap)
-                    }
-                },
-                onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
-            )
+        runCatching {
+            shortCall.newCall(req).execute().use {
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val text = it.body?.string().orEmpty()
+                parse(text, serializer, unwrap)
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
     }
 
     private fun <T> parse(

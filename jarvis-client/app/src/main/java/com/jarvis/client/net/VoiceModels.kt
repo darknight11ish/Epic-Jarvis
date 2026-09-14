@@ -13,7 +13,17 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class VoiceStatus(
-    /** Present and false only when the module failed to load on the desktop. */
+    /**
+     * Present and false only when the module failed to load on the desktop.
+     *
+     * Defaulting this to `true` looks like it contradicts "the defaults are the
+     * refusing ones" two lines up, and it does not: `jarvis_speech.status()`
+     * **omits this key entirely** when the module is healthy — the real payload
+     * is `{listening, stt, tts, audio_in, gate}` and nothing else. Defaulting
+     * it to false would make `canPushToTalk` false on every good response and
+     * hide the microphone button permanently. The refusal is carried by
+     * `listening.pushToTalk`, which does default to false.
+     */
     val available: Boolean = true,
     val error: String? = null,
     val listening: VoiceListening = VoiceListening(),
@@ -36,11 +46,17 @@ data class VoiceStatus(
     val wakeWordOn: Boolean get() = available && listening.wakeWord
 
     /**
-     * True when the owner was recognised but there is nothing to transcribe
-     * with. Worth saying on the button's own screen rather than only after a
-     * failed utterance.
+     * True when the desktop said it has no engine to transcribe with.
+     *
+     * **Nothing reads this yet** — the sentence it was written for was never
+     * put on the screen. It is kept because the intention is right, and made
+     * evidence-based so that wiring it up later cannot produce a fabricated
+     * claim: `stt.status` is blank unless the desktop actually described an
+     * engine, so a `{}` or an unrecognised payload now reports nothing rather
+     * than "there is no speech-to-text engine installed" about a desktop that
+     * said no such thing.
      */
-    val sttMissing: Boolean get() = available && !stt.available
+    val sttMissing: Boolean get() = available && stt.status.isNotBlank() && !stt.available
 }
 
 /**

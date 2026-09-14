@@ -105,4 +105,74 @@ class ListBodyTest {
             as ApiResult.Ok).value
         assertEquals("a1", items[0].id)
     }
+
+    /**
+     * The exact shape `/api/pending` sends, with an empty list omitted.
+     *
+     * The positional fallback used to take the first array it met, so `history`
+     * was handed back as the pending queue: items already decided, shown as
+     * waiting for a decision, and approving one would post a verdict on a
+     * request closed days ago. It decodes cleanly because PendingItem needs
+     * only an id, so nothing downstream could tell.
+     */
+    @Test
+    fun `history is never mistaken for pending`() {
+        val body = """
+            {"available": true,
+             "history": [{"id": "a1", "title": "Sent the email to Dana"}]}
+        """.trimIndent()
+        val r = parseListBody(body, ListSerializer(PendingItem.serializer()), JarvisApi.PENDING_KEYS)
+        assertTrue(
+            "an object with only a history array must not be read as the pending queue",
+            r is ApiResult.Failed,
+        )
+    }
+
+    /** Two arrays and neither is a known key: there is no principled choice. */
+    @Test
+    fun `an ambiguous object is refused rather than guessed`() {
+        val body = """{"history": [{"id": "a"}], "archive": [{"id": "b"}]}"""
+        val r = parseListBody(body, ListSerializer(PendingItem.serializer()), JarvisApi.PENDING_KEYS)
+        assertTrue(r is ApiResult.Failed)
+    }
+
+    /** One unrecognised array is still unambiguous, so it is still accepted. */
+    @Test
+    fun `a single array under an unknown key is still read`() {
+        val body = """{"available": true, "queue": [{"id": "a1"}]}"""
+        val r = parseListBody(body, ListSerializer(PendingItem.serializer()), JarvisApi.PENDING_KEYS)
+        assertTrue(r is ApiResult.Ok)
+        assertEquals(1, (r as ApiResult.Ok).value.size)
+    }
+
+    /** A named key wins even when other arrays are present. */
+    @Test
+    fun `the named key beats any other array`() {
+        val body = """
+            {"available": true,
+             "history": [{"id": "old"}],
+             "pending": [{"id": "new"}]}
+        """.trimIndent()
+        val r = parseListBody(body, ListSerializer(PendingItem.serializer()), JarvisApi.PENDING_KEYS)
+        assertTrue(r is ApiResult.Ok)
+        assertEquals("new", (r as ApiResult.Ok).value.single().id)
+    }
+
+    /**
+     * `available:false` must be seen even on a route whose model defaults every
+     * field — which is all of them. The check used to run only after the direct
+     * decode failed, and for a fully-defaulted model it never fails, so
+     * `/api/attention` answering `{"available": false}` produced an all-zero
+     * budget and the UI read "0 of 0 spoken interruptions left today".
+     */
+    @Test
+    fun `available false is seen even when the model would decode anyway`() {
+        val r = parseListBody(
+            """{"available": false}""",
+            ListSerializer(PendingItem.serializer()),
+            JarvisApi.PENDING_KEYS,
+        )
+        assertTrue(r is ApiResult.Failed)
+        assertEquals(ApiError.NotAvailable, (r as ApiResult.Failed).error)
+    }
 }

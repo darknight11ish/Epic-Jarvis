@@ -40,12 +40,24 @@ object SseParser {
         var kind = "message"
         var retry: Long? = null
         val data = StringBuilder()
+        // Whether a `data:` field appeared at all, which is not the same as
+        // whether it had content. Per the spec a frame dispatches if it carried
+        // any data field, empty included.
+        var sawData = false
 
         while (true) {
             val line = reader.readLine() ?: return
 
             if (line.isEmpty()) {
-                if (data.isNotEmpty() || retry != null) {
+                // `sawData`, not `data.isNotEmpty()`. A minimal doorbell —
+                //     id: 4471
+                //     event: attention
+                //     data:
+                // — is exactly how this server signals "go and re-read the
+                // budget", and it was dropped whole: no refresh, no `id`
+                // advance, and the keepalive watchdog counted a live frame as
+                // silence.
+                if (sawData || retry != null) {
                     val parsed = runCatching {
                         JarvisJson.parseToJsonElement(data.toString())
                     }.getOrNull()
@@ -53,6 +65,7 @@ object SseParser {
                 }
                 kind = "message"
                 data.setLength(0)
+                sawData = false
                 retry = null
                 continue
             }
@@ -71,7 +84,8 @@ object SseParser {
                 "event" -> kind = value
                 "retry" -> retry = value.toLongOrNull()
                 "data" -> {
-                    if (data.isNotEmpty()) data.append('\n')
+                    if (sawData) data.append('\n')
+                    sawData = true
                     data.append(value)
                 }
             }
