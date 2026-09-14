@@ -1,5 +1,9 @@
 # `/api/appearance` — the one route the face picker needs
 
+> **Written, tested and ready to apply:** `backend/appearance.patch`. This page
+> is the contract; that patch is the implementation of it for `jarvis_hud.py`,
+> with fourteen checks in `backend/test_appearance.py`.
+
 The desktop's Faces window edits which face Jarvis wears and how each of the
 eight states looks. That choice is **data, not drawing code**, which is the
 visual spec's own framing:
