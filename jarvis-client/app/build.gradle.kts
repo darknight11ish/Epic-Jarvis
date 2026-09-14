@@ -155,4 +155,16 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:core-ktx:1.6.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+
+    // A server that answers, for the contract tests. Pinned to the same 4.12.0
+    // as OkHttp itself: MockWebServer 5.x replaced MockResponse's setters with
+    // a builder, so the version is load-bearing, not incidental.
+    //
+    // androidTest rather than a JVM unit test, deliberately. TokenStore needs
+    // the real Keystore and JarvisApi takes it as a constructor argument, so a
+    // JVM test could only reach this code by making the token store injectable
+    // - a production change to suit a test. On the emulator the whole stack is
+    // real, including the network security config, which already permits
+    // cleartext to 127.0.0.1.
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
