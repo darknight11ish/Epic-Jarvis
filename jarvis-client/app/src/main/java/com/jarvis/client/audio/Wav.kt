@@ -1,6 +1,7 @@
 package com.jarvis.client.audio
 
 import java.io.ByteArrayOutputStream
+import kotlin.math.ceil
 
 /**
  * WAV encoding and resampling — the two things the server refuses to do.
@@ -28,16 +29,34 @@ object Wav {
      * the consumer is a voice-print embedder and a speech model rather than a
      * listener. A better kernel would cost more than it buys here.
      *
-     * Decimating without any filter would alias, so when downsampling by more
-     * than 1.5x the signal is first box-averaged over the decimation window.
-     * That is a crude low-pass and it is enough to keep aliased energy out of
-     * the band a voice occupies.
+     * Decimating without any filter would alias, so anything above the target
+     * rate is first box-averaged over the decimation window. That is a crude
+     * low-pass and it is enough to keep aliased energy out of the band a voice
+     * occupies.
+     *
+     * Two things here were wrong by an amount that is easy to miss and does not
+     * look like a bug, because aliasing is not distortion — it is energy folded
+     * back down into the speech band as plausible-sounding signal, and the
+     * symptom is a voice-print score that is quietly a little worse.
+     *
+     * The window was `ratio.toInt()`, which truncates: 44.1 kHz decimates by
+     * 2.756 and got a 2-sample average, a filter about a third of an octave too
+     * wide. And the filter only ran above 1.5x, so 22.05 kHz and 24 kHz — both
+     * genuine downsampling, both aliasing everything above 8 kHz — went through
+     * completely unfiltered. Measured against the real algorithm, with a 10 kHz
+     * tone relative to a 1 kHz tone of the same amplitude: 44.1 kHz went from
+     * 0.64 to 0.37, 22.05 kHz from 0.59 to 0.09, 24 kHz from 0.73 to 0.19. A
+     * 3 kHz tone — inside the band that matters — loses about 4%.
+     *
+     * Rounding up rather than to nearest, because the two errors are not
+     * symmetric: over-filtering costs a little clarity in the top of the voice
+     * band, and under-filtering folds energy in where nothing can remove it.
      */
     fun resample(input: ShortArray, fromRate: Int, toRate: Int = SAMPLE_RATE): ShortArray {
         if (fromRate == toRate || input.isEmpty()) return input
         val ratio = fromRate.toDouble() / toRate
 
-        val src = if (ratio > 1.5) boxFilter(input, ratio.toInt().coerceAtLeast(2)) else input
+        val src = if (ratio > 1.0) boxFilter(input, ceil(ratio).toInt().coerceAtLeast(2)) else input
         val outLen = ((src.size / ratio)).toInt().coerceAtLeast(1)
         val out = ShortArray(outLen)
         for (i in 0 until outLen) {

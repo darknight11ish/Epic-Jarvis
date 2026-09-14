@@ -235,12 +235,16 @@ jobs:
           # test. That is precisely the shape of the hole this whole job exists
           # to close, and leaving it open here would have been the same mistake
           # one level up.
-          xml=$(find app/build -path '*ndroidTest*' -name 'TEST-*.xml' 2>/dev/null)
+          xml=$(find app/build -path '*ndroidTest*' -name 'TEST-*.xml' 2>/dev/null || true)
           if [ -z "$xml" ]; then
             echo "::error::No instrumentation results were written — nothing ran on the device."
             exit 1
           fi
-          total=$(grep -ho 'tests="[0-9]*"' $xml | grep -o '[0-9]*' | paste -sd+ - | bc)
+          # `|| echo 0` because this step runs under -e with pipefail: a report
+          # with no `tests=` attribute is exactly the case being guarded
+          # against, and it must reach the check below rather than kill the
+          # step with grep's exit status.
+          total=$(grep -ho 'tests="[0-9]*"' $xml | grep -o '[0-9]*' | paste -sd+ - | bc || echo 0)
           echo "Tests run on the device: ${total:-0}"
           if [ "${total:-0}" -lt 1 ]; then
             echo "::error::The instrumentation report contains zero tests."

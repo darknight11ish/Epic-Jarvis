@@ -134,4 +134,58 @@ class WavHeaderTest {
         assertEquals(16_000, Wav.rateOf(wav))
         assertArrayEquals(samples, Wav.decode(wav))
     }
+
+    /**
+     * The anti-alias pass, measured rather than assumed.
+     *
+     * Aliasing is the failure this file's opening comment is about: it is not
+     * distortion, it is energy above the target Nyquist folded back down into
+     * the speech band as plausible signal, so the only symptom is a voice-print
+     * score that is quietly a little worse. Nothing catches that by listening
+     * and nothing catches it by reading.
+     *
+     * A 10 kHz tone is well above 16 kHz's 8 kHz ceiling, so it must come back
+     * much quieter than a 1 kHz tone of the same amplitude. The bound differs
+     * by rate for a real reason rather than to fit the numbers: when the ratio
+     * is a whole number the decimation window is exact and a box filter is
+     * simply as good as a box filter gets — 48 kHz lands at 0.51 and 32 kHz at
+     * 0.56 and neither can do better without a real kernel. When it is
+     * fractional the window has to be rounded up, and rounding up filters
+     * harder, so those rates land far lower.
+     *
+     * Those fractional rates are also exactly the ones that were wrong:
+     * truncating the window gave 44.1 kHz a filter a third of an octave too
+     * wide, and a 1.5x threshold meant 22.05 kHz and 24 kHz were not filtered
+     * at all. They returned 0.64, 0.59 and 0.73 before; they return 0.37, 0.09
+     * and 0.19 now.
+     */
+    @Test
+    fun `content above the target nyquist is filtered before decimation`() {
+        fun tone(hz: Double, rate: Int) = ShortArray(rate) {
+            (0.5 * Short.MAX_VALUE * kotlin.math.sin(2 * Math.PI * hz * it / rate)).toInt().toShort()
+        }
+        fun leak(rate: Int): Float {
+            val low = Wav.rms(Wav.resample(tone(1_000.0, rate), rate))
+            val high = Wav.rms(Wav.resample(tone(10_000.0, rate), rate))
+            assertTrue("$rate Hz lost the passband as well: 1 kHz came back at $low", low > 0.25f)
+            return high / low
+        }
+
+        // Whole-number ratios: a box filter's floor.
+        for (rate in intArrayOf(48_000, 32_000)) {
+            val leaked = leak(rate)
+            assertTrue("$rate Hz let 10 kHz through at $leaked of 1 kHz", leaked < 0.62f)
+        }
+
+        // Fractional ratios: the window must round up, so these must be well
+        // under the bound above. Each of these three was over it.
+        for (rate in intArrayOf(44_100, 24_000, 22_050)) {
+            val leaked = leak(rate)
+            assertTrue(
+                "$rate Hz let 10 kHz through at $leaked of 1 kHz — the decimation window " +
+                    "is rounding down, or the filter is not running at this ratio at all",
+                leaked < 0.45f,
+            )
+        }
+    }
 }
