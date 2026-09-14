@@ -16,6 +16,7 @@
 //! Show or hide the widget         Alt+Shift+W
 //! Show the HUD window
 //! Open the Brain
+//! Faces…
 //! ─────────────────────────────
 //! Backend: not supervised                  (status or action)
 //! Reconnect the event stream
@@ -98,6 +99,7 @@ const ID_MUTE: &str = "mute";
 const ID_BACKEND: &str = "backend";
 const ID_SHOW_HUD: &str = "show-hud";
 const ID_SHOW_BRAIN: &str = "show-brain";
+const ID_SHOW_FACES: &str = "show-faces";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
 const ID_RECONNECT: &str = "reconnect";
@@ -194,6 +196,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let show_hud = MenuItem::with_id(app, ID_SHOW_HUD, "Show the HUD window", true, None::<&str>)?;
     let show_brain = MenuItem::with_id(app, ID_SHOW_BRAIN, "Open the Brain", true, None::<&str>)?;
+    let show_faces = MenuItem::with_id(app, ID_SHOW_FACES, "Faces…", true, None::<&str>)?;
     let toggle_spotlight = MenuItem::with_id(
         app,
         ID_TOGGLE_SPOTLIGHT,
@@ -259,6 +262,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &toggle_widget,
             &show_hud,
             &show_brain,
+            &show_faces,
             &PredefinedMenuItem::separator(app)?,
             // The machinery. `backend` and `reconnect` were three groups apart
             // while being the same subject: is the thing on the other end of
@@ -912,6 +916,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             if let Err(err) = windows::show_hud(app) {
                 eprintln!("[jarvis] tray: HUD unavailable: {err}");
                 commands::notify(app, "Jarvis", &format!("HUD unavailable: {err}"));
+            }
+        }
+
+        ID_SHOW_FACES => {
+            if let Err(err) = windows::show_faces(app) {
+                eprintln!("[jarvis] faces unavailable: {err}");
+                commands::notify(app, "Jarvis", &format!("Faces unavailable: {err}"));
             }
         }
 

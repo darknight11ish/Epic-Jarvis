@@ -417,6 +417,50 @@ pub fn show_brain(app: &AppHandle) -> Result<(), String> {
     .map_err(|e| format!("unable to open the Brain: {e}"))
 }
 
+/// Label of the faces window.
+pub const FACES_LABEL: &str = "faces";
+
+/// Opens Faces — every face the spec defines, drawn live, and the bindings
+/// that decide which one Jarvis wears in each state.
+///
+/// Built on demand, and the heaviest window in the app by a distance: twenty
+/// procedural canvases animating at once, several of them integrating a
+/// physics step per frame. Declaring it in `tauri.conf.json` would pay that
+/// cost in every session, including the overwhelming majority that never open
+/// it.
+///
+/// The minimum is wide rather than tall on purpose. The grid is five across
+/// and the editor above it is one row of twelve pattern chips; below about
+/// 900px the chips wrap to three lines and the controls stop reading as one
+/// bar.
+pub fn show_faces(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(FACES_LABEL) {
+        window
+            .show()
+            .map_err(|e| format!("unable to show Faces: {e}"))?;
+        let _ = window.unminimize();
+        return window
+            .set_focus()
+            .map_err(|e| format!("unable to focus Faces: {e}"));
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        FACES_LABEL,
+        tauri::WebviewUrl::App("faces.html".into()),
+    )
+    .title("Jarvis — Faces")
+    .inner_size(1280.0, 900.0)
+    .min_inner_size(900.0, 620.0)
+    .center()
+    .resizable(true)
+    .focused(true)
+    .theme(Some(tauri::Theme::Dark))
+    .build()
+    .map(|_| ())
+    .map_err(|e| format!("unable to open Faces: {e}"))
+}
+
 /// Shows the HUD and brings it forward, whatever state it was in.
 ///
 /// Separate from [`toggle_hud`] because the tray's "Show HUD Window" and its

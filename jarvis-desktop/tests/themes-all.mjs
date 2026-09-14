@@ -20,6 +20,11 @@ const PAGES = [
   ["widget.html", "#widget-shell", 340, 320],
   ["settings.html", "body", 680, 700],
   ["brain.html", "body", 1000, 600],
+  // `faces.html` is deliberately absent. It keeps the reactor kit's own
+  // palette, because every colour on that window is a sample of the thing
+  // being edited and a second palette around the swatches would make the
+  // picker lie about what you are picking. Named here so this file's claim
+  // matches what it actually checks.
 ];
 
 let fails = 0;
@@ -46,5 +51,5 @@ for (const [page, selector, width, height] of PAGES) {
 }
 await browser.close();
 close();
-console.log(fails ? `\n${fails} window(s) ignore the theme` : "\nevery window follows the theme");
+console.log(fails ? `\n${fails} window(s) ignore the theme` : "\nevery themed window follows the theme (faces keeps its own, by design)");
 process.exit(fails ? 1 : 0);
