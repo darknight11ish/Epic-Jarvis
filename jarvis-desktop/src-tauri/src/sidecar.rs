@@ -60,9 +60,22 @@ const BACKEND_KEY: &str = "backend";
 /// shuts the HTTP server down on another thread, so the interesting part is
 /// the GPU handback — an unload of a large model off a busy card, not an
 /// instant operation.
-const SHUTDOWN_GRACE: Duration = Duration::from_secs(8);
+///
+/// This is also, unavoidably, how long quitting can take: the exit path blocks
+/// the Win32 message pump, and Windows ghosts a window at five seconds. The
+/// budget below is `ASK_TIMEOUT + SHUTDOWN_GRACE + REAP_TIMEOUT` ≈ 8 s worst
+/// case, down from ~16 s. Shortening it further would mean quitting while a
+/// model is still resident, which is the thing the graceful path exists to
+/// prevent — a brief ghosted frame on the way out is the better trade.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(4);
+/// How long to wait for `/api/shutdown` itself to answer. It returns as soon as
+/// the GPU is released, so it is not the slow part; the grace above is.
+const ASK_TIMEOUT: Duration = Duration::from_secs(2);
 /// How often the child is checked while it is stopping.
 const REAP_POLL: Duration = Duration::from_millis(100);
+/// How long to wait for a killed child to be reaped before giving up on it.
+/// Bounded because this runs on the exit path, where blocking is visible.
+const REAP_TIMEOUT: Duration = Duration::from_secs(2);
 /// How long to wait for a freshly started backend to answer on its port before
 /// saying so. Not a failure if it expires — Python plus a model registry is
 /// slow to boot, and the event stream will connect whenever it is ready.
@@ -122,12 +135,25 @@ impl BackendConfig {
 #[derive(Default)]
 pub struct SupervisorState {
     owned: Mutex<Option<Owned>>,
+    /// Serialises start and stop against each other.
+    ///
+    /// Without it, `ensure_backend`'s liveness check and its port probe are
+    /// separated by an `.await`, so the setup task and a tray click could both
+    /// decide to start. The second `start()` overwrote the first's `Owned`, and
+    /// dropping that closed a `KILL_ON_JOB_CLOSE` job — killing the backend
+    /// that had just won the port, leaving the loser wedged. Two Jarvises, then
+    /// none.
+    gate: tokio::sync::Mutex<()>,
 }
 
 struct Owned {
     child: Child,
     tree: ProcessTree,
     started: Instant,
+    /// The process we launched has exited. The *tree* may still be serving:
+    /// `python.exe` on Windows is often an App Execution Alias or a launcher
+    /// that re-execs, so the real server is frequently a grandchild.
+    child_exited: bool,
 }
 
 impl SupervisorState {
@@ -137,18 +163,32 @@ impl SupervisorState {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// The pid of the owned child, if there is one still running.
-    fn pid(&self) -> Option<u32> {
+    /// Whether this process owns a backend tree at all.
+    ///
+    /// Ownership outlives the launched process. It ends when the tree is
+    /// stopped, and at no other time.
+    fn owns(&self) -> bool {
+        self.lock().is_some()
+    }
+
+    /// The launched process's pid and whether it has exited.
+    ///
+    /// This used to be a `pid()` that *forgot* a child whose `try_wait` had
+    /// reported an exit — and forgetting dropped `Owned`, which dropped
+    /// `ProcessTree`, which closed a `KILL_ON_JOB_CLOSE` job and killed
+    /// everything still inside it. It was called from `supervisor_status`, so
+    /// the tray's backend row called it on every link change: with any launcher
+    /// that hands off to a grandchild, the next `activity` frame killed a
+    /// working backend mid-turn, and nothing logged it.
+    ///
+    /// It now reaps the zombie and records the fact. It never drops the tree.
+    fn snapshot(&self) -> Option<(u32, bool)> {
         let mut slot = self.lock();
         let owned = slot.as_mut()?;
-        match owned.child.try_wait() {
-            Ok(None) => Some(owned.child.id()),
-            // It exited on its own. Forget it, so a later start is allowed.
-            _ => {
-                *slot = None;
-                None
-            }
+        if !owned.child_exited && matches!(owned.child.try_wait(), Ok(Some(_))) {
+            owned.child_exited = true;
         }
+        Some((owned.child.id(), owned.child_exited))
     }
 }
 
@@ -162,8 +202,11 @@ pub struct SupervisorStatus {
     pub configured: bool,
     /// Whether this process started the backend that is running.
     pub owned: bool,
-    /// The owned child's pid, when there is one.
+    /// The launched process's pid, when this process started one.
     pub pid: Option<u32>,
+    /// The launched process has exited but its tree is still ours to stop —
+    /// normal for a Python launcher that re-execs.
+    pub launcher_exited: bool,
     /// Seconds since this process started it.
     pub uptime_seconds: Option<u64>,
     /// What is configured, echoed back so a read-only screen can show it.
@@ -199,7 +242,7 @@ fn read_backend(app: &AppHandle) -> BackendConfig {
 #[tauri::command]
 pub fn supervisor_status(app: AppHandle) -> SupervisorStatus {
     let state = app.state::<SupervisorState>();
-    let pid = state.pid();
+    let snapshot = state.snapshot();
     let uptime = state
         .lock()
         .as_ref()
@@ -208,9 +251,10 @@ pub fn supervisor_status(app: AppHandle) -> SupervisorStatus {
     SupervisorStatus {
         supervise: read_supervise(&app),
         configured: backend.configured(),
-        owned: pid.is_some(),
-        pid,
-        uptime_seconds: uptime.filter(|_| pid.is_some()),
+        owned: snapshot.is_some(),
+        pid: snapshot.map(|(pid, _)| pid),
+        launcher_exited: snapshot.map(|(_, exited)| exited).unwrap_or(false),
+        uptime_seconds: uptime,
         backend,
         base: commands::jarvis_base(&app),
     }
@@ -307,8 +351,22 @@ pub async fn ensure_backend(app: &AppHandle) -> Result<String, String> {
     if !read_supervise(app) {
         return Ok("Supervision is off; Jarvis Desktop will not start a backend.".to_string());
     }
-    if let Some(pid) = app.state::<SupervisorState>().pid() {
-        return Ok(format!("Already supervising the backend (pid {pid})."));
+
+    // One start or stop at a time. Held across every await below, so the
+    // liveness check and the port probe cannot be overtaken between them.
+    let state = app.state::<SupervisorState>();
+    let _gate = state.gate.lock().await;
+
+    if let Some((pid, exited)) = state.snapshot() {
+        return Ok(if exited {
+            format!(
+                "Already supervising the backend. The process we launched (pid {pid}) has \
+                 exited — normal for a launcher that re-execs — and its tree is still ours \
+                 to stop."
+            )
+        } else {
+            format!("Already supervising the backend (pid {pid}).")
+        });
     }
 
     let base = commands::jarvis_base(app);
@@ -381,6 +439,7 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
         child,
         tree,
         started: Instant::now(),
+        child_exited: false,
     });
     println!("[jarvis] backend started (pid {pid})");
     Ok(pid)
@@ -405,7 +464,10 @@ pub async fn start_backend(app: AppHandle) -> Result<String, String> {
 /// Safe to call when nothing is owned — that is the common case, because a
 /// backend the user started themselves is attached to, not adopted.
 pub async fn stop_owned(app: &AppHandle, reason: &str) -> String {
-    let Some(pid) = app.state::<SupervisorState>().pid() else {
+    let state = app.state::<SupervisorState>();
+    let _gate = state.gate.lock().await;
+
+    let Some((pid, _)) = state.snapshot() else {
         return "Nothing to stop: this app did not start the backend.".to_string();
     };
     println!("[jarvis] stopping the backend (pid {pid}): {reason}");
@@ -438,17 +500,34 @@ pub async fn stop_owned(app: &AppHandle, reason: &str) -> String {
     // 3. Kill the tree if asking did not work. Also on the clean path: the
     //    handle is dropped, and on Windows closing the last handle to a
     //    KILL_ON_JOB_CLOSE job takes anything still inside it with it.
-    let state = app.state::<SupervisorState>();
-    let mut slot = state.lock();
-    let Some(mut owned) = slot.take() else {
+    //
+    //    The `Owned` is taken out from under the lock and the guard released
+    //    BEFORE anything blocking happens. `Child::wait()` has no timeout, and
+    //    `supervisor_status` — a synchronous command the tray calls on the main
+    //    thread — takes this same lock: a kill that did not take would
+    //    otherwise park a tokio worker inside `wait()` holding it, and hard-lock
+    //    the UI with no window left to say why.
+    let taken = {
+        let mut slot = state.lock();
+        slot.take()
+    };
+    let Some(mut owned) = taken else {
         return summarise(asked, exited, false);
     };
     let killed = if exited {
         false
     } else {
         owned.tree.kill();
-        // Reap, so the child does not linger as a zombie on Unix.
-        let _ = owned.child.wait();
+        // Reap, so the child does not linger as a zombie on Unix. Bounded:
+        // `TerminateJobObject` is not guaranteed to land instantly, and this
+        // runs on the exit path.
+        let deadline = Instant::now() + REAP_TIMEOUT;
+        while Instant::now() < deadline {
+            match owned.child.try_wait() {
+                Ok(Some(_)) | Err(_) => break,
+                Ok(None) => tokio::time::sleep(REAP_POLL).await,
+            }
+        }
         true
     };
     drop(owned);
@@ -478,7 +557,7 @@ async fn request_shutdown(app: &AppHandle) -> Result<(), String> {
     let base = commands::jarvis_base(app);
     let client = reqwest::Client::builder()
         .connect_timeout(PROBE_TIMEOUT)
-        .timeout(SHUTDOWN_GRACE)
+        .timeout(ASK_TIMEOUT)
         .no_proxy()
         .build()
         .map_err(|e| e.to_string())?;
@@ -512,7 +591,7 @@ pub async fn stop_backend(app: AppHandle) -> Result<String, String> {
 /// Blocking the main thread here is deliberate: this is the last thing that
 /// happens, and the alternative is exiting while the model is still on the GPU.
 pub fn stop_on_exit(app: &AppHandle) {
-    if app.state::<SupervisorState>().pid().is_none() {
+    if !app.state::<SupervisorState>().owns() {
         return;
     }
     let handle = app.clone();

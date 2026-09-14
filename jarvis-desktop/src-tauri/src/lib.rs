@@ -298,7 +298,17 @@ fn spawn_telemetry_loop(app: AppHandle) {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
 
             // A drag is persisted even while the widget is collapsed or hidden.
-            app.state::<windows::WidgetState>().flush(&app);
+            // `flush` writes a file, so it goes to the blocking pool too.
+            {
+                let handle = app.clone();
+                if let Err(err) = tokio::task::spawn_blocking(move || {
+                    handle.state::<windows::WidgetState>().flush(&handle);
+                })
+                .await
+                {
+                    eprintln!("[jarvis] widget preference flush failed: {err}");
+                }
+            }
 
             if !windows::widget_is_visible(&app) {
                 continue;
@@ -310,7 +320,31 @@ fn spawn_telemetry_loop(app: AppHandle) {
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .clone();
-            let sample = commands::sample_telemetry(&mut system, lane);
+
+            // `sample_telemetry` spawns `nvidia-smi` and blocks on it, which on
+            // a busy GPU is routinely hundreds of milliseconds and sometimes
+            // seconds. Doing that on a tokio worker every three seconds steals
+            // capacity from the SSE loop and every async command, so it goes to
+            // the blocking pool. `System` moves in and back out again because
+            // it is not `Sync`.
+            let sampled = tokio::task::spawn_blocking(move || {
+                let value = commands::sample_telemetry(&mut system, lane);
+                (system, value)
+            })
+            .await;
+            let sample = match sampled {
+                Ok((returned, sample)) => {
+                    system = returned;
+                    sample
+                }
+                Err(err) => {
+                    // The blocking task panicked or was cancelled; `system`
+                    // went with it, so start a fresh one for the next tick.
+                    eprintln!("[jarvis] telemetry sampling failed: {err}");
+                    system = sysinfo::System::new_all();
+                    continue;
+                }
+            };
             if let Err(err) = app.emit_to(WIDGET_LABEL, events::DESKTOP_TELEMETRY, sample) {
                 eprintln!("[jarvis] unable to push telemetry: {err}");
             }
@@ -344,10 +378,25 @@ const HUD_BOOTSTRAP: &str = include_str!("hud_bootstrap.js");
 /// label; the window moved into Rust only so it could carry the script, and the
 /// capability file still addresses it by the same label.
 fn build_hud_window(app: &AppHandle) -> Result<(), String> {
-    // A second call must not stand up a second HUD — `setup` runs once, but
-    // this is also the natural place for a future "reopen the HUD" path.
+    // A window with this label already exists. `setup` runs once, so in normal
+    // operation this cannot happen — but Tauri creates every window declared in
+    // `tauri.conf.json` *before* `setup` runs, so re-adding a `hud` entry there
+    // would silently win this race and the bootstrap below would never inject:
+    // no API base, no token, no EventSource shim, and the page left to open its
+    // own stream with the token in the URL.
+    //
+    // That is exactly what used to happen, because a stale generated copy of
+    // the config declared one. The config now lives in one tracked place, and
+    // this says so out loud rather than returning quietly if it ever recurs.
     if app.get_webview_window(HUD_LABEL).is_some() {
-        return Ok(());
+        let message = format!(
+            "a window labelled `{HUD_LABEL}` already exists, so the HUD bootstrap \
+             was not injected. Remove the `{HUD_LABEL}` entry from tauri.conf.json \
+             — this window is built in Rust because it needs an initialisation script."
+        );
+        eprintln!("[jarvis] {message}");
+        commands::notify(app, "Jarvis — HUD misconfigured", &message);
+        return Err(message);
     }
 
     let base = commands::jarvis_base(app);
@@ -424,9 +473,19 @@ pub fn run() {
         .manage(stream::StreamState::default())
         .manage(sidecar::SupervisorState::default())
         .manage(tray::TrayHandles::default())
+        .manage(tray::Painted::default())
         .manage(windows::WidgetState::default())
         .manage(RouteState::default())
         .invoke_handler(tauri::generate_handler![
+            // Eight commands used to be registered here with no caller in any
+            // window: capture_screen, is_quickbar_pinned, notify_user,
+            // quit_app, read_clipboard, show_quickbar, toggle_hud and
+            // toggle_widget. The tray and the hotkeys call the `windows::`
+            // functions directly, not these wrappers. Registered IPC is
+            // reachable from every page — `quit_app` in particular let any
+            // script terminate the app — so unused surface is cost without
+            // benefit. The command bodies remain in commands.rs for the paths
+            // that will want them; they are simply not exposed until then.
             commands::stream_chat,
             commands::cancel_chat,
             commands::decide_approval,
@@ -442,24 +501,16 @@ pub fn run() {
             commands::set_api_settings,
             commands::resize_desktop_widget,
             commands::set_widget_always_on_top,
-            commands::toggle_widget,
             commands::save_widget_position,
             commands::get_widget_prefs,
             commands::prefill_quickbar,
             commands::capture_note,
-            commands::capture_screen,
             commands::check_server_health,
             commands::hide_quickbar,
-            commands::toggle_hud,
-            commands::show_quickbar,
             commands::resize_quickbar,
             commands::set_quickbar_pinned,
-            commands::is_quickbar_pinned,
             commands::write_clipboard,
-            commands::read_clipboard,
-            commands::notify_user,
             commands::open_external_url,
-            commands::quit_app,
         ]);
 
     // The global-shortcut plugin owns a single handler for every accelerator we

@@ -43,6 +43,9 @@ use crate::sse::{Event, Frame};
 const BASE_BACKOFF: Duration = Duration::from_millis(3_000);
 /// Backoff ceiling. A backend that is simply not running must not be hammered.
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
+/// A connection that lasted at least this long did its job, so the next
+/// reconnect starts from the floor again.
+const PRODUCTIVE_CONNECTION: Duration = Duration::from_secs(30);
 /// How long a silent socket is given before it is treated as dead.
 ///
 /// JARVIS-API §3: keepalives arrive every ~20 s and "their absence for much
@@ -58,6 +61,9 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(10);
 /// on change, so this is nearly always idle; it exists so that a burst cannot
 /// turn into a write per event.
 const RESUME_SAVE_INTERVAL: Duration = Duration::from_secs(5);
+/// Largest line the stream may send before it is treated as broken. The bus
+/// publishes small JSON objects; a megabyte without a newline is a fault.
+const MAX_LINE_BYTES: usize = 1024 * 1024;
 /// Store key holding the resume point across restarts.
 const RESUME_KEY: &str = "events.last_id";
 
@@ -211,12 +217,21 @@ fn wake() -> &'static Arc<tokio::sync::Notify> {
 }
 
 /// Drops whatever connection is open and reconnects without serving out the
-/// backoff. `notify_waiters` is right here and `notify_one` is not: a kick
-/// while nothing is waiting means "you are already about to reconnect", and
-/// leaving a permit behind would cut the *next* healthy connection instead.
+/// backoff.
+///
+/// `notify_one`, not `notify_waiters`. The latter is a no-op when nobody is
+/// parked, and the loop is unparked for long stretches — the two side-fetches
+/// after a connect are up to 10 s each, plus every `dispatch`, plus the tail of
+/// the outer loop. A kick landing in one of those evaporated, so "Reconnect"
+/// and the post-start nudge could silently do nothing and the user waited out
+/// a 30 s backoff staring at "offline".
+///
+/// `notify_one` leaves a permit instead, so the kick is honoured at the next
+/// wait. The cost is that a permit can cut one healthy connection short; that
+/// costs a reconnect, which is exactly what was asked for anyway.
 pub fn kick(app: &AppHandle) {
     let _ = app;
-    wake().notify_waiters();
+    wake().notify_one();
 }
 
 /// Starts the one connection. Called once from `setup`.
@@ -236,14 +251,21 @@ pub fn spawn(app: AppHandle) {
                 link.base = base.clone();
             });
 
+            let opened_at = Instant::now();
             let outcome = connect_once(&app, &base).await;
 
             let message = match outcome {
                 Ok(reason) => {
                     // A clean end is the normal case, not a failure: the server
                     // closes the stream after an hour by design. Reconnecting
-                    // promptly is correct, so the backoff is reset.
-                    backoff = BASE_BACKOFF;
+                    // promptly is correct, so the backoff is reset — but only
+                    // if the connection actually did some work. A server that
+                    // 200s the headers and immediately closes the body also
+                    // arrives here, and resetting for that meant reconnecting
+                    // every 3 s for ever with the tray flapping.
+                    if opened_at.elapsed() >= PRODUCTIVE_CONNECTION {
+                        backoff = BASE_BACKOFF;
+                    }
                     reason
                 }
                 Err(err) => {
@@ -259,12 +281,18 @@ pub fn spawn(app: AppHandle) {
             });
             save_resume(&app, true);
 
+            // Grow the backoff BEFORE waiting, so the two resets below are not
+            // undone one line later — which is what used to happen: a clean
+            // hourly close reconnected at 5.4 s instead of 3 s, and a
+            // user-requested reconnect climbed on every press.
+            let wait = backoff;
+            backoff = std::cmp::min(backoff.mul_f64(1.8), MAX_BACKOFF);
+
             // Wait out the backoff, unless something asks for a reconnect now.
             tokio::select! {
-                _ = tokio::time::sleep(backoff) => {}
+                _ = tokio::time::sleep(wait) => {}
                 _ = wake().notified() => { backoff = BASE_BACKOFF; }
             }
-            backoff = std::cmp::min(backoff.mul_f64(1.8), MAX_BACKOFF);
         }
     });
 }
@@ -371,6 +399,14 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
         };
 
         buffer.extend_from_slice(&chunk);
+        // A body that never sends a newline would otherwise grow this until the
+        // process dies. No legitimate SSE frame is anywhere near this large.
+        if buffer.len() > MAX_LINE_BYTES {
+            return Err(format!(
+                "the event stream sent {} bytes with no line break; treating it as broken",
+                buffer.len()
+            ));
+        }
         while let Some(newline) = buffer.iter().position(|b| *b == b'\n') {
             let line: Vec<u8> = buffer.drain(..=newline).collect();
             let text = String::from_utf8_lossy(&line[..line.len() - 1])
@@ -400,17 +436,47 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
     match event.name.as_str() {
         "hello" => {
             let stale = event.data["stale"].as_bool().unwrap_or(false);
+            // `latest` is the server's newest id. If it is BEHIND our resume
+            // point, the bus has been renumbered — `jarvis_events.Bus` is in
+            // memory and `_next` restarts at 1 on every backend restart. Its
+            // `since()` then returns `stale = False` against an empty ring, so
+            // we are told we are caught up while the monotonic guard below
+            // silently discards every event for ever. Nothing else lowers the
+            // resume point, so without this a routine restart killed the stream
+            // permanently and only clearing the settings store brought it back.
+            let latest = event.data["latest"].as_u64();
+            let renumbered = matches!((latest, app.state::<StreamState>().link().last_id),
+                                      (Some(latest), last) if last > 0 && latest < last);
+            if renumbered {
+                println!("[jarvis] the event bus restarted; resetting the resume point");
+            }
+
+            // `stale` is cleared only once the re-read below has landed. It
+            // used to be cleared here unconditionally, which enabled Approve
+            // and Deny for two network round-trips against a queue that had
+            // just been declared untrustworthy.
+            let settled = !(stale || renumbered);
             publish_link(app, |link| {
                 link.connected = true;
-                link.stale = false;
                 link.error = None;
+                if settled {
+                    link.stale = false;
+                }
+                if renumbered {
+                    link.last_id = latest.unwrap_or(0);
+                }
             });
-            if stale {
+            if renumbered {
+                save_resume(app, true);
+            }
+
+            if stale || renumbered {
                 // Rule 2 of §3: we fell off the back of the 512-event ring.
                 // Everything local is suspect — re-read it, do not replay.
-                println!("[jarvis] resume point was too old; re-reading all state");
+                println!("[jarvis] resume point unusable; re-reading all state");
                 prime_from_version(app, base).await;
                 refresh_pending(app, base).await;
+                publish_link(app, |link| link.stale = false);
                 crate::emit_all(app, crate::events::JARVIS_RESYNC, ());
             }
         }
@@ -473,13 +539,22 @@ async fn prime_from_version(app: &AppHandle, base: &str) {
         .send()
         .await
     {
-        Ok(response) => match response.json().await {
-            Ok(body) => body,
-            Err(err) => {
-                eprintln!("[jarvis] /api/version returned something unreadable: {err}");
+        Ok(response) => {
+            let status = response.status();
+            if !status.is_success() {
+                // A 401 body parses fine and would have left the tray sitting
+                // on the idle colour through an entire conversation.
+                eprintln!("[jarvis] /api/version answered HTTP {}", status.as_u16());
                 return;
             }
-        },
+            match response.json().await {
+                Ok(body) => body,
+                Err(err) => {
+                    eprintln!("[jarvis] /api/version returned something unreadable: {err}");
+                    return;
+                }
+            }
+        }
         Err(err) => {
             eprintln!("[jarvis] /api/version unavailable: {err}");
             return;
@@ -524,21 +599,41 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
         return;
     };
 
+    // The status is checked before the body is trusted. It used to go straight
+    // to `.json()`, and a 401/403/500 error body parses perfectly well — the
+    // `or_else` chain below then yielded an empty list, so a refused request
+    // silently WIPED the approval queue on all three surfaces while `stale`
+    // stayed false and the approve buttons stayed live. A queued shell command
+    // simply vanished.
     let body: serde_json::Value = match client
         .get(format!("{base}/api/pending"))
         .headers(headers)
         .send()
         .await
     {
-        Ok(response) => match response.json().await {
-            Ok(body) => body,
-            Err(err) => {
-                eprintln!("[jarvis] /api/pending returned something unreadable: {err}");
+        Ok(response) => {
+            let status = response.status();
+            if !status.is_success() {
+                eprintln!(
+                    "[jarvis] /api/pending answered HTTP {}; keeping the last known queue",
+                    status.as_u16()
+                );
+                // Not knowing is not the same as knowing there is nothing.
+                publish_link(app, |link| link.stale = true);
                 return;
             }
-        },
+            match response.json().await {
+                Ok(body) => body,
+                Err(err) => {
+                    eprintln!("[jarvis] /api/pending returned something unreadable: {err}");
+                    publish_link(app, |link| link.stale = true);
+                    return;
+                }
+            }
+        }
         Err(err) => {
             eprintln!("[jarvis] /api/pending unavailable: {err}");
+            publish_link(app, |link| link.stale = true);
             return;
         }
     };
@@ -546,6 +641,10 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
     // The server has answered `{"pending": [...]}` and a bare array at
     // different points in its life; accept either rather than show an empty
     // queue when there is one.
+    // `{"available": false, "pending": []}` means the gate module is not
+    // installed — which is not the same as an empty queue, and the API spec
+    // says a false capability means hide the UI, not show an empty one.
+    let available = body["available"].as_bool().unwrap_or(true);
     let items: Vec<serde_json::Value> = body["pending"]
         .as_array()
         .or_else(|| body["items"].as_array())
@@ -566,7 +665,7 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
     crate::emit_all(
         app,
         crate::events::APPROVALS_CHANGED,
-        serde_json::json!({ "count": items.len(), "items": items }),
+        serde_json::json!({ "count": items.len(), "items": items, "available": available }),
     );
 }
 

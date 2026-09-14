@@ -1101,10 +1101,8 @@ async function streamViaFetch(payload) {
       body: JSON.stringify({
         messages: payload.messages,
         has_image: payload.hasImage,
-        images: payload.images,
         stream: true,
         auto: payload.auto,
-        ...(payload.noteTarget ? { note_target: payload.noteTarget } : {}),
       }),
       signal: controller.signal,
     });
@@ -1205,10 +1203,22 @@ async function send(promptText) {
   await setPinned(true, { silent: true });
 
   // A `#log` / `#joplin` prefix pre-routes the turn: the prefix is stripped
-  // from the text, declared as `note_target`, and restated as a system turn so
-  // a server reading either mechanism lands in the same place.
+  // from the text and restated as a system turn. There used to be a
+  // `note_target` field alongside it — the server has never read one, so the
+  // system turn was always the only mechanism doing any work.
   const { target: noteTarget, body } = parseNotePrefix(message);
   const text = noteTarget ? body.trim() : message;
+
+  // A capture rides INSIDE the user message, not as a sibling `images` array.
+  // The server forwards `messages` verbatim to /v1/chat/completions and reads
+  // no `images` field anywhere, so the old shape sent the screenshot into a
+  // void while `has_image` still routed the turn to a vision model.
+  const content = state.capture
+    ? [
+        { type: "text", text },
+        { type: "image_url", image_url: { url: state.capture } },
+      ]
+    : text;
 
   // Clipboard context rides as a system turn; the server validates an
   // OpenAI-shaped `messages` array and routes on `has_image`.
@@ -1218,12 +1228,10 @@ async function send(promptText) {
       ...(state.clipboard
         ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
         : []),
-      { role: "user", content: text },
+      { role: "user", content },
     ],
     hasImage: Boolean(state.capture),
-    images: state.capture ? [state.capture] : [],
     auto: true,
-    noteTarget,
   };
 
   if (IS_TAURI) {

@@ -56,9 +56,13 @@ function report(target, text, tone) {
 }
 
 /** Runs an action, reporting whatever it says or throws in the same place. */
+let busy = false;
+
 async function act(button, target, work) {
+  if (busy) return;
   const others = [dom.saveBackend, dom.startBackend, dom.stopBackend];
   const lock = others.includes(button) ? others : [button];
+  busy = true;
   lock.forEach((b) => (b.disabled = true));
   report(target, "working…");
   try {
@@ -67,6 +71,7 @@ async function act(button, target, work) {
   } catch (error) {
     report(target, String((error && error.message) || error), "bad");
   } finally {
+    busy = false;
     lock.forEach((b) => (b.disabled = false));
     await paintBackend();
   }
@@ -120,7 +125,15 @@ dom.reconnect.addEventListener("click", () => {
    Backend
    ========================================================================== */
 
-async function paintBackend() {
+/**
+ * Repaints the backend section.
+ *
+ * `fields` is false for the polled refresh. The poll used to rewrite the inputs
+ * unconditionally, so anything half-typed was reverted within five seconds, and
+ * it re-enabled Start while a start was still in flight — long enough to issue
+ * a second one.
+ */
+async function paintBackend({ fields = false } = {}) {
   let status;
   try {
     status = await invoke("supervisor_status");
@@ -129,18 +142,28 @@ async function paintBackend() {
     return;
   }
 
-  dom.supervise.checked = Boolean(status.supervise);
-  dom.program.value = status.backend.program || "";
-  dom.args.value = (status.backend.args || []).join("\n");
-  dom.cwd.value = status.backend.cwd || "";
+  // Never overwrite a field the user is editing.
+  const editing = [dom.program, dom.args, dom.cwd].includes(document.activeElement);
+  if (fields && !editing) {
+    dom.supervise.checked = Boolean(status.supervise);
+    dom.program.value = status.backend.program || "";
+    dom.args.value = (status.backend.args || []).join("\n");
+    dom.cwd.value = status.backend.cwd || "";
+  }
 
-  dom.startBackend.disabled = status.owned || !status.supervise;
-  dom.stopBackend.disabled = !status.owned;
+  // While `act()` holds the button lock, it owns the disabled state.
+  if (!busy) {
+    dom.startBackend.disabled = status.owned || !status.supervise;
+    dom.stopBackend.disabled = !status.owned;
+  }
 
   if (status.owned) {
     const up = Number(status.uptime_seconds || 0);
+    const handedOff = status.launcher_exited
+      ? " · launcher exited, tree still supervised"
+      : "";
     dom.backendState.textContent =
-      `started by Jarvis Desktop · pid ${status.pid} · up ${formatUptime(up)} · ${status.base}`;
+      `started by Jarvis Desktop · pid ${status.pid} · up ${formatUptime(up)}${handedOff} · ${status.base}`;
   } else if (!status.supervise) {
     dom.backendState.textContent =
       `supervision off · Jarvis Desktop will not start or stop anything · ${status.base}`;
@@ -213,8 +236,14 @@ onLink((link) => {
   } catch (error) {
     report(dom.connectionStatus, String((error && error.message) || error), "bad");
   }
-  await paintBackend();
-  // The owned child's uptime and the "still running?" check are both cheap,
-  // and this window is only open while someone is looking at it.
-  setInterval(paintBackend, 5000);
+  await paintBackend({ fields: true });
+  // Cheap, and only while the window is actually on screen — a settings page
+  // nobody is looking at has no reason to poll.
+  let timer = null;
+  const poll = () => {
+    if (timer) clearInterval(timer);
+    timer = document.hidden ? null : setInterval(paintBackend, 5000);
+  };
+  document.addEventListener("visibilitychange", poll);
+  poll();
 })();

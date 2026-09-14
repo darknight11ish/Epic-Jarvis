@@ -8,18 +8,18 @@
     "node": ">=18"
   },
   "scripts": {
-    "sync:config": "node -e \"const f=require('fs');f.copyFileSync('tauri.conf.json','src-tauri/tauri.conf.json')\"",
-    "dev": "npm run sync:config && tauri dev",
-    "build": "npm run sync:config && tauri build",
-    "build:debug": "npm run sync:config && tauri build --debug",
-    "bundle:msi": "npm run sync:config && tauri build --bundles msi",
-    "bundle:nsis": "npm run sync:config && tauri build --bundles nsis",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:debug": "tauri build --debug",
+    "bundle:msi": "tauri build --bundles msi",
+    "bundle:nsis": "tauri build --bundles nsis",
     "icons": "tauri icon src-tauri/icons/icon.png",
     "info": "tauri info",
     "fmt": "cd src-tauri && cargo fmt",
     "lint": "cd src-tauri && cargo clippy --all-targets -- -D warnings",
     "check": "cd src-tauri && cargo check",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "cd src-tauri && cargo test"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0"

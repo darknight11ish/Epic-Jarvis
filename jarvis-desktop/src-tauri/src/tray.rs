@@ -103,8 +103,16 @@ struct Rows {
 }
 
 /// The colour last pushed to the shell, so an unchanged frame costs nothing.
+///
+/// Registered on the builder in `run()` alongside every other managed type,
+/// not here. It used to be registered inside `create_tray`, after eight
+/// fallible calls — and `run()` treats a `create_tray` failure as non-fatal, so
+/// a menu-item error left the stream's very first event panicking on
+/// `state::<Painted>()` in a task with no supervisor. Release builds set
+/// `windows_subsystem = "windows"`, so that panic went to a stderr that does
+/// not exist: no tray, no stream, no approvals, and nothing on screen to say so.
 #[derive(Default)]
-struct Painted(Mutex<Option<Rgb>>);
+pub struct Painted(Mutex<Option<Rgb>>);
 
 /// Builds the tray icon, its menu and the event handlers.
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -209,9 +217,6 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             approvals,
             backend,
         });
-
-    // Private to this module, so it is registered here rather than in `run`.
-    app.manage(Painted::default());
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip(tooltip(&link))

@@ -105,6 +105,9 @@ pub struct HealthReport {
 /// A store file rather than the page's `localStorage`, per DESKTOP-BUILD §3.1:
 /// the port can change without a rebuild, and reading it from Rust means the
 /// token reaches the webview only as the `JARVIS.set()` call at page load.
+/// Largest chat line accepted before the stream is treated as broken.
+const MAX_CHAT_LINE_BYTES: usize = 4 * 1024 * 1024;
+
 pub const SETTINGS_STORE: &str = "jarvis-desktop.json";
 
 /// Default API base. `JARVIS_HUD_PORT` defaults to 4719 in `jarvis_hud.py`;
@@ -308,10 +311,20 @@ async fn probe(
     id: &'static str,
     name: &'static str,
     url: String,
+    headers: Option<reqwest::header::HeaderMap>,
 ) -> ServiceStatus {
     let started = Instant::now();
 
-    match client.get(&url).send().await {
+    // Ollama and the LiteLLM proxy are unauthenticated; Jarvis is not. Probing
+    // it bare meant `_origin_ok` fell through to its `X-Jarvis-Client` check —
+    // reqwest sends no Origin — and answered 403 every time, so the core dot
+    // read "unhealthy" against a perfectly healthy server.
+    let request = match headers {
+        Some(headers) => client.get(&url).headers(headers),
+        None => client.get(&url),
+    };
+
+    match request.send().await {
         Ok(response) => {
             let status = response.status();
             let latency_ms = started.elapsed().as_millis();
@@ -386,18 +399,21 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
             "jarvis",
             "Jarvis Core",
             format!("{}/api/status", jarvis_base(&app)),
+            jarvis_headers(&app).ok(),
         ),
         probe(
             &client,
             "ollama",
             "Ollama",
             format!("{OLLAMA_URL}/api/tags"),
+            None,
         ),
         probe(
             &client,
             "litellm",
             "LiteLLM",
             format!("{LITELLM_URL}/health"),
+            None,
         ),
     );
 
@@ -480,32 +496,38 @@ pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, Str
 /// The future resolves when the body ends, and rejects with the failure text if
 /// the request could not be completed — so the frontend learns the terminal
 /// state from the promise and never has to infer it from silence.
+///
+/// Two fields this used to send are gone, because the server never read either.
+///
+/// `images: [dataUri]` was a sibling of `messages`. `jarvis_hud.py`'s
+/// `_build_payload` forwards only `model / messages / stream / temperature /
+/// max_tokens` upstream, and `images` appears nowhere in the server at all — so
+/// the screenshot was encoded, sent, and dropped. Worse, `has_image` *is* read,
+/// and routes the turn to a vision lane: the capture went to a vision model
+/// that received no image and answered about nothing. The image now rides
+/// inside the user message's content, which is the part the server forwards
+/// verbatim, in the OpenAI shape the upstream `/v1/chat/completions` expects.
+///
+/// `note_target` was invented outright — zero hits in the server. The system
+/// message the frontend already sends is the only mechanism that ever worked.
 #[tauri::command]
 pub async fn stream_chat(
     app: AppHandle,
     messages: Vec<serde_json::Value>,
     has_image: bool,
-    images: Vec<String>,
     auto: bool,
-    note_target: Option<String>,
     on_event: Channel<String>,
 ) -> Result<(), String> {
     let cancel = app.state::<ChatState>().begin();
     let base = jarvis_base(&app);
     let headers = jarvis_headers(&app)?;
 
-    let mut payload = serde_json::json!({
+    let payload = serde_json::json!({
         "messages": messages,
         "has_image": has_image,
-        "images": images,
         "stream": true,
         "auto": auto,
     });
-    // Additive: only present when a #log / #joplin prefix pre-routed the turn,
-    // so a server that does not know the field simply ignores it.
-    if let Some(target) = note_target.as_deref().filter(|t| !t.is_empty()) {
-        payload["note_target"] = serde_json::Value::String(target.to_string());
-    }
 
     // `notified()` consumes a permit left by `notify_one`, so a cancel that
     // lands before this future is polled still wins the race.
@@ -574,6 +596,14 @@ async fn pump_chat(
         .map_err(|e| format!("the stream broke: {e}"))?
     {
         buffer.extend_from_slice(&bytes);
+        // Bounded for the same reason the event stream's is: a body with no
+        // newline would grow this until the process dies.
+        if buffer.len() > MAX_CHAT_LINE_BYTES {
+            return Err(format!(
+                "the chat stream sent {} bytes with no line break; treating it as broken",
+                buffer.len()
+            ));
+        }
         while let Some(newline) = buffer.iter().position(|b| *b == b'\n') {
             let line: Vec<u8> = buffer.drain(..=newline).collect();
             let text = String::from_utf8_lossy(&line[..line.len() - 1])
@@ -864,10 +894,10 @@ pub async fn capture_note(app: AppHandle, target: String, text: String) -> Resul
             { "role": "user", "content": text },
         ],
         "has_image": false,
-        "images": [],
         "stream": false,
+        // No `note_target`: the server has never read one. The system message
+        // above is what actually routes the capture.
         "auto": true,
-        "note_target": target,
     });
 
     let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
