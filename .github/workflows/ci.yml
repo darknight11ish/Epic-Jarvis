@@ -50,6 +50,12 @@ jobs:
       - run: for f in src/*.js; do node --check "$f"; done
         shell: bash
       - run: node scripts/markdown-test.mjs
+      # Two of the ten frontend suites need no browser at all — they parse and
+      # compute rather than render — so they belong here rather than only on a
+      # machine where someone has installed Playwright. The other eight open
+      # real pages and stay out of CI for the reason in tests/README.md.
+      - run: python3 scripts/check-tokens.py
+      - run: node tests/voicecheck.mjs
 
   audit:
     runs-on: ubuntu-latest

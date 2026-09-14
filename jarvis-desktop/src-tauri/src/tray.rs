@@ -1347,13 +1347,19 @@ mod tests {
         };
 
         /// The strongest contrast any pixel of the icon reaches against `bg`.
+        ///
+        /// Walked by index rather than with `chunks_exact(4)`: clippy from
+        /// 1.98 pushes a constant chunk size onto `as_chunks::<4>()`, which is
+        /// newer than the toolchain some of this is built with. Stepping is
+        /// the version-independent spelling.
         fn strongest(buf: &[u8], bg: Rgb) -> f64 {
             let mut best = 1.0f64;
-            for chunk in buf.chunks_exact(4) {
-                if chunk[3] == 0 {
+            for i in (0..buf.len()).step_by(4) {
+                let px = &buf[i..i + 4];
+                if px[3] == 0 {
                     continue;
                 }
-                best = best.max(ratio(over(chunk, bg), bg));
+                best = best.max(ratio(over(px, bg), bg));
             }
             best
         }
