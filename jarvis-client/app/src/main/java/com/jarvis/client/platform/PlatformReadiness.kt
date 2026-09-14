@@ -92,6 +92,24 @@ object PlatformReadiness {
             },
         ),
         ReadinessItem(
+            title = "Microphone",
+            detail = if (micGranted(context)) {
+                "Granted. Push-to-talk will record and send one utterance at a time."
+            } else {
+                "Not granted yet. Asked for the first time you hold the microphone " +
+                    "button, not at launch. Audio is sent to your desktop to be " +
+                    "checked and transcribed there — this app never transcribes."
+            },
+            state = if (micGranted(context)) {
+                ReadinessItem.State.OK
+            } else {
+                // Not a warning. Push-to-talk is opt-in by holding a button,
+                // and an app that nags for a microphone it is not using is the
+                // reason people refuse the prompt that matters.
+                ReadinessItem.State.INFO
+            },
+        ),
+        ReadinessItem(
             title = "Foreground service type",
             detail = "specialUse. dataSync would be capped at six hours a day on " +
                 "Android 15 and the service would be killed when the budget ran out.",

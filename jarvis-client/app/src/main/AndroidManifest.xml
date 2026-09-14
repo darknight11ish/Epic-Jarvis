@@ -14,6 +14,13 @@
          the state step 8's live-state notification depends on. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Push-to-talk. Requested at the moment the microphone is first held,
+         never at launch: a permission dialog on first run, before the app has
+         shown what it is for, is the one most people refuse. Capture only ever
+         happens with the app in the foreground and the button held, so no
+         microphone foreground-service type is needed or asked for. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- The service returns START_STICKY, and a sticky restart happens with the app
          in the background - which is not on the FGS background-start exemption list,
          so startForeground throws and the link ends permanently. A battery-optimisation

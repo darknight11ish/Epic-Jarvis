@@ -305,6 +305,98 @@ class JarvisApi(
             )
     }
 
+    // ------------------------------------------------------------ voice ----
+
+    /**
+     * Call before offering a microphone button. §4.1.
+     *
+     * Returns the *refusing* defaults on any failure, so a backend that cannot
+     * answer leaves the button hidden rather than showing one that posts audio
+     * into a 404.
+     */
+    suspend fun voiceStatus(): ApiResult<VoiceStatus> =
+        get("/api/voice/status", VoiceStatus.serializer())
+
+    /**
+     * One complete utterance in, one verdict out.
+     *
+     * The only route on this server whose body is not JSON. The audio is
+     * already 16 kHz 16-bit mono PCM in a WAV container — resampled on this
+     * device, because the server refuses anything else rather than carrying a
+     * resampler in the most exposed code it has: these are bytes from the
+     * network arriving *before* the gate.
+     *
+     * Uses the long-timeout client. Verification and transcription happen
+     * before the response, and a few seconds of audio through a CPU Whisper is
+     * not a short call.
+     */
+    suspend fun utterance(
+        wav: ByteArray,
+        source: String = SOURCE_PUSH_TO_TALK,
+    ): ApiResult<Heard> = withContext(Dispatchers.IO) {
+        val target = url("/api/voice/utterance?source=$source") ?: return@withContext ApiResult.Failed(
+            ApiError.Unreachable("No desktop address set"),
+        )
+        val body = wav.toRequestBody("audio/wav".toMediaType())
+        val req = Request.Builder().url(target).post(body).authed().build()
+        runCatching { client.newCall(req).execute() }
+            .fold(
+                onSuccess = { resp ->
+                    resp.use {
+                        if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                        val text = it.body?.string().orEmpty()
+                        runCatching { JarvisJson.decodeFromString(Heard.serializer(), text) }
+                            .fold(
+                                { h -> ApiResult.Ok(h) },
+                                { e -> ApiResult.Failed(ApiError.Malformed(e.message ?: "bad verdict")) },
+                            )
+                    }
+                },
+                onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
+            )
+    }
+
+    /**
+     * Text to speech on the desktop, or null when there is no engine there.
+     *
+     * A **503 is a legitimate answer**, not a failure: speaking text the client
+     * already holds reveals nothing and skips no check, so this is the half of
+     * the voice path that is allowed to be missing. Null means "use your own
+     * voice", and the caller does.
+     */
+    suspend fun say(text: String): ApiResult<ByteArray?> = withContext(Dispatchers.IO) {
+        val target = url("/api/voice/say") ?: return@withContext ApiResult.Failed(
+            ApiError.Unreachable("No desktop address set"),
+        )
+        val body = """{"text":${quote(text)}}""".toRequestBody("application/json".toMediaType())
+        val req = Request.Builder().url(target).post(body).authed()
+            .header("Accept", "audio/wav")
+            .build()
+        runCatching { client.newCall(req).execute() }
+            .fold(
+                onSuccess = { resp ->
+                    resp.use {
+                        when {
+                            it.code == 503 -> ApiResult.Ok(null)
+                            it.isSuccessful -> ApiResult.Ok(it.body?.bytes())
+                            else -> ApiResult.Failed(errorFor(it))
+                        }
+                    }
+                },
+                onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
+            )
+    }
+
+    /**
+     * Asks the desktop to turn the wake word on or off.
+     *
+     * Gated as a config change server-side, and **approval means approved, not
+     * already live** — the value lives in the TOML. So a success here does not
+     * mean the wake word is on; re-read [voiceStatus] for that.
+     */
+    suspend fun setWakeWord(enabled: Boolean): ApiResult<Unit> =
+        postJson("/api/voice/wake", """{"enabled":$enabled}""")
+
     // ------------------------------------------------------------- chat ----
 
     /**
@@ -369,6 +461,9 @@ class JarvisApi(
         val DIGEST_KEYS = listOf("digest", "items", "entries")
         val UNDO_KEYS = listOf("shelf", "undo", "items")
         val JOB_KEYS = listOf("jobs", "items")
+
+        const val SOURCE_PUSH_TO_TALK = "push_to_talk"
+        const val SOURCE_WAKE_WORD = "wake_word"
 
         const val TOKEN_HEADER = "X-Jarvis-Token"
         const val CLIENT_HEADER = "X-Jarvis-Client"

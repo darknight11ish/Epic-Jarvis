@@ -12,6 +12,7 @@ import com.jarvis.client.net.DigestItem
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.net.EventStream
+import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.launch
 
 /**
@@ -98,6 +100,21 @@ object JarvisRuntime {
 
     /** Theme, face and the seven state bindings. Per device — see the class. */
     lateinit var appearance: AppearanceStore
+        private set
+
+    /**
+     * The chat turn in flight.
+     *
+     * Process-wide rather than remembered in the composition, for two reasons:
+     * the voice loop drives it from outside any activity, and a `remember`
+     * does not survive a configuration change — so a rotation mid-answer used
+     * to throw the reply away.
+     */
+    lateinit var chat: ChatSession
+        private set
+
+    /** Push-to-talk. Built even when the desktop reports no voice path. */
+    lateinit var voice: VoiceSession
         private set
     lateinit var api: JarvisApi
         private set
@@ -184,12 +201,18 @@ object JarvisRuntime {
         settings = ClientSettings(app)
         tokens = TokenStore(app)
         appearance = AppearanceStore(app)
+        chat = ChatSession(api)
+        voice = VoiceSession(app, api, scope) { text ->
+            chat.send(text)
+            chat.reply.value.takeIf { it.isNotBlank() }
+        }
         api = JarvisApi(settings, tokens)
         stream = EventStream(api)
         started = true
 
         faceJob = scope.launch {
             combine(_link, _activity, _power, _pending, _attention) { _, _, _, _, _ -> }
+                .combine(voice.phase) { _, _ -> }
                 .collectLatest {
                     _face.value = resolveFace()
                     if (_link.value != LinkState.CONNECTED) {
@@ -539,6 +562,19 @@ object JarvisRuntime {
             // about a second after the first failure.
             val down = linkDownSince
             if (down != 0L && nowMs - down > RECONNECT_GRACE_MS) return FaceState.ERROR
+        }
+        // This device's own microphone is a fact only this device knows: the
+        // server has no idea the mic is open until the utterance arrives, so
+        // there is nothing to re-derive and nothing to disagree with. The
+        // moment the turn reaches the desktop, the server's `activity` takes
+        // over again.
+        when (voice.phase.value) {
+            VoiceSession.Phase.CAPTURING -> return FaceState.LISTENING
+            VoiceSession.Phase.VERIFYING -> return FaceState.THINKING
+            VoiceSession.Phase.OFF -> Unit
+            // THINKING and SPEAKING are the server's to report once the
+            // transcript is in; falling through lets `activity` win.
+            else -> Unit
         }
         val act = _activity.value
         val resting = act == Activity.IDLE

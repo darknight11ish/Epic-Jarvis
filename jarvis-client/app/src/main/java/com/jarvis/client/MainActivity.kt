@@ -20,7 +20,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -29,7 +31,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiResult
-import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
@@ -72,6 +73,24 @@ class MainActivity : FragmentActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { permissionTick.intValue += 1 }
 
+    /**
+     * Asked the first time the microphone button is held, never at launch.
+     *
+     * A permission dialog on first run, before the app has shown what it is
+     * for, is the one most people refuse — and the refusal is sticky. Granting
+     * it starts the capture immediately, so the hold that asked is the hold
+     * that records.
+     */
+    private var micGrantedCallback: (() -> Unit)? = null
+
+    private val micPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        permissionTick.intValue += 1
+        if (granted) micGrantedCallback?.invoke()
+        micGrantedCallback = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -102,7 +121,11 @@ class MainActivity : FragmentActivity() {
     @Composable
     private fun App() {
         val scope = rememberCoroutineScope()
-        val chat = remember { ChatSession(JarvisRuntime.api) }
+        // Both live in the runtime now: the voice loop drives chat from
+        // outside any activity, and a `remember` does not survive a rotation —
+        // so a turn in flight used to lose its reply when the phone turned.
+        val chat = JarvisRuntime.chat
+        val voice = JarvisRuntime.voice
         val appearance = JarvisRuntime.appearance
 
         val nav = rememberNavState()
@@ -137,6 +160,14 @@ class MainActivity : FragmentActivity() {
         val jobs by JarvisRuntime.jobs.collectAsState()
         val brain by JarvisRuntime.brain.collectAsState()
         val streaming by chat.streaming.collectAsState()
+        val voicePhase by voice.phase.collectAsState()
+        val voiceStatus by voice.status.collectAsState()
+        val transcript by voice.transcript.collectAsState()
+        val voiceNotice by voice.notice.collectAsState()
+        // Held as State and read only inside drawBehind — a microphone
+        // delivers ~50 levels a second and this must not recompose anything.
+        val micLevelState = voice.micLevel.collectAsState()
+        val micLevel = remember { derivedStateOf { micLevelState.value ?: 0f } }
 
         val face = remember(faceId) { Faces.byId(faceId) }
         val idleColour = bindings.of(FaceState.IDLE).tint ?: com.jarvis.client.face.Palette.ICE_3
@@ -163,6 +194,14 @@ class MainActivity : FragmentActivity() {
             if (!followSystem || !resting) return@LaunchedEffect
             val want = Themes.forSystem(systemDark, preferredDark = Themes.byId(lastDarkId(chrome.id)))
             if (want.id != chrome.id) appearance.setTheme(want)
+        }
+
+        // Asked once per connection, before the button is offered. §4.1 says to
+        // call it before offering a microphone at all, and the refusing
+        // defaults mean a failure hides the button rather than showing one
+        // that posts audio into a 404.
+        LaunchedEffect(link, paired) {
+            if (paired && link == LinkState.CONNECTED) voice.refreshStatus()
         }
 
         // A notification tap goes straight home, so the card is where the
@@ -311,12 +350,17 @@ class MainActivity : FragmentActivity() {
                         draft = draft,
                         face = face,
                         bindings = bindings,
+                        voicePhase = voicePhase,
+                        voiceOffered = voiceStatus.canPushToTalk,
+                        transcript = transcript,
+                        voiceNotice = voiceNotice,
                     ),
                     // A lambda, so a streamed token redraws the reply and
                     // nothing else. Passing the string rebuilt HomeState on
                     // every chunk and recomposed the bar, the list and the
                     // composer while the face drew at 60fps on the same thread.
                     reply = { chat.reply.value },
+                    micLevel = micLevel,
                     actions = remember {
                         HomeActions(
                             onDraftChange = { draft = it },
@@ -358,12 +402,31 @@ class MainActivity : FragmentActivity() {
                             blockerFor = { item: PendingItem ->
                                 JarvisRuntime.decisionBlocker(item)
                             },
+                            onVoiceBegin = ::beginVoice,
+                            onVoiceRelease = { JarvisRuntime.voice.release() },
+                            onVoiceCancel = { JarvisRuntime.voice.cancel() },
+                            onDismissVoiceNotice = { JarvisRuntime.voice.clearNotice() },
                         )
                     },
                     modifier = root,
                 )
             }
         }
+    }
+
+    /**
+     * Opens the microphone, asking for permission first if it has not been
+     * granted — and then starting the capture, so the hold that triggered the
+     * dialog is not wasted.
+     */
+    private fun beginVoice() {
+        val voice = JarvisRuntime.voice
+        if (voice.recorder.hasPermission()) {
+            voice.begin()
+            return
+        }
+        micGrantedCallback = { voice.begin() }
+        micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     /** The dark theme to come back to when the system leaves light mode. */

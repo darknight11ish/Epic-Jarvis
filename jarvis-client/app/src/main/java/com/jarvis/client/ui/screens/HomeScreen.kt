@@ -50,6 +50,10 @@ import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.VoiceButton
+import com.jarvis.client.ui.parts.VoiceStrip
+import com.jarvis.client.voice.VoiceSession
+import androidx.compose.runtime.State
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
@@ -72,6 +76,18 @@ data class HomeState(
     val draft: String,
     val face: Face,
     val bindings: Bindings,
+    /** OFF unless a voice turn is in flight. */
+    val voicePhase: VoiceSession.Phase,
+    /**
+     * Whether to show the microphone at all.
+     *
+     * False hides it rather than showing one that posts audio into a 404 —
+     * §2's rule is that a capability reporting false means hide the UI for it.
+     */
+    val voiceOffered: Boolean,
+    /** What the desktop heard, so a mis-hearing is visible rather than silent. */
+    val transcript: String?,
+    val voiceNotice: String?,
 )
 
 @Immutable
@@ -88,6 +104,10 @@ data class HomeActions(
     val onOpenBrain: () -> Unit,
     val onOpenAppearance: () -> Unit,
     val blockerFor: (PendingItem) -> String?,
+    val onVoiceBegin: () -> Unit,
+    val onVoiceRelease: () -> Unit,
+    val onVoiceCancel: () -> Unit,
+    val onDismissVoiceNotice: () -> Unit,
 )
 
 @Composable
@@ -103,6 +123,8 @@ fun HomeScreen(
      * streaming reply from touching anything else.
      */
     reply: () -> String,
+    /** Read in the draw phase only — see VoiceButton. */
+    micLevel: State<Float>,
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -148,7 +170,7 @@ fun HomeScreen(
             item(key = "reply") { Reply(reply, state.streaming) }
         }
 
-        Composer(state, actions)
+        Composer(state, actions, micLevel)
     }
 }
 
@@ -315,17 +337,38 @@ private fun Reply(reply: () -> String, streaming: Boolean) {
 }
 
 @Composable
-private fun Composer(state: HomeState, actions: HomeActions) {
+private fun Composer(state: HomeState, actions: HomeActions, micLevel: State<Float>) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
     val radii = LocalRadii.current
     val canSend = state.draft.isNotBlank() && state.link == LinkState.CONNECTED
 
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
             .background(chrome.surface1)
             .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+    when (state.voicePhase) {
+        VoiceSession.Phase.CAPTURING ->
+            VoiceStrip("Listening — release to send, slide up to cancel")
+        VoiceSession.Phase.VERIFYING ->
+            // Named for what it is. The desktop checks whose voice this is
+            // BEFORE transcribing, so that a voice that is not his is never
+            // turned into words at all.
+            VoiceStrip("Checking it's you…")
+        VoiceSession.Phase.THINKING -> VoiceStrip("Thinking…")
+        VoiceSession.Phase.SPEAKING -> VoiceStrip("Speaking")
+        VoiceSession.Phase.OFF -> Unit
+    }
+    if (state.transcript != null && state.voicePhase != VoiceSession.Phase.CAPTURING) {
+        VoiceStrip("“${state.transcript}”", tone = chrome.textMid)
+    }
+    if (state.voiceNotice != null) {
+        VoiceStrip(state.voiceNotice, tone = chrome.warnInk, onDismiss = actions.onDismissVoiceNotice)
+    }
+    Row(
+        Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
     ) {
         // BasicTextField rather than OutlinedTextField: the Material one brings
@@ -389,5 +432,17 @@ private fun Composer(state: HomeState, actions: HomeActions) {
                 },
             )
         }
+        if (state.voiceOffered) {
+            Spacer(Modifier.width(8.dp))
+            VoiceButton(
+                enabled = state.link == LinkState.CONNECTED && !state.streaming,
+                capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
+                micLevel = micLevel,
+                onBegin = actions.onVoiceBegin,
+                onRelease = actions.onVoiceRelease,
+                onCancel = actions.onVoiceCancel,
+            )
+        }
+    }
     }
 }
