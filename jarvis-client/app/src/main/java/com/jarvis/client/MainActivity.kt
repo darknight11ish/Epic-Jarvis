@@ -51,8 +51,11 @@ import com.jarvis.client.ui.screens.ReadinessScreen
 import com.jarvis.client.ui.theme.JarvisTheme
 import com.jarvis.client.ui.theme.Themes
 import com.jarvis.client.ui.theme.systemPrefersDark
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The one activity.
@@ -261,7 +264,13 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(followSystem, systemDark, resting) {
             if (!followSystem || !resting) return@LaunchedEffect
             val want = Themes.forSystem(systemDark, preferredDark = Themes.byId(lastDarkId(chrome.id)))
-            if (want.id != chrome.id) appearance.setTheme(want)
+            // Retried, not dropped. `setTheme` refuses inside the dwell window
+            // and returns false; that answer was discarded, and since none of
+            // this effect's keys change again the theme simply stayed wrong
+            // until something else happened to move it.
+            while (want.id != chrome.id && !appearance.setTheme(want)) {
+                delay(THEME_RETRY_MS)
+            }
         }
 
         // Asked once per connection, before the button is offered. §4.1 says to
@@ -304,9 +313,18 @@ class MainActivity : FragmentActivity() {
                     notice = notice,
                     onPair = { host, token ->
                         busy = true
-                        JarvisRuntime.settings.setHost(host)
-                        if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
                         scope.launch {
+                            // Off the main thread. `setToken` generates a
+                            // hardware-backed AES key on first pair, which is a
+                            // TEE/StrongBox round trip — several hundred
+                            // milliseconds to a couple of seconds, blocking the
+                            // UI so hard that the button could not even repaint
+                            // into its own busy state, and an ANR candidate on a
+                            // slow device.
+                            withContext(Dispatchers.IO) {
+                                JarvisRuntime.settings.setHost(host)
+                                if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
+                            }
                             val result = JarvisRuntime.handshake()
                             busy = false
                             if (result is ApiResult.Ok) {
@@ -582,3 +600,6 @@ class MainActivity : FragmentActivity() {
         }
     }
 }
+
+/** How long to wait before re-offering a theme the dwell window refused. */
+private const val THEME_RETRY_MS = 600L

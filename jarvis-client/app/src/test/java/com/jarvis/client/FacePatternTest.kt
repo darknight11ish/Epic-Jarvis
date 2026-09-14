@@ -283,4 +283,72 @@ class FacePatternTest {
         assertEquals(0, Spec.fpsFor(FaceState.SPEAKING))
         assertEquals(0, Spec.fpsFor(FaceState.THINKING))
     }
+
+    /**
+     * The governor must actually count a flash, at any frame rate.
+     *
+     * It compared ADJACENT FRAMES against `FLASH_MIN_LUMA_DELTA`, and that
+     * constant is a WCAG threshold between the extremes of a flash, not between
+     * consecutive frames. Dividing a real swing across a frame interval makes
+     * every step tiny — so `abs(d) < 0.10` was true on every single frame, the
+     * window stayed empty, and the governor refused nothing. The faster the
+     * display the blinder it got, which is the opposite of what a safety
+     * mechanism should do.
+     *
+     * This drives a 4 Hz square wave — over the limit of three opposing
+     * transitions a second — at 120 fps, the rate at which the old code was
+     * least able to see it.
+     */
+    @Test
+    fun `the governor refuses a flash it used to be blind to`() {
+        val gov = FlashGovernor()
+        val dark = Color(0xFF1A1A2E)
+        val bright = Color(0xFFEDEDFF)
+        assertTrue(
+            "the fixture must itself exceed the luminance threshold",
+            kotlin.math.abs(relLuma(bright) - relLuma(dark)) > Spec.FLASH_MIN_LUMA_DELTA,
+        )
+
+        var held = 0
+        val fps = 120
+        // 4 Hz: the colour flips every eighth of a second.
+        for (frame in 0 until fps) {
+            val t = frame / fps.toFloat()
+            val on = ((t * 4f).toInt() % 2) == 0
+            val asked = Swatch(if (on) bright else dark, dark)
+            if (gov.govern(asked, t) !== asked) held += 1
+        }
+        assertTrue(
+            "a 4Hz full-swing flash ran for a second and the governor never held a frame",
+            held > 0,
+        )
+    }
+
+    /** And it must not hold a colour that is simply sitting still. */
+    @Test
+    fun `the governor does not interfere with a steady colour`() {
+        val gov = FlashGovernor()
+        val steady = Swatch(Color(0xFF12657F), Color(0xFF0A3A4A))
+        for (frame in 0 until 240) {
+            val t = frame / 120f
+            assertTrue("a still colour must pass through untouched", gov.govern(steady, t) === steady)
+        }
+    }
+
+    /**
+     * A slow ramp is one transition, not one per frame. Tracking the extremum
+     * rather than the previous frame is what makes that true.
+     */
+    @Test
+    fun `a monotonic ramp is not counted over and over`() {
+        val gov = FlashGovernor()
+        var held = 0
+        for (frame in 0 until 120) {
+            val k = frame / 119f
+            val v = (0.1f + 0.8f * k)
+            val asked = Swatch(Color(v, v, v), Color.Black)
+            if (gov.govern(asked, frame / 120f) !== asked) held += 1
+        }
+        assertEquals("a single slow brightening must never be refused", 0, held)
+    }
 }

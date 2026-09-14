@@ -125,14 +125,18 @@ object Orbit : Face {
         val steps = 48
         for (o in 0 until 5) {
             val incl = (o / 5f) * PI.toFloat() * 0.8f + f.pitch * 0.4f
+            // Hoisted: these were recomputed for all 48 steps of the inner
+            // loop, 480 redundant trig calls a frame.
+            val ci = cos(incl)
+            val si = sin(incl)
             for (s in 0 until steps) {
                 val a = s / steps.toFloat() * PI2 + f.angle * (0.5f + o * 0.15f) + f.yaw
                 val x = cos(a) * r
-                val y = sin(a) * r * cos(incl)
+                val y = sin(a) * r * ci
                 // Depth is read for size and alpha only, never position. Raising
                 // it is the one change that makes the most 3D faces read as
                 // volumes: far particles smaller and fainter, near ones bigger.
-                val z = sin(a) * sin(incl)
+                val z = sin(a) * si
                 val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
                 drawCircle(
                     color = mix(cool, hot, d).copy(alpha = 0.25f + 0.75f * d),
@@ -184,20 +188,35 @@ object Comb : Face {
         }
     }
 
+    /**
+     * Floats, not nullable Offsets.
+     *
+     * `Offset` is a value class over a Long, so it is free — until it is made
+     * nullable, at which point every assignment boxes. `prev` and `first` were
+     * `Offset?`, which cost 7 boxes per hexagon; at 37 hexagons that is 259
+     * allocations a frame, 15,500 a second, around 250 KB/s — the largest
+     * single allocation source in the app, and precisely the shape the
+     * Fullerene comment further down congratulates itself on having removed.
+     *
+     * The Offsets handed to the inlined [edge] are non-null and stay unboxed.
+     */
     private inline fun hexagon(
         x: Float, y: Float, rad: Float, rot: Float,
         edge: (Offset, Offset) -> Unit,
     ) {
-        var prev: Offset? = null
-        var first: Offset? = null
-        for (i in 0..5) {
+        val firstX = x + cos(rot) * rad
+        val firstY = y + sin(rot) * rad
+        var prevX = firstX
+        var prevY = firstY
+        for (i in 1..5) {
             val a = rot + i / 6f * PI2
-            val p = Offset(x + cos(a) * rad, y + sin(a) * rad)
-            if (first == null) first = p
-            prev?.let { edge(it, p) }
-            prev = p
+            val px = x + cos(a) * rad
+            val py = y + sin(a) * rad
+            edge(Offset(prevX, prevY), Offset(px, py))
+            prevX = px
+            prevY = py
         }
-        if (prev != null && first != null) edge(prev, first)
+        edge(Offset(prevX, prevY), Offset(firstX, firstY))
     }
 }
 
@@ -379,6 +398,14 @@ object Rime : Face {
     private const val ARMS = 6
     private const val SEGMENTS = 14
 
+    // Per-segment and identical for all six arms — frost is symmetric, which
+    // is the whole reason these are hashed on `s` alone. They were recomputed
+    // inside the inner loop, so the same 42 values were derived 6 times a
+    // frame.
+    private val wobBuf = FloatArray(SEGMENTS + 1) { (hash01(it * 37) - 0.5f) * 0.20f }
+    private val branchBuf = FloatArray(SEGMENTS + 1) { hash01(it * 91 + 7) }
+    private val lenBuf = FloatArray(SEGMENTS + 1) { hash01(it * 53) }
+
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 0.7f
         FaceState.THINKING -> 1.9f
@@ -411,7 +438,7 @@ object Rime : Face {
                 // than on the arm, so all six arms stay congruent — frost is
                 // symmetric, and six independently wandering arms read as a
                 // scribble.
-                val wob = (hash01(s * 37) - 0.5f) * 0.20f
+                val wob = wobBuf[s]
                 val th = base + wob
                 val x = cx + cos(th) * rad
                 val y = cy + sin(th) * rad * cp
@@ -430,9 +457,12 @@ object Rime : Face {
                 // Side branches, at the hexagonal 60 degrees, on segments the
                 // hash selects. Length falls off outward so the tips look fine
                 // rather than blunt.
-                if (hash01(s * 91 + 7) > 0.42f && s > 2) {
-                    val blen = r * 0.16f * (1f - k) * (0.6f + 0.8f * hash01(s * 53))
-                    for (sign in intArrayOf(-1, 1)) {
+                if (branchBuf[s] > 0.42f && s > 2) {
+                    val blen = r * 0.16f * (1f - k) * (0.6f + 0.8f * lenBuf[s])
+                    // A progression, not a fresh IntArray per segment per arm
+                    // per frame — that was ~50 arrays a frame while Rime was on
+                    // screen, for two values that never change.
+                    for (sign in -1..1 step 2) {
                         val bth = th + sign * (PI.toFloat() / 3f)
                         drawLine(
                             color = ink.copy(alpha = ink.alpha * 0.8f),
@@ -480,6 +510,15 @@ object Orbital : Face {
     private val yBuf = FloatArray(N)
     private val zBuf = FloatArray(N)
 
+    // The three hashes depend only on the point index, and `hash01` is a
+    // double-precision sin — the most expensive call in the draw path. They
+    // were recomputed every frame: 720 of them, 43,200 a second, producing the
+    // same 720 numbers each time. Computed once, alongside the buffers above
+    // that established the pattern.
+    private val uBuf = FloatArray(N) { hash01(it * 13 + 1) }
+    private val vBuf = FloatArray(N) { hash01(it * 71 + 5) }
+    private val rBuf = FloatArray(N) { hash01(it * 29 + 3) }
+
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 0.8f
         FaceState.THINKING -> 2.2f
@@ -499,8 +538,8 @@ object Orbital : Face {
             // A fixed direction per point, from two hashes. The z term is
             // uniform in cos(theta) so the points spread evenly over the
             // sphere instead of bunching at the poles.
-            val u = hash01(i * 13 + 1)
-            val v = hash01(i * 71 + 5)
+            val u = uBuf[i]
+            val v = vBuf[i]
             val cosT = 1f - 2f * u
             val sinT = kotlin.math.sqrt((1f - cosT * cosT).coerceAtLeast(0f))
             val phi = v * 2f * PI.toFloat() + spin
@@ -508,7 +547,7 @@ object Orbital : Face {
             // The lobe: radius pinched at the equator and full at the poles, so
             // this reads as an orbital rather than a shell. Breathing on amp.
             val lobe = 0.45f + 0.55f * (cosT * cosT)
-            val rr = lobe * (0.62f + 0.30f * hash01(i * 29 + 3)) * (1f + f.amp * 0.18f)
+            val rr = lobe * (0.62f + 0.30f * rBuf[i]) * (1f + f.amp * 0.18f)
 
             val x0 = sinT * cos(phi) * rr
             val y0 = cosT * rr

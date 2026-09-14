@@ -15,7 +15,11 @@ android {
         minSdk = 33
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1-step0"
+        // Not "step0" any more. The number is cosmetic — versionCode is
+        // pinned at 1 so any build installs over any other — but a version
+        // string naming a step this app passed long ago is one more thing
+        // quietly asserting something untrue.
+        versionName = "0.1"
 
         // There was no instrumentation runner, so there was nowhere to put a
         // test that actually starts the app. That is the gap that let a crash
@@ -50,11 +54,18 @@ android {
     buildTypes {
         debug { isMinifyEnabled = false }
         release {
-            // Minify off and proguardFiles listed anyway advertises a shrink that
-            // does not happen. This module has no serialization runtime and no
-            // reflective entry points yet, so the rules file is genuinely empty of
-            // anything load-bearing; when step 2 adds the SSE client and its models,
-            // turn this on rather than adding keeps that nothing verifies.
+            // Still off, and the reason has changed — the old comment here said
+            // "this module has no serialization runtime and no reflective entry
+            // points yet", which stopped being true the moment step 2 landed.
+            // The plugin is applied at the top of this file, the runtime is a
+            // declared dependency, and @Serializable is used in ApiModels and
+            // VoiceModels. Anyone who turned R8 on believing that sentence
+            // would have had its generated serializers stripped and seen it
+            // only at runtime, on a build type nobody runs.
+            //
+            // Turning it on needs the kotlinx-serialization keep rules and a
+            // release build that is actually exercised. Until then this stays
+            // off deliberately rather than by an argument that expired.
             isMinifyEnabled = false
         }
     }

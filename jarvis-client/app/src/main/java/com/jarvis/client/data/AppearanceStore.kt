@@ -1,6 +1,7 @@
 package com.jarvis.client.data
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.core.content.edit
 import com.jarvis.client.FaceState
 import com.jarvis.client.face.Binding
@@ -60,12 +61,17 @@ class AppearanceStore(context: Context) {
      * Enforced in the store rather than the UI on purpose, so a double-tap or a
      * system dark/light flap cannot get past it either.
      */
+    // elapsedRealtime, not wall clock. An NTP correction backwards — or a
+    // manual date change — made the elapsed value negative, so this returned
+    // false and the theme locked for the length of the jump: every tap answered
+    // "one theme change at a time", and the follow-the-system effect discarded
+    // the refusal and silently stayed on the wrong theme with no retry.
     private var lastChangeAt = 0L
 
-    fun canChangeNow(nowMs: Long = System.currentTimeMillis()): Boolean =
+    fun canChangeNow(nowMs: Long = SystemClock.elapsedRealtime()): Boolean =
         nowMs - lastChangeAt >= THEME_DWELL_MS
 
-    fun setTheme(theme: Chrome, nowMs: Long = System.currentTimeMillis()): Boolean {
+    fun setTheme(theme: Chrome, nowMs: Long = SystemClock.elapsedRealtime()): Boolean {
         if (theme.id == _chrome.value.id) return true
         if (!canChangeNow(nowMs)) return false
         lastChangeAt = nowMs
@@ -227,8 +233,16 @@ class AppearanceStore(context: Context) {
             val o = root.optJSONObject(state.name) ?: continue
             val pattern = Pattern.byId(o.optString("pattern")) ?: continue
             val colour = o.optString("color").takeIf { it.isNotEmpty() }?.let { Palette.byId[it] }
+            // `isFinite`, because `optDouble` answers NaN for anything it
+            // cannot coerce — and NaN is not caught by runCatching, so the
+            // "anything unreadable falls back to the defaults" promise above
+            // did not hold for it. NaN then survives every clamp in the
+            // renderer (`NaN < 0.05` is false, so coerceAtLeast returns NaN),
+            // reaches Color(), and `NaN.toInt()` is 0: the face renders pure
+            // black on black, invisibly, and it persists across restarts
+            // because it is in preferences.
             fun f(key: String): Float? =
-                if (o.has(key)) o.optDouble(key).toFloat() else null
+                if (o.has(key)) o.optDouble(key).takeIf { it.isFinite() }?.toFloat() else null
             out[state] = Binding(
                 pattern = pattern,
                 color = colour,

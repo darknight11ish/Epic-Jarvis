@@ -69,12 +69,31 @@ fun relLuma(c: Color): Float {
  */
 class FlashGovernor {
     private val window = ArrayDeque<Float>()
-    private var lastY: Float? = null
+
+    /**
+     * Luminance at the last turning point — NOT the previous frame's.
+     *
+     * This is the whole correction. It used to hold the previous frame and
+     * compare adjacent frames against `FLASH_MIN_LUMA_DELTA`, but that constant
+     * is a WCAG threshold between the *extremes* of a flash, not between
+     * consecutive frames. Dividing a real swing across a frame interval makes
+     * every step tiny — a 0.42 swing at 4 Hz on a 120 Hz panel is 0.028 a frame
+     * — so `abs(d) < 0.10` was true on every single frame, the window stayed
+     * empty, and the governor counted zero transitions and refused nothing.
+     *
+     * It was blind in exactly the 2-7 Hz band it exists to police, and the
+     * faster the display the blinder it got. It has almost certainly never
+     * fired, which is why it looked correct.
+     *
+     * Tracking the extremum instead measures peak-to-trough, which is what the
+     * threshold actually describes.
+     */
+    private var extreme = Float.NaN
     private var safe: Swatch? = null
     private var dir = 0
 
     fun reset() {
-        window.clear(); lastY = null; safe = null; dir = 0
+        window.clear(); extreme = Float.NaN; safe = null; dir = 0
     }
 
     fun govern(out: Swatch, t: Float): Swatch {
@@ -84,17 +103,28 @@ class FlashGovernor {
         while (window.isNotEmpty() && t - window.first() > 1f) window.removeFirst()
 
         val y = relLuma(out.a)
-        val prev = lastY
-        if (prev == null) {
-            lastY = y; safe = out; return out
+        if (extreme.isNaN()) {
+            extreme = y; safe = out; return out
         }
-        val d = y - prev
+
+        val d = y - extreme
+        val moving = if (d > 0f) 1 else if (d < 0f) -1 else 0
+
+        // Still travelling the way we were: this is a new peak, not a new
+        // transition. Move the reference with it so a slow ramp cannot be
+        // counted over and over.
+        if (moving != 0 && moving == dir) {
+            extreme = y; safe = out; return out
+        }
+
+        // A reversal that has not yet swung far enough to be a flash. The
+        // reference deliberately stays at the peak.
         if (abs(d) < Spec.FLASH_MIN_LUMA_DELTA) {
-            lastY = y; safe = out; return out
+            safe = out; return out
         }
-        val newDir = if (d > 0) 1 else -1
-        val opposing = newDir != dir
-        if (opposing && window.size >= Spec.FLASH_MAX_TRANSITIONS_PER_S) {
+
+        val newDir = moving
+        if (window.size >= Spec.FLASH_MAX_TRANSITIONS_PER_S) {
             // Over budget. Hold the colour that was ALREADY on screen — not the
             // one being refused, which was the whole point. Holding is the right
             // failure: going dark is itself a transition and going bright is the
@@ -102,10 +132,10 @@ class FlashGovernor {
             // luminance change at all.
             return safe ?: out
         }
-        if (opposing) {
-            window.addLast(t); dir = newDir
-        }
-        lastY = y; safe = out
+        window.addLast(t)
+        dir = newDir
+        extreme = y
+        safe = out
         return out
     }
 }
@@ -122,7 +152,12 @@ class FlashGovernor {
  */
 fun resolveRaw(bind: Binding, t: Float, amp: Float, seed: Int = 0): Swatch {
     val q = bind.merged
-    val periodS = (q.periodS ?: 4.5f).coerceAtLeast(0.05f)
+    // Floored at the strobe minimum, not at 0.05s. 0.05 permits a 20 Hz
+    // oscillation on a face that fills a quarter of the visual field, and the
+    // only thing standing between a hand-edited binding and that was a governor
+    // which — see FlashGovernor — could not see it. The shipped patterns are
+    // all 1.1s or slower, so nothing legitimate is affected.
+    val periodS = (q.periodS ?: 4.5f).coerceAtLeast(Spec.STROBE_MIN_PERIOD_S)
 
     return when (bind.kind) {
         PatternKind.SOLID -> {
@@ -162,7 +197,7 @@ fun resolveRaw(bind: Binding, t: Float, amp: Float, seed: Int = 0): Swatch {
 
         PatternKind.BREATHE -> {
             val base = bind.tint ?: Palette.ICE_4
-            val depth = q.depth ?: 0.45f
+            val depth = (q.depth ?: 0.45f).coerceIn(0f, 1f)
             val e = (sin(t / periodS * PI2) * 0.5f + 0.5f) * depth
             Swatch(lift(base, e * 0.8f - depth * 0.25f), lift(base, -0.6f + e * 0.3f))
         }
@@ -216,7 +251,7 @@ fun resolveRaw(bind: Binding, t: Float, amp: Float, seed: Int = 0): Swatch {
             // so the limit applies to whatever arrives — spec, hand-written
             // binding, or a future randomiser.
             val rate = (q.rateHz ?: 1.2f).coerceAtMost(Spec.FLICKER_RATE_HZ_MAX)
-            val depth = q.depth ?: 0.25f
+            val depth = (q.depth ?: 0.25f).coerceIn(0f, 1f)
             val n = hash01(floor(t * rate).toInt() + seed * 17) * 0.6f +
                 hash01(floor(t * rate * Spec.FLICKER_HARMONIC).toInt() + seed * 31) * 0.4f
             val idx = (1f + n * depth * (ramp.size - 1))

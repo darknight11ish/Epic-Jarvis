@@ -191,8 +191,19 @@ object Palette {
      * a contrast floor. Walking toward white instead would desaturate the
      * hue, and the hue is the thing the user bound.
      */
-    fun steps(family: String): List<Color> =
-        (1..5).mapNotNull { byId["$family-$it"] }
+    fun steps(family: String): List<Color> = ramps[family] ?: emptyList()
+
+    /**
+     * The ten ramps, built once.
+     *
+     * `steps()` used to rebuild its list on every call: an ArrayList, an
+     * iterator, five StringBuilders, five Strings and five map lookups — about
+     * a dozen objects. `resolveRaw` calls it inside the FLICKER branch, which
+     * is per frame, so a state bound to flicker allocated that twelve times a
+     * frame for ten lists that can never change.
+     */
+    private val ramps: Map<String, List<Color>> =
+        families.associateWith { f -> (1..5).mapNotNull { byId["$f-$it"] } }
 
     /** The family a colour belongs to, or null if it is not a palette colour. */
     fun familyOf(color: Color): String? =

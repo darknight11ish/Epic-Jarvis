@@ -144,20 +144,32 @@ object Spec {
 
     enum class Overlay { NONE, CLOCK, HITCH, NOTCHES }
 
+    // Preallocated. `transformFor` is called twice a frame — once in `advance`
+    // and once in `snapshot` — and built a fresh Transform every time for a
+    // table that never changes. The `else` branch is the only one that depends
+    // on its argument, so only that one still allocates.
+    private val T_APPROVAL = Transform(FaceState.IDLE, 1.0f, 1, 1.0f, Overlay.CLOCK)
+    private val T_ERROR = Transform(FaceState.THINKING, 0.3f, -1, 0.9f, Overlay.HITCH)
+    private val T_STANDBY = Transform(FaceState.IDLE, 0.5f, 1, 0.6f, Overlay.NONE)
+    private val T_BANKED = Transform(FaceState.IDLE, 0.0f, 1, 0.45f, Overlay.NOTCHES)
+    private val T_PLAIN = FaceState.entries.associateWith {
+        Transform(it, 1.0f, 1, 1.0f, Overlay.NONE)
+    }
+
     fun transformFor(state: FaceState): Transform = when (state) {
         // Borrows IDLE, not listening. A dozen faces branch on the state name
         // and multiply by the microphone level, and during an approval the mic
         // is not live — so borrowing listening made the one state that must
         // pull the eye across a room the deadest thing on the screen.
-        FaceState.APPROVAL -> Transform(FaceState.IDLE, 1.0f, 1, 1.0f, Overlay.CLOCK)
+        FaceState.APPROVAL -> T_APPROVAL
         // Runs BACKWARDS, and nothing else in this product ever does, so the
         // direction is the signal. Colour alone fails for the one man in twelve
         // with a red-green deficiency, at a glance, and in any frozen frame.
-        FaceState.ERROR -> Transform(FaceState.THINKING, 0.3f, -1, 0.9f, Overlay.HITCH)
-        FaceState.STANDBY -> Transform(FaceState.IDLE, 0.5f, 1, 0.6f, Overlay.NONE)
+        FaceState.ERROR -> T_ERROR
+        FaceState.STANDBY -> T_STANDBY
         // Still, not slow. rate 0.0 means the clock actually stops.
-        FaceState.BANKED -> Transform(FaceState.IDLE, 0.0f, 1, 0.45f, Overlay.NOTCHES)
-        else -> Transform(state, 1.0f, 1, 1.0f, Overlay.NONE)
+        FaceState.BANKED -> T_BANKED
+        else -> T_PLAIN.getValue(state)
     }
 
     /** True when the state should get the cached glow halo. renderer.active_states. */
@@ -321,10 +333,14 @@ data class Binding(
     val kind: PatternKind get() = pattern.kind
 
     /** Rule 1 applied: this binding's params over the pattern's own. */
-    val merged: Params get() = params.over(pattern.params)
+    // Computed once at construction, not on every read. As getters these
+    // rebuilt a 24-field Params each time, and `tint` called `merged` a second
+    // time just to pull one field out of it — four Params a frame for a value
+    // that cannot change, since Binding is immutable.
+    val merged: Params = params.over(pattern.params)
 
     /** The bound colour, or the pattern's own. */
-    val tint: Color? get() = color ?: merged.color
+    val tint: Color? = color ?: merged.color
 }
 
 /**

@@ -18,6 +18,7 @@ import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -89,6 +90,11 @@ class EventService : Service() {
         // outlives the connection that could deliver the answer is a trap.
         ApprovalNotifier.clear(this)
         JarvisRuntime.stopStream()
+        // The scope, not only the one child it tracked. onClick and
+        // onStartCommand launch untracked work on it, so a service torn
+        // down mid-call left a coroutine running on a live job, holding
+        // the destroyed instance.
+        scope.cancel()
         super.onDestroy()
     }
 

@@ -102,9 +102,15 @@ object DisplayRate {
      * Records a frame interval and keeps a running estimate.
      *
      * Fed from the face's own frame loop, so it measures the surface that
-     * actually matters. A median would be better than a mean against the odd
-     * 200 ms stall, so outliers beyond double the current estimate are dropped
-     * rather than averaged in.
+     * actually matters. Outliers in EITHER direction are dropped rather than
+     * averaged in.
+     *
+     * Both tails, because the case this names — the odd 200 ms stall — makes
+     * `hz` small, and the guard used to test only `hz > prev * 2`. So every
+     * stall it was written for went straight in while harmless fast samples
+     * were rejected. Ten hitches during a scroll dragged a 120 Hz estimate down
+     * to about 80, and this screen then reported the face was missing frames it
+     * was not — the exact diagnosis it exists to provide, inverted.
      */
     fun sample(deltaNanos: Long) {
         if (deltaNanos <= 0) return
@@ -113,7 +119,7 @@ object DisplayRate {
         val prev = _achievedHz.value
         _achievedHz.value = when {
             prev <= 0f -> hz
-            hz > prev * 2f -> prev
+            hz > prev * 2f || hz < prev * 0.5f -> prev
             else -> prev + (hz - prev) * 0.05f
         }
     }

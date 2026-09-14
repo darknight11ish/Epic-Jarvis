@@ -10,6 +10,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -65,6 +66,11 @@ class LinkTileService : TileService() {
     override fun onDestroy() {
         watcher?.cancel()
         watcher = null
+        // The scope, not only the one child it tracked. onClick and
+        // onStartCommand launch untracked work on it, so a service torn
+        // down mid-call left a coroutine running on a live job, holding
+        // the destroyed instance.
+        scope.cancel()
         super.onDestroy()
     }
 
