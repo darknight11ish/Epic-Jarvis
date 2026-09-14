@@ -27,8 +27,8 @@ import com.jarvis.client.net.Attention
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
-import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.Field
+import com.jarvis.client.ui.parts.Freshness
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Meter
@@ -249,26 +249,6 @@ private fun RushBanner(rush: JsonObject) {
             "Nothing is approved from here. A latch is cleared where the scanner runs.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textMid,
-        )
-    }
-}
-
-@Composable
-private fun Freshness(link: LinkState, stale: Boolean, fetchedAtMs: Long) {
-    val chrome = LocalChrome.current
-    val bad = stale || link != LinkState.CONNECTED
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Dot(if (bad) chrome.warnMark else chrome.okMark)
-        Spacer(Modifier.width(10.dp))
-        Text(
-            when {
-                link != LinkState.CONNECTED -> "Not connected. Everything below is last known."
-                stale -> "The stream is stale. Everything below is last known."
-                fetchedAtMs == 0L -> "Reading…"
-                else -> "Live."
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (bad) chrome.warnInk else chrome.textMid,
         )
     }
 }

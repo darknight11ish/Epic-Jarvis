@@ -553,6 +553,10 @@ object JarvisRuntime {
     private fun <T> ApiResult<T>.orNull(): T? = (this as? ApiResult.Ok)?.value
 
     suspend fun revert(entry: UndoEntry): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
         val result = api.revert(entry.id)
         when (result) {
             is ApiResult.Ok -> refreshInbox()
@@ -562,6 +566,10 @@ object JarvisRuntime {
     }
 
     suspend fun cancelJob(job: JobRecord): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
         val result = api.cancelJob(job.id)
         when (result) {
             is ApiResult.Ok -> refreshInbox()
@@ -580,6 +588,10 @@ object JarvisRuntime {
      * No caller yet: nothing in the API serves a hold handle. See [JarvisApi].
      */
     suspend fun cancelHold(handle: String): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
         val result = api.cancelHold(handle)
         when (result) {
             is ApiResult.Ok -> {
@@ -610,6 +622,30 @@ object JarvisRuntime {
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
     }
+
+    /**
+     * Why a state-changing call that is *not* a decision cannot be made now.
+     *
+     * Rule 4 blocks acting on a stale stream, and `decisionBlocker` was the
+     * only place that read it — so the gate covered one of the write paths and
+     * not the rest. `revert` is the call the API doc singles out as "the one
+     * state-changing thing a phone may drive", and it went out against an undo
+     * shelf that could be hours old; `cancelJob` went out against a job list
+     * that could name jobs long finished. Neither is an approval. Both are
+     * actions, and rule 4 is about actions.
+     *
+     * Deliberately not applied to `markDigestSeen`, `setMuted` or
+     * `setWakeWord`: marking a brief read is idempotent and claims nothing
+     * about the brief, and mute and the wake word are settings on this device's
+     * relationship with Jarvis rather than verdicts on anything Jarvis is
+     * holding. Refusing those on a stale link would be ceremony, not safety.
+     */
+    fun actionBlocker(): String? =
+        if (_stale.value || _link.value != LinkState.CONNECTED) {
+            "Not connected to the desktop, so this cannot be delivered."
+        } else {
+            null
+        }
 
     // -------------------------------------------------------- decisions ----
 

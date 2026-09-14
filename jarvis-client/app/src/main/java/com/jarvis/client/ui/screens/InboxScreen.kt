@@ -25,11 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.LinkState
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.ui.T
+import com.jarvis.client.ui.parts.Freshness
 
 /**
  * The brief, the shelf and the running jobs.
@@ -49,6 +51,8 @@ import com.jarvis.client.ui.T
  */
 @Composable
 fun InboxScreen(
+    link: LinkState,
+    stale: Boolean,
     attention: Attention,
     digest: List<DigestItem>,
     undo: List<UndoEntry>,
@@ -61,6 +65,11 @@ fun InboxScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Rule 4, on this screen: Revert and Cancel are actions, so a stream we
+    // cannot confirm is live disables them. `JarvisRuntime.actionBlocker`
+    // refuses them again on the way out - this is the visible half of the same
+    // rule, not a substitute for it.
+    val canAct = link == LinkState.CONNECTED && !stale
     Column(modifier.fillMaxSize().background(T.Void)) {
         Row(
             Modifier.fillMaxWidth().background(T.Plate).padding(16.dp),
@@ -90,6 +99,15 @@ fun InboxScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            // This screen used to take neither `link` nor `stale`, so it showed
+            // a shelf and a job list with no indication of how old either was,
+            // and offered Revert and Cancel against them. It also renders no
+            // notice surface - `_notice` is only on Home - so the refusal that
+            // followed a tap on a dead link was invisible: the row simply did
+            // not change. Rule 4's "block acting when the stream is stale" was
+            // being enforced nowhere the user could see.
+            item(key = "freshness") { Freshness(link, stale) }
+
             item(key = "mute") {
                 Row(
                     Modifier
@@ -227,7 +245,7 @@ fun InboxScreen(
                         Spacer(Modifier.height(8.dp))
                         // A cancelled job is not resumable, so the label says
                         // "cancel" rather than "pause".
-                        Action("Cancel", T.Dim) { onCancelJob(job) }
+                        Action("Cancel", T.Dim, enabled = canAct) { onCancelJob(job) }
                     }
                 }
             }
@@ -245,7 +263,7 @@ fun InboxScreen(
                         )
                         if (entry.reversible) {
                             Spacer(Modifier.height(8.dp))
-                            Action("Undo", T.Ok) { onRevert(entry) }
+                            Action("Undo", T.Ok, enabled = canAct) { onRevert(entry) }
                         } else {
                             // Listed anyway, marked, with the reason. A shelf
                             // that quietly left these off would look like a
@@ -302,15 +320,25 @@ private fun Card(
 }
 
 @Composable
-private fun Action(label: String, tint: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+private fun Action(
+    label: String,
+    tint: androidx.compose.ui.graphics.Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    // Dimmed and unclickable rather than hidden. A control that vanishes when
+    // the link drops reads as "this was never possible"; one that greys out
+    // reads as "not right now", which is the true statement and the one the
+    // freshness row at the top of this screen is already making.
+    val shade = if (enabled) tint else tint.copy(alpha = 0.35f)
     Text(
         label,
         style = MaterialTheme.typography.labelMedium,
-        color = tint,
+        color = shade,
         modifier = Modifier
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(role = Role.Button, enabled = enabled, onClick = onClick)
             .minimumInteractiveComponentSize()
-            .background(tint.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            .background(shade.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp),
     )
 }

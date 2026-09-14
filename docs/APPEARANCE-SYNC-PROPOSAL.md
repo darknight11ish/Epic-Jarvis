@@ -95,11 +95,34 @@ because it looks like it worked.
 phone can grey out faces it cannot draw in the picker instead of offering them:
 
 ```json
-"renderable_by": { "hud": ["...all 20..."], "phone": ["arc","orbit","comb","iris","fullerene","spiral"] }
+"renderable_by": { "hud": ["...all 20..."], "phone": ["...the 8 in Faces.all..."] }
 ```
 
-The client sends its own name in `X-Jarvis-Client`, so the server already knows
-which list applies.
+**This cannot be keyed on `X-Jarvis-Client`, and the first draft of this
+document said it could.** Both clients send the literal string `hud` — the
+desktop because it is the HUD (`commands.rs`, `JARVIS_CLIENT`), the phone
+because the server's origin check runs before the token check and refuses a
+request with no `Origin` unless that header marks it first-party, and a native
+client has no `Origin` (`JarvisApi.CLIENT_VALUE`, which says exactly this).
+The header is load-bearing for CSRF and carries no identity: changing the
+phone's value to `phone` would get it 403ed before its token was read.
+
+So this needs one of two things first, and the choice belongs to whoever
+changes the backend:
+
+- the origin check accepts a request with no `Origin` on the token alone, at
+  which point `X-Jarvis-Client` is free to mean what it says; or
+- the answer is keyed on the **pairing token** rather than a header — which is
+  the more defensible design anyway, because the token is the only thing in the
+  request the server itself issued.
+
+Until then the phone should filter `renderable_by` client-side against
+`Faces.all`, and the server should treat any face id it is handed as valid.
+
+The face list is also written here as a count for a reason: the earlier draft
+hard-coded six ids, the phone now renders eight, and a hand-maintained list of
+another component's contents is the thing in this system that has rotted most
+reliably.
 
 ### 3. Clamping — the one part that is not cosmetic
 

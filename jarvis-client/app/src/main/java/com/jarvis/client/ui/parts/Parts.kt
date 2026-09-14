@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.LinkState
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
@@ -163,6 +164,35 @@ fun Pill(
 @Composable
 fun Dot(color: Color, modifier: Modifier = Modifier, size: Int = 8) {
     Box(modifier.size(size.dp).clip(CircleShape).background(color))
+}
+
+/**
+ * Whether what is on the screen below can be trusted, said in words.
+ *
+ * Lifted out of BrainScreen, where it was private and therefore used on one
+ * screen out of five. Rule 4 blocks *acting* on a stale stream; it does not
+ * stop a screen showing what it last knew - but a screen that shows last-known
+ * data and does not say so is the one thing that rule cannot tolerate, because
+ * the owner cannot tell "nothing is waiting" from "I stopped being told".
+ */
+@Composable
+fun Freshness(link: LinkState, stale: Boolean, fetchedAtMs: Long = 1L) {
+    val chrome = LocalChrome.current
+    val bad = stale || link != LinkState.CONNECTED
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Dot(if (bad) chrome.warnMark else chrome.okMark)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            when {
+                link != LinkState.CONNECTED -> "Not connected. Everything below is last known."
+                stale -> "The stream is stale. Everything below is last known."
+                fetchedAtMs == 0L -> "Reading…"
+                else -> "Live."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (bad) chrome.warnInk else chrome.textMid,
+        )
+    }
 }
 
 /** A one-line label/value row, with the value in the machine face when it is one. */

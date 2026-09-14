@@ -101,8 +101,14 @@ class LinkTileService : TileService() {
         pending: Int,
     ) {
         val tile = qsTile ?: return
+        // INACTIVE, not UNAVAILABLE, when the link is down. SystemUI does not
+        // dispatch onClick to an unavailable tile, so marking it that way
+        // deleted the branch in onClick that starts EventService and opens the
+        // app - the one thing worth doing from the tile, refused in exactly the
+        // state that makes it worth doing. The subtitle below already says
+        // "Offline", so the tile still reads as off rather than as ready.
         tile.state = when {
-            link != LinkState.CONNECTED -> Tile.STATE_UNAVAILABLE
+            link != LinkState.CONNECTED -> Tile.STATE_INACTIVE
             muted -> Tile.STATE_INACTIVE
             else -> Tile.STATE_ACTIVE
         }

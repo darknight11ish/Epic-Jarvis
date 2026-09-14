@@ -399,6 +399,8 @@ class MainActivity : FragmentActivity() {
                 Screen.INBOX -> {
                     LaunchedEffect(Unit) { JarvisRuntime.refreshInbox() }
                     InboxScreen(
+                        link = link,
+                        stale = stale,
                         attention = attention,
                         digest = digest,
                         undo = undo,
