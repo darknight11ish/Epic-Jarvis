@@ -248,6 +248,45 @@ html[data-state="streaming"] .shell::before {
   width: 100%;
   height: 100%;
   overflow: visible;
+  /* The speech envelope, as a positional push. `voice.js` writes
+     `--voice-scale` (1 .. 1.035) per frame while Jarvis is talking or
+     listening; the fallback drives it even before TTS is wired, so the reactor
+     is never a still picture of a face that is mid-sentence. The default keeps
+     every other state exactly where it was. */
+  transform: scale(var(--voice-scale, 1));
+}
+
+/* The other half of the envelope: `speech.brightness_lift`, 0 .. 0.18. It
+   lands on the halo and the core rather than the whole glyph, so the rings and
+   vanes keep their own animation and only the light moves. */
+html[data-voice="speaking"] .reactor-core,
+html[data-voice="listening"] .reactor-core {
+  opacity: calc(0.75 + var(--voice-lift, 0));
+}
+
+html[data-voice="speaking"] .reactor-halo,
+html[data-voice="listening"] .reactor-halo {
+  opacity: calc(0.4 + var(--voice-lift, 0));
+}
+
+/* Listening is ember, per the spec's `listening` state: "Ember stays: it is
+   the product's established look. Listening is made unmistakable by MOTION
+   instead." The motion is above; this is the colour. */
+html[data-voice="listening"] .reactor-ring,
+html[data-voice="listening"] .reactor-vanes line {
+  stroke: var(--state-listening);
+}
+
+html[data-voice="listening"] .reactor-core {
+  fill: var(--state-listening);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* `voice.js` already writes a flat zero here, so this is belt and braces
+     for the frame between the media query flipping and the next tick. */
+  .reactor svg {
+    transform: none;
+  }
 }
 
 .reactor-halo {

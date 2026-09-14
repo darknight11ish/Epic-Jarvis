@@ -86,6 +86,7 @@ import {
   announce,
   currentQueue,
   decide as decideOnBackend,
+  faceState,
   fetchDigest,
   markDigestSeen,
   onLink,
@@ -95,6 +96,7 @@ import {
   followTheme,
   start as startLink,
 } from "./jarvis-link.js";
+import { startVoice, setVoiceMode } from "./voice.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -2037,6 +2039,7 @@ focusInput();
 // One stream, owned by Rust, fanned out to all three surfaces. This window
 // subscribes; it does not connect, and it does not poll.
 followTheme();
+startVoice(dom.root);
 startLink();
 
 let lastConnected = null;
@@ -2061,6 +2064,15 @@ onLink((link) => {
   // changes state — which is the moment their answer is most likely to differ.
   if (lastConnected !== null && lastConnected !== link.connected) refreshHealth();
   lastConnected = link.connected;
+
+  // Section B: the reactor talks. `faceState()` is the composed state the
+  // arbiter would serve if any route served it, and `speaking` / `listening`
+  // are the only two the envelope cares about. Everything else stops the loop.
+  //
+  // This is deliberately NOT `data-state`, which is this window's own phase
+  // machine (idle / streaming / done / error / approval) and says nothing
+  // about audio. A gate can be open while Jarvis is mid-sentence.
+  setVoiceMode(faceState(link));
 
   syncApprovalButtons();
   syncAttention();

@@ -157,3 +157,27 @@ was written to stop.
 `fonts/fonts.css`, and the two remote origins are gone from its meta CSP). The
 backend's own copy of this file has the same three lines and needs the same
 change, or the fix is lost the next time the page is re-synced.
+
+---
+
+## 9. Nothing serves an audio level, and nothing plays the audio
+
+**Read:** `jarvis-visual-spec.json` → `speech`; `DESKTOP-UPDATE-PROMPT.md` § B.
+
+The spec's contract is that the client feeds `setSpeechLevel(0..1)` "per audio
+frame with the level of the TTS audio **you are playing**". On Android that is
+true: the app owns the `AudioTrack`. On this desktop it is not. The backend
+speaks out of process — there is no `<audio>` element in any window, no route
+serves a level, and `/api/events` carries no `speaking` amplitude — so there is
+nothing here to put an `AnalyserNode` on.
+
+What the desktop does instead is the spec's own answer to this: `speech.fallback`
+("Speaking is never frozen, even before TTS is wired"). `src/voice.js` runs the
+synthetic envelope whenever the composed face state is `speaking` and no level
+has arrived for 500ms, which on this build is always. `attachSpeechSource()` and
+`attachMicSource()` are the real path, written and wired but with nothing to
+attach to yet; the day the backend hands the client the audio, or a route
+publishes a level, one call replaces the fallback.
+
+**Not a doc bug** — the spec anticipated this exactly. Recorded because "section
+B is done" would otherwise imply real audio is being analysed, and it is not.
