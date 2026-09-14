@@ -18,7 +18,7 @@ in `~/.cargo/registry` read directly rather than from documentation.
 ## Status
 
 Fixed and verified in commits `46fd1ca`, `11bf501`, `eed30e5`, `137cef9` and
-`b0nt` (this one). Every fix was checked by re-running the reviewer's own repro
+`cc65ef9`. Every fix was checked by re-running the reviewer's own repro
 or by a new test, not by inspection.
 
 **All six ship blockers are closed.** So is every item in the correctness table,
