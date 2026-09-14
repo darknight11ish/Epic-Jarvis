@@ -1,108 +1,133 @@
-<#
-.SYNOPSIS
-  Checks the Windows-only findings from docs/AUDIT.md that no Linux container
-  could settle.
-
-.DESCRIPTION
-  Everything in this repo has been verified by cross-compilation type-checking,
-  unit tests and a headless browser. None of that can tell you whether the
-  Acrylic tint applies on YOUR build, whether Alt+Space is already taken, or
-  whether a Job Object actually reaps a Python launcher's grandchildren.
-
-  This does. It reads state and reports; it changes nothing.
-
-.EXAMPLE
-  powershell -ExecutionPolicy Bypass -File scripts\verify-windows.ps1
-#>
+# Jarvis Desktop - Windows verification
+#
+# Checks the Windows-only findings from docs/AUDIT.md that no Linux container
+# could settle. Reads state and reports; changes nothing.
+#
+#   powershell -ExecutionPolicy Bypass -File scripts\verify-windows.ps1
+#
+# Written deliberately flat for Windows PowerShell 5.1: no angle brackets in
+# strings, no backtick continuations, no inline if-expressions as arguments.
+# The previous version used all three and would not parse.
 
 $ErrorActionPreference = 'Continue'
-$results = [System.Collections.Generic.List[object]]::new()
-function Add-Result($area, $finding, $verdict, $detail) {
-  $results.Add([pscustomobject]@{ Area = $area; Finding = $finding; Verdict = $verdict; Detail = $detail })
+$rows = New-Object System.Collections.ArrayList
+
+function Add-Row([string]$Area, [string]$Check, [string]$Verdict, [string]$Detail) {
+    $null = $rows.Add((New-Object psobject -Property ([ordered]@{
+        Area    = $Area
+        Check   = $Check
+        Verdict = $Verdict
+        Detail  = $Detail
+    })))
 }
 
-Write-Host "`nJarvis Desktop — Windows verification" -ForegroundColor Cyan
-Write-Host "=====================================`n"
+Write-Host ''
+Write-Host 'Jarvis Desktop - Windows verification' -ForegroundColor Cyan
+Write-Host '====================================='
+Write-Host ''
 
-# --- 1. Windows build ------------------------------------------------------
-# The Acrylic tint is honoured below build 22523 and silently dropped above it.
-$build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber
-$ubr   = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').UBR
-Add-Result 'Platform' 'Windows build' 'INFO' "$build.$ubr"
+# --- Platform -------------------------------------------------------------
+$cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+$build = [int]$cv.CurrentBuildNumber
+Add-Row 'Platform' 'Windows build' ("$build." + $cv.UBR) $cv.ProductName
+
+# window-vibrancy passes the tint only below build 22523; above it, the DWM
+# backdrop path is used and the colour is dropped.
 if ($build -ge 22523) {
-  Add-Result 'Acrylic' 'Tint argument honoured?' 'NO' "build $build >= 22523, so window-vibrancy takes the DWM path and drops the colour. Contrast comes from CSS (10.7:1) so this is cosmetic."
+    $v = 'NO'
+    $d = 'Build is at or above 22523, so the DWM path is used and the tint colour is dropped. Cosmetic only: contrast comes from CSS at 10.7 to 1.'
 } else {
-  Add-Result 'Acrylic' 'Tint argument honoured?' 'YES' "build $build < 22523, so SetWindowCompositionAttribute is used and the tint applies."
+    $v = 'YES'
+    $d = 'Build is below 22523, so SetWindowCompositionAttribute is used and the tint applies.'
 }
+Add-Row 'Acrylic' 'Tint argument honoured' $v $d
 
-# Transparency effects off in Settings makes every backdrop a no-op.
 $tp = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' -ErrorAction SilentlyContinue).EnableTransparency
-Add-Result 'Acrylic' 'Transparency effects enabled' $(if ($tp -eq 1) { 'YES' } elseif ($null -eq $tp) { 'UNKNOWN' } else { 'NO' }) `
-  $(if ($tp -ne 1) { 'Settings > Personalisation > Colours. With this off there is no blur on any window, and apply_mica still returns Ok.' } else { '' })
+if ($tp -eq 1) { $v = 'YES'; $d = '' }
+elseif ($null -eq $tp) { $v = 'UNKNOWN'; $d = 'Key not present.' }
+else { $v = 'NO'; $d = 'Settings, Personalisation, Colours. With this off there is no blur on any window and apply_mica still returns Ok.' }
+Add-Row 'Acrylic' 'Transparency effects on' $v $d
 
-# --- 2. Hotkey collisions --------------------------------------------------
-# RegisterHotKey is system-wide and first-come-first-served.
-$procs = Get-Process -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName -Unique
-$claimants = @{
-  'PowerToys'    = 'PowerToys Run defaults to Alt+Space'
-  'PowerToys.Run'= 'PowerToys Run defaults to Alt+Space'
-  'Flow.Launcher'= 'Flow Launcher commonly binds Alt+Space'
-  'Listary'      = 'Listary may bind Alt+Space'
-  'Wox'          = 'Wox defaults to Alt+Space'
-  'Keypirinha'   = 'Keypirinha may bind Alt+Space'
+# --- Hotkeys --------------------------------------------------------------
+$names = Get-Process -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessName -Unique
+$contenders = @('PowerToys', 'PowerToys.Run', 'Flow.Launcher', 'Listary', 'Wox', 'Keypirinha')
+$hits = @()
+foreach ($n in $contenders) { if ($names -contains $n) { $hits += $n } }
+if ($hits.Count -gt 0) {
+    Add-Row 'Hotkeys' 'Alt+Space contender running' 'YES' ($hits -join ', ')
+} else {
+    Add-Row 'Hotkeys' 'Alt+Space contender running' 'none seen' 'Alt+Space is also the system window menu in every app while Jarvis holds it.'
 }
-$found = $claimants.Keys | Where-Object { $procs -contains $_ }
-Add-Result 'Hotkeys' 'Alt+Space contender running' $(if ($found) { 'YES' } else { 'none seen' }) `
-  $(if ($found) { ($found | ForEach-Object { $claimants[$_] }) -join '; ' } else { 'Alt+Space is also the system window menu in every app while Jarvis holds it.' })
 
-# Multiple keyboard layouts make Alt+Shift the layout toggle, which fights
-# Alt+Shift+S / N / W.
 $layouts = (Get-WinUserLanguageList).Count
-Add-Result 'Hotkeys' 'Keyboard layouts installed' $layouts `
-  $(if ($layouts -gt 1) { 'More than one layout: Alt+Shift is the layout switch, which competes with Alt+Shift+S/N/W.' } else { '' })
+if ($layouts -gt 1) { $d = 'More than one layout, so Alt+Shift is the layout switch and competes with Alt+Shift+S, N and W.' } else { $d = '' }
+Add-Row 'Hotkeys' 'Keyboard layouts' $layouts $d
 
-# --- 3. Displays -----------------------------------------------------------
-# Mixed DPI is what broke the widget's saved position.
+# --- Displays -------------------------------------------------------------
 Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
 $screens = [System.Windows.Forms.Screen]::AllScreens
-$dpis = @()
-foreach ($s in $screens) { $dpis += "$($s.Bounds.Width)x$($s.Bounds.Height)@$($s.Bounds.X),$($s.Bounds.Y)" }
-Add-Result 'Display' 'Monitors' $screens.Count ($dpis -join ' | ')
-Add-Result 'Display' 'Mixed DPI risk' $(if ($screens.Count -gt 1) { 'CHECK' } else { 'N/A' }) `
-  $(if ($screens.Count -gt 1) { 'Drag the widget to each monitor, restart the app, and confirm it comes back where you left it.' } else { 'Single monitor: the DPI finding cannot bite.' })
+$desc = @()
+foreach ($s in $screens) {
+    $desc += ('{0}x{1} at {2},{3}' -f $s.Bounds.Width, $s.Bounds.Height, $s.Bounds.X, $s.Bounds.Y)
+}
+Add-Row 'Display' 'Monitors' $screens.Count ($desc -join ' | ')
+if ($screens.Count -gt 1) {
+    Add-Row 'Display' 'Mixed DPI check' 'TODO' 'Drag the widget to each monitor, restart the app, confirm it returns to the same place.'
+} else {
+    Add-Row 'Display' 'Mixed DPI check' 'N/A' 'Single monitor, so the DPI finding cannot bite.'
+}
 
-# --- 4. WebView2 -----------------------------------------------------------
-$wv = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue
-Add-Result 'WebView2' 'Runtime installed' $(if ($wv) { 'YES' } else { 'NO' }) $(if ($wv) { "v$($wv.pv)" } else { 'The installer bootstrapper will fetch it.' })
+# --- WebView2 -------------------------------------------------------------
+$wvKeys = @(
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+    'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+)
+$wv = $null
+foreach ($k in $wvKeys) {
+    $p = Get-ItemProperty $k -ErrorAction SilentlyContinue
+    if ($p) { $wv = $p; break }
+}
+if ($wv) { Add-Row 'WebView2' 'Runtime installed' 'YES' ('v' + $wv.pv) }
+else { Add-Row 'WebView2' 'Runtime installed' 'NO' 'The installer bootstrapper will fetch it.' }
 
-# --- 5. Python, and whether it hands off to a grandchild -------------------
-# This is the one that decides whether the Job Object work matters.
+# --- Supervision ----------------------------------------------------------
+# This decides whether the Job Object work was worth doing.
 $py = Get-Command python -ErrorAction SilentlyContinue
 if (-not $py) {
-  Add-Result 'Supervision' 'python on PATH' 'NO' 'Backend supervision cannot be tested without it.'
+    Add-Row 'Supervision' 'python on PATH' 'NO' 'Backend supervision cannot be tested without it.'
 } else {
-  $isAlias = $py.Source -like '*WindowsApps*'
-  Add-Result 'Supervision' 'python resolves to' $(if ($isAlias) { 'STORE ALIAS' } else { 'real exe' }) $py.Source
-  if ($isAlias) {
-    Add-Result 'Supervision' 'Launcher hand-off risk' 'HIGH' 'An App Execution Alias re-execs or opens the Store. The pid we hold may not be the pid that binds the port, which is exactly the case the Job Object exists for.'
-  }
-  # Does the launched process stay the serving process?
-  $p = Start-Process -FilePath $py.Source -ArgumentList '-c','import time; time.sleep(3)' -PassThru -WindowStyle Hidden
-  Start-Sleep -Milliseconds 700
-  $alive = -not $p.HasExited
-  Add-Result 'Supervision' 'Launched pid still alive after 0.7s' $(if ($alive) { 'YES' } else { 'NO' }) `
-    $(if ($alive) { "pid $($p.Id) is the interpreter itself" } else { 'It exited immediately — a launcher handing off. pid() must not treat that as "backend gone".' })
-  Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+    $isAlias = $py.Source -like '*WindowsApps*'
+    if ($isAlias) { $v = 'STORE ALIAS' } else { $v = 'real exe' }
+    Add-Row 'Supervision' 'python resolves to' $v $py.Source
+    if ($isAlias) {
+        Add-Row 'Supervision' 'Launcher hand-off risk' 'HIGH' 'An App Execution Alias re-execs or opens the Store, so the pid we launch may not be the pid that binds the port. That is the case the Job Object exists for.'
+    }
+    $proc = Start-Process -FilePath $py.Source -ArgumentList '-c', 'import time; time.sleep(3)' -PassThru -WindowStyle Hidden
+    Start-Sleep -Milliseconds 700
+    if ($proc.HasExited) {
+        Add-Row 'Supervision' 'Launched pid alive after 0.7s' 'NO' 'It exited immediately, so it is a launcher handing off. pid() must not read that as backend gone.'
+    } else {
+        Add-Row 'Supervision' 'Launched pid alive after 0.7s' 'YES' ('pid ' + $proc.Id + ' is the interpreter itself')
+    }
+    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
 }
 
-# --- 6. Toolchain ----------------------------------------------------------
-foreach ($t in 'rustc','cargo','node','npm','git') {
-  $c = Get-Command $t -ErrorAction SilentlyContinue
-  Add-Result 'Toolchain' $t $(if ($c) { 'present' } else { 'MISSING' }) $(if ($c) { (& $t --version 2>&1 | Select-Object -First 1) } else { '' })
+# --- Toolchain ------------------------------------------------------------
+foreach ($t in @('rustc', 'cargo', 'node', 'npm', 'git')) {
+    $c = Get-Command $t -ErrorAction SilentlyContinue
+    if ($c) {
+        $ver = (& $t --version 2>&1 | Select-Object -First 1)
+        Add-Row 'Toolchain' $t 'present' "$ver"
+    } else {
+        Add-Row 'Toolchain' $t 'MISSING' ''
+    }
 }
-$msvc = (rustup target list --installed 2>$null) -match 'x86_64-pc-windows-msvc'
-Add-Result 'Toolchain' 'x86_64-pc-windows-msvc target' $(if ($msvc) { 'present' } else { 'MISSING' }) ''
+$targets = rustup target list --installed 2>$null
+if ($targets -match 'x86_64-pc-windows-msvc') { $v = 'present' } else { $v = 'MISSING' }
+Add-Row 'Toolchain' 'msvc target' $v ''
 
-# --- Report ----------------------------------------------------------------
-$results | Format-Table -AutoSize -Wrap
-Write-Host "`nPaste the table above back into the Claude session.`n" -ForegroundColor Cyan
+# --- Report ---------------------------------------------------------------
+$rows | Format-Table -AutoSize -Wrap
+Write-Host ''
+Write-Host 'Paste the table above back into the Claude session.' -ForegroundColor Cyan
+Write-Host ''
