@@ -45,7 +45,7 @@
         "minWidth": 320,
         "maxWidth": 320,
         "minHeight": 44,
-        "maxHeight": 320,
+        "maxHeight": 400,
         "x": 40,
         "y": 40,
         "center": false,

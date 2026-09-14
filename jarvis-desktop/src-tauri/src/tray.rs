@@ -739,13 +739,19 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         // "unhandled" branch unnoticed.
         ID_STATUS_ACTIVITY | ID_STATUS_POWER | ID_STATUS_POWER_SWITCH => {}
 
-        // The queue lives in the HUD, which is the surface with room for the
-        // risk copy that makes an approval a decision rather than a button.
+        // The queue lives in the quickbar now, and the old comment here — "the
+        // HUD is the surface with room for the risk copy" — stopped being true
+        // when the gate grew its risk line, its `raised` chip with the
+        // attacker's quote, the named source, the tier move and the context
+        // disclosure. The HUD window loads the backend's own page, which is not
+        // ours to add any of that to.
         ID_APPROVALS => {
-            if let Err(err) = windows::show_hud(app) {
-                eprintln!("[jarvis] tray: HUD unavailable: {err}");
-                commands::notify(app, "Jarvis", &format!("HUD unavailable: {err}"));
+            if let Err(err) = windows::show_quickbar(app) {
+                eprintln!("[jarvis] tray: quickbar unavailable: {err}");
+                commands::notify(app, "Jarvis", &format!("Quickbar unavailable: {err}"));
+                return;
             }
+            crate::emit_quickbar(app, events::SHOW_APPROVAL, ());
         }
 
         ID_SHOW_HUD => {

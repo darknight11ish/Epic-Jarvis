@@ -79,6 +79,9 @@ pub mod events {
     /// surfaces on screen together never disagree about which palette is in
     /// force.
     pub const THEME_CHANGED: &str = "theme-changed";
+    /// Payload: none. Show the approval gate. The queue lives in the quickbar,
+    /// which is the surface that renders the risk line and the `raised` block.
+    pub const SHOW_APPROVAL: &str = "show-approval";
     /// Payload: none. Open the daily brief. Sent by the tray's waiting row and
     /// by the widget — the panel itself lives in the quickbar, because the HUD
     /// window is the backend's own page and not ours to add sections to.
@@ -700,6 +703,7 @@ pub fn run() {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
                 let hotkeys = Hotkeys::new();
+                let mut refused: Vec<&str> = Vec::new();
                 for (label, shortcut) in [
                     ("Alt+Space", hotkeys.toggle_quickbar),
                     ("Win+Shift+J", hotkeys.ingest_clipboard),
@@ -709,11 +713,37 @@ pub fn run() {
                 ] {
                     match handle.global_shortcut().register(shortcut) {
                         Ok(()) => println!("[jarvis] hotkey {label} registered"),
-                        Err(err) => eprintln!(
-                            "[jarvis] hotkey {label} could not be registered ({err}); \
-                             another application probably owns it"
-                        ),
+                        Err(err) => {
+                            eprintln!(
+                                "[jarvis] hotkey {label} could not be registered ({err}); \
+                                 another application probably owns it"
+                            );
+                            refused.push(label);
+                        }
                     }
+                }
+
+                // A refused hotkey used to be reported by `eprintln!` alone, and
+                // release builds set `windows_subsystem = "windows"` — there is
+                // no stderr for it to reach. Alt+Space is PowerToys Run's
+                // default, so on a machine with PowerToys installed Jarvis
+                // Desktop launched, bound nothing, and was indistinguishable
+                // from a failed install: the tray tooltip, the card footer and
+                // the startup banner all say "Alt+Space to summon", and none of
+                // them would have worked.
+                //
+                // The toast names the combinations rather than saying something
+                // went wrong, because the fix is for the user to free the key or
+                // to use the tray, and neither is guessable from "a hotkey
+                // failed".
+                if !refused.is_empty() {
+                    let list = refused.join(", ");
+                    let body = format!(
+                        "{list} could not be registered — another application owns \
+                         {}. Everything is still reachable from the tray icon.",
+                        if refused.len() == 1 { "it" } else { "them" }
+                    );
+                    commands::notify(&handle, "Jarvis Desktop: hotkeys in use", &body);
                 }
             }
 

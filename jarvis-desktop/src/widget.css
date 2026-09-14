@@ -566,10 +566,18 @@ body {
   line-height: 1.35;
 }
 
+/* Clamped, like `.appr-detail` beside it. This string is attacker-authored and
+   arbitrarily long, and the window is capped at 320px with `overflow: hidden` —
+   an unclamped quote grew the card until the Approve and Deny row fell off the
+   bottom and simply vanished. The quickbar's card carries the full text. */
 .appr-raised-quote {
   font-size: 10px;
   font-style: italic;
   line-height: 1.35;
   opacity: 0.85;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

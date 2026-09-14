@@ -47,7 +47,13 @@ const WIDGET_EXPANDED_HEIGHT: f64 = 220.0;
 /// roughly another 110px, and clipping the Approve button would be a
 /// correctness bug, not a cosmetic one — so the ceiling is set where the
 /// tallest legitimate layout ends rather than where the common one does.
-const WIDGET_MAX_HEIGHT: f64 = 320.0;
+///
+/// Raised from 320 when the `raised` block landed: a gate that carries one
+/// gains a chip and a quote, and the old budget was measured before that
+/// existed. The quote is line-clamped in `widget.css` for the same reason —
+/// the string is attacker-authored and arbitrarily long, so the ceiling alone
+/// is not a guarantee.
+const WIDGET_MAX_HEIGHT: f64 = 400.0;
 
 // ---------------------------------------------------------------------------
 // Setup

@@ -99,6 +99,13 @@ body {
   display: flex;
   flex-direction: column;
   width: 100%;
+  /* The window is clamped to 720px by `resize_quickbar`. Each region below is
+     individually bounded, but the STACK was not and nothing scrolled at shell
+     level: bar + attention panel + a gate with a long diff reached the clamp
+     before the answer card existed, and Approve/Deny went past the cut —
+     clipped, not scrolled, so there was no way to reach them at all.
+     `max-height` here plus the scroller below keeps the stack inside the clamp. */
+  max-height: 100vh;
   border-radius: var(--radius-shell);
   background: linear-gradient(
       180deg,
@@ -113,6 +120,15 @@ body {
     0 0 44px -22px var(--accent-dim);
   overflow: hidden;
   animation: shell-in 180ms var(--ease) both;
+}
+
+/* Everything below the input row scrolls together. The bar stays put because
+   it is where the user is typing. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 @keyframes shell-in {
@@ -1073,7 +1089,13 @@ html[data-state="error"] .pulse {
   color: var(--text-faint);
 }
 
+/* Pinned to the bottom of the gate while its preview scrolls. Getting to the
+   decision must never require scrolling past the thing being decided. */
 .approval-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--surface);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1499,4 +1521,38 @@ html[data-state="approval"] .pulse {
   background: var(--surface-sunken);
   border-radius: 8px;
   padding: 6px 8px;
+}
+
+
+/* ==========================================================================
+   Parked approvals
+   --------------------------------------------------------------------------
+   Esc puts a gate away instead of denying it. This is the receipt: quiet, one
+   line, and a way back. It is deliberately not a decision surface — parking
+   must never become a way to lose an approval, and it must never become a
+   second place to answer one.
+   ========================================================================== */
+
+.parked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 14px 7px 16px;
+  border-top: 1px solid var(--hairline);
+  border-left: 2px solid var(--warn);
+  background: rgba(255, 200, 96, 0.06);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.approval-count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-chip);
+  padding: 1px 7px;
 }

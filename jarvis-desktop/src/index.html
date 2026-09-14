@@ -89,163 +89,186 @@
       </div>
 
       <!-- ── Attachment strip (screen capture / clipboard ingest) ───────── -->
-      <div class="attachments" id="attachments" hidden>
-        <div class="attachment" id="attachment-capture" hidden>
-          <img id="capture-thumb" alt="Desktop capture attached to the next prompt" />
-          <div class="attachment-body">
-            <span class="attachment-title">Screen capture</span>
-            <span class="attachment-meta" id="capture-meta">—</span>
-          </div>
-          <button class="icon-button" type="button" id="capture-remove" title="Remove capture">
-            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path d="M4 4l8 8M12 4l-8 8" />
-            </svg>
-            <span class="sr-only">Remove capture</span>
-          </button>
-        </div>
-
-        <div class="attachment attachment-text" id="attachment-clipboard" hidden>
-          <div class="attachment-body">
-            <span class="attachment-title">Clipboard context</span>
-            <span class="attachment-meta" id="clipboard-meta">—</span>
-          </div>
-          <button class="icon-button" type="button" id="clipboard-remove" title="Remove clipboard context">
-            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path d="M4 4l8 8M12 4l-8 8" />
-            </svg>
-            <span class="sr-only">Remove clipboard context</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- ── Attention: the interruption budget and the daily brief ─────
-           `pending` is what is waiting to be *told* to you, which is not the
-           same as the approval queue below — that is what is waiting for a
-           decision. The two counts are kept apart on purpose.
-
-           There is no approve-all control in here, and there must never be
-           one: approval rows carry `opens_card` and no detail, and clicking
-           one opens its own gate. ────────────────────────────────────────── -->
-      <section class="attention" id="attention" hidden aria-label="Waiting to be told">
-        <header class="attention-head">
-          <div class="attention-title">
-            <strong id="attention-count">Nothing waiting</strong>
-            <span class="attention-budget" id="attention-budget"></span>
-          </div>
-          <div class="attention-actions">
-            <button class="text-button" type="button" id="attention-mute"></button>
-            <button class="text-button" type="button" id="attention-close" title="Hide">
-              Close
+      <!-- Everything below the input row scrolls together, so the stack can
+           never grow past the window's 720px clamp and hide the Approve and
+           Deny buttons below the cut. -->
+      <div class="stack" id="stack">
+        <div class="attachments" id="attachments" hidden>
+          <div class="attachment" id="attachment-capture" hidden>
+            <img id="capture-thumb" alt="Desktop capture attached to the next prompt" />
+            <div class="attachment-body">
+              <span class="attachment-title">Screen capture</span>
+              <span class="attachment-meta" id="capture-meta">—</span>
+            </div>
+            <button class="icon-button" type="button" id="capture-remove" title="Remove capture">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+              <span class="sr-only">Remove capture</span>
             </button>
           </div>
-        </header>
 
-        <!-- Rendered in the order the server sent. `jarvis_arbiter._rank`
-             orders by consequence and never by urgency; re-sorting here would
-             hand the ranking back to whoever wrote the text. -->
-        <ol class="digest" id="digest"></ol>
-
-        <footer class="attention-foot">
-          <span class="attention-note" id="attention-note"></span>
-          <button class="text-button" type="button" id="digest-seen">
-            Mark the brief read
-          </button>
-        </footer>
-      </section>
-
-      <!-- ── Approval gate ─────────────────────────────────────────────── -->
-      <section
-        class="approval"
-        id="approval"
-        hidden
-        role="alertdialog"
-        aria-live="assertive"
-        aria-label="Approval required"
-      >
-        <header class="approval-head">
-          <span class="approval-badge" aria-hidden="true">
-            <svg viewBox="0 0 16 16" focusable="false">
-              <path d="M8 1.6l5.6 2.2v3.6c0 3.3-2.3 6.2-5.6 7-3.3-.8-5.6-3.7-5.6-7V3.8L8 1.6Z" />
-              <path d="M5.6 8.1l1.7 1.7 3.3-3.4" class="approval-tick" />
-            </svg>
-          </span>
-          <div class="approval-title">
-            <span class="approval-kicker">Jarvis wants to</span>
-            <strong id="approval-action">run an action</strong>
+          <div class="attachment attachment-text" id="attachment-clipboard" hidden>
+            <div class="attachment-body">
+              <span class="attachment-title">Clipboard context</span>
+              <span class="attachment-meta" id="clipboard-meta">—</span>
+            </div>
+            <button class="icon-button" type="button" id="clipboard-remove" title="Remove clipboard context">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+              <span class="sr-only">Remove clipboard context</span>
+            </button>
           </div>
-          <span class="approval-target" id="approval-target" hidden></span>
-        </header>
-
-        <!-- ── Why this is being asked at all ─────────────────────────
-             Only rendered when the server sent `raised`: outside text tried
-             to rush the reader and the tier went up because of it. The quote
-             is the attacker's own words and showing them is the entire point;
-             the context is text from the page being judged, so it stays behind
-             a disclosure until asked for. There is deliberately no control
-             here that clears the latch. ───────────────────────────────── -->
-        <div class="raised" id="approval-raised" hidden>
-          <div class="raised-head">
-            <span class="raised-chip" id="raised-chip"></span>
-            <span class="raised-source" id="raised-source"></span>
-          </div>
-          <blockquote class="raised-quote" id="raised-quote"></blockquote>
-          <details class="raised-context" id="raised-context-wrap">
-            <summary>Show the surrounding text</summary>
-            <p class="raised-context-body" id="raised-context"></p>
-          </details>
         </div>
 
-        <div class="approval-preview markdown" id="approval-preview"></div>
+        <!-- ── Attention: the interruption budget and the daily brief ─────
+             `pending` is what is waiting to be *told* to you, which is not the
+             same as the approval queue below — that is what is waiting for a
+             decision. The two counts are kept apart on purpose.
 
-        <footer class="approval-actions">
-          <span class="approval-hint" id="approval-hint">Nothing runs until you decide.</span>
-          <button class="approval-button approval-deny" type="button" id="approval-deny">
-            Deny <kbd>Esc</kbd>
-          </button>
-          <button class="approval-button approval-approve" type="button" id="approval-approve">
-            Approve <kbd>↵</kbd>
-          </button>
-        </footer>
-      </section>
+             There is no approve-all control in here, and there must never be
+             one: approval rows carry `opens_card` and no detail, and clicking
+             one opens its own gate. ────────────────────────────────────────── -->
+        <section class="attention" id="attention" hidden aria-label="Waiting to be told">
+          <header class="attention-head">
+            <div class="attention-title">
+              <strong id="attention-count">Nothing waiting</strong>
+              <span class="attention-budget" id="attention-budget"></span>
+            </div>
+            <div class="attention-actions">
+              <button class="text-button" type="button" id="attention-mute"></button>
+              <button class="text-button" type="button" id="attention-close" title="Hide">
+                Close
+              </button>
+            </div>
+          </header>
 
-      <!-- ── Answer card ───────────────────────────────────────────────── -->
-      <section class="card" id="card" hidden>
-        <header class="card-head">
-          <span class="card-status" id="card-status">
-            <span class="pulse" aria-hidden="true"></span>
-            <span id="card-status-text">Thinking…</span>
-          </span>
-          <div class="card-actions">
-            <span class="card-stat" id="card-stat" title="Tokens received / elapsed"></span>
-            <button class="text-button" type="button" id="copy" title="Copy the answer">Copy</button>
-            <button class="text-button" type="button" id="stop" title="Stop generating" hidden>Stop</button>
-          </div>
-        </header>
+          <!-- Rendered in the order the server sent. `jarvis_arbiter._rank`
+               orders by consequence and never by urgency; re-sorting here would
+               hand the ranking back to whoever wrote the text. -->
+          <ol class="digest" id="digest"></ol>
 
-        <div class="card-body" id="card-body">
-          <article
-            class="markdown"
-            id="answer"
-            aria-live="polite"
-            aria-atomic="false"
-          ></article>
-          <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+          <footer class="attention-foot">
+            <span class="attention-note" id="attention-note"></span>
+            <button class="text-button" type="button" id="digest-seen">
+              Mark the brief read
+            </button>
+          </footer>
+        </section>
+
+        <!-- Something is still waiting after Esc put it away. Not a decision
+             surface — a way back to the card, so parking can never lose one. -->
+        <div class="parked" id="parked" hidden>
+          <span id="parked-text"></span>
+          <button class="text-button" type="button" id="parked-show">Show it</button>
         </div>
 
-        <footer class="card-foot">
-          <span class="services" id="services" title="Local service health">
-            <span class="service" data-service="jarvis"><i></i>Core</span>
-            <span class="service" data-service="ollama"><i></i>Ollama</span>
-            <span class="service" data-service="litellm"><i></i>LiteLLM</span>
-          </span>
-          <span class="keys">
-            <kbd>Esc</kbd> dismiss
-            <kbd>Alt</kbd>+<kbd>Space</kbd> summon
-            <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> capture
-            <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> note
-          </span>
-        </footer>
-      </section>
+        <!-- ── Approval gate ─────────────────────────────────────────────── -->
+        <section
+          class="approval"
+          id="approval"
+          hidden
+          tabindex="-1"
+          role="alertdialog"
+          aria-live="assertive"
+          aria-label="Approval required"
+        >
+          <header class="approval-head">
+            <span class="approval-badge" aria-hidden="true">
+              <svg viewBox="0 0 16 16" focusable="false">
+                <path d="M8 1.6l5.6 2.2v3.6c0 3.3-2.3 6.2-5.6 7-3.3-.8-5.6-3.7-5.6-7V3.8L8 1.6Z" />
+                <path d="M5.6 8.1l1.7 1.7 3.3-3.4" class="approval-tick" />
+              </svg>
+            </span>
+            <div class="approval-title">
+              <span class="approval-kicker">Jarvis wants to</span>
+              <strong id="approval-action">run an action</strong>
+            </div>
+            <!-- Which of how many. Answering one and having the next appear
+                 instantly under the cursor, with no sense of how many are left,
+                 is how a click lands on a card nobody read. -->
+            <span class="approval-count" id="approval-count" hidden></span>
+            <span class="approval-target" id="approval-target" hidden></span>
+          </header>
+
+          <!-- ── Why this is being asked at all ─────────────────────────
+               Only rendered when the server sent `raised`: outside text tried
+               to rush the reader and the tier went up because of it. The quote
+               is the attacker's own words and showing them is the entire point;
+               the context is text from the page being judged, so it stays behind
+               a disclosure until asked for. There is deliberately no control
+               here that clears the latch. ───────────────────────────────── -->
+          <div class="raised" id="approval-raised" hidden>
+            <div class="raised-head">
+              <span class="raised-chip" id="raised-chip"></span>
+              <span class="raised-source" id="raised-source"></span>
+            </div>
+            <blockquote class="raised-quote" id="raised-quote"></blockquote>
+            <details class="raised-context" id="raised-context-wrap">
+              <summary>Show the surrounding text</summary>
+              <p class="raised-context-body" id="raised-context"></p>
+            </details>
+          </div>
+
+          <div class="approval-preview markdown" id="approval-preview"></div>
+
+          <footer class="approval-actions">
+            <!-- No key hints on either button, and that is the fix rather than
+                 an omission. `Esc` used to deny and `↵` used to approve; both
+                 are gone, because the two most reflexive keys in a spotlight
+                 overlay must not be wired to a decision. Esc now puts the gate
+                 aside and the hint says so. Enter still works on whichever
+                 button has focus, which is simply what a button does. -->
+            <span class="approval-hint" id="approval-hint">Nothing runs until you decide.</span>
+            <button class="approval-button approval-deny" type="button" id="approval-deny">
+              Deny
+            </button>
+            <button class="approval-button approval-approve" type="button" id="approval-approve">
+              Approve
+            </button>
+          </footer>
+        </section>
+
+        <!-- ── Answer card ───────────────────────────────────────────────── -->
+        <section class="card" id="card" hidden>
+          <header class="card-head">
+            <span class="card-status" id="card-status">
+              <span class="pulse" aria-hidden="true"></span>
+              <span id="card-status-text">Thinking…</span>
+            </span>
+            <div class="card-actions">
+              <span class="card-stat" id="card-stat" title="Tokens received / elapsed"></span>
+              <button class="text-button" type="button" id="copy" title="Copy the answer">Copy</button>
+              <button class="text-button" type="button" id="stop" title="Stop generating" hidden>Stop</button>
+            </div>
+          </header>
+
+          <div class="card-body" id="card-body">
+            <article
+              class="markdown"
+              id="answer"
+              aria-live="polite"
+              aria-atomic="false"
+            ></article>
+            <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+          </div>
+
+          <footer class="card-foot">
+            <span class="services" id="services" title="Local service health">
+              <span class="service" data-service="jarvis"><i></i>Core</span>
+              <span class="service" data-service="ollama"><i></i>Ollama</span>
+              <span class="service" data-service="litellm"><i></i>LiteLLM</span>
+            </span>
+            <span class="keys">
+              <kbd>Esc</kbd> dismiss
+              <kbd>Alt</kbd>+<kbd>Space</kbd> summon
+              <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> capture
+              <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> note
+            </span>
+          </footer>
+        </section>
+      </div>
     </main>
 
     <script type="module" src="main.js"></script>

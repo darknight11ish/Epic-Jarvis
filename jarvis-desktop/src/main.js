@@ -160,6 +160,10 @@ const dom = {
   approvalHint: $("approval-hint"),
   approvalApprove: $("approval-approve"),
   approvalDeny: $("approval-deny"),
+  approvalCount: $("approval-count"),
+  parked: $("parked"),
+  parkedText: $("parked-text"),
+  parkedShow: $("parked-show"),
   approvalRaised: $("approval-raised"),
   raisedChip: $("raised-chip"),
   raisedSource: $("raised-source"),
@@ -224,10 +228,23 @@ const state = {
   deciding: false,
   /** The id of the gate a decision was sent for, so it cannot be sent twice. */
   decided: null,
+  /** Gate ids the user put away with Esc. Still pending; just not on screen. */
+  parked: new Set(),
   /** The digest as last read, in the server's order. Never re-sorted. */
   digest: null,
-  /** True once the panel has been opened, so it stays open while it is used. */
-  attentionOpen: false,
+  /**
+   * Three states, not two. `null` is "the user has not said" — the panel
+   * follows the count. `true` is "opened deliberately". `false` is "dismissed",
+   * and it survives until the count goes UP.
+   *
+   * A boolean was the bug: `attentionOpen || pending > 0` re-showed the panel
+   * within milliseconds of Close, because `same_link` includes `last_id` and
+   * the stream republishes the link on every event that carries one. Close did
+   * nothing, and the panel landed back on top of any gate opened from it.
+   */
+  attentionOpen: null,
+  /** The pending count when the panel was dismissed, so a NEW item re-arms it. */
+  attentionDismissedAt: 0,
   /** True while a digest read is in flight, so a repaint cannot stack them. */
   digestLoading: false,
   route: { ...DEFAULT_ROUTE },
@@ -865,10 +882,20 @@ function openApproval(approval) {
 
   if (!dom.card.hidden) dom.cardStatusText.textContent = "Paused for approval";
 
-  // Only a gate the user has not seen yet earns the window and the keyboard.
+  // The window, yes. The keyboard, no.
+  //
+  // Focus stays where the user put it. Moving it onto Approve is what turned a
+  // stray Enter into an approval, and there is no version of "helpfully focus
+  // the destructive button" that is safe on a surface that appears by itself.
+  // The gate is announced instead: `role="alertdialog"` with `aria-live` on the
+  // section carries it to a screen reader without stealing anything.
   setPinned(true, { silent: true });
-  focusInput({ selectAll: false });
-  dom.approvalApprove.focus();
+  if (!dom.prompt.value.trim() && document.activeElement !== dom.prompt) {
+    // Nothing half-typed and the composer is not where the user is looking:
+    // put focus on the gate itself, not on either button, so Tab reaches the
+    // buttons and Enter does nothing.
+    dom.approval.focus({ preventScroll: true });
+  }
   syncWindowHeight();
 }
 
@@ -891,11 +918,20 @@ function refreshApproval(approval) {
   // The risk line is the whole reason the gate is worth showing rather than
   // merely enforcing: `switch_model` and `send_email` are both tier `ask` and
   // arrive looking identical until this is on screen.
-  dom.approvalHint.textContent = riskLine(approval.risk);
+  // The risk line, plus what Esc does now — years of muscle memory say Esc
+  // dismisses a window, and until this change it denied an action instead.
+  dom.approvalHint.textContent = `${riskLine(approval.risk)} · Esc puts it aside`;
   dom.approvalHint.dataset.reversible = approval.risk
     ? approval.risk.reversible
     : "no";
   dom.approvalHint.dataset.reach = approval.risk ? approval.risk.reach : "outbound";
+
+  const queue = currentQueue();
+  const index = queue.items.findIndex((item) => item.id === approval.id);
+  dom.approvalCount.hidden = queue.items.length < 2;
+  if (queue.items.length > 1 && index >= 0) {
+    dom.approvalCount.textContent = `${index + 1} of ${queue.items.length}`;
+  }
 
   syncApprovalButtons();
   dom.approval.hidden = false;
@@ -927,7 +963,13 @@ function syncAttention() {
     return;
   }
 
-  const visible = state.attentionOpen || a.pending > 0;
+  // Re-arm when something new arrives, so dismissing is not permanent.
+  if (state.attentionOpen === false && a.pending > state.attentionDismissedAt) {
+    state.attentionOpen = null;
+  }
+  const visible =
+    state.attentionOpen === true ||
+    (state.attentionOpen === null && a.pending > 0);
   const wasHidden = dom.attention.hidden;
   dom.attention.hidden = !visible;
   if (!visible) {
@@ -1103,7 +1145,10 @@ function openDigestApproval(item) {
       "That one has already been answered — it will drop off the brief.";
     return;
   }
+  // Same as Close: dismissed until the count rises, so the panel cannot land
+  // back on top of the gate it just opened.
   state.attentionOpen = false;
+  state.attentionDismissedAt = currentLink().attention.pending;
   dom.attention.hidden = true;
   openApproval(match);
 }
@@ -1203,6 +1248,44 @@ function renderRaised(raised) {
   dom.approvalRaised.hidden = false;
 }
 
+/**
+ * Puts the gate away without answering it.
+ *
+ * The item stays pending and stays counted; only this window stops showing it,
+ * until the user asks for it back or a different one arrives. Without the
+ * parked set the queue subscription would reopen it on the next event, which
+ * is what made Esc feel like it did nothing.
+ */
+function parkApproval() {
+  if (!state.approval) return;
+  state.parked.add(state.approval.id);
+  closeApproval();
+  syncParkedBar();
+  focusInput({ selectAll: false });
+}
+
+/**
+ * The one-line reminder that something is still waiting after it was parked.
+ *
+ * Parking must not be a way to lose an approval. This is deliberately not a
+ * decision surface — it is a way back to the card.
+ */
+function syncParkedBar() {
+  const queue = currentQueue();
+  const waiting = queue.items.filter((item) => state.parked.has(item.id));
+  const hidden = Boolean(state.approval) || waiting.length === 0;
+  dom.parked.hidden = hidden;
+  if (hidden) {
+    syncWindowHeight();
+    return;
+  }
+  dom.parkedText.textContent =
+    waiting.length === 1
+      ? "1 approval is still waiting."
+      : `${waiting.length} approvals are still waiting.`;
+  syncWindowHeight();
+}
+
 /** Clears the gate. Called when it leaves the queue, however it left. */
 function closeApproval() {
   state.approval = null;
@@ -1210,6 +1293,11 @@ function closeApproval() {
   dom.approval.hidden = true;
   dom.approvalPreview.innerHTML = "";
   renderRaised(null);
+  // The pin was taken to hold the window open for the gate. Every path that
+  // ends a gate has to give it back, not only the one where the user answered
+  // here: an approval resolved on the phone used to leave a 750px always-on-top
+  // window floating over everything until it was clicked and dismissed.
+  if (!state.abort && !state.inFlight) setPinned(false, { silent: true });
   syncWindowHeight();
 }
 
@@ -1677,11 +1765,20 @@ function focusInput({ selectAll = true } = {}) {
 }
 
 function submitCurrentPrompt() {
-  // A pending gate owns Enter: the safe thing must be the deliberate thing.
-  if (state.approval) {
-    decideApproval(true);
-    return;
-  }
+  // Enter does NOT approve, and the comment that used to sit here claimed the
+  // opposite of what the code did — "the safe thing must be the deliberate
+  // thing" above a call to `decideApproval(true)`.
+  //
+  // The failure it caused: a gate arrives while you are mid-sentence, the old
+  // `openApproval` moved focus onto Approve, and the Enter you were about to
+  // press to send your prompt approved an action you had not read. Chromium
+  // fires `click` on keydown for a focused button, so there was no gap to
+  // notice it in.
+  //
+  // Approving now takes the Approve button — reachable by Tab, and Enter works
+  // on it natively once it is focused, which is a deliberate act rather than a
+  // reflex. `quickActionable()` in jarvis-link.js is the gate any faster path
+  // must go through, and it refuses anything carrying `raised`.
   const value = dom.prompt.value;
   if (!value.trim()) return;
   dom.prompt.value = "";
@@ -1711,9 +1808,15 @@ dom.prompt.addEventListener("keydown", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
-    // A pending gate owns Esc, and denying is what closing it means.
+    // Esc parks the gate; it does not deny it. In a spotlight overlay Esc means
+    // "close this", and wiring the most reflexive key in the app to a decision
+    // meant people answered a gate believing they had dismissed a window.
+    //
+    // Parking keeps the item in the queue — it is still pending, the tray still
+    // counts it, and the bar below says so — but stops it reopening over
+    // whatever the user does next. Denying takes the Deny button.
     if (state.approval) {
-      decideApproval(false);
+      parkApproval();
       return;
     }
     // The first Esc stops a running stream; a second one dismisses the window.
@@ -1898,7 +2001,13 @@ onLink((link) => {
 });
 
 onQueue((queue) => {
-  const open = queue.items[0] || null;
+  // Anything answered elsewhere stops being parked — the set must not grow for
+  // ever, and an id that has left the queue is not waiting for anything.
+  const live = new Set(queue.items.map((item) => item.id));
+  for (const id of [...state.parked]) if (!live.has(id)) state.parked.delete(id);
+
+  const open = queue.items.find((item) => !state.parked.has(item.id)) || null;
+  syncParkedBar();
   if (!open) {
     if (state.approval) {
       // It left the queue: answered here, in the widget, on the phone, or it
@@ -1930,6 +2039,14 @@ onQueue((queue) => {
   openApproval(open);
 });
 
+dom.parkedShow.addEventListener("click", () => {
+  const next = currentQueue().items.find((item) => state.parked.has(item.id));
+  if (!next) return;
+  state.parked.delete(next.id);
+  openApproval(next);
+  syncParkedBar();
+});
+
 dom.attentionMute.addEventListener("click", toggleMute);
 dom.digestSeen.addEventListener("click", markBriefRead);
 dom.attentionClose.addEventListener("click", () => {
@@ -1937,9 +2054,23 @@ dom.attentionClose.addEventListener("click", () => {
   // it again. It does not mark anything read: those are different actions and
   // conflating them would silently clear a brief nobody looked at.
   state.attentionOpen = false;
+  state.attentionDismissedAt = currentLink().attention.pending;
   dom.attention.hidden = true;
   syncWindowHeight();
 });
+
+// The tray's approvals row opens the gate here rather than in the HUD: this is
+// the surface that renders the risk line and the `raised` block.
+if (IS_TAURI) {
+  TAURI.event.listen("show-approval", () => {
+    const queue = currentQueue();
+    const next = queue.items[0];
+    if (!next) return;
+    state.parked.delete(next.id);
+    openApproval(next);
+    syncParkedBar();
+  });
+}
 
 // The tray's "N things waiting" row and the widget both open the brief here.
 if (IS_TAURI) {
