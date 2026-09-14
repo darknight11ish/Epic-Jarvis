@@ -318,6 +318,42 @@ pub fn is_quickbar_pinned() -> bool {
 // HUD control
 // ---------------------------------------------------------------------------
 
+/// Label of the settings window, created on demand.
+pub const SETTINGS_LABEL: &str = "settings";
+
+/// Opens the settings window, or brings it forward if it is already open.
+///
+/// Built on demand rather than declared in `tauri.conf.json` because it is a
+/// window most sessions never open, and a hidden one costs a WebView2 process
+/// for as long as the app runs.
+pub fn show_settings(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
+        window
+            .show()
+            .map_err(|e| format!("unable to show settings: {e}"))?;
+        let _ = window.unminimize();
+        return window
+            .set_focus()
+            .map_err(|e| format!("unable to focus settings: {e}"));
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        SETTINGS_LABEL,
+        tauri::WebviewUrl::App("settings.html".into()),
+    )
+    .title("Jarvis Desktop — Settings")
+    .inner_size(680.0, 760.0)
+    .min_inner_size(520.0, 480.0)
+    .center()
+    .resizable(true)
+    .focused(true)
+    .theme(Some(tauri::Theme::Dark))
+    .build()
+    .map(|_| ())
+    .map_err(|e| format!("unable to open settings: {e}"))
+}
+
 /// Shows the HUD and brings it forward, whatever state it was in.
 ///
 /// Separate from [`toggle_hud`] because the tray's "Show HUD Window" and its

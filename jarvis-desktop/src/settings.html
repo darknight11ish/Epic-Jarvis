@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jarvis Desktop — Settings</title>
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <!--
+      Jarvis Desktop — settings.
+
+      Deliberately the only place in this app that writes anything, and it writes
+      exactly two things: where the backend is, and whether Jarvis Desktop may
+      start one. Build order step 5 adds the read-only panes — models, memory,
+      config, skills — as sections alongside these.
+    -->
+    <main class="page">
+      <header class="page-head">
+        <h1>Jarvis Desktop</h1>
+        <p class="sub" id="version">settings</p>
+      </header>
+
+      <section class="card">
+        <h2>Connection</h2>
+        <p class="note">
+          Where the backend is. The token is held here and injected into the HUD at
+          load; it is never written to that page's storage and never shown again
+          once saved.
+        </p>
+
+        <label class="field">
+          <span class="label">Base URL</span>
+          <input id="base" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="http://127.0.0.1:4719" />
+        </label>
+
+        <label class="field">
+          <span class="label">Token <span class="hint" id="token-state">not set</span></span>
+          <input id="token" type="password" spellcheck="false" autocomplete="off"
+                 placeholder="leave blank to keep the current one" />
+        </label>
+
+        <div class="row">
+          <button class="btn" id="save-connection" type="button">Save connection</button>
+          <button class="btn ghost" id="clear-token" type="button">Clear token</button>
+          <span class="status" id="connection-status" role="status"></span>
+        </div>
+
+        <div class="link" id="link-state" data-connected="false">
+          <span class="dot"></span>
+          <span id="link-text">checking the event stream…</span>
+          <button class="btn ghost small" id="reconnect" type="button">Reconnect</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Backend</h2>
+        <p class="note">
+          Off by default, and it stays off unless you switch it on here. With it on,
+          Jarvis Desktop starts the backend when it launches — unless something is
+          already listening, in which case it attaches to that instead of running a
+          second one against the same approval queue. Quitting asks the backend to
+          stop, so the model comes off the GPU, and terminates the process tree only
+          if asking did not work. A backend you started yourself is never adopted
+          and never stopped.
+        </p>
+
+        <label class="toggle">
+          <input id="supervise" type="checkbox" />
+          <span>Let Jarvis Desktop start and stop the backend</span>
+        </label>
+
+        <label class="field">
+          <span class="label">Program</span>
+          <input id="program" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="python" />
+        </label>
+
+        <label class="field">
+          <span class="label">Arguments <span class="hint">one per line</span></span>
+          <textarea id="args" rows="2" spellcheck="false"
+                    placeholder="C:\jarvis\jarvis_hud.py"></textarea>
+        </label>
+
+        <label class="field">
+          <span class="label">Working directory <span class="hint">optional</span></span>
+          <input id="cwd" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="defaults to the folder holding the script" />
+        </label>
+
+        <div class="row">
+          <button class="btn" id="save-backend" type="button">Save backend</button>
+          <button class="btn ghost" id="start-backend" type="button">Start</button>
+          <button class="btn ghost" id="stop-backend" type="button">Stop</button>
+          <span class="status" id="backend-status" role="status"></span>
+        </div>
+
+        <p class="state" id="backend-state">—</p>
+      </section>
+
+      <footer class="page-foot">
+        <span id="store-path"></span>
+      </footer>
+    </main>
+
+    <script type="module" src="settings.js"></script>
+  </body>
+</html>

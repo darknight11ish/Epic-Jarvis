@@ -17,6 +17,8 @@
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
 pub mod commands;
+pub mod proctree;
+pub mod sidecar;
 pub mod spec;
 pub mod sse;
 pub mod stream;
@@ -420,6 +422,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .manage(ChatState::default())
         .manage(stream::StreamState::default())
+        .manage(sidecar::SupervisorState::default())
         .manage(tray::TrayHandles::default())
         .manage(windows::WidgetState::default())
         .manage(RouteState::default())
@@ -431,6 +434,10 @@ pub fn run() {
             stream::get_link_state,
             stream::get_pending_approvals,
             stream::refresh_link,
+            sidecar::supervisor_status,
+            sidecar::set_supervision,
+            sidecar::start_backend,
+            sidecar::stop_backend,
             commands::get_api_settings,
             commands::set_api_settings,
             commands::resize_desktop_widget,
@@ -584,6 +591,25 @@ pub fn run() {
                 eprintln!("[jarvis] tray icon unavailable: {err}");
             }
 
+            // Build order step 4. Off unless switched on, and even then it
+            // attaches to a backend that is already listening rather than
+            // starting a second one against the same SQLite approval queue.
+            {
+                let supervisor = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    match sidecar::ensure_backend(&supervisor).await {
+                        Ok(outcome) => {
+                            println!("[jarvis] {outcome}");
+                            sidecar::watch_startup(supervisor);
+                        }
+                        Err(err) => {
+                            eprintln!("[jarvis] backend supervision: {err}");
+                            commands::notify(&supervisor, "Jarvis — backend", &err);
+                        }
+                    }
+                });
+            }
+
             // The one event-stream connection. Everything downstream of it —
             // the tray colour, the approval queue in all three windows, the
             // online pill — is fed from here and nowhere else.
@@ -624,15 +650,29 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("failed to build the Jarvis Desktop application");
 
-    app.run(|_app, event| {
+    app.run(|app, event| match event {
         // Both windows are hidden rather than destroyed, so the process
         // normally stays alive on its own. The guard covers the case where the
         // HUD is closed outright: Jarvis keeps living in the tray. An explicit
         // `AppHandle::exit(code)` carries `Some(code)` and is let through.
-        if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+        tauri::RunEvent::ExitRequested { code, api, .. } => {
             if code.is_none() {
                 api.prevent_exit();
+                return;
             }
+            // This exit is really happening. DESKTOP-BUILD §5: ask the backend
+            // to stop — which is what unloads the model from the GPU — wait,
+            // and kill the process tree if it is still there. Blocking here is
+            // deliberate; the alternative is exiting with a model still
+            // resident and no window left to say so.
+            sidecar::stop_on_exit(app);
         }
+
+        // A last line of defence for the paths that reach `Exit` without an
+        // `ExitRequested` we saw. Stopping twice is a no-op: the owned child is
+        // taken out of the state by whichever call gets there first.
+        tauri::RunEvent::Exit => sidecar::stop_on_exit(app),
+
+        _ => {}
     });
 }

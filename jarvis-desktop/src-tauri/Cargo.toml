@@ -41,6 +41,24 @@ base64 = "0.22"
 # from `nvidia-smi`, which needs no crate.
 sysinfo = "0.32"
 
+# Build order step 4: killing the process TREE, not the process. On Windows
+# that is a Job Object; on Unix a process group. Both are a handful of calls,
+# and both versions below are already in this crate's dependency graph via
+# Tauri, so neither adds a new package to the build.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  # CreateJobObjectW takes a SECURITY_ATTRIBUTES pointer, so the job-object
+  # bindings are gated on this even though the pointer we pass is null.
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+  "Win32_System_Diagnostics_ToolHelp",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [features]
 # WebView2 devtools in release builds. Devtools are always on in debug builds.
 devtools = ["tauri/devtools"]

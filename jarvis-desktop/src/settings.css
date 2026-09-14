@@ -1,0 +1,185 @@
+/* Settings. Same palette as the widget, laid out for a window with room. */
+
+:root {
+  --bg: #06090e;
+  --bg-raised: rgba(18, 26, 36, 0.92);
+  --bg-sunken: rgba(0, 0, 0, 0.45);
+  --line: rgba(111, 227, 255, 0.15);
+  --line-soft: rgba(255, 255, 255, 0.07);
+
+  --cyan: #6fe3ff;
+  --ok: #3ddc97;
+  --bad: #ff6b7a;
+
+  --text: #cfe4ee;
+  --text-muted: #6b8496;
+
+  --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 20px 32px;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.sub {
+  margin: 2px 0 20px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.note {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field { display: block; margin-bottom: 12px; }
+
+.label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-style: italic;
+}
+
+input[type="text"],
+input[type="password"],
+textarea {
+  width: 100%;
+  padding: 7px 9px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  resize: vertical;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  cursor: pointer;
+}
+
+.toggle input { accent-color: var(--cyan); width: 15px; height: 15px; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.btn {
+  padding: 6px 12px;
+  background: rgba(111, 227, 255, 0.12);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) { background: rgba(111, 227, 255, 0.2); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.ghost { background: transparent; }
+.btn.small { padding: 3px 9px; font-size: 11px; margin-left: auto; }
+
+.status { font-size: 11px; color: var(--text-muted); }
+.status[data-tone="ok"] { color: var(--ok); }
+.status[data-tone="bad"] { color: var(--bad); }
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.link .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bad);
+  flex: none;
+}
+
+.link[data-connected="true"] .dot { background: var(--ok); }
+
+.state {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.page-foot {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+}

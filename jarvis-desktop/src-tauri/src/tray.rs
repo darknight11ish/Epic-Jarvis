@@ -78,10 +78,12 @@ const ID_STATUS_ACTIVITY: &str = "status-activity";
 const ID_STATUS_POWER: &str = "status-power";
 const ID_STATUS_POWER_SWITCH: &str = "status-power-switch";
 const ID_APPROVALS: &str = "approvals";
+const ID_BACKEND: &str = "backend";
 const ID_SHOW_HUD: &str = "show-hud";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
 const ID_RECONNECT: &str = "reconnect";
+const ID_SETTINGS: &str = "settings";
 const ID_STATUS_CHECK: &str = "status-check";
 const ID_QUIT: &str = "quit";
 
@@ -97,6 +99,7 @@ struct Rows {
     activity: MenuItem<tauri::Wry>,
     power: MenuItem<tauri::Wry>,
     approvals: MenuItem<tauri::Wry>,
+    backend: MenuItem<tauri::Wry>,
 }
 
 /// The colour last pushed to the shell, so an unchanged frame costs nothing.
@@ -138,6 +141,17 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
 
+    // One row that is status and action at once: it says what the backend is
+    // and, when there is something to do about it, does it.
+    let backend_state = backend_row(app);
+    let backend = MenuItem::with_id(
+        app,
+        ID_BACKEND,
+        backend_state.0,
+        backend_state.1,
+        None::<&str>,
+    )?;
+
     let show_hud = MenuItem::with_id(app, ID_SHOW_HUD, "Show HUD Window", true, None::<&str>)?;
     let toggle_spotlight = MenuItem::with_id(
         app,
@@ -160,6 +174,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
+    let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings…", true, None::<&str>)?;
     let status_check = MenuItem::with_id(app, ID_STATUS_CHECK, "Status Check", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, ID_QUIT, "Quit", true, None::<&str>)?;
 
@@ -170,11 +185,13 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &power,
             &power_switch,
             &approvals,
+            &backend,
             &PredefinedMenuItem::separator(app)?,
             &show_hud,
             &toggle_spotlight,
             &toggle_widget,
             &PredefinedMenuItem::separator(app)?,
+            &settings,
             &reconnect,
             &status_check,
             &PredefinedMenuItem::separator(app)?,
@@ -190,6 +207,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             activity,
             power,
             approvals,
+            backend,
         });
 
     // Private to this module, so it is registered here rather than in `run`.
@@ -431,6 +449,26 @@ fn approvals_label(link: &LinkState) -> String {
     }
 }
 
+/// The backend row's label and whether it is clickable.
+///
+/// Supervision is off by default and stays off unless the user turns it on, so
+/// the common case is a row that explains rather than offers.
+fn backend_row(app: &AppHandle) -> (String, bool) {
+    let status = crate::sidecar::supervisor_status(app.clone());
+    match (status.supervise, status.owned, status.configured) {
+        (_, true, _) => (
+            format!("Stop the backend (pid {})", status.pid.unwrap_or_default()),
+            true,
+        ),
+        (true, false, true) => ("Start the backend".to_string(), true),
+        (true, false, false) => (
+            "Backend: supervision is on but nothing is configured".to_string(),
+            false,
+        ),
+        (false, false, _) => ("Backend: not supervised".to_string(), false),
+    }
+}
+
 fn tooltip(link: &LinkState) -> String {
     let mut parts = vec![activity_label(link)];
     if link.connected {
@@ -474,6 +512,11 @@ pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
         // Nothing to open when the queue is empty, and a menu row that opens an
         // empty list is worse than one that is plainly unavailable.
         let _ = rows.approvals.set_enabled(link.approvals > 0);
+        // The pid check is a `try_wait`, so this also notices a backend that
+        // exited on its own between one event and the next.
+        let (label, enabled) = backend_row(app);
+        let _ = rows.backend.set_text(label);
+        let _ = rows.backend.set_enabled(enabled);
     }
     // The state changed, so the previous colour is no longer what should be on
     // screen even if the pattern happens to resolve to it this instant.
@@ -521,6 +564,15 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             }
         }
 
+        ID_BACKEND => run_backend_action(app),
+
+        ID_SETTINGS => {
+            if let Err(err) = windows::show_settings(app) {
+                eprintln!("[jarvis] tray: settings unavailable: {err}");
+                commands::notify(app, "Jarvis", &format!("Settings unavailable: {err}"));
+            }
+        }
+
         ID_RECONNECT => crate::stream::kick(app),
 
         ID_STATUS_CHECK => run_status_check(app),
@@ -531,16 +583,15 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let _ = app.global_shortcut().unregister_all();
             }
-            // §6 says quit must go through the shutdown path in §5 — asking the
-            // server to unload the model and stop, then killing the process
-            // tree if asking did not work. That path is build-order step 4 and
-            // does not exist yet, and calling POST /api/shutdown from here
-            // before it does would be wrong in the common case: a shell that
-            // did not start the backend must not stop it, or quitting the GUI
-            // takes down a server the user is talking to from a terminal.
             if let Some(hud) = app.get_webview_window(crate::HUD_LABEL) {
                 let _ = hud.destroy();
             }
+            // §6: quit goes through §5's shutdown path. It does — `exit(0)`
+            // raises `ExitRequested` with a code, and `run()` answers that by
+            // asking the backend to stop, waiting, and killing the tree if it
+            // is still there. Only a backend this app started is touched: one
+            // the user launched from a terminal is attached to, never adopted,
+            // so quitting the GUI leaves it running.
             app.exit(0);
         }
 
@@ -563,6 +614,31 @@ fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
             Err(err) => eprintln!("[jarvis] tray: unable to summon the quickbar: {err}"),
         }
     }
+}
+
+/// Starts or stops the backend, whichever the row is currently offering.
+fn run_backend_action(app: &AppHandle) {
+    let handle = app.clone();
+    let owned = crate::sidecar::supervisor_status(app.clone()).owned;
+
+    tauri::async_runtime::spawn(async move {
+        let outcome = if owned {
+            crate::sidecar::stop_owned(&handle, "asked from the tray").await
+        } else {
+            match crate::sidecar::start_backend(handle.clone()).await {
+                Ok(outcome) => outcome,
+                Err(err) => err,
+            }
+        };
+        println!("[jarvis] tray: {outcome}");
+        commands::notify(&handle, "Jarvis — backend", &outcome);
+        // The row's label is derived from state that just changed.
+        let link = handle.state::<crate::stream::StreamState>().link();
+        on_link_changed(&handle, &link);
+        if !owned {
+            crate::sidecar::watch_startup(handle);
+        }
+    });
 }
 
 /// Probes the local services off the UI thread, then reports the result both as
