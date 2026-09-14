@@ -116,8 +116,23 @@ pub fn setup_windows(app: &AppHandle) -> Result<(), String> {
 pub fn apply_quickbar_effects(window: &WebviewWindow) -> Result<(), String> {
     use window_vibrancy::apply_acrylic;
 
-    // A near-black tint at ~78% keeps text readable over a bright desktop while
-    // still letting the blur through on an AMOLED-dark theme.
+    // The tint argument is honoured only on Windows 10 v1809..=22H1 and
+    // Windows 11 builds below 22523. Above that — which is every currently
+    // shipping Windows 11 — window-vibrancy 0.5.3 takes the DWM path,
+    // `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW)`,
+    // and never passes `color` at all. It is kept because it still applies on
+    // Windows 10, and it is documented here because a colour that silently does
+    // nothing on the main target is worth knowing about.
+    //
+    // Text contrast does NOT depend on it. `--surface` in style.css is
+    // rgba(8,9,12,0.86), which composites to rgb(43,43,46) against a pure white
+    // desktop with no DWM tint whatsoever — 10.7:1 against the body colour,
+    // comfortably AAA. The tint was belt to the CSS braces, not the other way
+    // round.
+    //
+    // Note also that this returns `Ok(())` on the DWM path without checking the
+    // HRESULT, so a failure here is not reportable. Do not read a success as
+    // proof the effect applied.
     apply_acrylic(window, Some((10, 10, 14, 200)))
         .map_err(|e| format!("Acrylic unavailable on the quickbar: {e}"))
 }
@@ -511,15 +526,24 @@ fn position_is_visible(window: &WebviewWindow, x: f64, y: f64) -> bool {
         return false;
     };
     monitors.iter().any(|monitor| {
+        // Physical, on both sides. This used to divide each monitor's physical
+        // origin by that monitor's OWN scale factor and compare the results —
+        // but Windows has exactly one coordinate space for the virtual screen
+        // and it is physical. Dividing per-monitor invents a set of "logical"
+        // spaces that overlap or leave gaps on a mixed-DPI desktop, so the
+        // guard both rejected positions that were fine and accepted ones that
+        // were off-screen.
+        let origin = monitor.position();
+        let size = monitor.size();
+        let (mx, my) = (origin.x as f64, origin.y as f64);
+        let (mw, mh) = (size.width as f64, size.height as f64);
         let scale = monitor.scale_factor();
-        let origin = monitor.position().to_logical::<f64>(scale);
-        let size = monitor.size().to_logical::<f64>(scale);
-        // Require the widget's top-left corner plus a margin to land on-screen,
-        // so it can never be restored with only a sliver visible.
-        x >= origin.x - 8.0
-            && y >= origin.y - 8.0
-            && x + 48.0 <= origin.x + size.width
-            && y + 24.0 <= origin.y + size.height
+        // The margins are in logical pixels because that is how the widget is
+        // sized; scale them to compare against physical bounds.
+        x >= mx - 8.0 * scale
+            && y >= my - 8.0 * scale
+            && x + 48.0 * scale <= mx + mw
+            && y + 24.0 * scale <= my + mh
     })
 }
 
@@ -533,7 +557,12 @@ pub fn setup_widget(app: &AppHandle, prefs: &WidgetPrefs) -> Result<(), String> 
 
     if let (Some(x), Some(y)) = (prefs.x, prefs.y) {
         if position_is_visible(&window, x, y) {
-            let _ = window.set_position(LogicalPosition::new(x, y));
+            // Physical, matching what `Moved` reported and what was stored.
+            // Restoring through `LogicalPosition` multiplied by whichever
+            // monitor the window happened to start on, so a widget parked at
+            // physical x=2500 on a 100% secondary display reappeared at x=3750
+            // when the app started on a 150% primary.
+            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
         } else {
             eprintln!("[jarvis] saved widget position is off-screen; using the default corner");
         }
@@ -556,14 +585,14 @@ pub fn setup_widget(app: &AppHandle, prefs: &WidgetPrefs) -> Result<(), String> 
     let handle = app.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::Moved(position) => {
-            let scale = handle
-                .get_webview_window(WIDGET_LABEL)
-                .and_then(|w| w.scale_factor().ok())
-                .unwrap_or(1.0);
-            let logical = position.to_logical::<f64>(scale);
+            // Stored as physical, which is what this event reports and what the
+            // virtual screen is measured in. Converting to "logical" here using
+            // the window's current scale factor and converting back on restore
+            // using whatever scale factor applied then was a round trip through
+            // two different numbers.
             handle.state::<WidgetState>().update(|prefs| {
-                prefs.x = Some(logical.x);
-                prefs.y = Some(logical.y);
+                prefs.x = Some(position.x as f64);
+                prefs.y = Some(position.y as f64);
             });
         }
         WindowEvent::CloseRequested { api, .. } => {

@@ -1081,25 +1081,77 @@ pub fn open_external_url(url: String) -> Result<(), String> {
     validate_external_url(url)?;
 
     #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut c = std::process::Command::new("rundll32.exe");
-        c.arg("url.dll,FileProtocolHandler").arg(url);
-        c
-    };
-    #[cfg(target_os = "macos")]
-    let mut command = {
-        let mut c = std::process::Command::new("open");
-        c.arg(url);
-        c
-    };
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let mut command = {
-        let mut c = std::process::Command::new("xdg-open");
-        c.arg(url);
-        c
-    };
+    return open_with_shell(url);
 
-    command
+    #[cfg(target_os = "macos")]
+    return spawn_opener("open", url);
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    return spawn_opener("xdg-open", url);
+}
+
+/// Hands a URL to the shell with `ShellExecuteExW`.
+///
+/// This used to be `rundll32.exe url.dll,FileProtocolHandler`. That works, but
+/// it is the wrong tool three times over:
+///
+/// * `rundll32` with `url.dll,FileProtocolHandler` is a catalogued LOLBin —
+///   an execute primitive that Defender ASR, Defender for Endpoint and most
+///   third-party EDR alert on. On a managed machine a policy can block it
+///   outright, and the user sees a link that silently does nothing.
+/// * It is fire-and-forget. `spawn()` discards the exit code, so a refused
+///   protocol or a missing handler is invisible.
+/// * It starts a whole process to do what one call does.
+///
+/// `ShellExecuteExW` returns a real error, spawns nothing extra, and is not on
+/// anyone's watchlist. `validate_external_url` has already established that the
+/// string is an `http`/`https` URL with no whitespace or control characters.
+#[cfg(target_os = "windows")]
+fn open_with_shell(url: &str) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::{
+        ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    /// A NUL-terminated UTF-16 string, kept alive for the duration of the call.
+    fn wide(value: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(value)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    let verb = wide("open");
+    let target = wide(url);
+
+    // SAFETY: the struct is zeroed, `cbSize` is set to its own size as the API
+    // requires, and both pointers reference buffers that outlive the call.
+    // SEE_MASK_NOASYNC is required because this function returns — and may drop
+    // those buffers — before the shell would otherwise finish with them.
+    let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
+    info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    info.lpVerb = verb.as_ptr();
+    info.lpFile = target.as_ptr();
+    info.nShow = SW_SHOWNORMAL;
+
+    let ok = unsafe { ShellExecuteExW(&mut info) };
+    if ok == 0 {
+        let err = std::io::Error::last_os_error();
+        return Err(format!(
+            "Windows refused to open {url}: {err}. A policy may be blocking it, \
+             or no application is registered for that protocol."
+        ));
+    }
+    Ok(())
+}
+
+/// The non-Windows path, kept for developer machines. The product is Windows.
+#[cfg(not(target_os = "windows"))]
+fn spawn_opener(program: &str, url: &str) -> Result<(), String> {
+    std::process::Command::new(program)
+        .arg(url)
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("unable to open {url}: {e}"))

@@ -58,6 +58,12 @@ windows-sys = { version = "0.59", features = [
   "Win32_System_JobObjects",
   "Win32_System_Threading",
   "Win32_System_Diagnostics_ToolHelp",
+  # ShellExecuteExW, for opening a link in the user's browser. SHELLEXECUTEINFOW
+  # carries an HKEY, so the struct and the function are both gated on
+  # Win32_System_Registry as well as Win32_UI_Shell.
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Registry",
 ] }
 
 [target.'cfg(unix)'.dependencies]

@@ -14,8 +14,8 @@ fn main() {
     // Anything added to `generate_handler!` in lib.rs must be added here too,
     // or it is reachable from nowhere and the failure is a runtime "not allowed
     // on window" rather than a compile error.
-    let attributes = tauri_build::Attributes::new().app_manifest(
-        tauri_build::AppManifest::new().commands(&[
+    let attributes =
+        tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
             // Chat
             "stream_chat",
             "cancel_chat",
@@ -48,8 +48,7 @@ fn main() {
             "open_external_url",
             // Shared
             "check_server_health",
-        ]),
-    );
+        ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and
     // manifest, and makes `tauri::generate_context!()` resolvable.
