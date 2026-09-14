@@ -93,7 +93,6 @@ class MainActivity : FragmentActivity() {
             val digest by JarvisRuntime.digest.collectAsState()
             val undo by JarvisRuntime.undo.collectAsState()
             val jobs by JarvisRuntime.jobs.collectAsState()
-            val holds by JarvisRuntime.holds.collectAsState()
 
             val root = Modifier
                 .fillMaxSize()
@@ -108,7 +107,6 @@ class MainActivity : FragmentActivity() {
                         digest = digest,
                         undo = undo,
                         jobs = jobs,
-                        holds = holds,
                         onOpenApproval = {
                             // The brief cannot decide an approval. Tapping a row
                             // leaves the digest and opens the normal gate card.
@@ -117,7 +115,6 @@ class MainActivity : FragmentActivity() {
                         },
                         onRevert = { scope.launch { JarvisRuntime.revert(it) } },
                         onCancelJob = { scope.launch { JarvisRuntime.cancelJob(it) } },
-                        onCancelHold = { scope.launch { JarvisRuntime.cancelHold(it) } },
                         onMarkSeen = { scope.launch { JarvisRuntime.markDigestSeen() } },
                         onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
                         onBack = { showInbox = false },

@@ -112,9 +112,6 @@ class JarvisApi(
     suspend fun jobs(): ApiResult<List<JobRecord>> =
         get("/api/jobs", ListSerializer(JobRecord.serializer()), unwrap = "items")
 
-    suspend fun holds(): ApiResult<List<HoldRecord>> =
-        get("/api/holds", ListSerializer(HoldRecord.serializer()), unwrap = "items")
-
     // ----------------------------------------------------------- writes ----
 
     suspend fun approve(id: String): ApiResult<Unit> = decide("/api/approve", id)
@@ -135,6 +132,14 @@ class JarvisApi(
      * Stops a message inside its send window. 409 once released — there is no
      * unsend after that, and a client that reported success anyway would be
      * telling exactly the lie this feature exists to avoid.
+     *
+     * **Currently unreachable, and left here deliberately.** The contract has
+     * this route but nothing that *lists* holds, so a phone has no way to learn
+     * a handle. An earlier draft of this file invented `GET /api/holds` to fill
+     * the gap — which is the exact mistake that produced `jarvis-android`'s
+     * protocol, so it was removed rather than kept behind a 404. When something
+     * serves handles (a `hold` event, or a field on a pending item), this is
+     * ready.
      */
     suspend fun cancelHold(handle: String): ApiResult<Unit> =
         postJson("/api/holds/cancel", """{"handle":${quote(handle)}}""")

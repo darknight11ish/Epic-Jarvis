@@ -8,7 +8,6 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
-import com.jarvis.client.net.HoldRecord
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.net.EventStream
@@ -124,9 +123,6 @@ object JarvisRuntime {
 
     private val _jobs = MutableStateFlow<List<JobRecord>>(emptyList())
     val jobs: StateFlow<List<JobRecord>> = _jobs.asStateFlow()
-
-    private val _holds = MutableStateFlow<List<HoldRecord>>(emptyList())
-    val holds: StateFlow<List<HoldRecord>> = _holds.asStateFlow()
 
     /** Non-null when something needs saying on screen and nowhere else will say it. */
     private val _notice = MutableStateFlow<String?>(null)
@@ -309,7 +305,6 @@ object JarvisRuntime {
         api.digest().onOk { _digest.value = it }
         api.undo().onOk { _undo.value = it }
         api.jobs().onOk { _jobs.value = it }
-        api.holds().onOk { _holds.value = it }
     }
 
     suspend fun revert(entry: UndoEntry): ApiResult<Unit> {
@@ -336,9 +331,11 @@ object JarvisRuntime {
      * A 409 here means the window closed and it went. Saying anything other
      * than that would be the lie the hold queue exists to avoid, so it is
      * reported plainly rather than as a generic failure.
+     *
+     * No caller yet: nothing in the API serves a hold handle. See [JarvisApi].
      */
-    suspend fun cancelHold(hold: HoldRecord): ApiResult<Unit> {
-        val result = api.cancelHold(hold.handle)
+    suspend fun cancelHold(handle: String): ApiResult<Unit> {
+        val result = api.cancelHold(handle)
         when (result) {
             is ApiResult.Ok -> {
                 _notice.value = "Stopped before it sent."

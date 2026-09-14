@@ -27,15 +27,18 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
-import com.jarvis.client.net.HoldRecord
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.ui.T
 
 /**
- * The brief, the shelf, the jobs and anything still inside its send window.
+ * The brief, the shelf and the running jobs.
  *
- * One screen rather than four, because none of it is urgent — that is the point
+ * The send-hold queue is deliberately absent: the API can cancel a hold but has
+ * no route that lists them, so a phone cannot learn a handle. A section for
+ * data that can never arrive is worse than no section.
+ *
+ * One screen rather than three, because none of it is urgent — that is the point
  * of a digest — and four tabs for a handful of rows each is navigation for its
  * own sake.
  *
@@ -50,11 +53,9 @@ fun InboxScreen(
     digest: List<DigestItem>,
     undo: List<UndoEntry>,
     jobs: List<JobRecord>,
-    holds: List<HoldRecord>,
     onOpenApproval: (String) -> Unit,
     onRevert: (UndoEntry) -> Unit,
     onCancelJob: (JobRecord) -> Unit,
-    onCancelHold: (HoldRecord) -> Unit,
     onMarkSeen: () -> Unit,
     onSetMuted: (Boolean) -> Unit,
     onBack: () -> Unit,
@@ -176,33 +177,6 @@ fun InboxScreen(
                 }
             }
 
-            if (holds.isNotEmpty()) {
-                item(key = "holds-label") {
-                    Text(
-                        "SENDING — STOPPABLE FOR A FEW SECONDS",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = T.Bad,
-                    )
-                }
-                items(holds, key = { "h-" + it.handle }) { hold ->
-                    Card(border = T.Bad) {
-                        Text(
-                            hold.label.ifBlank { "Outgoing message" },
-                            style = MaterialTheme.typography.titleSmall,
-                            color = T.Ink,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "This hold is the only honest unsend there is.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = T.Dim,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Action("Stop it", T.Bad) { onCancelHold(hold) }
-                    }
-                }
-            }
-
             if (jobs.isNotEmpty()) {
                 item(key = "jobs-label") {
                     Text("RUNNING", style = MaterialTheme.typography.labelSmall, color = T.Pick)
@@ -273,7 +247,7 @@ fun InboxScreen(
                 }
             }
 
-            if (digest.isEmpty() && undo.isEmpty() && jobs.isEmpty() && holds.isEmpty()) {
+            if (digest.isEmpty() && undo.isEmpty() && jobs.isEmpty()) {
                 item(key = "empty") {
                     Text(
                         "Nothing waiting.",
