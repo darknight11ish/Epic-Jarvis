@@ -21,7 +21,21 @@ object SseParser {
      * no `id:` keeps the last one, so a resume point is never lost by a server
      * that only stamps some of its events.
      */
-    fun parse(reader: BufferedReader, onEvent: (SseEvent) -> Unit) {
+    fun parse(
+        reader: BufferedReader,
+        /**
+         * Called for a `:` comment line, which is how the server says it is
+         * still there during a quiet hour.
+         *
+         * This used to be a bare `continue`, under a comment claiming the
+         * caller watched the gap between keepalives. It could not: nothing left
+         * this function when one arrived, so the watchdog upstream was timing
+         * the gap between *events* and calling a perfectly healthy idle link
+         * dead after 70 seconds.
+         */
+        onAlive: () -> Unit = {},
+        onEvent: (SseEvent) -> Unit,
+    ) {
         var id: String? = null
         var kind = "message"
         var retry: Long? = null
@@ -43,10 +57,10 @@ object SseParser {
                 continue
             }
 
-            // A comment. `: keepalive` arrives every ~20s and is skipped — but
-            // its absence is the only sign of a connection the socket has not
-            // yet noticed is dead, which is why the caller watches the gap.
-            if (line.startsWith(":")) continue
+            // A comment. `: keepalive` arrives every ~20s. Its absence is the
+            // only sign of a connection the socket has not yet noticed is dead,
+            // so it is reported rather than dropped — see [onAlive].
+            if (line.startsWith(":")) { onAlive(); continue }
 
             val colon = line.indexOf(':')
             val field = if (colon >= 0) line.substring(0, colon) else line

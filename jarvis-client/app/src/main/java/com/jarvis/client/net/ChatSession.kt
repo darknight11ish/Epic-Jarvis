@@ -83,8 +83,19 @@ class ChatSession(private val api: JarvisApi) {
                     _error.value = t.message ?: "The reply stopped unexpectedly."
                 }
             } finally {
-                _streaming.value = false
-                call = null
+                // Only when this call is still the current one.
+                //
+                // `send` begins by cancelling the previous call, and the loser
+                // then unwinds into THIS block. Without the identity check it
+                // cleared the WINNER's handle and streaming flag on its way
+                // out: the new reply streamed in with the composer showing
+                // "Send" rather than "Stop", the voice button re-enabled
+                // mid-generation, and `cancel()` had a null handle — so the
+                // generation could no longer be interrupted at all.
+                if (call === c) {
+                    _streaming.value = false
+                    call = null
+                }
             }
         }
     }

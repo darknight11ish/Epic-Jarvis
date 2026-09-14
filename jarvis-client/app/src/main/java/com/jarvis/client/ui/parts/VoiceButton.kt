@@ -106,16 +106,36 @@ fun VoiceButton(
                     wouldCancel = false
                     onBegin()
                     var cancelled = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        cancelled = (down.position.y - change.position.y) > cancelPx
-                        wouldCancel = cancelled
-                        if (!change.pressed) { change.consume(); break }
-                        change.consume()
+                    // try/finally, because this coroutine is cancellable and the
+                    // thing it owns is an open microphone.
+                    //
+                    // `pointerInput(enabled)` restarts whenever `enabled`
+                    // changes, and enabled is `link == CONNECTED && !streaming`.
+                    // So a link blip mid-hold — which happens every time the
+                    // server recycles the hour-long SSE connection — tore this
+                    // coroutine down between `onBegin()` and the release. With
+                    // the release never delivered, `releaseRequested` stayed
+                    // false, the recorder ran to its 30-second cap with the
+                    // finger long since lifted, and then SENT it. The doc at the
+                    // top of this file promises that when the button is not held
+                    // the microphone is not open; without this it was a promise
+                    // the code did not keep.
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            cancelled = (down.position.y - change.position.y) > cancelPx
+                            wouldCancel = cancelled
+                            if (!change.pressed) { change.consume(); break }
+                            change.consume()
+                        }
+                    } finally {
+                        wouldCancel = false
+                        // A torn-down gesture is a cancel, never a send: audio
+                        // captured while nobody was holding the button must not
+                        // reach the desktop.
+                        if (cancelled) onCancel() else onRelease()
                     }
-                    wouldCancel = false
-                    if (cancelled) onCancel() else onRelease()
                 }
             }
             .semantics {

@@ -322,6 +322,9 @@ object JarvisRuntime {
                 when (signal) {
                     is EventStream.Signal.Open -> onOpen(signal.hello)
                     is EventStream.Signal.Event -> onEvent(signal.event.kind)
+                    // Nothing to do beyond the lastFrameAt above, which is the
+                    // entire point of it arriving.
+                    EventStream.Signal.Alive -> Unit
                     is EventStream.Signal.Down -> {
                         if (linkDownSince == 0L) linkDownSince = System.currentTimeMillis()
                         _link.value =
@@ -342,6 +345,16 @@ object JarvisRuntime {
                     Log.w(TAG, "no frame for ${since}ms; treating the link as stale")
                     _stale.value = true
                     _linkDetail.value = "No keepalive for ${since / 1000}s"
+                } else if (_link.value == LinkState.CONNECTED && _stale.value && lastFrameAt != 0L) {
+                    // And back again. Staleness used to be a one-way door: the
+                    // only `_stale = false` in this file is in onOpen, so a link
+                    // the watchdog had given up on stayed condemned until the
+                    // stream was torn down and rebuilt — up to an hour of every
+                    // approval being refused with "not connected" on a
+                    // connection that was answering.
+                    Log.i(TAG, "keepalives resumed after ${since}ms; link is live again")
+                    _stale.value = false
+                    _linkDetail.value = null
                 }
             }
         }

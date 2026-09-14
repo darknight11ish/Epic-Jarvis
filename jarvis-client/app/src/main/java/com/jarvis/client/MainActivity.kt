@@ -226,6 +226,17 @@ class MainActivity : FragmentActivity() {
         // "a voice is playing and is silent", which does not.
         val speechLevel = voice.speaker.level.collectAsState()
 
+        // Collected, not read. `chat.reply` is a StateFlow, and reading
+        // `.value` in a composable is not a snapshot read — so nothing
+        // subscribed and no chunk ever invalidated anything. The reply sat at
+        // "…" for the whole generation and appeared all at once when the stream
+        // closed, which is the exact opposite of what a chunked body is for.
+        //
+        // Held as State and read inside Reply's own scope, so the subscription
+        // lands there: a token recomposes the reply and nothing else, which is
+        // what the lambda was reaching for in the first place.
+        val replyState = chat.reply.collectAsState()
+
         val face = remember(faceId) { Faces.byId(faceId) }
         val idleColour = bindings.of(FaceState.IDLE).tint ?: com.jarvis.client.face.Palette.ICE_3
 
@@ -453,7 +464,7 @@ class MainActivity : FragmentActivity() {
                     // nothing else. Passing the string rebuilt HomeState on
                     // every chunk and recomposed the bar, the list and the
                     // composer while the face drew at 60fps on the same thread.
-                    reply = { chat.reply.value },
+                    reply = { replyState.value },
                     micLevel = micLevel,
                     speechLevel = speechLevel,
                     actions = remember {

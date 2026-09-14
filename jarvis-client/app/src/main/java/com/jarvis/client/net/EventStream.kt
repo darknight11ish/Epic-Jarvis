@@ -30,6 +30,13 @@ class EventStream(private val api: JarvisApi) {
         data class Event(val event: SseEvent) : Signal
 
         /**
+         * A `: keepalive` comment. Carries nothing and means everything: it is
+         * the only proof a quiet connection is still alive, and the staleness
+         * watchdog exists to count the time since the last one.
+         */
+        data object Alive : Signal
+
+        /**
          * Not connected. [attempt] counts consecutive failures so the UI can
          * distinguish a blip from a desktop that is genuinely gone.
          */
@@ -101,7 +108,7 @@ class EventStream(private val api: JarvisApi) {
                 var announcedOpen = false
 
                 body.charStream().buffered().use { reader ->
-                    SseParser.parse(reader) { event ->
+                    SseParser.parse(reader, onAlive = { trySend(Signal.Alive) }) { event ->
                         event.retryMs?.let { retryMs = it }
                         event.id?.let { id ->
                             resumeFrom = id

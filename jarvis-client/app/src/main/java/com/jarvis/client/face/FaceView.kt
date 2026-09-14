@@ -71,6 +71,24 @@ fun FaceView(
     val mic by rememberUpdatedState(micLevel)
     val speech by rememberUpdatedState(speechLevel)
 
+    // And `state`, which is the same shape and was the one that mattered.
+    //
+    // The loop below is keyed on `face, bindings`, so a coroutine started while
+    // the face was IDLE held IDLE for the life of the process. Two consequences,
+    // and the second is not a performance problem:
+    //
+    //  - `Spec.fpsFor(IDLE)` is 30, so THINKING and SPEAKING — which ask for
+    //    every frame the display gives — were capped at 30 on a panel that had
+    //    just been asked for 120, and BANKED and STANDBY never got their 2 and
+    //    15, so the battery saving described twenty lines down never happened.
+    //  - `advance(dt, wanted = state, …)` begins `if (wanted != state)
+    //    onStateChange(wanted)`. So one frame after LaunchedEffect(state) moved
+    //    the host to THINKING, the loop handed it the stale IDLE and moved it
+    //    straight back — resetting the flash governor and restarting the colour
+    //    crossfade each time. The reactor could not leave idle. The single most
+    //    visible thing this app does was inert, and no test could see it.
+    val liveState by rememberUpdatedState(state)
+
     // One glow sprite, painted once and reused.
     //
     // It used to be a Brush.radialGradient built inside the draw: a new
@@ -87,7 +105,7 @@ fun FaceView(
     LaunchedEffect(face, bindings) {
         var last = 0L
         while (true) {
-            val fps = Spec.fpsFor(state)
+            val fps = Spec.fpsFor(liveState)
             if (fps in 1..15) {
                 // Below 15fps the frame clock was still waking at the display
                 // rate to decide to do nothing: a Choreographer callback and a
@@ -100,7 +118,7 @@ fun FaceView(
                 if (last == 0L) last = now
                 val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                 last = now
-                if (host.advance(dt, state, mic(), speech(), bindings, face)) {
+                if (host.advance(dt, liveState, mic(), speech(), bindings, face)) {
                     frame = host.snapshot()
                 }
             } else {
@@ -116,7 +134,7 @@ fun FaceView(
                     // Resting states draw at 30 rather than the display rate.
                     // The accumulated dt is handed to the draw, so motion covers
                     // the same distance — frame skipping, not slow motion.
-                    if (host.advance(dt, state, mic(), speech(), bindings, face)) {
+                    if (host.advance(dt, liveState, mic(), speech(), bindings, face)) {
                         frame = host.snapshot()
                     }
                 }
