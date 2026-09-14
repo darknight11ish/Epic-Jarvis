@@ -1,0 +1,52 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -61,6 +61,7 @@
+     jarvis_memory = jarvis_extract = jarvis_sleep = jarvis_initiative = jarvis_compute = None
+     MEMORY = False
+ _ENGINE = None
++_PUMP = None
+ 
+ # --------------------------------------------------------------------------
+ # Where things live
+@@ -2208,7 +2209,7 @@
+     else:
+         print("  hud token  NOT SET    loopback-only: non-local callers get 401.")
+         print("             Set HUD_TOKEN before reaching this from a phone.")
+-    global _ENGINE
++    global _ENGINE, _PUMP
+     if MEMORY:
+         try:
+             st = jarvis_memory.store()
+@@ -2256,6 +2257,32 @@
+     # to loopback. Harmless while the value in the file also said loopback,
+     # but it is the same species of defect as the autonomy tiers were: a
+     # setting that looks like a control and is decoration. Now it is read.
++    # Nothing was running the pollers. jarvis_events.Pump existed, POLLERS
++    # listed _poll_approvals/_poll_power/_poll_persona, and the class
++    # docstring said "Started by the proxy" - but this file, which is the
++    # proxy, never instantiated it. The only kinds ever published were
++    # `activity` and `model`. `approval` - documented in JARVIS-API.md with a
++    # worked example, parsed by a test in the desktop's sse.rs, handled by
++    # both clients - was fiction.
++    #
++    # The cost is not cosmetic. An event is how a client learns a gate was
++    # raised or settled. Without it the desktop refreshes only on connect, on
++    # a renumbered resume, or when the owner presses Retry - and the stream
++    # lives for an hour with keepalives, so nothing times out. A gate raised
++    # while the desktop sat idle produced no toast and no tray badge for up
++    # to an hour, and an approval settled on the phone left a live, clickable
++    # card on the desktop for the same hour. The 409 on the second decision
++    # is what kept that safe; it should never have been load-bearing.
++    try:
++        import jarvis_events as _ev
++        _PUMP = _ev.Pump(engine=_ENGINE)
++        _PUMP.start()
++        print(f"  events     pump on, {len(_ev.POLLERS)} pollers every {_ev.POLL_SECONDS:g}s")
++    except Exception as exc:
++        print(f"  events     PUMP DID NOT START: {type(exc).__name__}: {exc}")
++        print("             approval, power and persona events will not be")
++        print("             published; clients will only see a gate on reconnect")
++
+     bind = _bind_address()
+     if bind not in ("127.0.0.1", "::1", "localhost") and not HUD_TOKEN:
+         print()
