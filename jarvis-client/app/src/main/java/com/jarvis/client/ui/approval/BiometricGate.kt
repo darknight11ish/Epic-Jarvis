@@ -1,10 +1,10 @@
 package com.jarvis.client.ui.approval
 
 import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.jarvis.client.net.PendingItem
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -54,11 +54,11 @@ object BiometricGate {
         UNAVAILABLE,
     }
 
-    fun available(activity: ComponentActivity): Boolean =
+    fun available(activity: FragmentActivity): Boolean =
         BiometricManager.from(activity).canAuthenticate(ALLOWED) ==
             BiometricManager.BIOMETRIC_SUCCESS
 
-    suspend fun confirm(activity: ComponentActivity, item: PendingItem): Outcome {
+    suspend fun confirm(activity: FragmentActivity, item: PendingItem): Outcome {
         if (!available(activity)) return Outcome.UNAVAILABLE
 
         return suspendCancellableCoroutine { cont ->

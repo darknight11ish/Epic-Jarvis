@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +37,7 @@ import com.jarvis.client.ui.screens.HomeScreen
 import com.jarvis.client.ui.screens.HomeState
 import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
@@ -48,7 +48,15 @@ import kotlinx.coroutines.launch
  * and a token, the readiness checks on demand, and home. A nav graph for three
  * screens with no deep links would be more machinery than routing.
  */
-class MainActivity : ComponentActivity() {
+/**
+ * FragmentActivity rather than ComponentActivity, for exactly one reason:
+ * `BiometricPrompt` takes a FragmentActivity or a Fragment and nothing else —
+ * it needs a fragment manager to survive a configuration change while the
+ * system prompt is on screen. FragmentActivity *is* a ComponentActivity, so
+ * `setContent`, `enableEdgeToEdge` and `registerForActivityResult` are
+ * unaffected.
+ */
+class MainActivity : FragmentActivity() {
 
     private val permissionTick = mutableIntStateOf(0)
 

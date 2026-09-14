@@ -61,9 +61,16 @@ jobs:
       - name: Run unit tests
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          set -o pipefail
           chmod +x ./gradlew
-          ./gradlew testDebugUnitTest --stacktrace
+          if ! ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee test.log; then
+            echo "::group::Kotlin errors"
+            grep -E "^e: |Unresolved reference|Argument type mismatch|None of the following candidates|Compilation error" test.log | head -80 \
+              || echo "(no compiler diagnostics found; see the full log above)"
+            echo "::endgroup::"
+            exit 1
+          fi
           results=app/build/test-results/testDebugUnitTest
           if ! ls "$results"/TEST-*.xml >/dev/null 2>&1; then
             echo "::error::No test results in $results — the test task matched no sources."
