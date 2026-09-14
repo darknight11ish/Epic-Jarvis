@@ -25,6 +25,10 @@ import java.util.Locale
 object CrashLog {
 
     private const val FILE = "last-crash.txt"
+
+    /** `X-Jarvis-Token: ...` however it appears in a trace or an OkHttp message. */
+    private val TOKEN_HEADER =
+        Regex("(X-Jarvis-Token[ :=]+)([A-Za-z0-9._~+/=-]+)", RegexOption.IGNORE_CASE)
     private const val TAG = "JarvisCrash"
 
     /** Installed once, from Application.onCreate, before anything else runs. */
@@ -52,8 +56,18 @@ object CrashLog {
         // The one thing that must never reach a file: the pairing token. It
         // should not be in a stack trace, but "should not" is not a guarantee,
         // and this file is meant to be read aloud and pasted into a chat.
+        // Two passes, because the first one is not guaranteed to run.
+        //
+        // `redact()` reads the token, and the token is exactly what is
+        // unavailable when the Keystore is unhappy - so the moment this file
+        // was most likely to need redacting was the moment the substitution
+        // silently did nothing and the trace was written anyway. This file is
+        // meant to be read aloud and pasted into a chat.
         val secret = runCatching { redact() }.getOrNull()
-        val safe = if (!secret.isNullOrBlank()) body.replace(secret, "«token»") else body
+        var safe = if (!secret.isNullOrBlank()) body.replace(secret, "«token»") else body
+        // And a belt: anything shaped like the header goes, whatever the
+        // token store had to say about itself.
+        safe = TOKEN_HEADER.replace(safe, "$1«token»")
         File(context.filesDir, FILE).writeText(safe)
     }
 

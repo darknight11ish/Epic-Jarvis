@@ -166,9 +166,13 @@ object Wav {
             val id = String(wav, i, 4, Charsets.US_ASCII)
             val size = le32(wav, i + 4)
             if (id == want) return i + 8
-            // A negative size is a malformed file; advancing by it would walk
-            // backwards and loop here forever.
-            if (size < 0) return null
+            // Bounds, not just a sign check. The old guard rejected a negative
+            // size and claimed that covered walking backwards; it did not.
+            // `8 + size` overflows for a large positive size — 0x7FFFFFF8 gives
+            // Int.MIN_VALUE — so the cursor jumped to a negative index and the
+            // next read threw, which is exactly the backwards walk the comment
+            // said was prevented.
+            if (size < 0 || size > wav.size - i - 8) return null
             i += 8 + size + (size and 1) // chunks are word-aligned
         }
         return null

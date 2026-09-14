@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.jarvis.client.data.AppearanceStore
 import com.jarvis.client.data.ClientSettings
@@ -18,12 +19,14 @@ import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -88,7 +91,20 @@ enum class FaceState { IDLE, LISTENING, THINKING, SPEAKING, APPROVAL, STANDBY, E
  */
 object JarvisRuntime {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * A handler, because everything in this app runs here.
+     *
+     * Without one, anything escaping a `scope.launch` — a voice turn, a refresh
+     * — reached the default uncaught handler and took the process down. The
+     * SupervisorJob keeps siblings alive but does nothing about the throw
+     * itself.
+     */
+    private val crashes = CoroutineExceptionHandler { _, t ->
+        Log.e(TAG, "unhandled in the runtime scope", t)
+        _notice.value = t.message ?: "Something went wrong in the background."
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + crashes)
 
     @Volatile private var started = false
     val isInitialized: Boolean get() = started
@@ -224,8 +240,12 @@ object JarvisRuntime {
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         val chatSession = ChatSession(jarvisApi)
         val voiceSession = VoiceSession(app, jarvisApi, scope) { text ->
-            chatSession.send(text)
-            chatSession.reply.value.takeIf { it.isNotBlank() }
+            // The value `send` returns, not the shared flow read afterwards.
+            // There is one `_reply`, so a typed message sent mid-answer would
+            // cancel the spoken one and leave its own partial reply in there —
+            // and Jarvis would say it aloud as the answer to the question that
+            // was spoken.
+            chatSession.send(text)?.takeIf { it.isNotBlank() }
         }
 
         settings = clientSettings
@@ -317,8 +337,16 @@ object JarvisRuntime {
             stream.connect(
                 lastEventId = settings.lastEventId,
                 onResumePoint = { settings.lastEventId = it },
-            ).collect { signal ->
-                lastFrameAt = System.currentTimeMillis()
+            )
+                // The one blocking socket in the app, and it was on the CPU
+                // pool. Dispatchers.Default is sized to the core count — two on
+                // a small phone — and this parks one of those threads on a
+                // socket for the life of the connection, up to an hour, while
+                // voice turns and the face collector contend for what is left.
+                // Every other call in this app already uses Dispatchers.IO.
+                .flowOn(Dispatchers.IO)
+                .collect { signal ->
+                lastFrameAt = SystemClock.elapsedRealtime()
                 when (signal) {
                     is EventStream.Signal.Open -> onOpen(signal.hello)
                     is EventStream.Signal.Event -> onEvent(signal.event.kind)
@@ -339,7 +367,12 @@ object JarvisRuntime {
         watchdog = scope.launch {
             while (true) {
                 delay(WATCHDOG_TICK_MS)
-                val since = System.currentTimeMillis() - lastFrameAt
+                // elapsedRealtime, not wall clock. An NTP correction or a
+                // manual date change backwards made `since` negative, so
+                // `since > KEEPALIVE_GAP_MS` was false and a genuinely dead
+                // half-open socket was never marked stale — which silently
+                // re-enabled the approval buttons this gate exists to hold.
+                val since = SystemClock.elapsedRealtime() - lastFrameAt
                 if (_link.value == LinkState.CONNECTED && since > KEEPALIVE_GAP_MS) {
                     // The socket has not failed, so nothing else will tell us.
                     Log.w(TAG, "no frame for ${since}ms; treating the link as stale")
@@ -468,7 +501,12 @@ object JarvisRuntime {
         note("digest", api.digest()) { _digest.value = it }
         note("undo", api.undo()) { _undo.value = it }
         note("jobs", api.jobs()) { _jobs.value = it }
-        _absent.value = missing
+        // Only this function's own three keys. It used to assign the whole set,
+        // so opening the inbox erased the "approvals" flag that refreshPending
+        // had set — and the approvals screen went from "there is no approval
+        // queue here" to an empty list with no explanation, which the comment
+        // in refreshPending calls true and deeply misleading.
+        _absent.value = _absent.value - INBOX_KEYS + missing
     }
 
     /**
@@ -684,6 +722,9 @@ object JarvisRuntime {
      * connection the socket has not noticed; below that a single late frame on
      * a dozing radio would flap the indicator for no reason.
      */
+    /** The three keys refreshInbox owns; it must not touch the rest of the set. */
+    private val INBOX_KEYS = setOf("digest", "undo", "jobs")
+
     private const val KEEPALIVE_GAP_MS = 70_000L
     private const val WATCHDOG_TICK_MS = 10_000L
 

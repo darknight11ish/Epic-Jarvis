@@ -155,12 +155,29 @@ class VoiceSession(
      *   which is why this is passed through rather than assumed.
      */
     fun begin(source: String = JarvisApi.SOURCE_PUSH_TO_TALK) {
-        if (job?.isActive == true) return
+        val previous = job
+        if (previous != null && !previous.isCompleted) {
+            // Not silent. The old guard returned having done nothing — no
+            // notice, no phase change — so after a 30-second capture hit its
+            // cap the button was simply inert for the several seconds the
+            // desktop spent verifying, with nothing on screen saying why.
+            _notice.value = "Still finishing the last one."
+            return
+        }
+        // Only now, once the previous turn is genuinely finished. Resetting it
+        // while the old recorder was still running took away the one flag that
+        // could stop it — `Recorder.record`'s read loop has no suspension
+        // point, so cancelling its job cannot interrupt it.
         releaseRequested = false
         _notice.value = null
         _transcript.value = null
 
         job = scope.launch {
+            // Whatever escapes below — a throw from AudioTrack, a cancelled
+            // HTTP call — the phase must not be left reading CAPTURING or
+            // SPEAKING for ever, because the button and the face both render
+            // from it.
+            try {
             _phase.value = Phase.CAPTURING
             val maxSeconds = status.value.audioIn.maxSeconds.toFloat()
             val captured = recorder.record(
@@ -176,6 +193,10 @@ class VoiceSession(
                     _notice.value = describe(captured.why)
                 }
                 is Recorder.Result.Captured -> deliver(captured.wav, source)
+            }
+            } finally {
+                _micLevel.value = null
+                if (_phase.value != Phase.OFF) _phase.value = Phase.OFF
             }
         }
     }
@@ -203,8 +224,15 @@ class VoiceSession(
         _phase.value = Phase.OFF
         if (running == null) return
         running.invokeOnCompletion {
-            _micLevel.value = null
-            _phase.value = Phase.OFF
+            // Only if no newer turn has taken over. This handler belongs to the
+            // turn being cancelled, and it used to write the shared phase
+            // unconditionally — so a dying turn could stamp OFF over a turn
+            // that had just started, leaving the button un-armed and the face
+            // idle while the microphone was open and nothing on screen said so.
+            if (job == null) {
+                _micLevel.value = null
+                _phase.value = Phase.OFF
+            }
         }
         running.cancel()
     }

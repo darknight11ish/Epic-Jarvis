@@ -2,11 +2,13 @@ package com.jarvis.client.data
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.edit
 import java.security.KeyStore
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -42,11 +44,26 @@ class TokenStore(context: Context) {
         val blob = prefs.getString(KEY_BLOB, null) ?: return ""
         return runCatching { decrypt(blob) }
             .onFailure {
-                // Invalidated key, restored backup, cleared Keystore. Drop the
-                // unreadable blob so the UI asks for the token rather than
-                // failing every request with a value it cannot produce.
-                Log.w(TAG, "stored token unreadable; clearing", it)
-                clear()
+                // Cleared only when the key is genuinely gone.
+                //
+                // This used to clear on ANY throwable, which destroyed the only
+                // copy of the token for reasons that had nothing to do with
+                // invalidation. The common one: after a reboot, before the
+                // first unlock, credential-encrypted Keystore entries are
+                // simply unavailable — and BootReceiver starts the service in
+                // exactly that window. `getEntry` threw, the token was deleted,
+                // and the owner unlocked their phone five minutes later to find
+                // themselves unpaired with no explanation.
+                //
+                // A bad tag or a corrupt blob means the ciphertext really
+                // cannot be opened again. Anything else is treated as "not
+                // right now": no token this time, blob left where it is.
+                if (isPermanent(it)) {
+                    Log.w(TAG, "stored token is unreadable for good; clearing", it)
+                    clear()
+                } else {
+                    Log.w(TAG, "token temporarily unreadable; keeping it", it)
+                }
             }
             .getOrDefault("")
     }
@@ -65,6 +82,20 @@ class TokenStore(context: Context) {
     fun clear() = prefs.edit { remove(KEY_BLOB) }
 
     // --------------------------------------------------------------------
+
+    /**
+     * Whether this failure means the ciphertext can never be opened again.
+     *
+     * Deliberately a small allow-list rather than "anything not on a deny
+     * list": getting this wrong in the permissive direction silently unpairs
+     * the phone, and getting it wrong the other way costs one failed request.
+     */
+    private fun isPermanent(t: Throwable): Boolean = when (t) {
+        is AEADBadTagException -> true            // wrong key, or tampered blob
+        is KeyPermanentlyInvalidatedException -> true // lock screen changed
+        is IllegalArgumentException -> true       // not valid Base64 any more
+        else -> false                             // locked, busy, absent, flaky
+    }
 
     private fun secretKey(): SecretKey {
         val ks = KeyStore.getInstance(PROVIDER).apply { load(null) }

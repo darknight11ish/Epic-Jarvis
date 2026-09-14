@@ -86,7 +86,11 @@ class Recorder(private val context: Context) {
             return@withContext Result.Refused(Failure.Unavailable)
         }
 
-        val maxSamples = (maxSeconds * rate).toInt()
+        // Clamped, because this comes from the desktop. `max_seconds: 0` — or
+        // a missing/garbled value — made maxSamples zero, so the read loop
+        // never ran once and every capture came back TooShort: "hold the button
+        // while you speak", to someone who was.
+        val maxSamples = (maxSeconds.coerceIn(1f, 120f) * rate).toInt()
         // A primitive array grown by doubling rather than an ArrayList<Short>.
         // The list looks equivalent and is not: every sample would be boxed,
         // and the Short cache only covers -128..127, so an audio signal misses

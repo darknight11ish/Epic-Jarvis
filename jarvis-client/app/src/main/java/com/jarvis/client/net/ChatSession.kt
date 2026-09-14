@@ -36,7 +36,18 @@ class ChatSession(private val api: JarvisApi) {
 
     @Volatile private var call: Call? = null
 
-    suspend fun send(message: String) {
+    /**
+     * Sends a turn and returns the reply **this** call produced, or null if it
+     * did not finish.
+     *
+     * The return value exists because the voice loop used to read
+     * `chat.reply.value` after `send` came back, and there is only one shared
+     * `_reply`. A typed message sent while a spoken one was still streaming
+     * cancels the voice call — so the read picked up the *typed* question's
+     * half-streamed answer, and Jarvis spoke it aloud as the answer to
+     * something else entirely.
+     */
+    suspend fun send(message: String): String? {
         cancel()
         _reply.value = ""
         _error.value = null
@@ -44,11 +55,12 @@ class ChatSession(private val api: JarvisApi) {
         val c = api.chatCall(message)
         if (c == null) {
             _error.value = "No desktop address set"
-            return
+            return null
         }
         call = c
         _streaming.value = true
 
+        var mine: String? = null
         withContext(Dispatchers.IO) {
             try {
                 c.execute().use { resp ->
@@ -70,6 +82,10 @@ class ChatSession(private val api: JarvisApi) {
                         // chunked is so the reply appears as it is written.
                         _reply.value += buf.readUtf8()
                     }
+                    // Captured before anything else can replace the shared
+                    // flow, so the caller gets its own answer rather than
+                    // whatever is in there when it happens to look.
+                    mine = _reply.value
                 }
             } catch (ce: CancellationException) {
                 throw ce
@@ -98,6 +114,7 @@ class ChatSession(private val api: JarvisApi) {
                 }
             }
         }
+        return mine
     }
 
     /** Interrupts generation. Safe to call when nothing is in flight. */

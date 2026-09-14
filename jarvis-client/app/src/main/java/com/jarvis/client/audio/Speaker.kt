@@ -51,22 +51,32 @@ class Speaker(private val context: Context) {
             rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(4096)
 
-        val out = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build(),
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(rate)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build(),
-            )
-            .setBufferSizeInBytes(minBuf)
-            .build()
+        // Inside the try. `build()` throws when the native track cannot be
+        // created — a rate the device will not open, or the audio HAL briefly
+        // out of tracks because another app holds them — and it sat outside the
+        // guard that would have cleaned up, so the throw escaped `play`,
+        // `speak`, `deliver` and the launch, and killed the process mid-answer.
+        val out = runCatching {
+            AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build(),
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(rate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build(),
+                )
+                .setBufferSizeInBytes(minBuf)
+                .build()
+        }.getOrElse {
+            Log.w(TAG, "could not open an audio track", it)
+            return@withContext
+        }
         track = out
 
         try {
@@ -104,6 +114,10 @@ class Speaker(private val context: Context) {
         if (text.isBlank()) return
         cancelled = false
         val engine = ensureTts() ?: return
+        // Re-checked after init. `stop()` during the ~1s first-run engine setup
+        // set the flag, and nothing read it again before speaking — so Jarvis
+        // could start talking after the owner had cancelled.
+        if (cancelled) return
         suspendCancellableCoroutine { cont ->
             val id = "jarvis-${System.nanoTime()}"
             engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -119,6 +133,10 @@ class Speaker(private val context: Context) {
 
                 override fun onDone(utteranceId: String?) {
                     _level.value = null
+                    // The engine outlives the utterance, and this listener
+                    // holds a continuation; left registered it kept the
+                    // finished turn's coroutine reachable.
+                    runCatching { engine.setOnUtteranceProgressListener(null) }
                     if (cont.isActive) cont.resume(Unit)
                 }
 
@@ -160,12 +178,21 @@ class Speaker(private val context: Context) {
             engine = TextToSpeech(context) { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     tts = engine
-                    if (cont.isActive) cont.resume(engine)
+                    if (cont.isActive) cont.resume(engine) else runCatching { engine?.shutdown() }
                 } else {
+                    // Shut down, not just dropped. A TextToSpeech holds a bound
+                    // ServiceConnection; on a device with no engine data this
+                    // branch ran once per voice turn and leaked a binding each
+                    // time, for the life of the process.
                     Log.w(TAG, "no local text-to-speech engine")
+                    runCatching { engine?.shutdown() }
                     if (cont.isActive) cont.resume(null)
                 }
             }
+            // Cancelled while waiting for first-run init — which takes about a
+            // second — left the engine built inside this block with nobody to
+            // shut it down.
+            cont.invokeOnCancellation { runCatching { engine?.shutdown() } }
         }
     }
 
