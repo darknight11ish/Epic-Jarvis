@@ -664,9 +664,16 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
  *
  *  So: one base URL and one header, in one place. jfetch() is the only thing
  *  below that knows either. Set them from the console, from the desktop
- *  shell, or from a ?token= bootstrap; they persist per browser.
+ *  shell, or from a ?token= bootstrap.
+ *
+ *  Note the `window.JARVIS =` below, which is not decoration. A top-level
+ *  `const` is a global LEXICAL binding and never becomes a property of
+ *  window - so a host that injects `window.JARVIS.set(...)` at load throws
+ *  TypeError on undefined, while a bare `JARVIS.set(...)` works. Assigning it
+ *  explicitly makes both spellings valid, because the one that fails does so
+ *  in an injected script where the error is close to invisible.
  * ======================================================================= */
-const JARVIS = (() => {
+const JARVIS = window.JARVIS = (() => {
   const LS = (k, d) => { try { return localStorage.getItem(k) || d; } catch(e) { return d; } };
   let base = LS("jarvis.base", "");
   let token = LS("jarvis.token", "");
@@ -680,11 +687,24 @@ const JARVIS = (() => {
   return {
     get base(){ return base; },
     get token(){ return token; },
-    set(b, t){
+    // persist defaults true so a browser user who sets this from the console
+    // is not asked again. A desktop shell passes false: it holds the real
+    // values in the OS keystore and re-injects them at load, and a copy in
+    // this page's localStorage would be a second, staler source of the token
+    // that outlives the shell's own storage.
+    set(b, t, persist){
+      persist = persist !== false;
       if (b !== undefined) { base = String(b || "").replace(/\/$/, "");
-        try { localStorage.setItem("jarvis.base", base); } catch(e){} }
+        if (persist) try { localStorage.setItem("jarvis.base", base); } catch(e){} }
       if (t !== undefined) { token = String(t || "");
-        try { localStorage.setItem("jarvis.token", token); } catch(e){} }
+        if (persist) try { localStorage.setItem("jarvis.token", token); } catch(e){} }
+    },
+    // Clears the cached copies without touching the live values. A shell that
+    // injects on every load should call this once at startup so a token left
+    // behind by an earlier browser session cannot shadow the real one.
+    forget(){
+      try { localStorage.removeItem("jarvis.base");
+            localStorage.removeItem("jarvis.token"); } catch(e){}
     },
     url(path){ return (base || "") + path; },
     headers(extra){

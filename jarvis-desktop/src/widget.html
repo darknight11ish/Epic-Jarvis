@@ -82,6 +82,10 @@
             <span class="action-name mono" id="appr-action">--</span>
           </div>
           <p class="appr-detail" id="appr-detail">--</p>
+          <!-- What getting the answer wrong costs. `risk` is derived by the
+               gate at read time and is the only thing that tells send_email
+               apart from switch_model, which are both tier `ask`. -->
+          <p class="appr-risk" id="appr-risk" data-reversible="no">--</p>
           <div class="approval-actions">
             <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
             <button class="btn btn-deny" id="btn-appr-no">Deny</button>

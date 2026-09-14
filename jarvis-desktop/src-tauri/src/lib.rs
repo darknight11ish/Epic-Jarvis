@@ -17,6 +17,9 @@
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
 pub mod commands;
+pub mod spec;
+pub mod sse;
+pub mod stream;
 pub mod tray;
 pub mod windows;
 
@@ -66,10 +69,29 @@ pub mod events {
     pub const QUICK_NOTE_SUMMON: &str = "quick-note-summon";
     /// Payload: [`crate::commands::DesktopTelemetry`].
     pub const DESKTOP_TELEMETRY: &str = "desktop-telemetry";
-    /// Payload: the normalised approval — `id`, `action`, `detail`.
-    pub const APPROVAL_REQUESTED: &str = "approval-requested";
     /// Payload: `{ id, approved }`.
     pub const APPROVAL_RESOLVED: &str = "approval-resolved";
+
+    // ---- the fanned-out event stream -----------------------------------
+    //
+    // Rust holds one `GET /api/events` open and re-emits every frame on these
+    // three names. No surface opens a stream of its own, and none of them
+    // polls: one stream, one source of truth, three consumers.
+
+    /// Payload: `{ kind, id, data }` — one frame off the server's event bus,
+    /// verbatim. `kind` is `hello`, `approval`, `finding`, `power`, `persona`,
+    /// `model`, `voice` or `activity`.
+    pub const JARVIS_EVENT: &str = "jarvis-event";
+    /// Payload: [`crate::stream::LinkState`] — whether the stream is up, what
+    /// Jarvis is doing, and how many approvals are waiting.
+    pub const JARVIS_LINK: &str = "jarvis-link";
+    /// Payload: `{ count, items }` — the approval queue, re-read once by the
+    /// backend after the doorbell rang, not once per window.
+    pub const APPROVALS_CHANGED: &str = "approvals-changed";
+    /// Payload: none. `hello.stale` said the resume point fell off the back of
+    /// the server's 512-event ring: everything on screen is suspect and must be
+    /// re-read rather than patched up.
+    pub const JARVIS_RESYNC: &str = "jarvis-resync";
 }
 
 /// Cancellation handle for the one chat stream the spotlight may have running.
@@ -136,6 +158,35 @@ pub fn emit_quickbar<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, 
 pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
     if let Err(err) = app.emit(event, payload) {
         eprintln!("[jarvis] unable to broadcast `{event}`: {err}");
+    }
+}
+
+/// Pushes a value into the HUD page by evaluating a call to its feed.
+///
+/// The HUD is the one window that cannot receive a Tauri event. `jarvis_hud
+/// .html` carries its own Content-Security-Policy meta tag whose `connect-src`
+/// lists the backend's loopback origins and nothing else, and Tauri's IPC on
+/// Windows is a fetch to `http://ipc.localhost` — so `listen` and `invoke` are
+/// both refused inside that page before the request leaves the webview. An
+/// `eval` from the host is not a fetch and is not subject to the page's policy.
+///
+/// `serde_json` is what makes it safe: the payload is a JSON literal, escaped
+/// by the serialiser, spliced into a call to a function the initialisation
+/// script defined. Nothing here is concatenated by hand.
+pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload: &S) {
+    let Some(hud) = app.get_webview_window(HUD_LABEL) else {
+        return;
+    };
+    let (Ok(channel), Ok(payload)) = (
+        serde_json::to_string(channel),
+        serde_json::to_string(payload),
+    ) else {
+        return;
+    };
+    let script =
+        format!("if (window.__jarvisFeed) {{ window.__jarvisFeed({channel}, {payload}); }}");
+    if let Err(err) = hud.eval(&script) {
+        eprintln!("[jarvis] unable to push `{channel}` to the HUD: {err}");
     }
 }
 
@@ -281,6 +332,63 @@ fn summon_quick_note(app: &AppHandle) {
     emit_quickbar(app, events::QUICK_NOTE_SUMMON, DEFAULT_NOTE_TARGET);
 }
 
+/// The bootstrap injected into the HUD webview before any of its own scripts.
+/// See the file itself for what it does and why it has to run this early.
+const HUD_BOOTSTRAP: &str = include_str!("hud_bootstrap.js");
+
+/// Creates the HUD window with its initialisation script.
+///
+/// Everything here mirrors what `tauri.conf.json` used to declare for the `hud`
+/// label; the window moved into Rust only so it could carry the script, and the
+/// capability file still addresses it by the same label.
+fn build_hud_window(app: &AppHandle) -> Result<(), String> {
+    // A second call must not stand up a second HUD — `setup` runs once, but
+    // this is also the natural place for a future "reopen the HUD" path.
+    if app.get_webview_window(HUD_LABEL).is_some() {
+        return Ok(());
+    }
+
+    let base = commands::jarvis_base(app);
+    let token = commands::jarvis_token_for(app).unwrap_or_default();
+    // `serde_json` is what makes this safe: the base and token are values a
+    // user typed into a settings field, and they are spliced into JavaScript.
+    // Serialising them as JSON string literals is exactly the escaping that
+    // needs, quotes and backslashes included.
+    let script = HUD_BOOTSTRAP
+        .replace(
+            "__JARVIS_BASE__",
+            &serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
+        )
+        .replace(
+            "__JARVIS_TOKEN__",
+            &serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into()),
+        );
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        HUD_LABEL,
+        tauri::WebviewUrl::App("jarvis_hud.html".into()),
+    )
+    .title("Jarvis")
+    .inner_size(1280.0, 820.0)
+    .min_inner_size(960.0, 640.0)
+    .center()
+    .decorations(true)
+    .transparent(false)
+    .always_on_top(false)
+    .skip_taskbar(false)
+    .resizable(true)
+    .focused(true)
+    .shadow(true)
+    .theme(Some(tauri::Theme::Dark))
+    .initialization_script(&script)
+    .build()
+    .map_err(|e| format!("{e}"))?;
+
+    println!("[jarvis] HUD window created for {base}");
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -311,14 +419,18 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .manage(ChatState::default())
+        .manage(stream::StreamState::default())
+        .manage(tray::TrayHandles::default())
         .manage(windows::WidgetState::default())
         .manage(RouteState::default())
         .invoke_handler(tauri::generate_handler![
             commands::stream_chat,
             commands::cancel_chat,
             commands::decide_approval,
-            commands::announce_approval,
             commands::set_route_lane,
+            stream::get_link_state,
+            stream::get_pending_approvals,
+            stream::refresh_link,
             commands::get_api_settings,
             commands::set_api_settings,
             commands::resize_desktop_widget,
@@ -393,15 +505,20 @@ pub fn run() {
         );
     }
 
-    // DESKTOP-BUILD §3.1 step 4. The page reads its API base and token from
-    // `JARVIS.set(base, token)`; the desktop shell is what calls it, sourcing
-    // both from the settings store rather than the page's own localStorage.
+    // DESKTOP-BUILD §3.1 step 4, belt to the braces in `hud_bootstrap.js`.
     //
-    // Injected on page load rather than as an initialisation script, because
-    // `JARVIS` is defined by the page itself and does not exist yet when an
-    // init script runs. `typeof` guards the reference: `JARVIS` is a top-level
-    // `const`, which is a global *lexical* binding and never a property of
-    // `window`, so `window.JARVIS` would be undefined here.
+    // The real configuration happens in the initialisation script the HUD
+    // window is built with, which runs before the page's own scripts and
+    // catches the assignment to `window.JARVIS` as it happens. This is the
+    // fallback for a page that somehow defined JARVIS without that assignment
+    // being interceptable: late — the first fetches have already gone out with
+    // the wrong base — but better than a page that never works at all.
+    //
+    // `typeof` guards the reference rather than `window.JARVIS`, because a
+    // top-level `const` is a global *lexical* binding and never a property of
+    // `window`. Against a page without the `window.JARVIS =` assignment, the
+    // obvious spelling throws TypeError inside an injected script, where the
+    // error is close to invisible.
     builder = builder.on_page_load(|webview, payload| {
         if payload.event() != tauri::webview::PageLoadEvent::Finished {
             return;
@@ -413,21 +530,36 @@ pub fn run() {
         let base = commands::jarvis_base(app);
         let token = commands::jarvis_token_for(app).unwrap_or_default();
         let script = format!(
-            "if (typeof JARVIS !== 'undefined' && JARVIS && typeof JARVIS.set === 'function') \
-             {{ JARVIS.set({}, {}); }}",
+            "if (typeof JARVIS !== 'undefined' && JARVIS && typeof JARVIS.set === 'function' \
+             && !JARVIS.base) {{ JARVIS.forget(); JARVIS.set({}, {}, false); }}",
             serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
             serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into()),
         );
         if let Err(err) = webview.eval(&script) {
             eprintln!("[jarvis] unable to configure the HUD page: {err}");
-        } else {
-            println!("[jarvis] HUD page configured for {base}");
         }
+
+        // A HUD that loads (or reloads) mid-session has heard nothing yet: the
+        // stream only speaks on change, and it may have connected minutes ago.
+        // Push the current state once, now, so the page is not a frame behind.
+        let link = app.state::<stream::StreamState>().link();
+        push_to_hud(app, "link", &link);
     });
 
     let app = builder
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // The HUD is built here rather than declared in `tauri.conf.json`
+            // because a config-declared window cannot carry an initialisation
+            // script, and this one needs two things to run before the page's
+            // own scripts do: the API base and token (the page reads them when
+            // it defines `JARVIS`, which is before its first fetch) and the
+            // EventSource shim that keeps the desktop down to one subscription.
+            // `on_page_load` is too late for either.
+            if let Err(err) = build_hud_window(&handle) {
+                eprintln!("[jarvis] the HUD window could not be created: {err}");
+            }
 
             // Vibrancy (Acrylic on the quickbar, Mica on the HUD) plus the
             // focus-loss auto-hide listener for the spotlight bar.
@@ -446,10 +578,16 @@ pub fn run() {
             }
             spawn_telemetry_loop(handle.clone());
 
-            // Notification-area icon and context menu.
+            // Notification-area icon and context menu. Built before the
+            // stream starts so the first link change has something to paint.
             if let Err(err) = tray::create_tray(&handle) {
                 eprintln!("[jarvis] tray icon unavailable: {err}");
             }
+
+            // The one event-stream connection. Everything downstream of it —
+            // the tray colour, the approval queue in all three windows, the
+            // online pill — is fed from here and nowhere else.
+            stream::spawn(handle.clone());
 
             // Bind the accelerators. A failure here is not fatal: another
             // application may already own a combination, and Jarvis still works

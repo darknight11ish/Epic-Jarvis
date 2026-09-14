@@ -378,6 +378,20 @@ body {
   -webkit-user-select: text;
 }
 
+/* The risk line. Colour comes from `reversible`, which is the axis the user is
+   deciding about — `reach` is in the text. A row that shouts at every approval
+   teaches nothing, so `yes` is deliberately quiet. */
+.appr-risk {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.appr-risk[data-reversible="hard"] { color: var(--gold); }
+.appr-risk[data-reversible="no"] { color: var(--bad); }
+
+
 .approval-actions {
   display: flex;
   gap: 6px;

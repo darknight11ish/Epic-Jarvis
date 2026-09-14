@@ -318,6 +318,25 @@ pub fn is_quickbar_pinned() -> bool {
 // HUD control
 // ---------------------------------------------------------------------------
 
+/// Shows the HUD and brings it forward, whatever state it was in.
+///
+/// Separate from [`toggle_hud`] because the tray's "Show HUD Window" and its
+/// approvals row both mean *show it* — a toggle there would hide the window for
+/// anyone who clicked while it was already open behind something else.
+pub fn show_hud(app: &AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window(HUD_LABEL)
+        .ok_or_else(|| format!("window `{HUD_LABEL}` was not found"))?;
+    window
+        .show()
+        .map_err(|e| format!("unable to show the HUD: {e}"))?;
+    // A window that was minimised stays minimised on `show`.
+    let _ = window.unminimize();
+    window
+        .set_focus()
+        .map_err(|e| format!("unable to focus the HUD: {e}"))
+}
+
 /// Toggles the HUD window, returning its new visibility.
 pub fn toggle_hud(app: &AppHandle) -> Result<bool, String> {
     let window = app

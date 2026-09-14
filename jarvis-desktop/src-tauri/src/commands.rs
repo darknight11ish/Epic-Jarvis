@@ -450,7 +450,7 @@ fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::Client, Str
 }
 
 /// `X-Jarvis-Client` and, when configured, `X-Jarvis-Token`.
-fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, String> {
+pub fn jarvis_headers(app: &AppHandle) -> Result<reqwest::header::HeaderMap, String> {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "X-Jarvis-Client",
@@ -666,17 +666,6 @@ pub fn set_route_lane(app: AppHandle, lane: String) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     *slot = Some(lane);
-}
-
-/// Broadcasts a pending approval to every window.
-///
-/// The quickbar spots gates in its own stream; the widget has no stream of its
-/// own, so the discovery is relayed through the backend rather than window to
-/// window. Emitting from Rust also means no window needs the capability to emit
-/// events itself.
-#[tauri::command]
-pub fn announce_approval(app: AppHandle, approval: serde_json::Value) {
-    crate::emit_all(&app, crate::events::APPROVAL_REQUESTED, approval);
 }
 
 // ---------------------------------------------------------------------------

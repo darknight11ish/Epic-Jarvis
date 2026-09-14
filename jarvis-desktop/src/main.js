@@ -81,6 +81,15 @@ const RESIZE_INTERVAL_MS = 150;
    Tauri bridge
    ========================================================================== */
 
+import {
+  currentLink,
+  decide as decideOnBackend,
+  onLink,
+  onQueue,
+  riskLine,
+  start as startLink,
+} from "./jarvis-link.js";
+
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
@@ -192,6 +201,8 @@ const state = {
   noteTarget: null,
   /** The approval gate awaiting a decision, if any. */
   approval: null,
+  /** True while a decision is in flight, so a double tap cannot send twice. */
+  deciding: false,
   route: { ...DEFAULT_ROUTE },
 };
 
@@ -598,7 +609,15 @@ function applyHealth(report) {
   }
 }
 
-/** Fire-and-forget health probe; the badge and dots update when it lands. */
+/**
+ * Fire-and-forget probe of the three local services.
+ *
+ * Called when something has actually changed — the window is summoned, the
+ * stream connects or drops, a request fails — and never on a timer. Ollama and
+ * the LiteLLM proxy are not on the event bus, so their dots still need a probe;
+ * Jarvis itself does not, because a live event stream *is* the proof that it is
+ * up, and a better one than a request that succeeded a moment ago.
+ */
 async function refreshHealth() {
   const report = await invoke("check_server_health");
   if (report) applyHealth(report);
@@ -666,60 +685,55 @@ function syncNoteChip() {
    Approval gates
    ========================================================================== */
 
-/**
- * Recognises a pending approval in a decoded stream chunk.
+/*
+ * There used to be an `approvalFromChunk()` here that sniffed the chat stream
+ * for anything that looked like a gate — `tier: "ask"`, `status:
+ * "pending_approval"`, half a dozen id spellings — and opened a card from it.
  *
- * The gate can arrive as an HTTP 409 body forwarded by the backend or as an
- * inline event while streaming, and different tools describe themselves
- * differently, so this accepts the shapes the server is known to emit and
- * normalises them into one object. Returns null when the chunk is ordinary
- * content.
+ * It is gone, and its absence is the point. `/api/pending` is the only place
+ * that knows what is waiting, `jarvis_gate.pending()` is what fills it, and the
+ * `risk` object that says what getting the answer wrong costs is derived there
+ * at read time and exists nowhere else. A card built by guessing at chat chunks
+ * had no risk to show and no way to know when something had already been
+ * answered somewhere else.
+ *
+ * So the quickbar no longer decides what an approval is. Rust reads the queue
+ * once, when the stream rings the bell, and every surface renders the same
+ * list. This file's remaining job is to draw it.
  */
-function approvalFromChunk(chunk) {
-  if (!chunk || typeof chunk !== "object") return null;
 
-  const node =
-    chunk.approval || chunk.pending_approval || chunk.approval_request || chunk;
-  const tier = String(node.tier || chunk.tier || "").toLowerCase();
-  const status = String(node.status || chunk.status || "").toLowerCase();
+/**
+ * Builds the markdown preview shown inside the approval card.
+ *
+ * `detail` is whatever the caller passed to `jarvis_gate.check()`, JSON-encoded
+ * and truncated to 4000 characters by the gate — so it can arrive as an object,
+ * as a string that no longer parses, or not at all. All three are drawn.
+ */
+function approvalPreview(approval) {
+  const detail = approval.detail;
 
-  const pending =
-    tier === "ask" ||
-    status === "pending_approval" ||
-    status === "awaiting_approval" ||
-    node.awaiting_approval === true ||
-    chunk.event === "approval_required";
-  if (!pending) return null;
-
-  const id = node.id || node.request_id || node.approval_id || chunk.id;
-  if (!id) return null;
-
-  return {
-    id: String(id),
-    action: String(
-      node.action || node.tool || node.name || chunk.action || "run an action"
-    ),
-    target: node.target || node.note_target || chunk.note_target || null,
-    preview: approvalPreview(node),
-  };
-}
-
-/** Builds the markdown preview shown inside the approval card. */
-function approvalPreview(node) {
-  if (typeof node.diff === "string" && node.diff.trim()) {
-    return `\`\`\`diff\n${node.diff.trim()}\n\`\`\``;
+  if (typeof detail === "string") {
+    return detail.trim()
+      ? `\`\`\`\n${detail.trim()}\n\`\`\``
+      : "_No detail was recorded for this action._";
   }
-  if (typeof node.command === "string" && node.command.trim()) {
-    return `\`\`\`sh\n${node.command.trim()}\n\`\`\``;
+  if (detail && typeof detail === "object") {
+    for (const [key, fence] of [
+      ["diff", "diff"],
+      ["command", "sh"],
+      ["cmd", "sh"],
+    ]) {
+      if (typeof detail[key] === "string" && detail[key].trim()) {
+        return `\`\`\`${fence}\n${detail[key].trim()}\n\`\`\``;
+      }
+    }
+    for (const key of ["preview", "content", "body", "text", "summary"]) {
+      if (typeof detail[key] === "string" && detail[key].trim()) return detail[key];
+    }
+    return `\`\`\`json\n${JSON.stringify(detail, null, 2)}\n\`\`\``;
   }
-  for (const key of ["preview", "content", "body", "text", "summary"]) {
-    if (typeof node[key] === "string" && node[key].trim()) return node[key];
-  }
-  const args = node.arguments || node.args || node.params;
-  if (args && typeof args === "object") {
-    return `\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``;
-  }
-  return "_No preview was supplied for this action._";
+  if (approval.prompt.trim()) return approval.prompt.trim();
+  return "_No detail was recorded for this action._";
 }
 
 /**
@@ -750,45 +764,46 @@ function decorateDiff(container) {
   }
 }
 
-/** Renders the gate and hands the keyboard to it. */
+/**
+ * Renders the gate and hands the keyboard to it.
+ *
+ * Called only from the queue subscription — never from the chat stream.
+ */
 function openApproval(approval) {
   state.approval = approval;
   setPhase("approval");
 
   dom.approvalAction.textContent = approval.action;
-  dom.approvalTarget.hidden = !approval.target;
-  if (approval.target) {
-    dom.approvalTarget.textContent = String(approval.target);
-  }
-  dom.approvalPreview.innerHTML = renderMarkdown(approval.preview);
+  const target = approval.detail && typeof approval.detail === "object"
+    ? approval.detail.target || approval.detail.note_target || approval.detail.to
+    : null;
+  dom.approvalTarget.hidden = !target;
+  if (target) dom.approvalTarget.textContent = String(target);
+
+  dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
   decorateDiff(dom.approvalPreview);
-  dom.approvalHint.textContent = "Nothing runs until you decide.";
-  dom.approvalApprove.disabled = false;
-  dom.approvalDeny.disabled = false;
+
+  // The risk line is the whole reason the gate is worth showing rather than
+  // merely enforcing: `switch_model` and `send_email` are both tier `ask` and
+  // arrive looking identical until this is on screen.
+  dom.approvalHint.textContent = riskLine(approval.risk);
+  dom.approvalHint.dataset.reversible = approval.risk
+    ? approval.risk.reversible
+    : "no";
+  dom.approvalHint.dataset.reach = approval.risk ? approval.risk.reach : "outbound";
+
+  syncApprovalButtons();
   dom.approval.hidden = false;
-  dom.cursor.hidden = true;
-  dom.stop.hidden = true;
-  // The turn is not streaming any more, it is waiting on a person.
+
   if (!dom.card.hidden) dom.cardStatusText.textContent = "Paused for approval";
 
-  // The widget has no stream of its own, so the discovery is relayed through
-  // the backend, which broadcasts it to every window.
-  invoke("announce_approval", {
-    approval: {
-      id: approval.id,
-      action: approval.action,
-      target: approval.target,
-      detail: approval.preview,
-    },
-  });
-
-  // A gate must survive the user clicking away to read what it is about.
   setPinned(true, { silent: true });
-  syncWindowHeight();
+  focusInput({ selectAll: false });
   dom.approvalApprove.focus();
+  syncWindowHeight();
 }
 
-/** Clears the gate. */
+/** Clears the gate. Called when it leaves the queue, however it left. */
 function closeApproval() {
   state.approval = null;
   dom.approval.hidden = true;
@@ -796,31 +811,60 @@ function closeApproval() {
   syncWindowHeight();
 }
 
-/** Sends the decision and reports the outcome in the answer card. */
+/**
+ * Enables or disables the two buttons from the link state.
+ *
+ * A stale stream means the queue cannot be confirmed live, and answering one
+ * that cannot be confirmed is how the same action gets approved twice.
+ */
+function syncApprovalButtons() {
+  const link = currentLink();
+  const blocked = link.stale || state.deciding;
+  dom.approvalApprove.disabled = blocked;
+  dom.approvalDeny.disabled = blocked;
+  if (link.stale && state.approval) {
+    dom.approvalHint.textContent =
+      "Offline — the approval queue cannot be confirmed, so nothing can be answered from here.";
+  }
+}
+
+/**
+ * Sends the decision and reports the outcome in the answer card.
+ *
+ * The decision itself goes to `decide_approval` in Rust — the one place that
+ * talks to `/api/approve` and `/api/deny`, so the 409 that means "already
+ * decided" is handled once rather than in each of three windows. The card
+ * closes when the backend broadcasts the resolution, not when this returns,
+ * so a decision taken in the widget closes the quickbar's copy the same way.
+ */
 async function decideApproval(approved) {
   const approval = state.approval;
-  if (!approval) return;
+  if (!approval || state.deciding) return;
 
-  dom.approvalApprove.disabled = true;
-  dom.approvalDeny.disabled = true;
+  state.deciding = true;
+  syncApprovalButtons();
   dom.approvalHint.textContent = approved ? "Approving…" : "Denying…";
 
   try {
-    await invokeStrict("decide_approval", { id: approval.id, approved });
-    closeApproval();
-    setPhase("done");
+    await decideOnBackend(approval.id, approved);
     state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${
       approved ? "Approved" : "Denied"
     } \`${approval.action}\` from the desktop spotlight.`;
     openCard(approved ? "Approved" : "Denied");
     paint({ immediate: true });
   } catch (error) {
-    dom.approvalApprove.disabled = false;
-    dom.approvalDeny.disabled = false;
-    dom.approvalHint.textContent = String(
+    const message = String(
       (error && error.message) || error || "the decision could not be sent"
     );
+    // The server answers 409 when the id is unknown, expired, or already
+    // decided. That is not a failure to report as one — someone answered it,
+    // possibly on the phone — so say so and let the queue update close the card.
+    dom.approvalHint.textContent = /409|already/i.test(message)
+      ? "Already handled somewhere else."
+      : message;
   } finally {
+    state.deciding = false;
+    syncApprovalButtons();
     await setPinned(false, { silent: true });
   }
 }
@@ -905,14 +949,6 @@ function consumeLine(rawLine) {
 
   if (chunk.error) {
     showError(String((chunk.error && chunk.error.message) || chunk.error));
-    return true;
-  }
-
-  const approval = approvalFromChunk(chunk);
-  if (approval) {
-    openApproval(approval);
-    // The turn is now waiting on a person, so the stream is over as far as the
-    // card is concerned.
     return true;
   }
 
@@ -1356,11 +1392,14 @@ listen("capture-failed", (event) => {
 
 listen("health-report", (event) => applyHealth(event.payload));
 
+// `approval-resolved` fires the instant a decision is accepted, ahead of the
+// queue re-read that follows it. Closing here as well as on the queue update
+// means the card goes away when the button is pressed rather than one round
+// trip later — and closing twice is harmless.
 listen("approval-resolved", (event) => {
   const resolved = event.payload;
   if (!state.approval) return;
   if (resolved && resolved.id && String(resolved.id) !== state.approval.id) return;
-  // Answered somewhere else — most likely the desktop widget.
   closeApproval();
   setPhase("done");
   paint({ immediate: true });
@@ -1382,11 +1421,56 @@ syncWindowHeight();
 refreshHealth();
 focusInput();
 
-// Re-probe the services periodically so the footer dots stay honest while the
-// window sits open.
-setInterval(() => {
-  if (state.phase !== "streaming") refreshHealth();
-}, 30000);
+// One stream, owned by Rust, fanned out to all three surfaces. This window
+// subscribes; it does not connect, and it does not poll.
+startLink();
+
+let lastConnected = null;
+onLink((link) => {
+  // The Jarvis dot comes off the stream now. A held-open connection is a
+  // stronger liveness signal than a probe that succeeded a moment ago, and it
+  // costs nothing.
+  const dot = dom.services.querySelector('[data-service="jarvis"]');
+  if (dot) {
+    dot.dataset.online = String(link.connected);
+    dot.title = link.connected
+      ? `Jarvis: event stream live${link.activity === "idle" ? "" : ` · ${link.activity}`}`
+      : `Jarvis: ${link.error || "no event stream"}`;
+  }
+  if (!link.connected && state.route.tier !== "offline") {
+    applyRoute({ tier: "offline", label: "Offline", model: "core unreachable" });
+  } else if (link.connected && state.route.tier === "offline") {
+    applyRoute(DEFAULT_ROUTE);
+  }
+
+  // Ollama and LiteLLM are not on the bus, so they are re-probed when the link
+  // changes state — which is the moment their answer is most likely to differ.
+  if (lastConnected !== null && lastConnected !== link.connected) refreshHealth();
+  lastConnected = link.connected;
+
+  syncApprovalButtons();
+});
+
+onQueue((queue) => {
+  const open = queue.items[0] || null;
+  if (!open) {
+    if (state.approval) {
+      // It left the queue: answered here, in the widget, on the phone, or it
+      // expired. Either way there is nothing left to decide.
+      closeApproval();
+      setPhase(state.phase === "approval" ? "done" : state.phase);
+      paint({ immediate: true });
+    }
+    return;
+  }
+  if (state.approval && state.approval.id === open.id) {
+    // Same gate, re-read: `risk` is derived per read and must never be cached
+    // against an id, so the card takes the new copy rather than keeping its own.
+    openApproval(open);
+    return;
+  }
+  openApproval(open);
+});
 
 console.info(
   `[jarvis] spotlight ready - backend ${IS_TAURI ? "connected" : "absent (browser preview)"}`

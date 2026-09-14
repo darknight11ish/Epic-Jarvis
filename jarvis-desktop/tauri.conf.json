@@ -37,25 +37,6 @@
         "theme": "Dark"
       },
       {
-        "label": "hud",
-        "title": "Jarvis",
-        "url": "jarvis_hud.html",
-        "width": 1280,
-        "height": 820,
-        "minWidth": 960,
-        "minHeight": 640,
-        "center": true,
-        "decorations": true,
-        "transparent": false,
-        "alwaysOnTop": false,
-        "skipTaskbar": false,
-        "visible": true,
-        "resizable": true,
-        "focus": true,
-        "shadow": true,
-        "theme": "Dark"
-      },
-      {
         "label": "widget",
         "title": "Jarvis Desktop Widget",
         "url": "widget.html",

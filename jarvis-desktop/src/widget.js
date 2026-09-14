@@ -16,6 +16,15 @@
    Tauri bridge
    ========================================================================== */
 
+import {
+  currentLink,
+  decide as decideOnBackend,
+  onLink,
+  onQueue,
+  riskLine,
+  start as startLink,
+} from "./jarvis-link.js";
+
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
@@ -81,6 +90,7 @@ const dom = {
   gpuBar: $("gpu-bar"),
 
   apprCard: $("approval-card"),
+  apprRisk: $("appr-risk"),
   apprAction: $("appr-action"),
   apprDetail: $("appr-detail"),
   btnApprYes: $("btn-appr-yes"),
@@ -100,7 +110,7 @@ const state = {
   expanded: false,
   alwaysOnTop: true,
   /** Id of the gate awaiting a decision, or null. */
-  approvalId: null,
+  approval: null,
   /** `"logseq"` or `"joplin"` — which store the capture field files to. */
   captureTarget: "logseq",
   busy: false,
@@ -285,54 +295,91 @@ function applyHealth(report) {
    Approval gates
    ========================================================================== */
 
-/** Best-effort one-line description of what the agent wants to do. */
-function approvalDetail(request) {
-  for (const key of ["detail", "preview", "summary", "prompt", "content", "command", "diff"]) {
-    const value = request[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim().split("\n")[0].slice(0, 200);
-    }
+/**
+ * One line describing what the agent wants to do.
+ *
+ * `detail` reaches here already parsed by the link module — an object when the
+ * gate's JSON survived its 4000-character truncation, the raw string when it
+ * did not.
+ */
+function approvalDetail(approval) {
+  const detail = approval.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim().split("\n")[0].slice(0, 200);
   }
-  const args = request.arguments || request.args || request.params;
-  if (args && typeof args === "object") return JSON.stringify(args).slice(0, 200);
+  if (detail && typeof detail === "object") {
+    for (const key of ["preview", "summary", "content", "command", "diff", "text"]) {
+      const value = detail[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim().split("\n")[0].slice(0, 200);
+      }
+    }
+    return JSON.stringify(detail).slice(0, 200);
+  }
+  if (approval.prompt.trim()) return approval.prompt.trim().split("\n")[0].slice(0, 200);
   return "No detail supplied.";
 }
 
-function openApproval(request) {
-  state.approvalId = String(request.id);
-  dom.apprAction.textContent = String(request.action || "unknown action");
+/**
+ * Renders the gate.
+ *
+ * Driven by the queue the backend read, never by anything this window worked
+ * out for itself: one list, one moment, three surfaces showing the same thing.
+ */
+function openApproval(approval) {
+  const fresh = !state.approval || state.approval.id !== approval.id;
+  state.approval = approval;
+  dom.apprAction.textContent = approval.action;
   // textContent, never innerHTML: this string comes from a model.
-  dom.apprDetail.textContent = approvalDetail(request);
+  dom.apprDetail.textContent = approvalDetail(approval);
+  dom.apprRisk.textContent = riskLine(approval.risk);
+  dom.apprRisk.dataset.reversible = approval.risk ? approval.risk.reversible : "no";
   dom.apprCard.hidden = false;
-  dom.btnApprYes.disabled = false;
-  dom.btnApprNo.disabled = false;
-  // A gate is the one thing worth opening the widget for on its own.
-  if (!state.expanded) toggleExpand();
+  syncApprovalButtons();
+  // A gate is the one thing worth opening the widget for on its own — but only
+  // when it is a new one, or re-reading the queue would keep re-expanding a
+  // widget the user had just collapsed.
+  if (fresh && !state.expanded) toggleExpand();
   else syncSize();
 }
 
 function closeApproval() {
-  state.approvalId = null;
+  state.approval = null;
   dom.apprCard.hidden = true;
   syncSize();
 }
 
+/**
+ * Enables the buttons only while the stream can confirm the queue is live.
+ * Answering one that cannot be confirmed is how the same thing gets approved
+ * twice, from two surfaces, seconds apart.
+ */
+function syncApprovalButtons() {
+  const blocked = currentLink().stale || state.busy;
+  dom.btnApprYes.disabled = blocked;
+  dom.btnApprNo.disabled = blocked;
+}
+
 async function decide(approved) {
-  if (!state.approvalId || state.busy) return;
+  if (!state.approval || state.busy) return;
   state.busy = true;
-  dom.btnApprYes.disabled = true;
-  dom.btnApprNo.disabled = true;
+  syncApprovalButtons();
 
   try {
-    await invokeStrict("decide_approval", { id: state.approvalId, approved });
+    await decideOnBackend(state.approval.id, approved);
     // The backend broadcasts approval-resolved, which closes the card.
     flash(approved ? "Approved." : "Denied.", approved ? "ok" : null);
   } catch (error) {
-    dom.btnApprYes.disabled = false;
-    dom.btnApprNo.disabled = false;
-    flash(String((error && error.message) || error), "bad");
+    const message = String((error && error.message) || error);
+    // 409 means the id is unknown, expired, or already decided. Someone
+    // answered it — that is not an error to shout about.
+    flash(
+      /409|already/i.test(message) ? "Already handled elsewhere." : message,
+      /409|already/i.test(message) ? null : "bad"
+    );
   } finally {
     state.busy = false;
+    syncApprovalButtons();
   }
 }
 
@@ -424,11 +471,9 @@ window.addEventListener("mouseup", () => invoke("save_widget_position", {}));
 
 listen("desktop-telemetry", (event) => applyTelemetry(event.payload));
 listen("health-report", (event) => applyHealth(event.payload));
-listen("approval-requested", (event) => {
-  const request = event.payload;
-  if (!request || !request.id) return;
-  openApproval(request);
-});
+// `approval-requested` is gone: it was the quickbar telling this window what
+// it had found in a chat chunk, which made two surfaces the authority on the
+// same queue. The queue below is read once, by Rust, from /api/pending.
 listen("approval-resolved", () => closeApproval());
 
 /* ==========================================================================
@@ -443,7 +488,24 @@ listen("approval-resolved", () => closeApproval());
   applyExpanded(Boolean(prefs && prefs.expanded));
   await setPinned(prefs ? Boolean(prefs.alwaysOnTop) : true);
 
-  // Paint the dot before the first telemetry tick arrives.
+  // One stream, owned by Rust, fanned out to all three surfaces.
+  startLink();
+
+  onLink((link) => {
+    // A held-open event stream is a stronger liveness signal than a probe that
+    // succeeded a moment ago, so the lane pill follows it directly.
+    if (!link.connected) applyLane("offline");
+    syncApprovalButtons();
+  });
+
+  onQueue((queue) => {
+    const open = queue.items[0] || null;
+    if (open) openApproval(open);
+    else if (state.approval) closeApproval();
+  });
+
+  // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
+  // one probe. Once, at boot — there is no timer here any more.
   const report = await invoke("check_server_health");
   if (report) applyHealth(report);
 
