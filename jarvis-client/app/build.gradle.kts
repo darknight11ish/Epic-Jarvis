@@ -60,7 +60,15 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.06.00"))
 
     implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.9.3")
+    // 1.12.4, not 1.9.3. androidx.activity is not managed by the Compose BOM, so
+    // that pin was real rather than decorative: resolving the graph in CI shows
+    // core-ktx and lifecycle floating up to 1.16.0 and 2.9.4 on their own, while
+    // activity stayed at a November 2024 release hosting a 2026 Compose runtime
+    // under targetSdk 36 — where edge-to-edge enforcement changed and
+    // MainActivity calls enableEdgeToEdge(). 1.12.4 is the last patch of the
+    // generation contemporaneous with Compose 1.11.3; 1.13.0 is stable but newer
+    // than the BOM, and 1.14.x is alpha.
+    implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
