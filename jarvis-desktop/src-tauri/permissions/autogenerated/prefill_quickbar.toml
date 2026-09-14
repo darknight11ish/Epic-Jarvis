@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-prefill-quickbar"
+description = "Enables the prefill_quickbar command without any pre-configured scope."
+commands.allow = ["prefill_quickbar"]
+
+[[permission]]
+identifier = "deny-prefill-quickbar"
+description = "Denies the prefill_quickbar command without any pre-configured scope."
+commands.deny = ["prefill_quickbar"]

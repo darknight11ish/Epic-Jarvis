@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "quickbar",
+  "description": "The Alt+Space spotlight. Streams chat, renders approval gates, and owns its own window geometry. It cannot reach the connection settings or backend supervision.",
+  "windows": [
+    "quickbar"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-internal-toggle-devtools",
+    "jarvis-link",
+    "approvals",
+    "quickbar-surface"
+  ]
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-supervision"
+description = "Enables the set_supervision command without any pre-configured scope."
+commands.allow = ["set_supervision"]
+
+[[permission]]
+identifier = "deny-set-supervision"
+description = "Denies the set_supervision command without any pre-configured scope."
+commands.deny = ["set_supervision"]

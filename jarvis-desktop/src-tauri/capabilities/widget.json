@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "widget",
+  "description": "The always-on-desktop widget. Telemetry is pushed to it, so it needs no command for that; it calls only its own geometry, its preferences and quick capture.",
+  "windows": [
+    "widget"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-internal-toggle-devtools",
+    "jarvis-link",
+    "approvals",
+    "widget-surface"
+  ]
+}

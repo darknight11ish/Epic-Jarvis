@@ -1,0 +1,88 @@
+# Which window may call what.
+#
+# Each set below is granted by exactly one capability file, so a command is
+# reachable only from the surface that has a reason to call it. The grouping is
+# derived from what each page actually invokes, not from what seemed plausible.
+
+# ---------------------------------------------------------------------------
+# Every Jarvis-authored window reads the one event stream. Answering a gate is
+# split out below: the whole point of the fan-out is that the surfaces that do
+# render approvals answer through the same command rather than each holding
+# their own logic — but a window with no approval UI has no business holding it.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "jarvis-link"
+description = "Read the fanned-out event stream and the local service health. Read-only."
+permissions = [
+  "allow-get-link-state",
+  "allow-get-pending-approvals",
+  "allow-refresh-link",
+  "allow-check-server-health",
+]
+
+# Answering a gate is a decision with consequences, so it is separate from
+# reading the stream. The quickbar and the widget both render approvals and
+# both get it; the settings window reads the link state to show a connection
+# dot and has no approval UI, so it does not.
+[[set]]
+identifier = "approvals"
+description = "Answer a pending approval gate."
+permissions = ["allow-decide-approval"]
+
+# ---------------------------------------------------------------------------
+# The spotlight. Streaming, its own geometry, the clipboard, and the shell-free
+# external link opener.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "quickbar-surface"
+description = "Everything the spotlight quickbar calls: streaming, its own window geometry, clipboard and external links."
+permissions = [
+  "allow-stream-chat",
+  "allow-cancel-chat",
+  "allow-set-route-lane",
+  "allow-hide-quickbar",
+  "allow-resize-quickbar",
+  "allow-set-quickbar-pinned",
+  "allow-write-clipboard",
+  "allow-open-external-url",
+]
+
+# ---------------------------------------------------------------------------
+# The desktop widget: its own geometry, its preferences, and quick capture.
+# `prefill_quickbar` is here because the widget's capture row hands a note to
+# the spotlight; the quickbar itself never calls it.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "widget-surface"
+description = "Widget geometry, pinning, saved position and quick capture."
+permissions = [
+  "allow-resize-desktop-widget",
+  "allow-set-widget-always-on-top",
+  "allow-save-widget-position",
+  "allow-get-widget-prefs",
+  "allow-prefill-quickbar",
+  "allow-capture-note",
+]
+
+# ---------------------------------------------------------------------------
+# The settings window, and ONLY the settings window.
+#
+# This set is the reason the whole file exists. `set_supervision` persists an
+# arbitrary program path and `start_backend` runs it, so together they are
+# code execution as the user that survives a restart — and `set_api_settings`
+# redirects the base URL that every token-bearing request is built from, by
+# reqwest rather than the webview, so neither the CSP nor a proxy sees where it
+# goes. Reachable from one window that exists only when the user opened it,
+# rather than from all four.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "settings-surface"
+description = "Read and write the connection settings and backend supervision. Privileged: keep this to the settings window."
+permissions = [
+  "allow-get-api-settings",
+  "allow-set-api-settings",
+  "allow-supervisor-status",
+  "allow-set-supervision",
+  "allow-start-backend",
+  "allow-stop-backend",
+]
