@@ -61,6 +61,38 @@
   --text-faint: #8e99a9;
   --text-on-accent: #04222a;
 
+  /* ---- Raw channels ------------------------------------------------------
+     The same colours as above, as bare `R G B` triples for `rgb(... / a)`.
+
+     A component that needs a hue at 7% alpha had no token to reach for and
+     wrote `rgba(56, 240, 255, 0.07)` — seventy-five such literals, each one a
+     colour no theme could move. Adding seventy-five alpha-specific tokens
+     would have been worse; this way the hue is the contract and the alpha
+     stays where it is used, next to the thing it is tinting.
+
+     `--sheen` and `--shade` are the two neutrals: the wash that LIFTS a
+     surface and the one that SINKS it. On a dark theme the lift is white; on
+     `paper` it is ink, which is the whole reason a component may not write
+     `rgba(255, 255, 255, 0.05)` for a hover state. `--shade` stays dark
+     everywhere — a drop shadow is a shadow on any theme. */
+  --accent-rgb: 56 240 255;
+  --ok-rgb: 61 220 151;
+  --warn-rgb: 255 200 96;
+  --bad-rgb: 255 107 122;
+  --info-rgb: 185 139 255;
+  --muted-rgb: 139 148 163;
+  --sheen-rgb: 255 255 255;
+  --shade-rgb: 0 0 0;
+
+  /* ---- Prose -------------------------------------------------------------
+     A rendered answer is read for minutes at a time, so its body sits a shade
+     below `--text` and its emphasis a shade above. Both were hex literals in
+     `style.css`, which made a light theme render a model's answer in near-white
+     on white. */
+  --prose: #dfe5ec;
+  --prose-strong: #ffffff;
+  --prose-em: #e8eef5;
+
   /* ---- Accent ----------------------------------------------------------- */
   --accent: #38f0ff;
   --accent-bright: #b8fbff;
@@ -206,6 +238,10 @@
    hue rotation without touching a component rule. */
 [data-theme="ember"] {
   color-scheme: dark;
+  --accent-rgb: 255 150 74;
+  --prose: #efe3d9;
+  --prose-strong: #fffaf5;
+  --prose-em: #f8ede3;
   --bg-window: rgba(14, 10, 8, 0.88);
   --surface-1: rgba(28, 21, 17, 0.92);
   --surface-2: rgba(38, 28, 22, 0.93);
@@ -236,6 +272,18 @@
    the contrast check over black is what catches that. */
 [data-theme="paper"] {
   color-scheme: light;
+  --accent-rgb: 0 105 127;
+  --ok-rgb: 23 105 74;
+  --warn-rgb: 99 35 3;
+  --bad-rgb: 179 32 47;
+  --info-rgb: 91 52 168;
+  --muted-rgb: 72 86 107;
+  /* Ink, not white. A white wash on a white surface is not a hover state. */
+  --sheen-rgb: 10 30 60;
+  --shade-rgb: 16 34 60;
+  --prose: #1b2532;
+  --prose-strong: #050a12;
+  --prose-em: #263243;
   --bg-window: rgb(244, 246, 249);
   --surface-1: rgb(255, 255, 255);
   --surface-2: rgb(237, 241, 246);
@@ -294,6 +342,15 @@
    here clears 7:1, which is the AAA floor. */
 [data-theme="high-contrast"] {
   color-scheme: dark;
+  --accent-rgb: 99 247 255;
+  --ok-rgb: 92 255 157;
+  --warn-rgb: 255 210 87;
+  --bad-rgb: 255 138 149;
+  --info-rgb: 208 169 255;
+  --muted-rgb: 195 204 217;
+  --prose: #ffffff;
+  --prose-strong: #ffffff;
+  --prose-em: #ffffff;
   --bg-window: rgb(0, 0, 0);
   --surface-1: rgb(10, 10, 12);
   --surface-2: rgb(20, 20, 24);

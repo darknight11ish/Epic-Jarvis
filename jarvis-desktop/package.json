@@ -21,10 +21,13 @@
     "tauri": "tauri",
     "test": "cd src-tauri && cargo test",
     "notices": "cd src-tauri && cargo-license --avoid-dev-deps --filter-platform x86_64-pc-windows-msvc -d",
-    "test:tokens": "python3 scripts/check-tokens.py",
-    "test:ui": "node tests/blockers.mjs",
-    "test:themes": "node tests/themecheck.mjs",
-    "shots": "node tests/shots.mjs"
+    "test:tokens": "python3 scripts/check-tokens.py && node tests/tokens.mjs",
+    "test:ui": "node tests/blockers.mjs && node tests/ia.mjs",
+    "test:themes": "node tests/themecheck.mjs && node tests/themes-all.mjs && node tests/distinct.mjs && node tests/contrast.mjs",
+    "shots": "node tests/shots.mjs",
+    "test:a11y": "node tests/a11y.mjs && node tests/disabled.mjs",
+    "test:voice": "node tests/voicecheck.mjs",
+    "test:all": "npm run test:tokens && npm run test:ui && npm run test:a11y && npm run test:themes && npm run test:voice"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0"

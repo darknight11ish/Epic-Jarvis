@@ -14,7 +14,37 @@ SRC = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else
                    "/home/user/Epic-Jarvis/jarvis-desktop/src")
 # Where defining a literal is legitimate.
 DEFINING = re.compile(r'(?::root\b|\[data-theme[^\]]*\])[^{]*\{')
-COLOUR = re.compile(r'#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)')
+HEX = re.compile(r'#[0-9a-fA-F]{3,8}\b')
+FUNC = re.compile(r'\b(?:rgba?|hsla?)\(')
+
+
+def colours(src):
+    """Every literal colour, as (offset, text).
+
+    `rgb(var(--accent-rgb) / 0.07)` is the TOKEN form, not a literal: the hue
+    comes from the theme and only the alpha is local. Telling the two apart
+    needs the function's balanced body, because a naive `[^)]*` stops at the
+    `)` that closes `var(` — and a lookahead over the rest of the declaration
+    would wrongly forgive a real literal that merely sits beside a var, as in
+    `box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 0 22px var(--glow)`.
+    """
+    for m in HEX.finditer(src):
+        yield m.start(), m.group(0)
+    for m in FUNC.finditer(src):
+        depth, j = 0, m.end() - 1
+        while j < len(src):
+            if src[j] == "(":
+                depth += 1
+            elif src[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        body = src[m.end():j]
+        if "var(" in body:
+            continue
+        yield m.start(), src[m.start():j + 1]
+
 
 def strip_comments(src):
     """Blank out /* ... */ but keep the byte offsets, so reported line numbers
@@ -57,9 +87,9 @@ for name in FILES:
     src = strip_comments(path.read_text())
     spans = blocks(src)
     hits = []
-    for m in COLOUR.finditer(src):
-        if any(a <= m.start() < b for a, b in spans): continue
-        hits.append((src[:m.start()].count("\n") + 1, m.group(0)))
+    for at, text in colours(src):
+        if any(a <= at < b for a, b in spans): continue
+        hits.append((src[:at].count("\n") + 1, text))
     total += len(hits)
     print(f"{name:<14} {len(hits):>3} unreachable  ({len(spans)} defining block(s))")
     if "-v" in sys.argv:

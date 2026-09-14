@@ -137,7 +137,7 @@ input:focus, textarea:focus {
 
 .btn {
   padding: 6px 12px;
-  background: rgba(111, 227, 255, 0.12);
+  background: rgb(var(--accent-rgb) / 0.12);
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text);
@@ -146,7 +146,7 @@ input:focus, textarea:focus {
   cursor: pointer;
 }
 
-.btn:hover:not(:disabled) { background: rgba(111, 227, 255, 0.2); }
+.btn:hover:not(:disabled) { background: rgb(var(--accent-rgb) / 0.2); }
 .btn:disabled {
   opacity: 1;
   background: var(--surface-raised);

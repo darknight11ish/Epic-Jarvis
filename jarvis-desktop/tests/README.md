@@ -1,6 +1,6 @@
 # UI tests
 
-Three checks that run the real frontend rather than a copy of it, plus a
+Ten checks that run the real frontend rather than a copy of it, plus a
 screenshot harness.
 
 They exist because this app has surfaces where being wrong is silent: a
@@ -22,12 +22,19 @@ Then:
 
 | command | what it checks |
 |---|---|
-| `npm run test:tokens` | no colour is welded into a component where a theme cannot reach it. Needs Python, not Playwright. |
-| `npm run test:ui` | the audited ship blockers, each one a bug that shipped |
-| `npm run test:themes` | every theme's contrast, over a black **and** a white backdrop |
+| `npm run test:all` | everything below, in order |
+| `npm run test:tokens` | no colour is welded into a component where a theme cannot reach it, and the `rgb(var(--hue-rgb) / a)` form actually resolves. The Python half needs no Playwright. |
+| `npm run test:ui` | the audited ship blockers, each one a bug that shipped, and the IA findings — things that were unreachable and things that were not true |
+| `npm run test:a11y` | live regions, headings, the roving tablist, hue-only state, text scaling, and whether a disabled control is still readable in all four themes |
+| `npm run test:themes` | every theme's contrast over a black **and** a white backdrop, every window's theme reach, and colour distinctness under three kinds of colour-blindness |
+| `npm run test:voice` | the speech envelope against `jarvis-visual-spec.json`. Needs no browser. |
 | `npm run shots` | renders every surface in every state into `tests/shots/` |
 
 `npm test` remains the Rust suite and needs none of this.
+
+Two of these need no browser at all — `check-tokens.py` and `voicecheck.mjs`
+parse and compute rather than render — so they run on a machine with nothing
+installed.
 
 ## Why both backdrops
 
