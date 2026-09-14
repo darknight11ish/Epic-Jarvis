@@ -73,6 +73,9 @@ const dom = {
   tray: $("widget-tray"),
 
   netDot: $("net-dot"),
+  offline: $("widget-offline"),
+  offlineText: $("widget-offline-text"),
+  offlineRetry: $("widget-offline-retry"),
   gpuTemp: $("gpu-temp-compact"),
   routePill: $("route-pill"),
 
@@ -172,7 +175,7 @@ function applyExpanded(expanded) {
   state.expanded = expanded;
   dom.root.dataset.state = expanded ? "expanded" : "collapsed";
   dom.tray.hidden = !expanded;
-  dom.btnToggle.title = expanded ? "Collapse" : "Expand";
+  dom.btnToggle.title = expanded ? "Collapse (E)" : "Expand (E)";
   syncSize();
 }
 
@@ -423,13 +426,30 @@ function setCaptureTarget(target) {
 
 let flashTimer = null;
 
-/** Shows a transient one-line status under the capture field. */
-function flash(message, tone) {
+/** Shortens a sentence for a 320px window without cutting mid-word. */
+function clip(text, max) {
+  const t = String(text).trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * Shows a transient one-line status under the capture field.
+ *
+ * `title` is for the sentence that does not fit in 320px but that the reader
+ * needs when the short version could be misread — "sent" versus "filed", for
+ * one.
+ */
+function flash(message, tone, title) {
   // `#widget-flash` is hidden when it is written and revealed afterwards,
   // which is the pattern that reliably says nothing. The shared region is
   // always present, so this is the half that actually speaks.
   announce(message);
   dom.flash.textContent = message;
+  if (title) dom.flash.title = title;
+  else dom.flash.removeAttribute("title");
   if (tone) dom.flash.dataset.tone = tone;
   else delete dom.flash.dataset.tone;
   dom.flash.hidden = false;
@@ -453,9 +473,25 @@ async function sendCapture() {
   flash("Filing…");
 
   try {
-    await invokeStrict("capture_note", { target: state.captureTarget, text });
+    // What comes back is the model's own account of what it did, not a receipt.
+    // `/api/chat` runs a chat turn whose system message ASKS for
+    // `append_logseq_journal`; a model can decline it, not have it, or answer
+    // in prose, and HTTP 200 covers all three. This used to say "Appended to
+    // Logseq." on any 200 — a confident claim about a file the desktop has
+    // never seen and cannot check.
+    const reply = String((await invokeStrict("capture_note", {
+      target: state.captureTarget,
+      text,
+    })) || "").trim();
     dom.captureInput.value = "";
-    flash(state.captureTarget === "joplin" ? "Filed to Joplin." : "Appended to Logseq.", "ok");
+    const where = state.captureTarget === "joplin" ? "Joplin" : "Logseq";
+    const first = reply.split("\n").find((l) => l.trim()) || "";
+    flash(
+      first ? `Sent to ${where} — ${clip(first, 70)}` : `Sent to ${where}.`,
+      "ok",
+      `Jarvis was asked to file this in ${where}. What it says it did is above; ` +
+        `the desktop has no way to confirm the note landed.`
+    );
   } catch (error) {
     flash(String((error && error.message) || error), "bad");
   } finally {
@@ -483,6 +519,10 @@ dom.captureTarget.addEventListener("click", () =>
   setCaptureTarget(state.captureTarget === "logseq" ? "joplin" : "logseq")
 );
 dom.btnCaptureSend.addEventListener("click", sendCapture);
+dom.offlineRetry.addEventListener("click", async () => {
+  dom.offlineText.textContent = "Reconnecting…";
+  await invoke("refresh_link");
+});
 dom.captureInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
@@ -491,6 +531,41 @@ dom.captureInput.addEventListener("keydown", (event) => {
     event.preventDefault();
     dom.captureInput.value = "";
     dom.captureInput.blur();
+  }
+});
+
+/**
+ * The keyboard's way in and out.
+ *
+ * The widget is `focus: false` and `skipTaskbar: true`: it is not in the
+ * Alt+Tab order and nothing used to give it the keyboard, so every control in
+ * it — including an approval gate — was mouse-only. `toggle_widget` now focuses
+ * it on show, which makes Alt+Shift+W the way in; this is the way out, and the
+ * two shortcuts for the things that are otherwise a hunt through eight
+ * unlabelled icon buttons.
+ */
+window.addEventListener("keydown", (event) => {
+  // The capture field owns its own Escape (clear, then blur), so a person
+  // mid-note is not thrown out of the window by the key that means "undo the
+  // last thing I typed".
+  if (event.target === dom.captureInput) return;
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    invoke("hide_widget");
+    return;
+  }
+  // A gate is never one keystroke away. Approve and Deny stay where they are,
+  // reachable by Tab like everything else, because a hotkey that answers a
+  // gate is a hotkey that answers it by accident.
+  if (event.key.toLowerCase() === "e") {
+    event.preventDefault();
+    toggleExpand();
+  } else if (event.key.toLowerCase() === "n") {
+    event.preventDefault();
+    if (!state.expanded) toggleExpand();
+    dom.captureInput.focus();
   }
 });
 
@@ -532,7 +607,18 @@ startLink();
     // A held-open event stream is a stronger liveness signal than a probe that
     // succeeded a moment ago, so the lane pill follows it directly.
     if (!link.connected) applyLane("offline");
+
+    // Offline used to be reported and never acted on: the dot went red, the
+    // pill said OFFLINE, and there was nothing anywhere in this window to do
+    // about it.
+    dom.offline.hidden = link.connected;
+    if (!link.connected) {
+      dom.offlineText.textContent = link.error
+        ? clip(`Not answering: ${link.error}`, 90)
+        : "Jarvis is not answering.";
+    }
     syncApprovalButtons();
+    syncSize();
   });
 
   onQueue((queue) => {

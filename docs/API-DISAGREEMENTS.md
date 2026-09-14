@@ -181,3 +181,24 @@ publishes a level, one call replaces the fallback.
 
 **Not a doc bug** — the spec anticipated this exactly. Recorded because "section
 B is done" would otherwise imply real audio is being analysed, and it is not.
+
+---
+
+## 10. `POST /api/chat` returns no receipt for a tool it was asked to run
+
+**Read:** `jarvis_hud.py` `do_POST`; `JARVIS-API.md` § chat.
+
+The widget's quick capture posts a chat turn whose system message asks the
+model to call `append_logseq_journal` or `create_joplin_note`. There is no
+route that files a note directly, and the chat response carries no record of
+which tools ran — so HTTP 200 means "a chat completed", not "a note exists".
+
+The widget said "Appended to Logseq." on any 200. It now says "Sent to
+Logseq — <the model's own first line>", which is the strongest claim the API
+supports: the desktop reports what Jarvis said it did, and does not vouch for
+it. `commands.rs::assistant_reply` parses that line out of the four response
+shapes the proxy might use.
+
+**Not a doc bug**, a real gap. A `tool_calls` array on the non-streaming chat
+response, or a small `POST /api/note` that returns the created id, would let a
+client tell the truth in one word instead of six.

@@ -84,6 +84,9 @@ permissions = [
 identifier = "widget-surface"
 description = "Widget geometry, pinning, saved position and quick capture."
 permissions = [
+  # Hiding its own window. The keyboard's only way out of a `skipTaskbar`,
+  # undecorated window once `toggle_widget` has focused it.
+  "allow-hide-widget",
   "allow-resize-desktop-widget",
   "allow-set-widget-always-on-top",
   "allow-save-widget-position",

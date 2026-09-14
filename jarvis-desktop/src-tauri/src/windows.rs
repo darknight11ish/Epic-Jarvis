@@ -722,6 +722,16 @@ pub fn toggle_widget(app: &AppHandle) -> Result<bool, String> {
         window
             .show()
             .map_err(|e| format!("unable to show the widget: {e}"))?;
+        // The widget is configured `focus: false` and `skipTaskbar: true`, so
+        // it is not in the Alt+Tab order and nothing ever gave it the keyboard.
+        // Every control in it — pin, expand, the two note buttons, Approve and
+        // Deny — was mouse-only, including a gate. Focusing it on show makes
+        // Alt+Shift+W the way in, and Escape inside the page is the way out.
+        //
+        // Only on SHOW. Focus-stealing is the reason `focus: false` is there in
+        // the first place: a widget that grabbed the caret every time it
+        // repainted would be unusable.
+        let _ = window.set_focus();
     }
 
     app.state::<WidgetState>()

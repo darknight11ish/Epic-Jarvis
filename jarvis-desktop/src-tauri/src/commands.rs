@@ -894,6 +894,21 @@ pub fn sample_telemetry(
 // Desktop widget
 // ---------------------------------------------------------------------------
 
+/// Hides the widget. The keyboard's way out of it.
+///
+/// The widget is `skipTaskbar` and `focus: false`, so once `toggle_widget` has
+/// focused it there is no shell affordance to leave — no title bar, no taskbar
+/// button, no Alt+Tab entry. Escape in the page calls this. It hides its own
+/// window and nothing else, which is why it is granted to the widget and to no
+/// one else.
+#[tauri::command]
+pub fn hide_widget(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window(windows::WIDGET_LABEL)
+        .ok_or_else(|| "the widget window was not found".to_string())?;
+    window.hide().map_err(|e| format!("unable to hide the widget: {e}"))
+}
+
 /// Expands or collapses the widget. `height` carries the frontend's measured
 /// content height when it has one.
 #[tauri::command]
@@ -1012,7 +1027,66 @@ pub async fn capture_note(app: AppHandle, target: String, text: String) -> Resul
             body.trim()
         ));
     }
-    Ok(body)
+    // HTTP 200 means the CHAT completed. It does not mean a note was written:
+    // this route asks a model to call `append_logseq_journal`, and a model can
+    // decline, lack the tool, or answer in prose. `/api/chat` returns no
+    // tool-execution receipt, so nothing here can honestly say "filed".
+    //
+    // What can be returned is the model's own account of what it did, which is
+    // the closest thing to evidence the API offers. The widget shows it instead
+    // of asserting a result.
+    Ok(assistant_reply(&body))
+}
+
+/// Pulls the assistant's text out of whatever shape `/api/chat` answered with.
+///
+/// Non-streaming OpenAI puts it at `choices[0].message.content`; the streaming
+/// shape uses `delta`; some proxies flatten it to a bare `content` or
+/// `response`. Anything unrecognised comes back empty rather than as a slice of
+/// raw JSON — a caller that shows this to a person needs a sentence or nothing.
+fn assistant_reply(body: &str) -> String {
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(body) else {
+        return String::new();
+    };
+    let choice = json.get("choices").and_then(|c| c.get(0));
+    let text = choice
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .or_else(|| choice.and_then(|c| c.get("delta")).and_then(|d| d.get("content")))
+        .or_else(|| choice.and_then(|c| c.get("text")))
+        .or_else(|| json.get("content"))
+        .or_else(|| json.get("response"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    text.trim().to_string()
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::assistant_reply;
+
+    #[test]
+    fn reads_the_non_streaming_openai_shape() {
+        let body = r#"{"choices":[{"message":{"role":"assistant","content":" Added to today's journal. "}}]}"#;
+        assert_eq!(assistant_reply(body), "Added to today's journal.");
+    }
+
+    #[test]
+    fn reads_the_streaming_and_flattened_shapes() {
+        assert_eq!(
+            assistant_reply(r#"{"choices":[{"delta":{"content":"ok"}}]}"#),
+            "ok"
+        );
+        assert_eq!(assistant_reply(r#"{"response":"filed"}"#), "filed");
+    }
+
+    #[test]
+    fn an_unrecognised_shape_yields_nothing_rather_than_raw_json() {
+        // The caller puts this in front of a person. A slice of JSON in a
+        // 320px flash is worse than no sentence at all.
+        assert_eq!(assistant_reply(r#"{"weird":{"nested":1}}"#), "");
+        assert_eq!(assistant_reply("not json at all"), "");
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -5,20 +5,30 @@
 //! stream:
 //!
 //! ```text
-//! Jarvis — thinking                      (status, disabled)
-//! Power: quiet · set by hand             (status, disabled)
-//! Active · Quiet · Standby — no route    (status, disabled — see below)
-//! 2 approvals waiting                    (opens the queue)
+//! Jarvis — thinking                        (status, disabled)
+//! Power: quiet · set by hand · read-only   (status, disabled)
 //! ─────────────────────────────
-//! Show HUD Window
-//! Toggle Spotlight              Alt+Space
-//! Toggle Widget                 Alt+Shift+W
+//! 2 approvals waiting                      (opens the queue)
+//! 3 things waiting to be told · standby    (opens the brief)
+//! Mute spoken interruptions until tomorrow
 //! ─────────────────────────────
-//! Reconnect event stream
-//! Status Check
+//! Show or hide Spotlight          Alt+Space
+//! Show or hide the widget         Alt+Shift+W
+//! Show the HUD window
+//! Open the Brain
 //! ─────────────────────────────
-//! Quit
+//! Backend: not supervised                  (status or action)
+//! Reconnect the event stream
+//! Run a status check
+//! Settings…
+//! ─────────────────────────────
+//! Quit Jarvis
 //! ```
+//!
+//! Four groups, in the order the questions get asked: what is Jarvis, what
+//! wants me, where do I look, and what is under the hood. The two hotkeyed
+//! rows lead their group because a hotkey printed beside a row is the only way
+//! most people ever learn it exists.
 //!
 //! ## The power switch that is not here
 //!
@@ -28,9 +38,14 @@
 //! `/api/memory/decide`, `/api/approve`, `/api/deny` and `/api/chat` — and
 //! nothing else. `jarvis_power` has `set_mode`, but the HTTP server does not
 //! expose it, and `GET /api/version` reports the mode read-only inside
-//! `capabilities.power`. Rather than invent an endpoint and ship a menu item
-//! that 404s, the switch appears as a disabled row that says why. It becomes
-//! three live items the day the server grows the route.
+//! `capabilities.power`.
+//!
+//! This used to be a whole disabled row reading "Active · Quiet · Standby — the
+//! server exposes no route yet". That is a true sentence and a bad menu item:
+//! it spent a line, every single open, telling the owner about something that
+//! does not exist. The same fact now rides on the `Power:` row as
+//! `· read-only`, next to the value it qualifies. It becomes three live items
+//! the day the server grows the route.
 //!
 //! ## Colour
 //!
@@ -76,7 +91,6 @@ const ANIMATION_TICK: std::time::Duration = std::time::Duration::from_millis(500
 // drift apart.
 const ID_STATUS_ACTIVITY: &str = "status-activity";
 const ID_STATUS_POWER: &str = "status-power";
-const ID_STATUS_POWER_SWITCH: &str = "status-power-switch";
 const ID_APPROVALS: &str = "approvals";
 const ID_WAITING: &str = "waiting";
 const ID_MUTE: &str = "mute";
@@ -137,15 +151,6 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
-    // Disabled on purpose, and worded so the reason is on screen rather than in
-    // a commit message. See the module docs.
-    let power_switch = MenuItem::with_id(
-        app,
-        ID_STATUS_POWER_SWITCH,
-        "Active · Quiet · Standby — the server exposes no route yet",
-        false,
-        None::<&str>,
-    )?;
     let approvals = MenuItem::with_id(
         app,
         ID_APPROVALS,
@@ -158,11 +163,16 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // different things: an approval is waiting on a decision right now, a
     // digest item is waiting to be *told* to you. Folding them into one number
     // would make "3 waiting" mean neither.
+    // Enabled whenever the arbiter has answered at all, NOT only when something
+    // is pending. Gating it on `pending > 0` made the brief unreachable at the
+    // exact moment the owner most wants it — "did I miss anything?" is a
+    // question you ask when the count is zero — and took the interruption
+    // budget and the mute control down with it, since the panel carries both.
     let waiting = MenuItem::with_id(
         app,
         ID_WAITING,
         waiting_label(&link),
-        link.attention.pending > 0,
+        link.attention.known,
         None::<&str>,
     )?;
     let mute = MenuItem::with_id(app, ID_MUTE, mute_label(&link), true, None::<&str>)?;
@@ -178,52 +188,63 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
 
-    let show_hud = MenuItem::with_id(app, ID_SHOW_HUD, "Show HUD Window", true, None::<&str>)?;
+    let show_hud = MenuItem::with_id(app, ID_SHOW_HUD, "Show the HUD window", true, None::<&str>)?;
     let show_brain = MenuItem::with_id(app, ID_SHOW_BRAIN, "Open the Brain", true, None::<&str>)?;
     let toggle_spotlight = MenuItem::with_id(
         app,
         ID_TOGGLE_SPOTLIGHT,
-        "Toggle Spotlight",
+        "Show or hide Spotlight",
         true,
         Some("Alt+Space"),
     )?;
     let toggle_widget = MenuItem::with_id(
         app,
         ID_TOGGLE_WIDGET,
-        "Toggle Widget",
+        "Show or hide the widget",
         true,
         Some("Alt+Shift+W"),
     )?;
     let reconnect = MenuItem::with_id(
         app,
         ID_RECONNECT,
-        "Reconnect event stream",
+        "Reconnect the event stream",
         true,
         None::<&str>,
     )?;
     let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings…", true, None::<&str>)?;
-    let status_check = MenuItem::with_id(app, ID_STATUS_CHECK, "Status Check", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, ID_QUIT, "Quit", true, None::<&str>)?;
+    let status_check = MenuItem::with_id(app, ID_STATUS_CHECK, "Run a status check", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, ID_QUIT, "Quit Jarvis", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
         &[
+            // What Jarvis is. Both rows are disabled: they report, they do
+            // not offer.
             &activity,
             &power,
-            &power_switch,
+            &PredefinedMenuItem::separator(app)?,
+            // What is waiting on you, and your control over being interrupted.
+            // `mute` belongs here rather than among the machinery: it is the
+            // answer to the two rows above it.
             &approvals,
             &waiting,
             &mute,
-            &backend,
             &PredefinedMenuItem::separator(app)?,
-            &show_hud,
-            &show_brain,
+            // Windows, everyday ones first — the two with hotkeys are the two
+            // reached most often, and a hotkey printed beside a row is how the
+            // owner learns it exists.
             &toggle_spotlight,
             &toggle_widget,
+            &show_hud,
+            &show_brain,
             &PredefinedMenuItem::separator(app)?,
-            &settings,
+            // The machinery. `backend` and `reconnect` were three groups apart
+            // while being the same subject: is the thing on the other end of
+            // the socket alive, and can I do something about it.
+            &backend,
             &reconnect,
             &status_check,
+            &settings,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -596,7 +617,11 @@ fn power_label(link: &LinkState) -> String {
         Some("idle") => " · idle timer",
         _ => "",
     };
-    format!("Power: {}{by}", link.power)
+    // "read-only" replaces what used to be a whole disabled row beneath this
+    // one, naming three modes the server has no route to set. Saying it here
+    // costs no line in a menu the owner opens dozens of times a day, and it
+    // disappears the moment the row becomes settable.
+    format!("Power: {}{by} · read-only", link.power)
 }
 
 fn approvals_label(link: &LinkState) -> String {
@@ -619,7 +644,7 @@ fn waiting_label(link: &LinkState) -> String {
         return "Waiting: unknown".to_string();
     }
     let head = match link.attention.pending {
-        0 => "Nothing waiting to be told".to_string(),
+        0 => "Nothing waiting — the brief and the budget".to_string(),
         1 => "1 thing waiting to be told".to_string(),
         n => format!("{n} things waiting to be told"),
     };
@@ -710,6 +735,7 @@ pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
         // empty list is worse than one that is plainly unavailable.
         let _ = rows.approvals.set_enabled(link.approvals > 0);
         let _ = rows.waiting.set_text(waiting_label(link));
+        let _ = rows.waiting.set_enabled(link.attention.known);
         let _ = rows.waiting.set_enabled(link.attention.pending > 0);
         let _ = rows.mute.set_text(mute_label(link));
         // Muting is a write, and a write against a backend that has not been
@@ -737,7 +763,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         // The three status rows are disabled, so they cannot fire; listed
         // anyway so that enabling one later cannot fall through to the
         // "unhandled" branch unnoticed.
-        ID_STATUS_ACTIVITY | ID_STATUS_POWER | ID_STATUS_POWER_SWITCH => {}
+        ID_STATUS_ACTIVITY | ID_STATUS_POWER => {}
 
         // The queue lives in the quickbar now, and the old comment here — "the
         // HUD is the surface with room for the risk copy" — stopped being true

@@ -86,11 +86,16 @@
         </div>
 
         <div class="bar-meta">
-          <span class="route" id="route" data-route="local" title="Active model route">
+          <!-- The model name starts EMPTY. It used to start at "qwen3:8b",
+               which is a guess about someone else's machine: the badge asserted
+               a specific model before the server had ever named one, and stayed
+               wrong for anyone whose Ollama serves something else until their
+               first answer came back. -->
+          <span class="route" id="route" data-route="local">
             <span class="route-dot" aria-hidden="true"></span>
             <span class="route-tier" id="route-tier">Local</span>
-            <span class="route-sep" aria-hidden="true">/</span>
-            <span class="route-model" id="route-model">qwen3:8b</span>
+            <span class="route-sep" id="route-sep" aria-hidden="true" hidden>/</span>
+            <span class="route-model" id="route-model" hidden></span>
           </span>
 
           <button
@@ -178,6 +183,59 @@
             </button>
           </footer>
         </section>
+
+        <!-- What Jarvis can do, on the surface a first run actually shows.
+             Every one of these hints already existed — in the card footer,
+             which is `hidden` until an answer has streamed. So the only way to
+             learn the hotkeys was to already know one. This block is the
+             inverse: present when nothing else is, gone the moment the card,
+             a gate or the brief takes the space. -->
+        <section class="primer" id="primer" aria-label="What you can do here">
+          <h2 class="sr-only">What you can do here</h2>
+          <ul class="primer-list">
+            <li>
+              <span class="primer-keys"><kbd>Alt</kbd>+<kbd>Space</kbd></span>
+              <span>Summon or dismiss this bar, from anywhere</span>
+            </li>
+            <li>
+              <span class="primer-keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></span>
+              <span>Attach a screen capture to the next question</span>
+            </li>
+            <li>
+              <span class="primer-keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
+              <span>Attach whatever is on the clipboard</span>
+            </li>
+            <li>
+              <span class="primer-keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
+              <span>Show or hide the desktop widget</span>
+            </li>
+            <li>
+              <span class="primer-keys"><code>#log</code></span>
+              <span>File the answer in the Logseq daily journal</span>
+            </li>
+            <li>
+              <span class="primer-keys"><code>#joplin</code></span>
+              <span>File it in the Joplin vault, or search it</span>
+            </li>
+          </ul>
+          <p class="primer-foot">
+            Nothing runs without you. Every action Jarvis wants to take stops
+            here first, and nothing leaves this machine.
+          </p>
+        </section>
+
+        <!-- "Offline" used to be a dead end: the route badge said it, the Core
+             dot went out, and neither offered anything to do about it. This is
+             the way out, on the one surface that is visible before anything has
+             ever been typed — which also means a first run against a backend
+             that is not up says so, instead of showing an empty box. -->
+        <div class="offline" id="offline" hidden>
+          <span id="offline-text">Jarvis is not answering.</span>
+          <span class="offline-actions">
+            <button class="text-button" type="button" id="offline-retry">Reconnect</button>
+            <span class="offline-where">Settings live in the tray menu</span>
+          </span>
+        </div>
 
         <!-- Something is still waiting after Esc put it away. Not a decision
              surface — a way back to the card, so parking can never lose one. -->
@@ -308,12 +366,11 @@
               <span class="service" data-service="ollama"><i></i>Ollama</span>
               <span class="service" data-service="litellm"><i></i>LiteLLM</span>
             </span>
-            <span class="keys">
-              <kbd>Esc</kbd> dismiss
-              <kbd>Alt</kbd>+<kbd>Space</kbd> summon
-              <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> capture
-              <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> note
-            </span>
+            <!-- The four-hotkey strip that used to sit here moved into
+                 `#primer`, which is visible BEFORE the first answer rather
+                 than only after it. `Esc` stays: it is the one key whose
+                 meaning changes with the card open (stop, then dismiss). -->
+            <span class="keys"><kbd>Esc</kbd> dismiss</span>
           </footer>
         </section>
       </div>

@@ -21,8 +21,11 @@ const JARVIS_SERVER = "http://127.0.0.1:4719";
 const CHAT_ENDPOINT = `${JARVIS_SERVER}/api/chat`;
 
 /** Route badge defaults, overridden by whatever the server reports. */
-const DEFAULT_ROUTE = { tier: "local", label: "Local", model: "qwen3:8b" };
-const CLOUD_ROUTE = { tier: "cloud", label: "Cloud", model: "jarvis-escalate" };
+// The model field is null until the server names one. Both of these used to
+// carry a hard-coded guess — "qwen3:8b" and "jarvis-escalate" — which the badge
+// then presented with the same confidence as a real answer.
+const DEFAULT_ROUTE = { tier: "local", label: "Local", model: null };
+const CLOUD_ROUTE = { tier: "cloud", label: "Cloud", model: null };
 
 /**
  * Sent as `X-Jarvis-Client`. The Jarvis server accepts a request whose `Origin`
@@ -152,6 +155,11 @@ const dom = {
   route: $("route"),
   routeTier: $("route-tier"),
   routeModel: $("route-model"),
+  routeSep: $("route-sep"),
+  offline: $("offline"),
+  offlineText: $("offline-text"),
+  offlineRetry: $("offline-retry"),
+  primer: $("primer"),
   pin: $("pin"),
   submitHint: $("submit-hint"),
   noteChip: $("note-chip"),
@@ -636,6 +644,9 @@ let resizeTimer = null;
  * jitter between two heights.
  */
 function syncWindowHeight() {
+  // Every caller that changes what the stack holds already calls this, which
+  // makes it the one place the primer's visibility cannot be forgotten.
+  syncPrimer();
   const height = Math.ceil(dom.shell.getBoundingClientRect().height);
   if (!height) return;
   if (state.phase === "streaming" && height < lastReportedHeight) return;
@@ -671,6 +682,26 @@ if (typeof ResizeObserver !== "undefined") {
 function openCard(statusText) {
   dom.card.hidden = false;
   dom.cardStatusText.textContent = statusText;
+  syncPrimer();
+}
+
+/**
+ * The primer is the window's empty state: visible when nothing else in the
+ * stack is, gone the instant anything is.
+ *
+ * Kept as one function rather than a `hidden = false` at each of the six call
+ * sites, because the failure mode of the second approach is a primer left
+ * behind under a streaming answer, and it only shows up on the one path nobody
+ * re-tested.
+ */
+function syncPrimer() {
+  const busy =
+    !dom.card.hidden ||
+    !dom.attention.hidden ||
+    !dom.approval.hidden ||
+    !dom.parked.hidden ||
+    !dom.attachments.hidden;
+  dom.primer.hidden = busy;
 }
 
 /** Collapses the card and clears everything it was showing. */
@@ -702,8 +733,20 @@ function applyRoute(route) {
   state.route = { ...state.route, ...route };
   dom.route.dataset.route = state.route.tier;
   dom.routeTier.textContent = state.route.label;
-  dom.routeModel.textContent = state.route.model;
-  dom.route.title = `Serving from ${state.route.label.toLowerCase()} - ${state.route.model}`;
+
+  // No model name until one has actually been reported. An empty slot says "I
+  // have not been told"; a plausible-looking default says "it is this", which
+  // is a different and unearned claim.
+  const model = state.route.model ? String(state.route.model) : "";
+  dom.routeModel.textContent = model;
+  dom.routeModel.hidden = !model;
+  dom.routeSep.hidden = !model;
+  dom.route.title = state.route.tier === "offline"
+    ? state.route.why || "No event stream. Nothing is being served."
+    : model
+      ? `Serving from ${state.route.label.toLowerCase()} — ${model}`
+      : `Serving from ${state.route.label.toLowerCase()}. The model is named when the server names it.`;
+
   // The widget shows the same lane; it has no stream to learn it from.
   invoke("set_route_lane", { lane: state.route.tier });
 }
@@ -748,7 +791,14 @@ function applyHealth(report) {
 
   const core = report.services.find((service) => service.id === "jarvis");
   if (core && !core.online) {
-    applyRoute({ tier: "offline", label: "Offline", model: "core unreachable" });
+    applyRoute({
+      tier: "offline",
+      label: "Offline",
+      model: null,
+      why: link.error
+        ? `No event stream: ${link.error}`
+        : "No event stream. Jarvis is not answering on 127.0.0.1:4719.",
+    });
   } else if (state.route.tier === "offline") {
     applyRoute(DEFAULT_ROUTE);
   }
@@ -1507,6 +1557,13 @@ function consumeLine(rawLine) {
 /** Appends text to the buffer and schedules a repaint. */
 function appendDelta(text) {
   if (!text) return;
+  // The first token is the moment "thinking" becomes "streaming", and it is
+  // the only honest moment for it. Both transports used to flip the label the
+  // instant the request left — one of them before it left — so "Thinking…" was
+  // on screen for a handful of milliseconds and the card claimed to be
+  // streaming through the whole cold start of a local model, which is the one
+  // stretch a person actually wants explained.
+  if (!state.chunks) dom.cardStatusText.textContent = "Streaming";
   state.buffer += text;
   state.chunks += 1;
   updateStat();
@@ -1615,8 +1672,6 @@ async function streamViaFetch(payload) {
         `the server answered HTTP ${response.status} ${response.statusText}${hint}`
       );
     }
-
-    dom.cardStatusText.textContent = "Streaming";
 
     if (!response.body) {
       consumeLine(await response.text());
@@ -1737,7 +1792,6 @@ async function send(promptText) {
   };
 
   if (IS_TAURI) {
-    dom.cardStatusText.textContent = "Streaming";
     await streamViaBackend(payload);
   } else {
     await streamViaFetch(payload);
@@ -2054,6 +2108,19 @@ onLink((link) => {
       ? `Jarvis: event stream live${link.activity === "idle" ? "" : ` · ${link.activity}`}`
       : `Jarvis: ${link.error || "no event stream"}`;
   }
+  // The offline bar, and the one thing there is to do about it.
+  const wasOffline = !dom.offline.hidden;
+  dom.offline.hidden = link.connected;
+  if (!link.connected) {
+    dom.offlineText.textContent = link.error
+      ? `Jarvis is not answering: ${String(link.error).split(/(?<=[.!?])\s/)[0]}`
+      : "Jarvis is not answering on 127.0.0.1:4719.";
+    // Once, on the transition. A live region that repeated this on every
+    // reconnect attempt would talk over everything else in the window.
+    if (!wasOffline) announce(dom.offlineText.textContent, "assertive");
+  }
+  syncWindowHeight();
+
   if (!link.connected && state.route.tier !== "offline") {
     applyRoute({ tier: "offline", label: "Offline", model: "core unreachable" });
   } else if (link.connected && state.route.tier === "offline") {
@@ -2123,6 +2190,16 @@ dom.parkedShow.addEventListener("click", () => {
   state.parked.delete(next.id);
   openApproval(next);
   syncParkedBar();
+});
+
+dom.offlineRetry.addEventListener("click", async () => {
+  // Cuts the backoff short rather than waiting it out. Saying so matters: the
+  // stream can sit in a 30s backoff, and a button that looked like it did
+  // nothing is how the old "Offline" dead end felt even once it had a button.
+  dom.offlineText.textContent = "Reconnecting…";
+  announce("Reconnecting.");
+  await invoke("refresh_link");
+  refreshHealth();
 });
 
 dom.attentionMute.addEventListener("click", toggleMute);

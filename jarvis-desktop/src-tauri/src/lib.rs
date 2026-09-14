@@ -528,6 +528,7 @@ pub fn run() {
             commands::set_theme,
             commands::get_api_settings,
             commands::set_api_settings,
+            commands::hide_widget,
             commands::resize_desktop_widget,
             commands::set_widget_always_on_top,
             commands::save_widget_position,

@@ -45,7 +45,7 @@
         <div class="route-pill mono" id="route-pill" title="Active model route">LOCAL</div>
 
         <div class="quick-actions">
-          <button class="icon-btn" id="btn-quick-log" title="Capture to the Logseq journal">
+          <button class="icon-btn" id="btn-quick-log" title="Capture to the Logseq journal — press N for the field">
             #log
           </button>
           <button class="icon-btn" id="btn-quick-joplin" title="Capture to the Joplin vault">
@@ -62,7 +62,7 @@
             </svg>
             <span class="sr-only">Toggle always on top</span>
           </button>
-          <button class="icon-btn toggle-btn" id="btn-toggle-expand" title="Expand">
+          <button class="icon-btn toggle-btn" id="btn-toggle-expand" title="Expand (E)">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" /></svg>
             <span class="sr-only">Expand widget</span>
           </button>
@@ -71,6 +71,15 @@
 
       <!-- ── Expanded tray: telemetry, gates, capture ───────────────────── -->
       <main class="widget-tray" id="widget-tray" hidden>
+        <!-- The widget's way out of an offline state. The dot in the compact
+             bar reports it but sits inside the drag region, where a click is a
+             drag; this row is the action, in the half of the window that has
+             room for a sentence. -->
+        <div class="widget-offline" id="widget-offline" hidden>
+          <span id="widget-offline-text">Jarvis is not answering.</span>
+          <button class="btn btn-quiet" type="button" id="widget-offline-retry">Reconnect</button>
+        </div>
+
         <section class="telemetry-grid">
           <div class="meter" id="meter-vram">
             <div class="meter-head">

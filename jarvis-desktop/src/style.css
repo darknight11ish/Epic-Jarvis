@@ -1622,6 +1622,89 @@ html[data-state="approval"] .pulse {
    second place to answer one.
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   The primer
+   --------------------------------------------------------------------------
+   What the bar can do, shown when the bar is doing nothing. It replaces a
+   four-hotkey strip that lived in the card footer and was therefore invisible
+   until the user had already done the thing the hotkeys were for.
+   -------------------------------------------------------------------------- */
+
+.primer {
+  padding: 12px 16px 13px;
+  border-top: 1px solid var(--hairline);
+}
+
+.primer-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* A chord is one unit, so the keys share a cell rather than the grid pulling
+   Alt, Shift and S into three columns of their own. */
+.primer-list li {
+  display: grid;
+  grid-template-columns: 11.5em 1fr;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.primer-keys {
+  white-space: nowrap;
+}
+
+.primer-list kbd,
+.primer-list code {
+  padding: 1px 5px;
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text);
+}
+
+.primer-foot {
+  margin: 11px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+/* The way out of an offline state. Mirrors `.parked` — same thin bar, same
+   place in the stack — because they are the same kind of thing: a one-line
+   statement of something unresolved, with the action that resolves it. */
+.offline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 14px 7px 16px;
+  border-top: 1px solid var(--hairline);
+  border-left: 2px solid var(--bad);
+  background: var(--bad-fill);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.offline-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.offline-where {
+  color: var(--text-faint);
+}
+
 .parked {
   display: flex;
   align-items: center;
