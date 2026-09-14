@@ -11,6 +11,7 @@
      you are picking. `tests/themes-all.mjs` names the exclusion so the suite
      does not claim more than it checks. -->
 <style>
+
 :root{
   --void:#05070b; --plate:#0a1119; --plate2:#0e1822;
   --line:#17293a; --line-hot:#22405a;
@@ -3237,6 +3238,9 @@ const CLOCK = {
   stride: 1,         // draw every Nth vsync
   target: "auto",    // auto | 60 | 120 | max
   samples: [],
+  /// True once the refresh estimate has stopped moving, so the per-tick
+  /// percentile sort can stop running.
+  settled: false,
   achieved: 0,
   probed: false,
 };
@@ -3281,22 +3285,51 @@ function hzFrom(gaps){
 }
 function measureClock(dtMs){
   if(!CLOCK.probed || dtMs <= 0 || dtMs > 120) return;
+  // Stop once it has settled. This ran `filter().sort()` over a pinned
+  // 180-element array on EVERY rAF tick for the life of the window — about
+  // 1,350 comparisons a tick, ~160,000 a second at 120Hz — to produce an
+  // answer that is discarded unless it exceeds a value that has already
+  // stopped moving. Two full windows of samples is more than enough.
+  if(CLOCK.settled) return;
   CLOCK.samples.push(dtMs / CLOCK.stride);     // undo our own pacing
   if(CLOCK.samples.length < 90) return;
-  if(CLOCK.samples.length > 180) CLOCK.samples.shift();
+  if(CLOCK.samples.length > 180){
+    CLOCK.samples.shift();
+    CLOCK.settled = true;
+  }
   const hz = hzFrom(CLOCK.samples);
   // Upward only. If the panel turns out to be faster than the boot probe saw,
   // take it; if the scene is heavy, that is a frame-rate problem, not a
   // display-rate one, and the governor already handles it.
   if(hz > CLOCK.hz){ CLOCK.hz = hz; applyTarget(); }
 }
+/// The OS "reduce motion" setting, read live.
+///
+/// Every other surface in this app honours it — `brain.js` even has a chunked
+/// reduced-motion layout path — and this window, the most expensive one by a
+/// wide margin, was the only one ignoring it entirely.
+///
+/// The faces still draw: a gallery of twenty frozen squares is not a gallery,
+/// and the setting says *reduce*, not *remove*. They are paced down to 10fps,
+/// which keeps every shape legible and cuts the work by roughly six sixths of
+/// a 60Hz budget.
+const CALM = typeof matchMedia === "function"
+  ? matchMedia("(prefers-reduced-motion: reduce)")
+  : { matches: false, addEventListener(){} };
+const CALM_HZ = 10;
+
 function applyTarget(){
   const t = CLOCK.target;
-  const want = t === "auto" || t === "max" ? CLOCK.hz : Math.min(+t, CLOCK.hz);
+  let want = t === "auto" || t === "max" ? CLOCK.hz : Math.min(+t, CLOCK.hz);
+  if(CALM.matches) want = Math.min(want, CALM_HZ);
   CLOCK.stride = Math.max(1, Math.round(CLOCK.hz / want));
   CLOCK.budget = 1000 / (CLOCK.hz / CLOCK.stride);
   paintClock();
 }
+// Toggling the OS setting takes effect without a reload, the same as it does
+// in the Brain.
+CALM.addEventListener?.("change", () => applyTarget());
+
 function paintClock(){
   const el = document.getElementById("clock");
   if(!el) return;
@@ -3355,10 +3388,20 @@ function frame(now){
 // supersample down rather than letting the browser thermally throttle into
 // uneven stutter. It steps back up when there is room.
 let costAvg = 0, lastQ = 0, drawn = 0, fpsWin = 0;
+// The readout element, looked up once. It used to be `getElementById` on every
+// frame, and the `textContent` write next to it forced a full document layout
+// per rendered frame — measured one-for-one with the draw rate. A developer
+// readout was costing a layout and a repaint over the whole canvas grid,
+// forever. Cached, and written four times a second instead of sixty.
+let perfEl = null, perfAt = 0;
 function budget(cost, drew){
   costAvg = costAvg * .9 + cost * .1;
-  const perf = document.getElementById("perf");
-  if(perf) perf.textContent = `${costAvg.toFixed(1)} ms/frame · ${drew} live`;
+  const nowMs = performance.now();
+  if(nowMs - perfAt > 250){
+    perfAt = nowMs;
+    if(perfEl === null) perfEl = document.getElementById("perf") || false;
+    if(perfEl) perfEl.textContent = `${costAvg.toFixed(1)} ms/frame · ${drew} live`;
+  }
   // Changing the supersample RESIZES every canvas, and resizing a canvas
   // clears it - so a quality change that fires every few frames shows up as
   // a flicker, and clears any surface that is currently scrolled off screen
@@ -4075,10 +4118,20 @@ function currentDocument() {
     // colour forward onto the new pattern, so BIND really does hold one here.
     const kind = (SPEC.patterns.find((x) => x.id === b.pattern) || {}).kind;
     if (b.color && kind !== "hue_sweep") out.color = b.color;
-    const params = {};
-    for (const [k, v] of Object.entries(b)) {
-      if (k !== "pattern" && k !== "color") params[k] = v;
-    }
+
+    // `params` is a NESTED key, not a bag of top-level extras. Both resolvers
+    // read `bind.params` and merge it over the pattern's own defaults — see
+    // `resolve()` above and the identical line in `spec.rs`. Copying every
+    // non-pattern, non-colour key into a fresh object wrapped it a SECOND
+    // time: `{params: {params: {...}}}`, which resolves to nothing, so
+    // `thinking`, `speaking` and `error` would each render as their pattern's
+    // generic default — a 360° rainbow where a 58° cool band belongs — on
+    // every surface after one save.
+    //
+    // The top-level keys that are not pattern/color/params are the kit's own
+    // bookkeeping (`_fam`, from the randomiser) and are deliberately dropped:
+    // they mean nothing to the phone.
+    const params = b.params && typeof b.params === "object" ? { ...b.params } : {};
     if (Object.keys(params).length) out.params = params;
     bindings[st.id] = out;
   }
@@ -4105,29 +4158,56 @@ function applyDocument(doc) {
     // Ignore a state this build has never heard of rather than throwing: the
     // phone may be a version ahead.
     if (!BIND[state] || !binding || !binding.pattern) continue;
-    BIND[state] = Object.assign({ pattern: binding.pattern }, binding.params || {},
-                                binding.color ? { color: binding.color } : {});
+    // Nested, for the same reason. Spreading the params to the top level
+    // left BIND with no `params` key at all, so `resolve()` fell through to
+    // the pattern's defaults and the EDITOR rendered the wrong thing the
+    // moment a saved document was loaded back.
+    const next = { pattern: binding.pattern };
+    if (binding.color) next.color = binding.color;
+    if (binding.params && typeof binding.params === "object"
+        && Object.keys(binding.params).length) {
+      next.params = { ...binding.params };
+    }
+    BIND[state] = next;
   }
   if (doc.face) SOLO_FACE = doc.face;
   syncUI();
   syncFaceChoice();
 }
 
+/** True until a load has succeeded. Saving before then would publish defaults. */
+let LOAD_FAILED = false;
+
 async function loadAppearance() {
   if (!IS_TAURI) { saveState("browser preview — nothing is saved"); return; }
   try {
     const loaded = await TAURI.core.invoke("get_appearance");
+    LOAD_FAILED = false;
     applyDocument(loaded);
     if (loaded.source === "default") saveState("nothing saved yet");
     else if (loaded.shared) saveState("loaded from Jarvis — the phone sees this too", "ok");
     else saveState(loaded.note || "loaded from this machine only");
   } catch (error) {
-    saveState(String((error && error.message) || error), "bad");
+    LOAD_FAILED = true;
+    saveState(`${String((error && error.message) || error)} — showing defaults, not your saved face`, "bad");
   }
 }
 
+let SAVING = false;
+
 async function saveAppearance() {
   if (!IS_TAURI) { saveState("browser preview — nothing is saved"); return; }
+  // Refuse to publish over a document we never managed to read. The grid is
+  // showing the spec's defaults in that case, so saving would replace the
+  // owner's real face — on the phone too — with whatever shipped.
+  if (LOAD_FAILED) {
+    saveState("cannot save: the saved face never loaded, so this would overwrite it", "bad");
+    return;
+  }
+  // No concurrent writes. Repeated presses issued overlapping saves whose
+  // status line was set by whichever returned last.
+  if (SAVING) return;
+  SAVING = true;
   saveState("saving…");
   try {
     const loaded = await TAURI.core.invoke("set_appearance", {
@@ -4140,6 +4220,8 @@ async function saveAppearance() {
     else saveState(loaded.note || "saved on this machine only");
   } catch (error) {
     saveState(String((error && error.message) || error), "bad");
+  } finally {
+    SAVING = false;
   }
 }
 

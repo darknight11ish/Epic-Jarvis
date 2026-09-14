@@ -122,7 +122,14 @@ const state = {
   approval: null,
   /** `"logseq"` or `"joplin"` — which store the capture field files to. */
   captureTarget: "logseq",
+  /** A note is being filed. Separate from `deciding`: they are unrelated, and
+   *  one shared flag meant each silently disabled the other. */
   busy: false,
+  /** A decision is in flight. */
+  deciding: false,
+  /** The id already answered from this window, so a second click cannot send
+   *  a contradictory decision before the resolution broadcast lands. */
+  decided: null,
 };
 
 /**
@@ -346,6 +353,11 @@ function approvalDetail(approval) {
  * out for itself: one list, one moment, three surfaces showing the same thing.
  */
 function openApproval(approval) {
+  // A different gate releases the "already answered" latch. Deliberately not
+  // released in `closeApproval`: `decide_approval` does not re-read the queue,
+  // so between answering and the server's next event the same card can be
+  // reopened, and clearing on close would disarm the latch exactly then.
+  if (state.decided && state.decided !== approval.id) state.decided = null;
   // The gate no longer claims `alertdialog`, so it announces itself — with the
   // risk line, which is the part that changes the decision.
   if (!state.approval || state.approval.id !== approval.id) {
@@ -397,8 +409,19 @@ function syncApprovalButtons() {
 }
 
 async function decide(approved) {
-  if (!state.approval || state.busy) return;
-  state.busy = true;
+  if (!state.approval || state.deciding) return;
+  // The id latch the spotlight has and this window did not. `deciding` is
+  // released in `finally`, but the card only closes when the backend
+  // broadcasts the resolution — so between those two moments a second click
+  // sent a SECOND, contradictory decision for the same action. Only the
+  // server's 409 stood between that and a real double-decide.
+  if (state.decided === state.approval.id) return;
+  state.decided = state.approval.id;
+  // `deciding`, not the shared `busy`. One flag served both this and the note
+  // field, so filing a note — which runs a whole chat turn and takes seconds —
+  // made Approve and Deny into live-looking no-ops with no feedback, and an
+  // in-flight decision silently swallowed Enter in the capture field.
+  state.deciding = true;
   syncApprovalButtons();
 
   try {
@@ -409,12 +432,16 @@ async function decide(approved) {
     const message = String((error && error.message) || error);
     // 409 means the id is unknown, expired, or already decided. Someone
     // answered it — that is not an error to shout about.
-    flash(
-      /409|already/i.test(message) ? "Already handled elsewhere." : message,
-      /409|already/i.test(message) ? null : "bad"
-    );
+    const handled = /409|already/i.test(message);
+    // Release the latch ONLY here, and only when the decision genuinely did
+    // not land. A 409 means it was answered somewhere else, so the latch
+    // stays. Releasing in `finally` instead would release it on SUCCESS too,
+    // which is the whole thing the latch exists to prevent.
+    if (!handled) state.decided = null;
+    flash(handled ? "Already handled elsewhere." : `${message} — nothing was decided.`,
+          handled ? null : "bad");
   } finally {
-    state.busy = false;
+    state.deciding = false;
     syncApprovalButtons();
   }
 }

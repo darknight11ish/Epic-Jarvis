@@ -1018,6 +1018,10 @@ function decorateDiff(container) {
  * Called only from the queue subscription — never from the chat stream.
  */
 function openApproval(approval) {
+  // A different gate releases the "already answered" guard. It is kept across
+  // `closeApproval` on purpose — see the note there — so this is the one place
+  // that clears it, and it must clear only for a genuinely different id.
+  if (state.decided && state.decided !== approval.id) state.decided = null;
   refreshApproval(approval);
   setPhase("approval");
 
@@ -1440,7 +1444,13 @@ function syncParkedBar() {
 /** Clears the gate. Called when it leaves the queue, however it left. */
 function closeApproval() {
   state.approval = null;
-  state.decided = null;
+  // `state.decided` is deliberately NOT cleared here. It is the guard that
+  // stops an already-answered gate being answered again, and `decide_approval`
+  // does not re-read the queue — so between answering and the server's next
+  // `approval` event the tray still says "1 waiting" and its row reopens the
+  // same card with live buttons. Clearing the guard on close disarmed it at
+  // precisely the moment it was needed. `openApproval` clears it when a
+  // DIFFERENT id arrives, which is the only time it should go.
   dom.approval.hidden = true;
   dom.approvalPreview.innerHTML = "";
   renderRaised(null);
@@ -1506,13 +1516,26 @@ async function decideApproval(approved) {
     // The server answers 409 when the id is unknown, expired, or already
     // decided. That is not a failure to report as one — someone answered it,
     // possibly on the phone — so say so and let the queue update close the card.
-    dom.approvalHint.textContent = /409|already/i.test(message)
+    const handled = /409|already/i.test(message);
+    dom.approvalHint.textContent = handled
       ? "Already handled somewhere else."
-      : message;
+      : `${message} — nothing was decided. Try again.`;
+    // Release the latch. It exists to stop a SECOND decision racing a
+    // successful first one; a decision that never reached the server is not a
+    // first one. Leaving it set made the gate permanently unanswerable —
+    // both buttons re-enabled by `syncApprovalButtons` below, and every
+    // subsequent click returning at the `state.decided === approval.id` guard
+    // with no feedback at all. A 409 keeps the latch, because that one really
+    // was answered, somewhere.
+    if (!handled) state.decided = null;
   } finally {
     state.deciding = false;
     syncApprovalButtons();
-    await setPinned(false, { silent: true });
+    // Only if nothing is still streaming. `closeApproval` is careful about
+    // exactly this and this path was not: answering a gate that arrived
+    // mid-answer unpinned the window under the running stream, so clicking
+    // away hid the spotlight and the answer with it.
+    if (!state.abort && !state.inFlight) await setPinned(false, { silent: true });
   }
 }
 

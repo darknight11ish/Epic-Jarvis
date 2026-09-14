@@ -297,7 +297,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute, decideFails, appearanceFails }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -334,7 +334,14 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "stream_chat": return null;
           case "get_theme": return theme || "deep-space";
           case "get_hotkeys": return window.__hotkeys;
-          case "get_appearance": return window.__appearance;
+          case "decide_approval":
+            window.__decides = window.__decides || [];
+            window.__decides.push({ id: args.id, approved: args.approved });
+            if (window.__decideFails) throw new Error(window.__decideFails);
+            return { ok: true };
+          case "get_appearance":
+            if (window.__appearanceFails) throw new Error(window.__appearanceFails);
+            return window.__appearance;
           case "set_appearance": {
             window.__calls.push(["__saved", args.appearance]);
             const shared = !window.__noRoute;
@@ -427,6 +434,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__update = JSON.parse(JSON.stringify(update));
   window.__appearance = JSON.parse(JSON.stringify(appearance));
   window.__noRoute = Boolean(noRoute);
+  window.__decideFails = decideFails || null;
+  window.__appearanceFails = appearanceFails || null;
+  window.__decides = [];
   window.__found = found || null;
   window.__installFails = installFails || null;
   window.__refuse = refuse || [];
@@ -459,7 +469,7 @@ export async function open(browser, base, file, data, viewport) {
     link: {}, pending: [], attention: ATTENTION_CLEAR, digest: DIGEST,
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
-    installFails: null, noRoute: false,
+    installFails: null, noRoute: false, decideFails: null, appearanceFails: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,
   });

@@ -17,7 +17,20 @@ pub struct Frame {
     id: Option<u64>,
     name: Option<String>,
     pub(crate) data: Vec<String>,
+    /// Running size of `data`, so the cap costs no re-scan.
+    bytes: usize,
+    /// Set when a frame was cut short, so the event can be dropped rather
+    /// than handed on as a truncated half-message that parses to `null`.
+    overflowed: bool,
 }
+
+/// The most one event's `data:` lines may total.
+///
+/// `stream.rs` caps a single LINE at 1 MB; this caps the frame. Generous
+/// against anything the API actually sends — the largest real payload is a
+/// graph of a few hundred KB — and small enough that a runaway stream fails
+/// fast instead of taking the process with it.
+const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 /// A complete SSE event.
 pub struct Event {
@@ -44,7 +57,23 @@ impl Frame {
             let name = self.name.take().unwrap_or_else(|| "message".to_string());
             let raw = std::mem::take(&mut self.data).join("\n");
             let id = self.id.take();
-            let data = serde_json::from_str(&raw).unwrap_or(serde_json::Value::Null);
+            self.bytes = 0;
+            if std::mem::take(&mut self.overflowed) {
+                eprintln!(
+                    "[jarvis] dropped an oversized `{name}` frame ({MAX_FRAME_BYTES} byte cap)"
+                );
+                return None;
+            }
+            // A body that is not JSON used to become `Null` silently, which is
+            // indistinguishable from `{}` downstream — a malformed `hello` read
+            // as a clean resume with no trace anywhere.
+            let data = match serde_json::from_str(&raw) {
+                Ok(value) => value,
+                Err(err) => {
+                    eprintln!("[jarvis] `{name}` frame carried unreadable JSON: {err}");
+                    serde_json::Value::Null
+                }
+            };
             return Some(Event { id, name, data });
         }
         if line.starts_with(':') {
@@ -57,7 +86,20 @@ impl Frame {
         match field {
             "id" => self.id = value.trim().parse::<u64>().ok(),
             "event" => self.name = Some(value.trim().to_string()),
-            "data" => self.data.push(value.to_string()),
+            "data" => {
+                // Bounded, because `stream.rs`'s MAX_LINE_BYTES only ever
+                // guards ONE line: the buffer is drained of every complete
+                // line each pass, so a backend that streams `data:` forever
+                // without an empty line grows this vector until the process
+                // dies of allocation failure — with no window and no stderr.
+                // Truncating loses a frame; not truncating loses the app.
+                if self.bytes + value.len() > MAX_FRAME_BYTES {
+                    self.overflowed = true;
+                    return None;
+                }
+                self.bytes += value.len();
+                self.data.push(value.to_string());
+            }
             // `retry:` is advice for a browser's EventSource, which reconnects
             // for itself. This loop's backoff is its own; ignoring the field is
             // the same thing every non-browser client does.

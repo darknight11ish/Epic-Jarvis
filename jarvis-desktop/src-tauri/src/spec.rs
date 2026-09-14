@@ -581,7 +581,13 @@ pub fn state_dim(state_id: &str) -> f64 {
 /// before it switches to an overflow mark — `state_transforms.states.<id>`
 /// `overlay: "notches"` and its `overlay_spec.max_notches`.
 pub fn notch_overlay(state_id: &str) -> Option<usize> {
-    let root: serde_json::Value = serde_json::from_str(SPEC_JSON).ok()?;
+    // Parsed once. This is called from `paint`, which runs on every link
+    // change and twice a second while a pattern animates — re-parsing 59 KB of
+    // JSON on that path was pure waste, and its two neighbours here already
+    // used a `OnceLock`.
+    static TRANSFORMS: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+    let root = TRANSFORMS
+        .get_or_init(|| serde_json::from_str(SPEC_JSON).unwrap_or(serde_json::Value::Null));
     let entry = &root["state_transforms"]["states"][state_id];
     if entry["overlay"].as_str() != Some("notches") {
         return None;

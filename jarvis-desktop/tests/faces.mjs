@@ -323,6 +323,77 @@ await check("CONTROL: the tray reads the saved bindings, not just the spec", asy
   assert.match(rust, /pub fn adopt_at_startup/, "the stored document is not loaded at startup");
 });
 
+await check("the spec's own defaults survive a save unchanged", async () => {
+  // The strongest statement of the round trip: open the window, change
+  // nothing, save, and the document must be exactly what the spec says. Three
+  // of the eight states live entirely in `params` — `thinking` is `sweep`
+  // narrowed to a 58 degree cool band — and a params bug renders all three as
+  // their pattern's generic default on every surface.
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.locator("#save").click();
+  await page.waitForTimeout(300);
+  const saved = await page.evaluate(() =>
+    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  await page.close();
+
+  const spec = JSON.parse(read("src/jarvis-visual-spec.json"));
+  for (const st of spec.states) {
+    const want = st.default || {};
+    const got = saved.bindings[st.id];
+    assert.ok(got, `${st.id} was not saved at all`);
+    assert.equal(got.pattern, want.pattern, `${st.id}: pattern`);
+    assert.deepEqual(got.params || {}, want.params || {},
+      `${st.id}: params did not survive — got ${JSON.stringify(got.params)}`);
+  }
+});
+
+await check("the kit's private bookkeeping is never sent", async () => {
+  // The randomiser writes `_fam` onto a binding to remember which hue family
+  // it drew from. It means nothing to the phone and must not travel.
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.locator("#randomise").click();
+  await page.waitForTimeout(300);
+  await page.locator("#save").click();
+  await page.waitForTimeout(300);
+  const saved = await page.evaluate(() =>
+    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  await page.close();
+  for (const [state, binding] of Object.entries(saved.bindings)) {
+    for (const key of Object.keys(binding)) {
+      assert.ok(["pattern", "color", "params"].includes(key),
+        `${state} carried an unexpected key: ${key}`);
+    }
+    assert.ok(!("_fam" in (binding.params || {})), `${state}: _fam leaked into params`);
+  }
+});
+
+await check("a loaded document renders, rather than falling back to defaults", async () => {
+  // The mirror bug: spreading params to the top level left BIND with no
+  // `params` key, so the editor itself drew the pattern's generic default
+  // after loading a document that specified otherwise.
+  const page = await K.open(browser, base, "faces.html", {
+    appearance: {
+      face: null, updated: 1, source: "server", shared: true,
+      bindings: { thinking: { pattern: "sweep", params: { offset_deg: 10, span_deg: 20 } } },
+    },
+  }, { width: 1300, height: 950 });
+  await page.waitForTimeout(2500);
+  const bind = await page.evaluate(() => {
+    // Round-trip it back out: if the load flattened the params, the save
+    // cannot put them back.
+    document.getElementById("save").click();
+    return null;
+  });
+  await page.waitForTimeout(300);
+  const saved = await page.evaluate(() =>
+    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  await page.close();
+  assert.deepEqual(saved.bindings.thinking.params, { offset_deg: 10, span_deg: 20 },
+    `round-tripped to ${JSON.stringify(saved.bindings.thinking)}`);
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe faces window holds");

@@ -256,12 +256,19 @@ function write(env) {
   // point a subpixel transform can express it — and it cuts the style writes
   // on a held vowel to nothing.
   const q = Math.round(shown * 100) / 100;
+  // The MODE is written first and unconditionally. It used to sit below the
+  // early return, so it only landed when the envelope value also changed —
+  // and `listening` has no fallback envelope by design, so with nothing
+  // feeding `setLevel()` the value stays at 0, the return fires every time,
+  // and `data-voice="listening"` was never written at all. The one on-screen
+  // signal that the microphone is live could not appear.
+  const mode = voice.mode || "";
+  if (root.dataset.voice !== mode) root.dataset.voice = mode;
   if (q === voice.wrote) return;
   voice.wrote = q;
   root.style.setProperty("--voice-env", String(q));
   root.style.setProperty("--voice-scale", String(1 + SCALE * q));
   root.style.setProperty("--voice-lift", String(BRIGHTNESS_LIFT * q));
-  root.dataset.voice = voice.mode || "";
 }
 
 /* ── Audio sources ───────────────────────────────────────────────────────── */

@@ -165,23 +165,58 @@ body {
   pointer-events: none;
 }
 
+/* The sweep runs on the COMPOSITOR, not the main thread.
+
+   This animated `background-position` for one release. Chromium cannot run
+   that off-thread, so it forced a full style recalc and a full document layout
+   on every frame — measured at 60 layouts/second, taking the window's main
+   thread from 0.3% of a core to 5.0%, for the entire duration of every answer.
+   A sixteenfold cost for a one-pixel hairline.
+
+   `transform` and `opacity` are the only two properties the compositor can
+   animate alone. So the gradient is twice as wide as the bar and slides,
+   which looks identical and costs no layout at all. `overflow: hidden` is on
+   the pseudo-element's own wrapper rather than `.shell`, because `.shell` must
+   keep overflowing — the approval gate's shadow and the focus ring both sit
+   outside it. */
 html[data-state="streaming"] .shell::before {
   opacity: 1;
-  /* `background-size` is what makes the animation below do anything at all.
-     Without it the gradient is exactly the size of the positioning area, so a
-     percentage `background-position` resolves to (area - image) x pct = 0 at
-     every percentage: the keyframes ran for the whole of every answer and
-     moved nothing, costing a repaint of the shell's top hairline for free. */
-  background-size: 200% 100%;
+}
+
+html[data-state="streaming"] .shell::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  /* The moving highlight, drawn over the static hairline above. */
+  background: linear-gradient(
+    90deg,
+    transparent 35%,
+    var(--accent-bright) 50%,
+    transparent 65%
+  );
+  background-size: 300% 100%;
+  will-change: transform;
   animation: scan 1.6s linear infinite;
 }
 
 @keyframes scan {
   0% {
-    background-position: -100% 0;
+    transform: translate3d(-40%, 0, 0);
   }
   100% {
-    background-position: 200% 0;
+    transform: translate3d(40%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* A moving highlight is exactly what the setting is about. The hairline
+     still brightens, so the state change keeps a channel. */
+  html[data-state="streaming"] .shell::after {
+    animation: none;
+    opacity: 0;
   }
 }
 

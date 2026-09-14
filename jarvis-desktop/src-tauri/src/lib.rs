@@ -461,6 +461,14 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        // Registering this is not optional and its absence was invisible:
+        // `UpdaterExt::updater_builder` resolves `state::<UpdaterState>()`,
+        // which PANICS when the type was never managed. The empty `pubkey` in
+        // tauri.conf.json masks it today, because `update.rs::configured()`
+        // short-circuits every path before it can be reached — so the first
+        // thing that would have happened after pasting in a real signing key
+        // is an abort with `panic = "abort"` and no stderr to print it to.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ChatState::default())
         .manage(stream::StreamState::default())
         .manage(sidecar::SupervisorState::default())

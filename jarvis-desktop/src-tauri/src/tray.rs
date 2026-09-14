@@ -137,7 +137,7 @@ struct Rows {
 /// `windows_subsystem = "windows"`, so that panic went to a stderr that does
 /// not exist: no tray, no stream, no approvals, and nothing on screen to say so.
 #[derive(Default)]
-pub struct Painted(Mutex<Option<(Rgb, u32, &'static str)>>);
+pub struct Painted(Mutex<Option<(Rgb, Rgb, u32, &'static str)>>);
 
 /// Builds the tray icon, its menu and the event handlers.
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -386,6 +386,15 @@ fn binding_for(app: &AppHandle, link: &LinkState) -> Binding {
 /// rebind that happens to resolve to the same 8-bit value is correctly a
 /// no-op; anything else redraws on the next call.
 pub fn on_appearance_changed(app: &AppHandle) {
+    // Drop the cached colour first. The key cannot see a binding change that
+    // resolves to the same colour *right now* but animates differently, and
+    // `repaint` would take the early return.
+    let painted = app.state::<Painted>();
+    painted
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
     let link = app.state::<crate::stream::StreamState>().link();
     repaint(app, &link);
 }
@@ -695,7 +704,10 @@ fn repaint(app: &AppHandle, link: &LinkState) {
         // The notch count is part of the key. Keying on the colour alone meant
         // a fourth item arriving while banked — same still colour, one more
         // notch — was skipped as an unchanged frame, so the ring never grew.
-        let key = (resolved.a, link.attention.pending, state);
+        // `resolved.b` is in the key because `draw` uses it for the rim: a
+        // rebind that lands on the same primary but a different secondary
+        // repainted nothing and kept the old edge.
+        let key = (resolved.a, resolved.b, link.attention.pending, state);
         if *slot == Some(key) {
             return;
         }
@@ -881,8 +893,12 @@ pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
         // empty list is worse than one that is plainly unavailable.
         let _ = rows.approvals.set_enabled(link.approvals > 0);
         let _ = rows.waiting.set_text(waiting_label(link));
+        // `known`, NOT `pending > 0`. Both lines were here — the second
+        // overwrote the first on every event, so the fix that made the brief
+        // reachable at zero pending was reverted one line after it, and the
+        // test caught nothing because it asserted the label and the mere
+        // presence of a `set_enabled` call rather than the value.
         let _ = rows.waiting.set_enabled(link.attention.known);
-        let _ = rows.waiting.set_enabled(link.attention.pending > 0);
         let _ = rows.mute.set_text(mute_label(link));
         // Muting is a write, and a write against a backend that has not been
         // read yet is a guess about which direction to write in.

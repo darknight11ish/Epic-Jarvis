@@ -22,6 +22,7 @@
 import {
   announce,
   currentLink,
+  followTheme,
   followZoom,
   surfaceState,
   onEvent,
@@ -1424,6 +1425,20 @@ function visible(n) {
   return !hiddenGroups.has(n.group);
 }
 
+/// Device pixels per CSS pixel for the graph canvas.
+///
+/// One function because there used to be two numbers: `fitCanvas` sized the
+/// backing store at one cap and `draw` set its transform with another. Every
+/// caller now reads the same value.
+///
+/// Capped at 3 rather than 2: the cap is a memory guard — a backing store
+/// grows with its square — but `devicePixelRatio` also carries the webview
+/// zoom, so on a 2x display at 150% the honest ratio is 3 and clamping to 2
+/// renders the graph soft for exactly the person who enlarged it to see it.
+function canvasScale() {
+  return Math.min(3, window.devicePixelRatio || 1);
+}
+
 function fitCanvas() {
   const c = dom.canvas;
   const rect = c.getBoundingClientRect();
@@ -1432,7 +1447,7 @@ function fitCanvas() {
   // `devicePixelRatio` carries the webview zoom, so on a 2x display at 150%
   // the honest ratio is 3 and clamping to 2 renders the graph soft for exactly
   // the person who enlarged it in order to see it.
-  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const dpr = canvasScale();
   c.width = Math.max(1, Math.round(rect.width * dpr));
   c.height = Math.max(1, Math.round(rect.height * dpr));
   draw();
@@ -1467,7 +1482,13 @@ function draw() {
   const c = dom.canvas;
   const ctx = c.getContext("2d");
   if (!ctx) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  // The SAME cap `fitCanvas` sizes the backing store with. They disagreed —
+  // 3 there, 2 here — from the moment the cap was raised, so on any display
+  // where `devicePixelRatio` exceeds 2 (a 300% Windows scale, or Ctrl+= up to
+  // the 2.5 zoom step) the graph drew into the top-left two thirds of its own
+  // buffer while the hit test went on using the full width. Clicking a visible
+  // node selected nothing.
+  const dpr = canvasScale();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, c.width / dpr, c.height / dpr);
 
@@ -1895,6 +1916,13 @@ window.addEventListener("resize", () => {
 matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => {
   if (state.view === "galaxy" && state.graph) startLayout();
 });
+
+// Applied at boot AND on every change. The Brain read `get_theme` once and
+// then ignored `theme-changed` for the life of the window, so picking a theme
+// in Settings left the largest coloured surface in the product on the old
+// palette until it was reopened. `tests/themes-all.mjs` only measured the
+// boot path, so it passed while claiming "every window follows the theme".
+followTheme();
 
 // The canvas is sized in device pixels from its CSS box, so a zoom step has to
 // re-measure it or the graph is drawn at the old scale inside the new box.

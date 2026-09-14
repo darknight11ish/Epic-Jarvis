@@ -843,12 +843,29 @@ fn sample_gpu() -> Option<GpuSample> {
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = match command.output() {
+    // `Command::output()` blocks until the child exits, with no deadline. A
+    // wedged NVIDIA driver — a reload, a lost GPU, an ECC fault — makes
+    // `nvidia-smi` hang, and this runs inside the single telemetry task: the
+    // `.await` in `lib.rs` would never resolve, freezing the widget's numbers
+    // and the widget-position flush for the rest of the session, with one
+    // blocking-pool thread parked forever and nothing printed anywhere.
+    let Some(output) = run_with_deadline(command, GPU_PROBE_TIMEOUT) else {
+        // Timed out and was killed. Do NOT latch: a driver that is busy now is
+        // usually fine on the next tick.
+        return None;
+    };
+    let output = match output {
         Ok(output) if output.status.success() => output,
-        _ => {
+        // The binary is not here. That is permanent, so stop asking.
+        Err(_) => {
             GPU_PROBE_ENABLED.store(false, Ordering::Relaxed);
             return None;
         }
+        // It ran and failed. `nvidia-smi` exits non-zero transiently — a
+        // driver reload, `GPU is lost`, an ECC state, a query timed out on a
+        // saturated card — and latching on one of those killed GPU telemetry
+        // for the rest of the session.
+        Ok(_) => return None,
     };
 
     let text = String::from_utf8_lossy(&output.stdout);
@@ -861,6 +878,61 @@ fn sample_gpu() -> Option<GpuSample> {
         vram_used_mb: fields.next().and_then(|v| v.parse().ok()),
         vram_total_mb: fields.next().and_then(|v| v.parse().ok()),
     })
+}
+
+/// How long `nvidia-smi` gets before it is treated as not answering.
+///
+/// It normally replies in well under 100 ms. Two seconds is generous for a
+/// loaded card and short enough that the telemetry tick is never held up.
+const GPU_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Runs a command with a deadline, killing it if it overruns.
+///
+/// `std::process` has no timeout and `wait_timeout` is not in std, so this
+/// polls `try_wait`. Crude, and correct: the alternative is a probe that can
+/// hang a background task for the life of the process.
+///
+/// `None` means it did not finish in time and has been killed. `Some(Err)`
+/// means it could not be started at all — a different and permanent thing,
+/// which is why the caller tells them apart.
+fn run_with_deadline(
+    mut command: std::process::Command,
+    limit: std::time::Duration,
+) -> Option<std::io::Result<std::process::Output>> {
+    use std::io::Read;
+    use std::process::Stdio;
+
+    command.stdout(Stdio::piped()).stderr(Stdio::null());
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(err) => return Some(Err(err)),
+    };
+    let deadline = std::time::Instant::now() + limit;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut stdout = Vec::new();
+                if let Some(mut pipe) = child.stdout.take() {
+                    let _ = pipe.read_to_end(&mut stdout);
+                }
+                return Some(Ok(std::process::Output {
+                    status,
+                    stdout,
+                    stderr: Vec::new(),
+                }));
+            }
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    eprintln!("[jarvis] a GPU probe overran {limit:?} and was killed");
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            Err(err) => return Some(Err(err)),
+        }
+    }
 }
 
 /// Samples CPU, RAM and (when present) the GPU.
@@ -1069,7 +1141,7 @@ fn assistant_reply(body: &str) -> String {
 
 #[cfg(test)]
 mod capture_tests {
-    use super::assistant_reply;
+    use super::{assistant_reply, validate_external_url};
 
     #[test]
     fn reads_the_non_streaming_openai_shape() {
@@ -1092,6 +1164,26 @@ mod capture_tests {
         // 320px flash is worse than no sentence at all.
         assert_eq!(assistant_reply(r#"{"weird":{"nested":1}}"#), "");
         assert_eq!(assistant_reply("not json at all"), "");
+    }
+
+    /// The trick this exists for: the visible text, the apparent host and the
+    /// real destination can be three different things.
+    #[test]
+    fn a_url_with_userinfo_is_refused() {
+        assert!(validate_external_url("https://github.com@evil.example/").is_err());
+        assert!(validate_external_url("http://user:pass@evil.example").is_err());
+        // Backslash folds to `/` in a real URL parser, so a `@`-only check
+        // could be stepped around with it.
+        assert!(validate_external_url("https://example.com\\@evil.example").is_err());
+    }
+
+    /// CONTROL: the ordinary case still opens, or this is just a deny-all.
+    #[test]
+    fn a_plain_url_still_opens() {
+        assert!(validate_external_url("https://github.com/anthropics").is_ok());
+        assert!(validate_external_url("http://127.0.0.1:4719/api/status").is_ok());
+        // A `@` after the host is a legitimate path character.
+        assert!(validate_external_url("https://example.com/users/@someone").is_ok());
     }
 }
 
@@ -1190,6 +1282,24 @@ fn validate_external_url(url: &str) -> Result<(), String> {
         .unwrap_or("");
     if host.is_empty() {
         return Err("that URL has no host".to_string());
+    }
+    // `https://github.com@evil.example/` has a host of `evil.example`; the
+    // part before the `@` is userinfo and is ignored by every resolver. A
+    // model that writes `[github.com](https://github.com@evil.example/)`
+    // produces a link whose visible text, whose apparent host, and whose
+    // actual destination are three different things — and this hands the
+    // result to the real browser.
+    //
+    // `validate_base` forty lines up already refuses `@` for exactly this
+    // reason. The two checks guard the same class of trick and disagreed.
+    if host.contains('@') {
+        return Err("refusing to open a URL that carries credentials before the host".to_string());
+    }
+    // Backslash is folded to `/` by the URL parser for http(s), so
+    // `https://example.com\@evil.example` would slip past a `@`-only check on
+    // what this function believes is the host.
+    if url.contains('\\') {
+        return Err("refusing to open a URL containing a backslash".to_string());
     }
     Ok(())
 }
