@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.net.WakeWord
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.ReadinessItem
 import com.jarvis.client.ui.T
@@ -49,6 +50,15 @@ fun ReadinessScreen(
     onRequestBatteryExemption: () -> Unit,
     onStartService: () -> Unit,
     onBack: () -> Unit,
+    /** The desktop's wake word, as three states — never as a boolean. */
+    wakeWord: WakeWord = WakeWord.UNKNOWN,
+    /** Turns the desktop's wake word off. Null hides the control entirely. */
+    onWakeWordOff: (() -> Unit)? = null,
+    onRecheckWakeWord: (() -> Unit)? = null,
+    /** Set while the change is in flight, so the button cannot be double-sent. */
+    wakeWordBusy: Boolean = false,
+    /** What went wrong, or what the desktop said afterwards. */
+    wakeWordNotice: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(T.Void).padding(horizontal = 18.dp)) {
@@ -78,6 +88,15 @@ fun ReadinessScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f),
         ) {
+            item(key = "wake-word") {
+                WakeWordCard(
+                    state = wakeWord,
+                    busy = wakeWordBusy,
+                    notice = wakeWordNotice,
+                    onTurnOff = onWakeWordOff,
+                    onRecheck = onRecheckWakeWord,
+                )
+            }
             item(key = "frame-rate") { FrameRateCard() }
             items(items, key = { it.title }) { ReadinessCard(it) }
         }
@@ -110,6 +129,122 @@ fun ReadinessScreen(
             ) { Text("Start link") }
         }
         Spacer(Modifier.height(18.dp))
+    }
+}
+
+/**
+ * The wake word, and the one control that turns it off.
+ *
+ * I argued against building a wake-word toggle at all, and that argument was
+ * about the *on* half: a switch labelled "listen for hey jarvis" that cannot
+ * listen, because no model is bundled, would be a promise about a microphone
+ * that the app cannot keep. None of that applies to switching it off.
+ * `/api/voice/wake` is a real route and the desktop's ear is a real thing that
+ * can be open right now, so "off" does something. It is offered on its own.
+ *
+ * Three states, not a checkbox, because [WakeWord.UNKNOWN] must never render as
+ * off — see that type. And the state shown is always the one the desktop last
+ * reported, never the one just requested: the write is a config change, and a
+ * 200 means accepted rather than stopped.
+ */
+@Composable
+private fun WakeWordCard(
+    state: WakeWord,
+    busy: Boolean,
+    notice: String?,
+    onTurnOff: (() -> Unit)?,
+    onRecheck: (() -> Unit)?,
+) {
+    val tint = when (state) {
+        WakeWord.ON -> T.Warn
+        WakeWord.OFF -> T.Ok
+        WakeWord.UNKNOWN -> T.Dim
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(T.Plate, RoundedCornerShape(12.dp))
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).background(tint, CircleShape))
+            Spacer(Modifier.width(10.dp))
+            Text("Wake word", style = MaterialTheme.typography.titleSmall, color = T.Ink)
+            Spacer(Modifier.weight(1f))
+            Text(
+                when (state) {
+                    WakeWord.ON -> "ON"
+                    WakeWord.OFF -> "Off"
+                    WakeWord.UNKNOWN -> "Unknown"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = tint,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            when (state) {
+                WakeWord.ON ->
+                    "Your desktop will accept audio sent as a wake-word trigger."
+                WakeWord.OFF ->
+                    "Your desktop refuses wake-word audio. Nothing can trigger Jarvis by " +
+                        "speaking a phrase."
+                WakeWord.UNKNOWN ->
+                    "The desktop has not answered, so this is not known. It is not being " +
+                        "reported as off, because \"off\" and \"could not ask\" are not the " +
+                        "same thing and only one of them is safe to believe."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = T.Dim,
+        )
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            // True regardless of the state above, and the thing most worth
+            // knowing: whatever the desktop is doing, this handset is not
+            // listening between button presses.
+            "This phone never listens for a wake phrase. No wake-word model is bundled in " +
+                "the app, so its microphone only opens while you hold the talk button down.",
+            style = MaterialTheme.typography.bodySmall,
+            color = T.Dim,
+        )
+
+        if (notice != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(notice, style = MaterialTheme.typography.bodySmall, color = T.Warn)
+        }
+
+        if (state == WakeWord.ON && onTurnOff != null) {
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onTurnOff,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(T.Void, T.Warn),
+            ) { Text(if (busy) "Turning it off…" else "Turn the wake word off") }
+        }
+
+        if (state == WakeWord.UNKNOWN && onRecheck != null) {
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onRecheck,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(T.Void, T.Pick),
+            ) { Text(if (busy) "Asking…" else "Ask the desktop again") }
+        }
+
+        if (state == WakeWord.OFF) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Turning it back on is a desktop-side change, deliberately. It is not " +
+                    "offered here because this phone could not use it yet.",
+                style = MaterialTheme.typography.labelSmall,
+                color = T.Dim,
+            )
+        }
     }
 }
 

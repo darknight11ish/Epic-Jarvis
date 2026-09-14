@@ -43,6 +43,43 @@ data class VoiceStatus(
     val sttMissing: Boolean get() = available && !stt.available
 }
 
+/**
+ * What the wake word is doing, as three states rather than a boolean.
+ *
+ * The third one is the point. `VoiceStatus`'s defaults are the refusing ones,
+ * so a status call that never reached the desktop looks exactly like a desktop
+ * reporting the wake word off — and those must not be shown the same way.
+ * "Off, nothing is listening" is a promise about a microphone; saying it when
+ * the truth is "I could not ask" is the worst thing this screen could do.
+ */
+enum class WakeWord {
+    /** The desktop confirms it will accept wake-word audio. */
+    ON,
+
+    /** The desktop confirms it will not. */
+    OFF,
+
+    /** No successful answer yet. Not the same as off, and never shown as off. */
+    UNKNOWN,
+    ;
+
+    companion object {
+        /**
+         * @param answered whether `/api/voice/status` has ever succeeded for
+         *   the current desktop. A failed call leaves the last known status in
+         *   place on purpose; this is what says whether to trust it.
+         */
+        fun of(answered: Boolean, status: VoiceStatus): WakeWord = when {
+            !answered -> UNKNOWN
+            // `available` false means the voice module did not load at all, so
+            // there is nothing on that side that could be listening. That is a
+            // real "off" rather than an unknown.
+            status.wakeWordOn -> ON
+            else -> OFF
+        }
+    }
+}
+
 @Serializable
 data class VoiceListening(
     @SerialName("push_to_talk") val pushToTalk: Boolean = false,

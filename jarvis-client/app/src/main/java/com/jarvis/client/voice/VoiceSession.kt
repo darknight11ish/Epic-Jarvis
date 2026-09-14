@@ -8,11 +8,15 @@ import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Heard
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.VoiceStatus
+import com.jarvis.client.net.WakeWord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -70,6 +74,23 @@ class VoiceSession(
     /** What the desktop says the voice path can do. Refusing defaults. */
     val status: StateFlow<VoiceStatus> = _status.asStateFlow()
 
+    private val _answered = MutableStateFlow(false)
+
+    /**
+     * Whether `/api/voice/status` has ever actually answered.
+     *
+     * Kept apart from [status] because the refusing defaults make an
+     * unreachable desktop indistinguishable from one that has everything
+     * switched off — and for the wake word those two must never be shown the
+     * same way. See [WakeWord].
+     */
+    val answered: StateFlow<Boolean> = _answered.asStateFlow()
+
+    /** The wake word as three states, which is what the UI should read. */
+    val wakeWord: StateFlow<WakeWord> = combine(_answered, _status) { a, s ->
+        WakeWord.of(a, s)
+    }.stateIn(scope, SharingStarted.Eagerly, WakeWord.UNKNOWN)
+
     private val _transcript = MutableStateFlow<String?>(null)
 
     /** What the desktop heard, shown so a mis-hearing is visible rather than acted on silently. */
@@ -84,8 +105,41 @@ class VoiceSession(
     /** Call before offering the button. Never assumes; a failure leaves it hidden. */
     suspend fun refreshStatus() {
         when (val r = api.voiceStatus()) {
-            is ApiResult.Ok -> _status.value = r.value
-            is ApiResult.Failed -> _status.value = VoiceStatus(available = false)
+            is ApiResult.Ok -> { _status.value = r.value; _answered.value = true }
+            is ApiResult.Failed -> { _status.value = VoiceStatus(available = false); _answered.value = false }
+        }
+    }
+
+    /**
+     * Turns the desktop's wake word off (or on), then asks what actually
+     * happened.
+     *
+     * The re-read is not belt and braces. `/api/voice/wake` is a **config
+     * write**: the value lands in the desktop's TOML and a 200 means the change
+     * was accepted, not that the wake word has stopped listening. Flipping a
+     * switch in the UI on the strength of that response would show "off" over a
+     * microphone that is still open, which is the one lie this control must not
+     * tell. So the response is discarded and [refreshStatus] decides.
+     *
+     * @return null on success, or a sentence to show the owner.
+     */
+    suspend fun setWakeWord(enabled: Boolean): String? {
+        val sent = api.setWakeWord(enabled)
+        if (sent is ApiResult.Failed) {
+            refreshStatus()
+            return "Could not reach the desktop to change that."
+        }
+        refreshStatus()
+        if (!_answered.value) {
+            return "The change was sent, but the desktop did not say what it is doing now."
+        }
+        if (_status.value.wakeWordOn == enabled) return null
+        return if (enabled) {
+            "The desktop accepted that but still reports the wake word off."
+        } else {
+            // The honest version of the failure this whole re-read exists for.
+            "The desktop accepted the change but still reports the wake word ON. " +
+                "It may need restarting before it takes effect."
         }
     }
 

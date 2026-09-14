@@ -22,7 +22,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -324,6 +323,14 @@ class MainActivity : FragmentActivity() {
                             host,
                         )
                     }
+                    val wakeWord by voice.wakeWord.collectAsState()
+                    var wakeBusy by remember { mutableStateOf(false) }
+                    var wakeNotice by remember { mutableStateOf<String?>(null) }
+                    // Asked on arrival, because this screen is where someone
+                    // goes to find out what is listening, and a stale answer is
+                    // the wrong thing to be reassured by.
+                    LaunchedEffect(Unit) { voice.refreshStatus() }
+
                     ReadinessScreen(
                         items = items,
                         onRequestNotifications = {
@@ -334,6 +341,28 @@ class MainActivity : FragmentActivity() {
                         onRequestBatteryExemption = ::requestBatteryExemption,
                         onStartService = { EventService.start(this@MainActivity) },
                         onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
+                        wakeWord = wakeWord,
+                        wakeWordBusy = wakeBusy,
+                        wakeWordNotice = wakeNotice,
+                        onWakeWordOff = {
+                            if (!wakeBusy) {
+                                wakeBusy = true
+                                wakeNotice = null
+                                lifecycleScope.launch {
+                                    wakeNotice = voice.setWakeWord(false)
+                                    wakeBusy = false
+                                }
+                            }
+                        },
+                        onRecheckWakeWord = {
+                            if (!wakeBusy) {
+                                wakeBusy = true
+                                lifecycleScope.launch {
+                                    voice.refreshStatus()
+                                    wakeBusy = false
+                                }
+                            }
+                        },
                         modifier = root,
                     )
                 }
