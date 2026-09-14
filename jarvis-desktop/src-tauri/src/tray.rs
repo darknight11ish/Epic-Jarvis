@@ -1306,6 +1306,21 @@ mod tests {
             waiting_label(&budgeted),
             "3 things waiting to be told · 2 of 6 interruptions left"
         );
+
+        // Zero pending had no coverage, and it is the case that changed: the
+        // row used to be disabled here, which made the brief unreachable at
+        // exactly the moment someone asks "did I miss anything?". It is a way
+        // in now, so it has to read like one rather than like a status.
+        budgeted.attention.pending = 0;
+        assert_eq!(
+            waiting_label(&budgeted),
+            "Nothing waiting — the brief and the budget"
+        );
+        assert!(
+            budgeted.attention.known,
+            "the row is enabled on `known`, so a label test that left it false \
+             would be asserting the disabled case by accident"
+        );
     }
     /// Contrast ratio between two opaque colours, WCAG's formula.
     fn ratio(x: Rgb, y: Rgb) -> f64 {
