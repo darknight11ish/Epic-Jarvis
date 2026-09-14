@@ -13,7 +13,7 @@
     "build:debug": "tauri build --debug",
     "bundle:msi": "tauri build --bundles msi",
     "bundle:nsis": "tauri build --bundles nsis",
-    "icons": "tauri icon src-tauri/icons/icon.png",
+    "icons": "python3 scripts/make-icons.py",
     "info": "tauri info",
     "fmt": "cd src-tauri && cargo fmt",
     "lint": "cd src-tauri && cargo clippy --all-targets -- -D warnings",

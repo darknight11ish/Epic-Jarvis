@@ -44,6 +44,7 @@ sysinfo = "0.32"
 # takes five `cargo audit` findings out of the lockfile with it, including two
 # CVSS 7.5 DoS advisories in quick-xml that arrived through its Wayland path.
 xcap = "0.9"
+tauri-plugin-updater = "2"
 
 # Build order step 4: killing the process TREE, not the process. On Windows
 # that is a Job Object; on Unix a process group. Both are a handful of calls,
