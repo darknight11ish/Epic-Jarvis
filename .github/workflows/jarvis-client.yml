@@ -113,6 +113,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 35
+    env:
+      # Pinned explicitly because the default is not one path but three, tried
+      # in order — $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd, $HOME/.android/avd
+      # — and avdmanager and the emulator resolved it differently between
+      # steps, so a created AVD was simply not there a minute later.
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.avd
     defaults:
       run:
         working-directory: jarvis-client
@@ -137,19 +143,17 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Create an AVD
+      - name: Install the system image
         working-directory: .
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager --install "system-images;android-34;default;x86_64" \
                                "platforms;android-34" "platform-tools" "emulator"
-          echo no | avdmanager create avd -n smoke \
-            -k "system-images;android-34;default;x86_64" --force
-          # Worth knowing which way this is going to go: with KVM the boot is
-          # a couple of minutes, without it the image is emulated instruction
-          # by instruction and there is no useful timeout to pick.
-          ls -l /dev/kvm 2>&1 || echo "::warning::/dev/kvm is not present - the emulator will be very slow"
+          # "minutes" versus "tens of minutes" is exactly the difference
+          # between having this and not, and it is worth seeing before a
+          # timeout rather than after one.
+          ls -l /dev/kvm 2>&1 || echo "::warning::/dev/kvm is absent - the emulator will be very slow"
 
       # Compiled before the device is needed, so a Kotlin error still fails in
       # about a minute rather than after a boot.
@@ -165,18 +169,28 @@ jobs:
             exit 1
           fi
 
-      # Start, wait and test in ONE step, deliberately.
-      #
-      # The first version started the emulator in its own step and used it in
-      # the next, which is the obvious way to overlap the boot with the build —
-      # and it does not work: the runner tears down a step's process group when
-      # the step finishes, so the emulator died the moment the step that
-      # launched it returned. `adb wait-for-device` then blocked for fifteen
-      # minutes on a device that was never coming, which looked exactly like a
-      # slow boot. Keeping it in one shell keeps it alive.
+      # Create, start, wait and test in ONE step. Everything this job has got
+      # wrong so far has been state that did not survive a step boundary: the
+      # emulator died with the process group that launched it, and then the AVD
+      # itself was not where the next step looked for it. Nothing crosses a
+      # boundary now except the installed SDK, which is on disk.
       - name: Start the emulator and launch the app
         run: |
           set -uo pipefail
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd -n smoke \
+            -k "system-images;android-34;default;x86_64" --force
+
+          # Assert it exists HERE, so a creation that silently went elsewhere
+          # fails on the line that created it rather than five minutes later
+          # inside the emulator's own error message.
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -qx smoke; then
+            echo "::error::The AVD was created but the emulator cannot see it."
+            echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"; ls -la "$ANDROID_AVD_HOME" || true
+            "$ANDROID_HOME/emulator/emulator" -list-avds || true
+            exit 1
+          fi
+
           "$ANDROID_HOME/emulator/emulator" -avd smoke \
             -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
             -camera-back none -camera-front none -memory 2048 \
