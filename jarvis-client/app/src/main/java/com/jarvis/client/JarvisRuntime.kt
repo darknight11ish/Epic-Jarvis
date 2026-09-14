@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import android.content.Context
 import android.util.Log
+import com.jarvis.client.data.AppearanceStore
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.ApiError
@@ -74,6 +75,10 @@ object JarvisRuntime {
     lateinit var settings: ClientSettings
         private set
     lateinit var tokens: TokenStore
+        private set
+
+    /** Theme, face and the seven state bindings. Per device — see the class. */
+    lateinit var appearance: AppearanceStore
         private set
     lateinit var api: JarvisApi
         private set
@@ -154,6 +159,7 @@ object JarvisRuntime {
         val app = context.applicationContext
         settings = ClientSettings(app)
         tokens = TokenStore(app)
+        appearance = AppearanceStore(app)
         api = JarvisApi(settings, tokens)
         stream = EventStream(api)
         started = true

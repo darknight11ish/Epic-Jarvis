@@ -103,6 +103,9 @@ class SpecDriftTest {
                     "from" -> assertEquals("$id from", Palette.byId[value.jsonPrimitive.content], p.from)
                     "to" -> assertEquals("$id to", Palette.byId[value.jsonPrimitive.content], p.to)
                     "tail" -> assertEquals("$id tail", Palette.byId[value.jsonPrimitive.content], p.tail)
+                    // strobe calls its pair `a` and `b`.
+                    "a" -> assertEquals("$id a", Palette.byId[value.jsonPrimitive.content], p.onColor)
+                    "b" -> assertEquals("$id b", Palette.byId[value.jsonPrimitive.content], p.offColor)
                     "quiet" -> assertEquals("$id quiet", Palette.byId[value.jsonPrimitive.content], p.quiet)
                     "loud" -> assertEquals("$id loud", Palette.byId[value.jsonPrimitive.content], p.loud)
                     "cold" -> assertEquals("$id cold", Palette.byId[value.jsonPrimitive.content], p.cold)
@@ -208,8 +211,9 @@ class SpecDriftTest {
 
     @Test
     fun `every kind the spec names can be expressed`() {
+        // A list of plain strings, not objects.
         val kinds = spec.getValue("pattern_kinds").jsonArray
-            .map { it.jsonObject.getValue("id").jsonPrimitive.content }
+            .map { it.jsonPrimitive.content }
         for (kind in kinds) {
             assertTrue(
                 "no PatternKind for '$kind' — randomise can roll it and nothing would render",

@@ -99,6 +99,13 @@ object Spec {
     const val STROBE_MAX_S = 2.0f
 
     /**
+     * The strobe pattern's own safety note: "period_s below 0.4 would exceed
+     * the transition budget". Clamped where the period is read, not merely
+     * documented.
+     */
+    const val STROBE_MIN_PERIOD_S = 0.4f
+
+    /**
      * limits.flash.flicker_rate_hz_max and flicker_harmonic.
      *
      * 1.3 is already the harmonic-adjusted cap: 1.3 x 2.3 = 2.99, just under
@@ -189,6 +196,9 @@ data class Params(
     val from: Color? = null,
     val to: Color? = null,
     val tail: Color? = null,
+    /** `strobe`'s two colours, which the spec calls `a` and `b`. */
+    val onColor: Color? = null,
+    val offColor: Color? = null,
     val quiet: Color? = null,
     val loud: Color? = null,
     val gain: Float? = null,
@@ -219,6 +229,8 @@ data class Params(
         from = from ?: base.from,
         to = to ?: base.to,
         tail = tail ?: base.tail,
+        onColor = onColor ?: base.onColor,
+        offColor = offColor ?: base.offColor,
         quiet = quiet ?: base.quiet,
         loud = loud ?: base.loud,
         gain = gain ?: base.gain,
@@ -276,7 +288,7 @@ enum class Pattern(val id: String, val kind: PatternKind, val params: Params) {
     ),
     STROBE(
         "strobe", PatternKind.STROBE,
-        Params(color = Palette.ROSE_4, to = Palette.NEUTRAL_1, periodS = 0.8f),
+        Params(onColor = Palette.ROSE_4, offColor = Palette.NEUTRAL_1, periodS = 0.8f),
     ),
     ;
 

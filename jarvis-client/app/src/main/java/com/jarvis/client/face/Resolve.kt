@@ -233,12 +233,19 @@ fun resolveRaw(bind: Binding, t: Float, amp: Float): Swatch {
         }
 
         PatternKind.STROBE -> {
-            val on = ((t / periodS) % 1f) < 0.5f
+            // The pattern's own safety note: below 0.4s it exceeds the
+            // transition budget on its own, before the governor sees it.
+            val strobeS = periodS.coerceAtLeast(Spec.STROBE_MIN_PERIOD_S)
+            val on = ((t / strobeS) % 1f) < 0.5f
             // The off phase is the pattern's own neutral-1, not the renderer
             // background. Strobing to the background made the face vanish
             // entirely on half the cycle, which reads as crashed rather than as
             // alarmed.
-            val a = if (on) (bind.tint ?: Palette.ROSE_4) else (q.to ?: Palette.NEUTRAL_1)
+            val a = if (on) {
+                bind.color ?: q.onColor ?: Palette.ROSE_4
+            } else {
+                q.offColor ?: Palette.NEUTRAL_1
+            }
             Swatch(a, lift(a, -0.5f))
         }
     }
@@ -281,7 +288,7 @@ fun resolve(
     // leave the face looking switched off, and the state that most often strobes
     // is the one that most needs to stay visible.
     val capped = if (strobe?.spent(bind.kind == PatternKind.STROBE, t) == true) {
-        val lit = bind.tint ?: Palette.ROSE_4
+        val lit = bind.color ?: bind.merged.onColor ?: Palette.ROSE_4
         Swatch(lit, lift(lit, -0.5f))
     } else {
         raw
