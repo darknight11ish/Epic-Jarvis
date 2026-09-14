@@ -106,6 +106,14 @@ dependencies {
     // runtime was declared, so the first @Serializable anyone wrote would have
     // failed to resolve rather than working. Step 2's event models need it.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // The transport. OkHttp rather than Ktor because the SSE stream wants a
+    // socket held open for an hour with no read timeout, and chat wants a
+    // chunked body cancelled mid-flight to interrupt generation - both are
+    // one-liners here.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okio:okio:3.6.0")
 
     testImplementation("junit:junit:4.13.2")
 }

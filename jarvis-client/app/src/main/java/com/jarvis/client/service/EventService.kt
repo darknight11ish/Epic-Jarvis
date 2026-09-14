@@ -1,6 +1,7 @@
 package com.jarvis.client.service
 
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -11,11 +12,25 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.jarvis.client.Activity
+import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.LinkState
+import com.jarvis.client.MainActivity
 import com.jarvis.client.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 
 /**
- * Holds the SSE connection open. Step 0 only proves the service type is right;
- * the stream itself arrives in step 2.
+ * Holds the SSE connection open.
+ *
+ * This is the single biggest thing the native app buys over a browser tab:
+ * Android suspends a backgrounded WebView's connections within about a minute,
+ * so approvals silently stop arriving. A foreground service does not get killed
+ * for that.
  *
  * The type is specialUse rather than dataSync deliberately - see §3.1(2). The
  * six-hour dataSync budget on Android 15 is shared across every dataSync
@@ -26,19 +41,46 @@ import com.jarvis.client.R
  */
 class EventService : Service() {
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var watcher: Job? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        startInForeground()
+        JarvisRuntime.initialize(this)
+        startInForeground(LinkState.RECONNECTING, Activity.IDLE, 0)
+
+        // The notification carries live state rather than a fixed string. It is
+        // the only surface visible while the phone is in a pocket, so "Linked"
+        // versus "Reconnecting" versus "2 waiting" is the whole value of it.
+        watcher = scope.launch {
+            combine(
+                JarvisRuntime.link,
+                JarvisRuntime.activity,
+                JarvisRuntime.pending,
+            ) { link, activity, pending -> Triple(link, activity, pending.size) }
+                .collect { (link, activity, count) ->
+                    startInForeground(link, activity, count)
+                }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            JarvisRuntime.stopStream()
             stopSelf()
             return START_NOT_STICKY
         }
+        JarvisRuntime.startStream()
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        watcher?.cancel()
+        watcher = null
+        JarvisRuntime.stopStream()
+        super.onDestroy()
     }
 
     /**
@@ -65,17 +107,32 @@ class EventService : Service() {
         stopSelf()
     }
 
-    private fun startInForeground() {
+    private fun startInForeground(link: LinkState, activity: Activity, pending: Int) {
+        val text = when {
+            link != LinkState.CONNECTED -> when (link) {
+                LinkState.RECONNECTING -> "Reconnecting…"
+                else -> "Offline"
+            }
+            pending > 0 -> if (pending == 1) "1 approval waiting" else "$pending approvals waiting"
+            activity == Activity.LISTENING -> "Listening"
+            activity == Activity.THINKING -> "Thinking"
+            activity == Activity.SPEAKING -> "Speaking"
+            activity == Activity.WORKING -> "Working"
+            activity == Activity.ERROR -> "Something went wrong"
+            else -> "Linked"
+        }
+
         val notification: Notification =
             NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(getString(R.string.app_name))
-                .setContentText("Not connected yet")
+                .setContentText(text)
                 .setOngoing(true)
                 .setSilent(true)
                 .setShowWhen(false)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .setContentIntent(contentIntent())
                 .build()
 
         try {
@@ -101,19 +158,28 @@ class EventService : Service() {
         }
     }
 
+    private fun contentIntent(): PendingIntent =
+        PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
     companion object {
         private const val TAG = "JarvisEventService"
+        const val CHANNEL_ID = "jarvis_link"
+        private const val NOTIFICATION_ID = 0x4A56
+        const val ACTION_STOP = "com.jarvis.client.STOP_LINK"
 
         /**
          * Set when the platform refused to let the service go foreground. Read by
          * the readiness screen; null while nothing has gone wrong.
          */
-        @Volatile
         @JvmStatic
+        @Volatile
         var lastStartFailure: String? = null
-        const val CHANNEL_ID = "jarvis_link"
-        private const val NOTIFICATION_ID = 0x4A56
-        const val ACTION_STOP = "com.jarvis.client.STOP_LINK"
 
         fun start(context: Context) {
             runCatching {
