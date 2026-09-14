@@ -20,7 +20,13 @@ on:
   push:
     branches: ["**"]
     # The desktop endpoint has no bearing on the APK.
-    paths: ["jarvis-android/**", ".github/workflows/android-apk.yml"]
+    # keystore/ is in here because the build now reads the shared debug key from
+    # it. Rotating that key changes what every APK is signed with, and without
+    # this the change would build nothing.
+    paths:
+      - "jarvis-android/**"
+      - "keystore/**"
+      - ".github/workflows/android-apk.yml"
 
 # contents: write is for the release step at the end, which publishes the APK
 # where a phone can actually reach it. Nothing else here writes anything.

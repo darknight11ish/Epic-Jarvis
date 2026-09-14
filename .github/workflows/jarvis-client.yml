@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - "jarvis-client/**"
+      # The shared debug key this module is now signed with.
+      - "keystore/**"
       - ".github/workflows/jarvis-client.yml"
 
 permissions:
