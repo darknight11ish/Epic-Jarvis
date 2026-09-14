@@ -11,6 +11,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -142,8 +146,31 @@ fun FaceView(
         }
     }
 
+    // The face is the largest thing on the screen and the app's primary status
+    // indicator, and to a screen reader it was not there at all: a bare Canvas
+    // carries no semantics, so TalkBack treats it as decoration and skips it.
+    // Everything the precedence chain resolves - that Jarvis has errored, that
+    // something is waiting - was available only as colour and motion.
+    //
+    // A live region, because the point of this surface is that it CHANGES.
+    // Polite rather than assertive: it should not interrupt what is being read,
+    // and the approval card below it is the thing that actually needs reading.
+    val spoken = when (state) {
+        FaceState.ERROR -> "Jarvis has a problem"
+        FaceState.APPROVAL -> "Jarvis is waiting for your decision"
+        FaceState.LISTENING -> "Jarvis is listening"
+        FaceState.THINKING -> "Jarvis is working"
+        FaceState.SPEAKING -> "Jarvis is speaking"
+        FaceState.BANKED -> "Jarvis has notes saved for later"
+        FaceState.STANDBY -> "Jarvis is on standby and will not speak"
+        FaceState.IDLE -> "Jarvis is idle"
+    }
     Box(
         modifier
+            .semantics {
+                contentDescription = spoken
+                liveRegion = LiveRegionMode.Polite
+            }
             .pointerInput(Unit) {
                 detectTapGestures(onPress = { host.onTap(it, size.width.toFloat()) })
             }

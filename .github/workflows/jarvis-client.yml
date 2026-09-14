@@ -128,6 +128,37 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # After the debug artifact is collected, so `find -name '*.apk'` above
+      # keeps picking up exactly one file.
+      #
+      # This does not publish anything yet. The release variant had never been
+      # built even once, and R8 breaks at RUNTIME on a variant nobody runs -
+      # a stripped serializer is a crash on first decode, not a build error. So
+      # this proves it compiles and shrinks, and prints the size next to the
+      # debug one; switching the published artifact waits until the smoke job
+      # has run against it.
+      - name: Assemble release APK
+        run: |
+          set -uo pipefail
+          set -o pipefail
+          chmod +x ./gradlew
+          if ! ./gradlew assembleRelease --stacktrace 2>&1 | tee release.log; then
+            echo "::group::Why R8 refused"
+            # R8's own complaints, which are not Kotlin diagnostics and do not
+            # look like them. A missing keep rule shows up here as a warning
+            # about a class it could not find a reference for.
+            grep -E "^e: |Missing class|R8: |Warning: |Error: |ProGuard" release.log | head -60               || echo "(nothing that looks like an R8 complaint; see the full log above)"
+            echo "::endgroup::"
+            exit 1
+          fi
+          echo "::group::Size"
+          debug=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          rel=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          for f in "$debug" "$rel"; do
+            [ -n "$f" ] && [ -e "$f" ] && printf '%10s  %s\n' "$(du -h "$f" | cut -f1)" "$f"
+          done
+          echo "::endgroup::"
+
   # The gap that let a crash in onCreate ship with a green tick on every
   # check: the job above compiles the APK and runs unit tests, and never once
   # launches it. This one does, on a real Android image — and because an APK

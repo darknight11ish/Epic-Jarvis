@@ -54,19 +54,34 @@ android {
     buildTypes {
         debug { isMinifyEnabled = false }
         release {
-            // Still off, and the reason has changed — the old comment here said
-            // "this module has no serialization runtime and no reflective entry
-            // points yet", which stopped being true the moment step 2 landed.
-            // The plugin is applied at the top of this file, the runtime is a
-            // declared dependency, and @Serializable is used in ApiModels and
-            // VoiceModels. Anyone who turned R8 on believing that sentence
-            // would have had its generated serializers stripped and seen it
-            // only at runtime, on a build type nobody runs.
+            // On, finally. The blocker recorded here for months was "this needs
+            // the kotlinx-serialization keep rules" — and the library has
+            // shipped them since 1.5: kotlinx-serialization-core 1.7.3, the
+            // exact version declared below, carries
+            // META-INF/com.android.tools/r8/kotlinx-serialization-r8.pro, and
+            // OkHttp 4.12.0 carries META-INF/proguard/okhttp3.pro. R8 consumes
+            // both without being asked. Checked by unzipping the artifacts, not
+            // by reading about them.
             //
-            // Turning it on needs the kotlinx-serialization keep rules and a
-            // release build that is actually exercised. Until then this stays
-            // off deliberately rather than by an argument that expired.
-            isMinifyEnabled = false
+            // This matters more than a smaller APK. The published artifact is
+            // the DEBUG one, and a debuggable build has ART's optimisations off
+            // and every class interpreted — app and libraries alike — which is
+            // the state the reactor's frame loop currently runs in. It also
+            // leaves `adb shell run-as` open on the app's data directory, and
+            // hardware Keystore binding stops a key being EXTRACTED, not used
+            // by anything running as the app. Sixty careful lines in TokenStore
+            // are undone by one build-type flag.
+            //
+            // Signed with the same committed debug key, so `adb install -r`
+            // over an existing install still works: the certificate is what
+            // has to match, not the build type.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
