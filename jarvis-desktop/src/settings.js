@@ -12,7 +12,14 @@
  * there is no path by which the secret comes back into a webview.
  */
 
-import { onLink, reconnect, start as startLink } from "./jarvis-link.js";
+import {
+  applyTheme,
+  followTheme,
+  onLink,
+  reconnect,
+  start as startLink,
+  THEMES,
+} from "./jarvis-link.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -211,6 +218,32 @@ dom.stopBackend.addEventListener("click", () =>
 /* ==========================================================================
    Boot
    ========================================================================== */
+
+/* ==========================================================================
+   Appearance
+   --------------------------------------------------------------------------
+   The picker writes through `set_theme`, which persists to the store and fans
+   a `theme-changed` event out to every open window. This page is one of the
+   listeners, so the select stays correct when the change came from the Brain.
+   ========================================================================== */
+
+const themePicker = $("theme");
+if (themePicker) {
+  themePicker.addEventListener("change", async () => {
+    // Paint immediately so the control feels connected, then persist. If the
+    // write fails the fan-out below puts it back.
+    applyTheme(themePicker.value);
+    try {
+      await invoke("set_theme", { theme: themePicker.value });
+    } catch (error) {
+      console.error("[settings] could not save the theme:", error);
+    }
+  });
+}
+
+followTheme((theme) => {
+  if (themePicker) themePicker.value = theme;
+});
 
 startLink();
 

@@ -260,6 +260,32 @@ export function faceState(state = link) {
 }
 
 /**
+ * The fuller state a *surface* shows, as opposed to the face the arbiter
+ * composes.
+ *
+ * `faceState()` above is `jarvis_arbiter.face_state` — activity, with `banked`
+ * replacing a resting face. That is the right answer for the reactor. A window
+ * or a tray icon answers a slightly bigger question, because it also has to
+ * say "something is waiting for you" and "Jarvis is asleep", and the precedence
+ * between those is a UI decision rather than the arbiter's.
+ *
+ * This is that precedence, and it is the same order `tray.rs::spec_state` uses:
+ * an error outranks everything, then anything waiting on a human, then what
+ * Jarvis is doing, then whether it is awake at all. Exported so the tray and
+ * the windows cannot drift — before this the tray showed `approval` and
+ * `standby` and the Brain had no way to render either.
+ */
+export function surfaceState(state = link) {
+  const activity = String((state && state.activity) || "idle");
+  if (activity === "error") return "error";
+  if (Number((state && state.approvals) || 0) > 0) return "approval";
+  const face = faceState(state);
+  if (face !== "idle") return face;
+  const power = String((state && state.power) || "active");
+  return power === "standby" || power === "quiet" ? "standby" : "idle";
+}
+
+/**
  * Mutes or unmutes spoken interruptions until tomorrow.
  *
  * There is no "mute forever" — not here and not in the API. A mute with no end
@@ -352,6 +378,50 @@ export function reconnect() {
   TAURI.core.invoke("refresh_link").catch(() => {
     /* the stream reports itself soon enough */
   });
+}
+
+/** Every theme `theme.css` defines, in the order the picker lists them. */
+export const THEMES = ["deep-space", "ember", "paper", "high-contrast"];
+
+/**
+ * Applies a theme to this window and remembers it for the next paint.
+ *
+ * Called on load, and again whenever another window changes it. `set_theme`
+ * has always fanned a `theme-changed` event out to every window; until now
+ * nothing listened, so choosing a theme in the Brain left the spotlight, the
+ * widget and settings on the palette they shipped with. For someone who picked
+ * high-contrast because they need it, the surface they use most ignored them.
+ */
+export function applyTheme(name) {
+  const theme = THEMES.includes(name) ? name : THEMES[0];
+  document.documentElement.setAttribute("data-theme", theme);
+  try {
+    localStorage.setItem("jarvis.theme", theme);
+  } catch (error) {
+    /* the store is the source of truth; this is only the anti-flash cache */
+  }
+  return theme;
+}
+
+/**
+ * Subscribes this window to the theme, and reads the current one once.
+ *
+ * Safe to call from any surface. The inline bootstrap in each page has already
+ * painted from localStorage, so this only corrects a disagreement.
+ */
+export function followTheme(onChange) {
+  if (!IS_TAURI) return;
+  TAURI.event.listen("theme-changed", (event) => {
+    const theme = applyTheme(event.payload);
+    if (onChange) onChange(theme);
+  });
+  TAURI.core
+    .invoke("get_theme")
+    .then((stored) => {
+      const theme = applyTheme(stored);
+      if (onChange) onChange(theme);
+    })
+    .catch((error) => console.error("[jarvis] could not read the theme:", error));
 }
 
 let started = false;

@@ -8,6 +8,13 @@
  *
  * Latin subset only: the UI is English, and each extra subset is another file
  * in the installer for glyphs nothing renders.
+ *
+ * IBM Plex Sans ships at 400 only. It used to ALSO declare 500 and 600, both
+ * pointing at the 400 file — which is worse than not declaring them: the
+ * browser believes those weights exist, uses the 400 outlines, and does not
+ * synthesise. `font-weight: 600` rendered identical to 400 with no warning.
+ * The two faces are gone, so a bolder weight is now synthesised and visibly
+ * bolder. Ship the real files if that is not good enough.
  */
 
 @font-face {
@@ -66,18 +73,3 @@
   src: url("ibm-plex-sans-400.woff2") format("woff2");
 }
 
-@font-face {
-  font-family: "IBM Plex Sans";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("ibm-plex-sans-400.woff2") format("woff2");
-}
-
-@font-face {
-  font-family: "IBM Plex Sans";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("ibm-plex-sans-400.woff2") format("woff2");
-}

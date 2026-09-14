@@ -1,9 +1,13 @@
 <title>Jarvis HUD</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:* http://localhost:*; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self' http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:* http://localhost:*; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
+<!-- Self-hosted, and this page's own <meta> CSP is not the only one that
+     matters: Tauri serves the app's `app.security.csp` as a response HEADER on
+     every .html asset, and BOTH policies are enforced. The header has no https
+     origin at all, so the Google Fonts request above was blocked and this page
+     was silently rendering in system fonts. The same families are already
+     bundled under fonts/ (SIL OFL, latin subset). -->
+<link rel="stylesheet" href="fonts/fonts.css">
 
 <style>
 /* ------------------------------------------------------------------ *

@@ -137,3 +137,23 @@ today)"), so a client that rendered both would say it twice.
 is `hue_sweep`. Both renderers resolve on `kind`, so this is correct — noting it
 only because a port that switched on the pattern *id* would silently fall
 through to the first pattern in the list.
+
+---
+
+## 8. `jarvis_hud.html` fetches fonts from Google, and is blocked doing it
+
+**The page** carries its own `<meta>` CSP allowing `fonts.googleapis.com` and
+`fonts.gstatic.com`, and three `<link>`s pulling Chakra Petch and IBM Plex from
+there.
+
+**The code:** Tauri serves the app's `app.security.csp` as a response **header**
+on every `.html` asset, and both policies are enforced. The header has no https
+origin at all, so the request was blocked and the HUD was silently rendering in
+system fonts — while also, on any build where it *did* work, leaking the user's
+IP to Google on every window open, which is the exact thing `fonts/fonts.css`
+was written to stop.
+
+**Fixed in the desktop's bundled copy** (`src/jarvis_hud.html` now links
+`fonts/fonts.css`, and the two remote origins are gone from its meta CSP). The
+backend's own copy of this file has the same three lines and needs the same
+change, or the fix is lost the next time the page is re-synced.

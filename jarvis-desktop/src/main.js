@@ -91,6 +91,7 @@ import {
   onQueue,
   riskLine,
   setMuted,
+  followTheme,
   start as startLink,
 } from "./jarvis-link.js";
 
@@ -566,16 +567,49 @@ function renderMarkdown(source) {
 let paintQueued = false;
 
 /** Repaints the card from the buffer, at most once per animation frame. */
+/**
+ * How often the answer is re-rendered while tokens are arriving.
+ *
+ * Every paint re-parses the WHOLE buffer and rebuilds the whole answer subtree,
+ * so the cost is quadratic in the length of the answer. At one paint per frame
+ * a thirty-second reply parsed its own text about eighteen hundred times, and
+ * the last of those frames were parsing tens of kilobytes each — in an
+ * always-on-top transparent window that is also resizing itself.
+ *
+ * 100ms is under the ~150ms at which text stops feeling live, and it cuts the
+ * parse count roughly sixfold. It also fixes the `.fresh` animation below,
+ * which could never complete at frame rate.
+ */
+const STREAM_PAINT_MS = 100;
+let lastPaintAt = 0;
+/** How many blocks the answer had last paint, so `.fresh` fires once each. */
+let paintedBlocks = 0;
+
 function paint({ immediate = false } = {}) {
   if (paintQueued && !immediate) return;
+  if (!immediate && state.phase === "streaming") {
+    const now = performance.now();
+    if (now - lastPaintAt < STREAM_PAINT_MS) return;
+  }
   paintQueued = true;
 
   requestAnimationFrame(() => {
     paintQueued = false;
+    lastPaintAt = performance.now();
 
     dom.answer.innerHTML = renderMarkdown(state.buffer);
+    // `.fresh` marks a block that has just appeared. It used to be added to
+    // `lastElementChild` on every paint — but `innerHTML` destroys and
+    // recreates that element each time, so the 260ms animation restarted every
+    // frame and never finished: the trailing paragraph sat permanently near
+    // opacity 0, flickering. Marking only when the block COUNT rises means a
+    // block animates once, when it first exists.
+    const blocks = dom.answer.childElementCount;
     const last = dom.answer.lastElementChild;
-    if (last && state.phase === "streaming") last.classList.add("fresh");
+    if (last && state.phase === "streaming" && blocks > paintedBlocks) {
+      last.classList.add("fresh");
+    }
+    paintedBlocks = blocks;
 
     // Keep the newest tokens in view unless the user scrolled up to read.
     const body = dom.cardBody;
@@ -643,6 +677,7 @@ function closeCard() {
   dom.cardStat.textContent = "";
   dom.cursor.hidden = true;
   state.buffer = "";
+  paintedBlocks = 0;
   setPhase("idle");
   paint({ immediate: true });
 }
@@ -1639,6 +1674,10 @@ async function send(promptText) {
 
   state.buffer = "";
   state.chunks = 0;
+  // A new answer starts from no blocks, or the first paragraph of the second
+  // reply never gets its entrance.
+  paintedBlocks = 0;
+  lastPaintAt = 0;
   state.startedAt = performance.now();
 
   setPhase("streaming");
@@ -1971,6 +2010,7 @@ focusInput();
 
 // One stream, owned by Rust, fanned out to all three surfaces. This window
 // subscribes; it does not connect, and it does not poll.
+followTheme();
 startLink();
 
 let lastConnected = null;

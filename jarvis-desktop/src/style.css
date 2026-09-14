@@ -7,40 +7,44 @@
    accent is a single cyan that carries the focus, route and streaming states.
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   Local names, aliased to the contract.
+
+   Every value here now comes from theme.css. The names stay because the
+   components below use them and renaming 200 call sites would be churn with no
+   behavioural change; what matters is that a theme can reach them, which it
+   could not before — this file used to declare its own palette and the theme
+   picker changed one window out of four.
+
+   Aliasing also silently fixed the worst contrast defect in the product:
+   `--text-faint` was #5b6474, which measures 2.37:1 over a white desktop and
+   1.82:1 on the `raised` block — the block whose entire job is to tell you that
+   outside text tried to rush a decision. theme.css already carries the lifted
+   value, so pointing at it is the fix.
+   -------------------------------------------------------------------------- */
+
 :root {
-  --accent: #38f0ff;
-  --accent-bright: #b8fbff;
-  --accent-dim: rgba(56, 240, 255, 0.32);
-  --accent-faint: rgba(56, 240, 255, 0.12);
+  /* Only the names that DIFFER from the contract are aliased. A name that
+     already matches — --accent, --ok, --warn, --bad, --text, --text-muted,
+     --text-faint, --surface-sunken, --radius-card, --radius-chip, --font-ui,
+     --font-mono, --ease — is simply inherited; redeclaring it as
+     `--accent: var(--accent)` would be a self-reference, which CSS resolves to
+     the guaranteed-invalid value and would blank the property. */
+  --cloud: var(--info);
+  --cloud-dim: var(--info-faint);
 
-  --cloud: #b98bff;
-  --cloud-dim: rgba(185, 139, 255, 0.3);
+  --surface: var(--bg-window);
+  --surface-raised: var(--surface-1);
 
-  --ok: #3ddc97;
-  --warn: #ffc860;
-  --bad: #ff6b7a;
+  /* A COLOUR. theme.css's width token is `--stroke-hair` precisely so these
+     two names cannot collide — this file uses `var(--hairline)` in 21
+     `border: 1px solid ...` rules, and inheriting a `1px` there would have
+     turned every one of them into `border: 1px solid 1px` and deleted it. */
+  --hairline: var(--border);
+  --hairline-strong: var(--border-strong);
 
-  --surface: rgba(8, 9, 12, 0.86);
-  --surface-raised: rgba(18, 20, 26, 0.9);
-  --surface-sunken: rgba(0, 0, 0, 0.55);
-
-  --hairline: rgba(255, 255, 255, 0.08);
-  --hairline-strong: rgba(255, 255, 255, 0.14);
-
-  --text: #f2f5f8;
-  --text-muted: #8b94a3;
-  --text-faint: #5b6474;
-
-  --radius-shell: 18px;
-  --radius-card: 14px;
-  --radius-chip: 999px;
-
-  --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
-    sans-serif;
-  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, "SF Mono", monospace;
-
+  --radius-shell: var(--radius-window);
   --bar-height: 80px;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* --------------------------------------------------------------------------
@@ -163,6 +167,12 @@ body {
 
 html[data-state="streaming"] .shell::before {
   opacity: 1;
+  /* `background-size` is what makes the animation below do anything at all.
+     Without it the gradient is exactly the size of the positioning area, so a
+     percentage `background-position` resolves to (area - image) x pct = 0 at
+     every percentage: the keyframes ran for the whole of every answer and
+     moved nothing, costing a repaint of the shell's top hairline for free. */
+  background-size: 200% 100%;
   animation: scan 1.6s linear infinite;
 }
 
@@ -353,7 +363,7 @@ html[data-state="error"] .reactor-core {
   border-radius: var(--radius-chip);
   border: 1px solid var(--accent-dim);
   background: var(--accent-faint);
-  color: var(--accent-bright);
+  color: var(--accent-text);
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.3px;
@@ -387,7 +397,7 @@ html[data-state="error"] .reactor-core {
 .route[data-route="cloud"] {
   border-color: var(--cloud-dim);
   background: rgba(185, 139, 255, 0.12);
-  color: #e2d2ff;
+  color: var(--info);
 }
 
 .route[data-route="cloud"] .route-dot {
@@ -398,7 +408,7 @@ html[data-state="error"] .reactor-core {
 .route[data-route="offline"] {
   border-color: rgba(255, 107, 122, 0.32);
   background: rgba(255, 107, 122, 0.1);
-  color: #ffc4ca;
+  color: var(--diff-remove);
 }
 
 .route[data-route="offline"] .route-dot {
@@ -496,7 +506,7 @@ html[data-state="error"] .reactor-core {
   object-fit: cover;
   border-radius: 6px;
   border: 1px solid var(--hairline-strong);
-  background: #000;
+  background: var(--code-bg);
 }
 
 .attachment-text {
@@ -842,7 +852,7 @@ html[data-state="error"] .pulse {
   border: 1px solid var(--hairline);
   border-radius: 5px;
   background: rgba(56, 240, 255, 0.07);
-  color: var(--accent-bright);
+  color: var(--accent-text);
   font-family: var(--font-mono);
   font-size: 12.5px;
 }
@@ -853,7 +863,7 @@ html[data-state="error"] .pulse {
   border: 1px solid var(--hairline);
   border-left: 2px solid var(--accent-dim);
   border-radius: 10px;
-  background: #000;
+  background: var(--code-bg);
   overflow-x: auto;
 }
 
@@ -862,7 +872,7 @@ html[data-state="error"] .pulse {
   border: 0;
   border-radius: 0;
   background: none;
-  color: #cfe9ee;
+  color: var(--code-text);
   font-size: 12.5px;
   line-height: 1.55;
 }
@@ -922,7 +932,7 @@ html[data-state="error"] .pulse {
   border-radius: var(--radius-chip);
   border: 1px solid var(--accent-dim);
   background: var(--accent-faint);
-  color: var(--accent-bright);
+  color: var(--accent-text);
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.25px;
@@ -952,7 +962,7 @@ html[data-state="error"] .pulse {
 .note-chip[data-target="joplin"] {
   border-color: var(--cloud-dim);
   background: rgba(185, 139, 255, 0.13);
-  color: #e2d2ff;
+  color: var(--info);
 }
 
 .note-chip[data-target="joplin"] .note-chip-dot {
@@ -1072,16 +1082,16 @@ html[data-state="error"] .pulse {
   display: block;
   margin: 0 -13px;
   padding: 0 13px;
-  background: rgba(61, 220, 151, 0.12);
-  color: #9ff0cc;
+  background: var(--ok-fill);
+  color: var(--ok-text);
 }
 
 .approval-preview pre code .diff-remove {
   display: block;
   margin: 0 -13px;
   padding: 0 13px;
-  background: rgba(255, 107, 122, 0.12);
-  color: #ffb3bb;
+  background: var(--bad-fill);
+  color: var(--bad-text);
 }
 
 .approval-preview pre code .diff-meta {
@@ -1137,21 +1147,31 @@ html[data-state="error"] .pulse {
   opacity: 0.8;
 }
 
+/* A press must be acknowledged in well under a tenth of a second or the button
+   feels dead. These two are the most consequential controls in the app and had
+   no press state at all. `scale` is composited; `translateY(0.5px)` — used
+   elsewhere in this file — is sub-pixel at 100% display scaling and therefore
+   does nothing on the most common configuration. */
+.approval-button:active {
+  transform: scale(0.985);
+  transition-duration: 40ms;
+}
+
 .approval-deny:hover {
   border-color: rgba(255, 107, 122, 0.5);
-  background: rgba(255, 107, 122, 0.12);
-  color: #ffc4ca;
+  background: var(--bad-fill);
+  color: var(--diff-remove);
 }
 
 .approval-approve {
-  border-color: rgba(61, 220, 151, 0.45);
-  background: rgba(61, 220, 151, 0.14);
-  color: #9ff0cc;
+  border-color: var(--ok-edge);
+  background: var(--ok-fill);
+  color: var(--ok-text);
 }
 
 .approval-approve:hover {
   border-color: var(--ok);
-  background: rgba(61, 220, 151, 0.22);
+  background: var(--ok-fill);
 }
 
 .approval-button:disabled {
@@ -1242,13 +1262,43 @@ html[data-state="approval"] .pulse {
    Reduced motion
    -------------------------------------------------------------------------- */
 
+/* Amplitude to zero, not duration to zero.
+ *
+ * Collapsing every duration to 0.01ms gives a reduced-motion user hard cuts
+ * everywhere, and a hard cut destroys information: you can no longer see
+ * whether a value changed or was replaced, whether a gate arrived or was
+ * already there. WCAG 2.3.3 asks for non-essential MOTION to be removable, and
+ * a cross-fade is not motion.
+ *
+ * So: nothing translates, nothing scales, nothing loops. Colour and opacity
+ * still transition, shortened. Every state change keeps a channel. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
+    /* Loops and entrances are pure motion; those go. */
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    /* Transitions stay alive so colour and opacity can still carry meaning. */
+    transition-duration: 120ms !important;
+  }
+
+  /* Nothing moves. A transition on a property that no longer changes is free. */
+  .shell,
+  .card,
+  .approval,
+  .attention,
+  .parked,
+  .markdown > *,
+  .text-button:active,
+  .approval-button:active {
+    transform: none !important;
+  }
+
+  /* The cursor stops blinking and says the same thing with colour instead. */
+  .cursor {
+    animation: none !important;
+    opacity: 1;
   }
 }
 

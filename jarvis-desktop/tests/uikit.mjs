@@ -341,6 +341,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
       emit: async () => {},
     },
   };
+  if (theme) {
+    // The page's own inline bootstrap reads this and sets data-theme before
+    // first paint — which is the path being tested, so the harness must not
+    // shortcut it. `documentElement` may not exist yet at init-script time.
+    try { localStorage.setItem("jarvis.theme", theme); } catch (e) {}
+    if (document.documentElement) {
+      document.documentElement.setAttribute("data-theme", theme);
+    }
+  }
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;

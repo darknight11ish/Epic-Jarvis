@@ -4,6 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jarvis</title>
+    <!--
+      Theme before first paint. Synchronous from localStorage rather than
+      waiting for the IPC round trip, because a window that paints deep-space
+      and flips to paper 80ms later is worse than one that paints the right
+      thing immediately. The store stays the source of truth and the script
+      below reconciles against it.
+
+      The allowlist is here and not only in applyTheme: a stale or hand-edited
+      value would otherwise paint an unmatched [data-theme] and then flip,
+      which is exactly the flash this exists to prevent.
+    -->
+    <script>
+      try {
+        var t = localStorage.getItem("jarvis.theme");
+        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {
+        /* private mode, cleared site data - the default theme is correct */
+      }
+    </script>
+    <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>

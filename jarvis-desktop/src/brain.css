@@ -65,7 +65,7 @@ body {
   flex-direction: column;
   gap: 14px;
   padding: 16px 10px 12px;
-  border-right: var(--hairline) solid var(--border);
+  border-right: var(--stroke-hair) solid var(--border);
   background: var(--surface-1);
   min-height: 0;
 }
@@ -113,7 +113,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border: var(--hairline) solid transparent;
+  border: var(--stroke-hair) solid transparent;
   border-radius: var(--radius-control);
   background: none;
   color: var(--text-muted);
@@ -165,14 +165,14 @@ body {
 }
 
 .rail-foot {
-  border-top: var(--hairline) solid var(--border);
+  border-top: var(--stroke-hair) solid var(--border);
   padding-top: 10px;
 }
 
 .rail-theme select {
   width: 100%;
   padding: 6px 8px;
-  border: var(--hairline) solid var(--border-strong);
+  border: var(--stroke-hair) solid var(--border-strong);
   border-radius: var(--radius-control);
   background: var(--surface-2);
   color: var(--text);
@@ -197,7 +197,7 @@ body {
   align-items: baseline;
   gap: 10px;
   padding: 14px 18px 12px;
-  border-bottom: var(--hairline) solid var(--border);
+  border-bottom: var(--stroke-hair) solid var(--border);
 }
 
 .topbar-title {
@@ -226,7 +226,7 @@ body {
   align-items: center;
   gap: 7px;
   padding: 3px 10px;
-  border: var(--hairline) solid var(--border);
+  border: var(--stroke-hair) solid var(--border);
   border-radius: var(--radius-chip);
   font-size: 11.5px;
   color: var(--text-muted);
@@ -253,7 +253,7 @@ body {
 .banner {
   margin: 10px 18px 0;
   padding: 8px 12px;
-  border: var(--hairline) solid var(--border-strong);
+  border: var(--stroke-hair) solid var(--border-strong);
   border-left-width: 2px;
   border-left-color: var(--warn);
   border-radius: var(--radius-control);
@@ -278,7 +278,7 @@ body {
   align-items: center;
   gap: 12px;
   padding: 10px 18px;
-  border-bottom: var(--hairline) solid var(--border);
+  border-bottom: var(--stroke-hair) solid var(--border);
   flex-wrap: wrap;
 }
 
@@ -289,7 +289,7 @@ body {
 
 .field {
   padding: 6px 10px;
-  border: var(--hairline) solid var(--border-strong);
+  border: var(--stroke-hair) solid var(--border-strong);
   border-radius: var(--radius-control);
   background: var(--surface-sunken);
   color: var(--text);
@@ -317,7 +317,7 @@ body {
   align-items: center;
   gap: 6px;
   padding: 2px 9px 2px 6px;
-  border: var(--hairline) solid var(--border);
+  border: var(--stroke-hair) solid var(--border);
   border-radius: var(--radius-chip);
   background: none;
   color: var(--text-muted);
@@ -396,7 +396,7 @@ body {
   max-height: calc(100% - 28px);
   overflow-y: auto;
   padding: 12px 14px 14px;
-  border: var(--hairline) solid var(--border-strong);
+  border: var(--stroke-hair) solid var(--border-strong);
   border-radius: var(--radius-card);
   background: var(--surface-2);
   box-shadow: var(--shadow-pane);
@@ -415,7 +415,7 @@ body {
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--text-faint);
-  border: var(--hairline) solid var(--border-strong);
+  border: var(--stroke-hair) solid var(--border-strong);
   border-radius: var(--radius-chip);
   padding: 1px 7px;
 }
@@ -511,7 +511,7 @@ body {
 }
 
 .card {
-  border: var(--hairline) solid var(--border);
+  border: var(--stroke-hair) solid var(--border);
   border-radius: var(--radius-card);
   background: var(--surface-1);
   padding: 13px 15px 15px;
@@ -564,7 +564,7 @@ body {
   align-items: baseline;
   gap: 10px;
   padding: 8px 0;
-  border-top: var(--hairline) solid var(--border);
+  border-top: var(--stroke-hair) solid var(--border);
 }
 
 .row-item:first-child {
@@ -577,7 +577,7 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 1px 7px;
-  border: var(--hairline) solid var(--border-strong);
+  border: var(--stroke-hair) solid var(--border-strong);
   border-radius: var(--radius-chip);
   color: var(--text-faint);
   white-space: nowrap;
@@ -640,7 +640,7 @@ body {
 
 .btn {
   padding: 5px 12px;
-  border: var(--hairline) solid var(--border-accent);
+  border: var(--stroke-hair) solid var(--border-accent);
   border-radius: var(--radius-control);
   background: var(--accent-faint);
   color: var(--text);
@@ -720,23 +720,35 @@ body {
   box-shadow: 0 0 0 4px var(--accent-faint);
 }
 
+/* All eight, from `--state-*`, which come from the spec's own bindings.
+   These used to borrow semantic tokens — `listening` took `--warn`, which is
+   the amber the spec binds to APPROVAL — and `approval` and `standby` had no
+   rule at all, so they fell through to the base `--accent` and rendered
+   identically to `speaking`. A face waiting on the owner to decide something
+   looked exactly like a face talking. */
 .now-face[data-face="idle"] {
-  background: var(--node-cluster);
+  background: var(--state-idle);
 }
 .now-face[data-face="listening"] {
-  background: var(--warn);
+  background: var(--state-listening);
 }
 .now-face[data-face="thinking"] {
-  background: var(--info);
+  background: var(--state-thinking);
 }
 .now-face[data-face="speaking"] {
-  background: var(--accent);
+  background: var(--state-speaking);
+}
+.now-face[data-face="approval"] {
+  background: var(--state-approval);
+}
+.now-face[data-face="standby"] {
+  background: var(--state-standby);
 }
 .now-face[data-face="error"] {
-  background: var(--bad);
+  background: var(--state-error);
 }
 .now-face[data-face="banked"] {
-  background: var(--text-faint);
+  background: var(--state-banked);
   opacity: 0.45;
   box-shadow: none;
 }
@@ -790,7 +802,7 @@ body {
   grid-template-columns: 62px 84px 1fr;
   gap: 8px;
   padding: 2px 0;
-  border-top: var(--hairline) solid var(--border);
+  border-top: var(--stroke-hair) solid var(--border);
 }
 
 .trace li:first-child {
@@ -823,7 +835,7 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 10px 0 14px;
-  border-bottom: var(--hairline) solid var(--border);
+  border-bottom: var(--stroke-hair) solid var(--border);
   margin-bottom: 10px;
 }
 
@@ -873,7 +885,7 @@ body {
   transform: translateX(-50%);
   max-width: 620px;
   padding: 9px 15px;
-  border: var(--hairline) solid var(--border-strong);
+  border: var(--stroke-hair) solid var(--border-strong);
   border-radius: var(--radius-chip);
   background: var(--surface-2);
   color: var(--text);

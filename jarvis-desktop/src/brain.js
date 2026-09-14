@@ -21,7 +21,7 @@
 
 import {
   currentLink,
-  faceState,
+  surfaceState,
   onEvent,
   onLink,
   start as startLink,
@@ -901,9 +901,10 @@ function renderLive() {
   const link = currentLink();
   const attention = link.attention;
 
-  // The server's composed face, not this window's phase — the same answer the
-  // tray paints, from the same function.
-  const face = faceState(link);
+  // The same answer the tray paints, from the same function — including
+  // `approval` and `standby`, which the arbiter's own `face_state` does not
+  // compose because they are UI precedence rather than its business.
+  const face = surfaceState(link);
   dom.nowFace.dataset.face = face;
   dom.nowActivity.textContent = face;
   dom.nowPower.textContent = link.connected
@@ -1033,9 +1034,41 @@ let hovered = null;
 let selected = null;
 const hiddenGroups = new Set();
 
+/**
+ * Node colours, cached.
+ *
+ * This is called once per node inside `draw()`, and `draw()` can run many times
+ * per displayed frame. `getComputedStyle` per node per frame was a style query,
+ * a string allocation and a trim for every dot on screen. The cache is cleared
+ * whenever the theme changes and whenever a new graph is loaded, which are the
+ * only two moments the answer can move.
+ */
+const colourCache = new Map();
 function colourFor(group) {
+  let hit = colourCache.get(group);
+  if (hit !== undefined) return hit;
   const token = GROUP_TOKENS[group] || "--node-entity";
-  return getComputedStyle(dom.root).getPropertyValue(token).trim() || "#888";
+  hit = getComputedStyle(dom.root).getPropertyValue(token).trim() || "#888";
+  colourCache.set(group, hit);
+  return hit;
+}
+
+/**
+ * Coalesces redraws onto the frame.
+ *
+ * `pointermove` fires at the mouse's polling rate — 125Hz typically, 1000Hz on
+ * a gaming mouse — and every handler used to call `draw()` directly, so the
+ * renderer could be asked to draw sixteen times per displayed frame. Every
+ * input path goes through here instead.
+ */
+let drawQueued = false;
+function invalidate() {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => {
+    drawQueued = false;
+    draw();
+  });
 }
 
 function renderGraph() {
@@ -1089,12 +1122,33 @@ function renderGraph() {
     L.push({ s, t, kind: String(l.kind || "") });
   }
 
-  state.graph = { nodes: N, links: L, byId };
+  colourCache.clear();
+  // Same node set as last time? Keep the settled positions. Clicking Galaxy
+  // used to replay 1.3s of assembly on every visit, which is charming once and
+  // an obstacle by the tenth time. Refresh still re-lays it out, so the
+  // spectacle is one click away and never imposed.
+  const signature = nodes.map((n) => n.id).join("\u0000");
+  const settled = state.graph && state.graph.signature === signature
+    ? new Map(state.graph.nodes.map((n) => [n.id, n]))
+    : null;
+  if (settled) {
+    for (const n of N) {
+      const was = settled.get(n.id);
+      if (was) { n.x = was.x; n.y = was.y; }
+    }
+  }
+
+  state.graph = { nodes: N, links: L, byId, signature };
   selected = null;
   dom.inspector.hidden = true;
   buildLegend(body.counts || countGroups(N));
   dom.graphStat.textContent = `${N.length} nodes · ${L.length} links`;
-  startLayout();
+  if (settled) {
+    fitCanvas();
+    draw();
+  } else {
+    startLayout();
+  }
 }
 
 function countGroups(nodes) {
@@ -1134,7 +1188,16 @@ function startLayout() {
 
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const total = 320;
+  // Ticks are driven by elapsed time, not by frames. Four ticks per frame meant
+  // 80 frames of assembly: 1.33s at 60Hz, 0.67s at 120Hz, 0.49s at 165Hz — the
+  // animation ran at whatever speed the monitor happened to be. The visual spec
+  // already wrote this bug report for the reactor (`state_transforms.phase`:
+  // never multiply the clock by a rate, integrate it) and this is the
+  // frame-count version of the same mistake.
+  const SIM_HZ = 240;
   let tick = 0;
+  let carried = 0;
+  let last = 0;
 
   // Reduced motion means no assembly animation: run the whole simulation in
   // one blocking pass and paint the settled result once.
@@ -1145,18 +1208,33 @@ function startLayout() {
     return;
   }
 
-  const frame = () => {
-    // Several steps per frame: 320 ticks at one per frame is five seconds of
-    // watching a graph crawl, which stops being charming immediately.
-    for (let i = 0; i < 4 && tick < total; i++, tick++) {
+  const frame = (now) => {
+    if (!last) last = now;
+    // Clamped: a background tab or a stalled frame must not deliver a hundred
+    // ticks at once and detonate the layout.
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    carried += dt * SIM_HZ;
+    const steps = Math.min(8, Math.floor(carried));
+    carried -= steps;
+    for (let i = 0; i < steps && tick < total; i++, tick++) {
       step(g, 1 - tick / total);
     }
-    if (tick < total * 0.15) fitToContent();
+
+    // The camera follows the whole way and eases in, rather than tracking for
+    // twelve frames and then teleporting to the final fit. `k` is derived from
+    // dt so the glide is the same on any refresh rate.
+    fitToContent({ ease: 1 - Math.exp(-dt / 0.35) });
     draw();
+
     if (tick < total) sim = requestAnimationFrame(frame);
     else {
       sim = null;
       fitToContent();
+      // Labels are only placed once the nodes have stopped. Re-running the
+      // collision test every frame made names flicker in and out as the
+      // packing resolved differently each time — the ugliest part of the
+      // assembly, and removing it is also cheaper.
       draw();
     }
   };
@@ -1177,19 +1255,32 @@ function step(g, heat) {
   // see then is the shape of the connections, which is the only thing this
   // view is for.
   const REPEL = 2600;
-  const CELL = 130;
-  const REACH = (CELL * 2.2) ** 2;
+  // CELL must be at least the reach radius, or the 3x3 neighbourhood below
+  // does not contain everything the force is supposed to touch. It used to be
+  // 130 against a 286px reach, so repulsion was silently truncated AND
+  // direction-dependent: whether a node 200px east pushed you depended on
+  // where the cell boundaries happened to fall. The layout still looked
+  // plausible, which is why it survived — but it was not the force field the
+  // constants describe.
+  const REACH_R = 286;
+  const CELL = REACH_R;
+  const REACH = REACH_R ** 2;
   const SPRING = 0.035;
   const REST = 42;
   const CENTRE = 0.0009;
   const DAMP = 0.86;
 
   // Bucket by cell so repulsion is over neighbours rather than everybody.
+  // Integer keys, not template strings. The string form cost one allocation
+  // and one hash per node to insert plus nine more to look up — ten per node
+  // per tick, times 320 ticks. At a few hundred nodes the garbage collector
+  // was the bottleneck long before the geometry was.
+  const key = (cx, cy) => (cx + 4096) * 8192 + (cy + 4096);
   const grid = new Map();
   for (const n of nodes) {
-    const key = `${Math.floor(n.x / CELL)},${Math.floor(n.y / CELL)}`;
-    let cell = grid.get(key);
-    if (!cell) grid.set(key, (cell = []));
+    const k = key(Math.floor(n.x / CELL), Math.floor(n.y / CELL));
+    let cell = grid.get(k);
+    if (!cell) grid.set(k, (cell = []));
     cell.push(n);
   }
   for (const n of nodes) {
@@ -1197,7 +1288,7 @@ function step(g, heat) {
     const cy = Math.floor(n.y / CELL);
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
-        const cell = grid.get(`${cx + dx},${cy + dy}`);
+        const cell = grid.get(key(cx + dx, cy + dy));
         if (!cell) continue;
         for (const m of cell) {
           if (m === n) continue;
@@ -1263,7 +1354,7 @@ function fitCanvas() {
   draw();
 }
 
-function fitToContent() {
+function fitToContent({ ease = 1 } = {}) {
   const g = state.graph;
   if (!g || !g.nodes.length) return;
   const shown = g.nodes.filter(visible);
@@ -1279,9 +1370,13 @@ function fitToContent() {
   const pad = 60;
   const sx = (rect.width - pad * 2) / Math.max(1, maxX - minX);
   const sy = (rect.height - pad * 2) / Math.max(1, maxY - minY);
-  view.scale = Math.max(0.12, Math.min(2.4, Math.min(sx, sy)));
-  view.x = rect.width / 2 - ((minX + maxX) / 2) * view.scale;
-  view.y = rect.height / 2 - ((minY + maxY) / 2) * view.scale;
+  const scale = Math.max(0.12, Math.min(2.4, Math.min(sx, sy)));
+  const x = rect.width / 2 - ((minX + maxX) / 2) * scale;
+  const y = rect.height / 2 - ((minY + maxY) / 2) * scale;
+  const k = Math.max(0, Math.min(1, ease));
+  view.scale += (scale - view.scale) * k;
+  view.x += (x - view.x) * k;
+  view.y += (y - view.y) * k;
 }
 
 function draw() {
@@ -1312,18 +1407,29 @@ function draw() {
     }
   }
 
+  // Two passes, two paths, two strokes — not one path per link. Each
+  // beginPath/stroke pair is a separate Skia draw call, and at a couple of
+  // thousand links that was the single most expensive thing on the canvas.
+  // Links only ever come in two appearances (lit, or not), so two batches
+  // covers every case.
   ctx.lineWidth = 1;
-  for (const l of g.links) {
-    if (!visible(l.s) || !visible(l.t)) continue;
-    const lit = focus && (l.s === focus || l.t === focus);
+  for (const lit of [false, true]) {
+    if (lit && !focus) continue;
     ctx.strokeStyle = lit ? edgeActive : edge;
     ctx.globalAlpha = focus ? (lit ? 1 : 0.18) : 1;
-    const [x1, y1] = T(l.s);
-    const [x2, y2] = T(l.t);
     ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
+    let drew = false;
+    for (const l of g.links) {
+      if (!visible(l.s) || !visible(l.t)) continue;
+      const isLit = Boolean(focus && (l.s === focus || l.t === focus));
+      if (isLit !== lit) continue;
+      const [x1, y1] = T(l.s);
+      const [x2, y2] = T(l.t);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      drew = true;
+    }
+    if (drew) ctx.stroke();
   }
   ctx.globalAlpha = 1;
 
@@ -1357,6 +1463,8 @@ function draw() {
   // Drawn in importance order and skipped where one would land on another
   // already placed. Overlapping labels are worse than missing ones: two names
   // on top of each other are unreadable AND hide that there are two things.
+  // Not while it is still settling: see the note in `startLayout`.
+  if (sim) return;
   const placed = [];
   const ordered = g.nodes
     .filter(visible)
@@ -1481,14 +1589,14 @@ dom.canvas.addEventListener("pointermove", (e) => {
     view.y += dy;
     dragging.x = e.clientX;
     dragging.y = e.clientY;
-    draw();
+    invalidate();
     return;
   }
   const hit = nodeAt(e.clientX, e.clientY);
   if (hit !== hovered) {
     hovered = hit;
     dom.canvas.style.cursor = hit ? "pointer" : "grab";
-    draw();
+    invalidate();
   }
 });
 
@@ -1513,7 +1621,7 @@ dom.canvas.addEventListener(
     view.x = px - ((px - view.x) / view.scale) * next;
     view.y = py - ((py - view.y) / view.scale) * next;
     view.scale = next;
-    draw();
+    invalidate();
   },
   { passive: false }
 );
@@ -1538,7 +1646,7 @@ dom.canvas.addEventListener("keydown", (e) => {
   if (!fn) return;
   e.preventDefault();
   fn();
-  draw();
+  invalidate();
 });
 
 /* ==========================================================================
@@ -1561,6 +1669,7 @@ function applyTheme(name, { persist = true } = {}) {
   }
   // The graph reads its colours from the computed style, so a theme change has
   // to repaint it — nothing else on the page needs telling.
+  colourCache.clear();
   if (state.graph) draw();
 }
 
@@ -1574,9 +1683,12 @@ for (const key of Object.keys(VIEWS)) {
 }
 
 dom.refresh.addEventListener("click", async () => {
+  // Drop the cached layout so a refresh really re-lays out — and note that
+  // `render` calls `startLayout` itself, so calling it again here started the
+  // simulation twice and cancelled the first one mid-flight.
+  if (state.view === "galaxy") state.graph = null;
   await load(VIEW_SECTIONS[state.view]);
   render(state.view);
-  if (state.view === "galaxy") startLayout();
 });
 
 dom.graphRefit.addEventListener("click", () => {

@@ -1,21 +1,29 @@
 /* Settings. Same palette as the widget, laid out for a window with room. */
 
+/* --------------------------------------------------------------------------
+   Local names, aliased to the contract.
+
+   Every value here now comes from theme.css. The names stay because the
+   components below use them and renaming 200 call sites would be churn with no
+   behavioural change; what matters is that a theme can reach them, which it
+   could not before — this file used to declare its own palette and the theme
+   picker changed one window out of four.
+
+   Aliasing also silently fixed the worst contrast defect in the product:
+   `--text-faint` was #5b6474, which measures 2.37:1 over a white desktop and
+   1.82:1 on the `raised` block — the block whose entire job is to tell you that
+   outside text tried to rush a decision. theme.css already carries the lifted
+   value, so pointing at it is the fix.
+   -------------------------------------------------------------------------- */
+
 :root {
-  --bg: #06090e;
-  --bg-raised: rgba(18, 26, 36, 0.92);
-  --bg-sunken: rgba(0, 0, 0, 0.45);
-  --line: rgba(111, 227, 255, 0.15);
-  --line-soft: rgba(255, 255, 255, 0.07);
+  --bg: var(--bg-window);
+  --bg-raised: var(--surface-1);
+  --bg-sunken: var(--surface-sunken);
+  --line: var(--border-accent);
+  --line-soft: var(--border);
 
-  --cyan: #6fe3ff;
-  --ok: #3ddc97;
-  --bad: #ff6b7a;
-
-  --text: #cfe4ee;
-  --text-muted: #6b8496;
-
-  --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  --cyan: var(--accent);
 }
 
 * { box-sizing: border-box; }
@@ -182,4 +190,29 @@ input:focus, textarea:focus {
   font-size: 10px;
   color: var(--text-muted);
   text-align: center;
+}
+
+/* The theme picker. Styled like the text inputs beside it so the Appearance
+   card does not read as a different kind of control from Connection. */
+select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  min-width: 260px;
+}
+
+select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.note {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
 }

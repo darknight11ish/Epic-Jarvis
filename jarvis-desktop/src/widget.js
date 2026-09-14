@@ -22,6 +22,7 @@ import {
   onLink,
   onQueue,
   riskLine,
+  followTheme,
   start as startLink,
 } from "./jarvis-link.js";
 
@@ -208,12 +209,14 @@ function levelFor(percent) {
 function paintMeter(meter, bar, percent, available, level = "ok") {
   meter.dataset.available = String(Boolean(available));
   if (!available) {
-    bar.style.width = "0%";
+    bar.style.transform = "scaleX(0)";
     meter.dataset.level = "ok";
     return;
   }
   const clamped = Math.max(0, Math.min(100, percent));
-  bar.style.width = `${clamped}%`;
+  // scaleX rather than width: see the comment on `.meter-track i`. This runs
+  // every three seconds for as long as the widget is open.
+  bar.style.transform = `scaleX(${clamped / 100})`;
   meter.dataset.level = level;
 }
 
@@ -509,7 +512,8 @@ listen("approval-resolved", (event) => {
   await setPinned(prefs ? Boolean(prefs.alwaysOnTop) : true);
 
   // One stream, owned by Rust, fanned out to all three surfaces.
-  startLink();
+  followTheme();
+startLink();
 
   onLink((link) => {
     // A held-open event stream is a stronger liveness signal than a probe that

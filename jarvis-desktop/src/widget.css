@@ -7,25 +7,32 @@
    so the two read as one product.
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   Local names, aliased to the contract.
+
+   Every value here now comes from theme.css. The names stay because the
+   components below use them and renaming 200 call sites would be churn with no
+   behavioural change; what matters is that a theme can reach them, which it
+   could not before — this file used to declare its own palette, which had already
+   drifted from the quickbar's — #6fe3ff against #38f0ff for the same accent.
+
+   Aliasing also silently fixed the worst contrast defect in the product:
+   `--text-faint` was #5b6474, which measures 2.37:1 over a white desktop and
+   1.82:1 on the `raised` block — the block whose entire job is to tell you that
+   outside text tried to rush a decision. theme.css already carries the lifted
+   value, so pointing at it is the fix.
+   -------------------------------------------------------------------------- */
+
 :root {
-  --bg: rgba(6, 10, 15, 0.88);
-  --bg-raised: rgba(18, 26, 36, 0.92);
-  --bg-sunken: rgba(0, 0, 0, 0.5);
-  --line: rgba(111, 227, 255, 0.15);
-  --line-soft: rgba(255, 255, 255, 0.07);
+  --bg: var(--bg-window);
+  --bg-raised: var(--surface-1);
+  --bg-sunken: var(--surface-sunken);
+  --line: var(--border-accent);
+  --line-soft: var(--border);
 
-  --cyan: #6fe3ff;
-  --violet: #b98bff;
-  --gold: #ffb648;
-  --ok: #3ddc97;
-  --bad: #ff6b7a;
-
-  --text: #cfe4ee;
-  --text-muted: #6b8496;
-
-  --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --cyan: var(--accent);
+  --violet: var(--info);
+  --gold: var(--warn);
 }
 
 *,
@@ -305,10 +312,18 @@ body {
 .meter-track i {
   display: block;
   height: 100%;
+  /* Full width, scaled down. The element is always 100% wide and `scaleX`
+     carries the value, which is what makes the transition compositor-only. */
+  width: 100%;
   border-radius: 2px;
   background: var(--cyan);
   box-shadow: 0 0 6px rgba(111, 227, 255, 0.5);
-  transition: width 400ms var(--ease);
+  /* `transform`, not `width`. Width is a layout property: four bars every
+     three seconds, for hours, in a transparent Acrylic window where each
+     frame also costs a DWM recomposite of the whole window rect. scaleX is
+     compositor-only and free. */
+  transform-origin: left center;
+  transition: transform 400ms var(--ease);
 }
 
 /* The bar warms as the resource saturates — readable without the number. */

@@ -100,11 +100,8 @@ for (const theme of THEMES) {
   const dir = path.join(OUT, theme);
   fs.mkdirSync(dir, { recursive: true });
   for (const scene of SCENES) {
-    const page = await K.open(browser, base, scene.file, scene.data, scene.vp);
-    if (theme !== "default") {
-      await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
-      await page.waitForTimeout(150);
-    }
+    const page = await K.open(browser, base, scene.file,
+      theme === "default" ? scene.data : { ...scene.data, theme }, scene.vp);
     if (scene.drive) { try { await scene.drive(page); } catch (e) { problems.push(`${scene.id}: drive failed: ${e.message}`); } }
     await page.waitForTimeout(250);
     await page.screenshot({ path: path.join(dir, `${scene.id}.png`) });
