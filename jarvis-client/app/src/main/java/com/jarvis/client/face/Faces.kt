@@ -42,7 +42,7 @@ interface Face {
 }
 
 /**
- * Six faces, not twenty.
+ * Eight faces, not twenty.
  *
  * The brief is explicit that porting all twenty is the real cost of going fully
  * native and that six to eight is the right number. These are all from the
@@ -54,9 +54,18 @@ interface Face {
  *
  * The picker shows only what is actually rendered — not all twenty with most of
  * them missing.
+ *
+ * Rime and Orbital were chosen over the flashier candidates for one reason:
+ * they are the only two missing faces the spec marks `integrates_per_frame:
+ * false` that are neither `heavy` nor recommended for the archive. Stateless
+ * means a pure function of `t`, which means the result can be pinned by a
+ * golden test the way the pattern engine is. Swarm, shoal, cascade, membrane
+ * and the rest carry simulation state between frames, so there is no value to
+ * assert and nothing to catch a drift — and drift in a face is invisible until
+ * someone compares it side by side with the desktop.
  */
 object Faces {
-    val all: List<Face> = listOf(Arc, Orbit, Comb, Spiral, Iris, Fullerene)
+    val all: List<Face> = listOf(Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital)
     val default: Face = Arc
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default
 }
@@ -347,5 +356,184 @@ object Fullerene : Face {
                 )
             }
         }
+    }
+}
+
+/**
+ * Crystal growth: six-fold frost, climbing and receding.
+ *
+ * Deterministic despite looking organic. The branch positions and lengths come
+ * from [hash01] on the segment index, so they are irregular but identical on
+ * every run and on every device — which is what makes this face testable at
+ * all, and is why it was ported ahead of the simulation-driven ones.
+ *
+ * The growth front sweeps out and resets rather than accumulating, so nothing
+ * is remembered between frames. A crystal that genuinely accreted would need
+ * per-frame state and would then differ between the phone and the desktop from
+ * the moment either one dropped a frame.
+ */
+object Rime : Face {
+    override val id = "rime"
+    override val name = "Rime"
+
+    private const val ARMS = 6
+    private const val SEGMENTS = 14
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.7f
+        FaceState.THINKING -> 1.9f
+        FaceState.SPEAKING -> 1.15f
+        else -> 0.34f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        // The hex plane is tilted by the drag, so this reads as a plate seen at
+        // an angle rather than a flat snowflake sticker.
+        val cp = cos(f.pitch)
+        // How far the frost has climbed, 0..1, sawtooth. `angle` already
+        // carries the state's speed multiplier, so the growth rate follows the
+        // face's motion table without this needing to know the state.
+        val front = ((f.angle * 0.12f) % 1f + 1f) % 1f
+        val reach = 0.30f + 0.66f * front
+
+        for (a in 0 until ARMS) {
+            val base = a * (2f * PI.toFloat() / ARMS) + f.yaw + f.angle * 0.06f
+            var prevX = cx
+            var prevY = cy
+            for (s in 1..SEGMENTS) {
+                val k = s / SEGMENTS.toFloat()
+                if (k > reach) break
+                val rad = r * k * 0.94f
+                // A slight per-segment wander, hashed on the segment rather
+                // than on the arm, so all six arms stay congruent — frost is
+                // symmetric, and six independently wandering arms read as a
+                // scribble.
+                val wob = (hash01(s * 37) - 0.5f) * 0.20f
+                val th = base + wob
+                val x = cx + cos(th) * rad
+                val y = cy + sin(th) * rad * cp
+                // Depth from the tilt: the far half of the plate sits dimmer.
+                val d = ((sin(th) * cp + 1f) / 2f).pow(Spec.DEPTH_GAIN)
+                val fade = (1f - (k / reach).coerceIn(0f, 1f) * 0.45f)
+                val ink = mix(cool, hot, d).copy(alpha = (0.30f + 0.70f * d) * fade)
+
+                drawLine(
+                    color = ink,
+                    start = Offset(prevX, prevY),
+                    end = Offset(x, y),
+                    strokeWidth = r * (0.016f - 0.008f * k) * (1f + f.amp * 0.5f),
+                )
+
+                // Side branches, at the hexagonal 60 degrees, on segments the
+                // hash selects. Length falls off outward so the tips look fine
+                // rather than blunt.
+                if (hash01(s * 91 + 7) > 0.42f && s > 2) {
+                    val blen = r * 0.16f * (1f - k) * (0.6f + 0.8f * hash01(s * 53))
+                    for (sign in intArrayOf(-1, 1)) {
+                        val bth = th + sign * (PI.toFloat() / 3f)
+                        drawLine(
+                            color = ink.copy(alpha = ink.alpha * 0.8f),
+                            start = Offset(x, y),
+                            end = Offset(x + cos(bth) * blen, y + sin(bth) * blen * cp),
+                            strokeWidth = r * 0.008f * (1f + f.amp * 0.4f),
+                        )
+                    }
+                }
+                prevX = x
+                prevY = y
+            }
+        }
+
+        // The seed, so the centre is not a hole while the frost is low.
+        drawCircle(
+            color = hot.copy(alpha = 0.55f),
+            radius = r * (0.035f + 0.02f * f.amp),
+            center = Offset(cx, cy),
+        )
+    }
+}
+
+/**
+ * An electron probability cloud: a shell of points, denser where the orbital is.
+ *
+ * Stateless in the same way [Rime] is — point `i` has a fixed hashed position,
+ * and time only rotates and breathes it. Two hashes give a direction and a
+ * radius, and the radius is shaped by a lobe function so the cloud has the
+ * pinched waist of a p-orbital rather than being a uniform fuzzy ball.
+ *
+ * The spec lists this face under `point_batch`, and this does **not** use
+ * `drawPoints`. Batching there means building a `List<Offset>` per frame, which
+ * boxes every point, and the measurement that would justify it has to happen on
+ * the real panel rather than in a software-GL container. 240 `drawCircle` calls
+ * is fewer draw operations than Fullerene already issues, so this is the
+ * conservative choice until there is a device to measure on.
+ */
+object Orbital : Face {
+    override val id = "orbital"
+    override val name = "Orbital"
+
+    private const val N = 240
+    private val xBuf = FloatArray(N)
+    private val yBuf = FloatArray(N)
+    private val zBuf = FloatArray(N)
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.8f
+        FaceState.THINKING -> 2.2f
+        FaceState.SPEAKING -> 1.25f
+        else -> 0.4f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val cp = cos(f.pitch)
+        val sp = sin(f.pitch)
+        val spin = f.angle * 0.35f + f.yaw
+
+        for (i in 0 until N) {
+            // A fixed direction per point, from two hashes. The z term is
+            // uniform in cos(theta) so the points spread evenly over the
+            // sphere instead of bunching at the poles.
+            val u = hash01(i * 13 + 1)
+            val v = hash01(i * 71 + 5)
+            val cosT = 1f - 2f * u
+            val sinT = kotlin.math.sqrt((1f - cosT * cosT).coerceAtLeast(0f))
+            val phi = v * 2f * PI.toFloat() + spin
+
+            // The lobe: radius pinched at the equator and full at the poles, so
+            // this reads as an orbital rather than a shell. Breathing on amp.
+            val lobe = 0.45f + 0.55f * (cosT * cosT)
+            val rr = lobe * (0.62f + 0.30f * hash01(i * 29 + 3)) * (1f + f.amp * 0.18f)
+
+            val x0 = sinT * cos(phi) * rr
+            val y0 = cosT * rr
+            val z0 = sinT * sin(phi) * rr
+
+            xBuf[i] = x0
+            yBuf[i] = y0 * cp - z0 * sp
+            zBuf[i] = y0 * sp + z0 * cp
+        }
+
+        for (i in 0 until N) {
+            val d = ((zBuf[i] + 1f) / 2f).pow(Spec.DEPTH_GAIN)
+            drawCircle(
+                color = mix(cool, hot, d).copy(alpha = (0.18f + 0.72f * d)),
+                radius = r * (0.006f + 0.014f * d) * (1f + f.amp * 0.35f),
+                center = Offset(cx + xBuf[i] * r, cy + yBuf[i] * r),
+            )
+        }
+
+        // The nucleus. Small, and the only thing in the face that is not a
+        // cloud point, so the eye has somewhere to rest.
+        drawCircle(
+            color = hot.copy(alpha = 0.7f),
+            radius = r * (0.028f + 0.022f * f.amp),
+            center = Offset(cx, cy),
+        )
     }
 }

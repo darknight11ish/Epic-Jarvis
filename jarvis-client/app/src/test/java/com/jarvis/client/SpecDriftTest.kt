@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import androidx.compose.ui.graphics.Color
 import com.jarvis.client.face.Binding
+import com.jarvis.client.face.Faces
 import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Palette
 import com.jarvis.client.face.Pattern
@@ -244,7 +245,87 @@ class SpecDriftTest {
             )
         }
     }
-}
 
-private fun kotlinx.serialization.json.JsonPrimitive.contentOrNullSafe(): String? =
-    if (this is kotlinx.serialization.json.JsonNull) null else content
+    /**
+     * Every face the picker offers must be a face the desktop also knows.
+     *
+     * Nothing checked this before, and it matters more now than it did: the
+     * appearance-sync proposal rests entirely on both ends naming the same
+     * things. A face id invented on this side — a typo, or a name that felt
+     * better in Kotlin — would sync as a value the desktop cannot resolve, and
+     * the failure would appear on the *other* machine.
+     */
+    @Test
+    fun `every face the client offers exists in the shared spec`() {
+        val known = spec["faces"]!!.jsonArray
+            .associate { it.jsonObject["id"]!!.jsonPrimitive.content to it.jsonObject }
+        for (face in Faces.all) {
+            val entry = known[face.id]
+            assertNotNull(
+                "face '${face.id}' is not in jarvis-visual-spec.json — the desktop has " +
+                    "no such face, so this id cannot be shared with it",
+                entry,
+            )
+        }
+    }
+
+    /**
+     * And the two the spec calls `heavy` stay out.
+     *
+     * `tokamak` and `nucleus` need a shader to look like anything; a rasterised
+     * version is the faceted, upscaled thing the first visual audit was about.
+     * This pins the decision so that "add the remaining faces" cannot quietly
+     * include them.
+     */
+    @Test
+    fun `no face the spec marks heavy is offered`() {
+        val heavy = spec["faces"]!!.jsonArray
+            .map { it.jsonObject }
+            .filter { it["heavy"]?.jsonPrimitive?.content == "true" }
+            .map { it["id"]!!.jsonPrimitive.content }
+            .toSet()
+        assertTrue("the spec should still mark some faces heavy", heavy.isNotEmpty())
+        for (face in Faces.all) {
+            assertTrue(
+                "face '${face.id}' is marked heavy in the spec and needs a shader; " +
+                    "a canvas version is worse than not offering it",
+                face.id !in heavy,
+            )
+        }
+    }
+
+    /**
+     * Which offered faces carry simulation state, pinned as an exact set.
+     *
+     * A face the spec marks `integrates_per_frame` has no value a golden test
+     * can assert: its output depends on every frame that came before, so it
+     * cannot be compared against the desktop's version and a drift between the
+     * two would be invisible until someone held the two screens side by side.
+     *
+     * `iris` is in this app and is one of those. That is not endorsed here, it
+     * is recorded — it shipped before this rule existed, and it is the one face
+     * whose fidelity to the desktop nothing can check. Rime and Orbital were
+     * chosen over flashier candidates precisely to avoid adding a second.
+     *
+     * An exact-set assertion rather than a blanket ban, so adding another
+     * stateful face fails this test and has to be an argued decision instead of
+     * a quiet one.
+     */
+    @Test
+    fun `iris is the only offered face that cannot be pinned`() {
+        val stateful = spec["faces"]!!.jsonArray
+            .map { it.jsonObject }
+            .filter { it["integrates_per_frame"]?.jsonPrimitive?.content == "true" }
+            .map { it["id"]!!.jsonPrimitive.content }
+            .toSet()
+        val offeredStateful = Faces.all.map { it.id }.filter { it in stateful }.toSet()
+        assertEquals(
+            "the set of simulation-driven faces this app offers has changed. Each one is a " +
+                "face that cannot be verified against the desktop, so this should be a " +
+                "deliberate decision rather than a test update",
+            setOf("iris"),
+            offeredStateful,
+        )
+    }
+    }
+}
