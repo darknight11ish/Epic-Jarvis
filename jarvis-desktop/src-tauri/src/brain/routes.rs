@@ -44,11 +44,7 @@ pub(super) fn route_for(section: &str) -> Option<&'static str> {
 pub(super) fn first_line(body: &str) -> String {
     let text = serde_json::from_str::<serde_json::Value>(body)
         .ok()
-        .and_then(|v| {
-            v.get("error")
-                .and_then(|e| e.as_str())
-                .map(str::to_string)
-        })
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
         .unwrap_or_else(|| body.trim().to_string());
     if text.is_empty() {
         return String::new();

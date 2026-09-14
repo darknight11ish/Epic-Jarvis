@@ -212,7 +212,13 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings…", true, None::<&str>)?;
-    let status_check = MenuItem::with_id(app, ID_STATUS_CHECK, "Run a status check", true, None::<&str>)?;
+    let status_check = MenuItem::with_id(
+        app,
+        ID_STATUS_CHECK,
+        "Run a status check",
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, ID_QUIT, "Quit Jarvis", true, None::<&str>)?;
 
     let menu = Menu::with_items(
@@ -815,7 +821,9 @@ pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
         let _ = rows.mute.set_text(mute_label(link));
         // Muting is a write, and a write against a backend that has not been
         // read yet is a guess about which direction to write in.
-        let _ = rows.mute.set_enabled(link.attention.known && link.connected);
+        let _ = rows
+            .mute
+            .set_enabled(link.attention.known && link.connected);
         // The pid check is a `try_wait`, so this also notices a backend that
         // exited on its own between one event and the next.
         let (label, enabled) = backend_row(app);
@@ -1104,7 +1112,11 @@ mod tests {
         assert_eq!(spec::state_dim("idle"), 1.0, "idle carries no transform");
         assert_eq!(spec::notch_overlay("banked"), Some(12));
         assert_eq!(spec::notch_overlay("idle"), None);
-        assert_eq!(spec::notch_overlay("approval"), None, "approval pings, not notches");
+        assert_eq!(
+            spec::notch_overlay("approval"),
+            None,
+            "approval pings, not notches"
+        );
     }
 
     /// The notch ring has to actually change the pixels, and it has to change
@@ -1112,8 +1124,16 @@ mod tests {
     /// skips the repaint because the colour did not move.
     #[test]
     fn notches_grow_with_the_count() {
-        let hot = Rgb { r: 255, g: 220, b: 180 };
-        let cool = Rgb { r: 40, g: 30, b: 20 };
+        let hot = Rgb {
+            r: 255,
+            g: 220,
+            b: 180,
+        };
+        let cool = Rgb {
+            r: 40,
+            g: 30,
+            b: 20,
+        };
         let lit = |count: usize| {
             draw(
                 shade(hot, 0.45),
@@ -1130,7 +1150,10 @@ mod tests {
         let none = lit(0);
         let one = lit(1);
         let four = lit(4);
-        assert_eq!(none, 0, "a dimmed disc with no notches has no bright pixels");
+        assert_eq!(
+            none, 0,
+            "a dimmed disc with no notches has no bright pixels"
+        );
         assert!(one > 0, "one waiting item must draw one notch");
         assert!(
             four > one * 2,
@@ -1183,7 +1206,12 @@ mod tests {
     /// — the three things a wrong buffer layout would break.
     #[test]
     fn icon_is_a_disc_on_transparency() {
-        let image = draw(Rgb { r: 255, g: 0, b: 0 }, Rgb { r: 0, g: 0, b: 128 }, true, None);
+        let image = draw(
+            Rgb { r: 255, g: 0, b: 0 },
+            Rgb { r: 0, g: 0, b: 128 },
+            true,
+            None,
+        );
         assert_eq!(image.width(), ICON_SIZE);
         assert_eq!(image.height(), ICON_SIZE);
         let rgba = image.rgba();
@@ -1263,7 +1291,8 @@ mod tests {
             waiting_label(&budgeted),
             "3 things waiting to be told · 2 of 6 interruptions left"
         );
-    }    /// Contrast ratio between two opaque colours, WCAG's formula.
+    }
+    /// Contrast ratio between two opaque colours, WCAG's formula.
     fn ratio(x: Rgb, y: Rgb) -> f64 {
         let (a, b) = (luma(x), luma(y));
         let (hi, lo) = if a > b { (a, b) } else { (b, a) };
@@ -1306,8 +1335,16 @@ mod tests {
     /// actually holds at 14:1.
     #[test]
     fn the_icon_has_an_edge_against_both_taskbars() {
-        const WHITE: Rgb = Rgb { r: 243, g: 243, b: 243 };
-        const BLACK: Rgb = Rgb { r: 32, g: 32, b: 32 };
+        const WHITE: Rgb = Rgb {
+            r: 243,
+            g: 243,
+            b: 243,
+        };
+        const BLACK: Rgb = Rgb {
+            r: 32,
+            g: 32,
+            b: 32,
+        };
 
         /// The strongest contrast any pixel of the icon reaches against `bg`.
         fn strongest(buf: &[u8], bg: Rgb) -> f64 {
@@ -1324,10 +1361,44 @@ mod tests {
         // Every state's resolved colour, dimmed as `paint` dims it. The two
         // extremes are what matter: the dimmest (banked, 0.45) and a pale one.
         for (name, fill) in [
-            ("banked", shade(Rgb { r: 108, g: 211, b: 249 }, 0.45)),
-            ("standby", shade(Rgb { r: 107, g: 125, b: 148 }, 0.6)),
-            ("speaking", Rgb { r: 214, g: 242, b: 255 }),
-            ("error", Rgb { r: 247, g: 59, b: 59 }),
+            (
+                "banked",
+                shade(
+                    Rgb {
+                        r: 108,
+                        g: 211,
+                        b: 249,
+                    },
+                    0.45,
+                ),
+            ),
+            (
+                "standby",
+                shade(
+                    Rgb {
+                        r: 107,
+                        g: 125,
+                        b: 148,
+                    },
+                    0.6,
+                ),
+            ),
+            (
+                "speaking",
+                Rgb {
+                    r: 214,
+                    g: 242,
+                    b: 255,
+                },
+            ),
+            (
+                "error",
+                Rgb {
+                    r: 247,
+                    g: 59,
+                    b: 59,
+                },
+            ),
         ] {
             let buf = draw_pixels(fill, fill, true, None);
             for (bg, label) in [(WHITE, "a light taskbar"), (BLACK, "a dark one")] {
@@ -1345,14 +1416,42 @@ mod tests {
     /// 0.89-1.0 of it.
     #[test]
     fn a_notch_still_reads_over_the_outline() {
-        let dim = shade(Rgb { r: 108, g: 211, b: 249 }, 0.45);
-        let hot = Rgb { r: 108, g: 211, b: 249 };
+        let dim = shade(
+            Rgb {
+                r: 108,
+                g: 211,
+                b: 249,
+            },
+            0.45,
+        );
+        let hot = Rgb {
+            r: 108,
+            g: 211,
+            b: 249,
+        };
         let buf = draw_pixels(dim, dim, true, Some((1, 12, hot)));
         // Notch 0 is straight up, at the top of the ring.
         let top = pixel(&buf, ICON_SIZE / 2, 2);
         let side = pixel(&buf, ICON_SIZE / 2 + 14, ICON_SIZE / 2);
         assert!(
-            ratio(over(top, Rgb { r: 32, g: 32, b: 32 }), over(side, Rgb { r: 32, g: 32, b: 32 })) > 1.6,
+            ratio(
+                over(
+                    top,
+                    Rgb {
+                        r: 32,
+                        g: 32,
+                        b: 32
+                    }
+                ),
+                over(
+                    side,
+                    Rgb {
+                        r: 32,
+                        g: 32,
+                        b: 32
+                    }
+                )
+            ) > 1.6,
             "the notch is indistinguishable from the outline beside it"
         );
     }

@@ -906,7 +906,9 @@ pub fn hide_widget(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(windows::WIDGET_LABEL)
         .ok_or_else(|| "the widget window was not found".to_string())?;
-    window.hide().map_err(|e| format!("unable to hide the widget: {e}"))
+    window
+        .hide()
+        .map_err(|e| format!("unable to hide the widget: {e}"))
 }
 
 /// Expands or collapses the widget. `height` carries the frontend's measured
@@ -1052,7 +1054,11 @@ fn assistant_reply(body: &str) -> String {
     let text = choice
         .and_then(|c| c.get("message"))
         .and_then(|m| m.get("content"))
-        .or_else(|| choice.and_then(|c| c.get("delta")).and_then(|d| d.get("content")))
+        .or_else(|| {
+            choice
+                .and_then(|c| c.get("delta"))
+                .and_then(|d| d.get("content"))
+        })
         .or_else(|| choice.and_then(|c| c.get("text")))
         .or_else(|| json.get("content"))
         .or_else(|| json.get("response"))

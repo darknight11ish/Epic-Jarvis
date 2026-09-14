@@ -191,10 +191,7 @@ pub async fn brain_watch_add(
 /// Forgets a topic and everything remembered about it. Destructive in a way the
 /// UI must confirm: the server does not keep a copy.
 #[tauri::command]
-pub async fn brain_watch_remove(
-    app: AppHandle,
-    name: String,
-) -> Result<serde_json::Value, String> {
+pub async fn brain_watch_remove(app: AppHandle, name: String) -> Result<serde_json::Value, String> {
     post(
         &app,
         "/api/watch/remove",
@@ -224,10 +221,7 @@ pub async fn brain_watch_seen(
 /// one, because installing runs the scanner and the gate inside the module and
 /// a client that bypassed both would be the whole attack.
 #[tauri::command]
-pub async fn brain_remove_skill(
-    app: AppHandle,
-    name: String,
-) -> Result<serde_json::Value, String> {
+pub async fn brain_remove_skill(app: AppHandle, name: String) -> Result<serde_json::Value, String> {
     post(
         &app,
         "/api/skills/decide",
@@ -350,11 +344,7 @@ async fn post(
     let status = response.status();
     let text = response.text().await.unwrap_or_default();
     if !status.is_success() {
-        return Err(format!(
-            "HTTP {}{}",
-            status.as_u16(),
-            first_line(&text)
-        ));
+        return Err(format!("HTTP {}{}", status.as_u16(), first_line(&text)));
     }
     Ok(serde_json::from_str(&text)
         .unwrap_or_else(|_| serde_json::json!({ "ok": true, "status": status.as_u16() })))

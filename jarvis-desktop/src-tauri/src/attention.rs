@@ -89,7 +89,10 @@ pub async fn get_digest(app: AppHandle) -> Result<serde_json::Value, String> {
 ///
 /// `ids` empty means "all of it", which is what `{}` means to the server.
 #[tauri::command]
-pub async fn mark_digest_seen(app: AppHandle, ids: Vec<String>) -> Result<serde_json::Value, String> {
+pub async fn mark_digest_seen(
+    app: AppHandle,
+    ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
     let body = if ids.is_empty() {
         serde_json::json!({})
     } else {

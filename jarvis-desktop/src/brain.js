@@ -1427,7 +1427,12 @@ function visible(n) {
 function fitCanvas() {
   const c = dom.canvas;
   const rect = c.getBoundingClientRect();
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  // 3, not 2. The cap is a memory guard — a backing store grows with its
+  // square — but it is also what a reader who has zoomed to 200% runs into:
+  // `devicePixelRatio` carries the webview zoom, so on a 2x display at 150%
+  // the honest ratio is 3 and clamping to 2 renders the graph soft for exactly
+  // the person who enlarged it in order to see it.
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
   c.width = Math.max(1, Math.round(rect.width * dpr));
   c.height = Math.max(1, Math.round(rect.height * dpr));
   draw();

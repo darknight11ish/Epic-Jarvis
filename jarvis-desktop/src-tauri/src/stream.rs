@@ -699,11 +699,7 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
             .collect();
         let fresh = items
             .iter()
-            .filter(|item| {
-                item["id"]
-                    .as_str()
-                    .is_some_and(|id| !known.contains(id))
-            })
+            .filter(|item| item["id"].as_str().is_some_and(|id| !known.contains(id)))
             .cloned()
             .collect();
         *slot = items.clone();
