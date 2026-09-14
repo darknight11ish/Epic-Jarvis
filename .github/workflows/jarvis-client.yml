@@ -10,7 +10,7 @@ on:
       - ".github/workflows/jarvis-client.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jarvis-client-${{ github.ref }}
@@ -89,3 +89,48 @@ jobs:
           path: jarvis-client/artifacts/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      # This is the app that actually talks to Jarvis, so it gets the same
+      # phone-reachable delivery as the other one: a plain .apk at a stable URL
+      # rather than a zip buried in a run the GitHub mobile app cannot download.
+      - name: Publish the APK to a rolling release
+        id: release
+        continue-on-error: true
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: client-latest
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          mv jarvis-client/artifacts/app-debug.apk "jarvis-client/artifacts/jarvis-client-$short.apk"
+
+          notes=$(printf '%s\n' \
+            "Debug build of \`jarvis-client\` from commit \`$short\` on \`$GITHUB_REF_NAME\`." \
+            "" \
+            "**This is the client that speaks the real Jarvis API** - SSE on \`/api/events\` plus REST, authenticated with \`X-Jarvis-Token\`. The \`android-latest\` release is the older app, which speaks a protocol the backend does not implement." \
+            "" \
+            '```' \
+            "adb install -r jarvis-client-$short.apk" \
+            '```' \
+            "" \
+            "Or open this page on the phone and tap the \`.apk\`." \
+            "" \
+            "Signed with the committed debug key, so it installs over a previous build in place. This tag is rolling.")
+
+          gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$TAG" jarvis-client/artifacts/*.apk \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Jarvis client - latest debug build" \
+            --notes "$notes"
+
+          echo "Published: $(gh release view "$TAG" --json url --jq .url)"
+
+      - name: Explain a failed release
+        if: steps.release.outcome == 'failure'
+        run: |
+          echo "::warning::Could not publish the release. If this was a 403, set" \
+               "Settings -> Actions -> General -> Workflow permissions to" \
+               "'Read and write permissions'. The APK is still available as the" \
+               "jarvis-client-debug-apk run artifact."

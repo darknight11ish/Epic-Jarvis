@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import okhttp3.Request
 import okhttp3.Response
-import java.io.BufferedReader
 import kotlin.coroutines.coroutineContext
 import kotlin.math.min
 
@@ -102,7 +101,7 @@ class EventStream(private val api: JarvisApi) {
                 var announcedOpen = false
 
                 body.charStream().buffered().use { reader ->
-                    parseFrames(reader) { event ->
+                    SseParser.parse(reader) { event ->
                         event.retryMs?.let { retryMs = it }
                         event.id?.let { id ->
                             resumeFrom = id
@@ -145,54 +144,6 @@ class EventStream(private val api: JarvisApi) {
         }
 
         awaitClose { }
-    }
-
-    /**
-     * Reads `field: value` lines and dispatches on a blank line.
-     *
-     * `: keepalive` comments arrive every ~20s and are skipped — but their
-     * *absence* is the only sign of a connection the socket has not yet
-     * noticed is dead, which is why the caller watches the gap rather than
-     * trusting the read to fail.
-     */
-    private inline fun parseFrames(reader: BufferedReader, onEvent: (SseEvent) -> Unit) {
-        var id: String? = null
-        var kind = "message"
-        var retry: Long? = null
-        val data = StringBuilder()
-
-        while (true) {
-            val line = reader.readLine() ?: return
-
-            if (line.isEmpty()) {
-                if (data.isNotEmpty() || id != null) {
-                    val parsed = runCatching {
-                        JarvisJson.parseToJsonElement(data.toString())
-                    }.getOrNull()
-                    onEvent(SseEvent(id, kind, parsed, retry))
-                }
-                kind = "message"
-                data.setLength(0)
-                retry = null
-                continue
-            }
-
-            if (line.startsWith(":")) continue // comment, including keepalive
-
-            val colon = line.indexOf(':')
-            val field = if (colon >= 0) line.substring(0, colon) else line
-            val value = if (colon >= 0) line.substring(colon + 1).removePrefix(" ") else ""
-
-            when (field) {
-                "id" -> id = value
-                "event" -> kind = value
-                "retry" -> retry = value.toLongOrNull()
-                "data" -> {
-                    if (data.isNotEmpty()) data.append('\n')
-                    data.append(value)
-                }
-            }
-        }
     }
 
     private fun backoff(attempt: Int, retryMs: Long): Long =

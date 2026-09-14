@@ -53,6 +53,15 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            // The pattern engine is pure maths over androidx Color, but a stray
+            // android.* call in a transitive would otherwise throw "not mocked"
+            // rather than returning something the test can assert on.
+            isReturnDefaultValues = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
