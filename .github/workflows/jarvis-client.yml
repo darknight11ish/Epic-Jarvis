@@ -32,6 +32,13 @@ jobs:
           cache: gradle
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # Not the default `tools platform-tools`. Google removed the obsolete
+          # `tools` package from the SDK repository, so the action's own default
+          # makes it run `sdkmanager tools`, get "Failed to find package 'tools'",
+          # and fail the job before a line of this project is compiled. Nothing
+          # here ever used it; platform-tools is the half that is real.
+          packages: platform-tools
 
       # The client had no test step at all. It now has tests, and the same
       # results-directory assertion as the other workflow, so "no test sources"
@@ -132,6 +139,13 @@ jobs:
           cache: gradle
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # Not the default `tools platform-tools`. Google removed the obsolete
+          # `tools` package from the SDK repository, so the action's own default
+          # makes it run `sdkmanager tools`, get "Failed to find package 'tools'",
+          # and fail the job before a line of this project is compiled. Nothing
+          # here ever used it; platform-tools is the half that is real.
+          packages: platform-tools
 
       # Without this the emulator drops to pure software emulation and takes
       # long enough to boot that the wait below times out.

@@ -53,6 +53,13 @@ jobs:
           cache: gradle
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # Not the default `tools platform-tools`. Google removed the obsolete
+          # `tools` package from the SDK repository, so the action's own default
+          # makes it run `sdkmanager tools`, get "Failed to find package 'tools'",
+          # and fail the job before a line of this project is compiled. Nothing
+          # here ever used it; platform-tools is the half that is real.
+          packages: platform-tools
 
       # Unit tests gate the APK. The assertion on the results directory is the
       # point: `testDebugUnitTest` reports NO-SOURCE and exits 0 when it is
