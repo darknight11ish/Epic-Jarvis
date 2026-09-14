@@ -1143,8 +1143,18 @@ mod tests {
             )
             .rgba()
             .chunks(4)
-            // Count pixels brighter than the dimmed disc can be: those are ring.
-            .filter(|px| px[3] > 0 && px[0] as u16 > (255.0 * 0.45) as u16 + 20)
+            // A notch is BRIGHTER than the dimmed disc and WARMER than the
+            // outline. Brightness alone was the old test, and it was right
+            // until the two-tone outline existed: `INK_LIGHT` is bright by
+            // design, so a dimmed disc with no notches at all counted 68 ring
+            // pixels. The hue is what separates them — the notch is drawn in
+            // the state's own undimmed colour, and these two rings are
+            // deliberately neutral.
+            .filter(|px| {
+                px[3] > 0
+                    && px[0] as u16 > (255.0 * 0.45) as u16 + 20
+                    && px[0] as i16 - px[2] as i16 > 40
+            })
             .count()
         };
         let none = lit(0);
@@ -1152,7 +1162,7 @@ mod tests {
         let four = lit(4);
         assert_eq!(
             none, 0,
-            "a dimmed disc with no notches has no bright pixels"
+            "a dimmed disc with no notches drew ring pixels anyway"
         );
         assert!(one > 0, "one waiting item must draw one notch");
         assert!(
@@ -1266,7 +1276,12 @@ mod tests {
         let mut quiet = link();
         quiet.power = "quiet".into();
         quiet.power_set_by = Some("override".into());
-        assert_eq!(power_label(&quiet), "Power: quiet · set by hand");
+        // `· read-only` replaced a whole disabled row that said the same
+        // thing. It is part of the label now, not decoration.
+        assert_eq!(
+            power_label(&quiet),
+            "Power: quiet · set by hand · read-only"
+        );
 
         // The mute row names its end date in both directions, because the API
         // has no mute without one.
