@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -40,6 +38,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.ui.T
+import com.jarvis.client.ui.parts.Affirm
+import com.jarvis.client.ui.parts.Refuse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -217,29 +217,25 @@ fun ApprovalCard(
         }
 
         Spacer(Modifier.height(12.dp))
+        // Filled against outlined, not green against red.
+        //
+        // These two were identical rounded rectangles distinguished by colour
+        // alone, and this is the one pair in the app where colour cannot carry
+        // it: verdant-4 and rose-4 are 67.7 ΔE apart normally and 8.2 apart to
+        // a deuteranope, where they simulate to nearly the same beige —
+        // #cbc4ac against #b9ae83, a difference of 1.2 on an axis that was
+        // 99.7 wide. Shape survives that, and survives a photograph, a still
+        // frame and peripheral vision with it.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onApprove,
-                enabled = canDecide,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = T.Ok.copy(alpha = 0.16f),
-                    contentColor = T.Ok,
-                ),
-            ) { Text("Approve") }
-
-            Button(
-                onClick = onDeny,
-                enabled = canDecide,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = T.Bad.copy(alpha = 0.16f),
-                    contentColor = T.Bad,
-                ),
-            ) { Text("Deny") }
+            Affirm("Approve", enabled = canDecide, onClick = onApprove)
+            Refuse("Deny", enabled = canDecide, onClick = onDeny)
         }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Nothing runs until you decide.",
+            style = MaterialTheme.typography.labelSmall,
+            color = T.Dim,
+        )
     }
 }
 
