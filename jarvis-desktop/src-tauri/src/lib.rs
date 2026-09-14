@@ -19,6 +19,7 @@
 pub mod attention;
 pub mod brain;
 pub mod commands;
+pub mod hotkeys;
 pub mod proctree;
 pub mod sidecar;
 pub mod spec;
@@ -211,39 +212,10 @@ pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload:
 // Global hotkeys
 // ---------------------------------------------------------------------------
 
-/// The three accelerators Jarvis owns, resolved once at startup.
-#[cfg(desktop)]
-struct Hotkeys {
-    /// `Alt+Space` — toggle the spotlight quickbar.
-    toggle_quickbar: tauri_plugin_global_shortcut::Shortcut,
-    /// `Win+Shift+J` — ingest the clipboard into the quickbar.
-    ingest_clipboard: tauri_plugin_global_shortcut::Shortcut,
-    /// `Alt+Shift+S` — capture the active desktop.
-    ///
-    /// Deliberately *not* `Win+Shift+S`: that combination is owned by the
-    /// Windows Snipping Tool at the shell level, so `RegisterHotKey` returns
-    /// ERROR_HOTKEY_ALREADY_REGISTERED (1409) and the user gets the Snipping
-    /// Tool instead of the Jarvis vision pipeline.
-    capture_screen: tauri_plugin_global_shortcut::Shortcut,
-    /// `Alt+Shift+N` — summon the bar pre-armed for a Logseq journal note.
-    quick_note: tauri_plugin_global_shortcut::Shortcut,
-    /// `Alt+Shift+W` — show or hide the desktop widget.
-    toggle_widget: tauri_plugin_global_shortcut::Shortcut,
-}
-
-#[cfg(desktop)]
-impl Hotkeys {
-    fn new() -> Self {
-        use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
-        Self {
-            toggle_quickbar: Shortcut::new(Some(Modifiers::ALT), Code::Space),
-            ingest_clipboard: Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyJ),
-            capture_screen: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyS),
-            quick_note: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyN),
-            toggle_widget: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyW),
-        }
-    }
-}
+// The accelerators live in `hotkeys.rs` now, as data rather than as five
+// struct fields: they are configurable, so the set has to be iterable and
+// each one has to carry its own label and default for the Settings window to
+// render. `Hotkeys::new()` was here, and it hard-coded them.
 
 /// Reads the clipboard and hands its text to the quickbar.
 #[cfg(desktop)]
@@ -491,6 +463,10 @@ pub fn run() {
         .manage(tray::Painted::default())
         .manage(windows::WidgetState::default())
         .manage(RouteState::default())
+        // Registered here with every other managed type, not inside setup: the
+        // shortcut handler reads it and would panic on an unregistered state
+        // if a fallible call above it ever returned early.
+        .manage(hotkeys::HotkeyState::default())
         .invoke_handler(tauri::generate_handler![
             // Eight commands used to be registered here with no caller in any
             // window: capture_screen, is_quickbar_pinned, notify_user,
@@ -528,6 +504,9 @@ pub fn run() {
             commands::set_theme,
             commands::get_api_settings,
             commands::set_api_settings,
+            hotkeys::get_hotkeys,
+            hotkeys::set_hotkeys,
+            hotkeys::reset_hotkeys,
             commands::hide_widget,
             commands::resize_desktop_widget,
             commands::set_widget_always_on_top,
@@ -550,13 +529,6 @@ pub fn run() {
     {
         use tauri_plugin_global_shortcut::ShortcutState;
 
-        let hotkeys = Hotkeys::new();
-        let toggle = hotkeys.toggle_quickbar;
-        let ingest = hotkeys.ingest_clipboard;
-        let capture = hotkeys.capture_screen;
-        let quick_note = hotkeys.quick_note;
-        let widget = hotkeys.toggle_widget;
-
         builder = builder.plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -565,8 +537,17 @@ pub fn run() {
                         return;
                     }
 
-                    if shortcut == &toggle {
-                        match windows::toggle_quickbar(app) {
+                    // Resolved against the LIVE bindings. This used to compare
+                    // the fired shortcut against five values captured at
+                    // startup, which is correct exactly until someone rebinds
+                    // one: after that the old combination still ran the action
+                    // and the new one did nothing.
+                    let Some(action) = hotkeys::action_for(app, shortcut) else {
+                        return;
+                    };
+
+                    match action {
+                        "toggle_quickbar" => match windows::toggle_quickbar(app) {
                             Ok(visible) => {
                                 if visible {
                                     // `toggle_quickbar` has already centred and
@@ -576,17 +557,16 @@ pub fn run() {
                                 }
                             }
                             Err(err) => eprintln!("[jarvis] quickbar toggle failed: {err}"),
+                        },
+                        "ingest_clipboard" => ingest_clipboard(app),
+                        "capture_screen" => capture_desktop(app),
+                        "quick_note" => summon_quick_note(app),
+                        "toggle_widget" => {
+                            if let Err(err) = windows::toggle_widget(app) {
+                                eprintln!("[jarvis] widget toggle failed: {err}");
+                            }
                         }
-                    } else if shortcut == &ingest {
-                        ingest_clipboard(app);
-                    } else if shortcut == &capture {
-                        capture_desktop(app);
-                    } else if shortcut == &quick_note {
-                        summon_quick_note(app);
-                    } else if shortcut == &widget {
-                        if let Err(err) = windows::toggle_widget(app) {
-                            eprintln!("[jarvis] widget toggle failed: {err}");
-                        }
+                        other => eprintln!("[jarvis] no handler for hotkey action `{other}`"),
                     }
                 })
                 .build(),
@@ -701,47 +681,31 @@ pub fn run() {
             // from the tray in that case.
             #[cfg(desktop)]
             {
-                use tauri_plugin_global_shortcut::GlobalShortcutExt;
-
-                let hotkeys = Hotkeys::new();
-                let mut refused: Vec<&str> = Vec::new();
-                for (label, shortcut) in [
-                    ("Alt+Space", hotkeys.toggle_quickbar),
-                    ("Win+Shift+J", hotkeys.ingest_clipboard),
-                    ("Alt+Shift+S", hotkeys.capture_screen),
-                    ("Alt+Shift+N", hotkeys.quick_note),
-                    ("Alt+Shift+W", hotkeys.toggle_widget),
-                ] {
-                    match handle.global_shortcut().register(shortcut) {
-                        Ok(()) => println!("[jarvis] hotkey {label} registered"),
-                        Err(err) => {
-                            eprintln!(
-                                "[jarvis] hotkey {label} could not be registered ({err}); \
-                                 another application probably owns it"
-                            );
-                            refused.push(label);
-                        }
-                    }
-                }
+                let bound = hotkeys::apply(&handle);
+                let refused: Vec<String> = bound
+                    .iter()
+                    .filter(|b| !b.registered)
+                    .map(|b| format!("{} ({})", b.accelerator, b.label))
+                    .collect();
 
                 // A refused hotkey used to be reported by `eprintln!` alone, and
                 // release builds set `windows_subsystem = "windows"` — there is
-                // no stderr for it to reach. Alt+Space is PowerToys Run's
-                // default, so on a machine with PowerToys installed Jarvis
-                // Desktop launched, bound nothing, and was indistinguishable
-                // from a failed install: the tray tooltip, the card footer and
-                // the startup banner all say "Alt+Space to summon", and none of
-                // them would have worked.
+                // no stderr for it to reach. Alt+Space is claimed by PowerToys
+                // Run and, on recent Windows 11 builds, by the Copilot app, so
+                // on such a machine Jarvis Desktop launched, bound nothing, and
+                // was indistinguishable from a failed install: the tray tooltip,
+                // the card footer and the startup banner all say "Alt+Space to
+                // summon", and none of them would have worked.
                 //
                 // The toast names the combinations rather than saying something
-                // went wrong, because the fix is for the user to free the key or
-                // to use the tray, and neither is guessable from "a hotkey
-                // failed".
+                // went wrong, and now also names where to change them — which
+                // it could not before, because there was nowhere.
                 if !refused.is_empty() {
                     let list = refused.join(", ");
                     let body = format!(
                         "{list} could not be registered — another application owns \
-                         {}. Everything is still reachable from the tray icon.",
+                         {}. Change them in Settings, or use the tray icon, which \
+                         reaches everything.",
                         if refused.len() == 1 { "it" } else { "them" }
                     );
                     commands::notify(&handle, "Jarvis Desktop: hotkeys in use", &body);

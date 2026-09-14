@@ -13,6 +13,7 @@
  */
 
 import {
+  announce,
   applyTheme,
   followTheme,
   followZoom,
@@ -47,6 +48,11 @@ const dom = {
   stopBackend: $("stop-backend"),
   backendStatus: $("backend-status"),
   backendState: $("backend-state"),
+
+  hotkeyRows: $("hotkey-rows"),
+  saveHotkeys: $("save-hotkeys"),
+  resetHotkeys: $("reset-hotkeys"),
+  hotkeyStatus: $("hotkey-status"),
 
   storePath: $("store-path"),
 };
@@ -284,3 +290,214 @@ onLink((link) => {
   document.addEventListener("visibilitychange", poll);
   poll();
 })();
+
+
+/* ==========================================================================
+   Shortcuts
+   --------------------------------------------------------------------------
+   The five global accelerators were constants in `lib.rs` until the first
+   machine this ran on refused `Alt+Space`, at which point the spotlight had no
+   shortcut and nothing could be done about it short of editing Rust.
+
+   Recorded rather than typed. "Alt+Space" spelled by hand invites a string
+   nothing accepts, and the combination someone wants is the one their fingers
+   already know — so the field listens instead of reading.
+   ========================================================================== */
+
+/** The bindings as last read from Rust, keyed by action id. */
+let hotkeys = [];
+/** The row currently listening, if any. */
+let recording = null;
+
+/** Windows names the Super key differently from the accelerator syntax. */
+const MOD_LABEL = { Super: "Win", Control: "Ctrl" };
+
+/**
+ * A `keydown` as an accelerator string Rust can parse, or `null` while the
+ * user is still only holding modifiers.
+ *
+ * Tauri's parser wants `Super`, `Control`, `Alt`, `Shift` and a `KeyX` /
+ * `Digit1` / `F5` code, so this speaks in `event.code` rather than `event.key`:
+ * `key` is layout-dependent and reports "S" for whatever key sits there, which
+ * is not what the OS binds.
+ */
+function accelerator(event) {
+  const mods = [];
+  if (event.ctrlKey) mods.push("Control");
+  if (event.altKey) mods.push("Alt");
+  if (event.shiftKey) mods.push("Shift");
+  if (event.metaKey) mods.push("Super");
+
+  const code = event.code;
+  // A modifier on its own is not a binding yet — the user is mid-chord.
+  if (/^(Control|Alt|Shift|Meta|OS)(Left|Right)?$/.test(code)) return null;
+
+  let key = null;
+  if (/^Key[A-Z]$/.test(code)) key = code.slice(3);
+  else if (/^Digit[0-9]$/.test(code)) key = code.slice(5);
+  else if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) key = code;
+  else if (code === "Space") key = "Space";
+  else if (code === "Enter") key = "Enter";
+  else if (code === "Backquote") key = "Backquote";
+  else if (code === "Minus") key = "Minus";
+  else if (code === "Equal") key = "Equal";
+  else if (code === "BracketLeft") key = "BracketLeft";
+  else if (code === "BracketRight") key = "BracketRight";
+  else if (code === "Semicolon") key = "Semicolon";
+  else if (code === "Quote") key = "Quote";
+  else if (code === "Comma") key = "Comma";
+  else if (code === "Period") key = "Period";
+  else if (code === "Slash") key = "Slash";
+  else if (code === "Backslash") key = "Backslash";
+  else if (/^Arrow(Up|Down|Left|Right)$/.test(code)) key = code;
+  else return null;
+
+  // Refused here as well as in Rust. Rust is the authority — a page cannot be
+  // trusted with a rule this consequential — but stopping it at the keystroke
+  // means the user sees why immediately instead of after a save.
+  if (!mods.length) return { error: "That needs a modifier — hold Ctrl, Alt, Shift or Win." };
+
+  return { accelerator: [...mods, key].join("+") };
+}
+
+/** The accelerator as a person reads it. */
+function prettyKey(accel) {
+  return String(accel)
+    .split("+")
+    .map((part) => MOD_LABEL[part] || part.replace(/^Key|^Digit/, ""))
+    .join(" + ");
+}
+
+function renderHotkeys() {
+  dom.hotkeyRows.textContent = "";
+  for (const row of hotkeys) {
+    const wrap = document.createElement("div");
+    wrap.className = "hotkey";
+    wrap.dataset.bound = String(Boolean(row.registered));
+
+    const name = document.createElement("div");
+    name.className = "hotkey-name";
+    name.textContent = row.label;
+
+    const hint = document.createElement("div");
+    hint.className = "hotkey-hint";
+    hint.textContent = row.hint;
+
+    const key = document.createElement("button");
+    key.type = "button";
+    key.className = "hotkey-key";
+    key.textContent = prettyKey(row.accelerator);
+    // The accessible name has to carry the action, or every one of these is
+    // announced as the bare combination with no clue what it does.
+    key.setAttribute("aria-label", `${row.label}: ${prettyKey(row.accelerator)}. Press to change.`);
+    key.addEventListener("click", () => startRecording(row.id, key));
+
+    const state = document.createElement("div");
+    state.className = "hotkey-state";
+    state.textContent = row.registered
+      ? "working"
+      : row.error
+        ? "in use by another app"
+        : "not bound";
+    if (!row.registered && row.error) state.title = row.error;
+
+    wrap.append(name, key, hint, state);
+    dom.hotkeyRows.append(wrap);
+  }
+}
+
+function startRecording(id, button) {
+  stopRecording();
+  recording = { id, button, previous: button.textContent };
+  button.dataset.recording = "true";
+  button.textContent = "press keys…";
+  button.focus();
+  announce(`Recording a shortcut for ${hotkeys.find((h) => h.id === id)?.label}. Press Escape to cancel.`);
+}
+
+function stopRecording() {
+  if (!recording) return;
+  recording.button.dataset.recording = "false";
+  recording.button.textContent = recording.previous;
+  recording = null;
+}
+
+// Capture phase, on the window: a recording field has to see the keystroke
+// before anything else does, including this page's own Ctrl+= zoom handler.
+window.addEventListener(
+  "keydown",
+  (event) => {
+    if (!recording) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.code === "Escape") {
+      stopRecording();
+      announce("Cancelled.");
+      return;
+    }
+
+    const read = accelerator(event);
+    if (!read) return; // still holding modifiers
+    if (read.error) {
+      report(dom.hotkeyStatus, read.error, "bad");
+      return;
+    }
+
+    const row = hotkeys.find((h) => h.id === recording.id);
+    if (row) row.accelerator = read.accelerator;
+    stopRecording();
+    renderHotkeys();
+    report(dom.hotkeyStatus, "Not saved yet — press Save shortcuts.", "");
+  },
+  true
+);
+
+async function loadHotkeys() {
+  try {
+    hotkeys = (await invoke("get_hotkeys")) || [];
+    renderHotkeys();
+  } catch (error) {
+    report(dom.hotkeyStatus, String(error.message || error), "bad");
+  }
+}
+
+dom.saveHotkeys.addEventListener("click", async () => {
+  stopRecording();
+  const bindings = Object.fromEntries(hotkeys.map((h) => [h.id, h.accelerator]));
+  try {
+    hotkeys = await invoke("set_hotkeys", { bindings });
+    renderHotkeys();
+    const refused = hotkeys.filter((h) => !h.registered);
+    if (refused.length) {
+      // Saved is not the same as working, and saying "Saved" alone is how the
+      // old build left someone believing a shortcut was live when it was not.
+      report(
+        dom.hotkeyStatus,
+        `Saved. ${refused.length} still held by another application.`,
+        "bad"
+      );
+    } else {
+      report(dom.hotkeyStatus, "Saved, and all of them bound.", "ok");
+    }
+    announce(dom.hotkeyStatus.textContent);
+  } catch (error) {
+    // Rust validated the whole set before writing or unbinding anything, so
+    // nothing changed and the old shortcuts are still live.
+    report(dom.hotkeyStatus, `${error.message || error} Nothing was changed.`, "bad");
+    announce(dom.hotkeyStatus.textContent, "assertive");
+  }
+});
+
+dom.resetHotkeys.addEventListener("click", async () => {
+  stopRecording();
+  try {
+    hotkeys = await invoke("reset_hotkeys");
+    renderHotkeys();
+    report(dom.hotkeyStatus, "Back to the shipped combinations.", "ok");
+  } catch (error) {
+    report(dom.hotkeyStatus, String(error.message || error), "bad");
+  }
+});
+
+loadHotkeys();

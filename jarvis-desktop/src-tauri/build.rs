@@ -55,6 +55,9 @@ fn main() {
             "get_api_settings",
             "set_api_settings",
             // Widget geometry and capture
+            "get_hotkeys",
+            "set_hotkeys",
+            "reset_hotkeys",
             "hide_widget",
             "resize_desktop_widget",
             "set_widget_always_on_top",

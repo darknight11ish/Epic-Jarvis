@@ -687,6 +687,52 @@ function openCard(statusText) {
 }
 
 /**
+ * Rewrites the primer's key chips from the bindings Rust actually holds.
+ *
+ * The four global combinations are configurable, so the markup's copy is only
+ * a placeholder for first paint. A hardcoded list here would be wrong from the
+ * first rebind — and this block exists precisely because the app was telling
+ * people about keys that did not do what it said.
+ *
+ * A refused binding is marked too: "Alt + Space (in use)" is more useful than
+ * a combination that silently does nothing, and it points at the one place
+ * that can fix it.
+ */
+async function syncPrimerKeys() {
+  if (!IS_TAURI) return;
+  let bound;
+  try {
+    bound = await invokeStrict("get_hotkeys");
+  } catch (error) {
+    // Leave the placeholders. They are the shipped defaults, so they are right
+    // unless something has been changed — and being quietly out of date beats
+    // an empty row.
+    console.warn("[jarvis] could not read the hotkeys:", error);
+    return;
+  }
+  for (const row of bound || []) {
+    const slot = dom.primer.querySelector(`[data-hotkey="${row.id}"]`);
+    if (!slot) continue;
+    slot.textContent = "";
+    // `Super` is the accelerator syntax; the key on the keyboard says Windows.
+    const parts = String(row.accelerator).split("+");
+    parts.forEach((part, i) => {
+      if (i) slot.append("+");
+      const kbd = document.createElement("kbd");
+      kbd.textContent = part === "Super" ? "Win" : part === "Control" ? "Ctrl" : part;
+      slot.append(kbd);
+    });
+    if (!row.registered) {
+      const note = document.createElement("span");
+      note.className = "primer-unbound";
+      note.textContent = " in use elsewhere";
+      slot.append(note);
+    }
+  }
+  syncWindowHeight();
+}
+
+/**
  * The primer is the window's empty state: visible when nothing else in the
  * stack is, gone the instant anything is.
  *
@@ -2104,6 +2150,7 @@ followTheme();
 // has no browser chrome, so without this there is no way to make the text
 // bigger anywhere in the app. The window re-measures after each step.
 followZoom(() => syncWindowHeight());
+syncPrimerKeys();
 startVoice(dom.root);
 startLink();
 

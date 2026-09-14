@@ -197,27 +197,32 @@
              learn the hotkeys was to already know one. This block is the
              inverse: present when nothing else is, gone the moment the card,
              a gate or the brief takes the space. -->
+        <!-- The four global combinations below are placeholders for first
+             paint. `main.js` replaces them with the LIVE bindings, because
+             they are configurable now and a hardcoded list goes stale the
+             moment someone rebinds one — which is the same class of bug this
+             block was added to fix. -->
         <section class="primer" id="primer" aria-label="What you can do here">
           <h2 class="sr-only">What you can do here</h2>
           <ul class="primer-list">
             <li>
-              <span class="primer-keys"><kbd>Alt</kbd>+<kbd>Space</kbd></span>
+              <span class="primer-keys" data-hotkey="toggle_quickbar"><kbd>Alt</kbd>+<kbd>Space</kbd></span>
               <span>Summon or dismiss this bar, from anywhere</span>
             </li>
             <li>
-              <span class="primer-keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></span>
+              <span class="primer-keys" data-hotkey="capture_screen"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></span>
               <span>Attach a screen capture to the next question</span>
             </li>
             <li>
-              <span class="primer-keys"><kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd></span>
+              <span class="primer-keys" data-hotkey="ingest_clipboard"><kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd></span>
               <span>Attach whatever is on the clipboard</span>
             </li>
             <li>
-              <span class="primer-keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
+              <span class="primer-keys" data-hotkey="quick_note"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
               <span>Summon the bar ready to file a Logseq journal note</span>
             </li>
             <li>
-              <span class="primer-keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
+              <span class="primer-keys" data-hotkey="toggle_widget"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
               <span>Show or hide the desktop widget</span>
             </li>
             <li>

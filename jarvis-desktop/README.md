@@ -57,6 +57,13 @@ shell controls where they come from; it cannot stop the page caching them.
 | `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
 | `Alt` + `Shift` + `N` | Summon the bar pre-armed for a Logseq journal note (`#log `). |
 | `Ctrl` + `+` / `-` / `0` | Text size, per window. Not a global hotkey — the window must have focus. |
+
+Every global combination in that table is a **default**, not a constant. They
+are configurable in Settings → Shortcuts, which exists because `Alt+Space` is
+claimed by PowerToys Run and, on recent Windows 11 builds, by the Copilot app —
+and until that section existed, a refused binding meant the spotlight had no
+shortcut and no way to give it one. Each row shows whether the OS actually
+took the combination, because saving one and binding one are different things.
 | `Alt` + `Shift` + `W` | Show or hide the desktop widget. |
 
 Capture is **not** bound to `Win+Shift+S`: the shell owns that for the Snipping

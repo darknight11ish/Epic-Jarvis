@@ -97,6 +97,31 @@
       </section>
 
       <section class="card">
+        <h2>Shortcuts</h2>
+        <p class="note">
+          Global accelerators: they work whatever window has focus, which also
+          means only one application on the machine can hold each combination.
+          If one shows as <em>in use</em>, something else claimed it first —
+          <code>Alt+Space</code> in particular is taken by PowerToys Run and,
+          on recent Windows 11 builds, by the Copilot app. Everything here is
+          also reachable from the tray icon, always.
+        </p>
+        <p class="note">
+          Every shortcut needs a modifier. A bare key bound globally would
+          swallow that key everywhere on the machine, including in the box you
+          would use to change it back.
+        </p>
+
+        <div id="hotkey-rows"></div>
+
+        <div class="row">
+          <button class="btn" id="save-hotkeys" type="button">Save shortcuts</button>
+          <button class="btn ghost" id="reset-hotkeys" type="button">Reset to defaults</button>
+          <span class="status" id="hotkey-status" role="status"></span>
+        </div>
+      </section>
+
+      <section class="card">
         <h2>Backend</h2>
         <p class="note">
           Off by default, and it stays off unless you switch it on here. With it on,

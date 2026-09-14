@@ -65,6 +65,11 @@ permissions = [
 identifier = "quickbar-surface"
 description = "Everything the spotlight quickbar calls: streaming, its own window geometry, clipboard and external links."
 permissions = [
+  # READ-ONLY. The spotlight's primer prints the global combinations, and they
+  # are configurable now — so it has to read them rather than hardcode them, or
+  # it goes back to naming keys that do not do what it says. `set_hotkeys` and
+  # `reset_hotkeys` stay with the settings window.
+  "allow-get-hotkeys",
   "allow-stream-chat",
   "allow-cancel-chat",
   "allow-set-route-lane",
@@ -110,6 +115,14 @@ permissions = [
 identifier = "settings-surface"
 description = "Read and write the connection settings and backend supervision. Privileged: keep this to the settings window."
 permissions = [
+  # The global accelerators. A write, and a privileged-feeling one — it binds
+  # keys machine-wide — so it sits with the other settings-only powers rather
+  # than with the read-only sets. `hotkeys.rs` refuses a binding with no
+  # modifier, which is the only shape that could not be undone from inside the
+  # app afterwards.
+  "allow-get-hotkeys",
+  "allow-set-hotkeys",
+  "allow-reset-hotkeys",
   "allow-get-api-settings",
   "allow-set-api-settings",
   "allow-supervisor-status",

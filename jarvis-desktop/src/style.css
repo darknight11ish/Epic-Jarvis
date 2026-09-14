@@ -1704,6 +1704,17 @@ html[data-state="approval"] .pulse {
   white-space: nowrap;
 }
 
+/* A combination the OS refused. Said in words, not implied by a colour: the
+   alternative is a key chip that looks exactly like the working ones and does
+   nothing when pressed. */
+.primer-unbound {
+  margin-left: 6px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  color: var(--bad-text);
+  white-space: nowrap;
+}
+
 .primer-list kbd,
 .primer-list code {
   padding: 1px 5px;

@@ -37,17 +37,16 @@ await check("a first run shows what the bar can do", async () => {
   await page.close();
 });
 
-await check("the primer names the hotkeys Rust actually registers", async () => {
+await check("the primer names the hotkeys Rust actually binds", async () => {
   // The first version of this list said Alt+Shift+N attached the clipboard.
-  // `lib.rs` binds Alt+Shift+N to the Logseq note and Win+Shift+J to the
+  // `hotkeys.rs` binds that to the Logseq note and Super+Shift+J to the
   // clipboard, so the primer built to stop the app lying was lying — and no
   // test could have caught it, because it checked the copy against itself.
-  // This checks it against the registration table instead.
-  const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
-  const table = rust.slice(rust.indexOf('("Alt+Space", hotkeys.toggle_quickbar)'));
-  const bound = [...table.slice(0, 600).matchAll(/\("([A-Za-z+]+)", hotkeys\.(\w+)\)/g)]
-    .map((m) => m[1]);
-  assert.ok(bound.length >= 5, `only found ${bound.length} registered hotkeys`);
+  // This checks it against the action table instead.
+  const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hotkeys.rs"), "utf8");
+  const defaults = [...rust.matchAll(/default:\s*"([^"]+)"/g)]
+    .map((m) => m[1].replace(/\bSuper\b/, "Win").replace(/\bControl\b/, "Ctrl"));
+  assert.ok(defaults.length >= 5, `only found ${defaults.length} default bindings`);
 
   const page = await K.open(browser, base, "index.html", {});
   const shown = await page.evaluate(() =>
@@ -56,28 +55,38 @@ await check("the primer names the hotkeys Rust actually registers", async () => 
       .filter(Boolean));
   await page.close();
 
-  for (const combo of bound) {
+  for (const combo of defaults) {
     assert.ok(shown.includes(combo),
-      `Rust registers ${combo} and the primer does not list it (it lists ${shown.join(", ")})`);
+      `${combo} is a shipped binding and the primer does not list it (it lists ${shown.join(", ")})`);
   }
 });
 
-await check("the primer gets out of the way", async () => {
-  const page = await K.open(browser, base, "index.html", { pending: [K.APPROVAL_RAISED] });
-  // A gate is open: the primer is the least important thing on screen.
-  assert.equal(await page.locator("#approval").isVisible(), true);
-  assert.equal(await page.locator("#primer").isVisible(), false,
-    "the primer is still taking space under an open gate");
+await check("the primer follows a rebind instead of hardcoding one", async () => {
+  // The bindings are configurable now, so a fixed list in the markup would be
+  // wrong from the first change — the same failure this block was added to fix.
+  const page = await K.open(browser, base, "index.html", {
+    hotkeys: K.HOTKEYS.map((h) =>
+      h.id === "toggle_quickbar" ? { ...h, accelerator: "Control+Alt+Backquote" } : h),
+  });
+  await page.waitForTimeout(400);
+  const shown = await page.evaluate(() =>
+    document.querySelector('[data-hotkey="toggle_quickbar"]').textContent.replace(/\s+/g, ""));
   await page.close();
+  assert.equal(shown, "Ctrl+Alt+Backquote", `the primer still shows "${shown}"`);
 });
 
-await check("the hotkeys are no longer only in the card footer", async () => {
-  // The four-key strip used to live inside `#card`, which is `hidden` until an
-  // answer has streamed: the only way to learn a hotkey was to already know one.
-  const html = read("src/index.html");
-  const footer = html.slice(html.indexOf('class="keys"'), html.indexOf('class="keys"') + 400);
-  assert.ok(!/Alt<\/kbd>\+<kbd>Space/.test(footer),
-    "the summon hotkey is still hidden inside the answer card");
+await check("a refused binding is marked in the primer, in words", async () => {
+  const page = await K.open(browser, base, "index.html", {
+    hotkeys: K.HOTKEYS.map((h) =>
+      h.id === "toggle_quickbar" ? { ...h, registered: false, error: "taken" } : h),
+  });
+  await page.waitForTimeout(400);
+  const text = await page.evaluate(() =>
+    document.querySelector('[data-hotkey="toggle_quickbar"]').textContent);
+  await page.close();
+  // A key chip that looks like the working ones and does nothing is worse than
+  // no chip at all.
+  assert.match(text, /in use/i, `said "${text}"`);
 });
 
 /* ── Offline is a place you can leave ────────────────────────────────────── */

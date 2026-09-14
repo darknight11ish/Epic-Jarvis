@@ -279,7 +279,20 @@ The direction is the signal — colour alone fails for one man in twelve.`;
 
 // ---- the stub bridge -----------------------------------------------------
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme }) {
+export const HOTKEYS = [
+  { id: "toggle_quickbar", label: "Summon Jarvis", hint: "Show or hide the spotlight bar from anywhere.",
+    accelerator: "Alt+Space", default: "Alt+Space", registered: true, error: null },
+  { id: "ingest_clipboard", label: "Attach the clipboard", hint: "Put whatever is on the clipboard into the bar as context.",
+    accelerator: "Super+Shift+J", default: "Super+Shift+J", registered: true, error: null },
+  { id: "capture_screen", label: "Attach a screen capture", hint: "Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
+    accelerator: "Alt+Shift+S", default: "Alt+Shift+S", registered: true, error: null },
+  { id: "quick_note", label: "Quick note to Logseq", hint: "Summon the bar already prefixed with #log.",
+    accelerator: "Alt+Shift+N", default: "Alt+Shift+N", registered: true, error: null },
+  { id: "toggle_widget", label: "Show or hide the widget", hint: "The desktop pane with the meters and the gates.",
+    accelerator: "Alt+Shift+W", default: "Alt+Shift+W", registered: true, error: null },
+];
+
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -315,6 +328,36 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                                 cwd: "C:\\Jarvis" } };
           case "stream_chat": return null;
           case "get_theme": return theme || "deep-space";
+          case "get_hotkeys": return window.__hotkeys;
+          case "reset_hotkeys":
+            window.__hotkeys = window.__hotkeys.map((h) => ({
+              ...h, accelerator: h.default, registered: true, error: null,
+            }));
+            return window.__hotkeys;
+          case "set_hotkeys": {
+            // Mirrors hotkeys.rs: validate the whole set BEFORE anything is
+            // written, so a rejected save leaves the bindings untouched.
+            const seen = new Map();
+            for (const [id, accel] of Object.entries(args.bindings)) {
+              const mods = String(accel).split("+").slice(0, -1);
+              if (!mods.length) throw new Error(`${id}: \`${accel}\` has no modifier.`);
+              const key = String(accel).toLowerCase();
+              if (seen.has(key)) {
+                throw new Error(`\`${accel}\` is on both ${seen.get(key)} and ${id}.`);
+              }
+              seen.set(key, id);
+            }
+            window.__hotkeys = window.__hotkeys.map((h) => ({
+              ...h,
+              accelerator: args.bindings[h.id] ?? h.accelerator,
+              // The scenario decides which combinations the "OS" refuses.
+              registered: !(window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator),
+              error: (window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator)
+                ? "HotKey already registered"
+                : null,
+            }));
+            return window.__hotkeys;
+          }
           case "set_theme": return args.theme;
           case "brain_read": {
             const out = {};
@@ -350,6 +393,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
       document.documentElement.setAttribute("data-theme", theme);
     }
   }
+  window.__hotkeys = JSON.parse(JSON.stringify(hotkeys));
+  window.__refuse = refuse || [];
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;
@@ -377,7 +422,8 @@ export async function open(browser, base, file, data, viewport) {
   page.on("requestfailed", r => { if (!/favicon/.test(r.url())) errors.push(`REQFAIL ${r.url()}`); });
   await page.addInitScript(bridge, {
     link: {}, pending: [], attention: ATTENTION_CLEAR, digest: DIGEST,
-    telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null, ...data,
+    telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
+    hotkeys: HOTKEYS, refuse: [], ...data,
   });
   await page.goto(`${base}/${file}`);
   await page.waitForTimeout(500);
