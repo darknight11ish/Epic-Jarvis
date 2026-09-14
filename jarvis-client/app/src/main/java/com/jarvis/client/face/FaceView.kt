@@ -27,6 +27,14 @@ import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.hypot
 import kotlin.math.max
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
@@ -55,20 +63,57 @@ fun FaceView(
     val host = remember { FaceHost() }
     var frame by remember { mutableStateOf(host.snapshot()) }
 
+    // The loop below is keyed on face and bindings, not on these. Called
+    // directly they would be captured from whichever composition started the
+    // loop and never updated — so the first non-remembered lambda a caller
+    // passes would freeze the mic at its opening value for the life of the
+    // face. rememberUpdatedState is the fix for exactly that shape.
+    val mic by rememberUpdatedState(micLevel)
+    val speech by rememberUpdatedState(speechLevel)
+
+    // One glow sprite, painted once and reused.
+    //
+    // It used to be a Brush.radialGradient built inside the draw: a new
+    // ArrayList, two boxed Colors, a new ShaderBrush and — because a
+    // ShaderBrush caches its native shader per instance — a fresh
+    // RadialGradient and gradient ramp, every active frame. At radius 2.1x it
+    // covers essentially the whole canvas, roughly thirty times the fill of the
+    // entire particle field, so it was the single most expensive thing on
+    // screen and it was being rebuilt sixty times a second.
+    val glow = rememberGlowSprite()
+
     LaunchedEffect(state) { host.onStateChange(state) }
 
     LaunchedEffect(face, bindings) {
         var last = 0L
         while (true) {
-            withFrameNanos { now ->
+            val fps = Spec.fpsFor(state)
+            if (fps in 1..15) {
+                // Below 15fps the frame clock was still waking at the display
+                // rate to decide to do nothing: a Choreographer callback and a
+                // coroutine resume 60-120 times a second, across what the spec
+                // itself calls nine tenths of screen-on time. Sleeping to the
+                // next due instant costs nothing in between.
+                val stepMs = 1000L / fps
+                delay(stepMs)
+                val now = System.nanoTime()
                 if (last == 0L) last = now
                 val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                 last = now
-                // Resting states draw at 30/15/2 rather than the display rate.
-                // The accumulated dt is handed to the draw, so motion covers the
-                // same distance — this is frame skipping, not slow motion.
-                if (host.advance(dt, state, micLevel(), speechLevel(), bindings, face)) {
+                if (host.advance(dt, state, mic(), speech(), bindings, face)) {
                     frame = host.snapshot()
+                }
+            } else {
+                withFrameNanos { now ->
+                    if (last == 0L) last = now
+                    val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
+                    last = now
+                    // Resting states draw at 30 rather than the display rate.
+                    // The accumulated dt is handed to the draw, so motion covers
+                    // the same distance — frame skipping, not slow motion.
+                    if (host.advance(dt, state, mic(), speech(), bindings, face)) {
+                        frame = host.snapshot()
+                    }
                 }
             }
         }
@@ -89,7 +134,7 @@ fun FaceView(
             },
     ) {
         Canvas(Modifier.matchParentSize()) {
-            drawFace(frame, face, notches)
+            drawFace(frame, face, notches, glow)
         }
     }
 }
@@ -361,7 +406,9 @@ class FaceHost {
         val inRest = (time % Spec.SPEECH_REST_EVERY_S) > (Spec.SPEECH_REST_EVERY_S - Spec.SPEECH_REST_S)
         if (inRest) return 0f
         val syl = sin(time * Spec.SPEECH_SYLLABLE_HZ * PI2) * 0.5f + 0.5f
-        val weight = 0.55f + 0.45f * Random(( time * 2f).toInt()).nextFloat()
+        // A hash, not a new XorWowRandom every frame. Random(seed) allocated a
+        // generator sixty times a second for one float.
+        val weight = 0.55f + 0.45f * hashUnit((time * 2f).toInt())
         return (syl * weight).coerceIn(0f, 1f)
     }
 }
@@ -377,7 +424,7 @@ private fun smoothstep(x: Float) = x * x * (3f - 2f * x)
  */
 private fun dimmed(c: Color, dim: Float): Color = mix(Spec.BACKGROUND, c, dim)
 
-private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int) {
+private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int, glow: ImageBitmap) {
     val w = size.minDimension
     val cx = size.width / 2f
     val cy = size.height / 2f
@@ -400,14 +447,19 @@ private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int) {
         // A cached-gradient halo rather than a blur. A real blur over a canvas
         // face was measured at 3-6 ms on a mid-range phone; this is one draw.
         if (Spec.isActive(f.state)) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(lifted.copy(alpha = 0.30f), Color.Transparent),
-                    center = Offset(cx, cy),
-                    radius = radius * 2.1f,
-                ),
-                radius = radius * 2.1f,
-                center = Offset(cx, cy),
+            // One textured quad, tinted, composited additively.
+            //
+            // Additive rather than SrcOver because the spec's own canvas
+            // fallback for bloom says the sprite is drawn "lighter" — this is a
+            // light source, and a light source adds.
+            val r = radius * 2.1f
+            val side = (r * 2f).toInt().coerceAtLeast(1)
+            drawImage(
+                image = glow,
+                dstOffset = IntOffset((cx - r).toInt(), (cy - r).toInt()),
+                dstSize = IntSize(side, side),
+                colorFilter = ColorFilter.tint(lifted.copy(alpha = 0.30f)),
+                blendMode = BlendMode.Plus,
             )
         }
 
@@ -492,4 +544,48 @@ private fun DrawScope.drawNotches(cx: Float, cy: Float, r: Float, tint: Color, n
             strokeWidth = 3f,
         )
     }
+}
+
+
+/**
+ * The glow ramp: white in the middle, transparent at the edge, painted once.
+ *
+ * 160px is plenty — a smooth radial ramp upscales invisibly, and at ARGB that
+ * is about 100 KB held for the life of the composition. The colour comes from a
+ * ColorFilter at draw time rather than from the bitmap, so the sprite never
+ * needs rebuilding when the state colour changes.
+ *
+ * Modifier.drawWithCache does not solve this on its own: its cache re-runs on a
+ * size or key change, and the glow's colour changes continuously, so it would
+ * invalidate every frame. Splitting the shape from the tint is what makes it
+ * cacheable at all.
+ */
+@Composable
+private fun rememberGlowSprite(): ImageBitmap = remember {
+    val n = 160
+    val bitmap = android.graphics.Bitmap.createBitmap(
+        n, n, android.graphics.Bitmap.Config.ARGB_8888,
+    )
+    android.graphics.Canvas(bitmap).drawCircle(
+        n / 2f, n / 2f, n / 2f,
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            shader = android.graphics.RadialGradient(
+                n / 2f, n / 2f, n / 2f,
+                android.graphics.Color.WHITE,
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Shader.TileMode.CLAMP,
+            )
+        },
+    )
+    bitmap.asImageBitmap()
+}
+
+/** A cheap deterministic 0..1 from an int. Replaces a per-frame Random. */
+private fun hashUnit(seed: Int): Float {
+    var x = seed * -1640531527
+    x = x xor (x ushr 15)
+    x *= -2048144789
+    x = x xor (x ushr 13)
+    return ((x ushr 8) and 0xFFFF) / 65535f
 }

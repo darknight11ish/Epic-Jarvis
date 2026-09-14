@@ -278,6 +278,11 @@ object Fullerene : Face {
     override val id = "fullerene"
     override val name = "Fullerene"
 
+    private const val N = 62
+    private val xBuf = FloatArray(N)
+    private val yBuf = FloatArray(N)
+    private val zBuf = FloatArray(N)
+
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 0.75f
         FaceState.THINKING -> 2.1f
@@ -292,23 +297,34 @@ object Fullerene : Face {
         // A spherical point set rotated by angle and the drag, with edges drawn
         // between near neighbours. Cheap, and it reads as a cage rather than a
         // disc because of the depth gain.
-        val n = 62
-        val pts = ArrayList<Triple<Float, Float, Float>>(n)
+        val n = N
+        // Three reused FloatArrays rather than an ArrayList of Triples.
+        //
+        // The list rebuilt itself every frame: 62 Triples plus about 186 boxed
+        // Floats, so roughly 250 objects a frame and 15,000 a second, for a
+        // nursery collection every few seconds in the middle of a 60fps draw.
+        // The arrays are fields on the face, which is a singleton, so this is
+        // 744 bytes allocated once for the life of the process.
+        val xs = xBuf
+        val ys = yBuf
+        val zs = zBuf
         val golden = PI.toFloat() * (3f - kotlin.math.sqrt(5f))
+        val cp = cos(f.pitch)
+        val sp = sin(f.pitch)
         for (i in 0 until n) {
             val y = 1f - (i / (n - 1f)) * 2f
             val rad = kotlin.math.sqrt(1f - y * y)
             val th = golden * i + f.angle * 0.5f + f.yaw
-            var x = cos(th) * rad
-            var z = sin(th) * rad
-            // pitch
-            val cp = cos(f.pitch); val sp = sin(f.pitch)
-            val y2 = y * cp - z * sp
-            z = y * sp + z * cp
-            pts.add(Triple(x, y2, z))
+            val x = cos(th) * rad
+            val z0 = sin(th) * rad
+            xs[i] = x
+            ys[i] = y * cp - z0 * sp
+            zs[i] = y * sp + z0 * cp
         }
-        for (i in pts.indices) {
-            val (x, y, z) = pts[i]
+        for (i in 0 until n) {
+            val x = xs[i]
+            val y = ys[i]
+            val z = zs[i]
             val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
             val px = cx + x * r
             val py = cy + y * r
@@ -319,9 +335,10 @@ object Fullerene : Face {
             )
             // Edges to the next few points only: a full neighbour search is
             // O(n^2) for a cage nobody can count the edges of.
-            for (j in i + 1 until minOf(i + 4, pts.size)) {
-                val (qx, qy, qz) = pts[j]
-                val dq = ((qz + 1f) / 2f).pow(Spec.DEPTH_GAIN)
+            for (j in i + 1 until minOf(i + 4, n)) {
+                val qx = xs[j]
+                val qy = ys[j]
+                val dq = ((zs[j] + 1f) / 2f).pow(Spec.DEPTH_GAIN)
                 drawLine(
                     color = mix(cool, hot, (d + dq) / 2f).copy(alpha = 0.10f + 0.3f * d),
                     start = Offset(px, py),

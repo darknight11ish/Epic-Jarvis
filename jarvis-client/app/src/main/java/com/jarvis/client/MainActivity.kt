@@ -25,30 +25,35 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
-import com.jarvis.client.ui.T
+import com.jarvis.client.ui.NavBackHandler
+import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.approval.BiometricGate
-import com.jarvis.client.ui.screens.InboxScreen
+import com.jarvis.client.ui.rememberNavState
+import com.jarvis.client.ui.screens.AppearanceScreen
+import com.jarvis.client.ui.screens.BrainScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
 import com.jarvis.client.ui.screens.HomeState
+import com.jarvis.client.ui.screens.InboxScreen
 import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
-import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.lifecycleScope
+import com.jarvis.client.ui.theme.JarvisTheme
+import com.jarvis.client.ui.theme.Themes
+import com.jarvis.client.ui.theme.systemPrefersDark
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
  * The one activity.
  *
- * Three destinations and no navigation library: pairing until there is a host
- * and a token, the readiness checks on demand, and home. A nav graph for three
- * screens with no deep links would be more machinery than routing.
- */
-/**
  * FragmentActivity rather than ComponentActivity, for exactly one reason:
  * `BiometricPrompt` takes a FragmentActivity or a Fragment and nothing else —
  * it needs a fragment manager to survive a configuration change while the
@@ -60,6 +65,9 @@ class MainActivity : FragmentActivity() {
 
     private val permissionTick = mutableIntStateOf(0)
 
+    /** The approval a notification asked us to open, or null. */
+    private val focusApproval = mutableStateOf<String?>(null)
+
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { permissionTick.intValue += 1 }
@@ -68,83 +76,115 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         JarvisRuntime.initialize(this)
+        readApprovalIntent(intent)
 
-        setContent {
-            val scope = rememberCoroutineScope()
-            val chat = remember { ChatSession(JarvisRuntime.api) }
+        setContent { App() }
+    }
 
-            var showReadiness by rememberSaveable { mutableStateOf(false) }
-            var showInbox by rememberSaveable { mutableStateOf(false) }
-            var paired by remember { mutableStateOf(JarvisRuntime.isPaired()) }
-            var busy by remember { mutableStateOf(false) }
-            var draft by rememberSaveable { mutableStateOf("") }
+    /**
+     * `launchMode="singleTask"`, so a second tap on a notification re-delivers
+     * the intent here rather than creating an activity. Without this override
+     * the extra was read once, at cold start, and every later tap opened the
+     * app on whatever screen it was last on — which for a decision request is
+     * the same as the notification not being tappable.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readApprovalIntent(intent)
+    }
 
-            val tick = permissionTick.intValue
-            val link by JarvisRuntime.link.collectAsState()
-            val linkDetail by JarvisRuntime.linkDetail.collectAsState()
-            val stale by JarvisRuntime.stale.collectAsState()
-            val activity by JarvisRuntime.activity.collectAsState()
-            val power by JarvisRuntime.power.collectAsState()
-            val pending by JarvisRuntime.pending.collectAsState()
-            val attention by JarvisRuntime.attention.collectAsState()
-            val notice by JarvisRuntime.notice.collectAsState()
-            val reply by chat.reply.collectAsState()
-            val streaming by chat.streaming.collectAsState()
-            val digest by JarvisRuntime.digest.collectAsState()
-            val undo by JarvisRuntime.undo.collectAsState()
-            val jobs by JarvisRuntime.jobs.collectAsState()
+    private fun readApprovalIntent(intent: Intent?) {
+        if (intent?.action != ApprovalNotifier.ACTION_OPEN_APPROVAL) return
+        focusApproval.value = intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID) ?: ""
+    }
 
+    @Composable
+    private fun App() {
+        val scope = rememberCoroutineScope()
+        val chat = remember { ChatSession(JarvisRuntime.api) }
+        val appearance = JarvisRuntime.appearance
+
+        val nav = rememberNavState()
+        NavBackHandler(nav)
+
+        // Saveable, unlike before: a rotation on the checks screen used to be
+        // able to bounce a paired device back to pairing, because this was the
+        // one flag of the three that was not saved.
+        var paired by rememberSaveable { mutableStateOf(JarvisRuntime.isPaired()) }
+        var busy by rememberSaveable { mutableStateOf(false) }
+        var draft by rememberSaveable { mutableStateOf("") }
+
+        val tick = permissionTick.intValue
+        val chrome by appearance.chrome.collectAsState()
+        val followSystem by appearance.followSystem.collectAsState()
+        val faceId by appearance.faceId.collectAsState()
+        val bindings by appearance.bindings.collectAsState()
+
+        val link by JarvisRuntime.link.collectAsState()
+        val linkDetail by JarvisRuntime.linkDetail.collectAsState()
+        val stale by JarvisRuntime.stale.collectAsState()
+        val activity by JarvisRuntime.activity.collectAsState()
+        val faceState by JarvisRuntime.face.collectAsState()
+        val power by JarvisRuntime.power.collectAsState()
+        val status by JarvisRuntime.status.collectAsState()
+        val version by JarvisRuntime.version.collectAsState()
+        val pending by JarvisRuntime.pending.collectAsState()
+        val attention by JarvisRuntime.attention.collectAsState()
+        val notice by JarvisRuntime.notice.collectAsState()
+        val digest by JarvisRuntime.digest.collectAsState()
+        val undo by JarvisRuntime.undo.collectAsState()
+        val jobs by JarvisRuntime.jobs.collectAsState()
+        val brain by JarvisRuntime.brain.collectAsState()
+        val streaming by chat.streaming.collectAsState()
+
+        val face = remember(faceId) { Faces.byId(faceId) }
+        val idleColour = bindings.of(FaceState.IDLE).tint ?: com.jarvis.client.face.Palette.ICE_3
+
+        // A chat failure used to be written to a StateFlow that nothing
+        // collected, so a send that failed looked exactly like a send that was
+        // still thinking — for ever.
+        LaunchedEffect(chat) {
+            chat.error.collectLatest { if (it != null) JarvisRuntime.setNotice(it) }
+        }
+
+        // "Follow the system" defers rather than fires.
+        //
+        // It can trigger at dusk, on an ambient-light change or when the OS
+        // flips, and a ground that changes mid-approval is exactly the "is it
+        // telling me something?" ambiguity the waiting clock exists to remove.
+        // It also overlaps the 300ms state crossfade with the 500ms theme one,
+        // which compounds two luminance ramps the flash governor cannot see.
+        val systemDark = systemPrefersDark()
+        val resting = faceState == FaceState.IDLE ||
+            faceState == FaceState.STANDBY ||
+            faceState == FaceState.BANKED
+        LaunchedEffect(followSystem, systemDark, resting) {
+            if (!followSystem || !resting) return@LaunchedEffect
+            val want = Themes.forSystem(systemDark, preferredDark = Themes.byId(lastDarkId(chrome.id)))
+            if (want.id != chrome.id) appearance.setTheme(want)
+        }
+
+        // A notification tap goes straight home, so the card is where the
+        // finger already is.
+        LaunchedEffect(focusApproval.value) {
+            if (focusApproval.value == null) return@LaunchedEffect
+            nav.resetTo(Screen.HOME)
+            JarvisRuntime.refreshPending()
+            focusApproval.value = null
+        }
+
+        JarvisTheme(chrome = chrome, idleColor = idleColour) {
             val root = Modifier
                 .fillMaxSize()
-                .background(T.Void)
+                .background(chrome.surface0)
                 .windowInsetsPadding(WindowInsets.systemBars)
 
-            when {
-                showInbox -> {
-                    LaunchedEffect(Unit) { JarvisRuntime.refreshInbox() }
-                    InboxScreen(
-                        attention = attention,
-                        digest = digest,
-                        undo = undo,
-                        jobs = jobs,
-                        onOpenApproval = {
-                            // The brief cannot decide an approval. Tapping a row
-                            // leaves the digest and opens the normal gate card.
-                            showInbox = false
-                            scope.launch { JarvisRuntime.refreshPending() }
-                        },
-                        onRevert = { scope.launch { JarvisRuntime.revert(it) } },
-                        onCancelJob = { scope.launch { JarvisRuntime.cancelJob(it) } },
-                        onMarkSeen = { scope.launch { JarvisRuntime.markDigestSeen() } },
-                        onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
-                        onBack = { showInbox = false },
-                        modifier = root,
-                    )
-                }
-
-                showReadiness -> {
-                    val host by JarvisRuntime.settings.host.collectAsState()
-                    val items = remember(tick, host) {
-                        com.jarvis.client.platform.PlatformReadiness.report(
-                            this@MainActivity,
-                            host,
-                        )
-                    }
-                    ReadinessScreen(
-                        items = items,
-                        onRequestNotifications = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        },
-                        onRequestBatteryExemption = ::requestBatteryExemption,
-                        onStartService = { EventService.start(this@MainActivity) },
-                        onBack = { showReadiness = false },
-                        modifier = root,
-                    )
-                }
-
-                !paired -> PairingScreen(
+            // Pairing outranks the stack: there is nothing to show until there
+            // is somewhere to talk to. The checks screen is the exception,
+            // because "why can I not connect" has to be answerable from here.
+            if (!paired && nav.current != Screen.CHECKS) {
+                PairingScreen(
                     initialHost = JarvisRuntime.settings.host.value,
                     hasToken = JarvisRuntime.tokens.hasToken(),
                     busy = busy,
@@ -166,25 +206,117 @@ class MainActivity : FragmentActivity() {
                             }
                         }
                     },
-                    onOpenReadiness = { showReadiness = true },
+                    onOpenReadiness = { nav.go(Screen.CHECKS) },
+                    modifier = root,
+                )
+                return@JarvisTheme
+            }
+
+            when (nav.current) {
+                Screen.CHECKS -> {
+                    val host by JarvisRuntime.settings.host.collectAsState()
+                    val items = remember(tick, host) {
+                        com.jarvis.client.platform.PlatformReadiness.report(
+                            this@MainActivity,
+                            host,
+                        )
+                    }
+                    ReadinessScreen(
+                        items = items,
+                        onRequestNotifications = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        onRequestBatteryExemption = ::requestBatteryExemption,
+                        onStartService = { EventService.start(this@MainActivity) },
+                        onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
+                        modifier = root,
+                    )
+                }
+
+                Screen.INBOX -> {
+                    LaunchedEffect(Unit) { JarvisRuntime.refreshInbox() }
+                    InboxScreen(
+                        attention = attention,
+                        digest = digest,
+                        undo = undo,
+                        jobs = jobs,
+                        onOpenApproval = { id ->
+                            // Carries the id now. It used to be dropped, so a
+                            // digest row with three approvals waiting took you
+                            // to a list and left you to find the right one.
+                            nav.resetTo(Screen.HOME)
+                            focusApproval.value = id
+                            scope.launch { JarvisRuntime.refreshPending() }
+                        },
+                        onRevert = { scope.launch { JarvisRuntime.revert(it) } },
+                        onCancelJob = { scope.launch { JarvisRuntime.cancelJob(it) } },
+                        onMarkSeen = { scope.launch { JarvisRuntime.markDigestSeen() } },
+                        onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+                }
+
+                Screen.BRAIN -> {
+                    LaunchedEffect(Unit) { JarvisRuntime.refreshBrain() }
+                    BrainScreen(
+                        link = link,
+                        stale = stale,
+                        activity = activity,
+                        power = power,
+                        status = status,
+                        version = version,
+                        attention = attention,
+                        jobs = jobs,
+                        brain = brain,
+                        onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+                }
+
+                Screen.APPEARANCE -> AppearanceScreen(
+                    current = chrome,
+                    followSystem = followSystem,
+                    face = face,
+                    bindings = bindings,
+                    onPickTheme = {
+                        if (!appearance.setTheme(it)) {
+                            JarvisRuntime.setNotice("One theme change at a time — give it a moment.")
+                        }
+                    },
+                    onFollowSystem = appearance::setFollowSystem,
+                    onPickFace = { appearance.setFace(it.id) },
+                    onRandomise = { appearance.randomise() },
+                    onResetBindings = { appearance.resetBindings() },
+                    onBack = { nav.back() },
                     modifier = root,
                 )
 
-                else -> HomeScreen(
+                Screen.HOME -> HomeScreen(
                     state = HomeState(
                         link = link,
                         linkDetail = linkDetail,
                         stale = stale,
                         activity = activity,
-                        faceState = JarvisRuntime.faceState(),
+                        faceState = faceState,
                         power = power,
+                        status = status,
                         pending = pending,
                         attention = attention,
                         notice = notice,
-                        reply = reply,
                         streaming = streaming,
                         draft = draft,
+                        face = face,
+                        bindings = bindings,
                     ),
+                    // A lambda, so a streamed token redraws the reply and
+                    // nothing else. Passing the string rebuilt HomeState on
+                    // every chunk and recomposed the bar, the list and the
+                    // composer while the face drew at 60fps on the same thread.
+                    reply = { chat.reply.value },
                     actions = remember {
                         HomeActions(
                             onDraftChange = { draft = it },
@@ -219,8 +351,10 @@ class MainActivity : FragmentActivity() {
                                 scope.launch { JarvisRuntime.refreshAll() }
                             },
                             onDismissNotice = { JarvisRuntime.clearNotice() },
-                            onOpenReadiness = { showReadiness = true },
-                            onOpenInbox = { showInbox = true },
+                            onOpenChecks = { nav.go(Screen.CHECKS) },
+                            onOpenInbox = { nav.go(Screen.INBOX) },
+                            onOpenBrain = { nav.go(Screen.BRAIN) },
+                            onOpenAppearance = { nav.go(Screen.APPEARANCE) },
                             blockerFor = { item: PendingItem ->
                                 JarvisRuntime.decisionBlocker(item)
                             },
@@ -231,6 +365,10 @@ class MainActivity : FragmentActivity() {
             }
         }
     }
+
+    /** The dark theme to come back to when the system leaves light mode. */
+    private fun lastDarkId(currentId: String): String =
+        if (currentId == Themes.DAYLIGHT.id) Themes.REACTOR.id else currentId
 
     /**
      * @return true when the decision may proceed.

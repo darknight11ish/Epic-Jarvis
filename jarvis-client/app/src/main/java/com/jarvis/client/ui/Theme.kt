@@ -1,22 +1,36 @@
 package com.jarvis.client.ui
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.jarvis.client.ui.theme.LocalAccent
+import com.jarvis.client.ui.theme.LocalChrome
 
 /**
- * Pulled out of MainActivity so the approval cards and the face host share
- * exactly these values rather than each declaring their own near-miss.
+ * The old nine-colour token set, now reading from the live theme.
  *
- * These are the spec's own palette entries, not eyeballed approximations:
- * neutral-1, ice-4, neutral-4, verdant-4, amber-4, rose-4.
+ * It used to be nine `val`s on an object, referenced 119 times across five
+ * files. Plain vals are not snapshot state, so making them mutable would have
+ * recomposed nothing — the screens would have kept the old colours until a
+ * configuration change. And three of the nine were hand-typed a digit off from
+ * the values the comment above them claimed: `Void` was neither `neutral-1` nor
+ * `renderer.background`, and `Ink` was two off `neutral-5`.
+ *
+ * These are composable getters over `LocalChrome`, so every existing call site
+ * follows the theme without being rewritten, and the near-miss colours are gone
+ * because the values now come from one measured place.
+ *
+ * New code should read `LocalChrome.current` directly — it is one lookup rather
+ * than nine, and it can reach the tokens this shim has no name for
+ * (`hairlineFocus`, `surface2`, the ink/mark tiers).
  */
 object T {
-    val Void = Color(0xFF05070B)
-    val Plate = Color(0xFF0A1119)
-    val Line = Color(0xFF17293A)
-    val Ink = Color(0xFFDBE7F2)
-    val Dim = Color(0xFF8FA3B8)
-    val Pick = Color(0xFF6FE3FF)
-    val Ok = Color(0xFF5FE0A8)
-    val Warn = Color(0xFFFFB648)
-    val Bad = Color(0xFFFF7B86)
+    val Void: Color @Composable get() = LocalChrome.current.surface0
+    val Plate: Color @Composable get() = LocalChrome.current.surface1
+    val Line: Color @Composable get() = LocalChrome.current.hairline
+    val Ink: Color @Composable get() = LocalChrome.current.textHi
+    val Dim: Color @Composable get() = LocalChrome.current.textMid
+    val Pick: Color @Composable get() = LocalAccent.current
+    val Ok: Color @Composable get() = LocalChrome.current.okInk
+    val Warn: Color @Composable get() = LocalChrome.current.warnInk
+    val Bad: Color @Composable get() = LocalChrome.current.badInk
 }

@@ -6,6 +6,7 @@ import com.jarvis.client.data.TokenStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import okhttp3.Call
@@ -196,6 +197,45 @@ class JarvisApi(
                     onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
                 )
         }
+
+    /**
+     * Reads a route whose *shape* the contract does not document.
+     *
+     * §4 lists `/api/compute`, `/api/memory/pending`, `/api/ledger`,
+     * `/api/skills` and `/api/initiative` with one line of description each and
+     * no field names — "GPU/VRAM plan", "Audit-chain status: entry count, last
+     * verified point, anchors". Writing a data class against that would mean
+     * inventing the keys, which is exactly the mistake that produced the other
+     * client's protocol: it fails silently, as an empty panel that looks built.
+     *
+     * So these come back as raw JSON and the screen renders whatever keys are
+     * actually there. It cannot be wrong about a field name because it does not
+     * know any. When the contract grows the shapes, these become real models.
+     */
+    suspend fun probe(path: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+        val target = url(path) ?: return@withContext ApiResult.Failed(
+            ApiError.Unreachable("No desktop address set"),
+        )
+        val req = Request.Builder().url(target).get().authed().build()
+        runCatching { shortCall.newCall(req).execute() }
+            .fold(
+                onSuccess = { resp ->
+                    resp.use {
+                        if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                        val text = it.body?.string().orEmpty()
+                        runCatching {
+                            when (val el = JarvisJson.parseToJsonElement(text)) {
+                                is JsonObject -> ApiResult.Ok(el)
+                                // A bare array is still worth showing; wrap it so
+                                // one renderer handles both.
+                                else -> ApiResult.Ok(JsonObject(mapOf("items" to el)))
+                            }
+                        }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
+                    }
+                },
+                onFailure = { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) },
+            )
+    }
 
     // ------------------------------------------------------------- chat ----
 

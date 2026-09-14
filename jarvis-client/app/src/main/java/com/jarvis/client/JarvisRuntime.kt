@@ -29,6 +29,25 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
+/**
+ * The raw JSON behind the brain screen.
+ *
+ * Deliberately untyped. §4 documents that these routes exist and what they are
+ * for, and does not document their fields — so a data class here would be
+ * invented keys, and invented keys fail silently as an empty panel. Null means
+ * the route was not reachable or not present, which the screen says plainly
+ * rather than rendering as zero.
+ */
+data class BrainSnapshot(
+    val compute: kotlinx.serialization.json.JsonObject? = null,
+    val memory: kotlinx.serialization.json.JsonObject? = null,
+    val ledger: kotlinx.serialization.json.JsonObject? = null,
+    val skills: kotlinx.serialization.json.JsonObject? = null,
+    val initiative: kotlinx.serialization.json.JsonObject? = null,
+    val contentRisk: kotlinx.serialization.json.JsonObject? = null,
+    val fetchedAtMs: Long = 0L,
+)
+
 /** Whether the event stream is up. Separate from whether Jarvis is busy. */
 enum class LinkState { OFFLINE, RECONNECTING, CONNECTED }
 
@@ -131,6 +150,11 @@ object JarvisRuntime {
     private val _jobs = MutableStateFlow<List<JobRecord>>(emptyList())
     val jobs: StateFlow<List<JobRecord>> = _jobs.asStateFlow()
 
+    private val _brain = MutableStateFlow(BrainSnapshot())
+
+    /** What the brain screen shows. Fetched on demand, never polled. */
+    val brain: StateFlow<BrainSnapshot> = _brain.asStateFlow()
+
     /** Non-null when something needs saying on screen and nowhere else will say it. */
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
@@ -217,6 +241,9 @@ object JarvisRuntime {
     fun noticeFor(e: ApiError): String = describe(e)
 
     fun clearNotice() { _notice.value = null }
+
+    /** For failures the UI has no other place to put. */
+    fun setNotice(text: String) { _notice.value = text }
 
     // ----------------------------------------------------------- stream ----
 
@@ -346,6 +373,38 @@ object JarvisRuntime {
         api.undo().onOk { _undo.value = it }
         api.jobs().onOk { _jobs.value = it }
     }
+
+    /**
+     * The brain screen's data.
+     *
+     * On demand rather than live, and the reason is the same as the inbox's:
+     * none of it changes at the display's rate. The active model changes every
+     * few seconds, VRAM samples arrive around 1 Hz, and memory facts and jobs
+     * are event-driven. Five more endpoints polled on every event would undo
+     * the battery saving the single stream bought, to animate numbers that are
+     * not moving.
+     *
+     * Each probe is independent and a 404 simply means that route is absent on
+     * this backend — the screen renders the sections it got and says nothing
+     * about the ones it did not, rather than showing an empty panel that looks
+     * broken.
+     */
+    suspend fun refreshBrain() {
+        refreshStatus()
+        refreshAttention()
+        api.jobs().onOk { _jobs.value = it }
+        _brain.value = BrainSnapshot(
+            compute = api.probe("/api/compute").orNull(),
+            memory = api.probe("/api/memory/pending").orNull(),
+            ledger = api.probe("/api/ledger").orNull(),
+            skills = api.probe("/api/skills").orNull(),
+            initiative = api.probe("/api/initiative").orNull(),
+            contentRisk = api.probe("/api/content-risk").orNull(),
+            fetchedAtMs = System.currentTimeMillis(),
+        )
+    }
+
+    private fun <T> ApiResult<T>.orNull(): T? = (this as? ApiResult.Ok)?.value
 
     suspend fun revert(entry: UndoEntry): ApiResult<Unit> {
         val result = api.revert(entry.id)
