@@ -48,7 +48,10 @@ be violated outranks any crash.
 ## What just happened
 
 A five-reviewer audit ran (the attached `AUDIT-2026-09-14.md`) and its findings
-were then fixed in a single commit. So the code you are reading is **post-fix**.
+were then fixed. So the code you are reading is **post-fix** — and post-CI: both
+modules compile, both test suites pass, and both debug APKs assemble on the
+commit in the bundle. "It builds" is therefore not a finding; what it does at
+runtime still is.
 Your job is not to re-derive that audit. It is to answer three questions:
 
 ### 1. Did the fixes actually work, or do they just look like they did?

@@ -1,10 +1,12 @@
 # Jarvis Android — full source bundle
-Commit: be86e1ec8a8769f695a6fcc9fa34b49d4181377b
-Branch: claude/android-apk-build-q435fi
-Generated: 2026-09-14
 
-Every source file in the repository, in one document. Build outputs, the
-Gradle wrapper JARs and the audit document itself are excluded.
+Commit `48967179f24900dcea5e3eec1dd12d3d688c547d` on `claude/android-apk-build-q435fi`, generated 2026-09-14.
+
+This is the state **after** the audit fixes, and it is the state CI built:
+both modules compile, both test suites run, both debug APKs assemble.
+
+Every source file in the repository, in one document. Build outputs, the two
+Gradle wrapper JARs and the documents under `docs/` are excluded.
 
 ## Contents
 - `README.md`
@@ -561,7 +563,15 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.06.00"))
 
     implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.9.3")
+    // 1.12.4, not 1.9.3. androidx.activity is not managed by the Compose BOM, so
+    // that pin was real rather than decorative: resolving the graph in CI shows
+    // core-ktx and lifecycle floating up to 1.16.0 and 2.9.4 on their own, while
+    // activity stayed at a November 2024 release hosting a 2026 Compose runtime
+    // under targetSdk 36 — where edge-to-edge enforcement changed and
+    // MainActivity calls enableEdgeToEdge(). 1.12.4 is the last patch of the
+    // generation contemporaneous with Compose 1.11.3; 1.13.0 is stable but newer
+    // than the BOM, and 1.14.x is alpha.
+    implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
@@ -639,6 +649,11 @@ kotlin.code.style=official
 distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
 distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
+# Verified against services.gradle.org, which this dev container cannot reach;
+# read from a CI runner by .github/workflows/verify-toolchain.yml.
+# validateDistributionUrl only checks the URL is well formed and reachable.
+# Without this line every build downloads ~130 MB and executes it unverified.
+distributionSha256Sum=f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6
 networkTimeout=10000
 validateDistributionUrl=true
 zipStoreBase=GRADLE_USER_HOME
@@ -665,6 +680,11 @@ kotlin.code.style=official
 distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
 distributionUrl=https\://services.gradle.org/distributions/gradle-9.6.0-bin.zip
+# Verified against services.gradle.org, which this dev container cannot reach;
+# read from a CI runner by .github/workflows/verify-toolchain.yml.
+# validateDistributionUrl only checks the URL is well formed and reachable.
+# Without this line every build downloads ~130 MB and executes it unverified.
+distributionSha256Sum=bbaeb2fef8710818cf0e261201dab964c572f92b942812df0c3620d62a529a01
 networkTimeout=10000
 validateDistributionUrl=true
 zipStoreBase=GRADLE_USER_HOME
