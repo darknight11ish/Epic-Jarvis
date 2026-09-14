@@ -2,9 +2,11 @@ package com.jarvis.client.face
 
 import androidx.compose.ui.graphics.Color
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** The two colours a pattern produces: the hot accent and the structural one. */
@@ -118,7 +120,7 @@ class FlashGovernor {
  * @param amp the smoothed drive: the microphone while listening, Jarvis's own
  *   voice while speaking. Never the raw level; the shell owns the envelope.
  */
-fun resolveRaw(bind: Binding, t: Float, amp: Float): Swatch {
+fun resolveRaw(bind: Binding, t: Float, amp: Float, seed: Int = 0): Swatch {
     val q = bind.merged
     val periodS = (q.periodS ?: 4.5f).coerceAtLeast(0.05f)
 
@@ -198,19 +200,29 @@ fun resolveRaw(bind: Binding, t: Float, amp: Float): Swatch {
         }
 
         PatternKind.FLICKER -> {
-            // Rate is clamped to limits.flash.flicker_rate_hz_max before it
-            // reaches the oscillator, not merely validated somewhere else: this
-            // is the only path to a colour, so the clamp belongs here.
-            val rate = (q.rateHz ?: 1.2f).coerceIn(0.05f, Spec.FLICKER_RATE_HZ_MAX)
-            val depth = (q.depth ?: 0.25f).coerceIn(0f, 1f)
-            val family = q.family ?: "ember"
-            val base = bind.tint ?: Palette.byId["$family-4"] ?: Palette.EMBER_4
-            // Two components, the stated rate and its 2.3x harmonic — the
-            // harmonic is what the spec's limit is actually sized against.
-            val n = sin(t * rate * PI2) * 0.6f +
-                sin(t * rate * Spec.FLICKER_HARMONIC * PI2) * 0.4f
-            val e = n * 0.5f * depth
-            Swatch(lift(base, e), lift(base, -0.6f + e * 0.5f))
+            // Steps along the FAMILY's own ramp, driven by a hash — not a
+            // smooth lift of one colour. "Irregular drift within one family,
+            // like a filament or a fire" is a walk between palette steps, and
+            // a sine pair is neither irregular nor stepped. Measured against
+            // the reference, the sine version was 117/255 out on the hot
+            // channel.
+            //
+            // Note it ignores a bound colour entirely, as the reference does:
+            // the family is the binding for this pattern, and a single colour
+            // has no ramp to walk.
+            val ramp = Palette.steps(q.family ?: "ember").ifEmpty { Palette.steps("ember") }
+            // Clamped here rather than merely defaulted: this is the one
+            // parameter that can put the face inside the photosensitive band,
+            // so the limit applies to whatever arrives — spec, hand-written
+            // binding, or a future randomiser.
+            val rate = (q.rateHz ?: 1.2f).coerceAtMost(Spec.FLICKER_RATE_HZ_MAX)
+            val depth = q.depth ?: 0.25f
+            val n = hash01(floor(t * rate).toInt() + seed * 17) * 0.6f +
+                hash01(floor(t * rate * Spec.FLICKER_HARMONIC).toInt() + seed * 31) * 0.4f
+            val idx = (1f + n * depth * (ramp.size - 1))
+                .roundToInt()
+                .coerceIn(0, ramp.size - 1)
+            Swatch(ramp[idx], ramp[(idx - 2).coerceAtLeast(0)])
         }
 
         PatternKind.REACTIVE -> {
@@ -229,7 +241,8 @@ fun resolveRaw(bind: Binding, t: Float, amp: Float): Swatch {
             val hot = q.hot ?: Palette.ROSE_4
             val u = sin(t / periodS * PI2) * 0.5f + 0.5f
             val a = if (u < 0.5f) mix(cold, warm, u * 2f) else mix(warm, hot, (u - 0.5f) * 2f)
-            Swatch(a, lift(a, -0.55f))
+            // -0.5, not -0.55. Measured 13/255 out against the reference.
+            Swatch(a, lift(a, -0.5f))
         }
 
         PatternKind.STROBE -> {
@@ -282,8 +295,13 @@ fun resolve(
     amp: Float,
     governor: FlashGovernor,
     strobe: StrobeBudget? = null,
+    /**
+     * Per-surface jitter, so `flicker` does not move in lockstep across a grid
+     * of faces. Only `flicker` reads it.
+     */
+    seed: Int = 0,
 ): Swatch {
-    val raw = resolveRaw(bind, t, amp)
+    val raw = resolveRaw(bind, t, amp, seed)
     // A spent strobe freezes on its lit phase. Freezing on the dark phase would
     // leave the face looking switched off, and the state that most often strobes
     // is the one that most needs to stay visible.
@@ -304,4 +322,19 @@ fun smooth(current: Float, target: Float, dt: Float, attackS: Float, releaseS: F
     if (tau <= 0f) return target
     val k = 1f - kotlin.math.exp(-dt / tau)
     return current + (target - current) * min(1f, k)
+}
+
+
+/**
+ * The reference's deterministic hash: `frac(sin(n * 127.1) * 43758.5453)`.
+ *
+ * Ported exactly rather than replaced with a better generator, because the
+ * point is to produce the same sequence the desktop produces from the same
+ * seed. Double precision throughout for the same reason — the value is
+ * quantised to one of five ramp steps, so a last-bit difference would have to
+ * land exactly on a rounding boundary to matter.
+ */
+fun hash01(n: Int): Float {
+    val s = kotlin.math.sin(n.toDouble() * 127.1) * 43758.5453
+    return (s - kotlin.math.floor(s)).toFloat()
 }
