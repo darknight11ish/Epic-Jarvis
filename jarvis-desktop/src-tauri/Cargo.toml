@@ -30,7 +30,6 @@ tauri-plugin-store = "2"
 # Build order step 3: starting the app twice focuses the running window.
 tauri-plugin-single-instance = "2"
 window-vibrancy = "0.5"
-screenshots = "0.8"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -40,6 +39,11 @@ base64 = "0.22"
 # CPU/RAM sampling for the desktop widget's telemetry panel. GPU figures come
 # from `nvidia-smi`, which needs no crate.
 sysinfo = "0.32"
+# Replaces `screenshots`, whose own crates.io description reads "Move to
+# [XCap]" — same author, same Monitor::all() shape, actively released. It also
+# takes five `cargo audit` findings out of the lockfile with it, including two
+# CVSS 7.5 DoS advisories in quick-xml that arrived through its Wayland path.
+xcap = "0.9"
 
 # Build order step 4: killing the process TREE, not the process. On Windows
 # that is a Job Object; on Unix a process group. Both are a handful of calls,

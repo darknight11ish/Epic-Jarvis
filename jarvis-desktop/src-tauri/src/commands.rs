@@ -269,23 +269,25 @@ pub fn notify(app: &AppHandle, title: &str, body: &str) {
 /// thread without going through the IPC layer.
 pub fn capture_primary_display() -> Result<CapturePayload, String> {
     use image::{codecs::jpeg::JpegEncoder, ExtendedColorType, ImageEncoder};
-    use screenshots::Screen;
+    use xcap::Monitor;
 
     let started = Instant::now();
 
-    let screens = Screen::all().map_err(|e| format!("unable to enumerate displays: {e}"))?;
-    if screens.is_empty() {
+    let monitors = Monitor::all().map_err(|e| format!("unable to enumerate displays: {e}"))?;
+    if monitors.is_empty() {
         return Err("no display was reported by the compositor".to_string());
     }
     // Prefer the display Windows marks primary; fall back to the first one so a
     // multi-monitor rig with an odd configuration still captures something.
-    let screen = screens
+    // `is_primary` is fallible in xcap, and a display that will not answer that
+    // question is not a reason to capture nothing.
+    let monitor = monitors
         .iter()
-        .find(|s| s.display_info.is_primary)
-        .unwrap_or(&screens[0]);
+        .find(|m| m.is_primary().unwrap_or(false))
+        .unwrap_or(&monitors[0]);
 
-    let frame = screen
-        .capture()
+    let frame = monitor
+        .capture_image()
         .map_err(|e| format!("desktop capture failed: {e}"))?;
 
     let (raw_width, raw_height) = (frame.width(), frame.height());
@@ -293,8 +295,8 @@ pub fn capture_primary_display() -> Result<CapturePayload, String> {
         return Err("the compositor returned an empty frame".to_string());
     }
 
-    // `screenshots` hands back RGBA. Rebuilding the buffer from raw bytes keeps
-    // this code independent of which `image` version the capture crate links.
+    // Rebuilt from raw bytes so this stays independent of which `image` version
+    // the capture crate links against.
     let rgba = image::RgbaImage::from_raw(raw_width, raw_height, frame.into_raw())
         .ok_or_else(|| "captured frame had an unexpected buffer length".to_string())?;
 
