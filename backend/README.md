@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Twelve patches against the Jarvis backend, each with an executable test.
+Thirteen patches against the Jarvis backend, each with an executable test.
 
 **Order.** They commute — five of them touch `jarvis_hud.py`, but in
 well-separated regions, and every order produces the same tree. The order in
@@ -28,6 +28,7 @@ roughly-matching unrelated fact, permanently, and `retire()` has no way back.
 | `degrade-filter.patch` | `jarvis_hud.py` | **A cloud turn that stepped down to local and back out again went upstream unfiltered.** The worst thing in this directory. |
 | `vram-estimate.patch` | `jarvis_models.py` | The estimator that advises on model choice was wrong in both directions at once. |
 | `memory-pane.patch` | `jarvis_hud.py` | Routes to read, edit, forget and export what Jarvis has learned. Gives `retire()` its first caller. Needs `extraction-wiring` for the learning switch. |
+| `token-file.patch` | `jarvis_hud.py` | Makes a token on first run. **The phone has never been pairable without this.** |
 
 ## Apply them
 
@@ -855,3 +856,67 @@ as a traceback. The rest are controls on shape: that no write route grows a
 list form, that `forget` calls `retire()` and not a `DELETE`, that `edit` never
 emits an `UPDATE`, and that both new read routes are actually in the whitelist
 — because a route nothing can call is the defect this project keeps producing.
+
+---
+
+# `token-file.patch`
+
+**The Android client has never been pairable, on any install, since it was
+written.**
+
+It authenticates by token alone — it sends no `Origin`, so the origin check
+cannot help it — and nothing in this project has ever generated a token.
+`docs/INSTALL.md` already lists that as an unbuilt piece. A secret nobody
+creates is not a default, it is a missing feature.
+
+The same fix closes a smaller hole: with no token, every process on this
+machine can `GET /api/events` and read the doorbell — what is waiting and how
+much of it. Not catastrophic on a single-owner workstation, since anything
+that could subscribe could also read `~/.openjarvis` directly, but it costs
+nothing to shut.
+
+## What it does
+
+`HUD_TOKEN` in the environment still wins, unchanged — someone who set it
+meant it, and nothing is written in that case. Otherwise the server reads
+`~/.openjarvis/token`, and writes a `secrets.token_urlsafe(32)` if it is not
+there. Written beside and renamed, then `chmod 600` on a best effort: a
+half-written token is a token that does not match, which looks exactly like an
+attacker to every client at once.
+
+The boot banner prints **the path, never the token** — a token echoed to a
+terminal is a token in a scrollback buffer.
+
+**It degrades rather than dying.** A config directory it cannot write returns
+empty and falls back to the old tokenless loopback behaviour. A read-only
+folder should cost the phone its pairing, not cost the owner their assistant.
+The non-loopback refusal still fires in that case, and now explains that a
+token is normally made for you, so reaching that message means a permissions
+problem rather than a missing step.
+
+## The desktop half
+
+`commands.rs` gains a third fallback in `jarvis_token_for`: settings store →
+environment → `~/.openjarvis/token`. Without it the desktop would be locked
+out of its own backend by a secret generated on its behalf. It honours
+`OPENJARVIS_CONFIG_DIR` because the backend does — reading a different
+directory from the one the server wrote to is the whole failure this avoids.
+
+`app.path().home_dir()` rather than the `dirs` crate. Tauri already resolves
+this and `windows.rs` uses the same API for `widget.json`; a new top-level
+crate for one lookup is a new thing to audit and pin.
+
+## Test it
+
+```powershell
+python test_token_file.py
+```
+
+Seventeen checks against the real `_resolve_token`, lifted with `ast`. A second
+call returns the *same* token, because regenerating on every boot would unpair
+the phone on every boot. An all-whitespace `HUD_TOKEN` falls through instead of
+disabling authentication — `$env:HUD_TOKEN=""` in PowerShell sets it empty
+rather than unsetting it. And the unwritable-directory case patches
+`Path.write_text` to raise rather than using `chmod`, because root ignores
+directory permissions and Windows ignores the mode bits entirely — the chmod
+version would have passed for the wrong reason on both.

@@ -140,6 +140,34 @@ pub fn jarvis_token_for(app: &AppHandle) -> Option<String> {
         .and_then(|store| store.get("token"))
         .and_then(|v| v.as_str().map(str::to_string))
         .or_else(|| jarvis_token().cloned())
+        .or_else(|| token_from_config_dir(app))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+}
+
+/// The token the backend writes for itself on first run.
+///
+/// Third and last, deliberately: something typed into Settings wins, then the
+/// environment, then this. It exists so the two halves agree without the owner
+/// configuring anything — the server now always has a token, and a desktop
+/// that did not know where to find it would be locked out of its own backend
+/// by a secret generated on its behalf.
+///
+/// `OPENJARVIS_CONFIG_DIR` is honoured because the backend honours it. Reading
+/// a different directory from the one the server wrote to is the whole failure
+/// this is meant to avoid.
+fn token_from_config_dir(app: &AppHandle) -> Option<String> {
+    let dir = match std::env::var_os("OPENJARVIS_CONFIG_DIR") {
+        Some(explicit) => std::path::PathBuf::from(explicit),
+        // `app.path().home_dir()` rather than the `dirs` crate: Tauri already
+        // resolves this and windows.rs already uses the same API for
+        // widget.json. A new top-level crate for one lookup is a new thing to
+        // audit and pin, which is the argument build.rs makes about
+        // futures-util.
+        None => app.path().home_dir().ok()?.join(".openjarvis"),
+    };
+    std::fs::read_to_string(dir.join("token"))
+        .ok()
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
 }
