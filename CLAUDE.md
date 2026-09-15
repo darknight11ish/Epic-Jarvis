@@ -53,6 +53,30 @@ The trap, written down because it has already been shipped once: inside
 under an ErrorRecord instead of the name. Capture it first — `$n = $_` — or
 use a plain `foreach` loop, where the variable is real.
 
+## Running PowerShell here
+
+There is a PowerShell 7 at `/opt/pwsh/pwsh` — the portable tarball, extracted,
+no install. **Use it.** Three bugs shipped to the owner before it existed,
+each found by them running the script and pasting an error back, which is the
+slowest possible way to test anything:
+
+```
+/opt/pwsh/pwsh -NoProfile -File ./scripts/apply-patches.ps1 -BackendPath /tmp/fake -SkipTests
+```
+
+If it is gone after a container restart:
+`curl -sSL https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/powershell-7.4.6-linux-x64.tar.gz -o /tmp/pwsh.tar.gz && mkdir -p /opt/pwsh && tar -xzf /tmp/pwsh.tar.gz -C /opt/pwsh && chmod +x /opt/pwsh/pwsh`
+
+**It is 7, the owner has 5.1.** It catches syntax errors, logic and the
+stderr trap; it does NOT catch 5.1-only problems like `??`, so those still
+have to be read for.
+
+The trap that cost the most: `$ErrorActionPreference = 'Stop'` turns **any
+stderr output from a native program into a terminating error**, even on
+success. `git apply --verbose` writes "Checking patch x..." to stderr every
+time, so the script died on the first of nineteen patches. Wrap native calls:
+save the preference, set `Continue`, restore in a `finally`.
+
 ## Explain things simply
 
 The owner is a **beginner developer**. Write for someone who is smart and is

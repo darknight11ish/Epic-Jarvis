@@ -70,11 +70,28 @@ $PATCHES = @(
     'gate-outcome.patch'
     'no-auto-approve.patch'
     'memory-noise.patch'
+    'event-allowlist.patch'
 )
 
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
 $PatchDir   = Join-Path $RepoRoot 'backend'
 $Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
+
+# The list above is hand-ordered because the order matters, which means it can
+# fall behind the directory - and it did: event-allowlist.patch was written,
+# documented in backend/README.md, and never added here, so it silently did
+# not get applied. A missing patch produces no error anywhere; it just is not
+# there. Checked on every run.
+$onDisk = @(Get-ChildItem -LiteralPath $PatchDir -Filter '*.patch' -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty Name)
+$unlisted = @($onDisk | Where-Object { $PATCHES -notcontains $_ })
+if ($unlisted.Count -gt 0) {
+    Write-Host "  FAIL  $($unlisted.Count) patch file(s) exist but are not in this script's list:" -ForegroundColor Red
+    foreach ($u in $unlisted) { Write-Host "          $u" -ForegroundColor Red }
+    Write-Host "        Add them to `$PATCHES, in the right place - the order is a" -ForegroundColor Cyan
+    Write-Host "        dependency order, not alphabetical. See backend/README.md." -ForegroundColor Cyan
+    exit 1
+}
 
 function Say($msg, $colour = 'Gray') { Write-Host $msg -ForegroundColor $colour }
 function Ok($msg)   { Write-Host "  ok    $msg" -ForegroundColor Green }
@@ -143,6 +160,20 @@ Say ""
 function Invoke-Patch {
     param([string] $File, [switch] $Check, [switch] $Reverse)
 
+    # `$ErrorActionPreference = 'Stop'` at the top of this file turns ANY
+    # stderr output from a native program into a terminating error - even when
+    # the program succeeded. `git apply --verbose` writes "Checking patch
+    # jarvis_memory.py..." to stderr on every single call, so the first check
+    # killed the script with a NativeCommandError and nineteen patches never
+    # got looked at.
+    #
+    # Relaxed here and restored in the finally, rather than globally: the Stop
+    # preference is doing real work elsewhere in this file, where a failed
+    # Copy-Item must not be shrugged off before the backup is complete.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+
     # NOT $args - that is an automatic variable in PowerShell, and writing to
     # it inside a function is a way to lose an afternoon.
     if ($UseGit) {
@@ -161,6 +192,10 @@ function Invoke-Patch {
         if ($Check)   { $patchArgs += '--dry-run' }
         $patchArgs += @('-i', $File)
         $out = & patch @patchArgs 2>&1
+    }
+
+    } finally {
+        $ErrorActionPreference = $prev
     }
     return @{ Ok = ($LASTEXITCODE -eq 0); Output = ($out | Out-String).Trim() }
 }
@@ -188,38 +223,89 @@ try {
         exit 0
     }
 
-    # --- 1. what would each patch do? ----------------------------------------
-    Say "Checking all $($PATCHES.Count) before changing anything." Cyan
-    $todo    = @()
-    $already = @()
-    $broken  = @()
+    # --- 1. rehearse the WHOLE STACK on a copy -------------------------------
+    #
+    # Two earlier versions of this got it wrong in the same way, from opposite
+    # directions, and both times the cause was treating a STACK as a SET.
+    #
+    # v1 ran `git apply --check` on each patch against the unpatched tree and
+    # refused to start if any failed. bitemporal edits code memory-safety
+    # wrote, so it cannot apply to a pristine backend and never could: the
+    # check could only ever report failures that were not real.
+    #
+    # v2 applied them in order to a copy - right - but decided "already
+    # applied?" per patch, by reverse-checking it alone. That fails too:
+    # memory-safety cannot be reversed out of a tree that has bitemporal on
+    # top of it, because bitemporal rewrote its context. Running the script
+    # twice reported six phantom failures.
+    #
+    # So the question is asked about the whole stack, never about one patch:
+    #
+    #   Does the ENTIRE stack reverse cleanly?  -> already applied, nothing to do
+    #   Does the ENTIRE stack apply cleanly?    -> go ahead for real
+    #   Neither                                 -> say so and touch nothing
+    #
+    # Both rehearsals run on a throwaway copy, so the real files are not
+    # opened until an answer is known.
+    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$Stamp"
+    $broken    = @()
+    $already   = $false
 
-    foreach ($name in $PATCHES) {
-        $full = Join-Path $PatchDir $name
-        if (-not (Test-Path -LiteralPath $full)) {
-            $broken += @{ Name = $name; Why = "missing from $PatchDir" }
-            Bad "$name - not found"
-            continue
+    function Reset-Rehearsal {
+        if (Test-Path -LiteralPath $rehearsal) {
+            Remove-Item -LiteralPath $rehearsal -Recurse -Force
         }
-        if ((Invoke-Patch -File $full -Check).Ok) {
-            $todo += $full
-            Say "  will apply   $name"
+        New-Item -ItemType Directory -Path $rehearsal -Force | Out-Null
+        Copy-Item -Path (Join-Path $BackendPath '*.py') -Destination $rehearsal -Force
+    }
+
+    try {
+        # (a) is it already patched? Reverse the stack, newest first.
+        Reset-Rehearsal
+        Push-Location -LiteralPath $rehearsal
+        $reversedAll = $true
+        $backwards = @($PATCHES); [array]::Reverse($backwards)
+        foreach ($name in $backwards) {
+            $full = Join-Path $PatchDir $name
+            if (-not (Test-Path -LiteralPath $full)) { $reversedAll = $false; break }
+            if (-not (Invoke-Patch -File $full -Reverse).Ok) { $reversedAll = $false; break }
         }
-        elseif ((Invoke-Patch -File $full -Check -Reverse).Ok) {
-            # It reverses cleanly, so it is already in the file.
-            $already += $name
-            Warn "$name (already applied)"
+        Pop-Location
+
+        if ($reversedAll) {
+            $already = $true
+            Say ""
+            Ok "All $($PATCHES.Count) patches are already applied. Nothing to do."
         }
         else {
-            $r = Invoke-Patch -File $full -Check
-            $broken += @{ Name = $name; Why = $r.Output }
-            Bad "$name - will not apply"
+            # (b) will the stack apply? Forward, in order.
+            Say "Rehearsing all $($PATCHES.Count) on a copy first." Cyan
+            Reset-Rehearsal
+            Push-Location -LiteralPath $rehearsal
+            foreach ($name in $PATCHES) {
+                $full = Join-Path $PatchDir $name
+                if (-not (Test-Path -LiteralPath $full)) {
+                    $broken += @{ Name = $name; Why = "missing from $PatchDir" }
+                    Bad "$name - not found"
+                    continue
+                }
+                $r = Invoke-Patch -File $full
+                if ($r.Ok) { Say "  ok           $name" }
+                else {
+                    $broken += @{ Name = $name; Why = $r.Output }
+                    Bad "$name - will not apply"
+                }
+            }
+            Pop-Location
         }
+    } finally {
+        Remove-Item -LiteralPath $rehearsal -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     if ($broken.Count -gt 0) {
         Say ""
         Bad "$($broken.Count) patch(es) will not apply. NOTHING HAS BEEN CHANGED."
+        Say "(The rehearsal ran on a copy. Your backend was never opened.)" Cyan
         Say ""
         foreach ($b in $broken) {
             Say "--- $($b.Name) ---" Yellow
@@ -231,14 +317,14 @@ try {
         exit 1
     }
 
-    if ($todo.Count -eq 0) {
+    if ($already) {
+        if ($SkipTests) { exit 0 }
         Say ""
-        Ok "All $($already.Count) patches are already applied. Nothing to do."
-        if (-not $SkipTests) { Say "" } else { exit 0 }
     }
 
     # --- 2. back up, then apply ----------------------------------------------
-    if ($todo.Count -gt 0) {
+    if (-not $already) {
+        $todo = @($PATCHES | ForEach-Object { Join-Path $PatchDir $_ })
         $backup = Join-Path $BackendPath "_jarvis-backup-$Stamp"
         New-Item -ItemType Directory -Path $backup | Out-Null
 
@@ -324,6 +410,12 @@ $env:JARVIS_BACKEND = (Resolve-Path -LiteralPath $BackendPath).Path
 $tests = Get-ChildItem -LiteralPath $PatchDir -Filter 'test_*.py' | Sort-Object Name
 $pass = 0; $fail = @()
 
+# Same trap as Invoke-Patch: a test that prints anything to stderr - which a
+# failing one does, and several passing ones do too - would terminate the run
+# rather than be reported as a failure.
+$prev = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+
 foreach ($t in $tests) {
     $out = & $python.Source $t.FullName 2>&1
     if ($LASTEXITCODE -eq 0) { Ok $t.Name; $pass++ }
@@ -332,6 +424,8 @@ foreach ($t in $tests) {
         $fail += @{ Name = $t.Name; Output = ($out | Out-String).Trim() }
     }
 }
+
+$ErrorActionPreference = $prev
 
 Say ""
 if ($fail.Count -eq 0) {
