@@ -20,6 +20,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+# BACKEND is where the modules under test actually live - this folder
+# in the dev container, $JARVIS_BACKEND on a real install. REPO is this
+# repository. They used to be the same path and are not on the machine
+# that runs Jarvis.
+from _where import BACKEND, REPO, missing, explain
 
 FAILED, PASSED = [], []
 
@@ -141,7 +146,7 @@ def t_the_push_redaction_does_not_ride_the_logging_switch():
 
 def t_call_sites_redact():
     """CONTROL. The rule lives at the call sites; _push cannot enforce it."""
-    src = (HERE / "jarvis_gate.py").read_text()
+    src = (BACKEND / "jarvis_gate.py").read_text()
     calls = [n for n in ast.walk(ast.parse(src))
              if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_push"]
     check("both _push call sites are present", len(calls) == 2, f"found {len(calls)}")

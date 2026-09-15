@@ -13,6 +13,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+# BACKEND is where the modules under test actually live - this folder
+# in the dev container, $JARVIS_BACKEND on a real install. REPO is this
+# repository. They used to be the same path and are not on the machine
+# that runs Jarvis.
+from _where import BACKEND, REPO, missing, explain
 
 FAILED, PASSED = [], []
 
@@ -102,7 +107,7 @@ def _since(bus, last):
 
 def t_the_server_actually_starts_it():
     """CONTROL. Fails if the one line in main() is ever removed again."""
-    src = (HERE / "jarvis_hud.py").read_text()
+    src = (BACKEND / "jarvis_hud.py").read_text()
     tree = ast.parse(src)
     found = []
     for node in ast.walk(tree):

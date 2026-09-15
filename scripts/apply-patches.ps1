@@ -281,8 +281,18 @@ Say ""
 Say "Running the test suites against the patched backend." Cyan
 Say ""
 
-# The tests import the backend modules, so they run from the BACKEND folder
-# with the repo's backend/ on the path - not the other way round.
+# THE ONE THING THAT MAKES THESE RUNNABLE HERE AT ALL.
+#
+# The suites live in this repository; the modules they test live in the
+# owner's backend folder. Until _where.py existed they used one path for both,
+# so they only ran in the dev container where the modules are symlinked in -
+# and this script would have run them anyway and produced eighteen import
+# errors that look exactly like the patches having broken something.
+#
+# _where.py reads JARVIS_BACKEND for the modules and derives the repo from its
+# own location, so both roots are right at once.
+$env:JARVIS_BACKEND = (Resolve-Path -LiteralPath $BackendPath).Path
+
 $tests = Get-ChildItem -LiteralPath $PatchDir -Filter 'test_*.py' | Sort-Object Name
 $pass = 0; $fail = @()
 

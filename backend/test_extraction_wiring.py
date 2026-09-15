@@ -18,7 +18,12 @@ from typing import Optional
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-HUD = HERE / "jarvis_hud.py"
+# BACKEND is where the modules under test actually live - this folder
+# in the dev container, $JARVIS_BACKEND on a real install. REPO is this
+# repository. They used to be the same path and are not on the machine
+# that runs Jarvis.
+from _where import BACKEND, REPO, missing, explain
+HUD = BACKEND / "jarvis_hud.py"
 
 FAILED, PASSED = [], []
 

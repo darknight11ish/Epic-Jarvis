@@ -17,11 +17,16 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+# BACKEND is where the modules under test actually live - this folder
+# in the dev container, $JARVIS_BACKEND on a real install. REPO is this
+# repository. They used to be the same path and are not on the machine
+# that runs Jarvis.
+from _where import BACKEND, REPO, missing, explain
 
 import jarvis_models as MM
 
-HUD = HERE / "jarvis_hud.py"
-BRAIN_JS = HERE.parent / "jarvis-desktop" / "src" / "brain.js"
+HUD = BACKEND / "jarvis_hud.py"
+BRAIN_JS = REPO / "jarvis-desktop" / "src" / "brain.js"
 
 FAILED, PASSED = [], []
 MB = 1024 * 1024

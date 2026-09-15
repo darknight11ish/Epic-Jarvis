@@ -10,6 +10,18 @@ import socket, sys, time, traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# BACKEND is where the modules under test actually live - this folder in
+# the dev container, $JARVIS_BACKEND on a real install. REPO is this
+# repository. They used to be the same path and are not on the machine
+# that runs Jarvis.
+from _where import BACKEND, REPO, missing, explain
+
+# jarvis_research.py is OURS - it ships in this repository, it is not part of
+# the backend being patched. _where prepends BACKEND to sys.path, which is
+# right for jarvis_memory and friends and wrong here: a stale copy sitting in
+# someone's backend folder would shadow the real one, and this test would then
+# be checking a file nobody edits. Put this directory first, for this import.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import jarvis_research as R
 
 FAILED, PASSED = [], []

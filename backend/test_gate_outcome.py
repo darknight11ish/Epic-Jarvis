@@ -24,6 +24,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+# BACKEND is where the modules under test actually live - this folder
+# in the dev container, $JARVIS_BACKEND on a real install. REPO is this
+# repository. They used to be the same path and are not on the machine
+# that runs Jarvis.
+from _where import BACKEND, REPO, missing, explain
 
 # A temp home BEFORE the import: jarvis_gate opens its queue at import time.
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-gate-outcome-"))
@@ -261,7 +266,7 @@ def t_there_is_still_no_approve_all():
     about code is the thing that goes stale first - see docs/PEERS.md on
     cline's docs describing three toggles their UI had already removed.
     """
-    src = (HERE / "jarvis_gate.py")
+    src = (BACKEND / "jarvis_gate.py")
     if not src.is_file():
         check("the gate source is readable", False, f"no {src}")
         return

@@ -22,6 +22,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+# BACKEND is where the modules under test actually live - this folder
+# in the dev container, $JARVIS_BACKEND on a real install. REPO is this
+# repository. They used to be the same path and are not on the machine
+# that runs Jarvis.
+from _where import BACKEND, REPO, missing, explain
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-noise-"))
 fw = types.ModuleType("jarvis_framework")
@@ -34,7 +39,7 @@ sys.modules.setdefault("jarvis_framework", fw)
 import jarvis_memory as M
 import jarvis_extract as X
 
-HUD = HERE / "jarvis_hud.py"
+HUD = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
 
 

@@ -41,6 +41,19 @@ dependency, not just a semantic one — it will not apply without both.
 | `memory-noise.patch` | `jarvis_extract.py`, `jarvis_hud.py` | A discarded proposal came straight back, and recalled facts carried no date. |
 | `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
 
+## Run the tests
+
+They live here; the modules they test live in your backend folder. Point them
+at it:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; Get-ChildItem backend\test_*.py | ForEach-Object { Write-Host $_.Name -NoNewline; python $_.FullName > $null 2>&1; if ($?) { Write-Host "  ok" -ForegroundColor Green } else { Write-Host "  FAIL" -ForegroundColor Red } }
+```
+
+`apply-patches.ps1` sets that variable for you. Without it the suites look in
+their own folder, which is right in the dev container — the modules are
+symlinked in there — and wrong everywhere else.
+
 ## Apply them
 
 One command:

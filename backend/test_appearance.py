@@ -11,8 +11,15 @@ import json
 import os, re, sys, time, tempfile
 from pathlib import Path
 
-SRC = Path(sys.argv[1] if len(sys.argv) > 1 else "jarvis_hud.py").read_text(encoding="utf-8")
-SPEC = Path(__file__).resolve().parent.parent / "jarvis-desktop" / "src" / "jarvis-visual-spec.json"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# BACKEND is where the modules under test actually live - this folder in
+# the dev container, $JARVIS_BACKEND on a real install. REPO is this
+# repository. They used to be the same path and are not on the machine
+# that runs Jarvis.
+from _where import BACKEND, REPO, missing, explain
+SRC = Path(sys.argv[1] if len(sys.argv) > 1
+          else BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
+SPEC = REPO / "jarvis-desktop" / "src" / "jarvis-visual-spec.json"
 
 # Pull the block from APPEARANCE_FILE to the end of _appearance_save.
 start = SRC.index("APPEARANCE_FILE = CONFIG_DIR")
