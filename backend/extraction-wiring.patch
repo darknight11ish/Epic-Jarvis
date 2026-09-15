@@ -276,7 +276,7 @@
      data: dict = field(default_factory=dict)
      at: float = field(default_factory=time.time)
  
-@@ -159,8 +160,52 @@
+@@ -159,8 +160,55 @@
      ids = sorted(p.get("id", "") for p in pending)
      ev = bus.note("approvals", ids, "approval")
      if ev is not None:
@@ -295,8 +295,11 @@
 +        # describing a rule that was not yet true here. Now it is.
 +        #
 +        # Everything a client needs in order to RENDER the queue it gets by
-+        # fetching /api/approvals, behind the same token. The event only says
-+        # that there is something to fetch.
++        # fetching /api/pending, behind the same token. The event only says
++        # that there is something to fetch. (/api/pending, not
++        # /api/approvals - the latter does not exist. The jarvis-client
++        # session caught that in a reply and was right to refuse to switch
++        # a working route on someone else's say-so.)
          ev.data.update({"count": len(pending),
 -                        "items": pending[:10]})
 +                        "items": [{k: v for k, v in item.items()
@@ -330,7 +333,7 @@
  
  
  def _poll_power(bus: Bus) -> None:
-@@ -252,7 +297,8 @@
+@@ -252,7 +300,8 @@
          return False
  
  
