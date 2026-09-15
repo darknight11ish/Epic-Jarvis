@@ -144,7 +144,24 @@ class ResolveVectorsTest {
     private fun bindingOf(v: JsonObject): Binding? {
         val b = v["bind"]!!.jsonObject
         val pattern = Pattern.byId(b["pattern"]!!.jsonPrimitive.content) ?: return null
-        val colour = b["color"]?.jsonPrimitive?.content?.let { Palette.byId[it] }
+        // A palette id OR a literal hex. `Palette.byId["#ff0000"]` is null, so
+        // reading only the palette silently DROPPED the override and resolved
+        // with the pattern's own colour - which is what all eight of run 62's
+        // disagreements were. The fixture says so in its own note on those
+        // vectors: "a literal hex passes through hexOf unchanged".
+        //
+        // The arithmetic settles it: twelve vectors carry a hex override, four
+        // of them use patterns that ignore a bound colour (rainbow, sweep,
+        // cycle, temperature), and twelve minus four is eight. The port was
+        // never wrong; it was never handed the colour.
+        val colour = b["color"]?.jsonPrimitive?.content?.let { id ->
+            Palette.byId[id] ?: if (id.startsWith("#")) {
+                val (r, g, bl) = css(id)
+                Color(red = r / 255f, green = g / 255f, blue = bl / 255f)
+            } else {
+                error("vector names a colour '$id' that is neither a palette id nor a hex literal")
+            }
+        }
         return Binding(pattern = pattern, color = colour)
     }
 
