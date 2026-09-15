@@ -513,6 +513,7 @@ pub fn run() {
             brain::brain_memory_edit,
             brain::brain_memory_learning,
             brain::brain_memory_export,
+            brain::brain_memory_as_of,
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,

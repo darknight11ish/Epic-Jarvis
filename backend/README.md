@@ -5,14 +5,18 @@
 > is the detail.
 
 
-Thirteen patches against the Jarvis backend, each with an executable test.
+Fourteen patches against the Jarvis backend, each with an executable test.
 
-**Order.** They commute — five of them touch `jarvis_hud.py`, but in
+**Order.** The first thirteen commute — several touch `jarvis_hud.py`, but in
 well-separated regions, and every order produces the same tree. The order in
 the table is still the one to use, because `memory-safety` must land before
 anything makes the extractor run. That is a *semantic* constraint, not a
 textual one: without it, the first accepted proposal retires a
 roughly-matching unrelated fact, permanently, and `retire()` has no way back.
+
+`bitemporal.patch` is the one exception and goes **last**. It edits code that
+`memory-safety` wrote and a route that `memory-pane` added, so it is a textual
+dependency, not just a semantic one — it will not apply without both.
 
 | patch | file it changes | what it is for |
 |---|---|---|
@@ -29,6 +33,7 @@ roughly-matching unrelated fact, permanently, and `retire()` has no way back.
 | `vram-estimate.patch` | `jarvis_models.py` | The estimator that advises on model choice was wrong in both directions at once. |
 | `memory-pane.patch` | `jarvis_hud.py` | Routes to read, edit, forget and export what Jarvis has learned. Gives `retire()` its first caller. Needs `extraction-wiring` for the learning switch. |
 | `token-file.patch` | `jarvis_hud.py` | Makes a token on first run. **The phone has never been pairable without this.** |
+| `bitemporal.patch` | `jarvis_memory.py`, `jarvis_hud.py` | The second time axis. Adds `retired_at` — when we stopped believing a fact, as distinct from when it stopped being true. Needs `memory-safety` and `memory-pane`. |
 
 ## Apply them
 
@@ -40,6 +45,7 @@ copy jarvis_extract.py jarvis_extract.py.bak
 git apply --verbose path\to\memory-safety.patch
 git apply --verbose path\to\events-pump.patch
 git apply --verbose path\to\appearance.patch
+... and so on, in table order
 ```
 
 No git in that folder? `patch -p1 < <name>.patch` does the same. Add
@@ -203,6 +209,7 @@ this machine.
 cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 copy jarvis_hud.py jarvis_hud.py.bak
 git apply --verbose path\to\appearance.patch
+... and so on, in table order
 ```
 
 No git in that folder? `patch -p1 < appearance.patch`, or apply the four edits
@@ -920,3 +927,84 @@ rather than unsetting it. And the unwritable-directory case patches
 `Path.write_text` to raise rather than using `chmod`, because root ignores
 directory permissions and Windows ignores the mode bits entirely — the chmod
 version would have passed for the wrong reason on both.
+
+
+---
+
+# `bitemporal.patch` — the second time axis
+
+Apply last. Needs `memory-safety` and `memory-pane`.
+
+## The case it exists for
+
+*"I moved in January. I'm telling you in March."*
+
+Before this patch that sentence is unstorable. `retire()` stamped `valid_to`
+with `time.time()`, so you got one of two wrong answers:
+
+- retire in March → the store says Mario lived in Lisbon until March, which is
+  false about the world, and "where did I live in February" answers wrong.
+- backdate to January → the store says it knew in January, which is false
+  about Jarvis, and cannot explain the Lisbon answer it gave in February.
+
+Both matter. The first is what a person asks about. The second is what
+explains an answer Jarvis already gave — and with the review queue it is not a
+corner case, because a proposal accepted three weeks late is *exactly* this
+shape.
+
+## What changed
+
+`facts` gains one column:
+
+```
+valid_from, valid_to   when the fact was TRUE          (valid time)
+created,    retired_at when WE believed it             (transaction time)
+```
+
+`retire(id, replaced_by=None, valid_to=None)` now stamps both. `retired_at` is
+always now, because that is when we learned. `valid_to` defaults to now and is
+the parameter to pass when you know better.
+
+`MemoryStore.known_at(when)` is the query the column buys: what this machine
+believed at a past moment, right or wrong. A fact entered on Tuesday and
+retired on Friday is in Wednesday's answer and not in today's.
+
+## The migration, and what it cannot recover
+
+Existing stores are altered in place — `ALTER TABLE facts ADD COLUMN
+retired_at REAL`, guarded by a `PRAGMA table_info` read rather than a
+try/except, so a real failure is not swallowed as "already there". Rows
+retired before the column existed are backfilled `retired_at = valid_to`.
+
+**That backfill is a guess and the patch says so in the code.** Back then the
+two axes were the same number, so every historical retirement now reads as
+"we learned the moment it stopped being true". That is often false and there
+is no way to recover the truth. Only new retirements record both honestly.
+
+## A control the patch also fixes
+
+Three places computed "is this fact current". One of them said
+`f["valid_to"] is None`, directly below a line that said
+`valid_to is None or valid_to > at`. Unreachable while `retire()` could only
+stamp `now`; reachable the moment it takes a date. A lease that ends in
+December is true today, and all three places now agree about that.
+
+## Where it is visible
+
+Not a column nobody reads:
+
+- `GET /api/memory/facts?known_at=<epoch>` answers from `known_at()` and
+  labels itself read-only.
+- A `brain_memory_as_of` command — its own command, not a `brain_read`
+  section, because that table maps a name to a fixed path with no parameters
+  on purpose, and letting a window append a query string to an allowlisted
+  path would widen the grant.
+- A **What did you know on…** button in the Brain's Memory tab. While a past
+  date is showing, every editing control is gone and `memoryWrite` refuses,
+  because a Forget button acting on today's store while the owner looks at
+  last June is a trap.
+- Each row shows `learned N ago` and `true until X, noticed Y` **only when the
+  two dates differ by more than a day** — otherwise it would be noise on
+  every row.
+
+`test_bitemporal.py`: 32 checks. Twelve of them fail on the unpatched tree.

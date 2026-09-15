@@ -198,13 +198,14 @@ permissions = ["allow-brain-remove-skill", "allow-brain-model"]
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, export the store, and turn the background learner on or off. One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, export the store, read what Jarvis believed at a past moment, and turn the background learner on or off. One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
   "allow-brain-memory-edit",
   "allow-brain-memory-learning",
   "allow-brain-memory-export",
+  "allow-brain-memory-as-of",
 ]
 
 # ---------------------------------------------------------------------------

@@ -49,6 +49,7 @@ fn main() {
             "brain_memory_edit",
             "brain_memory_learning",
             "brain_memory_export",
+            "brain_memory_as_of",
             // Backend supervision — settings window only
             "supervisor_status",
             "set_supervision",

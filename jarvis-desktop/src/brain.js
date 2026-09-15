@@ -582,6 +582,19 @@ function renderMemory() {
    takes a single integer id per call and forgetting cannot be undone.
    ========================================================================== */
 
+/* The "as of" view.
+ *
+ * `null` means the normal, live pane. A number is epoch seconds, and while it
+ * is set the facts list shows what Jarvis BELIEVED then rather than what is
+ * true now, with every editing control gone — the past is not editable, and a
+ * Forget button that silently acted on today's store would be a trap.
+ *
+ * Held here rather than in `state.data` because it is a question this window
+ * is asking, not an answer the server sent, and `load()` overwrites the
+ * latter on every refresh. */
+let memoryAsOf = null;
+let memoryAsOfRows = null;
+
 /** Re-read the pane's own sections and repaint. Used after every write. */
 async function refreshMemory() {
   await load(VIEW_SECTIONS.memory, { quiet: true });
@@ -590,6 +603,15 @@ async function refreshMemory() {
 
 /** Turn a write into a toast, so no handler swallows a failure silently. */
 async function memoryWrite(command, args, okText) {
+  // Nothing may be written while the pane is showing a past moment. Every
+  // caller already hides its buttons in that state, so reaching here means a
+  // code path was added that forgot to — which is exactly when a guard earns
+  // its keep, because the write would have landed on TODAY'S store while the
+  // owner was looking at last June.
+  if (memoryAsOf !== null) {
+    toast("This is what Jarvis believed then. Return to now to change anything.", "bad");
+    return null;
+  }
   try {
     const out = await invoke(command, args);
     // The server can refuse while still answering 200 — the learning switch
@@ -657,6 +679,54 @@ function renderLearning() {
       }
     }, { title: "Copy every fact, current and retired, as JSON. It stays on this machine." })
   );
+  box.append(
+    button(memoryAsOf === null ? "What did you know on\u2026" : "Back to now", async () => {
+      if (memoryAsOf !== null) {
+        memoryAsOf = null;
+        memoryAsOfRows = null;
+        render("memory");
+        return;
+      }
+      // A date, not a datetime. Nobody remembers the hour they told their
+      // assistant something, and asking for one would make the feature feel
+      // like a database console.
+      const typed = window.prompt(
+        "What did Jarvis know on this date?\n\nYYYY-MM-DD",
+        new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10)
+      );
+      if (typed === null) return;
+      const day = typed.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+        toast("A date like 2026-06-01.", "bad");
+        return;
+      }
+      // End of that day, in local time, so "the 1st" includes everything
+      // learned on the 1st. `new Date("2026-06-01")` would be UTC midnight —
+      // the START of the day, in the wrong zone, which west of Greenwich is
+      // the previous evening and quietly drops a day of facts.
+      const [y, m, d] = day.split("-").map(Number);
+      const end = new Date(y, m - 1, d, 23, 59, 59);
+      if (!Number.isFinite(end.getTime())) {
+        toast("That is not a date.", "bad");
+        return;
+      }
+      const when = Math.floor(end.getTime() / 1000);
+      if (when > Date.now() / 1000) {
+        toast("That is in the future. Jarvis has not been there yet.", "bad");
+        return;
+      }
+      try {
+        const out = await invoke("brain_memory_as_of", { when });
+        memoryAsOf = when;
+        memoryAsOfRows = Array.isArray(out && out.facts) ? out.facts : [];
+        render("memory");
+      } catch (error) {
+        toast(String((error && error.message) || error), "bad");
+      }
+    }, { title: memoryAsOf === null
+        ? "Show what Jarvis believed on a past date, including things it has since stopped believing. Read-only."
+        : "Go back to what is true now." })
+  );
   dom.memoryLearning.append(box);
 }
 
@@ -704,22 +774,34 @@ function renderFacts() {
     dom.memoryFacts.replaceChildren(el("p", "empty", why));
     return;
   }
-  const facts = Array.isArray(body.facts) ? body.facts : [];
+  const past = memoryAsOf !== null;
+  const facts = past
+    ? (memoryAsOfRows || [])
+    : (Array.isArray(body.facts) ? body.facts : []);
+  // `rows()` calls replaceChildren on whatever it is given, so the banner
+  // cannot share a parent with it. The list goes in its own box and the pane
+  // is assembled afterwards.
+  const list = el("div", "");
   rows(
-    dom.memoryFacts,
+    list,
     facts,
     (f) => {
       // `current` is computed server-side, but do not depend on it being
       // there: a retired fact rendered as live is a fact the owner thinks
       // Jarvis still uses, offered a Forget button that does nothing. Fall
       // back to the bi-temporal field the flag is derived from.
+      // The server computes `current` against the moment being asked about —
+      // now, or the "as of" date — so the fallback has to use the same moment,
+      // not Date.now(). Getting that wrong would render a fact as live in a
+      // view of last June because it happens to be live today.
+      const asOfSeconds = past ? memoryAsOf : Date.now() / 1000;
       const current =
         f.current === true ? true
         : f.current === false ? false
         : f.valid_to === null || f.valid_to === undefined
-          || Number(f.valid_to) > Date.now() / 1000;
+          || Number(f.valid_to) > asOfSeconds;
       const actions = [];
-      if (current) {
+      if (current && !past) {
         actions.push(
           button("Reword", async () => {
             // A prompt rather than an inline editor: this is the one place the
@@ -753,12 +835,64 @@ function renderFacts() {
           current ? "" : "no longer recalled",
           f.supersedes ? `replaced #${f.supersedes}` : "",
           ago(f.valid_from),
+          // The two axes, and the only place the difference is visible. They
+          // are usually the same day and this says nothing; when they are not,
+          // it is because the fact was corrected after the fact — "true until
+          // January, found out in March" — and that is precisely the case the
+          // second column was added for, so it must not be inferable only
+          // from the JSON export.
+          whenLearned(f),
+          whenNoticed(f),
         ],
         actions,
       });
     },
-    "Nothing yet. Facts arrive from the queue above, once you keep one."
+    past
+      ? "Jarvis knew nothing on that date."
+      : "Nothing yet. Facts arrive from the queue above, once you keep one."
   );
+  if (past) {
+    // Before the list, not after it: the difference between "these are your
+    // facts" and "these WERE your facts" is the whole meaning of the screen,
+    // and a footnote is read second.
+    const when = new Date(memoryAsOf * 1000);
+    dom.memoryFacts.replaceChildren(
+      el("p", "banner",
+         `What Jarvis believed on ${when.toLocaleDateString()} \u2014 right or ` +
+         "wrong. Nothing here can be changed; use \u201cBack to now\u201d first."),
+      list
+    );
+  } else {
+    dom.memoryFacts.replaceChildren(list);
+  }
+}
+
+/** "learned 12d ago" only when that differs from when the fact became true.
+ *
+ * valid_from and created are stamped together for anything typed or accepted
+ * in the moment, so saying both every time would be noise on every row. A gap
+ * of more than a day means someone recorded history, and that is worth a line.
+ */
+function whenLearned(f) {
+  const learned = Number(f.created);
+  const from = Number(f.valid_from);
+  if (!Number.isFinite(learned) || !Number.isFinite(from)) return "";
+  if (Math.abs(learned - from) < 86400) return "";
+  return `learned ${ago(learned)}`;
+}
+
+/** The same gap at the other end: stopped being true then, found out later.
+ *
+ * "I moved in January" told in March gives valid_to = January and
+ * retired_at = March. Facts retired before the retired_at column existed have
+ * it backfilled equal to valid_to, so they correctly say nothing here.
+ */
+function whenNoticed(f) {
+  const until = Number(f.valid_to);
+  const noticed = Number(f.retired_at);
+  if (!Number.isFinite(until) || !Number.isFinite(noticed)) return "";
+  if (Math.abs(noticed - until) < 86400) return "";
+  return `true until ${ago(until)}, noticed ${ago(noticed)}`;
 }
 
 /* ==========================================================================

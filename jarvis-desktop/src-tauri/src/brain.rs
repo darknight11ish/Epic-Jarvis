@@ -309,6 +309,38 @@ pub async fn brain_memory_export(app: AppHandle) -> Result<serde_json::Value, St
     get_json(&base, "/api/memory/export", headers, READ_TIMEOUT).await
 }
 
+/// What Jarvis believed at a past moment, right or wrong.
+///
+/// The transaction-time half of the bi-temporal store. `valid_from`/`valid_to`
+/// say when a fact was true; `created`/`retired_at` say when this machine
+/// thought so. A fact learned on Tuesday and retired on Friday belongs in
+/// Wednesday's answer and not in today's, and only the second pair can tell
+/// you that.
+///
+/// Its own command rather than a `brain_read` section because the section
+/// table maps a name to a fixed path with no parameters — deliberately, so the
+/// grant is auditable by reading one array. Rather than let a window append a
+/// query string to an allowlisted path, the timestamp is formatted here, from
+/// an `f64` that cannot carry anything but a number.
+///
+/// Read-only in both directions: the server returns the rows and offers no way
+/// to change them, because the past is not editable.
+#[tauri::command]
+pub async fn brain_memory_as_of(app: AppHandle, when: f64) -> Result<serde_json::Value, String> {
+    // NaN and the infinities format as "NaN" and "inf", which the server would
+    // reject as unparseable and answer with today's facts instead — the wrong
+    // answer rendered under an "as of" banner, which is worse than an error.
+    if !when.is_finite() || when <= 0.0 {
+        return Err(format!("{when} is not a moment in time"));
+    }
+    let base = commands::jarvis_base(&app);
+    let headers = commands::jarvis_headers(&app)?;
+    // Whole seconds. Sub-second precision means nothing here and a float in
+    // exponential notation would not survive the server's float() intact.
+    let path = format!("/api/memory/facts?known_at={:.0}", when);
+    get_json(&base, &path, headers, READ_TIMEOUT).await
+}
+
 /// Installs, switches or rolls back a model.
 ///
 /// Three routes behind one command because they are one power — deciding which

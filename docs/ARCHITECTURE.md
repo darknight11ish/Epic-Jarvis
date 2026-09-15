@@ -124,9 +124,14 @@ to Ollama in the background must do the same.
 ## 5. Memory — one model
 
 ```
-facts (bi-temporal)  valid_from / valid_to. Nothing is deleted; a superseded
-                     fact is retired and the new one records what it replaced.
-                     "What is no longer true" is load-bearing.
+facts (bi-temporal)  TWO axes, and they are not the same question.
+                       valid_from / valid_to  when the fact was TRUE
+                       created / retired_at   when WE believed it
+                     Nothing is deleted; a superseded fact is retired and the
+                     new one records what it replaced. "What is no longer
+                     true" is load-bearing, and so is "what did you think you
+                     knew in June" - a proposal accepted three weeks late has
+                     both dates and one column cannot hold them.
 
 facts_fts   FTS5, words
 facts_vec   sqlite-vec, meaning
@@ -147,6 +152,10 @@ cannot touch. Cost it honestly or design around it.
 `self.embedder.semantic`, and until fastembed finishes downloading the
 embedder is `HashEmbedder` with `semantic=False`. On day one the tail *is*
 padded to `k` on any shared content word.
+
+**"Current" is `valid_to IS NULL OR valid_to > now`, never `valid_to IS
+NULL`.** A lease that ends in December is true today. Three places computed
+this and one of them got it wrong, directly below a line that got it right.
 
 **Never compress facts or transcripts** with a keep/drop token dropper
 (LLMLingua and relatives). They are negation-blind, and this store is
