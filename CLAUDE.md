@@ -35,6 +35,24 @@ Good:
 > - **Do it, and check it worked** (recommended)
 > - **Leave it alone**
 
+## PowerShell: ONE line, ready to copy
+
+The owner runs these by pasting into a terminal. A multi-line block is a
+multi-line paste, and a multi-line paste into PowerShell goes wrong in ways
+that look like the command is broken rather than like the paste was.
+
+- **One line.** Statements joined with `;`. However long it ends up.
+- **No `.ps1` file to run**, unless the point IS the file. A script file means
+  being in the right folder, and it means the execution policy, and both of
+  those produce errors that read as "your command is wrong".
+- Say where any output file lands, in plain words, at the end of the command.
+
+The trap, written down because it has already been shipped once: inside
+`catch`, `$_` is the ERROR, not the pipeline item. In
+`... | ForEach-Object { try { ... } catch { $o[$_] = ... } }` the catch writes
+under an ErrorRecord instead of the name. Capture it first — `$n = $_` — or
+use a plain `foreach` loop, where the variable is real.
+
 ## Explain things simply
 
 The owner is a **beginner developer**. Write for someone who is smart and is
