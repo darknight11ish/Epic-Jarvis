@@ -42,6 +42,13 @@ fn main() {
             "brain_watch_seen",
             "brain_remove_skill",
             "brain_model",
+            // Memory: one decision per fact, and the switch that governs
+            // whether facts are proposed at all.
+            "brain_memory_decide",
+            "brain_memory_forget",
+            "brain_memory_edit",
+            "brain_memory_learning",
+            "brain_memory_export",
             // Backend supervision — settings window only
             "supervisor_status",
             "set_supervision",
