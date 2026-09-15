@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Nineteen patches against the Jarvis backend, each with an executable test.
+Twenty patches against the Jarvis backend, each with an executable test.
 
 **Order.** The first thirteen commute — several touch `jarvis_hud.py`, but in
 well-separated regions, and every order produces the same tree. The order in
@@ -39,6 +39,7 @@ dependency, not just a semantic one — it will not apply without both.
 | `gate-outcome.patch` | `jarvis_gate.py` | A timeout was indistinguishable from a refusal. Adds `Verdict.outcome`, which fails closed by default. |
 | `no-auto-approve.patch` | `jarvis_gate.py` | **`confirm_auto()` granted every `ask` action with nobody asked.** An approve-all, inside the module that forbids one. |
 | `memory-noise.patch` | `jarvis_extract.py`, `jarvis_hud.py` | A discarded proposal came straight back, and recalled facts carried no date. |
+| `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
 
 ## Apply them
 
@@ -1250,3 +1251,59 @@ A fact with no usable date prints without one rather than with a wrong one —
 `None`, a string, zero and a negative.
 
 `test_memory_noise.py`: 17 checks, 6 of which fail on the unpatched tree.
+
+
+---
+
+# `event-allowlist.patch` — a denylist ships whatever nobody remembered
+
+Found by `test_gate_egress.py`, which exists because `docs/PEERS.md` said to
+enumerate every place the gate is consulted and put a test on each.
+
+The SSE approval event filtered its payload like this:
+
+```python
+{k: v for k, v in item.items() if k not in ("detail", "prompt")}
+```
+
+Correct when it was written — those were the only two fields carrying text.
+`raised` was added to the row **later**, and shipped itself.
+
+`raised` is not an incidental field. It is the explanation of why an item is
+on the card when the tier table said otherwise, and the desktop client's own
+comments in `jarvis-link.js` name what is in it:
+
+```js
+quote:   "The attacker's words."
+context: "Text from the page or the document being judged, so it is
+          never shown until the user asks for it."
+```
+
+So the one field whose entire purpose is quoting hostile outside text was
+being pushed, unasked, to every subscriber — including the phone's foreground
+service, which surfaces approvals **on a lock screen**, where "never shown
+until the user asks" is not something the notification tray knows about.
+
+This is the third instance of one bug: the rule stated in one place and not
+enforced at the next. The other two were `gate-push.patch` (the audit log
+honoured `_redact`, the ntfy push sent the same dict verbatim) and
+`events-pump.patch` itself.
+
+Now an allowlist — `id`, `action`, `tier`, `created` — plus `raised` reduced
+to a **boolean**, because the invariant *"an item carrying `raised` never
+belongs in a group that can be actioned quickly"* has to survive out here, and
+a client can apply it from the flag without the attacker's words.
+
+**A denylist fails silently: a new column ships itself. An allowlist fails
+visibly: a new field is missing until someone adds it, and the person who
+added the column is the person who notices.**
+
+`jarvis_content_risk.chip_from()` builds that dict and is **not in this
+repository**, so its contents were confirmed from the client that reads them
+rather than the code that writes them. Said here because it is a weaker kind
+of evidence and the difference should not be invisible.
+
+`test_gate_egress.py`: 23 checks over all six sites where approval content can
+leave. Two of them are permanent CONTROLS that run the old denylist expression
+against a fixture row and show it leaking — so a reader can see the bug rather
+than take this file's word for it.
