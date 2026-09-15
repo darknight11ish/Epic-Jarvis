@@ -239,6 +239,45 @@ the prefix.
 
 ---
 
+## If you are thinking about a second card
+
+A Tesla P100 has been suggested. **I would not buy one for this workload**, and
+the reason is specific rather than general.
+
+**The P100 cannot run quantised inference well.** GP100 (sm_60) is the one
+Pascal chip with **no `DP4A` instruction**. llama.cpp's quantised matmul
+kernels are built around the assumption that int8 is cheap and fp16 is not —
+because the Pascal card that mattered commercially was the P40 (sm_61), which
+has `__dp4a` and crippled fp16. GP100 is the exact inverse: full-rate fp16,
+no DP4A. So on a P100 the Q4_K_M path falls back to emulation and cuBLAS, and
+the one thing the card is genuinely good at goes unused. There is a
+[community patch set](https://github.com/shinbunbun/llama-cpp-p100-patches)
+that exists solely to work around this, which tells you how well it works out
+of the box.
+
+It also misses llama.cpp's fast fused-attention kernels: those need the Turing
+MMA path (`GGML_CUDA_CC_TURING` is 750) and the P100 is 600. It passes
+Ollama's flash-attention gate — which only excludes 7.2 — and then takes the
+slower vector kernel.
+
+The practical problems on top of that, all verified:
+
+| | |
+|---|---|
+| **Power** | CPU/EPS 8-pin, **not** PCIe 8-pin. Needs an adapter cable. |
+| **Cooling** | Passive heatsink with no fan. Designed for server chassis airflow. In a desktop it needs a bolt-on blower shroud or it throttles and then dies. |
+| **Display** | No outputs at all. Compute only. |
+| **Drivers** | Windows 11 drivers do exist. The risk is that NVIDIA installs **one** driver for all NVIDIA GPUs in a box: Pascal left the Game Ready branch in October 2025 (quarterly security updates only, to 2028) while your Turing card is on the current branch. Two cards on two support branches in one Windows install is the thing to verify before money changes hands, not after. |
+
+**If you want more VRAM, buy one newer card, not this one.** A single 16GB
+Ampere-or-later card gives you real tensor cores, the MMA attention path, DP4A,
+one driver branch, a display output, a PCIe power connector and a fan. The
+P100's 16GB of HBM2 at ~732 GB/s is genuinely fast memory attached to a chip
+that cannot use it for the arithmetic this workload actually does.
+
+The one case for a P100 is fp16 work — unquantised models, or training — where
+its 2:1 FP16 rate is real and unusual for Pascal. That is not what Jarvis does.
+
 ## Sources
 
 Every Ollama and llama.cpp claim above was read from source rather than

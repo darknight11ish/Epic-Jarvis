@@ -1,5 +1,10 @@
 # Backend patches
 
+> Architecture, invariants and the permission model every capability must use:
+> [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). Read that first; this file
+> is the detail.
+
+
 Eleven patches against the Jarvis backend, each with an executable test.
 
 **Order.** They commute — five of them touch `jarvis_hud.py`, but in
