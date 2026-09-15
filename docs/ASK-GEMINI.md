@@ -22,21 +22,43 @@ Paste the numbers back as they come. No need to tidy them.
 
 ---
 
+## What went wrong the first time, 2026-09-15
+
+The first version of prompt 1 below said *"do not estimate, and do not round
+star counts"*. Every star count and push date came back `unknown`, and the
+model explained why: it has live **web search**, not API access. Search
+snippets round stars to "14.2k" and show dates as "3 days ago", so a rule
+against rounding rules out the only data it can see.
+
+**That was a prompt-design mistake, not a model failure.** `grade_repo` tests
+against 500 stars, 50 stars and 365 days. "14.2k" and "3 days ago" settle all
+three. Precision was demanded where none was needed, and the cost was the
+whole table.
+
+The rule that is worth keeping is the one about *labels*: three Part 2 answers
+came back "could not verify" while still marked "Source Type: PRIMARY
+source". Ask explicitly whether the page was opened or only summarised.
+
+Prompt 1 below has been rewritten accordingly. The licence column is kept even
+though three of its four disagreements were wrong last time, because checking
+them against `raw.githubusercontent.com` took two minutes and caught an error
+in `PEERS.md` — see the correction section there.
+
 ## Prompt 1 — the one that unblocks a tool (highest value)
 
 `backend/jarvis_research.py` grades a repository **ADOPT / FORK AND EXTEND /
 BUILD CUSTOM**. It needs four fields per repo and has never been run on real
 data, because it cannot reach the API.
 
-> For each GitHub repository below, give me exactly four values in a markdown
-> table. No commentary, no recommendations — I only want the raw fields, and I
-> will do the judging myself.
+> Rounded numbers are fine. I am only testing against thresholds: 500 stars,
+> 50 stars, and "pushed within the last 365 days". So "14.2k" and "3 days ago"
+> are both usable. Give me your best read from search and mark anything you
+> are unsure of. No recommendations — I only want the fields, and I will do
+> the judging myself.
 >
-> Columns: `full_name`, `stargazers_count`, `license.spdx_id`, `pushed_at`
-> (ISO 8601), `archived` (true/false).
->
-> If a value is genuinely unavailable, write `unknown` — do not estimate, and
-> do not round star counts.
+> Columns: `full_name`, stars, licence, last pushed, `archived?` — for the
+> last one, look for the grey "This repository has been archived" banner at
+> the top of the page, and give the date if it shows one.
 >
 > ```
 > khoj-ai/khoj
@@ -63,6 +85,12 @@ data, because it cannot reach the API.
 Thresholds it will be scored against, so you can sanity-check the result:
 500 stars is "popular", 50 is "viable", a push older than 365 days is stale,
 and AGPL/GPL count as reaching into what you build.
+
+**Add `rhasspy/rhasspy` to the list, and ask specifically about the archive
+banner on `MycroftAI/mycroft-core` and both Rhasspy repos.** `PEERS.md`
+recorded those as archived on specific dates and can no longer back that up:
+the README text quoted as evidence is on neither branch today, and archive
+status is the one field no raw file carries.
 
 ---
 
