@@ -23,6 +23,10 @@
     <string name="channel_approval_desc">A decision is waiting. This channel makes
         a sound: it is the only thing that tells you an approval arrived while the
         app was closed.</string>
+    <string name="channel_approval_quiet_name">Approvals (quiet)</string>
+    <string name="channel_approval_quiet_desc">Approvals that can be undone and stay
+        on your desktop, and approvals raised only because a message tried to hurry
+        you. Shown without a sound.</string>
     <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
     <string name="approvals_waiting">%1$d approvals waiting</string>
 </resources>

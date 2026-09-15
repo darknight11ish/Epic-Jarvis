@@ -55,5 +55,33 @@ class JarvisApp : Application() {
                 enableVibration(true)
             },
         )
+
+        // A second approval channel, because on Android 8 and later whether a
+        // notification interrupts is a property of the CHANNEL, not of the
+        // notification. `setPriority` is only a sorting hint inside a channel.
+        // So "heavy interrupts, normal waits to be found" cannot be a flag on
+        // the post; it has to be two channels, and the routing happens in
+        // ApprovalNotifier via PendingItem.shouldInterrupt.
+        //
+        // LOW rather than DEFAULT: DEFAULT still makes a sound, and the whole
+        // point of this channel is the approvals that should not. Nothing is
+        // lost by being silent - the foreground service's own status line
+        // already shows a running count of what is waiting, so a quiet
+        // approval is visible in two places without having made a noise.
+        //
+        // A NEW id rather than lowering the existing channel, because an
+        // app cannot lower a channel's importance once it has been created -
+        // that belongs to the person, not the app - so a rename in place would
+        // have silently kept HIGH for everyone who already has the app.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ApprovalNotifier.QUIET_CHANNEL_ID,
+                getString(R.string.channel_approval_quiet_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = getString(R.string.channel_approval_quiet_desc)
+                setShowBadge(true)
+            },
+        )
     }
 }

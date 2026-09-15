@@ -127,6 +127,46 @@ data class Raised(
     @SerialName("count_today") val countToday: Int = 0,
 )
 
+/**
+ * The only prose on an approval row that is safe by construction.
+ *
+ * The desktop generates it from two things: the action name, and whether
+ * `raised` is truthy. It reads no `detail`, no `prompt`, and nothing inside
+ * `raised`, so every word comes from tables on that side rather than from
+ * anything a stranger wrote. That is what makes it the right text for a
+ * notification, where a leak is least recoverable.
+ *
+ * Every other string on a `PendingItem` - `summary` included - can carry text
+ * somebody else wrote. This client composed its notification body from
+ * `summary` and `risk.why` before this existed, which is the hole the field
+ * closes.
+ *
+ * Absent on an older desktop, hence nullable: the notifier falls back to what
+ * it did before rather than posting nothing.
+ */
+@Serializable
+data class Notice(
+    val title: String = "",
+    val body: String = "",
+    /**
+     * `heavy` | `normal`. Heavy is earned by any of three things on the
+     * desktop side: the action cannot be undone, it leaves that machine, or
+     * outside text pushed the tier up.
+     *
+     * Read with [PendingItem.shouldInterrupt], never on its own. The third
+     * reason is set by text an attacker wrote, and this phone deliberately
+     * does not let that reason alone make a sound.
+     */
+    val weight: String = "normal",
+    @SerialName("deny_ok") val denyOk: Boolean = true,
+    /**
+     * Always false, and this client would ignore it if it were not: approving
+     * from a notification is refused here on its own terms, not on the
+     * server's say-so. See ApprovalNotifier.
+     */
+    @SerialName("approve_ok") val approveOk: Boolean = false,
+)
+
 @Serializable
 data class PendingItem(
     val id: String,
@@ -137,6 +177,7 @@ data class PendingItem(
     val action: String? = null,
     val risk: Risk = Risk(),
     val raised: Raised? = null,
+    val notice: Notice? = null,
     @SerialName("expires_at_ms") val expiresAtMs: Long? = null,
 ) {
     /**
@@ -148,6 +189,41 @@ data class PendingItem(
      * a swipe is the gesture people make without reading.
      */
     val swipeable: Boolean get() = risk.swipeOk && raised == null
+
+    /**
+     * Whether this approval may make a sound and appear over what you are
+     * doing, rather than waiting in the drawer to be found.
+     *
+     * The owner's rule, which is the desktop's `heavy` minus one of its three
+     * reasons: interrupt when the action cannot be undone or when it leaves
+     * the desktop, but NOT when the only thing that made it heavy is that
+     * outside text tried to rush the reader.
+     *
+     * The reason for the exception is that the first two are facts about what
+     * Jarvis is about to do and the third is a property of words a stranger
+     * wrote. Honouring the third would let anyone who puts "URGENT" in an
+     * email decide whether this phone interrupts its owner, and doing it
+     * repeatedly is how an alert becomes background noise. A raise still
+     * posts, still says something tried to hurry you, and still refuses every
+     * quick gesture - see [swipeable]. It just does not shout.
+     *
+     * Written as "heavy unless the raise is the ONLY reason" rather than
+     * "irreversible or outbound", so it fails toward interrupting. If the
+     * desktop grows a fourth reason for heavy that these two fields do not
+     * describe, this still makes a sound instead of silently swallowing it.
+     *
+     * Null notice - an older desktop - keeps the previous behaviour, which was
+     * that everything interrupts. Degrading to silence on an unknown server
+     * would be the wrong direction for the one notification that matters.
+     */
+    val shouldInterrupt: Boolean
+        get() {
+            val n = notice ?: return true
+            if (!n.weight.equals("heavy", ignoreCase = true)) return false
+            val raisedIsTheOnlyReason =
+                raised != null && risk.reversible != "no" && risk.reach == "local"
+            return !raisedIsTheOnlyReason
+        }
 }
 
 // -------------------------------------------------------------- digest -----

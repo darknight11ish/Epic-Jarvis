@@ -71,7 +71,13 @@ object ApprovalNotifier {
         }
 
         if (pending.size > 1) {
-            runCatching { manager.notify(SUMMARY_ID, summary(context, pending.size)) }
+            // The summary alerts on ITS channel, not on its children's, and the
+            // default group behaviour is for the summary to alert at all. So a
+            // summary hardcoded to the loud channel would make a sound over a
+            // drawer of approvals that were every one of them meant to be
+            // quiet - undoing the whole routing one line above.
+            val loud = pending.any { it.shouldInterrupt }
+            runCatching { manager.notify(SUMMARY_ID, summary(context, pending.size, loud)) }
         } else {
             manager.cancel(SUMMARY_ID)
         }
@@ -89,19 +95,54 @@ object ApprovalNotifier {
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
 
-    private fun build(context: Context, item: PendingItem): Notification {
+    /**
+     * The text this notification is allowed to show.
+     *
+     * `notice` when the desktop sent one, and NOTHING assembled here on top of
+     * it. That is the whole contract: the desktop generates `notice` from the
+     * action name and its own risk table, reading no `detail`, no `prompt` and
+     * nothing inside `raised`, so it is safe by construction rather than safe
+     * because a reviewer remembered to redact something.
+     *
+     * What this used to do is the hole: it composed a body from `item.summary`
+     * and `item.risk.why`. Both are row prose, and row prose can carry text
+     * somebody else wrote. It was mitigated - the lock screen has always shown
+     * the redacted public version below, not this - but composing it here at
+     * all is the mistake, and it is the same mistake in three other places in
+     * this project's history.
+     *
+     * The fallback is the old composition, used only when `notice` is absent,
+     * which means a desktop older than the contract. Posting nothing would be
+     * worse: an approval nobody is told about is the failure this whole file
+     * exists to prevent.
+     */
+    private fun textFor(item: PendingItem): Pair<String, String> {
+        val notice = item.notice
+        if (notice != null && notice.title.isNotBlank()) {
+            return notice.title to notice.body.ifBlank { "Nothing has happened yet." }
+        }
         val body = buildString {
             if (item.summary.isNotBlank()) appendLine(item.summary)
             if (item.risk.why.isNotBlank()) appendLine(item.risk.why)
             if (item.raised != null) {
-                // Named, never amplified. See the importance note below.
+                // Named, never quoted. See the importance note below.
                 appendLine("Marked urgent by the message itself.")
             }
         }.trim().ifEmpty { "Jarvis is waiting for a decision." }
+        return item.title to body
+    }
 
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+    private fun build(context: Context, item: PendingItem): Notification {
+        val (title, body) = textFor(item)
+
+        // Which channel, not which priority. On Android 8 and later the
+        // decision to interrupt belongs to the channel; `setPriority` below is
+        // kept only because it still orders notifications within one.
+        val channel = if (item.shouldInterrupt) CHANNEL_ID else QUIET_CHANNEL_ID
+
+        return NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(item.title)
+            .setContentTitle(title)
             .setContentText(body.lineSequence().first())
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
@@ -119,14 +160,23 @@ object ApprovalNotifier {
             .setOnlyAlertOnce(true)
             .setGroup(GROUP)
             .setContentIntent(openCard(context, item.id))
-            // Deliberately no Approve/Deny actions.
+            // Still deliberately no Approve/Deny actions, and this survived
+            // being asked for.
             //
-            // Both gates that make a decision safe live inside the app: the
-            // staleness check, which refuses to send a decision the phone
-            // cannot confirm is still live, and the fingerprint on anything
-            // outbound or irreversible. A notification action would route
-            // around both from the lock screen. Tapping opens the card, which
-            // is one extra tap and the entire safety model.
+            // The desktop's notification contract permits a Deny action -
+            // `deny_ok` is true on every notice - on the reasoning that
+            // refusing something you have not read costs only a retry. That
+            // reasoning is sound and the owner declined it anyway, which is
+            // their call to make: the extra tap is cheap and this surface is
+            // the one where a mistaken tap is least recoverable.
+            //
+            // `approve_ok` is false there too, and would be ignored here if it
+            // were not. Approving from a notification is refused on this side's
+            // own terms, not on the server's say-so: both gates that make a
+            // decision safe live inside the app - the staleness check, which
+            // refuses to send a decision the phone cannot confirm is still
+            // live, and the fingerprint on anything outbound or irreversible.
+            // A notification action routes around both from the lock screen.
             .build()
     }
 
@@ -138,8 +188,8 @@ object ApprovalNotifier {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
 
-    private fun summary(context: Context, count: Int): Notification =
-        NotificationCompat.Builder(context, CHANNEL_ID)
+    private fun summary(context: Context, count: Int, loud: Boolean): Notification =
+        NotificationCompat.Builder(context, if (loud) CHANNEL_ID else QUIET_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.approvals_waiting, count))
@@ -168,6 +218,14 @@ object ApprovalNotifier {
 
     private const val TAG = "ApprovalNotifier"
     const val CHANNEL_ID = "jarvis_approval"
+
+    /**
+     * Approvals that post without a sound: see [PendingItem.shouldInterrupt].
+     * A separate channel because importance is a channel property on Android 8
+     * and later, and a separate ID because an app cannot lower the importance
+     * of a channel it already created.
+     */
+    const val QUIET_CHANNEL_ID = "jarvis_approval_quiet"
     const val ACTION_OPEN_APPROVAL = "com.jarvis.client.OPEN_APPROVAL"
     const val EXTRA_APPROVAL_ID = "approval_id"
     private const val GROUP = "jarvis_approvals"
