@@ -146,12 +146,13 @@ jobs:
       # After the debug artifact is collected, so `find -name '*.apk'` above
       # keeps picking up exactly one file.
       #
-      # This does not publish anything yet. The release variant had never been
-      # built even once, and R8 breaks at RUNTIME on a variant nobody runs -
-      # a stripped serializer is a crash on first decode, not a build error. So
-      # this proves it compiles and shrinks, and prints the size next to the
-      # debug one; switching the published artifact waits until the smoke job
-      # has run against it.
+      # The release variant is now the one that gets published, but not from
+      # here. R8 breaks at RUNTIME, not at build time - a stripped serializer
+      # is a crash on first decode and a green `assembleRelease` - so the
+      # publish sits behind the smoke job, which installs and starts the
+      # shrunk APK on a real device first. This step earns its place anyway:
+      # it fails a broken shrink in about three minutes without waiting for an
+      # emulator to boot, and it prints the two sizes side by side.
       - name: Assemble release APK
         run: |
           set -uo pipefail
@@ -241,13 +242,21 @@ jobs:
 
       # Compiled before the device is needed, so a Kotlin error still fails in
       # about a minute rather than after a boot.
+      #
+      # `assembleRelease` is here too, because the RELEASE apk is the one this
+      # job now publishes, and it has to exist on disk before the emulator is
+      # up. R8 takes about three and a half minutes; failing that here costs a
+      # boot cycle less than failing it later.
       - name: Compile the app and the test
         run: |
           set -uo pipefail
           chmod +x ./gradlew
-          if ! ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace 2>&1 | tee build.log; then
-            echo "::group::Kotlin errors"
-            grep -E "^e: |Unresolved reference|Argument type mismatch|Compilation error" build.log | head -80 \
+          if ! ./gradlew assembleDebug assembleDebugAndroidTest assembleRelease --stacktrace 2>&1 | tee build.log; then
+            echo "::group::Kotlin errors, and R8's"
+            # R8's complaints are not Kotlin diagnostics and look nothing like
+            # them: a missing keep rule appears as a warning about a class it
+            # could not resolve a reference for.
+            grep -E "^e: |Unresolved reference|Argument type mismatch|Compilation error|Missing class|R8: " build.log | head -80 \
               || echo "(no compiler diagnostics found; see the full log above)"
             echo "::endgroup::"
             exit 1
@@ -412,6 +421,94 @@ jobs:
             exit 1
           fi
 
+          # ---------------------------------------------------------------
+          # The release build, started on the device, before it is published.
+          #
+          # This is the gate that lets the published artifact BE the release
+          # APK. R8 removes code it cannot prove is reachable, and everything
+          # it gets wrong fails at RUNTIME rather than at build time: a
+          # stripped serializer is a crash on first decode and a perfectly
+          # green `assembleRelease`. Publishing an APK no machine has ever
+          # started is the same hole this whole job exists to close, one build
+          # type across.
+          #
+          # Be exact about what this proves, because it is less than the suite
+          # above proves. The instrumentation tests still run against DEBUG:
+          # testing a minified variant means threading the app's R8 mapping
+          # into the test APK, which is a change worth making deliberately and
+          # not folded into this one. So this establishes that the release APK
+          # installs, starts, stays up, and logs none of R8's failure
+          # signatures. It does not walk every screen. A keep rule missing for
+          # something only reachable three taps in would still get through.
+          echo "::group::The release build on the device"
+          rel=$(find app/build/outputs/apk/release -name 'app-release.apk' 2>/dev/null | head -1)
+          if [ -z "$rel" ] || [ ! -e "$rel" ]; then
+            echo "::error::No release APK was built, so there is nothing to smoke or publish."
+            find app/build/outputs/apk -name '*.apk' 2>/dev/null || true
+            exit 1
+          fi
+          echo "Installing $rel"
+
+          # Uninstalled first, so this is a FRESH install with no data behind
+          # it - which is the case a person sideloading hits, and the one where
+          # a missing keep rule shows up on the very first screen rather than
+          # never.
+          adb uninstall com.jarvis.client >/dev/null 2>&1 || true
+          out=$(adb install -r "$rel" 2>&1) || true
+          printf '%s\n' "$out"
+          case "$out" in
+            *Success*) ;;
+            *) echo "::error::The release APK would not install."; exit 1 ;;
+          esac
+
+          # `-b all`, not a bare `-c`. The crash-buffer check at the end of
+          # this gate is only meaningful if the buffer starts empty, and the
+          # instrumentation suite has been running on this same device for the
+          # last few minutes.
+          adb logcat -b all -c 2>/dev/null || adb logcat -c || true
+          out=$(adb shell am start -W -n com.jarvis.client/.MainActivity 2>&1) || true
+          printf '%s\n' "$out"
+          case "$out" in
+            *Error*|*Exception*) echo "::error::The release APK would not start."; exit 1 ;;
+          esac
+
+          # Long enough for Compose to lay out a first frame and for a
+          # first-decode crash to have already happened.
+          sleep 15
+
+          pid=$(adb shell pidof com.jarvis.client 2>/dev/null | tr -d '\r' | awk '{print $1}')
+          if [ -z "$pid" ]; then
+            echo "::error::The release APK started and then died."
+            adb logcat -d -b crash | tail -60 || true
+            exit 1
+          fi
+          echo "Still alive after 15s, pid $pid"
+
+          # R8 damage the app CAUGHT still counts. This app has a crash screen,
+          # so a stripped class can surface as a handled exception and a live
+          # process - which passes a "did it survive" check while being exactly
+          # the bug this gate is for. These are the shapes code removal takes at
+          # runtime; none of them has an innocent reading inside our own pid.
+          adb logcat -d --pid="$pid" > "$RUNNER_TEMP/app.log" 2>/dev/null || true
+          bad=$( { grep -nE "FATAL EXCEPTION|ClassNotFoundException|NoSuchMethodError|NoSuchFieldError|ExceptionInInitializerError|Serializer for class|SerializationException" \
+                   "$RUNNER_TEMP/app.log" || true; } | head -20 )
+          if [ -n "$bad" ]; then
+            echo "::error::The release build logged what code removal looks like at runtime."
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+
+          # And the crash buffer, for a process that died and restarted inside
+          # the window above - which the pid check alone would read as healthy.
+          crashed=$( { adb logcat -d -b crash 2>/dev/null | grep -c "com.jarvis.client" || true; } )
+          if [ "${crashed:-0}" -gt 0 ]; then
+            echo "::error::The release build wrote to the crash buffer."
+            adb logcat -d -b crash | tail -60 || true
+            exit 1
+          fi
+          echo "The release APK installs, starts and stays up."
+          echo "::endgroup::"
+
       - name: Upload the report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -421,11 +518,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # The RELEASE apk, which the step above has just started on a real
+      # device. `app-release.apk` and not `*.apk`: the debug build and the
+      # androidTest build are both sitting in the same tree, and picking the
+      # wrong one here would publish a debuggable APK under release notes
+      # saying otherwise - which is worse than publishing the debug one openly.
       - name: Collect APK
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          find . -name 'app-debug.apk' -not -path './artifacts/*' -exec cp {} artifacts/ \;
+          find . -name 'app-release.apk' -not -path './artifacts/*' -exec cp {} artifacts/ \;
+          if [ ! -e artifacts/app-release.apk ]; then
+            echo "::error::No release APK to publish."
+            exit 1
+          fi
           ls -lh artifacts
 
       # This is the app that actually talks to Jarvis, so it gets the same
@@ -441,14 +547,13 @@ jobs:
         run: |
           set -euo pipefail
           short="${GITHUB_SHA::7}"
-          mv jarvis-client/artifacts/app-debug.apk "jarvis-client/artifacts/jarvis-client-$short.apk"
+          mv jarvis-client/artifacts/app-release.apk "jarvis-client/artifacts/jarvis-client-$short.apk"
+          size=$(du -h "jarvis-client/artifacts/jarvis-client-$short.apk" | cut -f1)
 
           notes=$(printf '%s\n' \
-            "Debug build of \`jarvis-client\` from commit \`$short\` on \`$GITHUB_REF_NAME\`." \
+            "Release build of \`jarvis-client\` from commit \`$short\` on \`$GITHUB_REF_NAME\`. **$size.**" \
             "" \
             "The only app. It speaks the real Jarvis API - SSE on \`/api/events\` plus REST, authenticated with \`X-Jarvis-Token\`." \
-            "" \
-            "Started on an Android 34 emulator before publishing, so it at least opens." \
             "" \
             '```' \
             "adb install -r jarvis-client-$short.apk" \
@@ -456,13 +561,23 @@ jobs:
             "" \
             "Or open this page on the phone and tap the \`.apk\`." \
             "" \
-            "Signed with the committed debug key, so it installs over a previous build in place. This tag is rolling.")
+            "### What changed about these builds" \
+            "" \
+            "This is the shrunk, optimised build, not the debug one. It is roughly a tenth the size, and Android is allowed to compile it ahead of time instead of interpreting every class - so the reactor face and the chat stream have a real frame budget for the first time. It also closes \`adb shell run-as\`, which on a debug build let anything with adb read the app's data directory, pairing token included." \
+            "" \
+            "### What was checked before this was published" \
+            "" \
+            "The unit tests and the instrumentation suite both passed, on an Android 34 emulator. Then THIS apk - the shrunk one, not a rebuild of it - was installed fresh on that emulator, started, and watched for fifteen seconds. It has to still be running, with nothing in its log that looks like the shrinker removed code it needed, or nothing is published." \
+            "" \
+            "Honest limit: that proves it starts and the first screen works. It does not walk every screen, so a shrinker fault on something only reachable several taps in would still get through. Report anything that crashes only on this build and not the previous debug one." \
+            "" \
+            "Signed with the committed debug key, the same one every previous build used, so it installs over an existing copy in place with no uninstall and no loss of pairing. This tag is rolling.")
 
           gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
           gh release create "$TAG" jarvis-client/artifacts/*.apk \
             --prerelease \
             --target "$GITHUB_SHA" \
-            --title "Jarvis client - latest debug build" \
+            --title "Jarvis client - latest release build" \
             --notes "$notes"
 
           echo "Published: $(gh release view "$TAG" --json url --jq .url)"
