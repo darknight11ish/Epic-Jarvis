@@ -5,6 +5,7 @@ import android.util.Log
 import com.jarvis.client.audio.Recorder
 import com.jarvis.client.audio.Speaker
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.SaidAloud
 import com.jarvis.client.net.Heard
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.VoiceStatus
@@ -294,14 +295,47 @@ class VoiceSession(
      * it reveals nothing new and skips no check. That asymmetry is the whole
      * reason one of the two voice routes may be missing and the other may not.
      */
+    /**
+     * Speaks the reply, or says plainly that it cannot.
+     *
+     * This used to read `(said as? ApiResult.Ok)?.value` and fall through to
+     * the handset's default engine whenever that was null - which is null on a
+     * *Failed* result too, not only on the 503. So both branches reached an
+     * unrestricted `TextToSpeech`, and because the desktop's speech module is
+     * not installed, every voice turn took that path. The text being handed
+     * over is Jarvis's reply, composed from the owner's recalled facts, and on
+     * a stock handset the default engine synthesises it over the network.
+     *
+     * Substituting this device's voice is now the server's call, and it is
+     * refused unless the server says otherwise. Silence with the reply on
+     * screen is an acceptable outcome; uploading it is not.
+     */
     private suspend fun speak(text: String) {
-        val said = api.say(text)
-        val wav = (said as? ApiResult.Ok)?.value
-        if (wav != null && wav.isNotEmpty()) {
-            speaker.play(wav)
-        } else {
-            runCatching { speaker.speakLocally(text) }
-                .onFailure { Log.w(TAG, "local synthesis failed", it) }
+        when (val said = api.say(text)) {
+            is ApiResult.Ok -> when (val out = said.value) {
+                is SaidAloud.Audio -> speaker.play(out.wav)
+                is SaidAloud.NoEngine -> {
+                    if (!out.fallbackOk) {
+                        _notice.value = out.reason
+                            ?: "Jarvis has no voice on this desktop. The reply is on screen."
+                        return
+                    }
+                    val spoke = runCatching { speaker.speakOnDevice(text) }
+                        .onFailure { Log.w(TAG, "on-device synthesis failed", it) }
+                        .getOrDefault(false)
+                    if (!spoke) {
+                        _notice.value =
+                            "No offline voice on this phone, so it was not spoken aloud. " +
+                            "The reply is on screen."
+                    }
+                }
+            }
+            // Deliberately no fallback. `client_fallback_ok` is the only thing
+            // that authorises this device to speak the text, and a failure is
+            // not that - it carries no permission at all.
+            is ApiResult.Failed -> {
+                _notice.value = "Could not reach the desktop to speak that. The reply is on screen."
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.builtins.ListSerializer
@@ -424,7 +425,7 @@ class JarvisApi(
      * the voice path that is allowed to be missing. Null means "use your own
      * voice", and the caller does.
      */
-    suspend fun say(text: String): ApiResult<ByteArray?> = withContext(Dispatchers.IO) {
+    suspend fun say(text: String): ApiResult<SaidAloud> = withContext(Dispatchers.IO) {
         val target = url("/api/voice/say") ?: return@withContext ApiResult.Failed(
             ApiError.Unreachable("No desktop address set"),
         )
@@ -435,8 +436,32 @@ class JarvisApi(
         runCatching {
             client.newCall(req).execute().use {
                 when {
-                    it.code == 503 -> ApiResult.Ok(null)
-                    it.isSuccessful -> ApiResult.Ok(it.body?.bytes())
+                    it.code == 503 -> {
+                        // The permission, read rather than assumed. Absent is
+                        // false: this decides whether the owner's reply gets
+                        // handed to whatever TTS engine the handset defaults
+                        // to, and on a stock phone that engine is Google's.
+                        val obj = runCatching {
+                            JarvisJson.parseToJsonElement(it.body?.string().orEmpty()) as? JsonObject
+                        }.getOrNull()
+                        ApiResult.Ok(
+                            SaidAloud.NoEngine(
+                                fallbackOk = (obj?.get("client_fallback_ok") as? JsonPrimitive)
+                                    ?.booleanOrNull ?: false,
+                                reason = (obj?.get("reason") as? JsonPrimitive)?.contentOrNull,
+                            ),
+                        )
+                    }
+                    it.isSuccessful -> {
+                        val bytes = it.body?.bytes()
+                        // A 200 carrying no audio is a server fault, not a
+                        // licence to synthesise locally.
+                        if (bytes == null || bytes.isEmpty()) {
+                            ApiResult.Ok(SaidAloud.NoEngine(fallbackOk = false, reason = null))
+                        } else {
+                            ApiResult.Ok(SaidAloud.Audio(bytes))
+                        }
+                    }
                     else -> ApiResult.Failed(errorFor(it))
                 }
             }
@@ -497,6 +522,12 @@ class JarvisApi(
     private fun errorFor(resp: Response): ApiError = when (resp.code) {
         401, 403 -> ApiError.BadToken
         404 -> ApiError.NotFound
+        // 503 is "that subsystem is not installed", which is a different
+        // sentence from "the desktop is broken" and has a different remedy.
+        // The voice routes answer it whenever the speech module is absent -
+        // which is always, today - and it read as "The desktop answered 503."
+        // `say` never reaches here; it needs the body and handles 503 itself.
+        503 -> ApiError.NotAvailable
         else -> ApiError.Server(resp.code, resp.body?.string().orEmpty().take(200))
     }
 

@@ -451,6 +451,18 @@ object JarvisRuntime {
             // on a control that has to be somewhere else.
             "model" -> Unit
             "voice" -> Unit
+            // The memory extractor runs on its own once a conversation goes
+            // quiet, so the review queue fills without anyone asking. The
+            // event deliberately carries no fact text, and there is nothing
+            // here worth showing: reviewing memory is desk work, and a count
+            // on a phone invites a batch-accept control, which is precisely
+            // the shape rule 4 forbids.
+            "proposal" -> Unit
+            // Face and bindings changed on another device. Each device renders
+            // its own face and the server is only the sync channel, so this is
+            // for a later change that reloads the appearance store - not a
+            // reason to redraw anything now.
+            "appearance" -> Unit
             else -> Log.d(TAG, "unhandled event kind '$kind'")
         }
     }

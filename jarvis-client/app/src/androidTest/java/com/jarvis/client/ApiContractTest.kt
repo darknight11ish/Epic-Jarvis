@@ -7,6 +7,7 @@ import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.JarvisApi
+import com.jarvis.client.net.SaidAloud
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -188,6 +189,56 @@ class ApiContractTest {
         val out = api.pending()
         assertTrue(out is ApiResult.Failed)
         assertEquals(ApiError.BadToken, (out as ApiResult.Failed).error)
+    }
+
+    // ------------------------------------------------------------- voice ---
+
+    /**
+     * A 503 from `/api/voice/say` is not permission to speak the text here.
+     *
+     * The client used to treat "no audio came back" as licence to hand the
+     * reply to the handset's default engine - which on a stock phone
+     * synthesises over the network. The reply is composed from the owner's
+     * recalled facts, so that was rule 1 being broken on the normal path.
+     * Whether this device may substitute its own voice is the server's call,
+     * and an ABSENT flag must read as no.
+     */
+    @Test
+    fun anAbsentFallbackFlagMeansDoNotSpeakItHere() = runBlocking {
+        routes["/api/voice/say"] = MockResponse().setResponseCode(503)
+            .setHeader("Content-Type", "application/json")
+            .setBody("""{"error":"speech module not installed"}""")
+
+        val out = api.say("the reply, composed from recalled facts")
+        assertTrue(out is ApiResult.Ok)
+        val said = (out as ApiResult.Ok).value
+        assertTrue("a 503 must decode as NoEngine", said is SaidAloud.NoEngine)
+        assertFalse(
+            "an absent client_fallback_ok was read as permission",
+            (said as SaidAloud.NoEngine).fallbackOk,
+        )
+    }
+
+    /** And when the server does allow it, that is carried through honestly. */
+    @Test
+    fun anExplicitFallbackFlagIsHonoured() = runBlocking {
+        routes["/api/voice/say"] = MockResponse().setResponseCode(503)
+            .setHeader("Content-Type", "application/json")
+            .setBody("""{"client_fallback_ok": true, "reason": "no engine installed"}""")
+
+        val said = (api.say("hello") as ApiResult.Ok).value
+        assertTrue(said is SaidAloud.NoEngine)
+        assertTrue((said as SaidAloud.NoEngine).fallbackOk)
+        assertEquals("no engine installed", said.reason)
+    }
+
+    /** A 200 carrying no audio is a server fault, not a licence either. */
+    @Test
+    fun anEmptySuccessIsNotPermissionEither() = runBlocking {
+        routes["/api/voice/say"] = MockResponse().setResponseCode(200).setBody("")
+        val said = (api.say("hello") as ApiResult.Ok).value
+        assertTrue(said is SaidAloud.NoEngine)
+        assertFalse((said as SaidAloud.NoEngine).fallbackOk)
     }
 
     private companion object {

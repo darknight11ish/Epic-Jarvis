@@ -20,10 +20,22 @@ import kotlin.coroutines.resume
  * Jarvis's voice, from whichever end has one.
  *
  * `/api/voice/say` may answer **503**, and that is a legitimate answer rather
- * than a failure: speaking text the client already holds reveals nothing and
- * skips no check, which is exactly why this half of the voice path is allowed
- * to be missing and the other half is not. So a 503 falls through to Android's
- * own synthesiser and nothing is weakened by it.
+ * than a failure. But the sentence that used to sit here - "speaking text the
+ * client already holds reveals nothing" - was false, and it was the whole
+ * argument for the fallback below.
+ *
+ * Handing text to `TextToSpeech` with an empty params Bundle uses whatever
+ * engine is default, and on a stock handset that is Google's, which may
+ * synthesise **over the network**. The text being spoken is Jarvis's reply,
+ * composed from the owner's recalled facts. So the "local" fallback was
+ * uploading exactly what rule 1 says never leaves the machine, on the normal
+ * path, because the server's speech module is not installed and every
+ * /api/voice/* call is on its failure path.
+ *
+ * Two things now hold instead. The server says whether substituting our own
+ * voice is acceptable at all (`client_fallback_ok`), and [speakOnDevice]
+ * refuses to speak through anything that needs a network connection. Silence
+ * with the reply on screen is a correct outcome; uploading it is not.
  *
  * Either way the level is published on [level] and handed to the face's
  * `setSpeechLevel`, so the reactor moves with the actual voice. When no level
@@ -110,10 +122,43 @@ class Speaker(private val context: Context) {
      * its synthetic envelope, which is the behaviour the spec already
      * specifies for exactly this case.
      */
-    suspend fun speakLocally(text: String) {
-        if (text.isBlank()) return
+    /**
+     * Speaks, but only through a voice that does not touch the network.
+     *
+     * Returns false when there is no such voice - no engine, or every voice on
+     * the handset is cloud-backed. The caller must then show the text and say
+     * the voice is unavailable, NOT fall back to the default engine.
+     */
+    suspend fun speakOnDevice(text: String): Boolean {
+        if (text.isBlank()) return true
         cancelled = false
-        val engine = ensureTts() ?: return
+        val engine = ensureTts() ?: return false
+
+        // Chosen explicitly, never left to the engine default. `voices` can
+        // return null, and can throw on a few OEM engines, so it is guarded.
+        val offline = runCatching {
+            engine.voices.orEmpty().filter { v ->
+                !v.isNetworkConnectionRequired &&
+                    TextToSpeech.Engine.KEY_FEATURE_NETWORK_SYNTHESIS !in v.features.orEmpty()
+            }
+        }.getOrDefault(emptyList())
+
+        val wanted = java.util.Locale.getDefault().language
+        val voice = offline.firstOrNull { it.locale.language == wanted } ?: offline.firstOrNull()
+        if (voice == null) {
+            Log.w(TAG, "no on-device voice; refusing to speak rather than synthesising remotely")
+            return false
+        }
+        if (runCatching { engine.setVoice(voice) }.getOrNull() != TextToSpeech.SUCCESS) {
+            Log.w(TAG, "could not select the on-device voice; refusing to speak")
+            return false
+        }
+
+        speakThrough(engine, text)
+        return true
+    }
+
+    private suspend fun speakThrough(engine: TextToSpeech, text: String) {
         // Re-checked after init. `stop()` during the ~1s first-run engine setup
         // set the flag, and nothing read it again before speaking — so Jarvis
         // could start talking after the owner had cancelled.

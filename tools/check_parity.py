@@ -46,7 +46,7 @@ ROUTE = re.compile(r"/api/[a-zA-Z0-9/_-]+")
 # "deliberate"   - a decision was made NOT to port it; the reason is the point
 # "todo"         - portable and wanted, nobody has done it yet
 CLASSIFICATION = {
-    "/api/appearance": ("todo", "Sync the face, theme and state bindings. NOT a live route: appearance.rs declares the name in a const and documents that the backend answers neither verb. Blocked on the backend, not on the phone - see docs/APPEARANCE-SYNC-PROPOSAL.md."),
+    "/api/appearance": ("todo", "Sync the face, theme and state bindings. GET/POST now EXIST and publish an `appearance` event (desktop thread, 15 Sep). No client handles that event yet. Agreed design: each device renders its face locally and the server is only the sync channel."),
     "/api/approve": ("ported", ""),
     "/api/attention": ("ported", ""),
     "/api/attention/mute": ("ported", ""),

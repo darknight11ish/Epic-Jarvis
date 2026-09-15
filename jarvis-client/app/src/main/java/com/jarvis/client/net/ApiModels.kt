@@ -249,6 +249,25 @@ data class JobRecord(
     val private: Boolean = false,
 )
 
+/**
+ * What `/api/voice/say` came back with.
+ *
+ * The 503 is not a failure - the desktop's speech module is optional - but it
+ * is also not permission to speak the text ourselves. Whether this device may
+ * substitute its own voice is the SERVER's call, carried in
+ * `client_fallback_ok`, and absent means no. It used to be assumed.
+ */
+sealed interface SaidAloud {
+    /** The desktop synthesised it; play these samples and nothing else. */
+    class Audio(val wav: ByteArray) : SaidAloud
+
+    /**
+     * The desktop has no engine. [fallbackOk] is the server's answer to "may
+     * this device speak it instead?" - never defaulted to true.
+     */
+    data class NoEngine(val fallbackOk: Boolean, val reason: String?) : SaidAloud
+}
+
 /** A message inside its send window. The only honest "unsend" there is. */
 @Serializable
 data class HoldRecord(
