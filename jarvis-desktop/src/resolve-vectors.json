@@ -1,0 +1,2184 @@
+{
+  "generated_from": "jarvis-desktop/src/faces.html resolve(), the implementation the others are ports of",
+  "spec_version": "1",
+  "note": "Vectors with exact:false use hash01(), whose sin() fractional part is not bit-portable across V8, libm and Rust std. DO NOT assert a tolerance on these: flicker uses the hash to pick an INDEX into a family ramp, so the output is discontinuous - a one-ulp difference either changes the colour completely or not at all, and 'close' is not a meaningful relation between two ramp entries. Assert the structural invariant given in `holds` instead. That invariant IS portable and is the actual contract.",
+  "count": 130,
+  "exact_count": 114,
+  "vectors": [
+    {
+      "bind": {
+        "pattern": "solid",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "solid",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "solid",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "solid",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "solid",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "solid",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "solid",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "solid",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "#4d1f08",
+        "b": "rgb(35,14,4)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "solid",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "solid",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "#ff0000",
+        "b": "rgb(115,0,0)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#ee4f4f",
+        "b": "#975317"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#ee894f",
+        "b": "#978217"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#eeee4f",
+        "b": "#5b9717"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#4fee9e",
+        "b": "#179793"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#4fd7ee",
+        "b": "#174997"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#ee4f4f",
+        "b": "#975317"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#ee4f7e",
+        "b": "#972c17"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "#eeee4f",
+        "b": "#5b9717"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "rainbow",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "#eeee4f",
+        "b": "#5b9717"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "expect": {
+        "a": "#ae7bff",
+        "b": "rgb(78,55,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "expect": {
+        "a": "#ae7bff",
+        "b": "rgb(78,55,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "expect": {
+        "a": "#ffb648",
+        "b": "rgb(115,82,32)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "cycle",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "step_cycle",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "expect": {
+        "a": "rgb(121,229,255)",
+        "b": "rgb(52,106,119)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "expect": {
+        "a": "rgb(134,231,255)",
+        "b": "rgb(56,114,128)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "expect": {
+        "a": "rgb(146,234,255)",
+        "b": "rgb(59,121,136)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "expect": {
+        "a": "rgb(112,227,255)",
+        "b": "rgb(49,101,113)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "expect": {
+        "a": "rgb(100,204,229)",
+        "b": "rgb(45,92,103)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "expect": {
+        "a": "rgb(143,233,255)",
+        "b": "rgb(58,119,134)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "expect": {
+        "a": "rgb(107,218,245)",
+        "b": "rgb(47,97,109)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "rgb(121,86,68)",
+        "b": "rgb(41,17,4)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "breathe",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "breathe",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "rgb(255,62,62)",
+        "b": "rgb(136,0,0)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,182,72)",
+        "b": "rgb(77,55,22)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,220,168)",
+        "b": "rgb(148,106,42)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,182,72)",
+        "b": "rgb(77,55,22)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,183,75)",
+        "b": "rgb(78,56,22)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,182,72)",
+        "b": "rgb(77,55,22)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,197,110)",
+        "b": "rgb(104,75,29)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,182,72)",
+        "b": "rgb(77,55,22)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "rgb(77,31,8)",
+        "b": "rgb(23,9,2)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "pulse",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "pulse",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "rgb(255,0,0)",
+        "b": "rgb(77,0,0)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "expect": {
+        "a": "rgb(177,137,232)",
+        "b": "rgb(177,137,232)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "expect": {
+        "a": "rgb(202,129,224)",
+        "b": "rgb(151,145,239)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "expect": {
+        "a": "rgb(238,117,213)",
+        "b": "rgb(115,157,250)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "expect": {
+        "a": "rgb(238,117,213)",
+        "b": "rgb(115,157,250)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "expect": {
+        "a": "rgb(201,129,224)",
+        "b": "rgb(152,145,239)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "expect": {
+        "a": "rgb(115,157,250)",
+        "b": "rgb(238,117,213)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "expect": {
+        "a": "rgb(107,160,252)",
+        "b": "rgb(246,114,211)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "rgb(236,102,186)",
+        "b": "rgb(96,40,30)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "gradient",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "gradient",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "rgb(255,99,185)",
+        "b": "rgb(255,12,23)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#52e0e0",
+        "b": "#1f5889"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#52b0e0",
+        "b": "#1f3489"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#527be0",
+        "b": "#321f89"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#52e0e0",
+        "b": "#1f5889"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#52e093",
+        "b": "#1f8981"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#527be0",
+        "b": "#321f89"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "expect": {
+        "a": "#5286e0",
+        "b": "#2a1f89"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "#527be0",
+        "b": "#321f89"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "sweep",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "hue_sweep",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "#527be0",
+        "b": "#321f89"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "expect": {
+        "a": "rgb(10,58,74)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "expect": {
+        "a": "rgb(15,63,79)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "expect": {
+        "a": "rgb(111,166,179)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "expect": {
+        "a": "rgb(10,58,74)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "expect": {
+        "a": "rgb(51,102,117)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "expect": {
+        "a": "rgb(184,244,255)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "expect": {
+        "a": "rgb(13,61,77)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "rgb(49,42,36)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "comet",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "comet",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "rgb(152,24,31)",
+        "b": "#0a3a4a"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 7,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 7,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#d4661c",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 7,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#d4661c",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 7,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#d4661c",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 7,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 7,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#d4661c",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 7,
+      "kind": "flicker",
+      "exact": false,
+      "expect": {
+        "a": "#8a3a0e",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "note": "flicker IGNORES bind.color and paints from the family ramp. A port that applies the override here is wrong.",
+      "expect": {
+        "a": "#d4661c",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "flicker",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "flicker",
+      "exact": false,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "#d4661c",
+        "b": "#4d1f08"
+      },
+      "holds": {
+        "rule": "both colours are entries in the family ramp, and b is the entry two steps below a, floored at the start of the ramp",
+        "family": "ember",
+        "ramp": [
+          "#4d1f08",
+          "#8a3a0e",
+          "#d4661c",
+          "#ff9b52",
+          "#ffcfa8"
+        ]
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(47,116,224)",
+        "b": "rgb(21,52,101)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0.42,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(187,121,164)",
+        "b": "rgb(84,54,74)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 1,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,123,134)",
+        "b": "rgb(115,55,60)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(47,116,224)",
+        "b": "rgb(21,52,101)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0.42,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(187,121,164)",
+        "b": "rgb(84,54,74)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 1,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,123,134)",
+        "b": "rgb(115,55,60)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(47,116,224)",
+        "b": "rgb(21,52,101)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0.42,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(187,121,164)",
+        "b": "rgb(84,54,74)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 1,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,123,134)",
+        "b": "rgb(115,55,60)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(47,116,224)",
+        "b": "rgb(21,52,101)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0.42,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(187,121,164)",
+        "b": "rgb(84,54,74)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 1,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,123,134)",
+        "b": "rgb(115,55,60)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(47,116,224)",
+        "b": "rgb(21,52,101)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0.42,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(187,121,164)",
+        "b": "rgb(84,54,74)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 1,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,123,134)",
+        "b": "rgb(115,55,60)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(47,116,224)",
+        "b": "rgb(21,52,101)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0.42,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(187,121,164)",
+        "b": "rgb(84,54,74)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 1,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,123,134)",
+        "b": "rgb(115,55,60)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(47,116,224)",
+        "b": "rgb(21,52,101)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0.42,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(187,121,164)",
+        "b": "rgb(84,54,74)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 1,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,123,134)",
+        "b": "rgb(115,55,60)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "rgb(77,31,8)",
+        "b": "rgb(35,14,4)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "reactive",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "reactive",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "rgb(255,0,0)",
+        "b": "rgb(115,0,0)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,182,72)",
+        "b": "rgb(128,91,36)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,167,88)",
+        "b": "rgb(128,84,44)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,144,112)",
+        "b": "rgb(128,72,56)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,124,133)",
+        "b": "rgb(128,62,67)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,134,122)",
+        "b": "rgb(128,67,61)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "expect": {
+        "a": "rgb(50,112,120)",
+        "b": "rgb(25,56,60)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "expect": {
+        "a": "rgb(255,126,131)",
+        "b": "rgb(128,63,66)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "rgb(255,144,112)",
+        "b": "rgb(128,72,56)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "temperature",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "temperature",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "rgb(255,144,112)",
+        "b": "rgb(128,72,56)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "params": {}
+      },
+      "t": 0,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "expect": {
+        "a": "#ff7b86",
+        "b": "rgb(128,62,67)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "params": {}
+      },
+      "t": 0.37,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "expect": {
+        "a": "#ff7b86",
+        "b": "rgb(128,62,67)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "expect": {
+        "a": "#ff7b86",
+        "b": "rgb(128,62,67)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "params": {}
+      },
+      "t": 2.5,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "expect": {
+        "a": "#ff7b86",
+        "b": "rgb(128,62,67)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "params": {}
+      },
+      "t": 3.14159,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "expect": {
+        "a": "#0a0e14",
+        "b": "rgb(5,7,10)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "params": {}
+      },
+      "t": 6,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "expect": {
+        "a": "#0a0e14",
+        "b": "rgb(5,7,10)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "params": {}
+      },
+      "t": 11.7,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "expect": {
+        "a": "#0a0e14",
+        "b": "rgb(5,7,10)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "color": "ember-1",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "note": "bind.color overrides the pattern's own colour",
+      "expect": {
+        "a": "#4d1f08",
+        "b": "rgb(39,16,4)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "strobe",
+        "color": "#ff0000",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "strobe",
+      "exact": true,
+      "note": "a literal hex passes through hexOf unchanged",
+      "expect": {
+        "a": "#ff0000",
+        "b": "rgb(128,0,0)"
+      }
+    },
+    {
+      "bind": {
+        "pattern": "no-such-pattern-exists",
+        "params": {}
+      },
+      "t": 1,
+      "amp": 0,
+      "seed": 0,
+      "kind": "__unknown_id__",
+      "exact": true,
+      "note": "falls back to SPEC.patterns[0]. NOT DISCRIMINATING on this spec: patterns[0] is solid/ice-4 and ice-4 is #6fe3ff, which is also hexOf's own default - so a port that wrongly returns the hardcoded fallback passes this vector anyway. Kept because it still catches a throw, and flagged so nobody reads a pass as proof the fallback is right.",
+      "expect": {
+        "a": "#6fe3ff",
+        "b": "rgb(50,102,115)"
+      }
+    }
+  ]
+}

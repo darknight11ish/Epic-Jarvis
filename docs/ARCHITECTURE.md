@@ -265,9 +265,26 @@ Current cross-branch documents, both directions:
 One more thing the desktop session can do cheaply and the Android session
 cannot: **read that branch's CI logs**. There is no local Android build, so
 every check there costs a ~15 minute round trip, while the GitHub API is a
-few seconds from here. Two failures were resolved that way — a test name
-buried by a log tail, and a compile error whose five reported symptoms were
-downstream of one unclosed comment. Offer it rather than waiting to be asked.
+few seconds from here. Offer it rather than waiting to be asked.
+
+**But relay the evidence, not a reading of it.** Fetching those logs resolved
+a compile error whose five reported symptoms were all downstream of one
+unclosed comment. It also produced the fifth misunderstanding, and this one
+was pure relay damage: the desktop passed back a stack trace with the words
+*"a timeout inside runBlocking — confirmed, not guessed"* on it. The frame
+could not support that. `EventStreamContractTest.kt:103` is the `runBlocking`
+line itself, so a timeout, a failed assertion and a thrown exception all
+unwind through it identically — and the real cause turned out to be a
+`ConcurrentModificationException`. The other session had written that
+hypothesis in its own handoff, the desktop repeated it back with added
+confidence, and it briefly became settled fact in two places at once.
+
+A frame inside `runBlocking` says where a coroutine was blocked, not why it
+failed. The general rule, which is the reason this is in the architecture
+document rather than a commit message: **quote the log, and let the side that
+owns the code do the diagnosing.** Fetching the other branch catches a stale
+file. It does nothing about a claim that was never verified — and confidence
+added in transit is indistinguishable, at the far end, from evidence.
 
 ---
 
