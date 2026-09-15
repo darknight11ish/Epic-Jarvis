@@ -1,9 +1,13 @@
 # Backend patches
 
-Nine patches against the Jarvis backend, each self-contained and each with an
-executable test. They touch different files and can be applied in any order,
-but the order below is the one to use: `memory-safety` must land
-before anything makes the extractor run.
+Eleven patches against the Jarvis backend, each with an executable test.
+
+**Order.** They commute — five of them touch `jarvis_hud.py`, but in
+well-separated regions, and every order produces the same tree. The order in
+the table is still the one to use, because `memory-safety` must land before
+anything makes the extractor run. That is a *semantic* constraint, not a
+textual one: without it, the first accepted proposal retires a
+roughly-matching unrelated fact, permanently, and `retire()` has no way back.
 
 | patch | file it changes | what it is for |
 |---|---|---|
@@ -16,6 +20,8 @@ before anything makes the extractor run.
 | `memory-prefix.patch` | `jarvis_hud.py` | Recalled facts were the first thing in every request: it dropped the persona invariants and threw away the KV cache for the whole conversation, every turn. |
 | `extraction-wiring.patch` | `jarvis_hud.py`, `jarvis_events.py` | `propose()` had zero call sites. Gives the learning loop a trigger, and the review queue a doorbell. |
 | `voice-503.patch` | `jarvis_hud.py` | Four voice routes answered a missing speech module in four different shapes, two of them a 500 for something that did not break. |
+| `degrade-filter.patch` | `jarvis_hud.py` | **A cloud turn that stepped down to local and back out again went upstream unfiltered.** The worst thing in this directory. |
+| `vram-estimate.patch` | `jarvis_models.py` | The estimator that advises on model choice was wrong in both directions at once. |
 
 ## Apply them
 
@@ -688,3 +694,88 @@ with `ast` and executed, so the shipped helper is what runs; the rest walk the
 tree and assert that exactly one of the four call sites allows a client
 fallback and three refuse it, and that nothing reaches a 500 for a module that
 was simply never installed.
+
+---
+
+# `degrade-filter.patch` — read this one first
+
+**A cloud turn that stepped down to the local model and back out again sent
+the whole transcript upstream, unfiltered.**
+
+The cloud-lane control is one comprehension near the top of the chat handler:
+on a cloud decision, keep only `role == "user"` messages. Its comment explains
+why at length and the reasoning is right — the assistant turn is a carrier, it
+restates injected memory, so only what you typed goes out.
+
+It runs once. `is_cloud` is computed once, above the degrade loop, and never
+re-evaluated. The loop then has a branch that, on landing at the local model,
+restores the **raw client transcript**:
+
+```python
+if lane == local_model and not decision.inject_memory:
+    messages = body.get("messages") or []
+    decision.inject_memory = True
+```
+
+and nothing ever put the filter back. The loop is sized `len(lanes) + 2`
+*precisely because* it expects hops after that one. Reproduced by executing the
+real loop:
+
+```
+cloud -> 429 -> local -> 503 -> back out to cloud
+  jarvis-escalate  roles=['user','user']
+  qwen3:8b         roles=['user','assistant','user']
+  jarvis-critic    roles=['user','assistant','user']   <- LEAK
+```
+
+The other direction needed no rebuild at all. A **local** turn carrying the
+recalled-facts block had no guard whatsoever against `degrade()` returning a
+cloud lane, and the facts went with it.
+
+The loop's own comment says *"downward only, never back into the lane that
+just said no"*. That is a contract with `jarvis_router`, and the loop never
+checked it. The fix does not need the contract to hold: it re-derives the
+filter from the lane it is **about to call**, on every hop, and clears the
+route header's memory claims when it does. Stripping the recalled-facts block
+is free, because that block is a system message.
+
+## Test it
+
+```powershell
+python test_degrade_filter.py
+```
+
+Eleven checks. The degrade loop is lifted out of `jarvis_hud.py` with `ast` and
+executed against a stub router that deliberately **breaks** the downward-only
+contract, because that is the case the code was trusting. Two controls: the
+local-rebuild branch beside the fix must still restore the full transcript, and
+a cloud turn that never degrades must be untouched. Against the unpatched file,
+five of the eleven fail — including both leaks.
+
+---
+
+# `vram-estimate.patch`
+
+`jarvis_models.estimate_vram_mb` is what advises on model choice, and it was
+wrong in both directions at once, which is presumably why nobody noticed.
+
+- **`cache_bits: int = 8`** — a `q8_0` cache — while nothing in the tree sets
+  `OLLAMA_KV_CACHE_TYPE`, so Ollama was running `f16` and every estimate was
+  ~47% light on the KV term. Now read from the environment, defaulting to 16.
+  And `q8_0` is not 8 bits: llama.cpp stores 32 values in 34 bytes, so it is
+  **8.5**. (Ollama's own estimator rounds this to 8 and under-counts by ~6%.)
+- **The batch surcharge was not modelled at all.** `server/sched.go` adds a
+  flat **768 MiB at `num_batch >= 1024`** and **2 GiB at `>= 2048`**, and
+  Ollama's auto-batch reaches for those when it thinks there is headroom. An
+  estimate could say a model fits and then Ollama would spill it.
+- **`assume_context` capped at 8192**, so a model you intend to deploy at 16K
+  was judged as if it were at 8K and `fits_with_margin` waved it through. Now
+  16384.
+- **`RUNTIME_OVERHEAD_MB = 1500`** is left at 1500 and made overridable rather
+  than "corrected". The measured parts are the CUDA context (~330 MiB) and the
+  compute buffer (~250–350 MiB at `num_batch 512`), so ~650 MiB — but this
+  estimate is deliberately a floor, and the cost of being wrong downward is a
+  model that spills and runs at a fifth of the speed. Named and overridable
+  beats silently optimistic.
+
+See `docs/MODEL-TOPOLOGY.md` for what to do with the corrected numbers.

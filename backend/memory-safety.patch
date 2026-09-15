@@ -128,7 +128,17 @@
          return done
  
      def import_legacy(self, path: Optional[Path] = None) -> int:
-@@ -295,9 +351,14 @@
+@@ -292,12 +348,24 @@
+         query = " ".join(str(query).split())
+         if not query:
+             return []
++        if k <= 0:
++            # The truncation below appends and THEN checks `len(out) >= k`, so
++            # k=0 returned exactly one fact. That reads as an off-by-one and is
++            # worse than one, because this is the function that decides what
++            # private text goes into a prompt: someone setting the recall width
++            # to zero to turn recall OFF still got a fact in every request.
++            return []
          at = time.time() if at is None else at
          with _LOCK, closing(self._connect()) as c:
              ranks: dict[int, float] = {}
@@ -145,7 +155,7 @@
                  rows = c.execute(
                      "SELECT rowid, bm25(facts_fts) AS s FROM facts_fts WHERE facts_fts MATCH ?"
                      " ORDER BY s LIMIT ?", (q, candidates)).fetchall()
-@@ -305,14 +366,22 @@
+@@ -305,14 +373,22 @@
                      ranks[row["rowid"]] = ranks.get(row["rowid"], 0) + 1.0 / (60 + r)
              except sqlite3.OperationalError:
                  pass
@@ -170,7 +180,7 @@
                          ranks[row["fact_id"]] = ranks.get(row["fact_id"], 0) + 1.0 / (60 + r)
                  except Exception:
                      pass
-@@ -336,6 +405,45 @@
+@@ -336,6 +412,45 @@
                  break
          return out
  

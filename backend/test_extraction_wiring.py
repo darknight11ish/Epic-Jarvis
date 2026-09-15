@@ -12,7 +12,7 @@ millisecond timings.
 
     python3 test_extraction_wiring.py
 """
-import ast, json, os, sys, threading, time, traceback, types
+import ast, json, os, sys, threading, time, traceback, types, urllib.parse
 from pathlib import Path
 from typing import Optional
 
@@ -31,19 +31,24 @@ def check(name, cond, detail=""):
 def _learner_ns():
     """The real `_Learner` and its three constants, executed in isolation."""
     tree = ast.parse(HUD.read_text(encoding="utf-8"))
-    want, body = {"_Learner"}, []
+    want = {"_Learner", "_loopback_ok", "_extract_model", "_int_env"}
     consts = {"EXTRACT_ENABLED", "EXTRACT_IDLE", "EXTRACT_MIN_GAP"}
+    body = []
     for node in tree.body:
-        if isinstance(node, ast.ClassDef) and node.name in want:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in want:
             body.append(node)
         elif isinstance(node, ast.Assign) and any(
                 isinstance(t, ast.Name) and t.id in consts for t in node.targets):
             body.append(node)
     names = {getattr(n, "name", None) or n.targets[0].id for n in body}
-    missing = (want | consts) - names
+    missing = (want | consts) - names - {"_int_env"}   # _int_env lives in memory-prefix
     if missing:
         raise AssertionError(f"not found at module level in jarvis_hud.py: {sorted(missing)}")
-    ns = {"os": os, "json": json, "sys": sys, "threading": threading, "Optional": Optional}
+    ns = {"os": os, "json": json, "sys": sys, "threading": threading,
+          "Optional": Optional, "urllib": urllib,
+          # _extract_model reads the config; an empty one is the interesting
+          # case because it is what sends it to the JARVIS_LOCAL_MODEL branch.
+          "_read_toml": lambda _p: {}, "CONFIG_FILE": None}
     exec(compile(ast.Module(body=body, type_ignores=[]), "<lifted>", "exec"), ns)
     # Real timings would make this suite take ten minutes.
     ns["EXTRACT_ENABLED"], ns["EXTRACT_IDLE"], ns["EXTRACT_MIN_GAP"] = True, 0.08, 0.02
@@ -53,22 +58,32 @@ def _learner_ns():
 class FakeExtract:
     """Stands in for jarvis_extract. Records every transcript it is handed."""
 
-    def __init__(self, raises=False):
-        self.calls, self.raises = [], raises
+    def __init__(self, raises=False, ollama="http://127.0.0.1:11434", answers=True):
+        self.calls, self.raises, self.answers = [], raises, answers
+        self.asked = []                       # (prompt, model) the llm saw
         self.lock = threading.Lock()
+        self.ollama = ollama
 
     def install(self):
         m = types.ModuleType("jarvis_extract")
         m.propose = self.propose
         m.pending = lambda: [{"id": 7, "text": "Mario is allergic to shellfish"}]
+        m.OLLAMA = self.ollama
+        m._local_llm = self._local_llm
         sys.modules["jarvis_extract"] = m
         return self
 
-    def propose(self, messages, source="conversation"):
+    def _local_llm(self, prompt, model=None, timeout=60):
+        self.asked.append((prompt, model))
+        return '{"facts":[]}' if self.answers else None
+
+    def propose(self, messages, llm=None, source="conversation"):
         with self.lock:
             self.calls.append(messages)
         if self.raises:
             raise RuntimeError("the local model is not up")
+        if llm is not None:
+            llm("prompt")                     # the real propose() always calls it
         return [{"id": len(self.calls), "text": "something durable"}]
 
 
@@ -197,6 +212,66 @@ def t_it_can_be_switched_off():
     check("JARVIS_EXTRACT=0 means no pass ever runs", fake.calls == [], repr(fake.calls))
 
 
+def t_it_refuses_a_non_loopback_ollama():
+    """jarvis_extract says "NEVER CLOUD ... localhost and nothing else".
+
+    That was vacuously true while propose() had no callers. It reads OLLAMA_URL,
+    so one environment variable pointing at a shared or remote Ollama would
+    ship everything typed here to it - automatically, 45s after every
+    conversation, with nobody in the loop.
+    """
+    ns = _learner_ns()
+    for url in ("https://ollama.attacker.example", "http://192.168.1.50:11434",
+                "http://ollama.internal:11434", "", "not a url at all"):
+        fake = FakeExtract(ollama=url).install()
+        L = ns["_Learner"]()
+        L.offer([{"role": "user", "content": "the safe combination is 11-22-33"}])
+        _run(L, 0.5)
+        check(f"refuses {url!r}", fake.calls == [] and fake.asked == [],
+              f"sent {len(fake.calls)} transcript(s) to {url}")
+
+    # CONTROL, all four spellings of this machine.
+    for url in ("http://127.0.0.1:11434", "http://localhost:11434",
+                "http://[::1]:11434"):
+        fake = FakeExtract(ollama=url).install()
+        L = ns["_Learner"]()
+        L.offer([{"role": "user", "content": "I use a Ryzen 9 3900X"}])
+        _run(L, 1.0, until=lambda: fake.calls)
+        check(f"CONTROL: allows {url!r}", len(fake.calls) == 1,
+              "loopback was refused - the check is too strict to be useful")
+
+
+def t_it_asks_for_the_chat_lanes_model():
+    ns = _learner_ns()
+    import os as _os
+    _os.environ["JARVIS_LOCAL_MODEL"] = "qwen3:8b-from-env"
+    try:
+        fake = FakeExtract().install()
+        L = ns["_Learner"]()
+        L.offer([{"role": "user", "content": "something worth keeping here"}])
+        _run(L, 1.0, until=lambda: fake.asked)
+        check("the model is passed explicitly, not left to the default",
+              bool(fake.asked) and fake.asked[0][1] == "qwen3:8b-from-env",
+              f"asked: {fake.asked}")
+    finally:
+        _os.environ.pop("JARVIS_LOCAL_MODEL", None)
+
+
+def t_a_model_that_never_answers_is_not_silent():
+    """An empty list means BOTH "nothing durable was said" and "the model
+    never answered", and only one of those is fine."""
+    ns = _learner_ns()
+    fake = FakeExtract(answers=False).install()
+    L = ns["_Learner"]()
+    L.offer([{"role": "user", "content": "I moved to Berlin in June"}])
+    _run(L, 1.0, until=lambda: fake.asked)
+    check("the model was asked", len(fake.asked) == 1, f"{fake.asked}")
+    # _pass must not mark the transcript as seen, or the same unanswered text
+    # would never be retried.
+    check("an unanswered transcript is not marked as already learned from",
+          L._last == "", f"_last was set to {L._last[:60]!r}")
+
+
 def t_the_doorbell():
     """_poll_proposals, executed against the real Bus."""
     import jarvis_events as ev
@@ -229,6 +304,52 @@ def t_the_doorbell():
           f"{len(again)} events for one change")
 
 
+def t_the_approval_event_is_a_doorbell_too():
+    """The rule _poll_proposals states about itself was not true next door.
+
+    jarvis_gate.pending() SELECTs detail and prompt verbatim, and
+    _poll_approvals attached them to the event. The phone surfaces approvals
+    with the screen off, so an email body was headed for a lock screen.
+    """
+    import jarvis_events as ev
+    gate = types.ModuleType("jarvis_gate")
+    gate.pending = lambda: [{
+        "id": "a1", "action": "email_send", "tier": "ask", "created": 1.0,
+        "raised": None, "risk": {"swipe_ok": False},
+        "detail": '{"to": "doctor@clinic.example"}',
+        "prompt": "Jarvis wants to email doctor@clinic.example: "
+                  "'my test came back positive'"}]
+    sys.modules["jarvis_gate"] = gate
+    bus = ev.Bus()
+    ev._poll_approvals(bus)                    # baseline
+    gate.pending = lambda: []
+    ev._poll_approvals(bus)
+    gate.pending = lambda: [{
+        "id": "a2", "action": "email_send", "tier": "ask", "created": 2.0,
+        "raised": None, "risk": {"swipe_ok": False},
+        "detail": '{"to": "doctor@clinic.example"}',
+        "prompt": "Jarvis wants to email doctor@clinic.example: "
+                  "'my test came back positive'"}]
+    ev._poll_approvals(bus)
+    events = [e for e in bus.since(0)[0] if e.kind == "approval"]
+    check("approvals still publish", len(events) >= 1, f"{len(events)}")
+    if not events:
+        return
+    blob = events[-1].sse()
+    check("no email address on the wire", "doctor@clinic.example" not in blob, blob[:300])
+    check("no message body on the wire", "came back positive" not in blob, blob[:300])
+    check("no prompt key at all", '"prompt"' not in blob, blob[:300])
+    check("no detail key at all", '"detail"' not in blob, blob[:300])
+    # CONTROL: it must still be a useful doorbell.
+    check("CONTROL: the count survives", events[-1].data.get("count") == 1, blob[:200])
+    items = events[-1].data.get("items") or []
+    check("CONTROL: the id and action survive, so a client can still route",
+          bool(items) and items[0].get("id") == "a2"
+          and items[0].get("action") == "email_send", repr(items))
+    check("CONTROL: raised survives, because the quick-action rule needs it",
+          bool(items) and "raised" in items[0], repr(items))
+
+
 def t_the_call_site():
     """CONTROL on the wiring itself."""
     src = HUD.read_text(encoding="utf-8")
@@ -253,7 +374,10 @@ if __name__ == "__main__":
     for fn in (t_it_reads_only_what_you_typed, t_it_waits_for_you_to_stop_talking,
                t_nothing_new_said_is_not_a_pass, t_a_dead_model_does_not_kill_the_thread,
                t_nothing_to_learn_from, t_it_can_be_switched_off,
-               t_the_doorbell, t_the_call_site):
+               t_it_refuses_a_non_loopback_ollama, t_it_asks_for_the_chat_lanes_model,
+               t_a_model_that_never_answers_is_not_silent,
+               t_the_doorbell, t_the_approval_event_is_a_doorbell_too,
+               t_the_call_site):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

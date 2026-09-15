@@ -16,7 +16,7 @@
      return out
  
  
-@@ -831,6 +838,21 @@
+@@ -831,6 +838,38 @@
      note = " ".join(str(note or "").split())[:400]
      if not note:
          return {"ok": False, "reason": "empty note"}
@@ -32,9 +32,26 @@
 +              {"skill": name, "note": note},
 +              f"Jarvis wants to note this against the {name} skill, which it "
 +              f"will read every time it uses it:\n\n{note}")
++    # `allowed` is not the same question as "a human decided".
++    #
++    # jarvis_gate.check returns allowed=True on tier `notify` with the reason
++    # "tier is notify; you were told after", and on `auto` with no human in the
++    # loop at all. The default is right - modify_own_code is unlisted, and
++    # UNKNOWN_TIER is "ask" - but a jarvis-framework.toml that lists it as
++    # notify would turn this gate into a rubber stamp, which is exactly the
++    # shape the comment above says this exists to prevent. So name the tiers
++    # that mean a person answered, rather than trusting a boolean that has a
++    # broader meaning than the one wanted here.
++    tier = getattr(v, "tier", "unknown")
++    if tier not in ("ask", "never"):
++        return {"ok": False, "tier": tier,
++                "reason": f"a skill note needs a person to answer for it, and "
++                          f"modify_own_code is tier {tier!r}. Set it to 'ask' "
++                          f"in jarvis-framework.toml, or to 'never' to refuse "
++                          f"these outright."}
 +    if not getattr(v, "allowed", False):
 +        return {"ok": False, "reason": getattr(v, "reason", "refused"),
-+                "tier": getattr(v, "tier", "unknown")}
++                "tier": tier}
      if [f for f in scan_text(note, "note") if f.severity == "block"]:
          return {"ok": False, "reason": "that note contains something the scanner "
                                         "refuses to store in a skill"}

@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -399,6 +399,140 @@
+@@ -399,6 +399,223 @@
          pass
  
  
@@ -26,6 +26,14 @@
 +#     same text would be re-read again and again for facts the queue already
 +#     holds. It runs when you stop talking, not when you pause for breath.
 +#
++#   WHERE IT SENDS - loopback, asserted rather than assumed. jarvis_extract's
++#   module docstring says "NEVER CLOUD ... talks to Ollama on localhost and
++#   nothing else", and that was vacuously true while propose() had no callers.
++#   It reads OLLAMA_URL, and one environment variable pointing at a shared or
++#   remote Ollama would ship everything typed here to it, automatically, 45
++#   seconds after every conversation, with no human in the loop. _loopback_ok
++#   below refuses to run at all in that case rather than trusting a docstring.
++#
 +#   WHAT IT READS - user turns only, and this is the load-bearing decision.
 +#   The cloud-lane filter below makes the same cut for the same reason, and
 +#   the reasoning transfers exactly: the assistant turn is a carrier. It
@@ -37,6 +45,14 @@
 +#   separation quietly and permanently, one accepted proposal at a time.
 +#   Reading only what you typed is the same promise the cloud lane makes, and
 +#   it is also just better extraction: what you said is what you meant.
++#
++#   One consequence worth stating because it is invisible otherwise: a turn
++#   whose content is a LIST rather than a string - which is what the client
++#   sends whenever a screenshot is attached - is skipped whole, typed text
++#   included. That is the safe direction and it is deliberate, because the
++#   obvious "fix" of flattening content arrays would immediately start
++#   admitting tool_result blocks, which is the carrier problem again. It does
++#   mean extraction is silently blind to any turn with an image in it.
 +# --------------------------------------------------------------------------
 +EXTRACT_ENABLED = os.environ.get("JARVIS_EXTRACT", "1").lower() not in ("0", "false", "no", "off")
 +# Seconds of silence before a pass runs. Every turn restarts this.
@@ -44,6 +60,46 @@
 +# And then nothing for this long, whatever happens. One pass covers a whole
 +# conversation; the model that runs it is the model that answers.
 +EXTRACT_MIN_GAP = float(os.environ.get("JARVIS_EXTRACT_MIN_GAP", "300"))
++
++
++def _loopback_ok(url: str) -> bool:
++    """Is that Ollama on this machine? Fails closed on anything unparseable."""
++    try:
++        host = (urllib.parse.urlparse(url).hostname or "").lower()
++    except Exception:
++        return False
++    return host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
++
++
++def _extract_model() -> str:
++    """The model the CHAT lane is using, not a second opinion about it.
++
++    jarvis_extract._local_llm defaults to os.environ["JARVIS_LOCAL_MODEL"] or
++    the literal "qwen3:8b", while the chat lane resolves its local model from
++    intelligence.default_model refined by jarvis_models.current_model(). Two
++    sources of truth for one question. If they disagree, either the extractor
++    asks for a model that is not pulled - Ollama 404s, _local_llm returns None,
++    propose() returns [], and the queue stays empty forever with a banner
++    saying learning is on - or both models are pulled and 8B-class, and every
++    pass evicts the chat model from an 8 GB card so the next turn reloads it.
++    """
++    name = os.environ.get("JARVIS_LOCAL_MODEL", "")
++    if name:
++        return name
++    try:
++        # _read_toml(CONFIG_FILE), the same call /api/status makes. Not
++        # _load_config(): that name is called once at line ~485 and is defined
++        # nowhere in this file, so it is a latent NameError, not a helper.
++        cfg = _read_toml(CONFIG_FILE)
++        name = (cfg.get("intelligence") or {}).get("default_model") or ""
++    except Exception:
++        name = ""
++    try:
++        import jarvis_models
++        name = jarvis_models.current_model() or name
++    except Exception:
++        pass
++    return name or "qwen3:8b"
 +
 +
 +class _Learner:
@@ -119,14 +175,41 @@
 +            import jarvis_extract
 +        except Exception:
 +            return False                       # not installed; not an error
++        if not _loopback_ok(jarvis_extract.OLLAMA):
++            print(f"  ! learning is OFF: OLLAMA_URL is {jarvis_extract.OLLAMA}, "
++                  f"which is not this machine. Nothing you type will be sent "
++                  f"there, and nothing will be learned until it is loopback.",
++                  file=sys.stderr)
++            return False
++        model = _extract_model()
++        unreachable = []
++
++        def _ask(prompt: str):
++            # propose() takes the model call as an argument precisely so it can
++            # be replaced. Used here for two reasons: to ask for the model the
++            # chat lane actually uses, and to see the None that propose()
++            # would otherwise swallow into an empty list.
++            out = jarvis_extract._local_llm(prompt, model=model)
++            if out is None:
++                unreachable.append(True)
++            return out
++
 +        try:
-+            out = jarvis_extract.propose(convo, source="conversation")
++            out = jarvis_extract.propose(convo, llm=_ask, source="conversation")
 +        except Exception as exc:
 +            # Never retried on the spot. The usual cause is that the local
 +            # model is not up, and a tight retry against a model that is down
 +            # is how a background thread becomes the reason the machine is
 +            # warm.
 +            print(f"  ! learning pass failed: {type(exc).__name__}: {exc}",
++                  file=sys.stderr)
++            return True
++        if unreachable:
++            # The failure that used to be perfectly silent: an empty list means
++            # BOTH "nothing durable was said" and "the model never answered",
++            # and only one of those is fine.
++            print(f"  ! learning pass reached no model at {jarvis_extract.OLLAMA} "
++                  f"(asked for {model!r}) - nothing was learned. Is it pulled?",
 +                  file=sys.stderr)
 +            return True
 +        self._last = seen
@@ -141,7 +224,7 @@
  def _activity(state: str, detail: str = "") -> None:
      """Announce what Jarvis is doing, if the event bus is importable.
  
-@@ -1940,6 +2074,18 @@
+@@ -1940,6 +2157,18 @@
              # refused, client vanished - the turn is over. In a finally block
              # because the one state nobody must be left showing is "thinking".
              _activity("idle")
@@ -160,7 +243,7 @@
  
  
  # Keys whose values are content rather than plumbing. Walking only these
-@@ -2228,6 +2374,16 @@
+@@ -2228,6 +2457,20 @@
              xs = jarvis_extract.setup_status()
              if not xs["setup_complete"]:
                  print("  extraction SCAFFOLD - proposals queue for review; set-up pass still needed")
@@ -170,6 +253,10 @@
 +                LEARNER.start()
 +                print(f"  learning   on - a pass runs after {EXTRACT_IDLE:g}s of quiet, "
 +                      f"at most every {EXTRACT_MIN_GAP / 60:g} min, over your turns only")
++                print(f"             it will ask {_extract_model()!r} at "
++                      f"{jarvis_extract.OLLAMA}"
++                      + ("" if _loopback_ok(jarvis_extract.OLLAMA)
++                         else "  <- NOT LOOPBACK: learning will refuse to run"))
 +                if xs["pending"]:
 +                    print(f"             {xs['pending']} proposal(s) already waiting for review")
 +            else:
@@ -189,10 +276,34 @@
      data: dict = field(default_factory=dict)
      at: float = field(default_factory=time.time)
  
-@@ -163,6 +164,31 @@
-                         "items": pending[:10]})
- 
- 
+@@ -159,8 +160,52 @@
+     ids = sorted(p.get("id", "") for p in pending)
+     ev = bus.note("approvals", ids, "approval")
+     if ev is not None:
++        # A doorbell: what is waiting and how much, never the content.
++        #
++        # jarvis_gate.pending() SELECTs detail and prompt verbatim and this
++        # attached them to an event that reaches every subscriber. While
++        # nothing constructed the Pump that was dormant; events-pump.patch
++        # makes it live, so it has to be fixed before anything relies on it.
++        # The phone runs a foreground service that surfaces approvals when the
++        # screen is off, so an email body was going to land on a lock screen.
++        #
++        # This is also the sentence gate-push.patch cites - "a doorbell, not
++        # the content, the same rule the SSE approval event follows" - and
++        # _poll_proposals below says the same thing about itself. Both were
++        # describing a rule that was not yet true here. Now it is.
++        #
++        # Everything a client needs in order to RENDER the queue it gets by
++        # fetching /api/approvals, behind the same token. The event only says
++        # that there is something to fetch.
+         ev.data.update({"count": len(pending),
+-                        "items": pending[:10]})
++                        "items": [{k: v for k, v in item.items()
++                                   if k not in ("detail", "prompt")}
++                                  for item in pending[:10]]})
++
++
 +def _poll_proposals(bus: Bus) -> None:
 +    """Facts the extractor would like to remember, waiting for a human.
 +
@@ -216,12 +327,10 @@
 +                  "proposal")
 +    if ev is not None:
 +        ev.data.update({"count": len(pending)})
-+
-+
+ 
+ 
  def _poll_power(bus: Bus) -> None:
-     try:
-         import jarvis_power
-@@ -252,7 +278,8 @@
+@@ -252,7 +297,8 @@
          return False
  
  

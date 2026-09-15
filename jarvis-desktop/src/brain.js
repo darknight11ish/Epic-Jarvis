@@ -978,7 +978,19 @@ function pushTrace(frame) {
       (data.banked ? " · banked" : "") +
       (data.blocked_by ? ` · ${data.blocked_by}` : "");
   } else if (kind === "approval") body = `${data.count ?? "?"} waiting`;
-  else if (kind === "hello") {
+  else if (kind === "proposal") {
+    // The extractor now runs on its own, after a conversation goes quiet, so
+    // the review queue fills having asked nobody. Without this branch the
+    // event landed in the generic `else` below and read as a raw id array —
+    // a doorbell ringing into an empty room, which is the exact defect the
+    // backend patch that added the event was written to fix elsewhere.
+    //
+    // Count only. The event deliberately carries no fact text (a proposal
+    // quotes whatever produced it), so there is nothing here to render but
+    // the number, and the memory pane is where you go to read them.
+    const n = data.count ?? (Array.isArray(data.value) ? data.value.length : "?");
+    body = n === 0 ? "review queue empty" : `${n} to review`;
+  } else if (kind === "hello") {
     body = `resumed from ${data.resumed_from ?? 0}${data.stale ? " · STALE" : ""}`;
   } else {
     const value = data.value !== undefined ? data.value : data.title || data.key;

@@ -97,6 +97,48 @@ def t_push_refuses_while_tainted():
           f"sent {len(got)} message(s) during a taint window")
 
 
+def t_the_push_redaction_does_not_ride_the_logging_switch():
+    """_redact is the wrong function for this path, and it took a review to see it.
+
+    _redact opens by consulting [logging].redact_private_content_in_logs and
+    returning `detail` verbatim if it is false. That key is named for LOGS -
+    someone might reasonably turn it off while debugging on their own machine -
+    and it would then also switch off redaction on a path that POSTs to a
+    public unauthenticated broker. An on-disk log is behind the file system;
+    an ntfy.sh topic is behind a guess. They are not the same decision and
+    must not share a switch.
+    """
+    out = G._safe_detail(SENSITIVE, 400)
+    leaked = [s for s in SECRETS if s in out]
+    check("_safe_detail leaks nothing", not leaked, f"leaked: {leaked} in {out!r}")
+    check("CONTROL: it still names the fields, so the alert means something",
+          all(k in out for k in SENSITIVE), out)
+
+    # The point of the test: flip the logging switch off and it must not care.
+    import types as _t
+    real = G.fw.load_framework
+    G.fw.load_framework = lambda *a, **k: {
+        "logging": {"redact_private_content_in_logs": False}}
+    try:
+        off = G._safe_detail(SENSITIVE, 400)
+        leaked = [s for s in SECRETS if s in off]
+        check("turning the LOGGING switch off does not un-redact the PUSH",
+              not leaked, f"leaked: {leaked}")
+        # CONTROL: prove the switch is real and that _redact does obey it, so
+        # this test is measuring a difference rather than a no-op.
+        loose = json.dumps(G._redact(SENSITIVE))
+        check("CONTROL: _redact DOES obey it, which is why it is the wrong "
+              "function here", any(s in loose for s in SECRETS),
+              "the switch did nothing - this test proves nothing")
+    finally:
+        G.fw.load_framework = real
+
+    check("a detail that will not serialise cannot raise on this path",
+          isinstance(G._safe_detail({"x": object()}, 100), str))
+    check("an empty detail says so rather than sending '{}'",
+          G._safe_detail({}, 100) == "(no details)", G._safe_detail({}, 100))
+
+
 def t_call_sites_redact():
     """CONTROL. The rule lives at the call sites; _push cannot enforce it."""
     src = (HERE / "jarvis_gate.py").read_text()
@@ -106,7 +148,7 @@ def t_call_sites_redact():
     for i, call in enumerate(calls):
         body_src = ast.unparse(call.args[1]) if len(call.args) > 1 else ""
         check(f"call site {i + 1} redacts before sending",
-              "_redact" in body_src,
+              "_safe_detail" in body_src,
               f"line {call.lineno}: {body_src[:90]}")
         check(f"call site {i + 1} does not fall back to the raw prompt",
               "prompt" not in body_src,
@@ -115,6 +157,7 @@ def t_call_sites_redact():
 
 if __name__ == "__main__":
     for fn in (t_redact_keeps_shape_drops_values, t_push_sends_only_what_it_was_given,
+               t_the_push_redaction_does_not_ride_the_logging_switch,
                t_push_refuses_while_tainted, t_call_sites_redact):
         print(f"\n--- {fn.__name__} ---")
         try:

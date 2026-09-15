@@ -172,8 +172,11 @@ def t_k_is_not_a_magic_number():
     check("the recall width is a named constant", "MEMORY_K" in src,
           "k=5 was a token budget written where nobody would find it")
     check("and search uses it", "search(query, k=MEMORY_K)" in src)
-    check("it still defaults to 5", 'JARVIS_MEMORY_K", "5"' in src,
+    check("it still defaults to 5", '_int_env("JARVIS_MEMORY_K", 5)' in src,
           "the default must not change behaviour")
+    check("a typo in the variable does not stop the server booting",
+          "def _int_env" in src and "except (TypeError, ValueError)" in src,
+          "int(os.environ[...]) at module scope raises before the import finishes")
 
 
 if __name__ == "__main__":
