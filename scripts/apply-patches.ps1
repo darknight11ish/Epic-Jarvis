@@ -30,9 +30,16 @@
 .PARAMETER SkipTests
   Apply, but do not run the test suites afterwards.
 
+.PARAMETER SkipMissing
+  Leave out any patch that needs a backend file which is not there, and apply
+  the rest. A PARTIAL install: the features those patches carry will not be
+  present. Only use it once you have looked for the missing files and they
+  really are gone - the script prints the command to search for them.
+
 .EXAMPLE
   .\scripts\apply-patches.ps1
   .\scripts\apply-patches.ps1 -BackendPath "D:\jarvis"
+  .\scripts\apply-patches.ps1 -SkipMissing
   .\scripts\apply-patches.ps1 -Revert
 #>
 
@@ -40,7 +47,8 @@
 param(
     [string] $BackendPath = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program",
     [switch] $Revert,
-    [switch] $SkipTests
+    [switch] $SkipTests,
+    [switch] $SkipMissing
 )
 
 $ErrorActionPreference = 'Stop'
@@ -268,7 +276,16 @@ foreach ($name in $PATCHES) {
 $absent = @($wanted.Keys | Where-Object {
     -not (Test-Path -LiteralPath (Join-Path $BackendPath $_))
 } | Sort-Object)
+
 if ($absent.Count -gt 0) {
+    # Which patches are actually stopped by this, and which are not. A patch
+    # is blocked if ANY file it touches is missing - there is no applying half
+    # of one. Worth separating, because "two files are missing" reads like the
+    # whole run is lost when in fact most of it is fine.
+    $blocked = @{}
+    foreach ($a in $absent) { foreach ($n in $wanted[$a]) { $blocked[$n] = $true } }
+    $clear = @($PATCHES | Where-Object { -not $blocked.ContainsKey($_) })
+
     Say ""
     Bad "$($absent.Count) file(s) the patches expect are not in your backend folder:"
     foreach ($a in $absent) {
@@ -276,13 +293,42 @@ if ($absent.Count -gt 0) {
     }
     Say ""
     Say "That folder is: $BackendPath" Cyan
-    Say "Either the module has a different name there, or it lives in a" Cyan
-    Say "sub-folder, or that backend is older than these patches. Send back" Cyan
-    Say "the output of this, which lists what IS there:" Cyan
-    Say "    Get-ChildItem `"$BackendPath`" -Filter *.py -Recurse | Select-Object -ExpandProperty FullName" Cyan
     Say ""
-    Say "NOTHING HAS BEEN CHANGED." Yellow
-    exit 1
+    Say "$($blocked.Count) patch(es) are stopped by this. $($clear.Count) are not." Cyan
+    Say ""
+    Say "Find the missing files first - this searches your whole user folder:" Cyan
+    foreach ($a in $absent) {
+        Say "    Get-ChildItem `$env:USERPROFILE -Filter $a -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName" Cyan
+    }
+    Say ""
+    Say "If they turn up somewhere else, that folder is your backend - pass it" Cyan
+    Say "with -BackendPath. If they are genuinely gone, you can apply the" Cyan
+    Say "$($clear.Count) that do not need them:" Cyan
+    Say "    .\scripts\apply-patches.ps1 -SkipMissing" Cyan
+
+    if (-not $SkipMissing) {
+        Say ""
+        Say "NOTHING HAS BEEN CHANGED." Yellow
+        exit 1
+    }
+
+    # -SkipMissing is safe to offer because it changes nothing about how the
+    # decision is made: the shortened stack still has to apply cleanly to a
+    # throwaway copy before a real file is opened. If dropping these six
+    # breaks the ones below them - and it may, because several share a file
+    # and so share context - the rehearsal says so and the run stops there.
+    Say ""
+    Say "-SkipMissing: leaving out $($blocked.Count), rehearsing the other $($clear.Count)." Yellow
+    Say "  Left out:" Yellow
+    foreach ($n in $PATCHES) { if ($blocked.ContainsKey($n)) { Say "    $n" Yellow } }
+    Say ""
+    Say "  This is a PARTIAL install. The features those patches carry will not" Yellow
+    Say "  be there, and backend/README.md says what each one was for." Yellow
+    $PATCHES = $clear
+    if ($PATCHES.Count -eq 0) {
+        Bad "Nothing is left to apply."
+        exit 1
+    }
 }
 
 Push-Location -LiteralPath $BackendPath
