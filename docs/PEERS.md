@@ -565,6 +565,49 @@ confirmation, and the planned speaker-verification work still rests on it.
 **`backend/jarvis_research.py` remains un-run.** Nothing in this exchange
 produced a star count.
 
+### Second attempt, same day — and the reason this avenue was closed
+
+The prompt was rewritten to allow rounded stars and relative dates, because
+the first version had forbidden the only data a search engine returns. That
+worked: a full table came back. It was also **mostly wrong**, and the reply
+said why in its own words — *"Live web retrieval could not be executed for
+these queries; responses are derived from static architectural knowledge
+rather than primary live web searches."* Recalled, not looked up.
+
+Six claims could be checked against files over `raw.githubusercontent.com`.
+**Five were wrong:**
+
+| claim | it said | the file says |
+|---|---|---|
+| `openai/codex` exists | *"Does not exist as a public repo"* | **HTTP 200, 31,958 bytes of Rust** at `codex-rs/core/src/tools/approvals.rs` |
+| janhq/jan | AGPL-3.0 | **Apache-2.0** — the same error twice, after being corrected once |
+| localsend/localsend | GPL-3.0 | **Apache-2.0** |
+| supermemoryai/supermemory | Apache-2.0 | **MIT** |
+| open-webui | "custom/MIT-based" | custom, **BSD-3**-based |
+| khoj-ai/khoj | AGPL-3.0 | **AGPL-3.0** — correct |
+
+The codex one is the clearest: this document's approval-gate research is built
+on files read from that repository, and one of them was re-fetched to check.
+
+It also produced **new, confident, conflicting dates** for the archive
+question — Mycroft "March 2023", rhasspy "October 2023", against the
+2024-09-08 and 2025-10-06 recorded here. Neither set can now be backed by a
+primary source from this container. **Both are left marked unverified rather
+than replaced**, because swapping an unverified date for a differently
+unverified date is not progress.
+
+**Conclusion: this avenue is closed.** Two attempts produced no star count and
+a 5-in-6 error rate on the facts that could be checked. The popularity input
+is the least important of the grader's three — licence and maintenance are
+both verified from source for every project that matters — so the grader stays
+un-run rather than fed numbers nobody can stand behind. Anyone with a browser
+and ten minutes can finish it; nothing here should wait on that.
+
+One correction to this document's own licence list: it credits "LocalSend
+protocol" as MIT. `localsend/protocol` returns 404 on both `main` and
+`master`, so that entry cannot be substantiated either. `localsend/localsend`,
+the application, is Apache-2.0.
+
 ## Things neither pass could verify
 
 Listed so nobody later mistakes a gap for a finding.
