@@ -133,8 +133,20 @@ class EventStreamContractTest {
                 waitFor { seen.any { it is EventStream.Signal.Event } },
             )
 
-            val event = seen.filterIsInstance<EventStream.Signal.Event>().first()
-            assertEquals("activity", event.event.kind)
+            // `first()` was wrong, and run 57 is what said so. The hello frame
+            // reaches the collector as BOTH Signal.Open and Signal.Event -
+            // EventStream emits Open for it and then falls through to the
+            // generic emit with no `else` - so the first Event here is `hello`,
+            // not `activity`. The test meant "the activity event" and said
+            // "the first event", which are only the same thing by accident of
+            // frame order.
+            val event = seen.filterIsInstance<EventStream.Signal.Event>()
+                .firstOrNull { it.event.kind == "activity" }
+            assertEquals(
+                "no `activity` event reached the collector; saw ${seen.map { it }}",
+                "activity",
+                event?.event?.kind,
+            )
             assertTrue("the resume point never advanced", resumed.contains("e1"))
         } finally {
             collector.cancel()

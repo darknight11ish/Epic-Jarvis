@@ -457,6 +457,11 @@ object JarvisRuntime {
             // here worth showing: reviewing memory is desk work, and a count
             // on a phone invites a batch-accept control, which is precisely
             // the shape rule 4 forbids.
+            // Announced as Signal.Open, and EventStream then falls through and
+            // emits it as a generic event too - so this arrives on every
+            // connect and was logging "unhandled event kind 'hello'" each
+            // time. The Open carries the payload; there is nothing to do here.
+            "hello" -> Unit
             "proposal" -> Unit
             // Face and bindings changed on another device. Each device renders
             // its own face and the server is only the sync channel, so this is
