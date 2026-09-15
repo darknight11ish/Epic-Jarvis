@@ -1112,6 +1112,22 @@ function drawNode(ctx, x, y, r, group, colour) {
  * input path goes through here instead.
  */
 let drawQueued = false;
+// The four theme tokens the canvas paints with. Cached because reading them
+// is a forced style recalc and they change only when the theme does.
+let _ink = null;
+function themeInk() {
+  if (_ink) return _ink;
+  const css = getComputedStyle(dom.root);
+  const edge = css.getPropertyValue("--edge").trim() || "rgba(140,165,190,0.22)";
+  _ink = {
+    edge,
+    edgeActive: css.getPropertyValue("--edge-active").trim() || edge,
+    text: css.getPropertyValue("--text").trim() || "#fff",
+    faint: css.getPropertyValue("--text-faint").trim() || "#888",
+  };
+  return _ink;
+}
+
 function invalidate() {
   if (drawQueued) return;
   drawQueued = true;
@@ -1495,11 +1511,11 @@ function draw() {
   const g = state.graph;
   if (!g) return;
 
-  const css = getComputedStyle(dom.root);
-  const edge = css.getPropertyValue("--edge").trim() || "rgba(140,165,190,0.22)";
-  const edgeActive = css.getPropertyValue("--edge-active").trim() || edge;
-  const text = css.getPropertyValue("--text").trim() || "#fff";
-  const faint = css.getPropertyValue("--text-faint").trim() || "#888";
+  // getComputedStyle forces a style recalc, and this ran inside draw() - so
+  // every interaction frame, at up to one per displayed frame while dragging,
+  // paid for one. The values are four theme tokens that change only when the
+  // theme does, so they are read once and refreshed from followTheme below.
+  const { edge, edgeActive, text, faint } = themeInk();
 
   const T = (n) => [n.x * view.scale + view.x, n.y * view.scale + view.y];
   const focus = selected || hovered;
@@ -1922,7 +1938,12 @@ matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => 
 // in Settings left the largest coloured surface in the product on the old
 // palette until it was reopened. `tests/themes-all.mjs` only measured the
 // boot path, so it passed while claiming "every window follows the theme".
-followTheme();
+// The cached ink has to die with the old palette, or the graph keeps painting
+// the previous theme's edges until something else forces a reload.
+followTheme(() => {
+  _ink = null;
+  if (state.view === "galaxy" && state.graph) invalidate();
+});
 
 // The canvas is sized in device pixels from its CSS box, so a zoom step has to
 // re-measure it or the graph is drawn at the old scale inside the new box.
