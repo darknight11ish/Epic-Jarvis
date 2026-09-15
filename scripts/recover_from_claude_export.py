@@ -220,6 +220,53 @@ def load(where: Path) -> object:
         raise SystemExit(f"{where.name} is not valid JSON: {exc}")
 
 
+_URLISH = re.compile(r"https?://|^[A-Za-z0-9_\-]{40,}$")
+
+
+def inspect(node, prefix: str = "", depth: int = 0, lines: list | None = None) -> list:
+    """Print the SHAPE of a file, with anything secret-looking held back.
+
+    An export can arrive as a manifest - a small index naming the real data
+    files - rather than the data. Working out which you have means looking
+    inside, and a manifest carries signed download URLs: long strings that are
+    effectively passwords for the archive. So this shows keys, types and short
+    values, and replaces anything that looks like a URL or a key with its
+    length. The output is safe to paste into a chat; the file itself is not.
+    """
+    if lines is None:
+        lines = []
+    if depth > 6 or len(lines) > 200:
+        return lines
+
+    pad = "  " * depth
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if isinstance(v, (dict, list)):
+                n = len(v)
+                kind = "object" if isinstance(v, dict) else f"list of {n}"
+                lines.append(f"{pad}{k}: {kind}")
+                inspect(v, prefix, depth + 1, lines)
+            else:
+                lines.append(f"{pad}{k}: {redact(v)}")
+    elif isinstance(node, list):
+        for item in node[:5]:
+            inspect(item, prefix, depth + 1, lines)
+        if len(node) > 5:
+            lines.append(f"{pad}... and {len(node) - 5} more")
+    else:
+        lines.append(f"{pad}{redact(node)}")
+    return lines
+
+
+def redact(v) -> str:
+    """A value, unless showing it would hand someone the download."""
+    if not isinstance(v, str):
+        return repr(v)
+    if _URLISH.search(v) or len(v) > 80:
+        return f"<{len(v)} chars, hidden - may be a download key>"
+    return repr(v)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -232,14 +279,43 @@ def main() -> int:
                     help="overwrite files that already exist in --out")
     ap.add_argument("--all", action="store_true",
                     help="also write modules that are not jarvis_*")
+    ap.add_argument("--inspect", action="store_true",
+                    help="show what the file CONTAINS and stop, with URLs and "
+                         "long keys hidden so the output is safe to paste")
     args = ap.parse_args()
 
     if not args.export.exists():
         print(f"Nothing at {args.export}")
         return 1
 
+    data = load(args.export)
+
+    if args.inspect:
+        print(f"\nWhat is inside {args.export.name}:\n")
+        for line in inspect(data):
+            print("  " + line)
+        print("\n(Anything that looked like a URL or a key is hidden. This "
+              "output is\nsafe to paste; the file itself is not.)")
+        return 0
+
     found: list = []
-    walk(load(args.export), found)
+    walk(data, found)
+
+    # A manifest is an INDEX of the export, not the export. It is small, it
+    # holds no messages, and it is what you get if you save the wrong link -
+    # so say that, rather than "no modules found", which reads as "your
+    # history is empty" and sends you looking in the wrong place.
+    size = args.export.stat().st_size if args.export.is_file() else 0
+    if not found and size < 2_000_000:
+        print(f"\n{args.export.name} is {size / 1024:.0f} KB and contains no "
+              f"messages at all.")
+        print("\nThat is a MANIFEST - an index naming the real data files - "
+              "not the export.\nThe conversations are a separate, much larger "
+              "download.")
+        print("\nSee what it points at:")
+        print(f"    python .\\scripts\\recover_from_claude_export.py "
+              f"\"{args.export.name}\" --inspect")
+        return 1
 
     unnamed = sum(1 for n, _, _, _ in found if not n)
     named = [f for f in found if f[0]]
