@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Sixteen patches against the Jarvis backend, each with an executable test.
+Eighteen patches against the Jarvis backend, each with an executable test.
 
 **Order.** The first thirteen commute — several touch `jarvis_hud.py`, but in
 well-separated regions, and every order produces the same tree. The order in
@@ -36,6 +36,8 @@ dependency, not just a semantic one — it will not apply without both.
 | `bitemporal.patch` | `jarvis_memory.py`, `jarvis_hud.py` | The second time axis. Adds `retired_at` — when we stopped believing a fact, as distinct from when it stopped being true. Needs `memory-safety` and `memory-pane`. |
 | `embedding-guard.patch` | `jarvis_memory.py` | A NaN or all-zero embedding was stored without complaint and the row was then unreachable forever. Needs `memory-safety`. |
 | `gpu-offload.patch` | `jarvis_models.py`, `jarvis_hud.py` | Says when the model is running on the CPU instead of the graphics card. Nothing did, and the only symptom was that everything got slow. |
+| `gate-outcome.patch` | `jarvis_gate.py` | A timeout was indistinguishable from a refusal. Adds `Verdict.outcome`, which fails closed by default. |
+| `no-auto-approve.patch` | `jarvis_gate.py` | **`confirm_auto()` granted every `ask` action with nobody asked.** An approve-all, inside the module that forbids one. |
 
 ## Apply them
 
@@ -1102,3 +1104,75 @@ also asserts that the only URL the check ever touches is loopback.
 
 Idea from janhq/jan `extensions/llamacpp-extension/src/readiness.ts`
 (Apache-2.0). See `docs/COMPARISON.md` §3.
+
+
+---
+
+# `gate-outcome.patch` — a timeout is not a refusal
+
+The database always knew the difference: `approvals.state` is
+`pending|approved|denied|expired`. `Verdict` did not. By the time a caller saw
+the answer, "a person said no" and "nobody was there" differed only in the
+wording of a sentence, so telling them apart meant matching prose.
+
+They need different handling. **A denial is an answer** — do not retry, the
+person decided. **A timeout is the absence of one** — worth asking again when
+the owner is back, worth counting (a run of them means notifications are
+broken, not that the owner is refusing things), and it should read differently
+on a screen.
+
+`Verdict` gains `outcome`, one of `auto` / `notify` / `approved` / `denied` /
+`timed_out` / `refused`, plus a `timed_out` property.
+
+Two things make it safe rather than decorative, both from codex by way of
+`docs/PEERS.md`:
+
+- **The default is `refused`, never anything permissive.** codex's
+  `impl Default for ReviewDecision` returns `Denied` for the same reason: a
+  new construction site that forgets the field must fail closed.
+- **`__post_init__` enforces the invariant**: only `auto`, `notify` and
+  `approved` may carry `allowed=True`, and an unrecognised outcome is coerced
+  to `refused` rather than raising — because this runs on the path that
+  decides whether a tool may act, and an exception there looks like a crash
+  rather than a refusal.
+
+`gate_tool` now says something different on a timeout. That string goes back
+to the **model** as the tool result, and "denied" tells it to find another way
+— which, for a tool the owner would have approved, means routing around a gate
+nobody answered.
+
+---
+
+# `no-auto-approve.patch` — there was an approve-all in the gate
+
+Found by `test_gate_outcome.t_there_is_still_no_approve_all` on its first run.
+
+`confirm_auto()` returned `True` for tiers `auto`, `notify` **and `ask`**,
+refusing only `never`. `ask` means a human decides one action at a time. This
+granted every future, unnamed `ask` action for the life of the process on the
+strength of one CLI flag typed once.
+
+`docs/ARCHITECTURE.md` invariant 3 reads: *"No auto-approve anywhere, and no
+approve-all control anywhere. One action, one decision. Do not build one."*
+This was one, and it sat inside the module that enforces the rule, with a
+docstring explaining why it was fine.
+
+It had **zero callers**, which is the only reason it never granted anything.
+That is not a defence: the next person to wire up `--auto-approve` would have
+found it here looking intended.
+
+Now it delegates to `confirm`. The symbol still resolves, so anything on the
+owner's machine that wired it keeps working — it just asks. The flag becomes a
+no-op rather than a bypass and says so on stderr once per process, because a
+flag that silently stopped working is its own kind of lie.
+
+**The old docstring's objection is answered, not ignored.** It argued that
+gating the flag "would silently redefine a documented flag". True. The flag's
+documentation is not the authority; the invariant is. A tool that asks when
+you told it not to is a nuisance. A tool that acts when you would have said no
+is the thing the gate exists to prevent.
+
+`test_gate_outcome.py`: 30 checks, 11 of which fail across the unpatched pair.
+The load-bearing one is *"an ask-tier action is NOT granted by the flag"* —
+it fails on the unpatched tree, which is what makes the finding real rather
+than theoretical.

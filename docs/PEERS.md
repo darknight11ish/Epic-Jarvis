@@ -466,8 +466,15 @@ exists.
    (task #25, already decided — this confirms it)
 5. **Enumerate the gate's enforcement sites and add a test per site**, plus
    the invariant test that no path reaches executed without a decision record.
+   The invariant test exists now
+   (`test_gate_outcome.t_there_is_still_no_approve_all`) **and it found a real
+   approve-all on its first run** — `confirm_auto()` granted every `ask`
+   action with nobody asked. See `no-auto-approve.patch`. The per-site
+   enumeration is still open.
 6. **Move redaction to the serializer** for every egress.
-7. **Add a distinct `TimedOut` decision** and treat it differently.
+7. ~~**Add a distinct `TimedOut` decision**~~ — **done**, `gate-outcome.patch`.
+   `Verdict.outcome` now distinguishes six endings and defaults to `refused`,
+   codex-style, so a forgotten field fails closed.
 8. ~~**Add a provenance flag to every fact**~~ — Open WebUI's
    `type: 'user' | 'context'`. **Already there**: `source` is one of `user`,
    `extracted`, `edited` or `legacy`, and the Memory pane renders it as

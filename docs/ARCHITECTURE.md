@@ -35,6 +35,16 @@ it works.
    with no `HUD_TOKEN` refuses to start — `SystemExit(2)`, not a warning.
 3. **No auto-approve anywhere, and no approve-all control anywhere.** One
    action, one decision. Do not build one.
+
+   This invariant has been violated once, in the gate itself. `confirm_auto()`
+   returned True for tier `ask` with nobody asked, behind a `--auto-approve`
+   flag, with a docstring explaining why that was reasonable. It had no
+   callers, which is the only reason it never granted anything. Fixed by
+   `no-auto-approve.patch`, and now asserted by
+   `test_gate_outcome.t_there_is_still_no_approve_all`, which reads the source
+   with comments and docstrings stripped — **because this rule is a claim
+   about code and a claim about code goes stale or is wrong from the start.**
+   That one was wrong from the start.
 4. **An item carrying `raised` never belongs in a group that can be actioned
    quickly**, whatever its `risk.swipe_ok` says.
 5. **`POST /api/digest/seen` marks read and approves nothing.**
