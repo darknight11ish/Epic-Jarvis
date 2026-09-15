@@ -286,10 +286,18 @@ jobs:
           adb devices
 
           if ! ./gradlew connectedDebugAndroidTest --stacktrace 2>&1 | tee smoke.log; then
+            # Ordered noisiest-first, so the thing worth reading is LAST.
+            # GitHub's log API serves a tail, and the emulator prints ~110
+            # lines of boot properties on its way out - enough to push the
+            # failing test names out of every window I could fetch. Three
+            # separate log pulls said only "a test failed" because of it.
+            echo "::group::Crash log, if the app got that far"
+            adb logcat -d -b crash | tail -80 || true
+            echo "::endgroup::"
+
             echo "::group::What the device said"
             # The assertion message carries the stack trace the app itself
-            # recorded, so this is usually already the answer; logcat is the
-            # fallback for anything that never reached the handler.
+            # recorded, so this is usually already the answer.
             grep -E "FAILED|something threw|AssertionError|Caused by" smoke.log | head -40 || true
 
             # And the instrumentation report, because none of the above is in
@@ -325,7 +333,6 @@ jobs:
                               print(f'      {line}')
           PYEOF
 
-            adb logcat -d -b crash | tail -150 || true
             echo "::endgroup::"
             exit 1
           fi
