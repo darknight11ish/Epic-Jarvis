@@ -1,0 +1,177 @@
+"""The redundancy engine, and the promise that it asks before it reaches out.
+
+Two things are being tested and only one of them is the grading. The other is
+that `plan()` cannot touch the network and `run()` cannot be tricked into it,
+because the whole design rests on that split being real rather than a comment.
+
+    python3 test_research.py
+"""
+import socket, sys, time, traceback
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import jarvis_research as R
+
+FAILED, PASSED = [], []
+
+
+def check(name, cond, detail=""):
+    (PASSED if cond else FAILED).append(name)
+    print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+class NoNetwork:
+    """Any socket at all, in this block, is a failure."""
+
+    def __enter__(self):
+        self.real = socket.socket.connect
+        def boom(*a, **k):
+            raise AssertionError("a socket was opened")
+        socket.socket.connect = boom
+        return self
+
+    def __exit__(self, *a):
+        socket.socket.connect = self.real
+        return False
+
+
+NOW = time.mktime(time.strptime("2026-09-15T00:00:00", "%Y-%m-%dT%H:%M:%S"))
+
+
+def repo(name="acme/thing", stars=1200, lic="MIT", pushed="2026-08-01T00:00:00Z",
+         archived=False):
+    return {"full_name": name, "stargazers_count": stars,
+            "license": {"spdx_id": lic} if lic else None,
+            "pushed_at": pushed, "archived": archived,
+            "html_url": f"https://github.com/{name}"}
+
+
+def t_planning_touches_nothing():
+    with NoNetwork():
+        p = R.plan("an offline pdf annotator that syncs between my phone and laptop",
+                   ["pdf annotation", "offline sqlite sync"])
+    check("a plan can be built with the network unplugged", len(p.queries) == 2,
+          f"{len(p.queries)} queries")
+    check("one query per capability",
+          sorted(q.capability for q in p.queries) == ["offline sqlite sync", "pdf annotation"],
+          repr([q.capability for q in p.queries]))
+    check("every query names exactly one host", all(q.host == "api.github.com" for q in p.queries))
+    check("every query carries a reason a person can read",
+          all(len(q.why) > 20 for q in p.queries), repr([q.why for q in p.queries]))
+    check("the plan says what refusing costs", "BUILD CUSTOM" in p.if_refused,
+          p.if_refused)
+
+
+def t_the_card_prints_the_whole_request():
+    p = R.plan("a habit tracker", ["local notifications"])
+    card = R.describe(p)
+    check("the literal URL is on the card", p.queries[0].url in card,
+          "a summarised URL defeats the card that authorises it")
+    check("the card says what leaves", "What leaves this machine" in card)
+    check("the card says no credential is used", "credential" in card)
+    check("the card says what happens on a refusal", "If you say no" in card, card[-200:])
+    # The idea in the owner's own words must NOT be what goes out.
+    p2 = R.plan("track my lithium doses and mood for my psychiatrist",
+                ["chart rendering"])
+    check("the outbound query carries derived terms, not the raw sentence",
+          "psychiatrist" not in p2.queries[0].url and "lithium" not in p2.queries[0].url,
+          p2.queries[0].url)
+
+
+def t_run_refuses_without_approval():
+    p = R.plan("a habit tracker", ["local notifications"])
+    with NoNetwork():
+        out = R.run(p)                       # no approved=True
+    check("run() sends nothing when it was not approved", out["ok"] is False, repr(out))
+    check("and says so plainly", "not approved" in out["reason"], out["reason"])
+    with NoNetwork():
+        out = R.run(p, approved=False)
+    check("approved=False is the same as not asking", out["ok"] is False)
+    # CONTROL: with approval and an injected fetch it does run.
+    calls = []
+    out = R.run(p, approved=True, fetch=lambda u: (calls.append(u), {"items": [repo()]})[1])
+    check("CONTROL: an approved plan does execute", out["ok"] is True and len(calls) == 1,
+          repr(out))
+
+
+def t_grading():
+    g = R.grade_repo(repo(), NOW)
+    check("popular + maintained + permissive is ADOPT", g["verdict"] == "ADOPT", repr(g))
+
+    g = R.grade_repo(repo(pushed="2021-01-01T00:00:00Z"), NOW)
+    check("stale but popular and permissive is FORK AND EXTEND",
+          g["verdict"] == "FORK AND EXTEND", repr(g))
+    check("and it says how stale", "years ago" in g["why"], g["why"])
+
+    g = R.grade_repo(repo(lic=None), NOW)
+    check("no licence is never ADOPT", g["verdict"] != "ADOPT", repr(g))
+    check("and it says why that matters",
+          "no permission to use it" in g["why"], g["why"])
+
+    g = R.grade_repo(repo(lic="GPL-3.0"), NOW)
+    check("copyleft is not silently adopted", g["verdict"] != "ADOPT", repr(g))
+    check("and it says what copyleft does", "reaches into" in g["why"], g["why"])
+
+    g = R.grade_repo(repo(stars=12), NOW)
+    check("12 stars is not something to depend on", g["verdict"] != "ADOPT", repr(g))
+
+    g = R.grade_repo(repo(archived=True), NOW)
+    check("archived is never ADOPT", g["verdict"] != "ADOPT", repr(g))
+    check("and it says archived", "archived" in g["why"], g["why"])
+
+    g = R.grade_repo(repo(lic="NOASSERTION"), NOW)
+    check("NOASSERTION is treated as no licence, not as a licence",
+          g["licence"] is None and "no permission" in g["why"], repr(g))
+
+
+def t_the_matrix():
+    found = {
+        "pdf annotation": [repo("good/pdf", 3000), repo("old/pdf", 900, pushed="2019-01-01T00:00:00Z")],
+        "offline sqlite sync": [repo("tiny/sync", 4)],
+        "the actual idea": [],
+    }
+    m = R.matrix({"ok": True, "found": found, "errors": []}, NOW)
+    by = {r["capability"]: r for r in m["rows"]}
+    check("a solved capability reads ADOPT", by["pdf annotation"]["verdict"] == "ADOPT")
+    check("the best candidate is the one shown",
+          by["pdf annotation"]["best"]["name"] == "good/pdf", repr(by["pdf annotation"]["best"]))
+    check("the rejected candidates are kept",
+          len(by["pdf annotation"]["considered"]) == 1,
+          "a matrix gets overruled when nobody can see what was considered")
+    check("an unsolved capability reads BUILD CUSTOM",
+          by["offline sqlite sync"]["verdict"] == "BUILD CUSTOM")
+    check("an empty result is BUILD CUSTOM but says it is weak evidence",
+          by["the actual idea"]["verdict"] == "BUILD CUSTOM"
+          and "weaker statement" in (by["the actual idea"]["note"] or ""),
+          repr(by["the actual idea"]))
+    check("rows are ordered so the things you need not build come first",
+          [r["verdict"] for r in m["rows"]][0] == "ADOPT",
+          repr([r["verdict"] for r in m["rows"]]))
+
+    m = R.matrix({"ok": False, "reason": "not approved; nothing was sent"})
+    check("an unapproved audit produces no matrix at all", m["ok"] is False, repr(m))
+    check("and renders as a refusal, not as an empty result",
+          "not approved" in R.render(m), R.render(m))
+
+
+def t_a_failed_request_is_not_a_clear_result():
+    out = {"ok": True, "found": {}, "errors": [{"url": "u", "error": "HTTPError: 403"}]}
+    text = R.render(R.matrix(out, NOW))
+    check("a failed request says the capability is unaudited",
+          "unaudited, not clear" in text or "No capabilities" in text, text)
+
+
+if __name__ == "__main__":
+    for fn in (t_planning_touches_nothing, t_the_card_prints_the_whole_request,
+               t_run_refuses_without_approval, t_grading, t_the_matrix,
+               t_a_failed_request_is_not_a_clear_result):
+        print(f"\n--- {fn.__name__} ---")
+        try:
+            fn()
+        except Exception:
+            FAILED.append(fn.__name__)
+            traceback.print_exc()
+    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    if FAILED:
+        print("failed: " + ", ".join(FAILED))
+    sys.exit(1 if FAILED else 0)
