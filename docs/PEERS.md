@@ -14,6 +14,11 @@ that is said out loud.
 Everything below is either a fact about someone else's code or a judgement
 about ours. The judgements are marked as such.
 
+**Read [`COMPARISON.md`](COMPARISON.md) next.** This document says what other
+people built; that one puts their files beside ours and quotes both. Two of
+the recommendations here did not survive that, and they are struck through
+below rather than quietly deleted.
+
 ---
 
 ## Part 1 — Approval gates
@@ -444,14 +449,18 @@ Stated as judgements, with the evidence above.
 Ordered by value per unit of work. Each names the task it belongs to where one
 exists.
 
-1. **Add the second time axis** — `recorded_at` / `retired_at` alongside
-   `valid_from` / `valid_to`, as graphiti does. Cheap now, impossible to
-   retrofit once there are facts. (task #18)
+1. ~~**Add the second time axis**~~ — `retired_at` alongside `valid_from` /
+   `valid_to`, as graphiti does. **Done**: `bitemporal.patch`, with
+   `known_at()`, a `?known_at=` route and a "What did you know on…" button.
 2. **Take Home Assistant's pipeline contract before writing voice code** — one
    call with `start_stage` / `end_stage`, the named event sequence, the twelve
    closed error codes. (task #27)
 3. **Build Jan's GPU-offload readiness check**, and go one better by reporting
    partial spill, not just "no GPU at all". (task #22)
+   The *other* half of that same file — `evaluateEmbeddingVector` — turned out
+   to apply to code we already have, and is now `embedding-guard.patch`. Our
+   `FastEmbedder.embed` had no finite check and no zero check, and `_pack`
+   takes NaN without complaint. **Done.**
 4. **Never compute `n_gpu_layers` ourselves.** Let the engine auto-fit; store
    nothing unless the owner overrode it; make the override removable.
    (task #25, already decided — this confirms it)
@@ -459,14 +468,25 @@ exists.
    the invariant test that no path reaches executed without a decision record.
 6. **Move redaction to the serializer** for every egress.
 7. **Add a distinct `TimedOut` decision** and treat it differently.
-8. **Add a provenance flag to every fact** — who said it, you or the extractor
-   — which is Open WebUI's `type: 'user' | 'context'` idea. (task #19 follow-up)
+8. ~~**Add a provenance flag to every fact**~~ — Open WebUI's
+   `type: 'user' | 'context'`. **Already there**: `source` is one of `user`,
+   `extracted`, `edited` or `legacy`, and the Memory pane renders it as
+   "from extracted". Verified in the code, not assumed.
 9. **Measure the approval volume** before arguing about fatigue again.
 10. **Syncthing-style device identity inside Tailscale** for phone pairing.
     (task #20)
-11. **Copy Jan's packaging decisions** — no model or engine in the installer,
-    first-run download behind explicit consent, two updater endpoints with
-    GitHub releases as the free fallback, `installMode: "passive"`.
+11. ~~**Copy Jan's packaging decisions.**~~ **Withdrawn after actually
+    comparing the two config files** — see [`COMPARISON.md`](COMPARISON.md)
+    §2. We already ship no model and no engine, already use
+    `installMode: "passive"`, and already point the updater at the GitHub
+    `latest.json` that is Jan's *fallback*. And our CSP is considerably
+    stricter than theirs: Jan allows `https: http:` in `connect-src` (every
+    host), `assetProtocol` `**/*` (every file on disk) and two telemetry hosts
+    in `script-src`; we allow four loopback ports, no file access and no
+    telemetry. The one real gap is our empty updater `pubkey`, which
+    `INSTALL.md` already lists. This entry is left in place rather than
+    deleted because "the research said copy it, the code said we already had
+    it" is the kind of thing worth remembering about research.
 12. **If the no-approve-all rule ever bends, bend it codex's way**: a
     structured key where anything different still asks, every option naming
     its object, an expiry from day one, and no caching at all when the request

@@ -14,6 +14,7 @@ there is no approve-all control anywhere. Non-commercial.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **The source of truth.** How the pieces fit, the invariants, and the one permission model everything must use. Read this before adding anything; where another document disagrees, this one wins. |
 | [`docs/INSTALL.md`](docs/INSTALL.md) | Getting it running, including the parts that are rough. |
 | [`docs/PEERS.md`](docs/PEERS.md) | What twenty comparable projects did about memory, approval gates, voice and packaging — read from their source. What to copy, what to refuse, where Jarvis is behind. |
+| [`docs/COMPARISON.md`](docs/COMPARISON.md) | Their files beside ours, both quoted. Where Jarvis is ahead, where it is behind, and the two recommendations that did not survive the comparison. |
 | [`docs/MODEL-TOPOLOGY.md`](docs/MODEL-TOPOLOGY.md) | Which model, at what context length, and why — including what does not fit. |
 | [`backend/README.md`](backend/README.md) | The thirteen backend patches, what each fixes, and how to apply them. |
 | [`docs/AUDIT.md`](docs/AUDIT.md) | Findings from the audits, and which are fixed. |

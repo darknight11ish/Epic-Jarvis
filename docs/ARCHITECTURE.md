@@ -371,6 +371,9 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    has one, and several caught the fix being wrong.
 6. Has someone already built it? [`PEERS.md`](PEERS.md) is what twenty
    comparable projects did about memory, approval gates, voice and packaging,
-   read from their source. It says what to copy, what to refuse, and where
+   read from their source, and [`COMPARISON.md`](COMPARISON.md) puts their
+   files beside ours. Between them: what to copy, what to refuse, and where
    Jarvis is behind. Three of the most-recommended projects in this space are
-   archived or retired, so check there before adopting a dependency.
+   archived or retired, so check there before adopting a dependency — and
+   check our own file before copying theirs, because twice now we already had
+   the thing, and once ours was stricter.

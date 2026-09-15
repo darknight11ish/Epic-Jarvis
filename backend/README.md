@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Fourteen patches against the Jarvis backend, each with an executable test.
+Fifteen patches against the Jarvis backend, each with an executable test.
 
 **Order.** The first thirteen commute — several touch `jarvis_hud.py`, but in
 well-separated regions, and every order produces the same tree. The order in
@@ -34,6 +34,7 @@ dependency, not just a semantic one — it will not apply without both.
 | `memory-pane.patch` | `jarvis_hud.py` | Routes to read, edit, forget and export what Jarvis has learned. Gives `retire()` its first caller. Needs `extraction-wiring` for the learning switch. |
 | `token-file.patch` | `jarvis_hud.py` | Makes a token on first run. **The phone has never been pairable without this.** |
 | `bitemporal.patch` | `jarvis_memory.py`, `jarvis_hud.py` | The second time axis. Adds `retired_at` — when we stopped believing a fact, as distinct from when it stopped being true. Needs `memory-safety` and `memory-pane`. |
+| `embedding-guard.patch` | `jarvis_memory.py` | A NaN or all-zero embedding was stored without complaint and the row was then unreachable forever. Needs `memory-safety`. |
 
 ## Apply them
 
@@ -1008,3 +1009,52 @@ Not a column nobody reads:
   every row.
 
 `test_bitemporal.py`: 32 checks. Twelve of them fail on the unpatched tree.
+
+
+---
+
+# `embedding-guard.patch` — a broken embedder must not write invisible rows
+
+Needs `memory-safety`. Independent of everything else.
+
+`_pack` is `struct.pack(f"{n}f", *v)`. It accepts NaN and infinity silently,
+and `FastEmbedder.embed` was:
+
+```python
+def embed(self, texts):
+    return [list(map(float, v)) for v in self._m.embed(list(texts))]
+```
+
+No finite check, no zero check, no width check. A NaN reaching `facts_vec` is
+not a row that ranks badly — **every distance comparison against NaN is false,
+so the row can never be returned, and nothing anywhere says so.** The fact
+looks stored, `embedded` reads 1, and it is gone from semantic recall for good.
+
+All-zero is the other shape of the same bug, and it is the one Jan documents in
+`readiness.ts`: cosine divides by the norm, so a zero vector makes every score
+NaN rather than merely inaccurate.
+
+`_usable_vector(v, dim)` now gates both call sites.
+
+- **Writing:** a bad vector is skipped and the row is left `embedded=0`,
+  exactly as a failed INSERT already was — so the fact is still found by
+  keyword and the backfill retries it when the model is working again. Storing
+  it anyway would be a row that can never be returned and never be noticed.
+- **Reading:** a bad *query* vector is worse than a bad stored one, because it
+  does not fail. It ranks the whole table by distance-from-nonsense, and RRF
+  then lets that noise outrank the real keyword hits. The vector vote is
+  dropped and FTS5 answers alone — the same thing that happens on a machine
+  with no embedding model.
+- **Saying so:** `status()` grows `bad_vectors` and a sentence explaining it,
+  **only when the count is non-zero**, because a permanent `bad_vectors: 0`
+  would be noise on every screen that renders status.
+
+Rejected: NaN, ±inf, all-zero, near-zero (float error means exact zero is not
+the only route to garbage), the wrong width, a non-list, a string inside, and
+`True` — which is an `int` subclass and would otherwise pack as `1.0`.
+
+Borrowed from `evaluateEmbeddingVector` in janhq/jan,
+`extensions/llamacpp-extension/src/readiness.ts`, Apache-2.0. See
+`docs/COMPARISON.md` §3.
+
+`test_embedding_guard.py`: 24 checks, 7 of which fail on the unpatched tree.
