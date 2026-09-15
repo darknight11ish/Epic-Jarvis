@@ -1,6 +1,6 @@
 # Backend patches
 
-Six patches against the Jarvis backend, each self-contained and each with an
+Seven patches against the Jarvis backend, each self-contained and each with an
 executable test. They touch different files and can be applied in any order,
 but the order below is the one to use: `memory-safety` must land
 before anything makes the extractor run.
@@ -13,6 +13,7 @@ before anything makes the extractor run.
 | `gate-push.patch` | `jarvis_gate.py` | Stops the approval gate posting unredacted private content to a public broker. Apply this one whether or not you use ntfy. |
 | `skill-notes.patch` | `jarvis_skills.py` | Gates and surfaces the skill notes, which steer answers, are written without approval, and appear on no screen. |
 | `documents-honesty.patch` | `jarvis_hud.py` | The brain map reports a document store that has never existed. Makes the status line true. |
+| `memory-prefix.patch` | `jarvis_hud.py` | Recalled facts were the first thing in every request, which threw away the KV cache for the whole conversation on every turn. |
 
 ## Apply them
 
@@ -428,3 +429,66 @@ what runs is the shipped function: a `memory.db` holding a `facts` table and
 no `documents` reads as absent, an empty `documents` table reads as present,
 a view does not read as a table, and a corrupt file answers no instead of
 raising. Against the unpatched file all sixteen fail.
+
+---
+
+# `memory-prefix.patch`
+
+The recalled-facts block was the first thing in the request.
+
+```python
+messages = [{"role": "system", "content": "Things you know about the user..."}] + messages
+```
+
+The facts in that block are chosen per question, so the first token of the
+request differed on every single turn. llama.cpp — and therefore Ollama —
+reuses a cached KV prefix only up to the first token that differs. A changing
+token 0 matches nothing, so the **entire conversation** was re-prefilled every
+turn: on a 6,000-token history at the ~1,700 tok/s an RTX 2080 Super prefills
+an 8B Q4 at, that is several seconds of GPU time per turn, spent re-reading
+text the model read a moment ago, and it grows as you talk.
+
+Nothing was wrong with the facts or the injection. It was the position.
+
+## What it changes
+
+The block is inserted immediately before the final user turn instead:
+
+```python
+messages = messages[:-1] + [recalled, messages[-1]] if messages else [recalled]
+```
+
+Every earlier turn is now byte-identical from one turn to the next, so the
+cache matches up to the final question and only the tail is prefilled. The
+facts also end up adjacent to the question they were recalled for, which is
+where they do the most good.
+
+There is a comment at the call site saying so, because this is the kind of
+thing that gets undone by a well-meaning edit: **if delimiters are ever added
+around recalled facts, they go on the `recalled` message**. Wrapping the whole
+list, or putting a marker at position 0, puts the invalidation straight back.
+
+## And `k=5` becomes `MEMORY_K`
+
+`search(query, k=5)` was a token budget written where nobody would look for
+one. Five facts is 100–150 tokens on every local prompt whether or not the
+fifth had anything to do with the question. It is now `MEMORY_K`, from
+`JARVIS_MEMORY_K`, defaulting to 5 — so nothing changes until you change it.
+
+With `memory-safety.patch` applied the store's search has a distance floor, so
+a lower `k` costs nothing on a query that genuinely has less to recall; it only
+stops the tail being padded out to five near-misses. Try 3.
+
+## Test it
+
+```powershell
+python test_memory_prefix.py
+```
+
+Fourteen checks. The ordering expression is lifted out of `jarvis_hud.py` with
+`ast` and evaluated, rather than paraphrased in the test, so what runs is the
+shipped line. The check that matters serialises two turns that recall
+*different* facts over the same history and asserts the prefixes are
+identical — with a control that runs the old prepend through the same
+assertion and confirms it fails, so the property is known to discriminate.
+Against the unpatched file all fourteen fail.
