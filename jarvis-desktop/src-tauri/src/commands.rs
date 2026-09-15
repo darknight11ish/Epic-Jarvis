@@ -269,8 +269,17 @@ fn validate_base(base: &str) -> Result<(), String> {
 /// Shared secret for `X-Jarvis-Token`, read once from the environment.
 ///
 /// `JARVIS_TOKEN` wins; `HUD_TOKEN` is accepted as the name the server itself
-/// uses. Keeping it in the backend means the token never enters WebView2
-/// memory, where any script running in the HUD could reach it.
+/// uses. Reading it here keeps it out of the pages the shell controls — the
+/// quickbar, the widget, settings and the Brain never see it.
+///
+/// It is NOT true that the token never enters WebView2 memory, and this
+/// comment used to claim that. `hud_bootstrap.js` substitutes the real value
+/// into the HUD window's initialisation script, so any script in that
+/// vendored page can read `window.JARVIS.token`. That is a deliberate
+/// trade — the page needs a token to talk to the backend at all, and the
+/// alternative was a second copy persisted in its localStorage — but it is
+/// an exposure, and describing it as impossible is how the next person
+/// builds something on a guarantee that is not there.
 fn jarvis_token() -> Option<&'static String> {
     static TOKEN: OnceLock<Option<String>> = OnceLock::new();
     TOKEN

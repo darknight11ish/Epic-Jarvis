@@ -1,0 +1,126 @@
+"""The approval gate must not post private content to a public broker.
+
+jarvis_gate._redact exists because, in its own words, the gate "is handed
+exactly the sensitive part - the recipient of the email, the path of the file,
+the body of the shell command - so writing `detail` verbatim would turn the
+audit trail into the leak it exists to detect."
+
+The local audit log honoured that. The ntfy push, 130 lines below, sent the
+identical dict verbatim to https://ntfy.sh/<topic> - a URL with no
+authentication, where the topic name is the only secret and it travels in the
+path. On tier `notify` that fires with no human in the loop at all.
+
+    python3 test_gate_push.py
+
+Runs against a stubbed network and a stubbed framework module. No requests are
+made and no approvals database is touched.
+"""
+import ast, json, re, sys, types, traceback
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+FAILED, PASSED = [], []
+
+
+def check(name, cond, detail=""):
+    (PASSED if cond else FAILED).append(name)
+    print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+# A framework stub: redaction ON, which is the default the real one uses.
+fw = types.ModuleType("jarvis_framework")
+fw.CONFIG_DIR = HERE / "_cfg"
+fw.LOG_DIR = HERE / "_cfg"
+fw.load_framework = lambda: {"logging": {"redact_private_content_in_logs": True}}
+fw.audit_log = lambda *a, **k: None
+sys.modules["jarvis_framework"] = fw
+
+import jarvis_gate as G
+
+SENSITIVE = {
+    "command": "grep -r 'password' /home/mario/.env",
+    "cwd": "/home/mario",
+    "recipient": "dr.okafor@clinic.example",
+    "note": "Lucia peanut allergy - reschedule Thursday 4pm",
+}
+SECRETS = ["password", "/home/mario", "dr.okafor@clinic.example", "Lucia", "peanut"]
+
+
+def captured(body, *, tainted=False):
+    """Run _push with the network and the latch stubbed, return what was sent."""
+    sent = []
+    real_open, real_topic, real_taint = None, G.NTFY_TOPIC, G.taint_active
+    import urllib.request
+    real_open = urllib.request.urlopen
+
+    class Fake:
+        def __init__(self, req): sent.append(req)
+        def close(self): pass
+
+    urllib.request.urlopen = lambda req, timeout=None: Fake(req)
+    G.NTFY_TOPIC = "jarvis-test-topic"
+    G.taint_active = lambda: tainted
+    try:
+        G._push("Jarvis wants to: send_email", body)
+        for t in list(getattr(G, "threading").enumerate()):
+            if t.name != "MainThread" and t.is_alive():
+                t.join(timeout=2)
+    finally:
+        urllib.request.urlopen = real_open
+        G.NTFY_TOPIC = real_topic
+        G.taint_active = real_taint
+    return [r.data.decode("utf-8", "replace") for r in sent]
+
+
+def t_redact_keeps_shape_drops_values():
+    out = G._redact(SENSITIVE)
+    blob = json.dumps(out)
+    leaked = [s for s in SECRETS if s in blob]
+    check("_redact drops every sensitive value", not leaked, f"leaked: {leaked}")
+    check("CONTROL _redact keeps the keys, so the alert still means something",
+          set(out) == set(SENSITIVE), f"got {sorted(out)}")
+
+
+def t_push_sends_only_what_it_was_given():
+    body = json.dumps(G._redact(SENSITIVE))
+    got = captured(body)
+    check("a redacted body reaches the broker unchanged", got == [body], f"{got}")
+    leaked = [s for s in SECRETS if any(s in g for g in got)]
+    check("nothing sensitive is on the wire", not leaked, f"leaked: {leaked}")
+
+
+def t_push_refuses_while_tainted():
+    got = captured(json.dumps(G._redact(SENSITIVE)), tainted=True)
+    check("no push at all while the conversation is latched local", got == [],
+          f"sent {len(got)} message(s) during a taint window")
+
+
+def t_call_sites_redact():
+    """CONTROL. The rule lives at the call sites; _push cannot enforce it."""
+    src = (HERE / "jarvis_gate.py").read_text()
+    calls = [n for n in ast.walk(ast.parse(src))
+             if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_push"]
+    check("both _push call sites are present", len(calls) == 2, f"found {len(calls)}")
+    for i, call in enumerate(calls):
+        body_src = ast.unparse(call.args[1]) if len(call.args) > 1 else ""
+        check(f"call site {i + 1} redacts before sending",
+              "_redact" in body_src,
+              f"line {call.lineno}: {body_src[:90]}")
+        check(f"call site {i + 1} does not fall back to the raw prompt",
+              "prompt" not in body_src,
+              f"line {call.lineno}: {body_src[:90]}")
+
+
+if __name__ == "__main__":
+    for fn in (t_redact_keeps_shape_drops_values, t_push_sends_only_what_it_was_given,
+               t_push_refuses_while_tainted, t_call_sites_redact):
+        print(f"\n--- {fn.__name__} ---")
+        try:
+            fn()
+        except Exception:
+            FAILED.append(fn.__name__)
+            traceback.print_exc()
+    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    sys.exit(1 if FAILED else 0)

@@ -89,7 +89,7 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper",
@@ -97,7 +97,7 @@
       },
       "allowDowngrades": false,
       "nsis": {
-        "installMode": "perMachine",
+        "installMode": "currentUser",
         "languages": [
           "English"
         ],

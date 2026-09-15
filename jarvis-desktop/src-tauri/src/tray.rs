@@ -202,14 +202,18 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         ID_TOGGLE_SPOTLIGHT,
         "Show or hide Spotlight",
         true,
-        Some("Alt+Space"),
+        // Read, not hardcoded. The tray is the fallback surface for exactly
+        // the case where a hotkey was refused or rebound, so a tray that
+        // advertises "Alt+Space" after PowerToys took it is pointing the owner
+        // at the one key that cannot work.
+        accel(app, "toggle_quickbar").as_deref(),
     )?;
     let toggle_widget = MenuItem::with_id(
         app,
         ID_TOGGLE_WIDGET,
         "Show or hide the widget",
         true,
-        Some("Alt+Shift+W"),
+        accel(app, "toggle_widget").as_deref(),
     )?;
     let reconnect = MenuItem::with_id(
         app,
@@ -292,7 +296,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         });
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip(tooltip(&link))
+        .tooltip(tooltip(app, &link))
         .menu(&menu)
         // Left click summons the spotlight; the menu belongs on right click.
         //
@@ -716,7 +720,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
     if let Err(err) = tray.set_icon(Some(paint(app, link))) {
         eprintln!("[jarvis] tray: unable to set the icon: {err}");
     }
-    if let Err(err) = tray.set_tooltip(Some(tooltip(link))) {
+    if let Err(err) = tray.set_tooltip(Some(tooltip(app, link))) {
         eprintln!("[jarvis] tray: unable to set the tooltip: {err}");
     }
 }
@@ -819,7 +823,7 @@ fn backend_row(app: &AppHandle) -> (String, bool) {
     }
 }
 
-fn tooltip(link: &LinkState) -> String {
+fn tooltip(app: &AppHandle, link: &LinkState) -> String {
     let mut parts = vec![activity_label(link)];
     if link.connected {
         parts.push(power_label(link));
@@ -830,14 +834,44 @@ fn tooltip(link: &LinkState) -> String {
             parts.push(waiting_label(link));
         }
     }
-    parts.push("Alt+Space".to_string());
+    if let Some(a) = accel(app, "toggle_quickbar") {
+        parts.push(a);
+    }
     parts.join(" · ")
 }
 
 /// Trims a long error down to something a menu row can hold.
+/// The accelerator actually bound to an action, or None if the OS refused it.
+///
+/// None is the honest answer: a menu row with no accelerator beside it is
+/// correct when there is no key that triggers it, and better than a row
+/// promising one that does nothing.
+fn accel(app: &AppHandle, id: &str) -> Option<String> {
+    let bound = crate::hotkeys::configured(app);
+    bound.get(id).cloned().filter(|s| !s.trim().is_empty())
+}
+
 fn first_sentence(text: &str) -> String {
     let text = text.trim();
-    let cut = text.find(['.', ';']).map(|i| i + 1).unwrap_or(text.len());
+    // A full stop only ends a sentence when whitespace or the end follows it.
+    // Without that test the first offline message the owner ever sees - "could
+    // not reach the Jarvis server at http://127.0.0.1:4719. Is it running?" -
+    // was cut at the dot inside the address, and the tray read, literally,
+    // "Jarvis - offline: could not reach the Jarvis server at http://127".
+    // The 403 message lost the half that names JARVIS_HUD_ORIGINS, which is
+    // the actual fix, for the same reason.
+    let bytes = text.as_bytes();
+    let ends_here = |i: usize| -> bool {
+        match bytes.get(i + 1) {
+            None => true,
+            Some(b) => b.is_ascii_whitespace(),
+        }
+    };
+    let cut = text
+        .char_indices()
+        .find(|(i, c)| (*c == '.' || *c == ';') && ends_here(*i))
+        .map(|(i, _)| i + 1)
+        .unwrap_or(text.len());
     let mut out = text[..cut].trim_end_matches(['.', ';']).to_string();
     if out.chars().count() > 60 {
         out = out.chars().take(57).collect::<String>() + "…";

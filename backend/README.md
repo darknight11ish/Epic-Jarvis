@@ -1,6 +1,6 @@
 # Backend patches
 
-Three patches against the Jarvis backend, each self-contained and each with an
+Four patches against the Jarvis backend, each self-contained and each with an
 executable test. They touch different files and can be applied in any order,
 but the order below is the one to use: `memory-safety` must land
 before anything makes the extractor run.
@@ -10,6 +10,7 @@ before anything makes the extractor run.
 | `memory-safety.patch` | `jarvis_memory.py`, `jarvis_extract.py` | Five ways the memory store destroyed or refused data. Apply first. |
 | `events-pump.patch` | `jarvis_hud.py` | Starts the event pump, which nothing was starting. One line and a comment. |
 | `appearance.patch` | `jarvis_hud.py` | `GET`/`POST /api/appearance`, so the phone and the desktop can agree on a face. |
+| `gate-push.patch` | `jarvis_gate.py` | Stops the approval gate posting unredacted private content to a public broker. Apply this one whether or not you use ntfy. |
 
 ## Apply them
 
@@ -253,3 +254,67 @@ broken twice: `time` was never imported, so every save would have raised
 `NameError`; and the palette walk looked for `families[].shades[]`, which does
 not exist — the fifty colours are a flat `palette.colors` — so colour checking
 was silently finding nothing and passing everything.
+
+
+---
+
+# `gate-push.patch` — the one to read even if you never set a token
+
+`jarvis_gate._redact` exists for a reason its own docstring states plainly:
+
+> the gate "is handed exactly the sensitive part - the recipient of the email,
+> the path of the file, the body of the shell command - so writing `detail`
+> verbatim would turn the audit trail into the leak it exists to detect."
+
+The local audit log honoured that. The **push did not**. 130 lines below that
+docstring, `_push` sent the identical dict verbatim to
+`https://ntfy.sh/<your-topic>`:
+
+```
+LOCAL AUDIT:  {"command":"<redacted 35 chars>","recipient":"<redacted 24 chars>"}
+SENT TO ntfy: {"command":"grep -r 'password' /home/mario/.env",
+               "recipient":"dr.okafor@clinic.example"}
+```
+
+An ntfy.sh topic is a URL with no authentication. The topic name is the only
+secret, it travels in the path, and anyone who knows or guesses it subscribes
+to everything. On tier `notify` this fires with **no human in the loop at
+all** — the whole point of that tier is that it does not ask.
+
+It also quietly falsifies the published contract: `risk_for` labels
+`read_joplin_note`, `read_files_readonly` and `delete_file` as
+`reach: "local"`, which both `JARVIS-API.md` and `JARVIS-FRAMEWORK.md` define
+as *"nothing leaves this machine"*. Every one of them pushed outbound once it
+reached `notify` or `ask`.
+
+**Mitigating:** it is opt-in — nothing is sent unless `JARVIS_NTFY_TOPIC` is
+set. **Aggravating:** ntfy appears in none of the three spec documents, so an
+owner who sets that variable to get phone alerts has no way to learn what it
+sends.
+
+The patch does three things:
+
+1. **Both call sites redact before sending.** The redactor already existed and
+   already keeps enough shape to make a useful alert — you still learn that a
+   `send_email` is waiting and how long the body was.
+2. **No push at all while the conversation is latched local.** The taint latch
+   exists precisely because private content is in play; a push is egress to a
+   third party, which is the thing the latch is refusing. It fails closed:
+   `taint_active()` returns true when it cannot read its own database.
+3. **The `prompt` fallback is gone.** It was the wider of the two leaks —
+   prose rather than a dict of keys. The notification is now a doorbell: what
+   is waiting, its id, and "open Jarvis to read it". Same rule the SSE
+   approval event already follows.
+
+### Test it
+
+```
+python3 backend/test_gate_push.py
+```
+
+Ten checks against a stubbed network and a stubbed framework — nothing is sent
+and no approvals database is touched. Four are controls: that `_redact` still
+keeps the keys so the alert means something, that a redacted body reaches the
+broker unchanged, and (parsing the source) that **neither** call site passes
+raw `detail` or falls back to `prompt`. That last pair is what fails if someone
+later "simplifies" the call sites back.

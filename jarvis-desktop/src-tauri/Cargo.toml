@@ -29,7 +29,11 @@ tauri-plugin-notification = "2"
 tauri-plugin-store = "2"
 # Build order step 3: starting the app twice focuses the running window.
 tauri-plugin-single-instance = "2"
-window-vibrancy = "0.5"
+# 0.6, not 0.5 and not 0.8. Tauri 2.11.5 itself depends on 0.6.0, so 0.5.3
+# compiled a second copy of the crate; 0.8 would compile a second copy again in
+# the other direction. 0.5 -> 0.6 is an objc2 bump and an MSRV raise; the
+# Windows apply_acrylic/apply_mica surface this file uses is unchanged.
+window-vibrancy = "0.6"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }

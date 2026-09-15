@@ -9,7 +9,13 @@
  *
  * The token is write-only from here. `get_api_settings` reports whether one is
  * set and never returns it, so a blank field means "keep what you have" and
- * there is no path by which the secret comes back into a webview.
+ * the secret never comes back into THIS page.
+ *
+ * Not into any page: the HUD window is the exception. `hud_bootstrap.js`
+ * injects the live token so the vendored page can reach the backend, where a
+ * script in that page can read it. This comment used to say "no path by which
+ * the secret comes back into a webview", full stop, which was false and made
+ * the storage look stronger than it is.
  */
 
 import {

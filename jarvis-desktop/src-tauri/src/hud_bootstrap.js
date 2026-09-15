@@ -14,9 +14,16 @@
  * already fired.
  *
  * Seeding localStorage would be early enough, and is exactly what DESKTOP-BUILD
- * §3.1 step 4 forbids: the shell holds the token in the OS keystore and injects
- * it at load, and "a copy in this page's localStorage would be a second,
- * staler source of the token that outlives the shell's own storage".
+ * §3.1 step 4 forbids: the shell holds the token and injects it at load, and
+ * "a copy in this page's localStorage would be a second, staler source of the
+ * token that outlives the shell's own storage".
+ *
+ * This comment used to say "the OS keystore". It is not in a keystore. It is
+ * a bare JSON string in tauri-plugin-store's file under %APPDATA%, which the
+ * uninstaller leaves behind. Saying otherwise made the storage look stronger
+ * than it is to the next person reading this, which is the only audience a
+ * comment has. Moving it to DPAPI is worth doing; claiming it already moved
+ * was not.
  *
  * So instead: intercept the assignment. The page does
  *
@@ -247,6 +254,52 @@
 
   window.EventSource = ShellEventSource;
   console.info("[jarvis] EventSource is served by the shell's single stream");
+
+  /* ---------------------------------------------------------------- *
+   * 2b. The Web Speech recogniser, refused
+   *
+   * The vendored page takes `window.SpeechRecognition ||
+   * window.webkitSpeechRecognition` and wires it to the mic button and to
+   * the space bar. Its own section header says what it is: "browser speech
+   * in, browser speech out. Swap these two for the local pipeline (whisper
+   * + Kokoro) later." The swap never happened.
+   *
+   * In Chromium that API is not implemented in page JS. The engine opens
+   * the microphone and POSTs the audio to a vendor speech endpoint FROM
+   * THE BROWSER PROCESS. `connect-src` does not govern it, so the app CSP
+   * — which is otherwise doing real work here, and is what refuses the
+   * page's Google Fonts link below — cannot see it and cannot stop it.
+   * Raw microphone audio would leave the machine, which is the one thing
+   * this product says it never does.
+   *
+   * The Android client already refuses the same API for the same reason,
+   * and argues it well (net/VoiceModels.kt: "Android's own recogniser is
+   * also a network service unless on-device recognition happens to be
+   * installed, so the privacy boundary would move without anyone being
+   * told"). This applies that decision to the desktop.
+   *
+   * Undefining it is enough and is deliberately gentle: the page does
+   * `if (SR) { ... }`, `start()` opens with `if (!rec || listening)
+   * return`, and the status line already renders "unsupported" when SR is
+   * absent. So the mic button goes inert and says so, rather than
+   * throwing. Done here rather than by editing jarvis_hud.html so the next
+   * copy of that file from the backend needs no re-patching — the same
+   * reasoning as the fonts below.
+   *
+   * When the local pipeline lands, this block is what to delete.
+   * ---------------------------------------------------------------- */
+  try {
+    delete window.SpeechRecognition;
+    delete window.webkitSpeechRecognition;
+  } catch (err) {
+    /* non-configurable on some builds; the assignment below still wins */
+  }
+  window.SpeechRecognition = undefined;
+  window.webkitSpeechRecognition = undefined;
+  console.info(
+    "[jarvis] Web Speech recognition is disabled: it uploads microphone " +
+      "audio from outside the CSP. Dictation waits on the local pipeline."
+  );
 
   /* ---------------------------------------------------------------- *
    * 3. Fonts, served locally
