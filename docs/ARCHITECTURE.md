@@ -214,12 +214,60 @@ for exactly that reason.
 
 **Android** (`claude/android-apk-build-q435fi`): Kotlin, native, over
 Tailscale. It is a remote, not a second brain. It renders, it decides one
-thing at a time, it does not hold its own copy of state. Cross-thread
-messaging does not work between these sessions — communication is a committed
-document. See [ANDROID-VOICE-FALLBACK.md](ANDROID-VOICE-FALLBACK.md) and
-[CROSS-CLIENT-CONTRACT-REPLY.md](CROSS-CLIENT-CONTRACT-REPLY.md).
+thing at a time, it does not hold its own copy of state.
 
 `jarvis-android` is retired; capabilities port later.
+
+### Talking to the other branch — do this, it keeps going wrong
+
+The two clients are worked by two sessions that **cannot message each other**.
+Communication is a committed document. That much was already understood. What
+was not: *each session only ever sees its own branch*, so a document written
+as a message sits unread on the branch of whoever wrote it, and **silence
+looks exactly like being ignored**.
+
+That has now caused four separate misunderstandings in two days:
+
+- The desktop's reply to `CROSS-CLIENT-CONTRACT.md` was written, committed and
+  pushed — and recorded on the other side as never read.
+- The Android session's `check_parity.py` was wrong about whether
+  `/api/appearance` exists **in both directions inside 24 hours**, because it
+  was reasoning about desktop source it had not fetched.
+- The desktop told the Android session to fetch `/api/approvals`, a route that
+  does not exist, from memory rather than from `jarvis_hud.py`.
+- The Android session's `SpecDriftTest` compares against its *own* vendored
+  copy of the visual spec, so it is structurally incapable of detecting drift
+  from the desktop's copy.
+
+Every one of them is the same mistake: making a claim about the other side's
+code without fetching it. So:
+
+```bash
+# Before writing anything ABOUT the other client, or replying to it:
+git fetch origin claude/android-apk-build-q435fi        # from the desktop
+git fetch origin claude/jarvis-desktop-tauri-vey6bc     # from the client
+git log --oneline origin/<other-branch> -10
+git show origin/<other-branch>:docs/<the-doc>.md
+```
+
+**Read the other branch before claiming anything about it, and fetch before
+concluding a message went unanswered.** A reply you cannot see is not absence
+of a reply.
+
+Current cross-branch documents, both directions:
+
+| on the desktop branch | on the client branch |
+|---|---|
+| `docs/CROSS-CLIENT-CONTRACT-REPLY.md` | `docs/CROSS-CLIENT-CONTRACT.md` |
+| `docs/ANDROID-VOICE-FALLBACK.md` | `docs/ANDROID-REPLY-2026-09-15.md` |
+| `docs/ARCHITECTURE.md` (this file) | `docs/HANDOFF.md`, `CLAUDE.md` |
+
+One more thing the desktop session can do cheaply and the Android session
+cannot: **read that branch's CI logs**. There is no local Android build, so
+every check there costs a ~15 minute round trip, while the GitHub API is a
+few seconds from here. Two failures were resolved that way — a test name
+buried by a log tail, and a compile error whose five reported symptoms were
+downstream of one unclosed comment. Offer it rather than waiting to be asked.
 
 ---
 
