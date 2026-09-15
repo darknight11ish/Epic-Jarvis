@@ -315,8 +315,6 @@ Say so rather than designing around imagined code.
 - `jarvis_framework.py`, `jarvis_router.py`, `jarvis_initiative.py`,
   `jarvis_compute.py`, `jarvis_sleep.py` — imported in places, present
   nowhere in anything handed over. Some may exist on the owner's machine.
-- `_load_config()` — called at `jarvis_hud.py:485`, defined nowhere. A latent
-  `NameError`. Use `_read_toml(CONFIG_FILE)`.
 - The `documents` table — read by two code paths, created by none. The status
   line now says `documents: false`, which is correct.
 - A memory review pane. The queue fills; there is no screen to read it on.

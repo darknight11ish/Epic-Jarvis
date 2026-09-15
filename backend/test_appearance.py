@@ -7,7 +7,8 @@
 palette walk found zero colours. Neither is a syntax error; both would have
 shipped. So this extracts the four helpers and runs them.
 """
-import json, re, sys, time, tempfile
+import json
+import os, re, sys, time, tempfile
 from pathlib import Path
 
 SRC = Path(sys.argv[1] if len(sys.argv) > 1 else "jarvis_hud.py").read_text(encoding="utf-8")
@@ -20,7 +21,10 @@ block = SRC[start:end]
 
 tmp = Path(tempfile.mkdtemp())
 ns = {
-    "json": json, "time": time, "Path": Path,
+    # `os` because _visual_spec consults JARVIS_VISUAL_SPEC before the
+    # filesystem candidates - an explicit path is the only thing that survives
+    # someone moving either tree.
+    "json": json, "time": time, "Path": Path, "os": os,
     "CONFIG_DIR": tmp, "HERE": SPEC.parent,
     "_publish": lambda kind, data: ns.setdefault("published", []).append((kind, data)),
 }

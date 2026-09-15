@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -399,6 +399,223 @@
+@@ -399,6 +399,221 @@
          pass
  
  
@@ -87,9 +87,7 @@
 +    if name:
 +        return name
 +    try:
-+        # _read_toml(CONFIG_FILE), the same call /api/status makes. Not
-+        # _load_config(): that name is called once at line ~485 and is defined
-+        # nowhere in this file, so it is a latent NameError, not a helper.
++        # _read_toml(CONFIG_FILE), the same call /api/status makes.
 +        cfg = _read_toml(CONFIG_FILE)
 +        name = (cfg.get("intelligence") or {}).get("default_model") or ""
 +    except Exception:
@@ -224,7 +222,7 @@
  def _activity(state: str, detail: str = "") -> None:
      """Announce what Jarvis is doing, if the event bus is importable.
  
-@@ -1940,6 +2157,18 @@
+@@ -1940,6 +2155,18 @@
              # refused, client vanished - the turn is over. In a finally block
              # because the one state nobody must be left showing is "thinking".
              _activity("idle")
@@ -243,7 +241,7 @@
  
  
  # Keys whose values are content rather than plumbing. Walking only these
-@@ -2228,6 +2457,20 @@
+@@ -2228,6 +2455,20 @@
              xs = jarvis_extract.setup_status()
              if not xs["setup_complete"]:
                  print("  extraction SCAFFOLD - proposals queue for review; set-up pass still needed")

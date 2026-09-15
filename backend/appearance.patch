@@ -8,7 +8,7 @@
  from typing import Optional
  import sqlite3
  import sys
-@@ -239,6 +240,155 @@
+@@ -239,6 +240,176 @@
      return out
  
  
@@ -35,9 +35,30 @@
 +    refusing every write - the spec is the desktop's to ship, and a server that
 +    could not find it would otherwise brick the feature it is meant to enable.
 +    """
-+    for candidate in (CONFIG_DIR / "jarvis-visual-spec.json",
-+                      HERE / "jarvis-visual-spec.json",
-+                      HERE / "src" / "jarvis-visual-spec.json"):
++    # The first three were the whole list, and on the owner's machine none of
++    # them hit: HERE is the backend folder, and the spec ships with the DESKTOP
++    # CLIENT, in jarvis-desktop/src/. So validation was off by default, every
++    # write came back with the "stored without checking" note, and a binding
++    # naming a pattern no renderer knows was accepted and then rendered as
++    # nothing. The note was honest; the search path was just wrong.
++    here_up = HERE.parent
++    for candidate in (
++            # Explicit wins. A path is the only thing that survives someone
++            # moving either tree, and this feature should not be the reason
++            # they cannot.
++            Path(os.environ["JARVIS_VISUAL_SPEC"])
++            if os.environ.get("JARVIS_VISUAL_SPEC") else None,
++            CONFIG_DIR / "jarvis-visual-spec.json",
++            HERE / "jarvis-visual-spec.json",
++            HERE / "src" / "jarvis-visual-spec.json",
++            # The desktop client's copy, as checked out beside the backend or
++            # one level up from it. This is where the file actually is.
++            HERE / "jarvis-desktop" / "src" / "jarvis-visual-spec.json",
++            here_up / "jarvis-desktop" / "src" / "jarvis-visual-spec.json",
++            here_up / "jarvis-visual-spec.json",
++    ):
++        if candidate is None:
++            continue
 +        try:
 +            if candidate.is_file():
 +                return json.loads(candidate.read_text(encoding="utf-8"))
@@ -164,7 +185,7 @@
  def _desktop_action(route: str, body: dict):
      """Returns (http_status, payload). Every branch calls the module and
      returns what the module said - including its refusals."""
-@@ -273,6 +423,9 @@
+@@ -273,6 +444,9 @@
          return 202, {"ok": True, "started": ref,
                       "progress": "watch the event stream for kind=model"}
  
@@ -174,7 +195,7 @@
      if route == "/api/config":
          # Not implemented, and saying so is the honest answer. Writing this
          # file means rewriting the tiers that decide what Jarvis may do
-@@ -1379,7 +1532,8 @@
+@@ -1379,7 +1553,8 @@
                  return self._send(200, {"available": False,
                                          "error": f"{type(exc).__name__}: {exc}"})
  
@@ -184,7 +205,7 @@
              # The three desktop-only surfaces. Every one of these existed as a
              # Python module with no way to reach it over HTTP, which meant the
              # desktop brief was promising screens with nothing behind them.
-@@ -1392,6 +1546,8 @@
+@@ -1392,6 +1567,8 @@
                      return self._send(200, _models_view())
                  if path == "/api/config":
                      return self._send(200, _config_view())
@@ -193,7 +214,7 @@
                  return self._send(200, _skills_view())
              except Exception as exc:
                  return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
-@@ -1573,6 +1729,7 @@
+@@ -1573,6 +1750,7 @@
  
          if route in ("/api/models/install", "/api/models/switch",
                       "/api/models/rollback", "/api/config", "/api/skills/decide",
