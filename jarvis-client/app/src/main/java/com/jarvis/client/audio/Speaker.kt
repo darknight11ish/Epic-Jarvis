@@ -29,8 +29,16 @@ import kotlin.coroutines.resume
  * synthesise **over the network**. The text being spoken is Jarvis's reply,
  * composed from the owner's recalled facts. So the "local" fallback was
  * uploading exactly what rule 1 says never leaves the machine, on the normal
- * path, because the server's speech module is not installed and every
- * /api/voice/* call is on its failure path.
+ * path, because the server's speech module is not installed and every voice
+ * route is on its failure path on every request.
+ *
+ * (Written as "every voice route" on purpose. Kotlin block comments NEST, so
+ * the literal route glob - a slash, "api/voice", a slash, a star - opens an
+ * inner comment inside this KDoc, and the closing marker below then shuts
+ * only that inner one. The whole file after it became comment, the Speaker
+ * class was never declared, and five "unresolved reference" errors in two
+ * other files were all downstream of it. Java does not nest block comments;
+ * Kotlin does.)
  *
  * Two things now hold instead. The server says whether substituting our own
  * voice is acceptable at all (`client_fallback_ok`), and [speakOnDevice]

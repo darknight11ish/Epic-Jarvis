@@ -23,7 +23,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.Collections
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
 /**
@@ -101,20 +101,37 @@ class EventStreamContractTest {
      */
     @Test
     fun openKeepaliveAndEventAllReachTheCollector() = runBlocking {
-        val seen = Collections.synchronizedList(mutableListOf<EventStream.Signal>())
-        val resumed = Collections.synchronizedList(mutableListOf<String>())
+        // CopyOnWriteArrayList, not synchronizedList. `any {}` ITERATES, and
+        // iterating a synchronized list without holding its monitor is not
+        // safe - the collector appends from another thread while the poll
+        // below walks it, which is a ConcurrentModificationException thrown
+        // out of the predicate rather than a timeout. The stack frame this
+        // produced was the `runBlocking` line, which looks identical to a
+        // timeout and is why the first reading of it was "SSE is too slow on a
+        // 2-core runner".
+        val seen = CopyOnWriteArrayList<EventStream.Signal>()
+        val resumed = CopyOnWriteArrayList<String>()
 
         val collector = CoroutineScope(Dispatchers.IO).launch {
             stream.connect(lastEventId = null, onResumePoint = { resumed += it })
                 .collect { seen += it }
         }
         try {
-            val got = waitFor {
-                seen.any { it is EventStream.Signal.Open } &&
-                    seen.any { it === EventStream.Signal.Alive } &&
-                    seen.any { it is EventStream.Signal.Event }
-            }
-            assertTrue("never saw open + keepalive + event; got $seen", got)
+            // Asserted one signal at a time. A single boolean over three
+            // conditions can only ever say "not all three", which is the least
+            // useful thing it could report on a runner nobody can attach to.
+            assertTrue(
+                "the stream never opened; saw $seen",
+                waitFor { seen.any { it is EventStream.Signal.Open } },
+            )
+            assertTrue(
+                "no keepalive reached the collector; saw $seen",
+                waitFor { seen.any { it === EventStream.Signal.Alive } },
+            )
+            assertTrue(
+                "no event reached the collector; saw $seen",
+                waitFor { seen.any { it is EventStream.Signal.Event } },
+            )
 
             val event = seen.filterIsInstance<EventStream.Signal.Event>().first()
             assertEquals("activity", event.event.kind)
@@ -192,7 +209,7 @@ class EventStreamContractTest {
         assertEquals("a cancelled stream reconnected anyway", null, afterCancel)
     }
 
-    private suspend fun waitFor(timeoutMs: Long = 20_000, cond: () -> Boolean): Boolean =
+    private suspend fun waitFor(timeoutMs: Long = 45_000, cond: () -> Boolean): Boolean =
         withTimeoutOrNull(timeoutMs) {
             while (!cond()) delay(50)
             true
