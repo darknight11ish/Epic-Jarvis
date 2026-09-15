@@ -108,6 +108,34 @@ Say ""
 Say "Backend : $BackendPath"
 Say "Patches : $PatchDir"
 Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
+
+# Line endings, checked BEFORE anything is attempted.
+#
+# A unified diff's context lines must match the target byte for byte. The
+# patches in this repository are written with LF. If the backend files were
+# saved with CRLF - which most Windows editors do by default - every hunk
+# fails, and `git apply` prints "patch does not apply" without ever
+# mentioning why. That message sends you looking for a wrong patch.
+#
+# Reported, not fixed: rewriting someone's source files to make a patch fit
+# is a much bigger thing to do silently than it looks.
+$probe = Join-Path $BackendPath 'jarvis_hud.py'
+if (Test-Path -LiteralPath $probe) {
+    $bytes = [IO.File]::ReadAllBytes($probe)
+    $crlf = 0
+    for ($i = 1; $i -lt $bytes.Length; $i++) {
+        if ($bytes[$i] -eq 10 -and $bytes[$i - 1] -eq 13) { $crlf++ }
+    }
+    $lf = 0
+    foreach ($b in $bytes) { if ($b -eq 10) { $lf++ } }
+    if ($crlf -gt 0) {
+        Say "Endings : jarvis_hud.py has $crlf CRLF line(s) of $lf" Yellow
+        Say "          The patches are LF. If they will not apply, THIS is why," Yellow
+        Say "          not a wrong patch. Say so and it gets handled properly." Yellow
+    } else {
+        Say "Endings : LF, which is what the patches expect"
+    }
+}
 Say ""
 
 # --- how to run one patch ----------------------------------------------------

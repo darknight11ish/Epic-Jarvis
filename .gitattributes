@@ -1,0 +1,34 @@
+# Line endings. Without this file, a Windows clone with the default
+# `core.autocrlf=true` reports twenty-six files as modified with an EMPTY
+# diff — git wants CRLF in the working tree, the files have LF, and the
+# content is identical. The visible cost is that `git merge --ff-only`
+# refuses to run: "your local changes would be overwritten", about changes
+# that do not exist. That happened, and it cost an afternoon.
+#
+# LF everywhere. This repository is written on Linux and used on Windows;
+# Python, Rust, Node and PowerShell all read LF without complaint, and
+# Notepad has handled it since 2018.
+* text=auto eol=lf
+
+# THE IMPORTANT LINE. `-text` means no conversion in either direction, ever.
+#
+# A unified diff's context lines have to match the target file byte for byte.
+# If git rewrote a patch's endings on checkout, every hunk would carry CRLF
+# context against an LF source and `git apply` would refuse the lot — and the
+# error it prints ("patch does not apply") says nothing about line endings, so
+# the natural conclusion is that the patch is wrong rather than that git
+# edited it in transit.
+*.patch -text
+*.diff -text
+
+# Binary, so git never inspects or converts them.
+*.png  binary
+*.ico  binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.jpg  binary
+*.jpeg binary
+*.wav  binary
+*.mp3  binary
+*.onnx binary
