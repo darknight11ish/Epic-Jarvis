@@ -87,7 +87,23 @@ class EventStreamContractTest {
         tokens.clear()
         settings.setHost("")
         settings.clearResumePoint()
-        server.shutdown()
+        // `shutdown()` waits for its own queue to drain and throws
+        // "Gave up waiting for queue to shut down" after a few seconds.
+        // `cancellingTheCollectorEndsTheConnection` deliberately leaves a
+        // response parked in a 60s `setBodyDelay`, and that sleep runs on
+        // MockWebServer's thread, which does not notice the peer going away.
+        // So teardown cannot drain, whatever the client did.
+        //
+        // That is an artifact of the fixture, not a result: the assertions
+        // have already run by the time this executes, and run 58 failed here
+        // with the test itself green - cancellation closed the connection
+        // inside 15s and nothing reconnected in the 8s after. Failing a passed
+        // test in teardown reports the fixture as a product defect.
+        //
+        // Each test class builds its own server on its own ephemeral port, so
+        // a lingering one cannot reach the next class.
+        holdBodyOpen = false
+        runCatching { server.shutdown() }
     }
 
     /**
