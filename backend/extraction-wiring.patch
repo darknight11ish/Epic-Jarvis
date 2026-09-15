@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -399,6 +399,221 @@
+@@ -399,6 +399,266 @@
          pass
  
  
@@ -100,6 +100,51 @@
 +    return name or "qwen3:8b"
 +
 +
++LEARNING_FILE = CONFIG_DIR / "learning.json"
++
++
++def learning_enabled() -> bool:
++    """Is the learner allowed to run right now?
++
++    JARVIS_EXTRACT is the floor: if it is off, nothing turns it on, because an
++    environment variable is the owner saying so before the process even
++    started. Above that floor the state file decides, so the switch in the
++    memory pane means something without a restart.
++
++    A missing file reads as on. That matches the shipped default and it is the
++    honest answer for a machine where nobody has touched the switch - inventing
++    "off" from an absent file would silently disable a feature the banner says
++    is running.
++    """
++    if not EXTRACT_ENABLED:
++        return False
++    try:
++        if LEARNING_FILE.is_file():
++            return bool(json.loads(LEARNING_FILE.read_text(encoding="utf-8"))
++                        .get("enabled", True))
++    except Exception:
++        pass
++    return True
++
++
++def set_learning(on: bool) -> dict:
++    """Flip the switch and say what it is now. Cosmetic: approves nothing."""
++    doc = {"enabled": bool(on), "changed": time.time()}
++    try:
++        LEARNING_FILE.parent.mkdir(parents=True, exist_ok=True)
++        tmp = LEARNING_FILE.with_suffix(".json.tmp")
++        tmp.write_text(json.dumps(doc, indent=2), encoding="utf-8")
++        tmp.replace(LEARNING_FILE)
++    except Exception as exc:
++        return {"ok": False, "error": f"{type(exc).__name__}: {exc}",
++                "enabled": learning_enabled()}
++    return {"ok": True, "enabled": learning_enabled(),
++            "floor": EXTRACT_ENABLED,
++            "note": None if EXTRACT_ENABLED else
++                    "JARVIS_EXTRACT is off in the environment, which overrides "
++                    "this switch. Unset it and restart to use the switch."}
++
++
 +class _Learner:
 +    """One thread, one pending transcript, latest wins.
 +
@@ -120,7 +165,7 @@
 +    # -- called from the request thread; must be cheap and must not raise ---
 +    def offer(self, messages) -> None:
 +        """A turn just ended. Keep what was said; do not act on it yet."""
-+        if not EXTRACT_ENABLED or not messages:
++        if not learning_enabled() or not messages:
 +            return
 +        said = [{"role": "user", "content": m.get("content")}
 +                for m in messages
@@ -222,7 +267,7 @@
  def _activity(state: str, detail: str = "") -> None:
      """Announce what Jarvis is doing, if the event bus is importable.
  
-@@ -1940,6 +2155,18 @@
+@@ -1940,6 +2200,18 @@
              # refused, client vanished - the turn is over. In a finally block
              # because the one state nobody must be left showing is "thinking".
              _activity("idle")
@@ -241,13 +286,13 @@
  
  
  # Keys whose values are content rather than plumbing. Walking only these
-@@ -2228,6 +2455,20 @@
+@@ -2228,6 +2500,20 @@
              xs = jarvis_extract.setup_status()
              if not xs["setup_complete"]:
                  print("  extraction SCAFFOLD - proposals queue for review; set-up pass still needed")
 +            # Nothing was calling propose(). This banner has been reporting on
 +            # a queue that could not fill, on every boot since it was written.
-+            if EXTRACT_ENABLED:
++            if learning_enabled():
 +                LEARNER.start()
 +                print(f"  learning   on - a pass runs after {EXTRACT_IDLE:g}s of quiet, "
 +                      f"at most every {EXTRACT_MIN_GAP / 60:g} min, over your turns only")

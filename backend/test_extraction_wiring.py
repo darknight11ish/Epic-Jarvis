@@ -31,8 +31,13 @@ def check(name, cond, detail=""):
 def _learner_ns():
     """The real `_Learner` and its three constants, executed in isolation."""
     tree = ast.parse(HUD.read_text(encoding="utf-8"))
-    want = {"_Learner", "_loopback_ok", "_extract_model", "_int_env"}
-    consts = {"EXTRACT_ENABLED", "EXTRACT_IDLE", "EXTRACT_MIN_GAP"}
+    want = {"_Learner", "_loopback_ok", "_extract_model", "_int_env",
+            # offer() consults the runtime switch rather than the constant, so
+            # the pane can turn learning off without an environment variable
+            # and a restart.
+            "learning_enabled", "set_learning"}
+    consts = {"EXTRACT_ENABLED", "EXTRACT_IDLE", "EXTRACT_MIN_GAP",
+              "LEARNING_FILE"}
     body = []
     for node in tree.body:
         if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in want:
@@ -44,8 +49,11 @@ def _learner_ns():
     missing = (want | consts) - names - {"_int_env"}   # _int_env lives in memory-prefix
     if missing:
         raise AssertionError(f"not found at module level in jarvis_hud.py: {sorted(missing)}")
+    import tempfile
     ns = {"os": os, "json": json, "sys": sys, "threading": threading,
-          "Optional": Optional, "urllib": urllib,
+          "Optional": Optional, "urllib": urllib, "time": time,
+          # a scratch CONFIG_DIR, because LEARNING_FILE is derived from it
+          "CONFIG_DIR": Path(tempfile.mkdtemp()), "Path": Path,
           # _extract_model reads the config; an empty one is the interesting
           # case because it is what sends it to the JARVIS_LOCAL_MODEL branch.
           "_read_toml": lambda _p: {}, "CONFIG_FILE": None}

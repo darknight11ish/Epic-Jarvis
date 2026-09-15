@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Eleven patches against the Jarvis backend, each with an executable test.
+Twelve patches against the Jarvis backend, each with an executable test.
 
 **Order.** They commute — five of them touch `jarvis_hud.py`, but in
 well-separated regions, and every order produces the same tree. The order in
@@ -27,6 +27,7 @@ roughly-matching unrelated fact, permanently, and `retire()` has no way back.
 | `voice-503.patch` | `jarvis_hud.py` | Four voice routes answered a missing speech module in four different shapes, two of them a 500 for something that did not break. |
 | `degrade-filter.patch` | `jarvis_hud.py` | **A cloud turn that stepped down to local and back out again went upstream unfiltered.** The worst thing in this directory. |
 | `vram-estimate.patch` | `jarvis_models.py` | The estimator that advises on model choice was wrong in both directions at once. |
+| `memory-pane.patch` | `jarvis_hud.py` | Routes to read, edit, forget and export what Jarvis has learned. Gives `retire()` its first caller. Needs `extraction-wiring` for the learning switch. |
 
 ## Apply them
 
@@ -784,3 +785,73 @@ wrong in both directions at once, which is presumably why nobody noticed.
   beats silently optimistic.
 
 See `docs/MODEL-TOPOLOGY.md` for what to do with the corrected numbers.
+
+---
+
+# `memory-pane.patch`
+
+Extraction fills a review queue on its own now. Before these routes there was
+no way to read that queue, no way to see what had already been accepted, and
+**`MemoryStore.retire()` had no caller anywhere in the tree** — so a fact, once
+in, was in.
+
+| route | |
+|---|---|
+| `GET /api/memory/facts?limit=` | every fact, newest first, **retired ones included**, each marked `current` |
+| `GET /api/memory/export` | the whole store as JSON, for a copy that does not depend on this program continuing to work |
+| `POST /api/memory/forget` | `{id}` → `retire()`. Its first caller. |
+| `POST /api/memory/edit` | `{id, text}` → supersede |
+| `POST /api/memory/learning` | `{enabled}` → the switch |
+
+## Four things it deliberately does
+
+**Forgetting retires; it does not delete.** The row stays and stops being
+current. A bi-temporal store whose interface deletes rows is not bi-temporal,
+and the reply says so in words: *"retired, not deleted — it stops being
+recalled and stays in the history. There is no undo for this."*
+
+**Editing supersedes.** `add_fact(text, supersedes=id)`, never `UPDATE facts`.
+Overwriting the text in place would throw away *when the old wording was
+true*, which is the one thing this store exists to keep. An edit that changes
+nothing returns `unchanged` rather than writing a new row.
+
+**Retired facts are shown, not hidden.** A pane listing only current facts
+makes a superseded fact look deleted when it is not.
+
+**One integer id per write, no list form.** Same rule as
+`/api/memory/decide`. Forgetting is irreversible, so a list form would be an
+approve-all with another name.
+
+## The learning switch, and its floor
+
+`learning_enabled()` reads `CONFIG_DIR/learning.json`, so the pane can turn
+extraction off without an environment variable and a restart. **`JARVIS_EXTRACT`
+is a floor it cannot lift** — an environment variable is the owner speaking
+before the process started, and a switch in a window must not override that.
+Setting it on while the floor is down returns `enabled: false` and says why,
+rather than reporting a success it did not achieve.
+
+A missing file reads as **on**, matching the shipped default. Inventing "off"
+from an absent file would silently disable a feature the boot banner says is
+running.
+
+## Ordering
+
+This is the one patch with a real dependency: `extraction-wiring` defines
+`learning_enabled()` and `set_learning()`. Apply that first. The other eleven
+still commute.
+
+## Test it
+
+```powershell
+python test_memory_pane.py
+```
+
+Twenty-nine checks. The switch and the query-string clamp are lifted out of
+the source with `ast` and executed — including that a corrupt switch file reads
+as on rather than raising, and that `limit=all`, `limit=-1` and
+`limit=99999999` reach a `LIMIT` clause as the default, 1 and 5000 rather than
+as a traceback. The rest are controls on shape: that no write route grows a
+list form, that `forget` calls `retire()` and not a `DELETE`, that `edit` never
+emits an `UPDATE`, and that both new read routes are actually in the whitelist
+— because a route nothing can call is the defect this project keeps producing.
