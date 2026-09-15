@@ -723,15 +723,37 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
     // action on it, because an action on a notification is a decision made
     // without the risk line, the `raised` block or the source in front of you.
     for item in arrived.iter().filter(|_| seeded) {
-        let what = item["action"]
-            .as_str()
-            .or_else(|| item["prompt"].as_str())
-            .unwrap_or("an action");
-        crate::commands::notify(
-            app,
-            "Jarvis is waiting on you",
-            &format!("{what} — nothing runs until you decide."),
-        );
+        // `notice` is built server-side by jarvis_gate.notice_for, from the
+        // action name and the risk table — it never reads `detail`, `prompt`
+        // or the contents of `raised`, so it is safe to display anywhere. One
+        // source of wording, so this and the phone cannot describe the same
+        // waiting decision two different ways.
+        let notice = &item["notice"];
+        let (title, body) = match (notice["title"].as_str(), notice["body"].as_str()) {
+            (Some(t), Some(b)) => (t.to_string(), b.to_string()),
+            // A backend without approval-notice.patch. The old wording, which
+            // is worse but not wrong — better than a toast that says nothing
+            // because a field it wanted was missing.
+            _ => {
+                let what = item["action"].as_str().unwrap_or("an action");
+                (
+                    "Jarvis is waiting on you".to_string(),
+                    format!("{what} — nothing runs until you decide."),
+                )
+            }
+        };
+
+        // No buttons on this toast, and not by choice: `action_type_id` is
+        // accepted by tauri-plugin-notification's builder but the DESKTOP
+        // implementation (notify_rust, win7_notifications) never reads it —
+        // actions are a mobile-only feature of that plugin. Checked in
+        // tauri-plugin-notification-2.4.0/src/desktop.rs rather than assumed.
+        // So the phone can offer Deny and Windows cannot, and pretending
+        // otherwise here would mean a button that silently does nothing.
+        //
+        // The weight is still honoured: a heavy item gets the tray's
+        // attention state, which is the loudest thing this surface has.
+        crate::commands::notify(app, &title, &body);
     }
 
     crate::emit_all(

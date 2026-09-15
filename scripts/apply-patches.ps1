@@ -71,6 +71,11 @@ $PATCHES = @(
     'no-auto-approve.patch'
     'memory-noise.patch'
     'event-allowlist.patch'
+    # Last: it rewrites `pending()` and `_push` in jarvis_gate.py, which
+    # gate-outcome and no-auto-approve have already edited, and the
+    # doorbell copy in jarvis_events.py that event-allowlist wrote. Its
+    # context lines are their output, so it cannot go earlier.
+    'approval-notice.patch'
 )
 
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
@@ -126,16 +131,57 @@ Say "Backend : $BackendPath"
 Say "Patches : $PatchDir"
 Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
 
-# Line endings, checked BEFORE anything is attempted.
+# --- line endings ------------------------------------------------------------
 #
-# A unified diff's context lines must match the target byte for byte. The
-# patches in this repository are written with LF. If the backend files were
-# saved with CRLF - which most Windows editors do by default - every hunk
-# fails, and `git apply` prints "patch does not apply" without ever
-# mentioning why. That message sends you looking for a wrong patch.
+# A unified diff's context lines must match the target byte for byte, so CRLF
+# on either side breaks every hunk of every patch at once. `git apply` reports
+# it as "patch does not apply", which sends you looking for a wrong patch.
+# There are two sides and they are handled differently.
 #
-# Reported, not fixed: rewriting someone's source files to make a patch fit
-# is a much bigger thing to do silently than it looks.
+# THE PATCH FILES - fixed here, silently, every run.
+#
+# This cost a whole run of twenty. The patches are LF in the repository, but a
+# Windows clone with the default `core.autocrlf=true` writes them to disk as
+# CRLF, and `.gitattributes` (which says `*.patch -text`) does NOT retroactively
+# rewrite files that were already checked out before it existed. So a clone
+# made last week still has CRLF patches today, `git checkout -- .` does not
+# touch them, and all twenty fail with an error that names none of this.
+#
+# Rather than ask anyone to fix their working tree, every patch is copied to a
+# temp folder with its endings forced to LF and the copy is what gets applied.
+# Nothing in the repository or the backend is rewritten. It is correct on a
+# machine where the files were already LF, so there is no case to detect.
+$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"
+New-Item -ItemType Directory -Path $LfDir -Force | Out-Null
+$crlfPatches = 0
+foreach ($name in $PATCHES) {
+    $src = Join-Path $PatchDir $name
+    if (-not (Test-Path -LiteralPath $src)) { continue }
+    # Byte-level. Get-Content/Set-Content would re-encode, and a patch can
+    # carry any bytes its target carries.
+    $raw = [IO.File]::ReadAllBytes($src)
+    $out = New-Object 'System.Collections.Generic.List[byte]'
+    for ($i = 0; $i -lt $raw.Length; $i++) {
+        # Drop a CR only when it is part of CRLF. A bare CR inside a line is
+        # content and stays.
+        if ($raw[$i] -eq 13 -and $i + 1 -lt $raw.Length -and $raw[$i + 1] -eq 10) {
+            $crlfPatches++
+            continue
+        }
+        $out.Add($raw[$i])
+    }
+    [IO.File]::WriteAllBytes((Join-Path $LfDir $name), $out.ToArray())
+}
+# Everything that applies a patch reads from here, never from $PatchDir.
+$PatchSrc = $LfDir
+if ($crlfPatches -gt 0) {
+    Say "Endings : normalised $crlfPatches CRLF line(s) to LF in a temp copy of" Yellow
+    Say "          the patches (your files are untouched - that is git's" Yellow
+    Say "          autocrlf having written them that way, not anything you did)" Yellow
+}
+
+# THE BACKEND FILES - reported, never fixed. Rewriting someone's source to
+# make a patch fit is a much bigger thing to do silently than it looks.
 $probe = Join-Path $BackendPath 'jarvis_hud.py'
 if (Test-Path -LiteralPath $probe) {
     $bytes = [IO.File]::ReadAllBytes($probe)
@@ -200,6 +246,45 @@ function Invoke-Patch {
     return @{ Ok = ($LASTEXITCODE -eq 0); Output = ($out | Out-String).Trim() }
 }
 
+# --- does the backend actually have the files the patches name? --------------
+#
+# `git apply` answers a missing target with "error: <name>: No such file or
+# directory", one line, inside the output of the patch that wanted it. With
+# twenty patches failing for a different reason at the same time, that line is
+# unfindable - and it is the only one that is not about line endings. Asked
+# once, up front, in words.
+$wanted = @{}
+foreach ($name in $PATCHES) {
+    $src = Join-Path $PatchSrc $name
+    if (-not (Test-Path -LiteralPath $src)) { continue }
+    foreach ($line in (Get-Content -LiteralPath $src)) {
+        if ($line -match '^\+\+\+ b/(.+)$') {
+            $t = $Matches[1].Trim()
+            if (-not $wanted.ContainsKey($t)) { $wanted[$t] = @() }
+            $wanted[$t] += $name
+        }
+    }
+}
+$absent = @($wanted.Keys | Where-Object {
+    -not (Test-Path -LiteralPath (Join-Path $BackendPath $_))
+} | Sort-Object)
+if ($absent.Count -gt 0) {
+    Say ""
+    Bad "$($absent.Count) file(s) the patches expect are not in your backend folder:"
+    foreach ($a in $absent) {
+        Say "          $a   (wanted by $($wanted[$a] -join ', '))" Red
+    }
+    Say ""
+    Say "That folder is: $BackendPath" Cyan
+    Say "Either the module has a different name there, or it lives in a" Cyan
+    Say "sub-folder, or that backend is older than these patches. Send back" Cyan
+    Say "the output of this, which lists what IS there:" Cyan
+    Say "    Get-ChildItem `"$BackendPath`" -Filter *.py -Recurse | Select-Object -ExpandProperty FullName" Cyan
+    Say ""
+    Say "NOTHING HAS BEEN CHANGED." Yellow
+    exit 1
+}
+
 Push-Location -LiteralPath $BackendPath
 try {
 
@@ -209,7 +294,7 @@ try {
         $removed = 0
         $backwards = @($PATCHES); [array]::Reverse($backwards)
         foreach ($name in $backwards) {
-            $full = Join-Path $PatchDir $name
+            $full = Join-Path $PatchSrc $name
             if (-not (Test-Path -LiteralPath $full)) { continue }
             if ((Invoke-Patch -File $full -Check -Reverse).Ok) {
                 $r = Invoke-Patch -File $full -Reverse
@@ -266,7 +351,7 @@ try {
         $reversedAll = $true
         $backwards = @($PATCHES); [array]::Reverse($backwards)
         foreach ($name in $backwards) {
-            $full = Join-Path $PatchDir $name
+            $full = Join-Path $PatchSrc $name
             if (-not (Test-Path -LiteralPath $full)) { $reversedAll = $false; break }
             if (-not (Invoke-Patch -File $full -Reverse).Ok) { $reversedAll = $false; break }
         }
@@ -283,7 +368,7 @@ try {
             Reset-Rehearsal
             Push-Location -LiteralPath $rehearsal
             foreach ($name in $PATCHES) {
-                $full = Join-Path $PatchDir $name
+                $full = Join-Path $PatchSrc $name
                 if (-not (Test-Path -LiteralPath $full)) {
                     $broken += @{ Name = $name; Why = "missing from $PatchDir" }
                     Bad "$name - not found"
@@ -324,7 +409,7 @@ try {
 
     # --- 2. back up, then apply ----------------------------------------------
     if (-not $already) {
-        $todo = @($PATCHES | ForEach-Object { Join-Path $PatchDir $_ })
+        $todo = @($PATCHES | ForEach-Object { Join-Path $PatchSrc $_ })
         $backup = Join-Path $BackendPath "_jarvis-backup-$Stamp"
         New-Item -ItemType Directory -Path $backup | Out-Null
 
@@ -371,6 +456,10 @@ try {
 
 } finally {
     Pop-Location
+    # The LF copies were only ever an intermediate. Leaving twenty patch files
+    # in %TEMP% after every run is the kind of litter nobody notices until a
+    # disk is full.
+    Remove-Item -LiteralPath $LfDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # --- 3. prove it -------------------------------------------------------------

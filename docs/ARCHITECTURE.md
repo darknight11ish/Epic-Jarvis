@@ -107,6 +107,63 @@ log and wrong for anything that leaves. A push to a public broker gets
 `_safe_detail` instead: keys only, unconditional. Do not reuse a redactor
 across destinations with different threat models.
 
+### The notification contract — `notice`
+
+A waiting approval has to be readable on a phone without any of the payload
+leaving the machine's control. That is not done by redacting the row. It is
+done by **generating** the text from tables we wrote.
+
+`jarvis_gate.notice_for(item)` reads exactly two things off an approval row —
+`action`, and whether `raised` is truthy. It reads no `detail`, no `prompt`,
+and nothing inside `raised`. Every word it returns comes from `_RISK` and from
+the action name. It is attached to every `/api/pending` row as `notice`, and
+allowed through the SSE doorbell by name.
+
+```
+title        "Jarvis wants to send email"   from the action name
+body         why it matters, that something tried to hurry you if `raised`
+             is set, and that nothing has happened yet
+weight       "heavy" | "normal"
+deny_ok      true    — always
+approve_ok   false   — always
+```
+
+**Three rules for any client reading this.**
+
+1. **`weight: "heavy"` interrupts; `"normal"` waits to be found.** Heavy is
+   earned by any one of three things: the action cannot be undone, it leaves
+   this machine, or outside text pushed the tier up. Three named reasons a
+   person can argue with, not a score nobody can.
+
+2. **`deny_ok` and `approve_ok` are not symmetric, and a client does not get
+   to decide that for itself.** Refusing something you have not fully read
+   costs a retry. Approving something you have not fully read is the failure
+   this whole model exists to prevent — and a notification is the worst place
+   for it: glanceable, often on a lock screen, one thumb, no context. So
+   **Deny may be a notification action. Approve may not.** Approving means
+   opening the app. This is not an approve-all — there is none and there will
+   be none — it is the weaker point that a one-tap approve on a lock screen
+   is, on its own, worth refusing.
+
+3. **Do not build the notification text yourself.** The reason this function
+   exists rather than each client assembling a string is that three separate
+   leaks in this project happened at the next call site along, where the rule
+   was stated in one place and not enforced in the other. A client that
+   composes its own summary from `detail` has reopened the hole, on the one
+   surface where it is least recoverable.
+
+`raised` travels as a **boolean**, here as everywhere. `raised.quote` is text
+an attacker wrote to make a reader hurry; its home is inside the app, in
+quotation marks, next to its source, where the point is to slow the reader
+down. The notice *says* something tried to rush you and never quotes it — that
+it tried is the fact that changes the decision, its words are not.
+
+*Known limitation, not a design choice:* `tauri-plugin-notification` accepts
+`action_type_id` on the desktop builder but never reads it — notification
+actions are mobile-only in that plugin. So the permitted Deny button is
+buildable on Android and is not, today, on the Windows toast, which is a
+prompt to open the app.
+
 ---
 
 ## 4. The egress boundary
@@ -116,7 +173,7 @@ Three lanes leave the machine. Nothing else may.
 | lane | what may go | enforced by |
 |---|---|---|
 | **cloud model** | user-role turns only | a role filter, re-derived on **every** hop of the degrade loop |
-| **ntfy push** | field names only, never values, never while tainted | `_safe_detail` + `taint_active()` |
+| **ntfy push** | text generated from our own tables, never payload, never while tainted | `notice_for` (`_safe_detail` where there is no action name) + `taint_active()` |
 | **research** | enumerated search terms, per approved plan | `jarvis_research.plan/run` |
 
 The cloud filter deserves a note because it was broken in the least obvious

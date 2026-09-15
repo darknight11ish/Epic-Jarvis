@@ -5,18 +5,23 @@
 > is the detail.
 
 
-Twenty patches against the Jarvis backend, each with an executable test.
+Twenty-one patches against the Jarvis backend, each with an executable test.
 
-**Order.** The first thirteen commute — several touch `jarvis_hud.py`, but in
-well-separated regions, and every order produces the same tree. The order in
-the table is still the one to use, because `memory-safety` must land before
-anything makes the extractor run. That is a *semantic* constraint, not a
-textual one: without it, the first accepted proposal retires a
-roughly-matching unrelated fact, permanently, and `retire()` has no way back.
+**Order.** This is a *stack*, not a set. The table order is the only order that
+works, and the script applies exactly it.
 
-`bitemporal.patch` is the one exception and goes **last**. It edits code that
-`memory-safety` wrote and a route that `memory-pane` added, so it is a textual
-dependency, not just a semantic one — it will not apply without both.
+The first thirteen would commute on their own — several touch `jarvis_hud.py`,
+but in well-separated regions. They are still in this order because
+`memory-safety` must land before anything makes the extractor run. That one is
+a *semantic* constraint, not a textual one: without it, the first accepted
+proposal retires a roughly-matching unrelated fact, permanently, and `retire()`
+has no way back.
+
+From `bitemporal.patch` down, the dependencies are **textual** — each of those
+patches has context lines that are an earlier patch's output, so it simply will
+not apply without it. That is why a "dry-run every patch against the untouched
+tree first" check is impossible here and the script rehearses the whole stack
+on a throwaway copy instead.
 
 | patch | file it changes | what it is for |
 |---|---|---|
@@ -40,6 +45,7 @@ dependency, not just a semantic one — it will not apply without both.
 | `no-auto-approve.patch` | `jarvis_gate.py` | **`confirm_auto()` granted every `ask` action with nobody asked.** An approve-all, inside the module that forbids one. |
 | `memory-noise.patch` | `jarvis_extract.py`, `jarvis_hud.py` | A discarded proposal came straight back, and recalled facts carried no date. |
 | `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
+| `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Needs `event-allowlist`. |
 
 ## Run the tests
 
@@ -66,11 +72,12 @@ Point it somewhere else with
 `-BackendPath "D:\your\path"`, undo with `-Revert`, and skip the test run
 with `-SkipTests`.
 
-It backs up every file it is about to touch into a timestamped folder,
-**dry-runs all nineteen before writing anything** — so a patch that will not
-apply stops the whole run rather than leaving you half-applied — then applies
-them in order and runs the suites. Running it twice is safe: a patch that is
-already applied is detected and skipped.
+It backs up every file it is about to touch into a timestamped folder, then
+**applies the whole stack to a throwaway copy first** — so a patch that will
+not apply stops the run before your real files are touched, rather than
+leaving you half-applied. Only if the rehearsal succeeds does it patch the
+backend for real and run the suites. Running it twice is safe: it checks
+whether the whole stack is already applied and says so instead of failing.
 
 If a patch will not apply, it prints the reason and changes nothing. That
 output is worth sending back: it almost always means the backend file has
@@ -1320,3 +1327,113 @@ of evidence and the difference should not be invisible.
 leave. Two of them are permanent CONTROLS that run the old denylist expression
 against a fixture row and show it leaking — so a reader can see the bug rather
 than take this file's word for it.
+
+
+---
+
+# `approval-notice.patch` — a notification you can act on, that still cannot leak
+
+The owner asked for this in plain words: *"I want approval for certain actions
+(especially ones with a lot of weight) to be a notification on Android and or
+the desktop program that I can read the details in a simple manner and approve
+or disapprove."*
+
+## What was actually arriving
+
+Two of the three previous patches in this stack shut leaks by **removing**
+text. `gate-push.patch` replaced the pushed detail with `_safe_detail`, which
+prints the field *names* and nothing else:
+
+```
+Jarvis wants to: send_email
+fields: args, tool
+(id 41) - open Jarvis to read it
+```
+
+That is safe, and it is useless. Nobody can decide anything from it, so the
+notification stopped being a decision point and became a nag that says "come
+and look". The gap between "safe" and "worth reading" was the whole request.
+
+## The move: generate, do not redact
+
+`notice_for(item)` reads exactly two things off an approval row: `action`, and
+whether `raised` is truthy. It reads **no** `detail`, **no** `prompt`, and
+nothing from inside `raised`. Every word it returns comes out of `_RISK` and
+out of the action name — tables in `jarvis_gate.py`, written by us.
+
+```python
+{"title":  "Jarvis wants to send email",
+ "body":   "it leaves this machine and cannot be taken back. nothing has "
+           "happened yet.",
+ "weight": "heavy",
+ "deny_ok": True,
+ "approve_ok": False}
+```
+
+This is the difference that matters. A redaction is safe **because a reviewer
+remembered**; three leaks in this project happened at the next call site along,
+where nobody did. A function that never touches the payload cannot join that
+list — there is no field you could add to an approval row tomorrow that would
+start appearing on a lock screen.
+
+## `weight`, and why it is three named reasons rather than a score
+
+`heavy` means *interrupt them*. It is earned by any one of:
+
+- the action cannot be undone (`reversible == "no"`), or
+- it leaves this machine (`reach != "local"`), or
+- outside text pushed the tier up (`raised`).
+
+Deliberately not a number. A person can argue with "it leaves the machine";
+nobody can argue with 0.73.
+
+## `deny_ok: True`, `approve_ok: False`
+
+The two buttons are not symmetric and the backend says so once, here, rather
+than each client deciding for itself.
+
+Refusing something you have not fully read costs a retry. Approving something
+you have not fully read **is the exact failure this module exists to prevent** —
+and a notification is the worst possible place to do it: glanceable, often on a
+lock screen, one thumb, no context.
+
+So: **Deny is a notification button. Approve is not.** Approving requires
+opening Jarvis and seeing the detail, the source, and the `raised` quote in
+quotation marks next to where it came from.
+
+That is also the honest answer to "approve or disapprove" in the request: half
+of it is being given, and this section is why the other half is not. It is not
+an approve-all — that still does not exist and is not being built — it is the
+weaker point that a one-tap approve on a lock screen is, on its own, worth
+refusing.
+
+## `raised` is still a boolean
+
+The owner chose the same summary on both clients, having been told the phone
+shows it on a lock screen. That is their call and it is honoured.
+
+But `raised.quote` is not "the summary". It is text an attacker wrote to make
+a reader hurry. Its home is inside the app, in quotation marks, beside its
+source, where the point is to **slow the reader down** — putting it on a lock
+screen defeats the feature it belongs to. The notice therefore *says* that
+something tried to rush you, and never quotes it. That something tried is the
+fact that changes your decision; its words are not.
+
+## The desktop side, and a limitation worth writing down
+
+`jarvis-desktop/src-tauri/src/stream.rs` now reads `notice.title` and
+`notice.body` off the doorbell, with a fallback to the old wording so an
+unpatched backend still produces a sensible toast.
+
+**There is no Deny button on the Windows toast, and not by choice.**
+`tauri-plugin-notification`'s builder accepts `action_type_id`, which reads as
+though actions work everywhere. They do not: the desktop implementation
+(`notify_rust`, `win7_notifications`) never reads that field — actions are a
+mobile-only feature of that plugin. Verified in
+`tauri-plugin-notification-2.4.0/src/desktop.rs`. So the Deny button the
+contract permits is buildable on Android and is not, today, on Windows. The
+toast is a prompt to open the app.
+
+`test_approval_notice.py`: 37 checks. The central one feeds a row stuffed with
+private strings and attacker text and asserts that none of them appear in the
+notice, end to end through the doorbell.
