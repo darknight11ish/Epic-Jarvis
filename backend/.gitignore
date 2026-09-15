@@ -1,0 +1,24 @@
+# Bytecode from running the test suites in place. The tests are meant to be
+# run from this directory on the owner's machine, beside the backend sources
+# they patch, so this directory fills up with __pycache__ as a matter of
+# course. None of it belongs in the repository.
+__pycache__/
+*.py[cod]
+
+# The backend sources themselves live on the owner's machine, not here. This
+# directory holds patches against them plus the tests that prove the patches
+# do what they say. If a copy is ever dropped in here to apply a patch or run
+# a suite, it must not be committed - it is the owner's data, it moves on its
+# own schedule, and a stale copy in git would be worse than no copy.
+jarvis_hud.py
+jarvis_memory.py
+jarvis_extract.py
+jarvis_events.py
+jarvis_gate.py
+jarvis_skills.py
+jarvis_recall.py
+jarvis_models.py
+jarvis_persona.py
+jarvis_structured.py
+jarvis_speech.py
+*.py.bak
