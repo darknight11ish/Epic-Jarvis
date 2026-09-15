@@ -80,7 +80,9 @@ and `github.com` are both blocked from this container (only
 popularity dimension of every verdict above is unevaluated**. Licences,
 archive status and last-release dates are verified — from PyPI, npm and the
 repositories' own files. Run the grader from a machine with GitHub access
-before treating any "BUILD CUSTOM" here as final.
+before treating any "BUILD CUSTOM" here as final —
+[`ASK-GEMINI.md`](ASK-GEMINI.md) prompt 1 fetches exactly the four fields it
+needs.
 
 ---
 
