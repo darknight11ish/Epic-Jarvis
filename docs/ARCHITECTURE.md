@@ -360,3 +360,8 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    know yet.
 5. Does it need a test that fails on the unpatched tree? Yes. Every patch here
    has one, and several caught the fix being wrong.
+6. Has someone already built it? [`PEERS.md`](PEERS.md) is what twenty
+   comparable projects did about memory, approval gates, voice and packaging,
+   read from their source. It says what to copy, what to refuse, and where
+   Jarvis is behind. Three of the most-recommended projects in this space are
+   archived or retired, so check there before adopting a dependency.
