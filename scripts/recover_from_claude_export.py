@@ -180,7 +180,12 @@ def load(where: Path) -> object:
                     "folder you unzipped it into.")
             where = found[0]
 
-    if where.suffix.lower() == ".zip":
+    # Look at the CONTENT, not the extension. The export Claude emails is
+    # named like `manifest-<uuid>-<numbers>-<hash>-<date>` with no `.zip` on
+    # the end at all, so deciding by suffix reads a perfectly good archive as
+    # though it were text and fails with a UnicodeDecodeError - an error that
+    # says nothing about the real problem.
+    if zipfile.is_zipfile(where):
         with zipfile.ZipFile(where) as z:
             names = [n for n in z.namelist() if n.endswith("conversations.json")]
             if not names:
@@ -188,15 +193,31 @@ def load(where: Path) -> object:
                 names = sorted((n for n in z.namelist() if n.endswith(".json")),
                                key=lambda n: -z.getinfo(n).file_size)
             if not names:
-                raise SystemExit(f"No .json inside {where}.")
-            print(f"Reading {names[0]} from the zip.")
+                inner = [n for n in z.namelist() if zipfile.is_zipfile(n)]
+                raise SystemExit(
+                    f"No .json inside {where.name}. It holds: "
+                    + ", ".join(z.namelist()[:12])
+                    + ("" if len(z.namelist()) <= 12 else " ...")
+                    + ("\n\nThere is a zip inside the zip - unpack it and "
+                       "point this at what comes out." if inner else ""))
+            print(f"Reading {names[0]} from the archive.")
             with z.open(names[0]) as fh:
                 return json.load(io.TextIOWrapper(fh, encoding="utf-8"))
 
     size = where.stat().st_size
     print(f"Reading {where.name} ({size / 1e6:.0f} MB). This can take a minute.")
     # utf-8-sig, not utf-8: a BOM would otherwise read as a corrupt file.
-    return json.loads(where.read_text(encoding="utf-8-sig"))
+    try:
+        text = where.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        raise SystemExit(
+            f"{where.name} is neither a zip nor text, so it cannot be read.\n"
+            "If Claude emailed you a link rather than a file, download the "
+            "archive itself\nand point this at that.")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{where.name} is not valid JSON: {exc}")
 
 
 def main() -> int:
