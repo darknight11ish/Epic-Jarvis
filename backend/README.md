@@ -42,20 +42,41 @@ dependency, not just a semantic one — it will not apply without both.
 
 ## Apply them
 
+One command:
+
+```powershell
+.\scripts\apply-patches.ps1
+```
+
+Point it somewhere else with
+`-BackendPath "D:\your\path"`, undo with `-Revert`, and skip the test run
+with `-SkipTests`.
+
+It backs up every file it is about to touch into a timestamped folder,
+**dry-runs all nineteen before writing anything** — so a patch that will not
+apply stops the whole run rather than leaving you half-applied — then applies
+them in order and runs the suites. Running it twice is safe: a patch that is
+already applied is detected and skipped.
+
+If a patch will not apply, it prints the reason and changes nothing. That
+output is worth sending back: it almost always means the backend file has
+moved on since the patch was written, and the patch gets regenerated.
+
+### By hand, if you would rather
+
+The order below matters — see **Order** above. Back up `jarvis_hud.py`,
+`jarvis_memory.py` and `jarvis_extract.py` first, and add `--check` to see
+whether a patch will apply without changing anything.
+
 ```powershell
 cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
-copy jarvis_hud.py jarvis_hud.py.bak
-copy jarvis_memory.py jarvis_memory.py.bak
-copy jarvis_extract.py jarvis_extract.py.bak
 git apply --verbose path\to\memory-safety.patch
 git apply --verbose path\to\events-pump.patch
-git apply --verbose path\to\appearance.patch
 ... and so on, in table order
 ```
 
-No git in that folder? `patch -p1 < <name>.patch` does the same. Add
-`--dry-run` first to see whether it will apply cleanly without changing
-anything.
+No git? `patch -p1 --forward -i <name>.patch` does the same, with `--dry-run`
+for the check.
 
 ---
 
