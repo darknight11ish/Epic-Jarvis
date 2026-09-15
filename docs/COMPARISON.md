@@ -71,7 +71,25 @@ failure mode is silent — a queue that re-asks what you declined, a gate with a
 bypass in it. Both of those were found in this repo, by tests written because
 of this research. See `no-auto-approve.patch` and `memory-noise.patch`.
 
-### What could not be graded
+### Graded, 2026-09-15
+
+The grader ran. The owner fetched the metadata from `api.github.com` on their
+own machine and `backend/grade-peers.py` scored it: twelve ADOPT, five FORK
+AND EXTEND, three BUILD CUSTOM. Details and the four things it settled are in
+[`PEERS.md`](PEERS.md#the-real-numbers-2026-09-15).
+
+**It changes nothing in the table above, and that is the point.** The grader
+answers *"is this repository's code safe and sane to take"* — popularity,
+maintenance, licence. It cannot answer *"does this project already do what
+Jarvis does"*. `openai/codex` grades ADOPT and is a coding CLI; `syncthing`
+grades ADOPT and is a file-sync daemon. Both are excellent, neither is a
+local-first assistant with a reviewed memory.
+
+Its real value was negative: it confirmed that every project recommended here
+is maintained and permissively licensed **except** the ones already flagged,
+and it caught a bug of its own — see PEERS.md.
+
+### What could not be graded (superseded)
 
 `backend/jarvis_research.py` grades a repo ADOPT / FORK AND EXTEND / BUILD
 CUSTOM on stars, recency and licence. It could not be run here: `api.github.com`

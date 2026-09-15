@@ -119,9 +119,23 @@ def t_grading():
     check("archived is never ADOPT", g["verdict"] != "ADOPT", repr(g))
     check("and it says archived", "archived" in g["why"], g["why"])
 
+    # This test used to assert `"no permission" in g["why"]`, and it was
+    # pinning the wrong belief. NOASSERTION is GitHub's classifier saying it
+    # could not MATCH the licence file, not that there is not one. The first
+    # run on real data called janhq/jan - "Licensed under the Apache License,
+    # Version 2.0" with an added attribution request - a project with "no
+    # permission to use it".
     g = R.grade_repo(repo(lic="NOASSERTION"), NOW)
-    check("NOASSERTION is treated as no licence, not as a licence",
-          g["licence"] is None and "no permission" in g["why"], repr(g))
+    check("NOASSERTION is not usable, because nobody has read the file yet",
+          g["verdict"] != "ADOPT" and g["licence"] is None, repr(g))
+    check("but it is NOT called 'no licence'",
+          "no permission" not in g["why"], g["why"])
+    check("and it says to go and read the file",
+          "OPEN THE FILE" in g["why"], g["why"])
+
+    g = R.grade_repo(repo(lic=None), NOW)
+    check("a genuinely absent licence still says no permission",
+          "no permission" in g["why"], g["why"])
 
 
 def t_the_matrix():

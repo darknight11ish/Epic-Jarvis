@@ -178,8 +178,8 @@ auto-approve: everything"), whose stated reason is latency.
 | janhq/jan | Apache-2.0 | v0.8.4, 2026-07-23 | healthy |
 | home-assistant/core | Apache-2.0 | 2026.9.2, 2026-09-11 | healthy |
 | OpenVoiceOS/ovos-core | Apache-2.0 | 3.5.6a1, 2026-09-13 | alive, **alpha tags only**, 288 stars |
-| MycroftAI/mycroft-core | Apache-2.0 | — | **archived 2024-09-08** — date NOT re-confirmed, see the correction below |
-| rhasspy/rhasspy, rhasspy3 | MIT | — | **both archived 2025-10-06** — dates NOT re-confirmed |
+| MycroftAI/mycroft-core | Apache-2.0 | — | **archived**, last push 2024-09-08 — CONFIRMED from the API |
+| rhasspy/rhasspy, rhasspy3 | MIT | — | **both archived** — CONFIRMED; last pushes 2025-04-22 and 2023-12-26 |
 | open-webui/open-webui | BSD-3 **+ branding clause** | 0.11.3, 2026-08-31 | healthy, **not OSI open source** |
 | letta-ai/letta (Python) | Apache-2.0 | 0.16.8, **2026-05-14** | **retired to an `archive` branch** |
 | letta-ai/letta-code (TS) | Apache-2.0 | 0.32.10, 2026-09-14 | healthy |
@@ -578,6 +578,9 @@ confirmation, and the planned speaker-verification work still rests on it.
 **`backend/jarvis_research.py` remains un-run.** Nothing in this exchange
 produced a star count.
 
+*(Resolved. The owner ran the fetch script against `api.github.com` from
+their own machine — see "The real numbers" below.)*
+
 ### Second attempt, same day — and the reason this avenue was closed
 
 The prompt was rewritten to allow rounded stars and relative dates, because
@@ -620,6 +623,65 @@ One correction to this document's own licence list: it credits "LocalSend
 protocol" as MIT. `localsend/protocol` returns 404 on both `main` and
 `master`, so that entry cannot be substantiated either. `localsend/localsend`,
 the application, is Apache-2.0.
+
+## The real numbers, 2026-09-15
+
+The owner ran `scripts/fetch-repo-stats.ps1` on their own machine, which can
+reach `api.github.com`. `backend/grade-peers.py` then ran
+`jarvis_research.grade_repo` over it — **the first time that function has seen
+real data.** Full output in `backend/peer-stats.json`.
+
+### Four things this settled
+
+**1. Mycroft's archive date was right all along.** `archived: true`, last push
+`2024-09-08` — the exact date originally recorded here, which I had downgraded
+to "unverified" after failing to find the README text I quoted as evidence for
+it. The date was right; the *quotation* was wrong. Both Rhasspy repos are also
+confirmed `archived: true` (rhasspy3 last pushed 2023-12-26, rhasspy
+2025-04-22). The second model's "Archived October 2023" for `rhasspy/rhasspy`
+is impossible — it was still being pushed to in April 2025.
+
+**2. `block/goose` has moved.** The API returns
+`"full_name": "aaif-goose/goose"`. The old path still redirects, so every link
+in this document works, but the project is not where it says it is.
+
+**3. `openai/codex` has 124,195 stars**, Apache-2.0, pushed today. The second
+model said it "does not exist as a public repo".
+
+**4. Its star counts were not close either**, where it gave them:
+`getzep/graphiti` ~4k vs **30,880**; `open-webui` ~85k vs **152,076**.
+
+### And it found a bug in the grader
+
+`grade_repo` reported **janhq/jan** and **open-webui** as *"NO LICENCE, which
+means no permission to use it"*. Both have licence files. Both had already
+been read in this project.
+
+GitHub returns `NOASSERTION` when its classifier cannot match a licence file
+against a known template — which is exactly what a custom or amended one looks
+like. Jan's file says *"Licensed under the Apache License, Version 2.0"* with
+an added attribution request; Open WebUI's is a custom licence with a branding
+clause. **Permissive and restrictive, collapsed into the same wrong answer.**
+
+Fixed: absent means absent, unclassified means *open the file*. Neither counts
+as usable, because "go and read it" is not "yes". A test in
+`test_research.py` was pinning the old behaviour and has been corrected with
+the reason attached.
+
+### The verdicts
+
+Twelve ADOPT, five FORK AND EXTEND, three BUILD CUSTOM. **Read these narrowly.**
+The grader answers one question — *is this repository's code safe and sane to
+take* — on popularity, maintenance and licence. It says nothing about whether
+the project does what Jarvis does. `openai/codex` grades ADOPT and is a
+coding CLI. `syncthing` grades ADOPT and is a file-sync daemon. The verdict
+that matters for redundancy is in [`COMPARISON.md`](COMPARISON.md), which
+compares capabilities.
+
+What it does usefully confirm: every project this document recommends reading
+is maintained and permissively licensed, except the four already flagged —
+Khoj (AGPL), superlocalmemory (AGPL), Open WebUI (custom, restrictive), and
+the three archived voice projects.
 
 ## Things neither pass could verify
 

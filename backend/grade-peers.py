@@ -38,7 +38,12 @@ def main() -> int:
         return 1
 
     try:
-        raw = json.loads(where.read_text(encoding="utf-8"))
+        # utf-8-SIG, not utf-8. PowerShell 5.1's `Set-Content -Encoding UTF8`
+        # writes a byte-order mark, and json.loads rejects it with
+        # "Unexpected UTF-8 BOM" - which reads like the file is corrupt when
+        # it is perfectly good. utf-8-sig strips a BOM if there is one and is
+        # identical to utf-8 if there is not.
+        raw = json.loads(where.read_text(encoding="utf-8-sig"))
     except Exception as exc:
         print(f"{where} is not readable JSON: {type(exc).__name__}: {exc}")
         return 1

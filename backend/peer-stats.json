@@ -1,0 +1,182 @@
+﻿{
+    "khoj-ai/khoj":  {
+                         "full_name":  "khoj-ai/khoj",
+                         "stargazers_count":  37336,
+                         "license":  {
+                                         "spdx_id":  "AGPL-3.0"
+                                     },
+                         "pushed_at":  "2026-08-02T01:55:40Z",
+                         "archived":  false
+                     },
+    "janhq/jan":  {
+                      "full_name":  "janhq/jan",
+                      "stargazers_count":  44471,
+                      "license":  {
+                                      "spdx_id":  "NOASSERTION"
+                                  },
+                      "pushed_at":  "2026-09-15T03:43:52Z",
+                      "archived":  false
+                  },
+    "open-webui/open-webui":  {
+                                  "full_name":  "open-webui/open-webui",
+                                  "stargazers_count":  152076,
+                                  "license":  {
+                                                  "spdx_id":  "NOASSERTION"
+                                              },
+                                  "pushed_at":  "2026-09-14T21:57:14Z",
+                                  "archived":  false
+                              },
+    "letta-ai/letta":  {
+                           "full_name":  "letta-ai/letta",
+                           "stargazers_count":  24738,
+                           "license":  {
+                                           "spdx_id":  "Apache-2.0"
+                                       },
+                           "pushed_at":  "2026-09-10T17:59:08Z",
+                           "archived":  false
+                       },
+    "letta-ai/letta-code":  {
+                                "full_name":  "letta-ai/letta-code",
+                                "stargazers_count":  3341,
+                                "license":  {
+                                                "spdx_id":  "Apache-2.0"
+                                            },
+                                "pushed_at":  "2026-09-15T05:17:44Z",
+                                "archived":  false
+                            },
+    "mem0ai/mem0":  {
+                        "full_name":  "mem0ai/mem0",
+                        "stargazers_count":  65305,
+                        "license":  {
+                                        "spdx_id":  "Apache-2.0"
+                                    },
+                        "pushed_at":  "2026-09-14T19:12:46Z",
+                        "archived":  false
+                    },
+    "getzep/graphiti":  {
+                            "full_name":  "getzep/graphiti",
+                            "stargazers_count":  30880,
+                            "license":  {
+                                            "spdx_id":  "Apache-2.0"
+                                        },
+                            "pushed_at":  "2026-09-11T20:16:31Z",
+                            "archived":  false
+                        },
+    "OpenVoiceOS/ovos-core":  {
+                                  "full_name":  "OpenVoiceOS/ovos-core",
+                                  "stargazers_count":  288,
+                                  "license":  {
+                                                  "spdx_id":  "Apache-2.0"
+                                              },
+                                  "pushed_at":  "2026-09-13T21:36:06Z",
+                                  "archived":  false
+                              },
+    "rhasspy/rhasspy3":  {
+                             "full_name":  "rhasspy/rhasspy3",
+                             "stargazers_count":  382,
+                             "license":  {
+                                             "spdx_id":  "MIT"
+                                         },
+                             "pushed_at":  "2023-12-26T10:47:32Z",
+                             "archived":  true
+                         },
+    "rhasspy/rhasspy":  {
+                            "full_name":  "rhasspy/rhasspy",
+                            "stargazers_count":  2747,
+                            "license":  {
+                                            "spdx_id":  "MIT"
+                                        },
+                            "pushed_at":  "2025-04-22T15:08:14Z",
+                            "archived":  true
+                        },
+    "MycroftAI/mycroft-core":  {
+                                   "full_name":  "MycroftAI/mycroft-core",
+                                   "stargazers_count":  6615,
+                                   "license":  {
+                                                   "spdx_id":  "Apache-2.0"
+                                               },
+                                   "pushed_at":  "2024-09-08T08:02:02Z",
+                                   "archived":  true
+                               },
+    "home-assistant/core":  {
+                                "full_name":  "home-assistant/core",
+                                "stargazers_count":  90481,
+                                "license":  {
+                                                "spdx_id":  "Apache-2.0"
+                                            },
+                                "pushed_at":  "2026-09-15T05:11:59Z",
+                                "archived":  false
+                            },
+    "block/goose":  {
+                        "full_name":  "aaif-goose/goose",
+                        "stargazers_count":  54270,
+                        "license":  {
+                                        "spdx_id":  "Apache-2.0"
+                                    },
+                        "pushed_at":  "2026-09-15T02:19:35Z",
+                        "archived":  false
+                    },
+    "cline/cline":  {
+                        "full_name":  "cline/cline",
+                        "stargazers_count":  68055,
+                        "license":  {
+                                        "spdx_id":  "Apache-2.0"
+                                    },
+                        "pushed_at":  "2026-09-15T05:37:23Z",
+                        "archived":  false
+                    },
+    "openai/codex":  {
+                         "full_name":  "openai/codex",
+                         "stargazers_count":  124195,
+                         "license":  {
+                                         "spdx_id":  "Apache-2.0"
+                                     },
+                         "pushed_at":  "2026-09-15T04:20:53Z",
+                         "archived":  false
+                     },
+    "supermemoryai/supermemory":  {
+                                      "full_name":  "supermemoryai/supermemory",
+                                      "stargazers_count":  29674,
+                                      "license":  {
+                                                      "spdx_id":  "MIT"
+                                                  },
+                                      "pushed_at":  "2026-09-14T18:02:22Z",
+                                      "archived":  false
+                                  },
+    "qualixar/superlocalmemory":  {
+                                      "full_name":  "qualixar/superlocalmemory",
+                                      "stargazers_count":  225,
+                                      "license":  {
+                                                      "spdx_id":  "AGPL-3.0"
+                                                  },
+                                      "pushed_at":  "2026-09-12T19:07:37Z",
+                                      "archived":  false
+                                  },
+    "k2-fsa/sherpa-onnx":  {
+                               "full_name":  "k2-fsa/sherpa-onnx",
+                               "stargazers_count":  14765,
+                               "license":  {
+                                               "spdx_id":  "Apache-2.0"
+                                           },
+                               "pushed_at":  "2026-09-14T06:37:21Z",
+                               "archived":  false
+                           },
+    "localsend/localsend":  {
+                                "full_name":  "localsend/localsend",
+                                "stargazers_count":  91450,
+                                "license":  {
+                                                "spdx_id":  "Apache-2.0"
+                                            },
+                                "pushed_at":  "2026-09-14T13:10:57Z",
+                                "archived":  false
+                            },
+    "syncthing/syncthing":  {
+                                "full_name":  "syncthing/syncthing",
+                                "stargazers_count":  88589,
+                                "license":  {
+                                                "spdx_id":  "MPL-2.0"
+                                            },
+                                "pushed_at":  "2026-09-15T01:19:32Z",
+                                "archived":  false
+                            }
+}

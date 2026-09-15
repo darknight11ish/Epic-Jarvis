@@ -256,9 +256,32 @@ def grade_repo(repo: dict, now: Optional[float] = None) -> dict:
     gets overruled by the next person who looks.
     """
     stars = int(repo.get("stargazers_count") or 0)
-    lic = ((repo.get("license") or {}).get("spdx_id") or "").lower()
-    if lic in ("noassertion", "none", ""):
-        lic = ""
+    raw_lic = ((repo.get("license") or {}).get("spdx_id") or "").lower()
+
+    # NOASSERTION is NOT "no licence". It is GitHub's classifier saying it
+    # could not match the LICENSE file against a known template - which is
+    # exactly what a custom or amended licence looks like to it.
+    #
+    # The first run of this function on real data called janhq/jan and
+    # open-webui "NO LICENCE, which means no permission to use it". Both have
+    # licence files, and both had already been read in this project:
+    #
+    #   jan         "Licensed under the Apache License, Version 2.0", with an
+    #               added request for attribution - which is why the matcher
+    #               balks. Permissive.
+    #   open-webui  a custom "Open WebUI License": BSD-3 plus a clause
+    #               forbidding removal of their branding above fifty users.
+    #               NOT permissive.
+    #
+    # Opposite answers. Collapsing both into "no permission" skips a usable
+    # project for no reason, and would be wrong in the dangerous direction the
+    # moment the rest of the row said ADOPT.
+    #
+    # So: absent means absent, unclassified means go and read the file.
+    # Neither counts as usable, because "go and read it" is not "yes".
+    unclassified = raw_lic == "noassertion"
+    lic = "" if raw_lic in ("noassertion", "none", "") else raw_lic
+
     age = _age_days(repo.get("pushed_at") or "", now)
     archived = bool(repo.get("archived"))
 
@@ -271,7 +294,11 @@ def grade_repo(repo: dict, now: Optional[float] = None) -> dict:
         reasons.append(f"last push {age / 365:.1f} years ago")
     if stars < POPULAR_STARS:
         reasons.append(f"{stars} stars")
-    if not lic:
+    if unclassified:
+        reasons.append("GitHub could not identify the licence, which usually "
+                       "means a custom or amended one - OPEN THE FILE. This is "
+                       "not the same as having none")
+    elif not lic:
         reasons.append("NO LICENCE, which means no permission to use it")
     elif lic in COPYLEFT:
         reasons.append(f"{lic} reaches into what you build")
