@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import okhttp3.Call
 import okhttp3.Request
 import okhttp3.Response
 import java.util.concurrent.atomic.AtomicReference
@@ -84,12 +85,36 @@ class EventStream(private val api: JarvisApi) {
         // A child coroutine is cancelled the instant its parent is, whatever
         // the parent is doing, so this one is not parked on anything and can do
         // the close that makes the read throw.
-        val live = AtomicReference<Response?>(null)
+        //
+        // What is held is the CALL, not the Response, and it is registered
+        // BEFORE execute() rather than after. Two separate reasons, both of
+        // which cost a real failure:
+        //
+        // 1. `execute()` returns when the response HEADERS arrive; the body can
+        //    stay open for an hour after that. Registering the Response after
+        //    it returned left a window in which a connection was live and
+        //    nothing could reach it. Cancelling inside that window closed
+        //    nothing and the read stayed parked until the server next wrote —
+        //    which is exactly the case this whole mechanism exists to stop, and
+        //    which the emulator test hit: `takeRequest` returns the instant the
+        //    request lands, so a cancel right after it falls inside the window
+        //    almost every time. Registering the Call first closes the window:
+        //    a Call can be cancelled before, during or after execute(), and a
+        //    cancel that lands early just makes execute() throw at once.
+        //
+        // 2. `Response.close()` closes the body stream; it does not promise
+        //    anything about a read already blocked on it from another thread.
+        //    `Call.cancel()` does — it is the one OkHttp operation documented
+        //    as safe from any thread, and it fails the in-flight read.
+        //
+        // The Response is still closed in the loop's `finally`, which is what
+        // releases the connection back to the pool on a normal end.
+        val live = AtomicReference<Call?>(null)
         launch(Dispatchers.IO) {
             try {
                 awaitCancellation()
             } finally {
-                runCatching { live.getAndSet(null)?.close() }
+                runCatching { live.getAndSet(null)?.cancel() }
             }
         }
 
@@ -114,8 +139,10 @@ class EventStream(private val api: JarvisApi) {
                         .apply { resumeFrom?.let { header("Last-Event-ID", it) } }
                         .build()
                 }
-                response = api.streamClient.newCall(req).execute()
-                live.set(response)
+                val call = api.streamClient.newCall(req)
+                // Before execute(), not after: see the note on `live` above.
+                live.set(call)
+                response = call.execute()
 
                 if (!response.isSuccessful) {
                     val reason = when (response.code) {
@@ -215,7 +242,7 @@ class EventStream(private val api: JarvisApi) {
             }
         }
 
-        awaitClose { runCatching { live.getAndSet(null)?.close() } }
+        awaitClose { runCatching { live.getAndSet(null)?.cancel() } }
     }
 
     /** Saturating, so a large `retry` cannot overflow into a negative delay. */
