@@ -372,6 +372,17 @@ against them plus the tests that prove the patches do what they claim.
 `backend/.gitignore` refuses the sources, because a stale copy in git is worse
 than no copy — the next reader would not know which is real.
 
+**Twenty-six modules, and there is no second copy.** No public upstream has
+been found; the evidence is that the files were produced in assistant
+conversations and saved to disk, which makes that chat history the only
+backup. `scripts/check-backend.ps1` lists what a folder is missing — run it
+before the patches, because a patch failing against an absent file reports
+"patch does not apply" and reads as a bad patch.
+
+That asymmetry is worth stating once: **this repo is version-controlled and the
+thing it patches is not.** A patch here can always be recovered. The file it
+edits cannot.
+
 Eleven patches. They commute (five touch `jarvis_hud.py`, in separated
 regions), but `memory-safety` must land first: without it the first accepted
 proposal retires a roughly-matching unrelated fact, permanently, and `retire()`

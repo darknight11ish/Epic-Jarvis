@@ -49,12 +49,48 @@ py -3 -c "import sys; print(sys.executable)"
 Typically `C:\Users\<you>\AppData\Local\Programs\Python\Python312\python.exe`.
 Use that full path everywhere below.
 
-### 1.2 Put the backend files somewhere
+### 1.2 Get the backend files
+
+**This step used to be missing from this page, and it cost a day.** It went
+straight to "put the files somewhere" without saying where to get them. When
+ten of them turned out to be absent from the owner's machine, there was
+nothing here to reinstall from.
+
+So, plainly: **there is no download link.** The backend is not a public
+project. Searching for it found two unrelated things — `open-jarvis/OpenJarvis`
+keeps its code under `src/openjarvis/` with no flat `jarvis_*.py` at all, and
+`Twsman1/JARVIS` has a `jarvis_hud.py` that is a wake-word overlay, not an
+HTTP server. Neither has `jarvis_memory.py` or `jarvis_gate.py`. If a real
+upstream exists, it has not been found.
+
+What the files are, as far as the evidence goes: they were produced in
+assistant conversations and saved to disk. The owner's copy lives under
+`Documents\Claude\`, `patch_openjarvis.py` is written in the same voice as
+the rest, and there is no installer, package or archive anywhere on the
+machine that contains them.
+
+**The practical consequence: those conversations are the only copy.** Save the
+files somewhere backed up, and if one goes missing, the chat history is where
+it is.
+
+### 1.2b Check the folder is complete before anything else
 
 `jarvis_hud.py` needs **all of its sibling `jarvis_*.py` modules in the same
-folder**. It imports eighteen of them. Most are wrapped so a missing one does
+folder**. There are twenty-six. Most imports are wrapped so a missing one does
 not stop the program starting — which is the problem: it starts, looks healthy,
 and then fails on the first real request.
+
+And one missing file hides the others. `jarvis_framework` is imported by
+fifteen of the twenty-six, so the moment it is absent Python stops at the very
+first import and you never learn what else is gone.
+
+```powershell
+.\scripts\check-backend.ps1
+```
+
+It reads the import lines of every file you have, works out the full list of
+modules they need, and says which are present — most-needed first. It changes
+nothing. Run it before the patches, and again after recovering any file.
 
 It also wants `jarvis_hud.html` beside it, for the browser HUD. That file lives
 in this repo at `jarvis-desktop/src/jarvis_hud.html`; copy it across, or accept
