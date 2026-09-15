@@ -201,20 +201,55 @@
  
 -        if path in ("/api/models", "/api/config", "/api/skills"):
 +        if path in ("/api/models", "/api/config", "/api/skills",
-+                    "/api/appearance"):
++                    "/api/appearance", "/api/visual-spec"):
              # The three desktop-only surfaces. Every one of these existed as a
              # Python module with no way to reach it over HTTP, which meant the
              # desktop brief was promising screens with nothing behind them.
-@@ -1392,6 +1567,8 @@
+@@ -1392,6 +1567,43 @@
                      return self._send(200, _models_view())
                  if path == "/api/config":
                      return self._send(200, _config_view())
 +                if path == "/api/appearance":
 +                    return self._send(200, _appearance_view())
++                if path == "/api/visual-spec":
++                    # Serving it settles a question the two clients could not
++                    # settle between themselves. Both vendor a copy, both
++                    # declare "version": 1, and the two files differ - so
++                    # neither side can detect drift at runtime, and the
++                    # client's own SpecDriftTest compares Kotlin constants
++                    # against the PHONE's copy, which is structurally
++                    # incapable of seeing the desktop's.
++                    #
++                    # The hash is the point, more than the document. A client
++                    # keeps its vendored copy as a cold-start fallback and
++                    # compares digests; equal means agreement, different means
++                    # something to look at. A version field that both sides
++                    # hardcode can never say that.
++                    spec = _visual_spec()
++                    if not spec:
++                        return self._send(200, {
++                            "available": False,
++                            "reason": "no jarvis-visual-spec.json on this "
++                                      "machine; set JARVIS_VISUAL_SPEC to its "
++                                      "path. Keep using your vendored copy.",
++                        })
++                    import hashlib
++                    canon = json.dumps(spec, sort_keys=True,
++                                       separators=(",", ":")).encode("utf-8")
++                    return self._send(200, {
++                        "available": True,
++                        "version": spec.get("version"),
++                        # Over the CANONICAL form, so two files that differ
++                        # only in whitespace or key order agree - which is
++                        # what "the same spec" means, and what a byte digest
++                        # of the file would get wrong.
++                        "sha256": hashlib.sha256(canon).hexdigest(),
++                        "spec": spec,
++                    })
                  return self._send(200, _skills_view())
              except Exception as exc:
                  return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
-@@ -1573,6 +1750,7 @@
+@@ -1573,6 +1785,7 @@
  
          if route in ("/api/models/install", "/api/models/switch",
                       "/api/models/rollback", "/api/config", "/api/skills/decide",

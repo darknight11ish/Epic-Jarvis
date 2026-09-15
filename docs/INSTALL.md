@@ -175,10 +175,32 @@ backend, and therefore stops the phone from reaching anything.
 
 ---
 
+## Jarvis learns from your conversations, and it is on
+
+Worth knowing before you use it rather than after.
+
+About 45 seconds after a conversation goes quiet, Jarvis re-reads **what you
+typed** — never its own replies, never anything a tool returned — and asks the
+local model which of it would still be true and useful next month. Anything it
+finds goes into a review queue.
+
+**Nothing it finds enters memory until you accept it, one at a time.** The
+queue is the Memory tab in the Brain window, which is also where you can
+reword a fact, stop one being recalled, or copy the lot out as JSON.
+
+It never leaves the machine: the extractor talks to Ollama on loopback and
+refuses to run at all if `OLLAMA_URL` points anywhere else.
+
+To turn it off: the switch is in that same Memory tab. To turn it off before
+Jarvis has ever started, set `JARVIS_EXTRACT=0` — that is a floor the in-app
+switch cannot lift.
+
+---
+
 ## Part 3 — The phone
 
-**Read this part before you start it.** Two pieces are not built yet and you
-will hit both.
+**Read this part before you start it.** One piece is not built yet and you will
+hit it. (The other — nothing generating a pairing token — is fixed; see 3.2.)
 
 ### 3.1 What works
 
@@ -210,10 +232,19 @@ correct. Its refusal message tells you to edit `bind_address` in
 `jarvis-framework.toml` — **ignore that**, the module that reads that file does
 not exist. `JARVIS_HUD_BIND` is the only thing that works.
 
-**Nothing generates the token.** Both ends are write-only: the desktop will not
-show it back to you and neither will the phone. You invent it, you type it
-twice, and **you write it down**, because there is no recovery except replacing
-it on both ends.
+**The token is now made for you.** On first run the backend writes a random one
+to `%USERPROFILE%\.openjarvis\token` and the desktop app reads it from there,
+so neither end needs configuring. Open that file to get the string for the
+phone.
+
+Setting `HUD_TOKEN` yourself still wins and nothing is written in that case —
+useful if you would rather choose it. Delete the file to get a new one; the
+phone then has to be re-paired, which is also how you unpair a device you no
+longer have.
+
+If the boot banner does not print a `token` line, the backend could not write
+that file. Check the permissions on the folder. It will still run on loopback
+without one, but the phone cannot pair.
 
 ### 3.3 Pair
 
@@ -237,7 +268,8 @@ phone gets a 401 that looks like a token mismatch.
 ## Uninstalling
 
 The uninstaller leaves your settings behind, including **the pairing token, in
-plain text**. To remove everything:
+plain text** — in the `.openjarvis` folder, and in `%APPDATA%` too if you ever
+typed a token into Settings. To remove everything:
 
 ```
 %APPDATA%\com.jarvis.desktop\
@@ -260,5 +292,10 @@ rather than your fault.
   setting up.
 - **The updater is off.** No signing key exists, so the in-app updater is inert
   and reports itself unsupported. Updating means building and installing again.
-- **The token is stored in plain text** in `%APPDATA%`, despite a code comment
-  that used to claim otherwise.
+- **The token is stored in plain text**, in two places: the one the backend
+  makes for itself at `%USERPROFILE%\.openjarvis\token`, and — only if you
+  typed one into Settings — the desktop app's store under `%APPDATA%`. Neither
+  is encrypted and neither is in the Windows credential manager. Anything
+  running as you can read them. On Linux and macOS the backend at least sets
+  the file to owner-only; Windows has no equivalent in that code path, so the
+  file inherits whatever the folder allows.

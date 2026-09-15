@@ -2013,6 +2013,13 @@ function subscribe(){
     // rather than assume we only missed the tail.
     if (kind === "hello" && d.stale) { apprPoll(); initPoll(); return; }
     if (kind === "approval") apprPoll();
+    // The extractor fills the memory review queue on its own, 45s after a
+    // conversation goes quiet - so nobody ASKED for the thing that is
+    // waiting, and without this the only way to find out was to open the
+    // Brain window and look. initPoll() is the right call rather than a new
+    // one: /api/initiative already carries proposal cards, so this reuses the
+    // surface instead of building a second one beside it.
+    else if (kind === "proposal") initPoll();
     else if (kind === "finding") initPoll();
     else if (kind === "activity" && typeof onActivity === "function") onActivity(d);
   };
