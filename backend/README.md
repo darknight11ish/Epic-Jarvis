@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Eighteen patches against the Jarvis backend, each with an executable test.
+Nineteen patches against the Jarvis backend, each with an executable test.
 
 **Order.** The first thirteen commute — several touch `jarvis_hud.py`, but in
 well-separated regions, and every order produces the same tree. The order in
@@ -38,6 +38,7 @@ dependency, not just a semantic one — it will not apply without both.
 | `gpu-offload.patch` | `jarvis_models.py`, `jarvis_hud.py` | Says when the model is running on the CPU instead of the graphics card. Nothing did, and the only symptom was that everything got slow. |
 | `gate-outcome.patch` | `jarvis_gate.py` | A timeout was indistinguishable from a refusal. Adds `Verdict.outcome`, which fails closed by default. |
 | `no-auto-approve.patch` | `jarvis_gate.py` | **`confirm_auto()` granted every `ask` action with nobody asked.** An approve-all, inside the module that forbids one. |
+| `memory-noise.patch` | `jarvis_extract.py`, `jarvis_hud.py` | A discarded proposal came straight back, and recalled facts carried no date. |
 
 ## Apply them
 
@@ -1176,3 +1177,55 @@ is the thing the gate exists to prevent.
 The load-bearing one is *"an ask-tier action is NOT granted by the flag"* —
 it fails on the unpatched tree, which is what makes the finding real rather
 than theoretical.
+
+
+---
+
+# `memory-noise.patch` — a discarded fact must stay discarded
+
+Two refinements taken from projects that hit the problem first.
+
+## 1. Discarding did not work
+
+`propose()` deduped against `state='pending'` only. The learner re-reads the
+**whole** conversation on each pass, and the transcript grows every turn, so
+the "nothing new was said" guard does not stop it. You discard *"Mario drives
+a 1998 Volvo"*, the same sentence is still in the transcript, the model
+proposes it again, and it is back in the queue within the minute.
+
+A review queue that re-asks what you just declined trains you to stop reading
+it — which costs more than the feature is worth, and is how you end up at Open
+WebUI's #18603, where users ask to switch memory off entirely.
+
+Now `state IN ('pending','rejected')`.
+
+**`accepted` is deliberately not in that list.** An accepted proposal became a
+fact, and `propose()` already checks the current facts; adding it would
+wrongly suppress a re-propose after the owner *retires* that fact and
+genuinely wants it back. There is a test for exactly that.
+
+## 2. Recalled facts carried no date
+
+Khoj injects memories as `- [{friendly_dt}]: {raw}` — the one small thing in
+that project worth copying outright. Undated, a fact is asserted flatly: the
+model cannot know *"Mario lives in Lisbon"* was true eighteen months ago and
+says it as though it were checked this morning.
+
+It is worth more here than to Khoj, because this store retires rather than
+deletes and now carries two time axes. `created` is printed — when **this
+machine was told** — because that is what the owner can check against their
+own memory of the conversation; `valid_from` would be when the fact became
+true in the world, which for most facts is the extractor's guess. The prompt
+says which of the two it is, because an unexplained date invites the model to
+read it as the other one.
+
+`chosen_facts` had to start carrying `created`: it was built as
+`{"text", "id"}` and dropped every other column, which is why the first
+version of the helper printed no date on the path that supplies almost every
+fact.
+
+A fact with no usable date prints without one rather than with a wrong one —
+`- text`, exactly what the model saw before. Tested against a missing key,
+`None`, a string, zero and a negative.
+
+`test_memory_noise.py`: 17 checks, 6 of which fail on the unpatched tree.

@@ -23,6 +23,67 @@ openai/codex       codex-rs/core/src/tools/approvals.rs
 
 ---
 
+## Is Jarvis redundant? No, and here is the test that settles it
+
+The honest way to ask this is not "does something similar exist" — a dozen
+things do — but **"does any existing project meet the four constraints, so
+that building this is wasted effort?"** The constraints are not preferences;
+they are the reason the project exists:
+
+1. Everything private stays on the local model. Nothing leaves the machine.
+2. No public tunnel, ever. No API keys in the app.
+3. No approve-all anywhere. One action, one decision.
+4. One owner, one Windows desktop, one Android phone. Non-commercial.
+
+| | local-only | no keys | reviewed memory | one-action gate | Windows desktop |
+|---|---|---|---|---|---|
+| **Jarvis** | yes | yes | **yes** | **yes** | yes |
+| Jan | yes | yes | no memory | n/a | yes |
+| Open WebUI | yes | yes | no | tools only, Aug 2026 | web |
+| Khoj | self-host | yes | no | no | web |
+| Home Assistant | yes | yes | n/a | **no per-action gate at all** | web |
+| Letta (active) | no — wants keys | **no** | no | no | CLI |
+| mem0 / graphiti | library | library | no | n/a | library |
+| goose / cline / codex | no | no | n/a | gate exists, **off by default** | CLI/IDE |
+
+**Nothing in the second block fills the first row.** The closest are Jan — a
+good local chat app with no memory and no permission model — and Home
+Assistant, which is excellent and solves a different problem: it gates *which
+devices* an assistant may touch, and then lets it act on them freely with no
+confirmation step anywhere.
+
+So the redundant parts are real and should be taken, and the non-redundant
+part is the whole point:
+
+- **Redundant, and taken:** the Tauri shell (Jan got there first and made
+  three rewrites' worth of mistakes), hybrid retrieval (mem0 converged on the
+  same design), bi-temporal storage (graphiti shipped it), the voice pipeline
+  (Home Assistant specified it), GPU-offload detection, embedding validation.
+- **Not redundant:** a memory review queue where nothing is written without a
+  human saying yes, and a permission gate that is actually on. As far as
+  twenty projects' source shows, nobody else has either. mem0's April 2026
+  rewrite and Open WebUI's #18603 are two independent groups arriving at the
+  edges of the same problem from opposite directions.
+
+**The risk is not building something redundant. It is building the
+non-redundant part badly**, because there is no prior art to copy and the
+failure mode is silent — a queue that re-asks what you declined, a gate with a
+bypass in it. Both of those were found in this repo, by tests written because
+of this research. See `no-auto-approve.patch` and `memory-noise.patch`.
+
+### What could not be graded
+
+`backend/jarvis_research.py` grades a repo ADOPT / FORK AND EXTEND / BUILD
+CUSTOM on stars, recency and licence. It could not be run here: `api.github.com`
+and `github.com` are both blocked from this container (only
+`raw.githubusercontent.com` answers), so **no star counts were obtained and the
+popularity dimension of every verdict above is unevaluated**. Licences,
+archive status and last-release dates are verified — from PyPI, npm and the
+repositories' own files. Run the grader from a machine with GitHub access
+before treating any "BUILD CUSTOM" here as final.
+
+---
+
 ## The scorecard
 
 | | Jarvis | best peer | who is ahead |
@@ -275,3 +336,5 @@ the owner opts out of, rather than a list each install assembles.
 4. `gpu-offload.patch` — say when the model is on the CPU, from Jan's
    `evaluateGpuOffload`, extended to report partial spill. **Done.**
 5. The Assist pipeline contract, folded into task #27. Still open.
+6. `memory-noise.patch` — Khoj's dated memory injection, plus the discard bug
+   that looking at their prompt design led me to. **Done.**
