@@ -24,7 +24,7 @@
                      if hits:
                          chosen_facts = [{"text": h["text"], "id": h["id"]} for h in hits]
                          facts = chosen_facts
-@@ -1766,11 +1774,31 @@
+@@ -1766,11 +1774,55 @@
                  injected_ids = [f"mem:{f['id']}" if "id" in f else f"fact:{facts.index(f)}"
                                  for f in chosen_facts if f in facts]
                  block = "\n".join(f"- {f.get('text','')}" for f in chosen_facts)
@@ -50,9 +50,33 @@
 +                # also end up adjacent to the question they were recalled for,
 +                # which is where they are most use.
 +                #
++                # And it restores the persona invariants, which is the more
++                # serious of the two. Ollama's chat handler reads:
++                #
++                #     if req.Messages[0].Role != "system" && m.System != "" {
++                #         msgs = append([]api.Message{{Role: "system",
++                #                        Content: m.System}}, msgs...)
++                #
++                # (ollama/server/routes.go). A system message at index 0
++                # SUPPRESSES the Modelfile's own SYSTEM block. So on every
++                # local turn where recall fired - and only those turns -
++                # jarvis_persona.INVARIANT_PROMPT was silently dropped:
++                # "say what is a guess and what is verified", "never claim an
++                # action was taken that was not". The invariants went missing
++                # at exactly the moment the model was holding private facts.
++                # With the block moved off index 0 they are back, and they are
++                # now a STABLE position 0, which is what a prefix cache wants.
++                #
++                # Truncation does not undo this. chatPrompt re-collects system
++                # messages only from the region it SKIPS (`for j := range i`,
++                # ollama/server/prompt.go) and this block is at the tail, in
++                # the kept region - the one exception being a conversation
++                # truncated to its final message alone, where there is no
++                # prefix left to preserve anyway.
++                #
 +                # If delimiters are ever added around recalled facts, add them
 +                # HERE, to `recalled` - wrapping the whole message list, or
-+                # putting a marker at position 0, puts the invalidation back.
++                # putting a marker at position 0, puts both problems back.
 +                messages = (messages[:-1] + [recalled, messages[-1]]
 +                            if messages else [recalled])
                  # Memory is now in the transcript. Pin the conversation local

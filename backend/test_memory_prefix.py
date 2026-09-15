@@ -133,6 +133,40 @@ def t_it_is_not_prepended_anywhere():
     check("nothing is prepended to messages", True)
 
 
+def t_the_persona_invariants_come_back():
+    """The more serious half, and it is not about speed at all.
+
+    ollama/server/routes.go:
+
+        msgs := append(m.Messages, req.Messages...)
+        if req.Messages[0].Role != "system" && m.System != "" {
+            msgs = append([]api.Message{{Role: "system", Content: m.System}}, msgs...)
+
+    A system message at index 0 suppresses the Modelfile's own SYSTEM block.
+    Prepending the recalled facts therefore dropped jarvis_persona's
+    INVARIANT_PROMPT - "say what is a guess and what is verified", "never
+    claim an action was taken that was not" - on every local turn where recall
+    fired, and only those turns. The invariants went missing at exactly the
+    moment the model was holding the user's private facts.
+    """
+    place = _ordering()
+    history = [{"role": "user", "content": "where does Mario live"},
+               {"role": "assistant", "content": "at 42 Elm Street"},
+               {"role": "user", "content": "and what is he allergic to"}]
+    out = place(list(history), {"role": "system", "content": "recalled"})
+    check("index 0 is not a system message, so the Modelfile SYSTEM applies",
+          out[0].get("role") != "system",
+          f"messages[0] is {out[0].get('role')!r} - ollama will skip m.System")
+
+    # A client that sends its own leading system message is a different case
+    # and stays that way: it was already suppressing m.System before this
+    # change, and that is the client's decision to make, not ours.
+    theirs = [{"role": "system", "content": "you are a pirate"}] + history
+    out = place(list(theirs), {"role": "system", "content": "recalled"})
+    check("a client's own leading system message is left where it put it",
+          out[0] is theirs[0], repr(out[0]))
+
+
 def t_k_is_not_a_magic_number():
     src = SRC.read_text(encoding="utf-8")
     check("the recall width is a named constant", "MEMORY_K" in src,
@@ -144,7 +178,8 @@ def t_k_is_not_a_magic_number():
 
 if __name__ == "__main__":
     for fn in (t_the_prefix_survives_a_turn, t_the_facts_reach_the_question, t_edges,
-               t_it_is_not_prepended_anywhere, t_k_is_not_a_magic_number):
+               t_it_is_not_prepended_anywhere, t_the_persona_invariants_come_back,
+               t_k_is_not_a_magic_number):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

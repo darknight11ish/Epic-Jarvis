@@ -13,7 +13,7 @@ before anything makes the extractor run.
 | `gate-push.patch` | `jarvis_gate.py` | Stops the approval gate posting unredacted private content to a public broker. Apply this one whether or not you use ntfy. |
 | `skill-notes.patch` | `jarvis_skills.py` | Gates and surfaces the skill notes, which steer answers, are written without approval, and appear on no screen. |
 | `documents-honesty.patch` | `jarvis_hud.py` | The brain map reports a document store that has never existed. Makes the status line true. |
-| `memory-prefix.patch` | `jarvis_hud.py` | Recalled facts were the first thing in every request, which threw away the KV cache for the whole conversation on every turn. |
+| `memory-prefix.patch` | `jarvis_hud.py` | Recalled facts were the first thing in every request: it dropped the persona invariants and threw away the KV cache for the whole conversation, every turn. |
 | `extraction-wiring.patch` | `jarvis_hud.py`, `jarvis_events.py` | `propose()` had zero call sites. Gives the learning loop a trigger, and the review queue a doorbell. |
 
 ## Apply them
@@ -480,19 +480,58 @@ With `memory-safety.patch` applied the store's search has a distance floor, so
 a lower `k` costs nothing on a query that genuinely has less to recall; it only
 stops the tail being padded out to five near-misses. Try 3.
 
+## And it puts the persona invariants back
+
+This is the more serious half, and it is not about speed at all.
+
+`ollama/server/routes.go`:
+
+```go
+msgs := append(m.Messages, req.Messages...)
+if req.Messages[0].Role != "system" && m.System != "" {
+    msgs = append([]api.Message{{Role: "system", Content: m.System}}, msgs...)
+}
+```
+
+**A system message at index 0 suppresses the Modelfile's own `SYSTEM` block.**
+Prepending the recalled facts put one there, so `jarvis_persona`'s
+`INVARIANT_PROMPT` — *"say what is a guess and what is verified"*, *"never
+claim an action was taken that was not"* — was dropped on every local turn
+where recall fired, **and only those turns**. The invariants went missing at
+exactly the moment the model was holding the user's private facts, and came
+back the moment it was not. Nothing surfaced it: the answer just came back
+slightly more confident than it should have.
+
+With the block moved off index 0 the Modelfile `SYSTEM` is inserted again —
+and it is now a *stable* position 0, which is exactly what a prefix cache
+wants. The two fixes are the same edit.
+
+Truncation does not undo it. `chatPrompt` re-collects system messages only
+from the region it **skips** (`for j := range i`, `ollama/server/prompt.go`),
+and this block is at the tail, in the kept region. The one exception is a
+conversation truncated to its final message alone, where there is no prefix
+left to preserve anyway.
+
+**One thing to check on the machine**, because it cannot be checked from here:
+the HUD posts to `JARVIS_URL/v1/chat/completions`, not to Ollama directly. All
+of the above is Ollama's behaviour. If the Jarvis backend normalises the
+message list by hoisting system messages to the front before forwarding, it
+would undo both halves of this. Worth one look at how it builds its Ollama
+request.
+
 ## Test it
 
 ```powershell
 python test_memory_prefix.py
 ```
 
-Fourteen checks. The ordering expression is lifted out of `jarvis_hud.py` with
+Sixteen checks. The ordering expression is lifted out of `jarvis_hud.py` with
 `ast` and evaluated, rather than paraphrased in the test, so what runs is the
 shipped line. The check that matters serialises two turns that recall
 *different* facts over the same history and asserts the prefixes are
 identical — with a control that runs the old prepend through the same
 assertion and confirms it fails, so the property is known to discriminate.
-Against the unpatched file all fourteen fail.
+Against the unpatched file all sixteen fail.
 
 ---
 
