@@ -200,6 +200,21 @@ class AppearanceStore(context: Context) {
 
     // ------------------------------------------------------------ storage ----
 
+    /**
+     * The wire shape, written locally so there is never a second shape.
+     *
+     * This used to key states by Kotlin enum name (`IDLE`) and write params as
+     * flat siblings of `pattern`. `/api/appearance` keys by the SPEC's state
+     * ids (`idle`) and nests `params` inside each binding, so a sync would have
+     * needed a translation layer between two formats that differ for no reason
+     * other than which language wrote them first. The desktop hit the mirror of
+     * this and says it cost a real bug in both directions.
+     *
+     * So the local store now uses the wire shape. There is nothing to
+     * translate when sync lands, and no second format to keep in step.
+     * [loadBindings] still reads the old one, so an existing install migrates
+     * on its next write rather than losing its face.
+     */
     private fun encode(b: Bindings): String {
         val root = JSONObject()
         for ((state, binding) in b.byState) {
@@ -207,19 +222,27 @@ class AppearanceStore(context: Context) {
             o.put("pattern", binding.pattern.id)
             binding.color?.let { c -> Palette.byId.entries.firstOrNull { it.value == c } }
                 ?.let { o.put("color", it.key) }
-            binding.params.periodS?.let { o.put("period_s", it.toDouble()) }
-            binding.params.spanDeg?.let { o.put("span_deg", it.toDouble()) }
-            binding.params.offsetDeg?.let { o.put("offset_deg", it.toDouble()) }
-            binding.params.sat?.let { o.put("sat", it.toDouble()) }
-            binding.params.light?.let { o.put("light", it.toDouble()) }
-            binding.params.sharpness?.let { o.put("sharpness", it.toDouble()) }
-            binding.params.gain?.let { o.put("gain", it.toDouble()) }
+            val p = JSONObject()
+            binding.params.periodS?.let { p.put("period_s", it.toDouble()) }
+            binding.params.spanDeg?.let { p.put("span_deg", it.toDouble()) }
+            binding.params.offsetDeg?.let { p.put("offset_deg", it.toDouble()) }
+            binding.params.sat?.let { p.put("sat", it.toDouble()) }
+            binding.params.light?.let { p.put("light", it.toDouble()) }
+            binding.params.sharpness?.let { p.put("sharpness", it.toDouble()) }
+            binding.params.gain?.let { p.put("gain", it.toDouble()) }
             binding.params.loud?.let { c -> Palette.byId.entries.firstOrNull { it.value == c } }
-                ?.let { o.put("loud", it.key) }
-            root.put(state.name, o)
+                ?.let { p.put("loud", it.key) }
+            if (p.length() > 0) o.put("params", p)
+            root.put(state.wireId, o)
         }
         return root.toString()
     }
+
+    /**
+     * The spec's id for a state - lowercase, and checked against the spec's
+     * own `states[].id` list by SpecDriftTest rather than assumed.
+     */
+    private val FaceState.wireId: String get() = name.lowercase()
 
     /**
      * Anything unreadable falls back to the defaults rather than throwing. A
@@ -230,9 +253,16 @@ class AppearanceStore(context: Context) {
         val root = JSONObject(raw)
         val out = Bindings.DEFAULTS.byState.toMutableMap()
         for (state in FaceState.entries) {
-            val o = root.optJSONObject(state.name) ?: continue
+            // Both shapes. The wire id is what is written now; the enum name is
+            // what older installs have on disk, and dropping it would reset a
+            // face the owner chose deliberately.
+            val o = root.optJSONObject(state.wireId) ?: root.optJSONObject(state.name) ?: continue
             val pattern = Pattern.byId(o.optString("pattern")) ?: continue
             val colour = o.optString("color").takeIf { it.isNotEmpty() }?.let { Palette.byId[it] }
+            // Params nested, falling back to the flat siblings of the old
+            // shape. `optJSONObject` returns null rather than throwing when
+            // the key is absent or is not an object.
+            val pj = o.optJSONObject("params") ?: o
             // `isFinite`, because `optDouble` answers NaN for anything it
             // cannot coerce — and NaN is not caught by runCatching, so the
             // "anything unreadable falls back to the defaults" promise above
@@ -242,7 +272,7 @@ class AppearanceStore(context: Context) {
             // black on black, invisibly, and it persists across restarts
             // because it is in preferences.
             fun f(key: String): Float? =
-                if (o.has(key)) o.optDouble(key).takeIf { it.isFinite() }?.toFloat() else null
+                if (pj.has(key)) pj.optDouble(key).takeIf { it.isFinite() }?.toFloat() else null
             out[state] = Binding(
                 pattern = pattern,
                 color = colour,
@@ -254,7 +284,7 @@ class AppearanceStore(context: Context) {
                     light = f("light"),
                     sharpness = f("sharpness"),
                     gain = f("gain"),
-                    loud = o.optString("loud").takeIf { it.isNotEmpty() }?.let { Palette.byId[it] },
+                    loud = pj.optString("loud").takeIf { it.isNotEmpty() }?.let { Palette.byId[it] },
                 ),
             )
         }

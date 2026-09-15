@@ -324,6 +324,32 @@ class SpecDriftTest {
             Faces.all.map { it.id }.filter { it in stateful }.toSet(),
         )
     }
+
+    /**
+     * The id this app writes for a state is the id the spec uses.
+     *
+     * `AppearanceStore` stores bindings keyed by `FaceState.name.lowercase()`,
+     * and `/api/appearance` keys by the spec's `states[].id`. Those agree
+     * today by coincidence of naming, which is exactly the kind of agreement
+     * this project keeps discovering it did not actually have - the enum is
+     * Kotlin's to rename and the spec is the contract's.
+     *
+     * Asserted rather than maintained, so renaming either one is a red build
+     * instead of a face that silently reverts to defaults on both devices.
+     */
+    @Test
+    fun `every face state maps onto a spec state id`() {
+        val specIds = spec["states"]!!.jsonArray
+            .map { it.jsonObject["id"]!!.jsonPrimitive.content }
+            .toSet()
+        assertEquals(
+            "the ids this app would send to /api/appearance no longer match the spec's " +
+                "states[].id. AppearanceStore keys on FaceState.name.lowercase(); if either " +
+                "side was renamed, the mapping has to become explicit rather than incidental",
+            specIds,
+            FaceState.entries.map { it.name.lowercase() }.toSet(),
+        )
+    }
 }
 
 private fun kotlinx.serialization.json.JsonPrimitive.contentOrNullSafe(): String? =
