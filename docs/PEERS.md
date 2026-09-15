@@ -178,8 +178,8 @@ auto-approve: everything"), whose stated reason is latency.
 | janhq/jan | Apache-2.0 | v0.8.4, 2026-07-23 | healthy |
 | home-assistant/core | Apache-2.0 | 2026.9.2, 2026-09-11 | healthy |
 | OpenVoiceOS/ovos-core | Apache-2.0 | 3.5.6a1, 2026-09-13 | alive, **alpha tags only**, 288 stars |
-| MycroftAI/mycroft-core | — | — | **archived 2024-09-08** |
-| rhasspy/rhasspy, rhasspy3 | MIT | — | **both archived 2025-10-06** |
+| MycroftAI/mycroft-core | Apache-2.0 | — | **archived 2024-09-08** — date NOT re-confirmed, see the correction below |
+| rhasspy/rhasspy, rhasspy3 | MIT | — | **both archived 2025-10-06** — dates NOT re-confirmed |
 | open-webui/open-webui | BSD-3 **+ branding clause** | 0.11.3, 2026-08-31 | healthy, **not OSI open source** |
 | letta-ai/letta (Python) | Apache-2.0 | 0.16.8, **2026-05-14** | **retired to an `archive` branch** |
 | letta-ai/letta-code (TS) | Apache-2.0 | 0.32.10, 2026-09-14 | healthy |
@@ -522,6 +522,48 @@ exists.
    branding above 50 end users. The screen's *design* is free to copy.
 
 ---
+
+## A correction to this document, 2026-09-15
+
+A second model was asked for the same repository metadata (see
+[`ASK-GEMINI.md`](ASK-GEMINI.md)). It had no GitHub API access either, so it
+returned no star counts and no push dates — but it did return licences, and
+three disagreed with this document. Each was then checked against the
+project's own `LICENSE` file over `raw.githubusercontent.com`, which is the
+one GitHub host this container can reach.
+
+| repo | it said | the LICENSE file says | who was right |
+|---|---|---|---|
+| khoj-ai/khoj | GPL-3.0 | "GNU AFFERO GENERAL PUBLIC LICENSE Version 3" | **this document** |
+| janhq/jan | AGPL-3.0 | "Licensed under the Apache License, Version 2.0" | **this document** |
+| open-webui | MIT | "Open WebUI License" + the branding clause, intact | **this document** |
+| MycroftAI/mycroft-core | not archived | cannot be read from any file | **unresolved** |
+
+The Jan one mattered most. Apache-2.0 and AGPL-3.0 are the difference between
+"safe to copy ideas and configuration from" and "reaches into what you build",
+and this project has been copying from Jan on the strength of the first.
+Open WebUI's "MIT" is its **2023** licence, superseded twice since.
+
+**This document was also wrong about one thing, found by the same check.** The
+Mycroft entry cited a README reading *"This project is no longer actively
+maintained… probably likely not work on your computer anymore"*. That text is
+on **neither `master` nor `dev` today**. Archive status is a GitHub API field
+that cannot be read from a raw file, so the status stays as first reported —
+but **the quotation offered as evidence for it does not check out**, and the
+2024-09-08 date is now unverified. The same applies to both Rhasspy dates.
+What IS still confirmed from source is that rhasspy3's README opens *"NOTE:
+This is a very early developer preview!"*.
+
+Nothing else in the second model's reply was usable. Every star count and push
+date came back `unknown`, and three of its four Part 2 answers were "could not
+verify" while still carrying the label "Source Type: PRIMARY source" — a
+contradiction rather than an answer. Its one substantive finding, that
+`home-assistant/core` has no speaker identification, agrees with this
+document; given the error rate above that is weak corroboration and not
+confirmation, and the planned speaker-verification work still rests on it.
+
+**`backend/jarvis_research.py` remains un-run.** Nothing in this exchange
+produced a star count.
 
 ## Things neither pass could verify
 
