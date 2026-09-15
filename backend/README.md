@@ -1,6 +1,6 @@
 # Backend patches
 
-Five patches against the Jarvis backend, each self-contained and each with an
+Six patches against the Jarvis backend, each self-contained and each with an
 executable test. They touch different files and can be applied in any order,
 but the order below is the one to use: `memory-safety` must land
 before anything makes the extractor run.
@@ -12,6 +12,7 @@ before anything makes the extractor run.
 | `appearance.patch` | `jarvis_hud.py` | `GET`/`POST /api/appearance`, so the phone and the desktop can agree on a face. |
 | `gate-push.patch` | `jarvis_gate.py` | Stops the approval gate posting unredacted private content to a public broker. Apply this one whether or not you use ntfy. |
 | `skill-notes.patch` | `jarvis_skills.py` | Gates and surfaces the skill notes, which steer answers, are written without approval, and appear on no screen. |
+| `documents-honesty.patch` | `jarvis_hud.py` | The brain map reports a document store that has never existed. Makes the status line true. |
 
 ## Apply them
 
@@ -357,3 +358,73 @@ This is worth knowing before adopting anything from the self-improving-agent
 literature. ExpeL's "Insight Pool" is this, with a research paper behind it. The
 delta between a skill bank and an ungated one is approval, not storage — and we
 already have the storage.
+
+---
+
+# `documents-honesty.patch`
+
+Two readers, no writer, and a status line that said everything was fine.
+
+`SELECT ... FROM documents` runs twice in `jarvis_hud.py` — in
+`collect_documents()`, which builds the document half of the brain map, and in
+`retrieval_corpus()`, which builds the text the retrieval trace matches
+against. Nothing creates that table. `grep -rn "CREATE TABLE documents"` over
+the whole backend returns nothing, and `MemoryStore._init` creates `facts`,
+`facts_fts` and `facts_vec` and stops there.
+
+So both queries have always raised `no such table: documents`, and both catch
+`sqlite3.Error` and return empty. That is a reasonable thing to do when a
+store is merely not set up yet — except that it makes *missing* and *empty*
+the same silence, and the one surface that could have distinguished them said
+the opposite:
+
+```python
+"sources": {
+    "documents": DOCS_DB.exists(),     # <- true on every boot
+```
+
+`DOCS_DB` is `~/.openjarvis/memory.db`. The memory store creates that file for
+its own tables the first time it runs, so `.exists()` has been true since the
+first boot of the program and has never once been about documents. The brain
+map's source list — the place you would look to find out whether a source is
+wired up — reported a working document store on a machine that has never had
+one.
+
+## What it changes
+
+A `_has_table(db_path, name)` helper beside `_ro_sqlite`, and three call sites
+that ask it instead of asking the filesystem:
+
+| site | was | is |
+|---|---|---|
+| `collect_documents()` | `if not DOCS_DB.exists()` | `if not _has_table(DOCS_DB, "documents")` |
+| `retrieval_corpus()` | `if DOCS_DB.exists()` | `if _has_table(DOCS_DB, "documents")` |
+| `build_graph()` sources | `DOCS_DB.exists()` | `_has_table(DOCS_DB, "documents")` |
+
+and the two bare `except sqlite3.Error` returns now print. They were only
+defensible while a missing table was the expected case; once the missing table
+is ruled out above them, a read that still fails is a real fault and should
+say so, the way `build_graph()`'s own per-source handler already does.
+
+## What it does not change
+
+It does not create the table. Nothing writes documents, so an empty table
+would be the same nothing with a more convincing shape — and a document
+corpus is a decision about what gets indexed and therefore about what a
+resembling query can pull into a prompt, which is the owner's call and not a
+patch's. The point of this one is that the status line now tells the truth
+until that decision is made, so `documents: false` is what you see, and it is
+correct.
+
+## Test it
+
+```powershell
+python test_documents_honesty.py
+```
+
+Sixteen checks. `_has_table` is lifted out of `jarvis_hud.py` with `ast` and
+executed against real SQLite files rather than paraphrased in the test, so
+what runs is the shipped function: a `memory.db` holding a `facts` table and
+no `documents` reads as absent, an empty `documents` table reads as present,
+a view does not read as a table, and a corrupt file answers no instead of
+raising. Against the unpatched file all sixteen fail.
