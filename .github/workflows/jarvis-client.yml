@@ -267,8 +267,17 @@ jobs:
           EMU=$!
 
           finish() {
-            echo "::group::Emulator log"
-            tail -120 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
+            # Twelve lines, not a hundred and twenty. This runs on EXIT, so it
+            # prints AFTER the failing test names - and GitHub's log API serves
+            # a tail, so 120 lines of emulator boot properties pushed the one
+            # useful thing out of every window I could fetch. Four log pulls
+            # across two runs said only "a test failed" because of this trap.
+            #
+            # The emulator's own failures are at the end of its log anyway
+            # (boot completed, panics, driver errors); the boot-property dump
+            # that made up the bulk of it has never once been the answer.
+            echo "::group::Emulator log (tail)"
+            tail -12 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
             echo "::endgroup::"
             kill "$EMU" 2>/dev/null || true
           }
