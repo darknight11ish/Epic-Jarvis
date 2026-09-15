@@ -260,9 +260,13 @@ of the change, and Approve / Deny. Nothing runs until the human decides.
 
 * The gate pins the window, so clicking away to read the diff does not dismiss
   it.
-* `Enter` approves and `Esc` denies — both keys are taken over for as long as
-  the gate is open, so neither can be hit by muscle memory meaning something
-  else.
+* **Neither `Enter` nor `Esc` decides anything.** Opening the gate moves focus
+  to the card so `Enter` does nothing at all, and `Esc` *parks* the gate — it
+  stays pending, just off screen. This is the opposite of what this README said
+  until now, and the reason is in `main.js`: a gate can arrive while you are
+  mid-sentence, and the `Enter` you were about to press to send your prompt
+  would have approved an action you had not read. Approve and Deny are clicks,
+  deliberately.
 * A `diff` preview is colour-coded by rebuilding the escaped text into tagged
   spans, so the escape-first guarantee still holds — no raw HTML is ever
   inserted.

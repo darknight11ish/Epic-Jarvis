@@ -1,6 +1,6 @@
 # Backend patches
 
-Four patches against the Jarvis backend, each self-contained and each with an
+Five patches against the Jarvis backend, each self-contained and each with an
 executable test. They touch different files and can be applied in any order,
 but the order below is the one to use: `memory-safety` must land
 before anything makes the extractor run.
@@ -11,6 +11,7 @@ before anything makes the extractor run.
 | `events-pump.patch` | `jarvis_hud.py` | Starts the event pump, which nothing was starting. One line and a comment. |
 | `appearance.patch` | `jarvis_hud.py` | `GET`/`POST /api/appearance`, so the phone and the desktop can agree on a face. |
 | `gate-push.patch` | `jarvis_gate.py` | Stops the approval gate posting unredacted private content to a public broker. Apply this one whether or not you use ntfy. |
+| `skill-notes.patch` | `jarvis_skills.py` | Gates and surfaces the skill notes, which steer answers, are written without approval, and appear on no screen. |
 
 ## Apply them
 
@@ -318,3 +319,41 @@ keeps the keys so the alert means something, that a redacted body reaches the
 broker unchanged, and (parsing the source) that **neither** call site passes
 raw `detail` or falls back to `prompt`. That last pair is what fails if someone
 later "simplifies" the call sites back.
+
+
+---
+
+# `skill-notes.patch`
+
+`jarvis_skills.refine(name, note)` appends free-text notes to a skill's index
+row. Three facts about it, each true in the current code:
+
+- **It is not gated.** `write_skill()` twenty lines above calls
+  `_gate("modify_own_code", ...)`. `refine()` calls nothing.
+- **Its notes reach the model.** `load()` returns `"notes": row.get("notes")`
+  *alongside the body*, so they go into the prompt every time the skill is
+  used, and they change what it does.
+- **They appear on no surface.** `cards()` — what `GET /api/skills` serves, and
+  the only place anything lists skills — returns name, description, trust and
+  uses. Not notes.
+
+So: a store of self-authored heuristics, written with no approval, injected
+into prompts, invisible to the owner. That is the exact shape this product's
+rules exist to forbid, sitting inside the module that otherwise enforces them
+best — the one that scans skill bodies on raw bytes before a model sees them
+and refuses outright at block severity rather than asking.
+
+**Nothing calls `refine()` today**, which is why it has gone unnoticed. It is a
+loaded gun, not a fired one. The patch is here so that stays true when
+something does call it — and something will, because "let the assistant record
+what it learned" is the single most requested feature in this class.
+
+Two changes: `refine()` goes through `_gate("modify_own_code", ...)` like its
+neighbour, with a prompt that shows the owner the note and says it will be read
+every time the skill runs; and `cards()` returns `notes`, so anything steering
+an answer is on a screen the owner can reach.
+
+This is worth knowing before adopting anything from the self-improving-agent
+literature. ExpeL's "Insight Pool" is this, with a research paper behind it. The
+delta between a skill bank and an ungated one is approval, not storage — and we
+already have the storage.

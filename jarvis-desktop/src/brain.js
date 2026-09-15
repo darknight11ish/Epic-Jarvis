@@ -542,7 +542,13 @@ function renderMemory() {
       el(
         "p",
         "note",
-        "Proposed facts are decided in the approval gate, one at a time — not from here."
+        // This used to say "decided in the approval gate, one at a time - not
+        // from here", which sent the owner somewhere that can never hold the
+        // item: memory proposals live in jarvis_extract's table and never
+        // enter jarvis_gate's queue. The HUD window is the one surface that
+        // can decide one today; this pane cannot, and says so.
+        "Read-only here. A proposal is kept or forgotten from the HUD window — " +
+          "the approval gate never sees these."
       )
     );
   }
