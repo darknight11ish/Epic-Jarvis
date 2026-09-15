@@ -27,6 +27,9 @@ const READ_ROUTES: &[(&str, &str)] = &[
     ("watch_report", "/api/watch/report"),
     ("memory", "/api/memory/status"),
     ("memory_pending", "/api/memory/pending"),
+    // Every fact the store holds, retired ones included. A read: the pane
+    // shows it, and each change is its own command below.
+    ("memory_facts", "/api/memory/facts"),
     ("initiative", "/api/initiative"),
     ("attention", "/api/attention"),
     ("digest", "/api/digest"),
@@ -84,6 +87,9 @@ mod tests {
             "/api/attention/unmute",
             "/api/digest/seen",
             "/api/memory/decide",
+            "/api/memory/forget",
+            "/api/memory/edit",
+            "/api/memory/learning",
         ];
         for (section, path) in READ_ROUTES {
             assert!(

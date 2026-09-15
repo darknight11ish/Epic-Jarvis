@@ -209,9 +209,21 @@ export const BRAIN = {
   memory: { available: true, facts: 612, documents: 148, chunks: 4102,
             path: "C:\\Users\\pcadmin\\.openjarvis\\memory.db",
             model: "nomic-embed-text", sleep_time: { enabled: true, remind: true } },
-  memory_pending: { available: true, pending: [
-    { text: "Prefers invoices filed by supplier, not by month.", source: "chat", at: Date.now()/1000 - 3600 },
-    { text: "Standing desk arrives the week of the 22nd.", source: "mail", at: Date.now()/1000 - 7200 }] },
+  memory_pending: { available: true, setup: { setup_complete: false, note:
+      "extraction is a scaffold: review its proposals and tune the prompt against real conversations" },
+    pending: [
+    { id: 41, text: "Prefers invoices filed by supplier, not by month.", source: "conversation",
+      confidence: 0.82, created: Date.now()/1000 - 3600 },
+    { id: 42, text: "Standing desk arrives the week of the 22nd.", source: "conversation",
+      confidence: 0.61, replaces: "Standing desk arrives in March.",
+      created: Date.now()/1000 - 7200 }] },
+  memory_facts: { available: true, learning: true, pending: 2, facts: [
+    { id: 7, text: "Works in Europe/London.", source: "user",
+      valid_from: Date.now()/1000 - 800000, valid_to: null },
+    { id: 9, text: "Prefers explicit PowerShell cmdlets over aliases.", source: "extracted",
+      valid_from: Date.now()/1000 - 90000, valid_to: null },
+    { id: 4, text: "Standing desk arrives in March.", source: "extracted",
+      valid_from: Date.now()/1000 - 900000, valid_to: Date.now()/1000 - 90000 }] },
   jobs: { available: true, jobs: [
     { id: "j1", label: "index the archive", handler: "index", state: "running", created: Date.now()/1000 - 900,
       caps: ["fs.read", "memory.write"], tainted: true },
@@ -297,7 +309,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute, decideFails, appearanceFails }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute, decideFails, appearanceFails, memoryRefuses, learningFloor }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -412,6 +424,31 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "brain_remove_skill":
           case "brain_model":
             return { ok: true };
+          // Recorded rather than just acknowledged: the memory pane's whole
+          // contract is ONE fact per call, so a test has to be able to count
+          // the calls and read the ids, not merely see that nothing threw.
+          case "brain_memory_decide":
+          case "brain_memory_forget":
+          case "brain_memory_edit":
+          case "brain_memory_learning":
+            window.__memoryWrites.push({ cmd, ...args });
+            if (window.__memoryRefuses) {
+              return { ok: false, error: String(window.__memoryRefuses) };
+            }
+            if (cmd === "brain_memory_learning") {
+              // The server can answer 200 and still refuse, when
+              // JARVIS_EXTRACT is off in the environment. Reproduce that,
+              // because rendering the request instead of the reply is the
+              // bug most likely to be written here.
+              return window.__learningFloor
+                ? { ok: true, enabled: false, floor: false,
+                    note: "JARVIS_EXTRACT is off in the environment, which overrides this switch." }
+                : { ok: true, enabled: args.enabled };
+            }
+            return { ok: true };
+          case "brain_memory_export":
+            window.__memoryWrites.push({ cmd });
+            return { available: true, facts: [{ id: 1, text: "exported" }], pending: [] };
           default: return null;
         }
       },
@@ -437,6 +474,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__decideFails = decideFails || null;
   window.__appearanceFails = appearanceFails || null;
   window.__decides = [];
+  window.__memoryWrites = [];
+  window.__memoryRefuses = memoryRefuses || null;
+  window.__learningFloor = Boolean(learningFloor);
   window.__found = found || null;
   window.__installFails = installFails || null;
   window.__refuse = refuse || [];
@@ -470,6 +510,7 @@ export async function open(browser, base, file, data, viewport) {
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, noRoute: false, decideFails: null, appearanceFails: null,
+    memoryRefuses: null, learningFloor: false,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,
   });

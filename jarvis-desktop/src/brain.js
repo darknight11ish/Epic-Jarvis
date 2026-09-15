@@ -38,6 +38,7 @@ const VIEWS = {
   galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
   live: { title: "Live", sub: "what Jarvis is doing" },
   faculties: { title: "Faculties", sub: "models, compute, skills, memory" },
+  memory: { title: "Memory", sub: "what Jarvis has learned about you" },
   work: { title: "Work", sub: "jobs in flight and what can be put back" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
   watch: { title: "Watch", sub: "the GitHub watchlist" },
@@ -48,6 +49,7 @@ const VIEW_SECTIONS = {
   galaxy: ["graph"],
   live: ["attention", "status"],
   faculties: ["models", "compute", "skills", "memory", "memory_pending"],
+  memory: ["memory_facts", "memory_pending"],
   work: ["jobs", "undo"],
   trust: ["content_risk", "ledger"],
   watch: ["watch", "watch_report"],
@@ -96,6 +98,9 @@ const dom = {
   compute: $("compute"),
   skills: $("skills"),
   memory: $("memory"),
+  memoryLearning: $("memory-learning"),
+  memoryProposals: $("memory-proposals"),
+  memoryFacts: $("memory-facts"),
   jobs: $("jobs"),
   undo: $("undo"),
   contentRisk: $("content-risk"),
@@ -111,6 +116,7 @@ const dom = {
   countWork: $("count-work"),
   countTrust: $("count-trust"),
   countWatch: $("count-watch"),
+  countMemory: $("count-memory"),
 };
 
 const state = {
@@ -304,6 +310,11 @@ function render(name) {
       renderSkills();
       renderMemory();
       break;
+    case "memory":
+      renderLearning();
+      renderProposals();
+      renderFacts();
+      break;
     case "work":
       renderJobs();
       renderUndo();
@@ -336,6 +347,12 @@ function renderCounts() {
   set(dom.countWatch, (watch && watch.waiting_for_you) || 0);
   const attention = currentLink().attention;
   set(dom.countLive, attention.known ? attention.pending : 0);
+  // Proposals waiting. This is the badge that matters most, because the
+  // extractor fills that queue on its own - nobody asked for the thing that
+  // is waiting, so nothing else would tell you it is there.
+  const proposed = state.data.memory_pending;
+  set(dom.countMemory,
+      (proposed && Array.isArray(proposed.pending) && proposed.pending.length) || 0);
 }
 
 /* ==========================================================================
@@ -547,14 +564,201 @@ function renderMemory() {
         // item: memory proposals live in jarvis_extract's table and never
         // enter jarvis_gate's queue. The HUD window is the one surface that
         // can decide one today; this pane cannot, and says so.
-        "Read-only here. A proposal is kept or forgotten from the HUD window — " +
-          "the approval gate never sees these."
+        "Decide these in the Memory tab, one at a time. The approval gate " +
+          "never sees them — memory proposals live in their own queue."
       )
     );
   }
   if (!dom.memory.childElementCount) {
     dom.memory.append(el("p", "empty", "The memory store reported nothing."));
   }
+}
+
+/* ==========================================================================
+   Memory — what Jarvis has learned, and every way to change it
+
+   Every write here is one fact and one decision. There is no select-all, no
+   "keep the rest", no bulk anything, and that is not an omission: the server
+   takes a single integer id per call and forgetting cannot be undone.
+   ========================================================================== */
+
+/** Re-read the pane's own sections and repaint. Used after every write. */
+async function refreshMemory() {
+  await load(VIEW_SECTIONS.memory, { quiet: true });
+  render("memory");
+}
+
+/** Turn a write into a toast, so no handler swallows a failure silently. */
+async function memoryWrite(command, args, okText) {
+  try {
+    const out = await invoke(command, args);
+    // The server can refuse while still answering 200 — the learning switch
+    // does exactly that when JARVIS_EXTRACT is off in the environment. Render
+    // what came back, never what was asked for.
+    if (out && out.ok === false) {
+      toast(String(out.error || out.reason || "Refused."), "bad");
+    } else {
+      toast(typeof okText === "function" ? okText(out) : okText, "ok");
+    }
+    await refreshMemory();
+    return out;
+  } catch (error) {
+    toast(String((error && error.message) || error), "bad");
+    return null;
+  }
+}
+
+function renderLearning() {
+  const facts = state.data.memory_facts || {};
+  const pending = state.data.memory_pending || {};
+  dom.memoryLearning.replaceChildren();
+  const why = unavailable("memory_facts");
+  if (why) return dom.memoryLearning.append(el("p", "empty", why));
+
+  const on = facts.learning === true;
+  const setup = pending.setup || {};
+
+  const dl = el("dl", "kv");
+  dl.append(el("dt", "", "Learning"), el("dd", "", on ? "on" : "off"));
+  dl.append(el("dt", "", "Waiting"), el("dd", "",
+    String(facts.pending ?? (Array.isArray(pending.pending) ? pending.pending.length : 0))));
+  if (setup.note) dl.append(el("dt", "", "Note"), el("dd", "", String(setup.note)));
+  dom.memoryLearning.append(dl);
+
+  const box = el("div", "row-actions");
+  box.append(
+    button(on ? "Stop learning" : "Start learning", async () => {
+      await memoryWrite(
+        "brain_memory_learning",
+        { enabled: !on },
+        (out) =>
+          out && out.note
+            ? String(out.note)
+            : out && out.enabled
+              ? "Learning is on."
+              : "Learning is off. Nothing new will be proposed."
+      );
+    }, { title: on
+        ? "Stop reading conversations for facts. Nothing already proposed is lost."
+        : "Read conversations for facts again. Each one still needs your yes." })
+  );
+  box.append(
+    button("Export everything", async () => {
+      try {
+        const out = await invoke("brain_memory_export");
+        const n = Array.isArray(out && out.facts) ? out.facts.length : 0;
+        // Written to the clipboard rather than a file: this window has no
+        // save-file permission, and adding one to export a JSON blob would be
+        // a wider grant than the feature is worth.
+        await navigator.clipboard.writeText(JSON.stringify(out, null, 2));
+        toast(`${n} fact${n === 1 ? "" : "s"} copied to the clipboard.`, "ok");
+      } catch (error) {
+        toast(String((error && error.message) || error), "bad");
+      }
+    }, { title: "Copy every fact, current and retired, as JSON. It stays on this machine." })
+  );
+  dom.memoryLearning.append(box);
+}
+
+function renderProposals() {
+  const body = state.data.memory_pending || {};
+  const why = unavailable("memory_pending");
+  if (why) {
+    dom.memoryProposals.replaceChildren(el("p", "empty", why));
+    return;
+  }
+  const items = Array.isArray(body.pending) ? body.pending : [];
+  rows(
+    dom.memoryProposals,
+    items,
+    (p) =>
+      row({
+        tag: "proposed",
+        state: "warn",
+        title: String(p.text || "(no text)"),
+        meta: [
+          p.replaces ? `would replace: ${p.replaces}` : "",
+          p.confidence != null ? `confidence ${Number(p.confidence).toFixed(2)}` : "",
+          p.source ? `from ${p.source}` : "",
+          ago(p.created),
+        ],
+        actions: [
+          button("Keep", async () => {
+            await memoryWrite("brain_memory_decide", { id: Number(p.id), accept: true },
+              "Kept. Jarvis can recall it now.");
+          }, { title: "Add it to memory. It can be reworded or forgotten later." }),
+          button("Discard", async () => {
+            await memoryWrite("brain_memory_decide", { id: Number(p.id), accept: false },
+              "Discarded. It was never in memory.");
+          }, { title: "Throw the proposal away. Nothing is removed from memory, because it was never there." }),
+        ],
+      }),
+    "Nothing is waiting. Either Jarvis has not heard anything worth keeping, or learning is off."
+  );
+}
+
+function renderFacts() {
+  const body = state.data.memory_facts || {};
+  const why = unavailable("memory_facts");
+  if (why) {
+    dom.memoryFacts.replaceChildren(el("p", "empty", why));
+    return;
+  }
+  const facts = Array.isArray(body.facts) ? body.facts : [];
+  rows(
+    dom.memoryFacts,
+    facts,
+    (f) => {
+      // `current` is computed server-side, but do not depend on it being
+      // there: a retired fact rendered as live is a fact the owner thinks
+      // Jarvis still uses, offered a Forget button that does nothing. Fall
+      // back to the bi-temporal field the flag is derived from.
+      const current =
+        f.current === true ? true
+        : f.current === false ? false
+        : f.valid_to === null || f.valid_to === undefined
+          || Number(f.valid_to) > Date.now() / 1000;
+      const actions = [];
+      if (current) {
+        actions.push(
+          button("Reword", async () => {
+            // A prompt rather than an inline editor: this is the one place the
+            // owner rewrites something the model will be told, and a
+            // full-width text box that autosaves is how a stray keystroke
+            // becomes a fact. A dialog makes the change deliberate.
+            const next = window.prompt("Reword this fact:", String(f.text || ""));
+            if (next === null) return;
+            const text = next.trim();
+            if (!text || text === String(f.text || "")) return;
+            await memoryWrite("brain_memory_edit", { id: Number(f.id), text },
+              "Reworded. The old wording is kept as history.");
+          }, { title: "Replace the wording. The old one is retired, not erased." }),
+          button("Forget", async () => {
+            if (!window.confirm(
+              `Stop recalling this?\n\n${f.text}\n\n` +
+              "It stays in the history but Jarvis will not use it again. " +
+              "This cannot be undone."
+            )) return;
+            await memoryWrite("brain_memory_forget", { id: Number(f.id) },
+              "Forgotten. It stays in the history and will not be recalled.");
+          }, { danger: true, title: "Stop this being recalled. There is no undo." })
+        );
+      }
+      return row({
+        tag: current ? "fact" : "retired",
+        state: current ? "ok" : undefined,
+        title: String(f.text || "(no text)"),
+        meta: [
+          f.source ? `from ${f.source}` : "",
+          current ? "" : "no longer recalled",
+          f.supersedes ? `replaced #${f.supersedes}` : "",
+          ago(f.valid_from),
+        ],
+        actions,
+      });
+    },
+    "Nothing yet. Facts arrive from the queue above, once you keep one."
+  );
 }
 
 /* ==========================================================================

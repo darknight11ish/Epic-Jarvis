@@ -184,6 +184,29 @@ identifier = "brain-faculties"
 description = "Remove a skill; install, switch or roll back a model. Privileged: keep this to the Brain window."
 permissions = ["allow-brain-remove-skill", "allow-brain-model"]
 
+# Changing what Jarvis remembers about the owner.
+#
+# Its own set rather than part of `brain-act`, because that set is explicitly
+# the things that "move toward a state the owner already had" and forgetting is
+# the exact opposite: the server retires rather than deletes, so the row
+# survives, but nothing in the product brings a retired fact back. Editing is
+# gentler - it supersedes, and can be corrected again - but it lives here too,
+# since both decide what the model is told about a person.
+#
+# The learning switch is in the same set on purpose. Turning the extractor on
+# is the power to have facts proposed about you at all, which is upstream of
+# every other item here.
+[[set]]
+identifier = "brain-memory"
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, export the store, and turn the background learner on or off. One fact per decision; there is no bulk form."
+permissions = [
+  "allow-brain-memory-decide",
+  "allow-brain-memory-forget",
+  "allow-brain-memory-edit",
+  "allow-brain-memory-learning",
+  "allow-brain-memory-export",
+]
+
 # ---------------------------------------------------------------------------
 # The faces window: read and write the appearance document.
 #

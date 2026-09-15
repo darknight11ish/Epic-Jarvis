@@ -230,6 +230,85 @@ pub async fn brain_remove_skill(app: AppHandle, name: String) -> Result<serde_js
     .await
 }
 
+/// Keeps or discards ONE proposed fact.
+///
+/// The extractor fills this queue on its own, so the queue is the one place
+/// the owner ever sees what Jarvis wanted to remember about them. One integer
+/// id, one decision, and no list form anywhere in this file — forgetting is
+/// irreversible and a "keep all" would be an approve-all with another name.
+#[tauri::command]
+pub async fn brain_memory_decide(
+    app: AppHandle,
+    id: i64,
+    accept: bool,
+) -> Result<serde_json::Value, String> {
+    post(
+        &app,
+        "/api/memory/decide",
+        serde_json::json!({ "id": id, "accept": accept }),
+    )
+    .await
+}
+
+/// Stops a fact being recalled.
+///
+/// The server retires rather than deletes: the row stays and stops being
+/// current, so the history of what was once true survives. There is no undo,
+/// and the UI says so before asking.
+#[tauri::command]
+pub async fn brain_memory_forget(app: AppHandle, id: i64) -> Result<serde_json::Value, String> {
+    post(&app, "/api/memory/forget", serde_json::json!({ "id": id })).await
+}
+
+/// Rewords a fact by superseding it.
+///
+/// Separate from forget because they are different powers: this one adds a
+/// replacement and can be corrected again, that one cannot be undone at all.
+#[tauri::command]
+pub async fn brain_memory_edit(
+    app: AppHandle,
+    id: i64,
+    text: String,
+) -> Result<serde_json::Value, String> {
+    post(
+        &app,
+        "/api/memory/edit",
+        serde_json::json!({ "id": id, "text": text }),
+    )
+    .await
+}
+
+/// Turns the background learner on or off.
+///
+/// `JARVIS_EXTRACT` in the environment is a floor this cannot lift, and the
+/// server says so in the reply rather than reporting a success it did not
+/// achieve — so the UI must render what came back, not what it asked for.
+#[tauri::command]
+pub async fn brain_memory_learning(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    post(
+        &app,
+        "/api/memory/learning",
+        serde_json::json!({ "enabled": enabled }),
+    )
+    .await
+}
+
+/// Every fact and every pending proposal, for the owner to keep a copy of.
+///
+/// A command rather than a read section because it is large and wanted rarely;
+/// putting it in the section table would fetch the whole store every time the
+/// pane opened. It leaves the machine only if the owner then saves it
+/// somewhere that does.
+#[tauri::command]
+pub async fn brain_memory_export(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = commands::jarvis_base(&app);
+    let headers = commands::jarvis_headers(&app)?;
+    get_json(&base, "/api/memory/export", headers, READ_TIMEOUT).await
+}
+
 /// Installs, switches or rolls back a model.
 ///
 /// Three routes behind one command because they are one power — deciding which
