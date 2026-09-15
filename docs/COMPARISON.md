@@ -34,8 +34,8 @@ openai/codex       codex-rs/core/src/tools/approvals.rs
 | approval gate | 4 tiers, no approve-all | codex's structured key | **codex, on repeats** |
 | gate decided by the model | no | 3 of 5 peers do it | **us** |
 | voice pipeline | **nothing** | Home Assistant Assist | **them, by a mile** |
-| GPU offload check | **nothing** | Jan | **them** |
-| embedding validation | **nothing** | Jan | **them** |
+| GPU offload check | yes, incl. partial spill | Jan, all-or-nothing only | **us** |
+| embedding validation | yes | Jan | level |
 | webview CSP | fixed loopback allowlist | Jan allows `https: http:` | **us** |
 | asset protocol | disabled | Jan allows `**/*` | **us** |
 | telemetry in CSP | none | Jan allows posthog | **us** |
@@ -180,10 +180,11 @@ when there is one. Do not copy their CSP; ours is better.
 > the CPU and the engine still reports healthy. **Comparing the two counts is
 > the only signal that offload never happened.**
 
-We have nothing like this. On a 6.9 GB budget it is the difference between
-"Jarvis is slow today" and "Jarvis is on the CPU and nobody told you", and
-Ollama gives no warning either. Their version only catches *zero* GPU; ours
-should also report partial spill. → task #22.
+We had nothing like this. **Now `gpu-offload.patch`** — and it goes one better
+than Jan: they compare a hardware GPU count against an engine device count,
+which sees only the all-CPU case, while `/api/ps` carries `size` and
+`size_vram` per model, so partial spill is a subtraction. Partial spill is the
+commoner failure. **Done.**
 
 The second half of that file is more immediately relevant, and it found
 something in our code:
@@ -271,5 +272,6 @@ the owner opts out of, rather than a list each install assembles.
 2. `embedding-guard.patch` — validate a vector before it is stored, from Jan's
    `evaluateEmbeddingVector`. **Done.**
 3. Packaging: **do not** copy Jan's CSP. Corrected in PEERS.md.
-4. GPU offload readiness, folded into task #22.
-5. The Assist pipeline contract, folded into task #27.
+4. `gpu-offload.patch` — say when the model is on the CPU, from Jan's
+   `evaluateGpuOffload`, extended to report partial spill. **Done.**
+5. The Assist pipeline contract, folded into task #27. Still open.

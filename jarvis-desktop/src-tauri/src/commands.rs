@@ -1489,6 +1489,111 @@ fn spawn_opener(program: &str, url: &str) -> Result<(), String> {
         .map_err(|e| format!("unable to open {url}: {e}"))
 }
 
+/// Where the logs are, whether they exist, and how big they have got.
+///
+/// A read, so Settings can show the path as selectable text even when opening
+/// the folder fails — on a locked-down machine the Explorer call can be
+/// refused, and a path the owner can copy is the difference between sending a
+/// log and giving up.
+#[tauri::command]
+pub fn get_log_info() -> serde_json::Value {
+    let dir = match crate::logfile::dir() {
+        Some(d) => d,
+        None => {
+            return serde_json::json!({
+                "available": false,
+                "note": "no log directory could be created, so nothing is being \
+                         recorded. Start the backend in a terminal to see why it \
+                         fails.",
+            })
+        }
+    };
+    let describe = |name: &str| {
+        let path = dir.join(name);
+        match std::fs::metadata(&path) {
+            Ok(m) => serde_json::json!({ "path": path.display().to_string(), "bytes": m.len() }),
+            // Not an error: backend.log does not exist until the app has
+            // started the backend at least once, which is the normal state on
+            // a machine where the owner runs it themselves.
+            Err(_) => serde_json::json!({ "path": path.display().to_string(), "bytes": 0 }),
+        }
+    };
+    serde_json::json!({
+        "available": true,
+        "dir": dir.display().to_string(),
+        "app": describe("jarvis-desktop.log"),
+        "backend": describe("backend.log"),
+        "note": "plain text, and not redacted. Read it before you send it anywhere.",
+    })
+}
+
+/// Opens the log folder in Explorer.
+///
+/// A folder, never a file: opening `backend.log` would hand it to whatever is
+/// registered for `.log`, and this function has no say in what that is.
+/// Explorer with a directory path is a fixed, known target.
+#[tauri::command]
+pub fn open_log_folder() -> Result<(), String> {
+    let dir = crate::logfile::dir()
+        .ok_or_else(|| "there is no log directory on this machine".to_string())?;
+    if !dir.is_dir() {
+        return Err(format!("{} is not there any more", dir.display()));
+    }
+
+    // `#[cfg]` on the `let`, not on a block: an attribute on a trailing block
+    // EXPRESSION is still unstable, and this function is the shape that
+    // tempts you into writing one.
+    #[cfg(target_os = "windows")]
+    let program = "explorer.exe";
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let program = "xdg-open";
+
+    // `explorer.exe <dir>` rather than ShellExecuteExW: the path comes from
+    // Tauri's own resolver, not from a page, so there is no URL to validate,
+    // and Explorer is the only handler a directory ever has. Its exit code is
+    // famously non-zero on success, so it is never checked - `spawn` failing
+    // is the only signal here that means anything.
+    std::process::Command::new(program)
+        .arg(dir.as_os_str())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("could not open {}: {e}", dir.display()))
+}
+
+/// Does Jarvis start when Windows does?
+///
+/// Read from the registry every time rather than from the settings store. The
+/// store would record what we asked for; this reports what is actually there,
+/// and the two part company the moment the owner turns it off in Task
+/// Manager's Startup tab - which is where most people turn these off.
+#[tauri::command]
+pub fn get_autostart() -> serde_json::Value {
+    serde_json::json!({
+        "enabled": crate::autostart::is_enabled(),
+        "supported": cfg!(windows),
+        "launchedAtLogin": crate::autostart::launched_at_login(),
+        "note": "Jarvis will be running after a restart. It does not promise to \
+                 be first: the Alt+Space hotkey is still claimed on a \
+                 first-come basis and other startup programs are racing for it.",
+    })
+}
+
+/// Turns the Windows startup entry on or off, and reports what it is after.
+///
+/// The returned value is read back from the registry rather than echoed from
+/// the argument, so a write that silently did nothing shows as off in the UI
+/// instead of as the success it was not.
+#[tauri::command]
+pub fn set_autostart(enabled: bool) -> Result<serde_json::Value, String> {
+    let now = crate::autostart::set(enabled)?;
+    crate::logfile::log(&format!(
+        "[jarvis] start with Windows: asked for {enabled}, registry now reads {now}"
+    ));
+    Ok(serde_json::json!({ "enabled": now, "supported": cfg!(windows) }))
+}
+
 /// Shuts the application down for real, releasing the global shortcuts first.
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {

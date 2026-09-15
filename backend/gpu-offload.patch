@@ -1,0 +1,119 @@
+--- a/jarvis_models.py
++++ b/jarvis_models.py
+@@ -826,6 +826,93 @@
+     return any(n == ref or n == want or n.split(":")[0] == ref for n in names)
+ 
+ 
++def offload_status(timeout: float = 4.0) -> dict:
++    """Is the model actually on the graphics card, or only pretending to be?
++
++    THE FAILURE THIS CATCHES. llama.cpp fits as many layers as it thinks will
++    fit and silently runs the rest on the CPU. Ollama reports the model as
++    loaded and healthy either way; nothing warns, nothing errors, and the only
++    symptom is that answers take fifteen seconds instead of two. On a 6.9 GB
++    budget that is the difference between "Jarvis is slow today" and "Jarvis
++    has not touched the GPU since you installed that other model".
++
++    /api/ps gives `size` (total resident) and `size_vram` (the part on the
++    card) per loaded model, so the split is a subtraction rather than a guess.
++    Jan built the same check by counting devices, which catches only the
++    all-CPU case; this catches partial spill too, which is the commoner one.
++
++    Never raises and never blocks for long: a four-second budget, and every
++    failure reports "unknown" rather than inventing a number. A diagnostic
++    that takes the status page down with it is worse than no diagnostic.
++    """
++    out = {"available": False, "status": "unknown", "models": [], "note": ""}
++    raw = _get(f"{OLLAMA}/api/ps", timeout=timeout)
++    if not raw:
++        out["note"] = ("Ollama did not answer, so there is nothing to report. "
++                       "This is normal when nothing has been asked yet.")
++        return out
++    try:
++        running = json.loads(raw).get("models") or []
++    except Exception:
++        out["note"] = "Ollama answered with something that was not JSON."
++        return out
++
++    out["available"] = True
++    if not running:
++        out["status"] = "idle"
++        out["note"] = ("No model is loaded right now. Ollama unloads after a "
++                       "few minutes idle; ask Jarvis something and look again.")
++        return out
++
++    worst = 100
++    for m in running:
++        total = int(m.get("size") or 0)
++        vram = int(m.get("size_vram") or 0)
++        # A zero total would be a divide-by-zero, and it happens while a model
++        # is still being loaded.
++        pct = 100 if total <= 0 else max(0, min(100, round(vram * 100 / total)))
++        worst = min(worst, pct)
++        out["models"].append({
++            "name": m.get("name") or m.get("model") or "(unnamed)",
++            "size_mb": round(total / (1024 * 1024)),
++            "vram_mb": round(vram / (1024 * 1024)),
++            "on_gpu_percent": pct,
++        })
++
++    out["on_gpu_percent"] = worst
++    if worst >= 99:
++        out["status"] = "gpu"
++        out["note"] = "The model is on the graphics card. This is what you want."
++    elif worst <= 1:
++        out["status"] = "cpu"
++        out["note"] = (
++            "The model is running on the CPU, not the graphics card. Answers "
++            "will be several times slower and nothing else will tell you. "
++            "Usually this means the model is too big for the card, another "
++            "program is holding video memory, or the graphics driver needs "
++            "restarting.")
++    else:
++        out["status"] = "partial"
++        out["note"] = (
++            f"Only {worst}% of the model is on the graphics card; the rest is "
++            "on the CPU, which is what makes it slow. A smaller model, or a "
++            "shorter context, would fit.")
++
++    # Said only when it adds something. The budget is what the owner told us
++    # the card has, not what was probed - so this compares a claim against a
++    # measurement rather than pretending to know the hardware.
++    if out["status"] in ("cpu", "partial"):
++        try:
++            budget = _budget_mb()
++            biggest = max((x["size_mb"] for x in out["models"]), default=0)
++            if biggest and budget:
++                out["note"] += (f" The model needs about {biggest} MB and the "
++                                f"configured budget is {budget} MB.")
++        except Exception:
++            pass
++    return out
++
++
+ def local_geometry(ref: str, timeout: float = 15.0) -> Optional[dict]:
+     """Exact layer/head counts for an INSTALLED model, so estimate_vram_mb
+     can use the real KV formula instead of the parameter-count stand-in.
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -295,10 +295,20 @@
+         names = MM.installed()
+     except Exception:
+         names = []
++    # Loopback, four seconds, never raises. It belongs here rather than behind
++    # its own route because the one screen that shows which model is running is
++    # the screen that has to say whether it is actually on the card - a warning
++    # on a page nobody opens is not a warning.
++    try:
++        offload = MM.offload_status()
++    except Exception as exc:
++        offload = {"available": False, "status": "unknown",
++                   "note": f"could not be checked: {type(exc).__name__}"}
+     return {
+         "current": MM.current_model(),
+         "previous": MM.previous_model(),
+         "installed": names,
++        "offload": offload,
+         # The catalogue is a network fetch; the desktop asks for it explicitly
+         # rather than paying for it every time the screen opens.
+         "recommendations_endpoint": "/api/models?recommend=1",

@@ -197,6 +197,34 @@
         <p class="state" id="backend-state">—</p>
       </section>
 
+      <section class="card">
+        <h2>Startup and logs</h2>
+        <p class="note">
+          Jarvis writes what it is doing to a file. If the backend refuses to start,
+          the reason is in <code>backend.log</code> — before this existed there was
+          nowhere for it to go, because a released Windows app has no console.
+          Both files are plain text and <strong>nothing in them is hidden or
+          scrambled</strong>, so read one before you send it to anybody.
+        </p>
+
+        <label class="toggle">
+          <input id="autostart" type="checkbox" />
+          <span>Start Jarvis when Windows starts</span>
+        </label>
+        <p class="note" id="autostart-note">
+          Jarvis will be running after a restart. It does not promise to be
+          <em>first</em> — other startup programs are racing it for the
+          <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and whoever asks first wins.
+        </p>
+
+        <div class="row">
+          <button class="btn ghost" id="open-logs" type="button">Open the log folder</button>
+          <span class="status" id="logs-status" role="status"></span>
+        </div>
+
+        <p class="state" id="logs-state">—</p>
+      </section>
+
       <footer class="page-foot">
         <span id="store-path"></span>
       </footer>

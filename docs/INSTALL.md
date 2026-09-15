@@ -279,17 +279,38 @@ typed a token into Settings. To remove everything:
 
 ---
 
+## When something goes wrong
+
+Open **Settings → Startup and logs → Open the log folder**. Two files:
+
+- `jarvis-desktop.log` — the app itself: what it started, what failed.
+- `backend.log` — everything the Python backend printed, including the reason
+  it refused to start.
+
+Both roll over at 4 MB, keeping one previous copy as `.1`. Neither is
+redacted, so read before you share.
+
+**"Jarvis got slow."** Open the Brain → Models. If the model has fallen off
+the graphics card onto the CPU, there is now a yellow line at the top of that
+list saying so, with the percentage. Nothing used to say it — Ollama reports
+the model as loaded and healthy either way.
+
+---
+
 ## Known rough edges
 
 Things you will hit that are already on the list, so you know they are known
 rather than your fault.
 
-- **No autostart.** The app must be launched by hand after every boot, and it
-  loses the `Alt+Space` race because it starts after everything else.
-- **No log file.** The app writes no log, the release build has no console, and
-  the Python child's output goes to a closed handle. When the backend fails to
-  start, nothing anywhere records why. Start the backend in a terminal while
-  setting up.
+- ~~No autostart.~~ Fixed. Settings → Startup and logs → **Start Jarvis when
+  Windows starts**. It still loses the `Alt+Space` race, though: every startup
+  program asks for its shortcuts at once and whoever asks first wins, so being
+  present after a reboot is not the same as owning the key.
+- ~~No log file.~~ Fixed. Settings → Startup and logs → **Open the log
+  folder**. `jarvis-desktop.log` is the app, `backend.log` is everything the
+  Python side printed — which used to go to a closed handle, which is why the
+  advice was to run it in a terminal. Both are **plain text and nothing in
+  them is scrambled or hidden**, so read one before sending it anywhere.
 - **The updater is off.** No signing key exists, so the in-app updater is inert
   and reports itself unsupported. Updating means building and installing again.
 - **The token is stored in plain text**, in two places: the one the backend

@@ -403,6 +403,21 @@ function renderModels() {
     "No models reported."
   );
 
+  // Is the model actually ON the graphics card? Nothing else anywhere says.
+  // llama.cpp spills layers to the CPU silently and Ollama still reports the
+  // model as loaded and healthy, so the only symptom is that everything got
+  // slow - and the owner blames Jarvis rather than the fit.
+  //
+  // Prepended after `rows()` rather than composed before it, because `rows()`
+  // calls replaceChildren on whatever it is given, and the rollback button
+  // below appends to the same element.
+  const off = body.offload || {};
+  if (off.status === "cpu" || off.status === "partial") {
+    dom.models.prepend(
+      el("p", "banner", String(off.note || "The model is not on the graphics card."))
+    );
+  }
+
   if (previous && previous !== current) {
     const back = el("div", "row-actions");
     back.style.paddingTop = "10px";

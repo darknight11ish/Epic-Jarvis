@@ -113,7 +113,7 @@ permissions = [
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "settings-surface"
-description = "Read and write the connection settings and backend supervision. Privileged: keep this to the settings window."
+description = "Read and write the connection settings, backend supervision, the log location and whether Jarvis starts with Windows. Privileged: keep this to the settings window."
 permissions = [
   # The global accelerators. A write, and a privileged-feeling one — it binds
   # keys machine-wide — so it sits with the other settings-only powers rather
@@ -138,6 +138,18 @@ permissions = [
   "allow-set-supervision",
   "allow-start-backend",
   "allow-stop-backend",
+  # Diagnostics. `get_log_info` returns paths and sizes, never contents - the
+  # log is plain text with no redaction pass and must not become readable by a
+  # page just because the page can ask where it is. `open_log_folder` hands a
+  # directory to Explorer and takes no argument at all, so there is nothing a
+  # caller can point it at.
+  "allow-get-log-info",
+  "allow-open-log-folder",
+  # Starting with Windows. A registry write under HKEY_CURRENT_USER\...\Run,
+  # which is a thing that survives uninstalling carelessly, so it belongs with
+  # the other settings-only powers rather than anywhere a chat page can reach.
+  "allow-get-autostart",
+  "allow-set-autostart",
 ]
 
 # ---------------------------------------------------------------------------

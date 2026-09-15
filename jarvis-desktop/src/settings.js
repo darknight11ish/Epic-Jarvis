@@ -55,6 +55,12 @@ const dom = {
   backendStatus: $("backend-status"),
   backendState: $("backend-state"),
 
+  autostart: $("autostart"),
+  autostartNote: $("autostart-note"),
+  openLogs: $("open-logs"),
+  logsStatus: $("logs-status"),
+  logsState: $("logs-state"),
+
   updateAuto: $("update-auto"),
   updateState: $("update-state"),
   updateCheck: $("update-check"),
@@ -283,6 +289,96 @@ onLink((link) => {
   }
 });
 
+/* ==========================================================================
+   Startup and logs
+   --------------------------------------------------------------------------
+   Two small things that were the difference between "it broke and I have no
+   idea why" and a file you can read. The log did not exist at all: a released
+   Windows build has no console, so every print in the Rust and every traceback
+   from the Python child went to a dead handle.
+   ========================================================================== */
+
+/** Human bytes. A log size nobody can read is not information. */
+function size(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return "empty";
+  if (n < 1024) return `${n} bytes`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function paintLogs() {
+  let info;
+  try {
+    info = await invoke("get_log_info");
+  } catch (error) {
+    dom.logsState.textContent = String((error && error.message) || error);
+    dom.openLogs.disabled = true;
+    return;
+  }
+  if (!info || info.available === false) {
+    dom.logsState.textContent = String(info?.note || "No log directory.");
+    dom.openLogs.disabled = true;
+    return;
+  }
+  dom.openLogs.disabled = false;
+  // The folder path is rendered as text as well as being openable, because
+  // Explorer can be refused on a locked-down machine and a path you can
+  // select and copy is the difference between sending a log and giving up.
+  dom.logsState.textContent =
+    `${info.dir} · this app ${size(info.app?.bytes)} · backend ${size(info.backend?.bytes)}`;
+}
+
+async function paintAutostart() {
+  let info;
+  try {
+    info = await invoke("get_autostart");
+  } catch (error) {
+    dom.autostartNote.textContent = String((error && error.message) || error);
+    dom.autostart.disabled = true;
+    return;
+  }
+  // Read back from the registry every time, never remembered here: the owner
+  // can turn this off in Task Manager's Startup tab, and a checkbox still
+  // showing ticked after that would be a lie about the machine.
+  dom.autostart.checked = Boolean(info.enabled);
+  dom.autostart.disabled = !info.supported;
+  if (!info.supported) {
+    dom.autostartNote.textContent =
+      "Starting with the computer is a Windows feature. This build is not Windows.";
+  }
+}
+
+dom.autostart.addEventListener("change", async () => {
+  const wanted = dom.autostart.checked;
+  dom.autostart.disabled = true;
+  try {
+    const out = await invoke("set_autostart", { enabled: wanted });
+    // Render what came back, not what was asked for. A registry write that
+    // silently did nothing must show as off.
+    dom.autostart.checked = Boolean(out && out.enabled);
+    report(
+      dom.logsStatus,
+      out && out.enabled ? "Jarvis will start with Windows." : "Jarvis will not start with Windows.",
+      "ok"
+    );
+  } catch (error) {
+    report(dom.logsStatus, String((error && error.message) || error), "bad");
+    await paintAutostart();
+  } finally {
+    dom.autostart.disabled = false;
+  }
+});
+
+dom.openLogs.addEventListener("click", async () => {
+  try {
+    await invoke("open_log_folder");
+    report(dom.logsStatus, "Opened.", "ok");
+  } catch (error) {
+    report(dom.logsStatus, String((error && error.message) || error), "bad");
+  }
+});
+
 (async () => {
   if (!IS_TAURI) {
     report(dom.connectionStatus, "No desktop backend — browser preview.", "bad");
@@ -294,12 +390,24 @@ onLink((link) => {
     report(dom.connectionStatus, String((error && error.message) || error), "bad");
   }
   await paintBackend({ fields: true });
+  await paintAutostart();
+  await paintLogs();
   // Cheap, and only while the window is actually on screen — a settings page
   // nobody is looking at has no reason to poll.
   let timer = null;
   const poll = () => {
     if (timer) clearInterval(timer);
-    timer = document.hidden ? null : setInterval(paintBackend, 5000);
+    timer = document.hidden
+      ? null
+      : setInterval(() => {
+          paintBackend();
+          // The backend log grows while the backend runs, so the size on
+          // screen should move. Autostart is not polled: it changes only when
+          // someone changes it, here or in Task Manager, and re-reading the
+          // registry every five seconds to catch the second case is not worth
+          // it - the page re-reads it on open.
+          paintLogs();
+        }, 5000);
   };
   document.addEventListener("visibilitychange", poll);
   poll();

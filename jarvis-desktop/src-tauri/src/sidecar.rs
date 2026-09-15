@@ -39,7 +39,7 @@
 //! `std::process::Command` is `CreateProcess` with argument quoting `std`
 //! already gets right, and no shell anywhere in the path.
 
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -47,6 +47,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use crate::commands;
+use crate::logfile;
 use crate::proctree::{self, ProcessTree};
 
 /// Store key for the on/off switch. Absent means off.
@@ -425,6 +426,28 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
         command.env("HUD_TOKEN", token);
     }
 
+    // The whole reason the backend's failures were invisible. A release build
+    // is `windows_subsystem = "windows"`, so this process has no console and
+    // its standard handles are dead; inheriting them - which is what Command
+    // does when no Stdio is set - handed the Python child the same dead
+    // handles. Its startup banner, its bind refusal and its tracebacks all
+    // went nowhere, and INSTALL.md had to tell people to run it in a terminal
+    // instead. Now it goes to backend.log, which is the file the owner can
+    // actually send us.
+    //
+    // Falls back to inheriting when the log file cannot be opened: the old
+    // behaviour, which is bad, beats refusing to start the backend at all.
+    match logfile::backend_sinks() {
+        Some((out, err)) => {
+            logfile::mark_backend(&format!(
+                "\n===== starting `{}` =====",
+                config.program.trim()
+            ));
+            command.stdout(Stdio::from(out)).stderr(Stdio::from(err));
+        }
+        None => logfile::log("[jarvis] no log directory; the backend's output will be lost"),
+    }
+
     let (child, tree) = proctree::spawn(&mut command).map_err(|e| {
         format!(
             "could not start `{}`: {e}. Check that the program exists and the path to \
@@ -441,7 +464,7 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
         started: Instant::now(),
         child_exited: false,
     });
-    println!("[jarvis] backend started (pid {pid})");
+    logfile::log(&format!("[jarvis] backend started (pid {pid})"));
     Ok(pid)
 }
 

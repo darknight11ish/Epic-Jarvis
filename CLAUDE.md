@@ -61,6 +61,34 @@ draft and mistaking it for the source file.
 - "I checked X and it says Y" beats "Y". "I have not checked" beats a guess
   delivered confidently.
 
+## Checking the Rust without waiting for CI
+
+`cargo clippy` fails in the dev container: the product is a Windows app, the
+Linux dependency graph pulls `gdk-sys`, and GTK is not installed. For a long
+time that meant every Rust change was pushed unverified and checked by CI five
+minutes later.
+
+**It does not have to be.** The `x86_64-pc-windows-msvc` target is installed,
+and checking against it selects the *Windows* dependency graph, which has no
+GTK in it. Nothing is linked, so no MSVC toolchain is needed:
+
+```
+cd jarvis-desktop/src-tauri
+cargo fmt --check
+cargo check  --target x86_64-pc-windows-msvc --all-targets
+cargo clippy --target x86_64-pc-windows-msvc --all-targets -- -D warnings
+```
+
+That is two of the three things CI runs, on the same code CI compiles,
+including every `#[cfg(windows)]` block — which a Linux check would have
+skipped entirely, and which is where the unsafe FFI lives. It takes about
+twenty seconds warm.
+
+The third, `cargo test`, still needs a Windows host. Write the Rust tests
+anyway; they are compiled by `--all-targets` above, so at least they are known
+to build. A "GNU compiler is not supported for this target" warning in the
+output is expected and harmless.
+
 ## Where everything is written down
 
 - `docs/ARCHITECTURE.md` — **read first.** The invariants, the one permission

@@ -85,6 +85,13 @@ fn main() {
             "set_quickbar_pinned",
             "write_clipboard",
             "open_external_url",
+            // Diagnostics and startup. Settings window only: the log path is
+            // a filesystem path and the startup entry is a registry write,
+            // and neither belongs to a page that renders chat.
+            "get_log_info",
+            "open_log_folder",
+            "get_autostart",
+            "set_autostart",
             // Shared
             "check_server_health",
         ]));

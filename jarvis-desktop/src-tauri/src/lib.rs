@@ -18,9 +18,11 @@
 
 pub mod appearance;
 pub mod attention;
+pub mod autostart;
 pub mod brain;
 pub mod commands;
 pub mod hotkeys;
+pub mod logfile;
 pub mod proctree;
 pub mod sidecar;
 pub mod spec;
@@ -407,6 +409,14 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
             &serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into()),
         );
 
+    // Started by hand, the HUD is what you came for, so it opens focused.
+    // Started by Windows at login it must not: a 1280x820 window taking focus
+    // while the desktop is still painting is the single most obnoxious thing a
+    // startup program can do, and it would arrive over whatever the person
+    // actually opened. Hidden, not skipped - it is fully built and warm, and
+    // the tray's "Show the HUD window" or the hotkey brings it up instantly.
+    let at_login = autostart::launched_at_login();
+
     tauri::WebviewWindowBuilder::new(
         app,
         HUD_LABEL,
@@ -421,14 +431,22 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .always_on_top(false)
     .skip_taskbar(false)
     .resizable(true)
-    .focused(true)
+    .visible(!at_login)
+    .focused(!at_login)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
     .initialization_script(&script)
     .build()
     .map_err(|e| format!("{e}"))?;
 
-    println!("[jarvis] HUD window created for {base}");
+    logfile::log(&format!(
+        "[jarvis] HUD window created for {base}{}",
+        if at_login {
+            " (hidden: started at login)"
+        } else {
+            ""
+        }
+    ));
     Ok(())
 }
 
@@ -448,7 +466,7 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            println!("[jarvis] second launch folded into the running instance");
+            logfile::log("[jarvis] second launch folded into the running instance");
             if let Some(hud) = app.get_webview_window(HUD_LABEL) {
                 let _ = hud.show();
                 let _ = hud.unminimize();
@@ -547,6 +565,10 @@ pub fn run() {
             commands::set_quickbar_pinned,
             commands::write_clipboard,
             commands::open_external_url,
+            commands::get_log_info,
+            commands::open_log_folder,
+            commands::get_autostart,
+            commands::set_autostart,
         ]);
 
     // The global-shortcut plugin owns a single handler for every accelerator we
@@ -645,6 +667,24 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
+            // FIRST, before anything that might fail. Until this runs, every
+            // `logfile::log` is a no-op and a release build has no console, so
+            // anything that goes wrong below would be lost exactly the way the
+            // backend's startup errors used to be.
+            match logfile::init(&handle) {
+                Some(dir) => logfile::log(&format!(
+                    "\n===== Jarvis Desktop {} starting ===== (logs in {})",
+                    env!("CARGO_PKG_VERSION"),
+                    dir.display()
+                )),
+                None => eprintln!(
+                    "[jarvis] no log directory could be created; this session is not recorded"
+                ),
+            }
+            if autostart::launched_at_login() {
+                logfile::log("[jarvis] started by Windows at login");
+            }
+
             // The HUD is built here rather than declared in `tauri.conf.json`
             // because a config-declared window cannot carry an initialisation
             // script, and this one needs two things to run before the page's
@@ -653,13 +693,15 @@ pub fn run() {
             // EventSource shim that keeps the desktop down to one subscription.
             // `on_page_load` is too late for either.
             if let Err(err) = build_hud_window(&handle) {
-                eprintln!("[jarvis] the HUD window could not be created: {err}");
+                logfile::log(&format!(
+                    "[jarvis] the HUD window could not be created: {err}"
+                ));
             }
 
             // Vibrancy (Acrylic on the quickbar, Mica on the HUD) plus the
             // focus-loss auto-hide listener for the spotlight bar.
             if let Err(err) = windows::setup_windows(&handle) {
-                eprintln!("[jarvis] window setup reported: {err}");
+                logfile::log(&format!("[jarvis] window setup reported: {err}"));
             }
 
             // Desktop widget: put it back where the user left it, then start

@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Fifteen patches against the Jarvis backend, each with an executable test.
+Sixteen patches against the Jarvis backend, each with an executable test.
 
 **Order.** The first thirteen commute — several touch `jarvis_hud.py`, but in
 well-separated regions, and every order produces the same tree. The order in
@@ -35,6 +35,7 @@ dependency, not just a semantic one — it will not apply without both.
 | `token-file.patch` | `jarvis_hud.py` | Makes a token on first run. **The phone has never been pairable without this.** |
 | `bitemporal.patch` | `jarvis_memory.py`, `jarvis_hud.py` | The second time axis. Adds `retired_at` — when we stopped believing a fact, as distinct from when it stopped being true. Needs `memory-safety` and `memory-pane`. |
 | `embedding-guard.patch` | `jarvis_memory.py` | A NaN or all-zero embedding was stored without complaint and the row was then unreachable forever. Needs `memory-safety`. |
+| `gpu-offload.patch` | `jarvis_models.py`, `jarvis_hud.py` | Says when the model is running on the CPU instead of the graphics card. Nothing did, and the only symptom was that everything got slow. |
 
 ## Apply them
 
@@ -1058,3 +1059,46 @@ Borrowed from `evaluateEmbeddingVector` in janhq/jan,
 `docs/COMPARISON.md` §3.
 
 `test_embedding_guard.py`: 24 checks, 7 of which fail on the unpatched tree.
+
+
+---
+
+# `gpu-offload.patch` — say when the model fell off the graphics card
+
+Independent of the others.
+
+llama.cpp fits as many layers as it thinks will fit and silently runs the rest
+on the CPU. **Ollama reports the model loaded and healthy either way.** Nothing
+errors, nothing warns, and the only symptom is that answers take fifteen
+seconds instead of two — at which point the owner blames the assistant rather
+than the fit.
+
+`MM.offload_status()` reads `/api/ps`, which carries `size` and `size_vram`
+per loaded model, so the split is a subtraction:
+
+| reading | status | what it means |
+|---|---|---|
+| `size_vram == size` | `gpu` | what you want; says nothing |
+| `size_vram == 0` | `cpu` | none of it is on the card |
+| in between | `partial` | some layers spilled; this is the common one |
+| no models | `idle` | Ollama unloads after a few minutes; normal |
+
+Jan's equivalent compares a hardware GPU count against the engine's device
+count, which catches only the all-CPU case. The subtraction catches partial
+spill too, and partial spill is the commoner failure.
+
+Surfaced in `_models_view()` — the one screen that says which model is running
+is the screen that has to say whether it is really on the card — and as a
+banner in the Brain's Models pane, **shown only when the answer is bad**. A
+banner on the healthy path is noise on every visit.
+
+Never raises, never blocks: a four-second budget on loopback, and every
+failure reports `unknown` rather than inventing a number. A `size` of zero,
+which happens while a model is still loading, is not a divide-by-zero and is
+not called a failure.
+
+`test_gpu_offload.py`: 26 checks, 15 of which fail on the unpatched tree. It
+also asserts that the only URL the check ever touches is loopback.
+
+Idea from janhq/jan `extensions/llamacpp-extension/src/readiness.ts`
+(Apache-2.0). See `docs/COMPARISON.md` §3.
