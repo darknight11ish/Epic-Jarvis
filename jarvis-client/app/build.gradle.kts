@@ -156,6 +156,22 @@ dependencies {
     // A fingerprint instead of a tap for irreversible and outbound decisions -
     // the one item on the brief's list a browser genuinely cannot do.
     implementation("androidx.biometric:biometric:1.1.0")
+    // Not used directly - this app has no fragments of its own and is pure
+    // Compose. It is here to raise a floor that biometric:1.1.0 sets too low:
+    // it depends on androidx.fragment 1.2.5, and `registerForActivityResult`
+    // needs 1.3.0 or newer. Gradle takes the highest, so declaring the minimum
+    // is all this does.
+    //
+    // Found by building the release variant for the first time. The check is
+    // `InvalidFragmentVersionForActivityResult`, and it is fatal only under
+    // lintVitalRelease - which runs on release builds and nothing else - so it
+    // had never run at all. That is the whole argument for building this
+    // variant in CI: the failure was latent, not new.
+    //
+    // It is also not merely a lint nag. MainActivity registers two permission
+    // contracts at construction, and BiometricPrompt - the gate that rule 4
+    // leans on for irreversible approvals - drives a fragment internally.
+    implementation("androidx.fragment:fragment:1.3.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okio:okio:3.6.0")
