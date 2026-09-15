@@ -76,7 +76,15 @@ jobs:
                   # underneath, so printing `msg[0]` reported "8 of 113
                   # vectors" and threw away all eight. The smoke job has
                   # printed 25 since it was written; this half never caught up.
-                  body = (bad.text or bad.get("message") or "").strip()
+                  # `message` FIRST, not `text`. The attribute is the
+                  # assertion alone; the element body is the assertion plus
+                  # the whole stack trace. Preferring `text` meant an
+                  # assertion that lists eight cases printed one line of
+                  # message, eight lines of detail, and then sixteen frames of
+                  # JUnit reflection - and the log tail cut the top off, so
+                  # the eight were lost a second time by the fix meant to
+                  # surface them. Frames are the one thing never in doubt.
+                  body = (bad.get("message") or bad.text or "").strip()
                   if not body:
                       body = bad.get("type", "failed")
                   for line in body.splitlines()[:25]:
