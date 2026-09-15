@@ -1,6 +1,6 @@
 # Backend patches
 
-Eight patches against the Jarvis backend, each self-contained and each with an
+Nine patches against the Jarvis backend, each self-contained and each with an
 executable test. They touch different files and can be applied in any order,
 but the order below is the one to use: `memory-safety` must land
 before anything makes the extractor run.
@@ -15,6 +15,7 @@ before anything makes the extractor run.
 | `documents-honesty.patch` | `jarvis_hud.py` | The brain map reports a document store that has never existed. Makes the status line true. |
 | `memory-prefix.patch` | `jarvis_hud.py` | Recalled facts were the first thing in every request: it dropped the persona invariants and threw away the KV cache for the whole conversation, every turn. |
 | `extraction-wiring.patch` | `jarvis_hud.py`, `jarvis_events.py` | `propose()` had zero call sites. Gives the learning loop a trigger, and the review queue a doorbell. |
+| `voice-503.patch` | `jarvis_hud.py` | Four voice routes answered a missing speech module in four different shapes, two of them a 500 for something that did not break. |
 
 ## Apply them
 
@@ -623,3 +624,67 @@ nothing you typed does not wake the model at all, and a pass that raises does
 not stop the next thing you say being learned from. The transcript assertions
 check both directions — your words present, the assistant's Joplin quote and
 the recalled-facts block absent. Against the unpatched files all of it fails.
+
+---
+
+# `voice-503.patch`
+
+`jarvis_speech.py` does not exist — not unfinished, absent — so every
+`/api/voice/*` route is on its failure path on every request today. They
+disagreed about what that looks like:
+
+| route | today |
+|---|---|
+| `/api/voice/status` | `200` `{"available": false, "error": "ModuleNotFoundError: ..."}` |
+| `/api/voice/utterance` | `500` `{"error": "ModuleNotFoundError"}` |
+| `/api/voice/say` | `500` `{"error": "ModuleNotFoundError"}` |
+| `/api/voice/wake` | the `ImportError` was not caught at all |
+
+A client asking "is the voice path up?" had to recognise four shapes. And the
+two 500s are the wrong answer: a 500 says the server broke, and nothing broke
+— the module was never installed. That is a 503, which is the code the `say`
+route's own no-engine branch already used.
+
+## `client_fallback_ok` is the point
+
+All four now go through one `_no_speech()` helper returning the same body —
+but `client_fallback_ok` is set **per route**, because the two directions are
+not alike:
+
+| route | code | `client_fallback_ok` | why |
+|---|---|---|---|
+| `say` | 503 | **true** | speaking text the client already holds reveals nothing and skips no check |
+| `utterance` | 503 | **false** | client-side speech-to-text moves the privacy boundary and disarms the owner-voice gate |
+| `wake` | 503 | false | there is nothing to switch on |
+| `status` | 200 | false | same body; still 200, because "can you speak?" is a question this route *can* answer |
+
+The `utterance` reason says it in words the client author will read:
+
+> do NOT recognise this yourself. Local speech-to-text on the client moves the
+> privacy boundary and disarms the owner-voice gate; show that dictation is
+> unavailable instead.
+
+## And the `say` permission was too broad
+
+The old reason read *"speak it with your own synthesiser; the text is already
+yours, so nothing is revealed"*. True of a synthesiser **on the device**. Not
+true of one that ships the text to a vendor to be spoken — which is what
+stock Android does by default, and what the sibling client is doing right now.
+So the sentence the server sends is narrowed to say on-device, name network
+synthesis as egress, and state that the 503 is not permission for it.
+
+Details for the client half are in `docs/ANDROID-VOICE-FALLBACK.md`. **This
+patch does not close that hole** — the 503 path *is* the hole. It makes the
+contract honest and machine-readable so the client fix has something to read.
+
+## Test it
+
+```powershell
+python test_voice_503.py
+```
+
+Nineteen checks. `_no_speech` and `_SAY_FALLBACK` are lifted out of the source
+with `ast` and executed, so the shipped helper is what runs; the rest walk the
+tree and assert that exactly one of the four call sites allows a client
+fallback and three refuse it, and that nothing reaches a 500 for a module that
+was simply never installed.
