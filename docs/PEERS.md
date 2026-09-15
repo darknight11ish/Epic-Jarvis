@@ -683,6 +683,91 @@ is maintained and permissively licensed, except the four already flagged —
 Khoj (AGPL), superlocalmemory (AGPL), Open WebUI (custom, restrictive), and
 the three archived voice projects.
 
+## Two repositories the owner asked about, 2026-09-15
+
+Both read from source. Neither was in the original twenty.
+
+### `adewaskar/jarvis` — MIT, and the most useful thing found for task #27
+
+A browser voice assistant: "Hey Jarvis", wake word, barge-in, an Iron Man
+holographic UI. React + Vite + Three.js in the browser, a Node bridge that runs
+**Claude Code headless** as the brain via `@anthropic-ai/claude-agent-sdk`.
+
+**What cannot be used, and it is most of it.** The brain runs on Anthropic's
+servers — the README says so plainly and treats it as the selling point ("even
+a low-end laptop only has to draw the interface"). That is invariant 1 in
+reverse. ElevenLabs is the preferred voice and transcription. The whole thing
+is a browser app; ours is native Tauri.
+
+**What is worth taking — `src/lib/vad.ts`, and it is the single best find in
+any of this research for the voice work.** MIT, self-contained, and the
+docstring diagnoses a failure we would have walked straight into:
+
+> the browser's SpeechRecognition ... dies silently under always-on use —
+> Chrome throttles it, it stops firing events, and **nothing you can catch
+> tells you it has gone deaf**. Detecting that a human is speaking is not a
+> language problem, though; it is an energy problem.
+
+Same failure class as the GPU silently running on the CPU: healthy-looking and
+unreported. Their answer is a running-mean noise floor, a threshold as a
+*ratio* above it, and hysteresis. The tuned constants are there to read:
+`TRIGGER_OVER_FLOOR 2.6`, `RELEASE_RATIO 0.6`, `START_MS 110`,
+`SILENCE_MS 650`, `MAX_MS 20000`, and an asymmetric floor —
+`FLOOR_UP 0.0008` / `FLOOR_DOWN 0.02` — so it adapts slowly to a fan spinning
+up and quickly to a door closing.
+
+Four more things from it, none of which we had thought about:
+
+1. **It hears itself.** The microphone picks up the assistant's own voice
+   through the speakers and raw energy cannot tell that from a person. Three
+   layers: ask `getUserMedia` for echo cancellation, raise the trigger
+   threshold *while speaking* (`GUARD_BOOST 2.4`), and check the transcript
+   text as a backstop.
+2. **Segment end is not turn end.** They had one timer for both and could not
+   set it: long enough not to clip someone thinking mid-sentence meant every
+   finished question also sat waiting. Split it — energy decides "stopped
+   making noise", words decide "finished the thought".
+3. **Capability detection at boot, no flag.** The browser asks the bridge
+   `GET /health` → `{ ok, tts, stt }` and picks the best engine available, so
+   adding a key upgrades voice and transcription with nothing to configure.
+   That is the shape for sherpa-onnx present vs absent.
+4. **A server-side media proxy.** `/img` and `/media` fetch remote media
+   through the bridge, SSRF-guarded, so **"the page never beacons your IP to a
+   host the model chose."** Worth checking whether our HUD has that hole.
+
+**And it challenges our design, which is the most valuable part.** Their gate
+is default-deny and decides **ahead of time** in `decideTool()`, explicitly not
+at the moment of use, with a stated reason:
+
+> Voice is a poor interface for a confirmation dialog.
+
+That is a real problem for one-action-one-decision and it is unsolved here.
+When #27 lands, "how does a person approve something with their voice" needs
+an answer better than reading the prompt aloud.
+
+They also ship a blanket grant — `npm run bridge:writes` turns on **every**
+effectful tool at once — which makes six out of six comparable projects with
+one. Their `settingSources: []` is good though: it makes the bridge's own gate
+the only authority, so a global `bypassPermissions` elsewhere cannot override
+it. Same spirit as our never-tier being unwaivable.
+
+### `Egonex-AI/Understand-Anything` — MIT, a dev tool, not a component
+
+A Claude Code *plugin*: `/understand` runs tree-sitter over a codebase plus LLM
+agents and builds a knowledge graph and dashboard at `.ua/knowledge-graph.json`.
+
+**Not integrated, and it should not be.** It is a plugin for a coding agent,
+not a library — there is nothing to import. It solves a problem Jarvis does not
+have (a developer dropped into 200,000 unfamiliar lines). And it is a third
+runtime: Node 22, pnpm, thirteen compiled tree-sitter parsers, in a project
+that is Python and Rust.
+
+**Worth using ON this repo, which is a different question.** ~40,000 lines now,
+and the owner did not write most of it. Two caveats: the first run costs a lot
+of tokens (their README says so), and **the Python backend is not in this
+repository**, so the graph would cover the desktop app, the patches and the
+docs but not the running backend those patches modify.
+
 ## Things neither pass could verify
 
 Listed so nobody later mistakes a gap for a finding.

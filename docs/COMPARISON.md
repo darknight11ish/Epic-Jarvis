@@ -115,6 +115,8 @@ needs.
 | approval gate | 4 tiers, no approve-all | codex's structured key | **codex, on repeats** |
 | gate decided by the model | no | 3 of 5 peers do it | **us** |
 | voice pipeline | **nothing** | Home Assistant Assist | **them, by a mile** |
+| local voice detection | **nothing** | adewaskar/jarvis `vad.ts`, MIT | **them** |
+| barge-in (interrupt it) | **nothing** | adewaskar/jarvis | **them** |
 | GPU offload check | yes, incl. partial spill | Jan, all-or-nothing only | **us** |
 | embedding validation | yes | Jan | level |
 | webview CSP | fixed loopback allowlist | Jan allows `https: http:` | **us** |
