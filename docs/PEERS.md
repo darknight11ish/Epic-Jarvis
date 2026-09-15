@@ -404,8 +404,10 @@ Stated as judgements, with the evidence above.
 
 ## What Jarvis is probably getting wrong
 
-1. **The gate is enforced in more places than have been audited, and two have
-   already been found.** The webview-vs-Rust staleness split, and
+1. ~~**The gate is enforced in more places than have been audited.**~~
+   **Enumerated**: `test_gate_egress.py` covers all six sites. It found a
+   third leak doing so — see item 5 in the list above. The original finding,
+   kept because it is still the best description of the bug class: The webview-vs-Rust staleness split, and
    `gate-push.patch` — where `_redact`'s own docstring stated the rule, the
    local audit log honoured it, and `_push` sent the identical dict to an
    unauthenticated ntfy.sh topic, on the `notify` tier where by construction
@@ -469,9 +471,20 @@ exists.
    The invariant test exists now
    (`test_gate_outcome.t_there_is_still_no_approve_all`) **and it found a real
    approve-all on its first run** — `confirm_auto()` granted every `ask`
-   action with nobody asked. See `no-auto-approve.patch`. The per-site
-   enumeration is still open.
-6. **Move redaction to the serializer** for every egress.
+   action with nobody asked. See `no-auto-approve.patch`.
+
+   The per-site enumeration is **done** — `test_gate_egress.py`, six sites —
+   **and it found a third leak on its first run.** The SSE doorbell filtered
+   its payload with a denylist naming `detail` and `prompt`; `raised` was
+   added to the row later and shipped itself, and `raised` is the field whose
+   entire purpose is quoting hostile outside text. See
+   `event-allowlist.patch`.
+6. ~~**Move redaction to the serializer** for every egress.~~ Superseded by
+   the enumeration above, which is the same idea done concretely. All six
+   sites now have a test: the row keeps the real text by design,
+   `/api/pending` is behind both the origin check and the token, `decide()`
+   NULLs both columns, `history()` never selects them, every `_push` body
+   goes through `_safe_detail`, and the SSE event is an allowlist.
 7. ~~**Add a distinct `TimedOut` decision**~~ — **done**, `gate-outcome.patch`.
    `Verdict.outcome` now distinguishes six endings and defaults to `refused`,
    codex-style, so a forgotten field fails closed.
