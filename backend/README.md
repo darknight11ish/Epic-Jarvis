@@ -1,6 +1,6 @@
 # Backend patches
 
-Seven patches against the Jarvis backend, each self-contained and each with an
+Eight patches against the Jarvis backend, each self-contained and each with an
 executable test. They touch different files and can be applied in any order,
 but the order below is the one to use: `memory-safety` must land
 before anything makes the extractor run.
@@ -14,6 +14,7 @@ before anything makes the extractor run.
 | `skill-notes.patch` | `jarvis_skills.py` | Gates and surfaces the skill notes, which steer answers, are written without approval, and appear on no screen. |
 | `documents-honesty.patch` | `jarvis_hud.py` | The brain map reports a document store that has never existed. Makes the status line true. |
 | `memory-prefix.patch` | `jarvis_hud.py` | Recalled facts were the first thing in every request, which threw away the KV cache for the whole conversation on every turn. |
+| `extraction-wiring.patch` | `jarvis_hud.py`, `jarvis_events.py` | `propose()` had zero call sites. Gives the learning loop a trigger, and the review queue a doorbell. |
 
 ## Apply them
 
@@ -492,3 +493,94 @@ shipped line. The check that matters serialises two turns that recall
 identical — with a control that runs the old prepend through the same
 assertion and confirms it fails, so the property is known to discriminate.
 Against the unpatched file all fourteen fail.
+
+---
+
+# `extraction-wiring.patch`
+
+**`jarvis_extract.propose()` has never been called.**
+
+Grep the tree. Zero call sites. Every other piece of the learning loop works:
+the prompt, the `proposals` table, `pending()`, `decide()`, the accept path
+that supersedes the fact it replaces, the HTTP routes the HUD already serves.
+The banner has been printing `extraction SCAFFOLD — proposals queue for
+review` on every boot since it was written, about a queue that could not fill.
+The memory store has only ever held what was typed into it by hand.
+
+Apply `memory-safety.patch` first. It is not optional here: the moment
+extraction starts producing proposals, the unpatched `_accept` retires a
+roughly-matching fact chosen by an unfloored `search(replaces, k=1)`.
+
+## The trigger
+
+A `_Learner` on one background thread, offered the transcript in the chat
+handler's `finally`. Three constraints shape it:
+
+**It must not slow the answer down.** Extraction is another full generation on
+the same 8B that is answering, on one GPU. Inline it would double the wait for
+every turn; concurrent it would halve the speed of both.
+
+**It must not be able to break a turn.** Its own thread, and the `offer()` call
+is inside a `try` — a learning pass must never be the reason an answered turn
+reports an error.
+
+**Every turn is the wrong cadence.** A conversation is cumulative, so the same
+text would be re-read again and again for facts the queue already holds. A
+pass runs after **45 seconds of quiet** (`JARVIS_EXTRACT_IDLE`), and then not
+again for **5 minutes** (`JARVIS_EXTRACT_MIN_GAP`). `JARVIS_EXTRACT=0` turns
+the whole thing off and the banner says so.
+
+There is no clock in the implementation. The idle wait is an `Event` with a
+timeout, so a turn arriving restarts it by construction rather than by
+comparing timestamps — the version that cannot drift and cannot be confused by
+the system clock moving.
+
+## What it reads — user turns only
+
+This is the load-bearing decision, and it is the same cut the cloud lane
+already makes twenty lines above, for the same reason the comment there gives:
+**the assistant turn is a carrier.** It restates injected memory. It quotes
+tool output. A Joplin read comes back through it — and the vault is
+deliberately kept out of the retrieval corpus, with a comment saying so,
+precisely so that something merely *resembling* it cannot pull it into a
+prompt. Extracting durable facts out of a vault read and filing them in memory
+would undo that separation quietly and permanently, one accepted proposal at a
+time.
+
+So the learner sees what you typed and nothing else. It also means the taint
+latch does not need consulting: there is nothing in the transcript it reads
+that the latch protects.
+
+The cost is honest and small: a fact the assistant stated and you confirmed
+with "yes" is not learned. That is the right side to err on.
+
+## The doorbell
+
+`_poll_proposals` joins `POLLERS`, publishing `kind: "proposal"` with a count
+when the queue changes. Without it the queue now fills on its own, having
+asked nobody, and the only way to find out is to open the memory pane and
+look — so the review queue grows unseen and the learning loop looks broken
+from every surface at once.
+
+It carries the **count and the ids, never the text**. A proposal quotes
+whatever was said to produce it, and this bus reaches every connected client,
+including a phone showing notifications on a lock screen. Same rule as the
+approval doorbell.
+
+Clients: `proposal` is a new event kind. A client that does not know it should
+ignore it, which every `switch` on `kind` in both clients already does.
+
+## Test it
+
+```powershell
+python test_extraction_wiring.py
+```
+
+Twenty-two checks. `_Learner` is lifted out of `jarvis_hud.py` with `ast` and
+executed with millisecond timings against a fake extractor, so the shipped
+class is what runs: a burst of four turns produces one pass and not four, an
+unchanged transcript is not sent to the model twice, a transcript containing
+nothing you typed does not wake the model at all, and a pass that raises does
+not stop the next thing you say being learned from. The transcript assertions
+check both directions — your words present, the assistant's Joplin quote and
+the recalled-facts block absent. Against the unpatched files all of it fails.
