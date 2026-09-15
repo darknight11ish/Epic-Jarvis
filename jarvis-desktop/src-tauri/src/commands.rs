@@ -319,7 +319,31 @@ pub fn notify(app: &AppHandle, title: &str, body: &str) {
 // Desktop capture
 // ---------------------------------------------------------------------------
 
-/// Grabs the primary display, encodes it as JPEG and returns a base64 data URI.
+/// Where the pointer is, in the virtual-screen coordinate space.
+///
+/// `None` on any platform that is not Windows, and on any failure - callers
+/// fall back to the primary display, which is what they did before.
+fn cursor_point() -> Option<(i32, i32)> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::POINT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+        let mut p = POINT { x: 0, y: 0 };
+        // SAFETY: `p` is a valid, writable POINT for the duration of the call,
+        // which is the function's only requirement.
+        if unsafe { GetCursorPos(&mut p) } != 0 {
+            return Some((p.x, p.y));
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// Grabs the display under the pointer, encodes it as JPEG and returns a
+/// base64 data URI.
 ///
 /// Split out of the command so the `Alt+Shift+S` hotkey can run it on a worker
 /// thread without going through the IPC layer.
@@ -333,14 +357,24 @@ pub fn capture_primary_display() -> Result<CapturePayload, String> {
     if monitors.is_empty() {
         return Err("no display was reported by the compositor".to_string());
     }
-    // Prefer the display Windows marks primary; fall back to the first one so a
-    // multi-monitor rig with an odd configuration still captures something.
-    // `is_primary` is fallible in xcap, and a display that will not answer that
-    // question is not a reason to capture nothing.
-    let monitor = monitors
-        .iter()
-        .find(|m| m.is_primary().unwrap_or(false))
-        .unwrap_or(&monitors[0]);
+    // The monitor under the pointer, not the primary one. "Capture my screen"
+    // means the screen being looked at, and on a two-monitor desk the hotkey
+    // was firing while the owner worked on the secondary and handing back a
+    // picture of the other one - with no indication it had done so.
+    //
+    // Falls back to primary, then to the first display: `is_primary` is
+    // fallible in xcap, and a display that will not answer that question is
+    // not a reason to capture nothing.
+    let monitor = cursor_point()
+        .and_then(|(x, y)| Monitor::from_point(x, y).ok())
+        .or_else(|| {
+            monitors
+                .iter()
+                .find(|m| m.is_primary().unwrap_or(false))
+                .cloned()
+        })
+        .unwrap_or_else(|| monitors[0].clone());
+    let monitor = &monitor;
 
     let frame = monitor
         .capture_image()

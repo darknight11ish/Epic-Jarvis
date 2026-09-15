@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewWindow, WindowEvent};
 
 use crate::{events, HUD_LABEL, QUICKBAR_LABEL};
 
@@ -85,6 +85,29 @@ pub fn setup_windows(app: &AppHandle) -> Result<(), String> {
         if let Err(err) = apply_hud_effects(&hud) {
             problems.push(err);
         }
+        // The HUD is the only window built with `decorations(true)`, so it is
+        // the only one with a real X button - and it was the only one with no
+        // CloseRequested handler. Clicking that X DESTROYED it, and
+        // `build_hud_window` is called once, from `setup`. After that:
+        // `show_hud` and `toggle_hud` both fail with "window `hud` was not
+        // found", the tray's "Show the HUD window" only raises a toast, and a
+        // second launch of the app does nothing visible at all, because
+        // single-instance folds it into this process and the callback focuses
+        // a window that no longer exists. Release builds have no console, so
+        // none of that is reported anywhere.
+        //
+        // Hide, like the quickbar and the widget. The window survives, every
+        // route back to it keeps working, and closing still does what the
+        // owner meant.
+        let handle = app.clone();
+        hud.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                if let Some(hud) = handle.get_webview_window(HUD_LABEL) {
+                    let _ = hud.hide();
+                }
+            }
+        });
     } else {
         problems.push(format!("window `{HUD_LABEL}` was not found"));
     }
@@ -238,15 +261,25 @@ pub fn center_quickbar(window: &WebviewWindow) -> Result<(), String> {
             .map_err(|e| format!("unable to centre the quickbar: {e}"));
     };
 
+    // Physical throughout, for the reason `position_is_visible` below already
+    // spells out: Windows has exactly one coordinate space for the virtual
+    // screen and it is physical. This used to divide `monitor.position()` -
+    // which is physical, in that single space - by *that monitor's* scale,
+    // inventing a per-monitor logical space that does not exist, and then hand
+    // the result to `set_position(Logical)`, which multiplies by the scale of
+    // whichever monitor the window is on *now*. On a 150% primary beside a
+    // 100% secondary those two disagree and the bar lands off-centre or off
+    // the monitor entirely.
     let scale = monitor.scale_factor();
-    let size = monitor.size().to_logical::<f64>(scale);
-    let origin = monitor.position().to_logical::<f64>(scale);
+    let size = monitor.size(); // physical
+    let origin = monitor.position(); // physical, virtual-screen space
 
-    let x = origin.x + (size.width - QUICKBAR_WIDTH) / 2.0;
-    let y = origin.y + size.height * QUICKBAR_VERTICAL_ANCHOR;
+    let width_px = QUICKBAR_WIDTH * scale;
+    let x = origin.x as f64 + (size.width as f64 - width_px) / 2.0;
+    let y = origin.y as f64 + size.height as f64 * QUICKBAR_VERTICAL_ANCHOR;
 
     window
-        .set_position(LogicalPosition::new(x, y))
+        .set_position(PhysicalPosition::new(x, y))
         .map_err(|e| format!("unable to position the quickbar: {e}"))
 }
 
@@ -654,7 +687,7 @@ pub fn setup_widget(app: &AppHandle, prefs: &WidgetPrefs) -> Result<(), String> 
             // monitor the window happened to start on, so a widget parked at
             // physical x=2500 on a 100% secondary display reappeared at x=3750
             // when the app started on a 150% primary.
-            let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+            let _ = window.set_position(PhysicalPosition::new(x, y));
         } else {
             eprintln!("[jarvis] saved widget position is off-screen; using the default corner");
         }
