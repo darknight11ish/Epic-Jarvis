@@ -796,3 +796,90 @@ sherpa-onnx: Apache-2.0. Rhasspy, LocalSend protocol, supermemory: MIT. Khoj
 and superlocalmemory: AGPL-3.0. Open WebUI: BSD-3 plus a branding clause —
 **not OSI open source**. OpenHands SDK: **not verified** — ideas only until
 someone checks.
+
+
+---
+
+## Seven more the owner asked about, 2026-09-16
+
+All seven exist. That is worth saying first, because the previous round of
+suggested repositories was five-of-six wrong and one of them 404'd, so each of
+these was opened before anything was written about it.
+
+| repo | stars | commits | licence | language |
+|---|---|---|---|---|
+| `avikeid2007/KaiROS-AI` | 22 | 126 | MIT | C# / .NET MAUI |
+| `Helldez/JarvisQ` | 18 | 65 | Apache-2.0 | TypeScript |
+| `MSkill1/zynkbot` | 7 | 502 | **custom, see below** | Rust + React |
+| `ashutosh0x/jarvis` | 4 | 131 | MIT | JavaScript |
+| `MasteraSnackin/LFO` | 2 | 7 | MIT | Node / TypeScript |
+| `XidaoApi/local-llm-router` | 0 | 1 | MIT | Python |
+| `azhri1990/jarvis-monorepo` | 0 | 2 | MIT | TypeScript |
+
+`backend/grade-peers.py` returns **BUILD CUSTOM for all seven**: none reaches
+the 50-star viability floor, and three of them are a weekend's work — one
+commit, two commits, seven commits.
+
+### The two routers are behind this project, not ahead of it
+
+This is the finding that matters, because "hybrid router" is what they were
+proposed for. `XidaoApi/local-llm-router` routes on task complexity;
+`MasteraSnackin/LFO` routes on token count with confidence escalation. Both
+decide **local versus cloud on how hard the question is**.
+
+`jarvis_router.choose()` has five gates in a fixed order, and complexity is
+the *fourth*. Ahead of it sit: no lanes offered, the conversation is tainted,
+and the private-topic backstop. Behind it sits the budget. The whole argument
+of this project is that deciding what may leave the machine is the hard part
+and the complexity score is the easy part — so adopting either router would
+mean replacing a privacy decision with a cost decision.
+
+Neither has a taint latch. Neither has anything corresponding to
+`inject_memory`. Taking code from them would be a downgrade with extra steps.
+
+### Language rules out code reuse almost everywhere
+
+The backend is Python, standard library only. The desktop is Rust/Tauri. The
+phone is Kotlin. Of the seven: three are TypeScript, one is C#/.NET, one is
+Rust with a React front end, one is Node, and the single Python one has one
+commit. There is no file here that could be dropped into this project.
+
+### `zynkbot` is the only one worth reading, and its licence needs opening
+
+502 commits is real work, and it is the closest in spirit: local-first, Rust,
+persistent semantic memory, contradiction detection between stored memories,
+and "containment modes" for safety. The memory ideas are adjacent to the
+bi-temporal store and to task #18.
+
+**Its licence is not MIT.** GitHub could not classify it, which
+`grade_repo` correctly flagged as NOASSERTION — the project's own note says
+that means "a custom or amended one, OPEN THE FILE." The description says
+noncommercial use is free and commercial distribution needs a separate
+licence. This build is non-commercial so reading it is fine, but nothing can
+be copied out of it without reading the terms first, and "I read the GitHub
+description" is not reading the terms.
+
+### What none of the seven has
+
+The same gap the earlier passes found, unchanged by seven more projects:
+
+- no per-action approval tier table with a human in the loop
+- no review queue for anything the assistant learned about you
+- no bi-temporal memory — nothing that answers "where did I live last year"
+- no owner voice-print gate in front of transcription
+
+`Helldez/JarvisQ` is the nearest on voice — a full on-device STT → LLM → TTS
+pipeline with Whisper/Parakeet and Qwen3 through llama.cpp, in a hexagonal
+architecture so Android and Electron share a core. Worth twenty minutes
+before task #27 (the sherpa-onnx voice loop), for the shape of the pipeline
+rather than the code. Note its architecture answers a question this project
+answered differently: JarvisQ shares a core between two apps, while Jarvis
+runs one backend with two thin clients. The Jarvis answer is the better one
+for a machine that already has the model resident, and is already built.
+
+### Verdict
+
+Nothing to adopt. One thing to read (`zynkbot`, for memory ideas), one thing
+to skim (`JarvisQ`, before the voice loop). The routers are a step backwards
+and should be refused.
+
