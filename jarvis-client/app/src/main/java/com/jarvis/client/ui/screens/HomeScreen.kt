@@ -111,6 +111,7 @@ data class HomeActions(
     val onOpenInbox: () -> Unit,
     val onOpenBrain: () -> Unit,
     val onOpenAppearance: () -> Unit,
+    val onOpenFaq: () -> Unit,
     val blockerFor: (PendingItem) -> String?,
     val onVoiceBegin: () -> Unit,
     val onVoiceRelease: () -> Unit,
@@ -343,6 +344,7 @@ private fun LinkBar(state: HomeState, actions: HomeActions) {
             onClick = actions.onOpenInbox,
         )
         Quiet("Look", color = chrome.textMid, onClick = actions.onOpenAppearance)
+        Quiet("Help", color = chrome.textMid, onClick = actions.onOpenFaq)
     }
 }
 

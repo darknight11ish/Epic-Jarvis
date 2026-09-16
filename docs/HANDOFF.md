@@ -173,3 +173,26 @@ that file.** The owner has to nudge it.
    files; Porcupine's AccessKey would violate rule 3).
 7. `docs/APPEARANCE-SYNC-PROPOSAL.md` — a proposal, not implemented, and its
    client-identity premise has been corrected.
+
+---
+
+## 8. Added since this handoff was written: a FAQ screen
+
+A new `Screen.FAQ`, reachable from Home's "Help" button next to "Look". Its
+own file, `ui/screens/FaqScreen.kt`, is a static list of phone-specific
+questions and answers — no network calls, no new state, nothing that touches
+the failing-emulator-test investigation in §1. Every answer is grounded in
+this codebase (`PairingScreen.kt`'s Keystore comment, `VoiceModels.kt`'s
+`clientSttAllowed`, `ReadinessScreen.kt`'s wake-word note, `ApprovalNotifier`'s
+lock-screen redaction, `Speaker.kt`'s on-device-only fix, and §4 item 3's
+"sleeping desktop looks like an alarm" bug above) rather than invented copy.
+
+**Not verified by CI**, because there was no green run to verify it against —
+CI was already red for the unrelated emulator failure in §1 before this
+change. This is Kotlin source only (no XML, no manifest change, no new
+dependency), reviewed by hand against exact import and API patterns already
+proven to compile elsewhere in this file tree (`ReadinessScreen.kt`,
+`MainActivity.kt`), since there is no local build to check it against
+directly. Whoever picks up §1's task should know this file exists and is not
+the cause of the emulator failure — it adds no test, touches no network code,
+and the failure predates it.

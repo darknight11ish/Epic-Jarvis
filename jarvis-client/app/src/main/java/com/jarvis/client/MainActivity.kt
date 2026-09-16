@@ -42,6 +42,7 @@ import com.jarvis.client.ui.rememberNavState
 import com.jarvis.client.ui.screens.AppearanceScreen
 import com.jarvis.client.ui.screens.BrainScreen
 import com.jarvis.client.ui.screens.CrashScreen
+import com.jarvis.client.ui.screens.FaqScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
 import com.jarvis.client.ui.screens.HomeState
@@ -440,6 +441,11 @@ class MainActivity : FragmentActivity() {
                     )
                 }
 
+                Screen.FAQ -> FaqScreen(
+                    onBack = { nav.back() },
+                    modifier = root,
+                )
+
                 Screen.APPEARANCE -> AppearanceScreen(
                     current = chrome,
                     followSystem = followSystem,
@@ -525,6 +531,7 @@ class MainActivity : FragmentActivity() {
                             onOpenInbox = { nav.go(Screen.INBOX) },
                             onOpenBrain = { nav.go(Screen.BRAIN) },
                             onOpenAppearance = { nav.go(Screen.APPEARANCE) },
+                            onOpenFaq = { nav.go(Screen.FAQ) },
                             blockerFor = { item: PendingItem ->
                                 JarvisRuntime.decisionBlocker(item)
                             },

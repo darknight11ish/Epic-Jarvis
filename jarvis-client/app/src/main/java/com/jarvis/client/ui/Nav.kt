@@ -15,7 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
  * only inside the `link == CONNECTED` branch, so the screen that tells you why
  * you cannot connect was hidden exactly when you could not connect.
  */
-enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE }
+enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ }
 
 /**
  * A back stack, because there was not one.
