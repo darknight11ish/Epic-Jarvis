@@ -31,7 +31,7 @@
 //! person read the full current text, which happens where the scanner runs.
 
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::commands;
 
@@ -131,8 +131,30 @@ pub async fn brain_read(
 /// Puts something back. JARVIS-API calls this "the one state-changing thing a
 /// phone may drive, because it only ever moves toward a state the owner
 /// already had".
+///
+/// Gated on `StreamState.link().stale`, the same check `decide_approval` in
+/// commands.rs has and this one did not. The Brain window can be open with a
+/// dead event stream - a sleep/wake, a backend restart, a dropped radio - and
+/// `brain.js` only ever read `link.stale` to DISPLAY it, never before firing
+/// this command. jarvis-client found and fixed the identical shape on its own
+/// side for this exact action (`revert`, commit 44a1202) and named it, in its
+/// own comment, "the call JARVIS-API singles out as the one state-changing
+/// thing a phone may drive" - the desktop's copy of that same action had no
+/// gate at all.
+fn require_link_live(app: &AppHandle) -> Result<(), String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "the event stream is stale, so this cannot be confirmed live - \
+             nothing can be sent until it reconnects"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn brain_revert_undo(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
     post(&app, "/api/undo/revert", serde_json::json!({ "id": id })).await
 }
 
@@ -140,6 +162,10 @@ pub async fn brain_revert_undo(app: AppHandle, id: String) -> Result<serde_json:
 /// resumable — the UI must say so before it calls this, not after.
 #[tauri::command]
 pub async fn brain_cancel_job(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    // Same gate, same reason as brain_revert_undo above: cancelling against a
+    // job list that could not be confirmed live risks cancelling one that has
+    // already finished or already failed on its own.
+    require_link_live(&app)?;
     post(&app, "/api/jobs/cancel", serde_json::json!({ "id": id })).await
 }
 
@@ -154,6 +180,11 @@ pub async fn brain_cancel_hold(
     app: AppHandle,
     handle: String,
 ) -> Result<serde_json::Value, String> {
+    // Same gate: a 409 ("already gone") is the server's backstop for a race,
+    // not a reason to send a cancellation we already know is unfounded
+    // because the stream that would confirm the hold is still open cannot be
+    // confirmed live.
+    require_link_live(&app)?;
     post(
         &app,
         "/api/holds/cancel",
@@ -242,6 +273,11 @@ pub async fn brain_memory_decide(
     id: i64,
     accept: bool,
 ) -> Result<serde_json::Value, String> {
+    // The exact same shape as decide_approval (commands.rs): a decision
+    // against a review queue that could have changed since this window last
+    // synced. The extractor fills this queue on its own, on a background
+    // thread, independent of whatever the Brain window last fetched.
+    require_link_live(&app)?;
     post(
         &app,
         "/api/memory/decide",

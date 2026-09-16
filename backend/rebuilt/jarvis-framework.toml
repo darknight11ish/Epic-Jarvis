@@ -341,7 +341,15 @@ import_legacy_on_start = true
 # mem0-style: watch conversations and propose durable facts by itself.
 # Only ever runs on the LOCAL model - extraction is reading your words,
 # and that never goes to a cloud lane. Proposals land in a review queue;
-# nothing enters memory until you accept it (auto_accept = false).
+# nothing enters memory until you accept it.
+#
+# auto_accept IS NOT LOAD-BEARING. It reads as the reason nothing enters
+# memory unattended, but memory-safety.patch removed that code path from
+# propose() entirely - there is no longer anywhere in the extractor that
+# reads this key. Flipping it, in either direction, changes nothing.
+# setup_status() reports it as the constant `false` for exactly this
+# reason - not a live check, a fact about the code. Kept here rather
+# than deleted so an old value on disk does not become a KeyError.
 #
 # SETUP REQUIRED. This is a working scaffold, not a tuned system: the
 # prompt, the accept threshold, and what counts as "durable" all need
@@ -357,8 +365,16 @@ review_queue_max = 200
 # re-read memory, merge duplicates, retire contradicted facts, and
 # rewrite the summary of you. OFF by default, on purpose: 8B-class models
 # are unreliable at editing structured data about themselves, so this is
-# a prototype until you have watched it work. The deterministic parts
-# (duplicate merge, contradiction detection) are safe and run either way.
+# a prototype until you have watched it work.
+#
+# NONE OF THIS EXISTS YET, REGARDLESS OF THE FLAG ABOVE. The line that used
+# to stand here - "the deterministic parts (duplicate merge, contradiction
+# detection) are safe and run either way" - was checked against the code
+# during a self-improvement audit and found false: no code anywhere merges
+# two stored facts or detects a contradiction between them, on or off.
+# jarvis_sleep.py is the whole of what exists: it decides whether to OFFER
+# the feature, once a day, and says so in its own status() as
+# "implemented": false. There is no "either way" to run in yet.
 enabled = false
 # While disabled, a once-a-day card in the HUD explains what it would do,
 # the upside and the risk, and offers to turn it on. Set remind = false

@@ -47,7 +47,7 @@
                  heard = jarvis_speech.hear(raw, source=src)
              except Exception as exc:
                  return self._send(500, {"error": type(exc).__name__})
-@@ -1559,16 +1583,19 @@
+@@ -1559,16 +1583,27 @@
                  return self._send(400, {"error": str(exc)})
              try:
                  import jarvis_speech
@@ -58,7 +58,16 @@
                  wav = jarvis_speech.say(text)
              except Exception as exc:
                  return self._send(500, {"error": type(exc).__name__})
-             if wav is None:
+-            if wav is None:
++            if not wav:
++                # Not `is None`. `jarvis_speech.say()` returning `b""` is not
++                # None and slipped past this exact check, sending a 200 with
++                # an empty WAV body - which is not "no engine", it is a
++                # server fault wearing a success status, and Android's own
++                # contract test (ApiContractTest.anEmptySuccessIsNotPermission
++                # Either) exists specifically because the client cannot tell
++                # the difference between that and a genuine empty clip
++                # without this route already having refused it.
                  return self._send(503, {
                      "error": "no text-to-speech engine installed here",
 +                    "available": False,
@@ -70,7 +79,7 @@
              return self._send(200, wav, ctype="audio/wav")
  
          if route in ("/api/models/install", "/api/models/switch",
-@@ -2084,6 +2111,39 @@
+@@ -2084,6 +2119,39 @@
      return handler.headers.get("X-Jarvis-Client") == "hud"
  
  

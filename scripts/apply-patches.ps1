@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   backend/README.md used to say "git apply this, then this, ... and so on, in
-  table order" — nineteen patches, in a required order, with a backup step you
+  table order" — twenty patches, in a required order, with a backup step you
   had to remember. That is a bad thing to ask of anyone, and the failure mode
   is the worst kind: patch eleven fails and you are left half-applied, with no
   record of which half.
@@ -13,7 +13,7 @@
 
     1. Backs up every file that is about to be touched, into a timestamped
        folder, before anything is written.
-    2. DRY-RUNS all nineteen first. If any one of them would fail, it stops
+    2. DRY-RUNS all twenty first. If any one of them would fail, it stops
        and changes nothing at all.
     3. Applies them in order.
     4. Runs the test suites and prints a summary.
@@ -78,6 +78,9 @@ $PATCHES = @(
     'gate-outcome.patch'
     'no-auto-approve.patch'
     'memory-noise.patch'
+    # After memory-noise: its context is that patch's dedupe rewrite (the
+    # 'pending','rejected' query) and memory-safety's queue_full() field.
+    'decide-once.patch'
     'event-allowlist.patch'
     # Last: it rewrites `pending()` and `_push` in jarvis_gate.py, which
     # gate-outcome and no-auto-approve have already edited, and the

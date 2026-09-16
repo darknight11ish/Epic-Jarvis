@@ -818,8 +818,8 @@
       "exact": true,
       "note": "bind.color overrides the pattern's own colour",
       "expect": {
-        "a": "rgb(236,102,186)",
-        "b": "rgb(96,40,30)"
+        "a": "rgb(51,20,5)",
+        "b": "rgb(74,30,8)"
       }
     },
     {
@@ -835,8 +835,8 @@
       "exact": true,
       "note": "a literal hex passes through hexOf unchanged",
       "expect": {
-        "a": "rgb(255,99,185)",
-        "b": "rgb(255,12,23)"
+        "a": "rgb(169,0,0)",
+        "b": "rgb(244,0,0)"
       }
     },
     {

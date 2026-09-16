@@ -102,6 +102,17 @@ struct Spec {
     patterns: Vec<Pattern>,
     /// State id → its default binding.
     states: HashMap<String, Binding>,
+    /// `limits.flash.flicker_rate_hz_max` - the one number `resolve()` itself
+    /// enforces. The spec's own note calls this a hard limit, not advice, and
+    /// says it is "enforced in three places: the randomiser will not generate
+    /// parameters that break them, a governor inside resolve() holds the
+    /// colour..., and a build check replays every pattern at both parameter
+    /// extremes." None of the three existed in this file - `resolve()`'s
+    /// "flicker" branch read `rate_hz` straight from the binding with no
+    /// clamp and an unsafe fallback of 7.0 (the spec's own safe default is
+    /// 1.2, and 1.3 is the ceiling). Falls back to the spec's documented
+    /// value if the field is ever missing, never to something permissive.
+    flicker_rate_hz_max: f64,
 }
 
 struct Pattern {
@@ -177,11 +188,16 @@ fn spec() -> &'static Spec {
             }
         }
 
+        let flicker_rate_hz_max = root["limits"]["flash"]["flicker_rate_hz_max"]
+            .as_f64()
+            .unwrap_or(1.3);
+
         Spec {
             colors,
             families,
             patterns,
             states,
+            flicker_rate_hz_max,
         }
     })
 }
@@ -481,7 +497,19 @@ pub fn resolve(bind: &Binding, t: f64, amp: f64, seed: f64) -> Resolved {
                     b: lift(Rgb::FALLBACK, -0.55),
                 };
             }
-            let rate = num(q, "rate_hz", 7.0);
+            // CLAMPED, where this used to read straight through with an
+            // unsafe fallback. `limits.flash.flicker_rate_hz_max` (1.3) is a
+            // photosensitive-seizure bound, not a style limit - the spec's
+            // own note calls it a hard limit because the face fills over a
+            // quarter of the visual field at reading distance, so the
+            // small-area exemption in the guidance does not apply. Nothing
+            // clamped it here: a hand-written or randomised binding could
+            // set any rate_hz, and the FALLBACK when the field was simply
+            // missing was 7.0 - itself more than five times the ceiling.
+            // Reachable with no phone, no second device and no network at
+            // all: the desktop's own "Randomise" button in faces.html could
+            // already generate 5-11 Hz before that generator is fixed too.
+            let rate = num(q, "rate_hz", 1.2).min(spec.flicker_rate_hz_max);
             let depth = num(q, "depth", 0.55);
             let n = hash01((t * rate).floor() + seed * 17.0) * 0.6
                 + hash01((t * rate * 2.3).floor() + seed * 31.0) * 0.4;

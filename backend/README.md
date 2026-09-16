@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Twenty-one patches against the Jarvis backend, each with an executable test.
+Twenty-two patches against the Jarvis backend, each with an executable test.
 
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
@@ -44,17 +44,18 @@ on a throwaway copy instead.
 | `gate-outcome.patch` | `jarvis_gate.py` | A timeout was indistinguishable from a refusal. Adds `Verdict.outcome`, which fails closed by default. |
 | `no-auto-approve.patch` | `jarvis_gate.py` | **`confirm_auto()` granted every `ask` action with nobody asked.** An approve-all, inside the module that forbids one. |
 | `memory-noise.patch` | `jarvis_extract.py`, `jarvis_hud.py` | A discarded proposal came straight back, and recalled facts carried no date. |
+| `decide-once.patch` | `jarvis_extract.py` | Found during a self-improvement audit: `decide()` was a plain check-then-act, so two concurrent accepts on one proposal could both win. A full queue also dropped proposals with no record. Needs `memory-noise`. |
 | `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
 | `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Needs `event-allowlist`. |
 
-## Nineteen of the twenty-one actually apply, and that is correct
+## Twenty of the twenty-two actually apply, and that is correct
 
 Ten backend modules were lost and rebuilt from scratch (`backend/rebuilt/` —
 see the header of any file in there). The rebuild was written against the
 *patched* behaviour, because the patches were the specification: their `+`
 lines were often the only surviving copy of the original code.
 
-So six of the twenty-one patches are already half-applied by the rebuild:
+So six of the twenty-two patches are already half-applied by the rebuild:
 
 | patch | half in `rebuilt/` | half still applied, from `rebuilt-patches/` |
 |---|---|---|
@@ -1304,6 +1305,80 @@ A fact with no usable date prints without one rather than with a wrong one —
 `None`, a string, zero and a negative.
 
 `test_memory_noise.py`: 17 checks, 6 of which fail on the unpatched tree.
+
+
+---
+
+# `decide-once.patch` — one human decision, at most one fact
+
+Found reading `decide()` during a self-improvement audit — not reported by
+any test, because none existed for this file's concurrency.
+
+## 1. `decide(id, True)` was a plain check-then-act
+
+```python
+row = c.execute("SELECT * FROM proposals WHERE id=? AND state='pending'", ...).fetchone()
+if not row:
+    return None
+if accept:
+    return _accept(c, store, dict(row))
+```
+
+Nothing sits between the `SELECT` and the `UPDATE` `_accept()` eventually
+issues. Two concurrent calls for the same id — a double-tap, a retried
+request, two devices open on the same review card — can both read
+`state='pending'` before either commits, and both then call `_accept()`.
+`store.add_fact()` already serialises its own writers, so nothing crashes and
+nothing corrupts; it just quietly writes the same fact twice for one decision
+the owner made exactly once.
+
+Reproduced with a `threading.Barrier` forcing simultaneous release rather than
+`Thread.start()`'s natural stagger, which is wide enough on a fast local
+sqlite file that the race often does not show up on its own: twelve threads,
+released together, twelve accepted results, twelve fact rows, from one
+proposal.
+
+Fixed by making the `UPDATE` the claim, not the consequence: `SET
+state='accepting' WHERE id=? AND state='pending'`, checked by `rowcount`
+before anything else runs. The loser sees exactly what an already-decided
+proposal looks like — `None` — instead of a race. A rejection is the same
+shape: `UPDATE ... WHERE state='pending'`, `rowcount` decides the return
+value, no separate read at all.
+
+## 2. A full queue dropped proposals with nothing to show for it
+
+```python
+if text.lower() in known or text.lower() in have or pending_n >= cap:
+    continue
+```
+
+Three different reasons to skip a proposal, folded into one `continue`. Once
+the queue hit its cap, every further proposal that extraction pass produced
+went on the floor — `queue_full` stayed a boolean, and a client watching it
+could not tell "nothing new to learn" from "still learning things, and losing
+all of them".
+
+Split apart now, and the cap branch counts: `setup_status()["dropped_full"]`,
+a running total for the process's life, present only once something has
+actually been dropped — a permanent `dropped_full: 0` line would be noise on
+every screen that renders this, the same rule `jarvis_memory`'s `bad_vectors`
+counter already follows.
+
+## Ordering
+
+Needs `memory-noise`: its context is that patch's `state IN
+('pending','rejected')` dedupe query.
+
+## Test it
+
+```powershell
+python test_decide_once.py
+```
+
+Fourteen checks. The concurrency one is real, not simulated — real threads,
+a real sqlite file, released together by a barrier — and it fails three ways
+on the unpatched tree: more than one winner, fewer `None`s than losers, and
+more than one fact actually written.
 
 
 ---

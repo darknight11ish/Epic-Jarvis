@@ -8,7 +8,7 @@
  from typing import Optional
  import sqlite3
  import sys
-@@ -239,6 +240,176 @@
+@@ -239,6 +240,237 @@
      return out
  
  
@@ -143,6 +143,45 @@
 +    return ""
 +
 +
++def _clamp_flash(pattern: str, params: dict, spec: dict) -> dict:
++    """Clamp the one animation number the safety envelope actually names.
++
++    `limits.flash.flicker_rate_hz_max` (1.3) is a photosensitive-seizure
++    bound, not a style preference - the spec's own note says the face fills
++    over a quarter of the visual field at reading distance, so the
++    small-area exemption in the guidance does not apply. Only `flicker`'s
++    `rate_hz` reads from this envelope; every other pattern's numbers are
++    cosmetic (a period, a hue span, a gain) and clamping them would be
++    opinionated rather than safe.
++
++    A CLAMP, not a rejection - the line this module already draws for
++    structural problems: reject a bad id, clamp a dangerous number. A bound
++    colour or pattern that does not exist is a choice that is in effect
++    nowhere and _appearance_check refuses it outright; an animation speed
++    one device wrote is a value the OTHER device is about to render nearly
++    full-screen, and dropping the whole binding over one unsafe number in it
++    would be worse than gently taming that number.
++
++    Falls back to the spec's own documented ceiling (1.3) when no spec file
++    is on this machine, so a write is never LESS safe just because
++    `_visual_spec()` came back empty - unlike `_appearance_check`'s
++    structural checks, which have nothing to check against and say so.
++    """
++    if pattern != "flicker":
++        return params
++    limits = spec.get("limits", {}).get("flash", {}) if isinstance(spec, dict) else {}
++    try:
++        ceiling = float(limits.get("flicker_rate_hz_max", 1.3))
++    except (TypeError, ValueError):
++        ceiling = 1.3
++    rate = params.get("rate_hz")
++    if (isinstance(rate, (int, float)) and not isinstance(rate, bool)
++            and rate > ceiling):
++        params = dict(params)
++        params["rate_hz"] = ceiling
++    return params
++
++
 +def _appearance_save(body: dict) -> tuple[int, dict]:
 +    """Writes the appearance document. Cosmetic: this approves nothing.
 +
@@ -156,9 +195,24 @@
 +                     "reason": ("a binding the renderers cannot resolve would "
 +                                "show as a choice that is in effect nowhere")}
 +
-+    spec_seen = bool(_visual_spec())
++    spec = _visual_spec()
++    spec_seen = bool(spec)
++    # Clamped per binding before anything is written. This is the promise
++    # made and not kept the first time this patch shipped: "our patch will
++    # clamp numeric animation params server-side" - it checked shape only,
++    # never the number, and the desktop's own local Randomise button could
++    # already generate an unsafe rate_hz with no second device involved at
++    # all.
++    bindings = dict(body.get("bindings") or {})
++    clamped = []
++    for state, binding in bindings.items():
++        params = binding.get("params") or {}
++        safe = _clamp_flash(binding.get("pattern", ""), params, spec)
++        if safe is not params:
++            bindings[state] = dict(binding, params=safe)
++            clamped.append(state)
 +    doc = {"face": body.get("face") or None,
-+           "bindings": body.get("bindings") or {},
++           "bindings": bindings,
 +           "updated": time.time()}
 +    try:
 +        APPEARANCE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -176,7 +230,14 @@
 +    _publish("appearance", doc)
 +
 +    out = {"ok": True, "updated": doc["updated"]}
-+    if not spec_seen:
++    if clamped:
++        # Told, not hidden: a device that asked for something unsafe gets an
++        # honest answer about what was actually stored, not silence.
++        out["clamped"] = clamped
++        out["note"] = ("one or more bindings asked for an animation speed "
++                       "above the photosensitive-seizure limit and were "
++                       "slowed to it before being stored")
++    elif not spec_seen:
 +        out["note"] = ("stored without checking it against the visual spec: no "
 +                       "jarvis-visual-spec.json on this machine")
 +    return 200, out
@@ -185,7 +246,7 @@
  def _desktop_action(route: str, body: dict):
      """Returns (http_status, payload). Every branch calls the module and
      returns what the module said - including its refusals."""
-@@ -273,6 +444,9 @@
+@@ -273,6 +505,9 @@
          return 202, {"ok": True, "started": ref,
                       "progress": "watch the event stream for kind=model"}
  
@@ -195,7 +256,7 @@
      if route == "/api/config":
          # Not implemented, and saying so is the honest answer. Writing this
          # file means rewriting the tiers that decide what Jarvis may do
-@@ -1379,7 +1553,8 @@
+@@ -1379,7 +1614,8 @@
                  return self._send(200, {"available": False,
                                          "error": f"{type(exc).__name__}: {exc}"})
  
@@ -205,7 +266,7 @@
              # The three desktop-only surfaces. Every one of these existed as a
              # Python module with no way to reach it over HTTP, which meant the
              # desktop brief was promising screens with nothing behind them.
-@@ -1392,6 +1567,43 @@
+@@ -1392,6 +1628,43 @@
                      return self._send(200, _models_view())
                  if path == "/api/config":
                      return self._send(200, _config_view())
@@ -249,7 +310,7 @@
                  return self._send(200, _skills_view())
              except Exception as exc:
                  return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
-@@ -1573,6 +1785,7 @@
+@@ -1573,6 +1846,7 @@
  
          if route in ("/api/models/install", "/api/models/switch",
                       "/api/models/rollback", "/api/config", "/api/skills/decide",
