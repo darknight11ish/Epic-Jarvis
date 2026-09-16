@@ -163,26 +163,78 @@ def walk(node, out: list, depth: int = 0) -> None:
         walk(value, out, depth + 1)
 
 
+def _from_zip(where: Path):
+    """Every JSON inside an archive - not just one.
+
+    THE BUG THIS FIXES, found by running it on a real export rather than on a
+    fixture. This used to pick a SINGLE entry per archive: `conversations.json`
+    if present, otherwise the largest `.json`. A real export does not work that
+    way. It stores one file per conversation -
+
+        conversations.json              <- an index. No message text in it.
+        conversations/<uuid>.json       <- the actual conversations
+        projects/<uuid>.json
+        memories/<uuid>.json
+
+    - so it read the index, found no messages, and reported "0 code blocks" for
+    a whole history. The number was true about what it had read and worthless
+    as an answer to the question asked.
+
+    Reading everything is also what makes the count mean something: "0 code
+    blocks" now means the history really has none.
+    """
+    with zipfile.ZipFile(where) as z:
+        entries = [n for n in z.namelist() if n.lower().endswith(".json")]
+        if not entries:
+            inner = [n for n in z.namelist() if n.lower().endswith(".zip")]
+            raise SystemExit(
+                "no JSON inside - holds "
+                + ", ".join(z.namelist()[:5])
+                + ("" if len(z.namelist()) <= 5 else " ...")
+                + (" (there is a zip inside this zip; unpack it first)"
+                   if inner else ""))
+        entries.sort(key=lambda n: -z.getinfo(n).file_size)
+        print(f"  {where.name}: reading {len(entries)} JSON file(s)")
+        for name in entries:
+            try:
+                with z.open(name) as fh:
+                    yield f"{where.name}:{name}", json.load(
+                        io.TextIOWrapper(fh, encoding="utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+                print(f"    {name}: unreadable ({type(exc).__name__})")
+
+
+def _one(f: Path):
+    """One path on disk, expanded into however many documents it holds."""
+    try:
+        if zipfile.is_zipfile(f):
+            yield from _from_zip(f)
+        else:
+            yield f.name, load(f)
+    except SystemExit as exc:
+        # A Downloads folder is full of archives that have nothing to do with
+        # this - installers, game assets. Calling those UNREADABLE reads as a
+        # failure when they are simply unrelated, so the wording is flat.
+        print(f"  {f.name}: skipped - {str(exc).splitlines()[0]}")
+    except (zipfile.BadZipFile, json.JSONDecodeError, OSError) as exc:
+        print(f"  {f.name}: skipped - {type(exc).__name__}: {exc}")
+
+
 def sources(where: Path):
     """Every JSON document worth reading, from whatever was pointed at.
 
-    An export is FIVE archives, not one - conversations, projects, memories,
-    feedback and metadata - because `get-export.ps1` downloads the lot. The
-    modules could be in a Project as easily as in a chat, so a folder means
-    "read all of them", not "find the conversations one".
+    An export is five archives and each holds many files. The modules could be
+    in a Project as easily as in a chat, so a folder means "read all of it".
 
-    Yields (label, parsed) and keeps going when one file is unreadable: with
-    five single-use downloads behind this, one bad archive must not throw away
-    the other four.
+    Keeps going when one file is unreadable: with five single-use downloads
+    behind this, one bad archive must not throw away the other four.
     """
     if where.is_dir():
         # Anything NAMED like an export file is a candidate, even if it turns
         # out not to be readable. A first version filtered on
         # `is_zipfile(f) or suffix == ".json"`, which quietly dropped a
-        # truncated .zip before anything was reported - and a truncated
-        # archive is the exact thing a spent one-time link produces. A file
-        # that cannot be read has to be NAMED, because it is the one the user
-        # may have to get a fresh export for.
+        # truncated .zip before anything was reported - and a truncated archive
+        # is exactly what a spent one-time link produces.
         files = sorted(
             [f for f in where.iterdir()
              if f.is_file() and f.suffix.lower() in (".zip", ".json")],
@@ -190,44 +242,15 @@ def sources(where: Path):
         if not files:
             raise SystemExit(
                 f"No archives or .json files in {where}.\n"
-                "Point this at the folder get-export.ps1 wrote to.")
+                "Point this at the folder holding the export archives.")
         for f in files:
-            try:
-                yield f.name, load(f)
-            except SystemExit as exc:
-                print(f"  {f.name}: UNREADABLE - {str(exc).splitlines()[0]}")
-            except (zipfile.BadZipFile, json.JSONDecodeError, OSError) as exc:
-                print(f"  {f.name}: UNREADABLE - {type(exc).__name__}: {exc}")
+            yield from _one(f)
         return
-    yield where.name, load(where)
+    yield from _one(where)
 
 
 def load(where: Path) -> object:
-    """Read one export file, whether it is an archive or the JSON inside it."""
-    # Look at the CONTENT, not the extension. The export Claude emails is
-    # named like `manifest-<uuid>-<numbers>-<hash>-<date>` with no `.zip` on
-    # the end at all, so deciding by suffix reads a perfectly good archive as
-    # though it were text and fails with a UnicodeDecodeError - an error that
-    # says nothing about the real problem.
-    if zipfile.is_zipfile(where):
-        with zipfile.ZipFile(where) as z:
-            names = [n for n in z.namelist() if n.endswith("conversations.json")]
-            if not names:
-                # Some exports name it differently; take any sizeable .json.
-                names = sorted((n for n in z.namelist() if n.endswith(".json")),
-                               key=lambda n: -z.getinfo(n).file_size)
-            if not names:
-                inner = [n for n in z.namelist() if zipfile.is_zipfile(n)]
-                raise SystemExit(
-                    f"No .json inside {where.name}. It holds: "
-                    + ", ".join(z.namelist()[:12])
-                    + ("" if len(z.namelist()) <= 12 else " ...")
-                    + ("\n\nThere is a zip inside the zip - unpack it and "
-                       "point this at what comes out." if inner else ""))
-            print(f"Reading {names[0]} from the archive.")
-            with z.open(names[0]) as fh:
-                return json.load(io.TextIOWrapper(fh, encoding="utf-8"))
-
+    """Read one JSON file from disk. Archives are handled by _from_zip."""
     size = where.stat().st_size
 
     # Named .zip but is not one. This is what a SPENT one-time link produces:
@@ -341,7 +364,11 @@ def main() -> int:
             continue
         before = len(found)
         walk(data, found)
-        print(f"  {label}: {len(found) - before} code block(s)")
+        got = len(found) - before
+        # Only the hits. A real history is thousands of conversations, and a
+        # line each would bury the four that matter under four thousand zeros.
+        if got:
+            print(f"    {label}: {got} code block(s)")
         read_any = True
 
     if args.inspect:
