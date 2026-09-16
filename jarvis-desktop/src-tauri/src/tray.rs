@@ -139,6 +139,19 @@ struct Rows {
 #[derive(Default)]
 pub struct Painted(Mutex<Option<(Rgb, Rgb, u32, &'static str)>>);
 
+/// The tray's flash-safety governor — one instance, because the tray draws
+/// exactly one surface (the icon). See [`spec::FlashGovernor`] for why one of
+/// these must never be shared across more than one surface, and
+/// [`governed_resolve`] for the one place it is called from: calling it twice
+/// per repaint (this module used to resolve once for the dedup key and again
+/// inside `paint`) would show it the same logical frame as two frames.
+///
+/// Registered in `run()` alongside `Painted`, for the same reason `Painted`
+/// is: a panic on first use, in a task with no supervisor, in a release
+/// build with no stderr.
+#[derive(Default)]
+pub struct TrayFlashGovernor(Mutex<spec::FlashGovernor>);
+
 /// Builds the tray icon, its menu and the event handlers.
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let link = app.state::<crate::stream::StreamState>().link();
@@ -426,16 +439,29 @@ fn clock() -> f64 {
 /// spec has no binding for it — a hollow icon says "nothing is coming through"
 /// without claiming to know what Jarvis is doing.
 fn render_icon(app: &AppHandle, link: &LinkState) -> Option<Image<'static>> {
-    Some(paint(app, link))
+    let resolved = governed_resolve(app, link);
+    Some(paint(link, resolved))
 }
 
-/// Resolves the state and draws it, dim and notches included.
+/// Resolves through this module's one [`TrayFlashGovernor`]. The only path to
+/// a colour here, the same way `resolve()` is the spec's only path to one —
+/// so nothing in this file can bypass the flash governor by calling
+/// `spec::resolve` directly.
+fn governed_resolve(app: &AppHandle, link: &LinkState) -> spec::Resolved {
+    let binding = binding_for(app, link);
+    app.state::<TrayFlashGovernor>()
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .resolve(&binding, clock(), 0.0, 0.0)
+}
+
+/// Draws the already-resolved colour, dim and notches included.
 ///
-/// One function so the animation tick, the first paint and `repaint` cannot
-/// disagree about what the icon should look like.
-fn paint(app: &AppHandle, link: &LinkState) -> Image<'static> {
+/// Takes `resolved` rather than resolving itself so the governor sees each
+/// repaint exactly once — see [`governed_resolve`].
+fn paint(link: &LinkState, resolved: spec::Resolved) -> Image<'static> {
     let state = spec_state(link);
-    let resolved = spec::resolve(&binding_for(app, link), clock(), 0.0, 0.0);
     let dim = spec::state_dim(state);
     // `notches` is the overlay the spec puts on `banked`, and its source is
     // named there: "the number of items waiting in the digest
@@ -698,7 +724,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
         return;
     };
     let state = spec_state(link);
-    let resolved = spec::resolve(&binding_for(app, link), clock(), 0.0, 0.0);
+    let resolved = governed_resolve(app, link);
     {
         let painted = app.state::<Painted>();
         let mut slot = painted
@@ -717,7 +743,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
         }
         *slot = Some(key);
     }
-    if let Err(err) = tray.set_icon(Some(paint(app, link))) {
+    if let Err(err) = tray.set_icon(Some(paint(link, resolved))) {
         eprintln!("[jarvis] tray: unable to set the icon: {err}");
     }
     if let Err(err) = tray.set_tooltip(Some(tooltip(app, link))) {

@@ -113,6 +113,16 @@ struct Spec {
     /// 1.2, and 1.3 is the ceiling). Falls back to the spec's documented
     /// value if the field is ever missing, never to something permissive.
     flicker_rate_hz_max: f64,
+    /// `limits.flash.max_transitions_per_s` - the second of the three
+    /// enforcement points the spec's note names, and [`FlashGovernor`] is
+    /// what implements it. "Three opposing transitions per second is the
+    /// standard [photosensitive-seizure] threshold" per the spec's own
+    /// `why_these_numbers`.
+    max_transitions_per_s: u32,
+    /// `limits.flash.min_luma_delta` - the swing below which a colour change
+    /// does not count as a transition at all, so a pattern drifting through
+    /// near-identical shades cannot be held hostage by the governor.
+    min_luma_delta: f64,
 }
 
 struct Pattern {
@@ -191,6 +201,12 @@ fn spec() -> &'static Spec {
         let flicker_rate_hz_max = root["limits"]["flash"]["flicker_rate_hz_max"]
             .as_f64()
             .unwrap_or(1.3);
+        let max_transitions_per_s = root["limits"]["flash"]["max_transitions_per_s"]
+            .as_u64()
+            .unwrap_or(3) as u32;
+        let min_luma_delta = root["limits"]["flash"]["min_luma_delta"]
+            .as_f64()
+            .unwrap_or(0.1);
 
         Spec {
             colors,
@@ -198,6 +214,8 @@ fn spec() -> &'static Spec {
             patterns,
             states,
             flicker_rate_hz_max,
+            max_transitions_per_s,
+            min_luma_delta,
         }
     })
 }
@@ -573,6 +591,109 @@ pub fn resolve(bind: &Binding, t: f64, amp: f64, seed: f64) -> Resolved {
     }
 }
 
+/// Relative luminance, 0..1, Rec. 709 coefficients — the same weighting the
+/// spec's own accessibility numbers (`min_luma_delta`) are defined against.
+fn luma(c: Rgb) -> f64 {
+    (0.2126 * c.r as f64 + 0.7152 * c.g as f64 + 0.0722 * c.b as f64) / 255.0
+}
+
+/// The flash-safety governor the spec's `limits.flash.note` describes as the
+/// second of three enforcement points: "a governor inside resolve() holds
+/// the colour when a fourth opposing transition would land inside one
+/// second." Verified against the CROSS-CLIENT-CONTRACT-REPLY-2 finding that
+/// none of the three existed anywhere — this is the client-side one.
+///
+/// **One instance per rendered surface, never shared.** The spec's own
+/// `scope_why` documents the exact failure a shared governor produces: fed by
+/// several surfaces in turn, it "saw twenty faces with twenty clocks as one
+/// face flashing between twenty colours, spent its budget on those
+/// cross-surface transitions and then held one face's colour on another."
+/// The tray draws one surface (the icon) and owns exactly one of these.
+#[derive(Debug, Clone)]
+pub struct FlashGovernor {
+    /// The colour last actually shown. `None` before the first call, so the
+    /// very first resolve is never held against an colour that never existed.
+    held: Option<Resolved>,
+    held_luma: f64,
+    /// Direction of the last transition let through: `true` = luma rose.
+    /// `None` before the first transition, so the first one is never
+    /// "opposing" anything and always goes through.
+    last_direction: Option<bool>,
+    /// Clock times (the same `t` `resolve()` takes) of opposing transitions
+    /// let through in roughly the last second, oldest first.
+    recent: Vec<f64>,
+}
+
+impl FlashGovernor {
+    pub fn new() -> Self {
+        Self {
+            held: None,
+            held_luma: 0.0,
+            last_direction: None,
+            recent: Vec::new(),
+        }
+    }
+
+    /// Resolves `bind` at time `t` exactly as [`resolve`] would, except that a
+    /// colour change which would be a fourth opposing transition inside one
+    /// second is held at the previous colour instead of applied. Call once
+    /// per surface per frame in place of a bare `resolve()` call — this reads
+    /// prior state and cannot be a drop-in for a caller that needs a pure
+    /// function (a build-time replay, a golden-vector test).
+    pub fn resolve(&mut self, bind: &Binding, t: f64, amp: f64, seed: f64) -> Resolved {
+        let candidate = resolve(bind, t, amp, seed);
+
+        let Some(held) = self.held else {
+            self.held = Some(candidate);
+            self.held_luma = luma(candidate.a);
+            return candidate;
+        };
+
+        let candidate_luma = luma(candidate.a);
+        let delta = candidate_luma - self.held_luma;
+        let limits = spec();
+
+        // Below the swing the spec defines as a real change, this is not a
+        // transition at all — apply it freely and leave the window alone, or
+        // a pattern drifting through near-identical shades would eventually
+        // starve on transitions that were never visible in the first place.
+        if delta.abs() < limits.min_luma_delta {
+            self.held = Some(candidate);
+            self.held_luma = candidate_luma;
+            return candidate;
+        }
+
+        let direction = delta > 0.0;
+        let opposing = self.last_direction != Some(direction);
+
+        // Prune to the trailing one-second window before counting, so an old
+        // transition cannot keep the budget spent long after it happened.
+        self.recent.retain(|&at| t - at < 1.0);
+
+        if opposing && self.recent.len() as u32 >= limits.max_transitions_per_s {
+            // Letting this one through would be the (max + 1)th opposing
+            // transition inside one second. Hold — the held colour is not
+            // re-recorded as a transition, so a run of held frames cannot
+            // itself exhaust the budget.
+            return held;
+        }
+
+        if opposing {
+            self.recent.push(t);
+            self.last_direction = Some(direction);
+        }
+        self.held = Some(candidate);
+        self.held_luma = candidate_luma;
+        candidate
+    }
+}
+
+impl Default for FlashGovernor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Whether a pattern's output depends on `t`. The tray uses this to decide
 /// whether re-resolving is worth a timer at all: `solid` never changes, so a
 /// state bound to it costs one resolve for as long as it lasts.
@@ -809,5 +930,126 @@ mod tests {
         );
         assert_eq!(hex_of(Some("not-a-colour")), Rgb::FALLBACK);
         assert_eq!(hex_of(None), Rgb::FALLBACK);
+    }
+
+    /// `strobe`'s own spec entry says it: "period_s below 0.4 would exceed
+    /// the transition budget" (`rose-4` against `neutral-1`, a stark enough
+    /// pair that every alternation clears `min_luma_delta`). 0.2s is exactly
+    /// twice that, so the governor MUST intervene or this test is not
+    /// exercising it at all.
+    fn fast_strobe() -> Binding {
+        let mut params = serde_json::Map::new();
+        params.insert("period_s".into(), serde_json::json!(0.2));
+        Binding {
+            pattern: "strobe".to_string(),
+            params,
+            ..Default::default()
+        }
+    }
+
+    /// The bug this whole type exists to fix: nothing stopped a fast strobe
+    /// (or a mis-set flicker, before that got its own clamp) from alternating
+    /// past the standard three-opposing-transitions-per-second threshold.
+    /// Sampled every 50ms across 2 real seconds — coarser than a real frame
+    /// rate, deliberately, so the assertion is not tuned to one animation
+    /// tick length.
+    #[test]
+    fn governor_holds_a_fast_strobe_under_the_transition_budget() {
+        let bind = fast_strobe();
+        let mut gov = FlashGovernor::new();
+        let mut transitions = 0u32;
+        let mut worst_in_any_window = 0u32;
+        let mut window: Vec<f64> = Vec::new();
+        let mut last: Option<Resolved> = None;
+
+        let mut t = 0.0;
+        while t < 2.0 {
+            let out = gov.resolve(&bind, t, 0.0, 0.0);
+            match last {
+                // The very first frame is an appearance, not a transition —
+                // there is nothing on screen yet for it to oppose, and the
+                // real photosensitive-seizure guidance this limit is drawn
+                // from (a pair of opposing luminance changes) agrees.
+                None => last = Some(out),
+                Some(prev) if prev != out => {
+                    transitions += 1;
+                    window.push(t);
+                    window.retain(|&at| t - at < 1.0);
+                    worst_in_any_window = worst_in_any_window.max(window.len() as u32);
+                    last = Some(out);
+                }
+                Some(_) => {}
+            }
+            t += 0.05;
+        }
+
+        assert!(
+            worst_in_any_window <= spec().max_transitions_per_s,
+            "governor let {worst_in_any_window} transitions land inside one \
+             second; the spec's limit is {}",
+            spec().max_transitions_per_s
+        );
+        // The strobe is genuinely fast (10 raw transitions/s): if the
+        // governor were a no-op this would be far higher, so a low count
+        // proves it actually held frames rather than the pattern coincidentally
+        // resolving to the same output.
+        assert!(
+            transitions < 12,
+            "expected the governor to hold most of a 10 Hz strobe's \
+             transitions over 2s, saw {transitions} distinct outputs"
+        );
+    }
+
+    /// The other side of the same fix: a slow, ordinary transition must never
+    /// be held. A governor that clamps everything would "solve" flashing by
+    /// making Jarvis look broken instead.
+    #[test]
+    fn governor_does_not_touch_a_slow_transition() {
+        let bind = state_binding("error").expect("error is a state"); // pulse, ~1.8s period
+        let mut gov = FlashGovernor::new();
+        for i in 0..20 {
+            let t = i as f64 * 0.3;
+            assert_eq!(
+                gov.resolve(&bind, t, 0.0, 0.0),
+                resolve(&bind, t, 0.0, 0.0),
+                "a slow pattern should never be held at t={t}"
+            );
+        }
+    }
+
+    /// `limits.flash.scope_why` names the exact failure of a governor shared
+    /// across surfaces: one surface's transitions spend a budget another
+    /// surface then has to live under. Two independent instances resolving
+    /// the same fast pattern must not affect each other at all.
+    #[test]
+    fn governor_instances_are_independent() {
+        let bind = fast_strobe();
+        let mut a = FlashGovernor::new();
+        let mut b = FlashGovernor::new();
+        // Drive `a` hard first, as if it had already spent its budget.
+        for i in 0..40 {
+            a.resolve(&bind, i as f64 * 0.05, 0.0, 0.0);
+        }
+        // `b` has seen nothing yet, so its very first call must go through
+        // exactly as a fresh governor's would — unaffected by `a`'s history.
+        let fresh = FlashGovernor::new().resolve(&bind, 0.0, 0.0, 0.0);
+        assert_eq!(b.resolve(&bind, 0.0, 0.0, 0.0), fresh);
+    }
+
+    /// A pattern with no real colour change (here, two `solid` calls at
+    /// different times) must never be held — `min_luma_delta` exists so a
+    /// governor cannot be starved by transitions that were never visible.
+    #[test]
+    fn governor_ignores_changes_below_the_luma_threshold() {
+        let bind = state_binding("listening").expect("listening is a spec state"); // solid
+        let mut gov = FlashGovernor::new();
+        for i in 0..10 {
+            let t = i as f64 * 0.05;
+            assert_eq!(
+                gov.resolve(&bind, t, 0.0, 0.0),
+                resolve(&bind, t, 0.0, 0.0),
+                "solid has no transition to hold against at t={t}"
+            );
+        }
     }
 }

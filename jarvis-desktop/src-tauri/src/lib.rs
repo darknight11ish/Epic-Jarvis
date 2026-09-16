@@ -498,6 +498,7 @@ pub fn run() {
         .manage(sidecar::SupervisorState::default())
         .manage(tray::TrayHandles::default())
         .manage(tray::Painted::default())
+        .manage(tray::TrayFlashGovernor::default())
         .manage(windows::WidgetState::default())
         .manage(RouteState::default())
         // Registered here with every other managed type, not inside setup: the

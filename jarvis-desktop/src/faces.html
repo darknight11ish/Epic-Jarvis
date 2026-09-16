@@ -3007,6 +3007,73 @@ function resolve(bind, t, amp, seed){
 }
 
 /* ====================================================================== *
+ * FLASH GOVERNOR
+ * The spec's limits.flash.note names three enforcement points for the
+ * photosensitive-seizure bounds; this is the second one ("a governor inside
+ * resolve() holds the colour when a fourth opposing transition would land
+ * inside one second"). Line-for-line the same algorithm as
+ * jarvis-desktop/src-tauri/src/spec.rs's FlashGovernor - change one, change
+ * both, the same rule this file's own gradient/flicker cases learned the
+ * hard way (see docs/CROSS-CLIENT-CONTRACT-REPLY-2.md).
+ *
+ * ONE INSTANCE PER SURFACE. limits.flash.scope_why documents the exact bug a
+ * shared governor produces here specifically - a single page-wide window fed
+ * by twenty faces in turn read as one face flashing between twenty colours.
+ * makeSurface() below gives every surface its own.
+ * ====================================================================== */
+function relativeLuma(hex){
+  const [r, g, b] = parseCol(hex);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+function newFlashGovernor(){
+  return {
+    held: null,       // last { a, b } actually shown
+    heldLuma: 0,
+    lastDirection: null,  // true = rising, false = falling, null = none yet
+    recent: [],           // clock times of opposing transitions let through
+  };
+}
+/** Resolves through `gov`, holding `gov.held` instead of `candidate` when
+ *  doing otherwise would be a fourth opposing transition inside one second.
+ *  Call once per surface per frame - see the module note above. */
+function governedResolve(gov, bind, t, amp, seed){
+  const candidate = resolve(bind, t, amp, seed);
+  if(gov.held === null){
+    gov.held = candidate;
+    gov.heldLuma = relativeLuma(candidate.a);
+    return candidate;
+  }
+  const candidateLuma = relativeLuma(candidate.a);
+  const delta = candidateLuma - gov.heldLuma;
+  const limits = SPEC?.limits?.flash || {};
+  const minLumaDelta = limits.min_luma_delta ?? 0.1;
+  const maxTransitionsPerS = limits.max_transitions_per_s ?? 3;
+
+  // Below the swing the spec calls a real change, this is not a transition
+  // at all - apply it freely, same as the Rust port.
+  if(Math.abs(delta) < minLumaDelta){
+    gov.held = candidate;
+    gov.heldLuma = candidateLuma;
+    return candidate;
+  }
+
+  const direction = delta > 0;
+  const opposing = gov.lastDirection !== direction;
+  gov.recent = gov.recent.filter(at => t - at < 1.0);
+
+  if(opposing && gov.recent.length >= maxTransitionsPerS){
+    return gov.held;
+  }
+  if(opposing){
+    gov.recent.push(t);
+    gov.lastDirection = direction;
+  }
+  gov.held = candidate;
+  gov.heldLuma = candidateLuma;
+  return candidate;
+}
+
+/* ====================================================================== *
  * COLOUR OVERRIDE
  * The twenty draw functions each keep their own per-state palette under
  * different key names - a/b, seam, tint, c1/c2/c3. Rather than edit twenty
@@ -3079,6 +3146,8 @@ function makeSurface(theme, canvas, fpsEl){
     speed:1, clock:0, last:0, vis:true,
     frames:0, fpsT:0, fps:0, cost:0, ss:Q.ss, detail:Q.detail, w:0, h:0,
     devpx:0, gpuOk:true, gpuSlow:0,
+    // One flash governor per surface - see the module note on governedResolve.
+    flashGov: newFlashGovernor(),
   };
 }
 
@@ -3123,7 +3192,7 @@ function drawSurface(s, dt, state){
   // path on this device.
   GPUPX = Math.max(96, Math.round((s.devpx || s.w) * Q.gpu));
   GPUOK = s.gpuOk !== false;
-  const col = resolve(BIND[state], s.clock, HUD.amp, s.seed || 0);
+  const col = governedResolve(s.flashGov, BIND[state], s.clock, HUD.amp, s.seed || 0);
   PC = [col.a, col.b, mix(col.a, col.b, .5)];
   // The spec has seven states; a face's own motion table has four. Approval,
   // standby and error are bindings, not new choreography - they borrow the
