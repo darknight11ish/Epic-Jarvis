@@ -381,6 +381,16 @@
 
           <div class="card-body" id="card-body">
             <!--
+              Closed by default: asking a quick follow-up should not push the
+              new answer below the old one. It only appears once there is a
+              completed answer to fold away, and it clears when the window is
+              dismissed rather than surviving into the next time it opens.
+            -->
+            <details class="previous-answer" id="previous-answer" hidden>
+              <summary id="previous-answer-summary"></summary>
+              <article class="markdown" id="previous-answer-body"></article>
+            </details>
+            <!--
               No `aria-live` here, deliberately. `paint()` reassigns this
               element's whole innerHTML, and `aria-relevant` defaults to
               `additions text` — so every repaint re-added the ENTIRE answer so

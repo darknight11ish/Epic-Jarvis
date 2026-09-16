@@ -309,7 +309,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute, decideFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute, decideFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -317,8 +317,23 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     power: "active", power_set_by: null, activity: "idle",
     approvals: pending.length, attention, error: null, ...link,
   };
+  // Real Tauri serialises a Channel to an id the Rust side calls back into;
+  // this mock never leaves JavaScript, so `args.onEvent` handed to `invoke`
+  // below IS the live object a scenario can call `.onmessage(...)` on
+  // directly. Its absence used to throw `TAURI.core.Channel is not a
+  // constructor` at `new TAURI.core.Channel()` in streamViaBackend - before
+  // the first `await`, so uncaught by that function's own try/catch - which
+  // silently broke every scenario that drove a real `send()` on index.html
+  // rather than posing the card mid-answer by hand.
+  class MockChannel {
+    constructor() {
+      this.onmessage = null;
+    }
+  }
+
   window.__TAURI__ = {
     core: {
+      Channel: MockChannel,
       invoke: async (cmd, args) => {
         window.__calls.push([cmd, args]);
         switch (cmd) {
@@ -356,7 +371,22 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                      backend: { program: "C:\\Python312\\python.exe",
                                 args: ["C:\\Jarvis\\jarvis_hud.py"],
                                 cwd: "C:\\Jarvis" } };
-          case "stream_chat": return null;
+          case "stream_chat": {
+            // A scenario that cares what the answer actually SAYS (rather
+            // than only that a turn completed) queues real text here; each
+            // call consumes the next entry. Emitted as a single raw,
+            // non-JSON chunk - `consumeLine` appends anything that does not
+            // parse as JSON and is not an SSE control line verbatim, so this
+            // is the real append path, not a shortcut around it. Exhausted
+            // or unset, `stream_chat` resolves with nothing sent, which
+            // `finishStream` already turns into its own honest placeholder -
+            // still a real "done" turn, just with nothing scripted to say.
+            const reply = (window.__chatReplies || []).shift();
+            if (reply && args && args.onEvent && typeof args.onEvent.onmessage === "function") {
+              args.onEvent.onmessage(reply);
+            }
+            return null;
+          }
           case "get_theme": return theme || "deep-space";
           case "get_hotkeys": return window.__hotkeys;
           case "decide_approval":
@@ -489,6 +519,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__decides = [];
   window.__memoryWrites = [];
   window.__memoryRefuses = memoryRefuses || null;
+  window.__chatReplies = [...(chatReplies || [])];
   window.__learningFloor = Boolean(learningFloor);
   window.__found = found || null;
   window.__installFails = installFails || null;
@@ -528,7 +559,7 @@ export async function open(browser, base, file, data, viewport) {
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, noRoute: false, decideFails: null, appearanceFails: null,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
-    bindAddressRefuses: null, bindAddressRefusalMessage: null,
+    bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,
   });

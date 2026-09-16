@@ -857,6 +857,53 @@ html[data-state="error"] .pulse {
 }
 
 /* --------------------------------------------------------------------------
+   Previous answer (scrollback)
+   -------------------------------------------------------------------------- */
+
+.previous-answer {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.previous-answer[open] {
+  padding-bottom: 12px;
+}
+
+.previous-answer summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  list-style: none;
+}
+
+.previous-answer summary::-webkit-details-marker {
+  display: none;
+}
+
+.previous-answer summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  transition: transform 140ms var(--ease);
+}
+
+.previous-answer[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.previous-answer summary:hover {
+  color: var(--text);
+}
+
+.previous-answer .markdown {
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
+/* --------------------------------------------------------------------------
    Markdown
    -------------------------------------------------------------------------- */
 

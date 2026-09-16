@@ -211,6 +211,10 @@ const dom = {
   copy: $("copy"),
   stop: $("stop"),
   services: $("services"),
+
+  previousAnswer: $("previous-answer"),
+  previousAnswerSummary: $("previous-answer-summary"),
+  previousAnswerBody: $("previous-answer-body"),
 };
 
 /* ==========================================================================
@@ -261,7 +265,30 @@ const state = {
   /** True while a digest read is in flight, so a repaint cannot stack them. */
   digestLoading: false,
   route: { ...DEFAULT_ROUTE },
+
+  /**
+   * Prompts actually submitted, oldest first, for Up/Down recall. In-memory
+   * for this run of the window only — never written to disk — but NOT
+   * cleared by `dismiss()`: the quickbar hides and reopens on every
+   * Alt+Space, and history that reset on every hide would barely recall
+   * anything.
+   */
+  promptHistory: [],
+  /** Index into `promptHistory` while browsing it; `null` when not browsing. */
+  historyIndex: null,
+  /** What was in the composer before Up was first pressed, restored on Down
+   *  past the newest entry — so browsing history never eats a draft. */
+  historyDraft: "",
+  /** The prompt behind the answer currently in `state.buffer`, kept after the
+   *  turn finishes so a later turn can label it in the scrollback strip. */
+  lastPrompt: "",
+  /** The previous turn's `{ prompt, buffer }`, once a new one starts — one
+   *  level of scrollback, shown folded in the card until dismissed. */
+  previousAnswer: null,
 };
+
+/** How many prompts `state.promptHistory` keeps. Older ones fall off the front. */
+const PROMPT_HISTORY_LIMIT = 50;
 
 /** `idle` | `streaming` | `done` | `error` | `approval`. */
 function setPhase(phase) {
@@ -758,9 +785,34 @@ function closeCard() {
   dom.cardStat.textContent = "";
   dom.cursor.hidden = true;
   state.buffer = "";
+  state.lastPrompt = "";
+  state.previousAnswer = null;
   paintedBlocks = 0;
   setPhase("idle");
+  renderPreviousAnswer();
   paint({ immediate: true });
+}
+
+/**
+ * Shows or hides the folded "previous answer" strip from `state.previousAnswer`.
+ *
+ * Closed by default (the `<details>` starts with no `open` attribute) every
+ * time it is (re)populated — a follow-up you asked on purpose should not have
+ * the last answer thrust back open in front of it.
+ */
+function renderPreviousAnswer() {
+  const prev = state.previousAnswer;
+  dom.previousAnswer.hidden = !prev;
+  if (!prev) return;
+  dom.previousAnswer.open = false;
+  dom.previousAnswerSummary.textContent = truncateForSummary(prev.prompt);
+  dom.previousAnswerBody.innerHTML = renderMarkdown(prev.buffer);
+}
+
+/** A one-line label for the scrollback summary — long prompts wrap the card. */
+function truncateForSummary(text, max = 80) {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
 /** Renders a failure inside the card instead of silently doing nothing. */
@@ -1816,6 +1868,17 @@ async function send(promptText) {
   // An answered gate belongs to the turn that is ending, not the next one.
   if (state.approval) closeApproval();
 
+  // Fold the just-finished turn into scrollback before wiping the buffer for
+  // the new one — a follow-up asked seconds later used to erase the answer
+  // it was a follow-up TO, with no way back short of asking again. Only a
+  // completed turn is worth keeping; an error banner is not an answer.
+  state.previousAnswer =
+    state.phase === "done" && state.buffer.trim() && state.lastPrompt
+      ? { prompt: state.lastPrompt, buffer: state.buffer }
+      : null;
+  renderPreviousAnswer();
+  state.lastPrompt = message;
+
   state.buffer = "";
   state.chunks = 0;
   // A new answer starts from no blocks, or the first paragraph of the second
@@ -1978,9 +2041,72 @@ function submitCurrentPrompt() {
   // must go through, and it refuses anything carrying `raised`.
   const value = dom.prompt.value;
   if (!value.trim()) return;
+  pushPromptHistory(value.trim());
   dom.prompt.value = "";
   autoGrowPrompt();
   send(value);
+}
+
+/* ==========================================================================
+   Prompt history (Up / Down recall)
+   ========================================================================== */
+
+/** Records a submitted prompt, skipping an immediate repeat. */
+function pushPromptHistory(text) {
+  state.historyIndex = null;
+  state.historyDraft = "";
+  const { promptHistory } = state;
+  if (promptHistory[promptHistory.length - 1] === text) return;
+  promptHistory.push(text);
+  if (promptHistory.length > PROMPT_HISTORY_LIMIT) promptHistory.shift();
+}
+
+/**
+ * Moves through `state.promptHistory`. `direction` is -1 for older (Up) or
+ * +1 for newer (Down). Returns whether it moved anything, so the caller
+ * knows whether to swallow the keystroke or let the caret behave normally.
+ *
+ * Entering history stashes whatever was being typed in `historyDraft`, and
+ * stepping past the newest entry restores exactly that — so reconsidering
+ * and pressing Down back to the bottom never loses a half-written prompt.
+ */
+function recallHistory(direction) {
+  const { promptHistory } = state;
+  if (!promptHistory.length) return false;
+
+  if (state.historyIndex === null) {
+    if (direction > 0) return false; // nothing newer than "not browsing"
+    state.historyDraft = dom.prompt.value;
+    state.historyIndex = promptHistory.length - 1;
+  } else {
+    const next = state.historyIndex + direction;
+    if (next < 0) return true; // already at the oldest; swallow, don't wrap
+    if (next >= promptHistory.length) {
+      state.historyIndex = null;
+      dom.prompt.value = state.historyDraft;
+      autoGrowPrompt();
+      placeCaretForRecall(direction);
+      return true;
+    }
+    state.historyIndex = next;
+  }
+
+  dom.prompt.value = promptHistory[state.historyIndex];
+  autoGrowPrompt();
+  placeCaretForRecall(direction);
+  return true;
+}
+
+/**
+ * Setting `.value` leaves the caret wherever the browser defaults to, which
+ * is not consistently "somewhere that lets the SAME key keep working" — so
+ * without this, one Up press recalled correctly and a second, from wherever
+ * the caret landed, silently did nothing. Up parks it at the start, Down at
+ * the end, matching each key's own boundary check below.
+ */
+function placeCaretForRecall(direction) {
+  const pos = direction < 0 ? 0 : dom.prompt.value.length;
+  dom.prompt.setSelectionRange(pos, pos);
 }
 
 /* ==========================================================================
@@ -1988,6 +2114,10 @@ function submitCurrentPrompt() {
    ========================================================================== */
 
 dom.prompt.addEventListener("input", () => {
+  // A real keystroke, as opposed to `recallHistory` assigning `.value`
+  // directly (which fires no `input` event) — so typing anything always
+  // breaks out of history browsing, the same way a shell's would.
+  state.historyIndex = null;
   autoGrowPrompt();
   syncNoteChip();
 });
@@ -1997,6 +2127,26 @@ dom.prompt.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     submitCurrentPrompt();
+    return;
+  }
+
+  // A single-line prompt has no "line above" or "line below" for the arrow
+  // key to reach anyway, so recall always applies there. A multi-line one
+  // (Shift+Enter) does, so recall only claims the key at the very start or
+  // end of the whole text — anywhere else, the caret should move a line
+  // the ordinary way. Already-selected text counts as "not at an edge";
+  // collapse it first if that's the intent.
+  const singleLine = !dom.prompt.value.includes("\n");
+  if (event.key === "ArrowUp") {
+    const atStart = dom.prompt.selectionStart === 0 && dom.prompt.selectionEnd === 0;
+    if ((singleLine || atStart) && recallHistory(-1)) event.preventDefault();
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    const atEnd =
+      dom.prompt.selectionStart === dom.prompt.value.length &&
+      dom.prompt.selectionEnd === dom.prompt.value.length;
+    if ((singleLine || atEnd) && recallHistory(1)) event.preventDefault();
   }
 });
 
