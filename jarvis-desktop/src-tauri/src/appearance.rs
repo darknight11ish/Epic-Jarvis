@@ -29,7 +29,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_store::StoreExt;
 
 use crate::commands;
@@ -141,6 +141,7 @@ pub struct Loaded {
 fn adopt(app: &AppHandle, doc: &Appearance) {
     app.state::<AppearanceState>().put(doc);
     crate::tray::on_appearance_changed(app);
+    let _ = app.emit(crate::events::APPEARANCE_CHANGED, ());
 }
 
 /// Loads the stored document at startup so the tray wears it immediately.

@@ -320,6 +320,26 @@ body {
   background: linear-gradient(180deg, rgb(var(--shade-rgb) / 0.25), rgb(var(--shade-rgb) / 0.4));
 }
 
+/* Jarvis's live face. Circular to match the tray icon and the reactor's own
+   vignette elsewhere in the app, rather than a hard-edged rectangle that
+   would fight the face's own round geometry. */
+.face-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 4px;
+}
+
+#face-frame {
+  width: 120px;
+  height: 120px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  box-shadow:
+    0 0 0 1px var(--line-soft),
+    0 6px 18px rgb(var(--shade-rgb) / 0.5);
+}
+
 .telemetry-grid {
   display: flex;
   flex-direction: column;

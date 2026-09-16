@@ -72,6 +72,7 @@ const dom = {
   root: document.documentElement,
   shell: $("widget-shell"),
   tray: $("widget-tray"),
+  faceFrame: $("face-frame"),
 
   netDot: $("net-dot"),
   offline: $("widget-offline"),
@@ -184,6 +185,16 @@ function applyExpanded(expanded) {
   dom.root.dataset.state = expanded ? "expanded" : "collapsed";
   dom.tray.hidden = !expanded;
   dom.btnToggle.title = expanded ? "Collapse (E)" : "Expand (E)";
+  // The face is a live canvas animating every frame. `hidden` on the tray
+  // stops it being SEEN but not being DRAWN — an iframe's rAF loop keeps
+  // running under `display:none`, so clearing `src` on collapse is what
+  // actually stops the work rather than just hiding its output. Re-set on
+  // every expand rather than only the first time, so a face or colour the
+  // owner changed while collapsed shows up on the next open without this
+  // window needing its own copy of the appearance-changed listener.
+  if (dom.faceFrame) {
+    dom.faceFrame.src = expanded ? "faces.html?mode=display" : "";
+  }
   syncSize();
 }
 

@@ -75,6 +75,20 @@
 
       <!-- ── Expanded tray: telemetry, gates, capture ───────────────────── -->
       <main class="widget-tray" id="widget-tray" hidden>
+        <!-- Jarvis's live face — the same renderer as the Faces window, in
+             "display mode" (no editor, no grid, just the owner's chosen face
+             reacting to whatever Jarvis is actually doing). widget.js sets
+             `src` only while expanded, so the animation loop isn't spending
+             GPU on a face nobody can see. -->
+        <div class="face-wrap">
+          <iframe
+            id="face-frame"
+            title="Jarvis"
+            tabindex="-1"
+            aria-hidden="true"
+          ></iframe>
+        </div>
+
         <!-- The widget's way out of an offline state. The dot in the compact
              bar reports it but sits inside the drag region, where a click is a
              drag; this row is the action, in the half of the window that has

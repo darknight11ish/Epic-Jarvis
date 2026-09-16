@@ -94,6 +94,12 @@ pub mod events {
     /// Payload: [`crate::update::Status`] — the result of an update check.
     /// Carries no action: nothing that receives this may install anything.
     pub const UPDATE_STATUS: &str = "update-status";
+    /// Payload: none. The appearance document (which face, which state
+    /// bindings) changed — the tray already repaints on this via
+    /// `on_appearance_changed`; sent to every window too so a display-mode
+    /// Faces surface (the Widget's live face) can re-fetch and switch face
+    /// or colours without waiting for its own next reload.
+    pub const APPEARANCE_CHANGED: &str = "appearance-changed";
 
     // ---- the fanned-out event stream -----------------------------------
     //

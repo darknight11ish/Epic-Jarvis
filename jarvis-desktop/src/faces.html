@@ -199,6 +199,15 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 // not be bound at all, on the one surface whose whole job is binding.
 const SPEC = window.JARVIS_SPEC;
 
+/**
+ * `faces.html?mode=display` is the Widget's live face, not the editor: no
+ * grid, no toolbar, no solo controls, one canvas driven by Jarvis's real
+ * activity. See the "DISPLAY MODE" section near the end of this script for
+ * the renderer; declared this early only because it changes what `boot()`
+ * below is allowed to run.
+ */
+const DISPLAY_MODE = new URLSearchParams(location.search).get("mode") === "display";
+
 /* ============================ shared maths ============================ */
 const STATES = ["idle","listening","thinking","speaking"];
 const TAU = Math.PI * 2;
@@ -4180,8 +4189,122 @@ function boot(){
   // One still frame immediately, so the page is never blank at rest.
   surfaces.forEach(s => drawSurface(s, 0, PREVIEW));
 }
-if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-else boot();
+/* ====================================================================== *
+ * DISPLAY MODE
+ * `faces.html?mode=display[&face=ID]` — the Widget's live face, not the
+ * editor. No grid, no toolbar, no solo controls: one canvas, one face,
+ * driven by Jarvis's real current activity instead of a slider.
+ *
+ * Reuses makeSurface/sizeSurface/drawSurface and the already-populated
+ * FACE/THEME/BIND globals exactly as the editor does. The one thing the
+ * editor never had to compute — because a person was always choosing the
+ * state by hand — is which STATE to hand `drawSurface` each frame.
+ * `specState`/`faceStateFromActivity` below port `tray::spec_state()` and
+ * `attention::face_state()` (src-tauri/src/tray.rs,
+ * src-tauri/src/attention/state.rs) line for line. Change one, change both:
+ * a face and a tray icon disagreeing about which state Jarvis is in is
+ * exactly the kind of drift docs/CROSS-CLIENT-CONTRACT-REPLY-2.md found
+ * between this file's own `gradient` case and spec.rs's.
+ * ====================================================================== */
+
+/** What `drawSurface` is told to paint. Updated by `onLink` below. */
+let LIVE_STATE = "idle";
+
+/** Port of `attention::face_state()`. */
+function faceStateFromActivity(activity, banked) {
+  if (activity === "idle" && banked) return "banked";
+  switch (activity) {
+    case "listening": return "listening";
+    case "thinking": return "thinking";
+    case "speaking": return "speaking";
+    case "error": return "error";
+    // `working` has no binding of its own — the nearest bound state is
+    // `thinking`: busy, and not talking.
+    case "working": return "thinking";
+    default: return "idle";
+  }
+}
+
+/** Port of `tray::spec_state()`. */
+function specState(link) {
+  if (link.activity === "error") return "error";
+  if (link.approvals > 0) return "approval";
+  const composed = faceStateFromActivity(link.activity, Boolean(link.attention && link.attention.banked));
+  if (composed !== "idle") return composed;
+  return link.power === "standby" || link.power === "quiet" ? "standby" : "idle";
+}
+
+async function bootDisplay() {
+  document.documentElement.classList.add("display-mode");
+  document.body.innerHTML = "";
+  const style = document.createElement("style");
+  style.textContent = `
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent; }
+    #display-canvas { display:block; width:100%; height:100%; }
+  `;
+  document.head.appendChild(style);
+  const canvas = document.createElement("canvas");
+  canvas.id = "display-canvas";
+  document.body.appendChild(canvas);
+
+  const params = new URLSearchParams(location.search);
+  let faceId = params.get("face");
+  if (!faceId && IS_TAURI) {
+    try {
+      const loaded = await TAURI.core.invoke("get_appearance");
+      mergeBindings(loaded);
+      faceId = loaded && loaded.face;
+    } catch (error) { /* fall through to the default face below */ }
+  }
+  if (!faceId || !FACE[faceId]) faceId = SPEC.faces[0].id;
+
+  const surface = makeSurface(THEME[faceId], canvas, null);
+  surface.seed = 7;
+  surface.ss = 2;                              // full pixel density, always
+  surface.detail = Math.max(1.6, Q.detail);
+
+  const fit = () => sizeSurface(surface);
+  window.addEventListener("resize", fit);
+  fit();
+
+  let last = performance.now();
+  function tick(now) {
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    last = now;
+    drawSurface(surface, dt, LIVE_STATE);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // The same broadcast Brain and the Widget's own status bar already
+  // subscribe to (see jarvis-link.js's module note: Rust fans one event
+  // stream out to every window) — no new Rust event needed for this.
+  try {
+    const { onLink, start } = await import("./jarvis-link.js");
+    onLink((link) => { LIVE_STATE = specState(link); });
+    start();
+  } catch (error) { /* browser preview, or the module failed to load: stay idle */ }
+
+  // Repaint with the owner's latest choices if they change the face or its
+  // colours while the Widget is open, rather than waiting for a reload.
+  if (IS_TAURI) {
+    TAURI.event.listen("appearance-changed", async () => {
+      try {
+        const loaded = await TAURI.core.invoke("get_appearance");
+        mergeBindings(loaded);
+        if (loaded && loaded.face && loaded.face !== faceId && FACE[loaded.face]) {
+          faceId = loaded.face;
+          surface.theme = THEME[faceId];
+          surface.f = FACE[faceId];
+          fit();
+        }
+      } catch (error) { /* keep showing what was already loaded */ }
+    });
+  }
+}
+
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", DISPLAY_MODE ? bootDisplay : boot);
+else (DISPLAY_MODE ? bootDisplay : boot)();
 
 /* ==========================================================================
    Persistence
@@ -4249,7 +4372,14 @@ function syncFaceChoice() {
   b.setAttribute("aria-pressed", String(Boolean(chosen)));
 }
 
-function applyDocument(doc) {
+/**
+ * Merges a saved document's bindings into `BIND` in place. Pulled out of
+ * `applyDocument()` so the display-mode renderer (see "DISPLAY MODE" below)
+ * can pick up the owner's saved colours too, without dragging in the rest of
+ * `applyDocument()`'s editor bookkeeping (`syncUI()`, `syncFaceChoice()`),
+ * which assumes grid/solo DOM that display mode never builds.
+ */
+function mergeBindings(doc) {
   if (!doc || !doc.bindings) return;
   for (const [state, binding] of Object.entries(doc.bindings)) {
     // Ignore a state this build has never heard of rather than throwing: the
@@ -4267,7 +4397,11 @@ function applyDocument(doc) {
     }
     BIND[state] = next;
   }
-  if (doc.face) SOLO_FACE = doc.face;
+}
+
+function applyDocument(doc) {
+  mergeBindings(doc);
+  if (doc && doc.face) SOLO_FACE = doc.face;
   syncUI();
   syncFaceChoice();
 }
@@ -4322,22 +4456,29 @@ async function saveAppearance() {
   }
 }
 
-$("save").onclick = saveAppearance;
+// Everything below wires the editor's own DOM (the save button, the solo
+// view's "use this face" toggle) and loads the owner's document into it.
+// Display mode built neither and loads its own document inside
+// `bootDisplay()` above, against a page that no longer has any of these
+// elements — so none of this runs there.
+if (!DISPLAY_MODE) {
+  $("save").onclick = saveAppearance;
 
-$("solo-use").onclick = () => {
-  if (!SOLO_ON_SCREEN) return;
-  // Toggle, so the owner can go back to "no choice" — which is not the same as
-  // choosing the default face. An absent `face` leaves each client on its own,
-  // and a phone whose default differs should keep it.
-  SOLO_FACE = SOLO_FACE === SOLO_ON_SCREEN ? null : SOLO_ON_SCREEN;
-  syncFaceChoice();
-  // "close and press save", not "press save": the solo view is a full overlay
-  // and the save button is behind it, so the shorter instruction cannot be
-  // followed from where the person reading it is standing.
-  saveState(SOLO_FACE
-    ? `${SOLO_FACE} chosen — close, then press save`
-    : "no face chosen — close, then press save");
-};
+  $("solo-use").onclick = () => {
+    if (!SOLO_ON_SCREEN) return;
+    // Toggle, so the owner can go back to "no choice" — which is not the same
+    // as choosing the default face. An absent `face` leaves each client on
+    // its own, and a phone whose default differs should keep it.
+    SOLO_FACE = SOLO_FACE === SOLO_ON_SCREEN ? null : SOLO_ON_SCREEN;
+    syncFaceChoice();
+    // "close and press save", not "press save": the solo view is a full
+    // overlay and the save button is behind it, so the shorter instruction
+    // cannot be followed from where the person reading it is standing.
+    saveState(SOLO_FACE
+      ? `${SOLO_FACE} chosen — close, then press save`
+      : "no face chosen — close, then press save");
+  };
 
-loadAppearance();
+  loadAppearance();
+}
 </script>
