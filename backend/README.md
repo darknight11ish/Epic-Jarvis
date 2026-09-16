@@ -834,6 +834,45 @@ filter from the lane it is **about to call**, on every hop, and clears the
 route header's memory claims when it does. Stripping the recalled-facts block
 is free, because that block is a system message.
 
+## The other gate in `choose()`, added since: a pasted secret, not just the word for one
+
+`jarvis_router.is_private()` catches a *topic word* — "what's my api key" —
+and nothing ever scanned for the secret **itself**: a `.env` line, a stack
+trace, a token pasted with no matching word nearby. `choose()` now has a
+sixth gate, `looks_like_a_secret()` (`jarvis_router.py`, not a patch — it is
+a rebuilt module, edited in place), checked right after `is_private()` and
+before complexity: a private key block, an AWS/GitHub/Slack token, a JWT, a
+bearer header, or a labelled `key: <value>` assignment pins the turn local
+the same unconditional way `is_private`/taint already do. The reason string
+names *what kind* of secret it looked like and shows four characters plus a
+length — never the value itself, so the confirmation that protection fired
+cannot become a second place the secret is readable in full.
+
+Deliberately narrow: known, low-ambiguity shapes rather than a generic
+high-entropy heuristic. A false negative here still has to clear
+`is_private`, taint, complexity and budget; a false positive on this gate
+only costs answer quality (local instead of cloud), never privacy — which is
+the right side to be wrong on, so the patterns lean toward specific shapes
+that explain themselves rather than a broad net that flags everything and
+means nothing. Five new tests in `test_rebuilt.py`'s `Router` class (which
+had nine already, for `is_private`/taint/degrade): every listed shape is
+caught, ordinary text and a bare hash are not, the secret never appears
+verbatim in the reason, and a message with the shape but no matching keyword
+is still caught (`is_private` must not be what is doing the work in that
+one).
+
+**Not built, and worth saying plainly rather than leaving quiet:** this
+downgrades silently, the same as `is_private`/taint already do — it does not
+pause and ask via the approval queue (`jarvis_gate`). That queue's own
+`check()`/`decide()` functions are not visible anywhere in this repository —
+every patch that touches `jarvis_gate.py` does so through narrow, pre-existing
+diff context, none of which happens to include the function signature — so
+wiring a genuine "confirmation card" through it would mean guessing at an
+API this session cannot verify, which is worse than not building it. What
+ships is the part that matters most and is fully verified: the secret never
+reaches a cloud lane. Turning the after-the-fact notice into an actual card
+on a client is future work for whoever has `jarvis_gate.py` open.
+
 ## Test it
 
 ```powershell

@@ -1028,6 +1028,64 @@ class Router(unittest.TestCase):
             self.assertTrue(hasattr(d, attr), attr)
         self.assertIsInstance(d.as_dict(), dict)
 
+    # ---- looks_like_a_secret / gate 3 -----------------------------------
+    #
+    # is_private() catches the WORD for a secret; these catch the secret
+    # ITSELF, pasted with nothing naming it - a gap a prior audit found had
+    # no scanner at all, only the topic-keyword backstop above.
+
+    def test_recognised_secret_shapes_are_caught(self):
+        samples = {
+            "a private key": "-----BEGIN RSA PRIVATE KEY-----\nMIIB...",
+            "an AWS access key": "AKIAABCDEFGHIJKLMNOP",
+            "a GitHub token": "ghp_" + "a" * 36,
+            "a Slack token": "xoxb-1234567890-abcdefghij",
+            "an OpenAI-style API key": "sk-" + "a" * 24,
+            "a JSON web token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+            "a bearer token": "Bearer " + "a" * 24,
+            "a labelled secret value": 'api_key: "abcdefghijklmnop1234"',
+        }
+        for kind, sample in samples.items():
+            found = RT.looks_like_a_secret(f"here is the config: {sample}")
+            self.assertIsNotNone(found, f"{kind} was not caught: {sample!r}")
+            self.assertIn(kind, found)
+
+    def test_ordinary_text_is_not_flagged(self):
+        for q in ["what's the weather like", "explain how photosynthesis works",
+                  "my order number is 4471829", "the meeting is at 3pm",
+                  "here is a hash: d41d8cd98f00b204e9800998ecf8427e"]:
+            self.assertIsNone(RT.looks_like_a_secret(q), f"false positive on {q!r}")
+
+    def test_a_secret_is_never_shown_in_full(self):
+        secret = "sk-" + "x" * 40
+        found = RT.looks_like_a_secret(secret)
+        self.assertIsNotNone(found)
+        self.assertNotIn(secret, found, "the full secret leaked into the reason text")
+
+    def test_a_pasted_secret_pins_the_turn_local_with_no_matching_keyword(self):
+        # Deliberately no word from _PRIVATE_TERMS anywhere in this message -
+        # is_private() must NOT be what catches this one.
+        q = ("here's the deploy config: AKIAABCDEFGHIJKLMNOP, explain in "
+             "detail step by step and compare the trade-offs " * 2)
+        self.assertFalse(RT.is_private(q), "test setup: this must not trip the keyword backstop")
+        d = RT.choose(q, local_model="local", lanes=self.LANES)
+        self.assertEqual(d.lane, "local")
+        self.assertEqual(d.gate, "secret")
+        self.assertIn("AWS access key", d.reason)
+
+    def test_secret_gate_lands_on_local_the_same_way_the_other_gates_do(self):
+        # A local decision is allowed to carry memory - only a CLOUD lane may
+        # not (test_a_cloud_lane_is_never_handed_memory covers that
+        # invariant already). What matters here is that gate 3 resolves to
+        # `local` through the same local_decision() every other gate uses,
+        # rather than some parallel path that could disagree about it.
+        q = "ghp_" + "a" * 36  # a shape gate 3 catches with no is_private keyword nearby
+        self.assertFalse(RT.is_private(q), "test setup: this must not trip the keyword backstop")
+        d = RT.choose(q, local_model="local", lanes=self.LANES)
+        self.assertEqual(d.lane, "local")
+        self.assertEqual(d.gate, "secret")
+        self.assertTrue(d.inject_memory, "a local decision should carry memory like the others do")
+
 
 # ==========================================================================
 #   jarvis_voice

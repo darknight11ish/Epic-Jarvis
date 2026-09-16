@@ -89,6 +89,68 @@ def is_private(text: str) -> bool:
 
 
 # --------------------------------------------------------------------------
+#   What must never go to a cloud lane, part two: the literal secret itself
+# --------------------------------------------------------------------------
+#
+# `is_private()` above matches the WORD for a secret ("what's my api key").
+# It says nothing about a message that pastes the secret itself with no
+# matching word nearby - a stack trace, a .env line, a curl command copied
+# out of a terminal. That gap is real: nothing in this codebase scanned
+# outbound content for a secret-SHAPED value before this, only for the
+# topic words naming one.
+#
+# Shape-based and intentionally narrow. A false negative here still has
+# is_private()'s keyword list and the taint/complexity/budget gates behind
+# it; a false positive sends a genuinely safe question to the local model
+# instead of the cloud, which costs quality, not privacy. That asymmetry is
+# why this leans toward well-known, low-ambiguity SHAPES (a private key
+# block, a provider's own documented token prefix, a JWT's three-dot
+# structure) rather than a generic high-entropy-string heuristic, which
+# flags far more and explains far less.
+_SECRET_PATTERNS = [
+    ("a private key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
+    ("an AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("a GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")),
+    ("a Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    ("an OpenAI-style API key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    ("a JSON web token", re.compile(
+        r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
+    ("a bearer token", re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}", re.I)),
+    # A labelled assignment, not a bare high-entropy string: `token = <blob>`
+    # is specific enough to act on; an unlabelled 20-character string is not
+    # - it is also a hash, an id, a filename.
+    ("a labelled secret value", re.compile(
+        r"\b(?:api[_-]?key|secret|token|password|passwd)\s*[:=]\s*"
+        r"['\"]?([A-Za-z0-9_\-/+]{16,})['\"]?", re.I)),
+]
+
+
+def _mask(excerpt: str) -> str:
+    """First four characters and a length, never the excerpt itself. Enough
+    for the owner to recognise WHICH secret this was without this function
+    becoming a second place the secret is readable in full."""
+    excerpt = str(excerpt)
+    head = excerpt[:4]
+    return f"{head}{'…' if len(excerpt) > 4 else ''} ({len(excerpt)} characters)"
+
+
+def looks_like_a_secret(text: str) -> Optional[str]:
+    """The kind of secret found (masked, human-readable), or None.
+
+    Shape, not topic - see the module note above. Checked in declaration
+    order and returns on the first match, so a message tripping several
+    patterns is still reported once, with the earliest and most specific
+    match winning.
+    """
+    s = str(text or "")
+    for kind, pattern in _SECRET_PATTERNS:
+        m = pattern.search(s)
+        if m:
+            return f"{kind} ({_mask(m.group(0))})"
+    return None
+
+
+# --------------------------------------------------------------------------
 #   The budget
 # --------------------------------------------------------------------------
 
@@ -269,16 +331,22 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            **_extra) -> Decision:
     """Which lane answers this turn.
 
-    Five gates, in this order, and the order is the policy. Each one can only
+    Six gates, in this order, and the order is the policy. Each one can only
     send the answer DOWNWARD toward local - none of them can escalate past a
     gate that already refused.
 
       0. no cloud lanes offered      -> local
       1. the conversation is tainted -> local, unconditionally
       2. private content matched     -> local
-      3. not complex enough          -> local
-      4. budget spent                -> local
+      3. a real secret was found     -> local, unconditionally
+      4. not complex enough          -> local
+      5. budget spent                -> local
       otherwise                      -> the first cloud lane
+
+    Gate 2 (`is_private`) catches the WORD for a secret ("what's my api
+    key"); gate 3 (`looks_like_a_secret`) catches the secret ITSELF pasted
+    with no matching word nearby - a stack trace, a .env line, a token
+    copied out of a terminal. Neither replaces the other.
 
     THE PARAMETER IS `conversation_tainted`, AND THAT IS NOT A DETAIL.
 
@@ -334,6 +402,11 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
             "this conversation has read outside text, so it stays on this machine")
     if is_private(query):
         return local_decision("private", "the question matches the private-topic backstop")
+    secret = looks_like_a_secret(query)
+    if secret:
+        return local_decision(
+            "secret", f"the message contains what looks like {secret}, not "
+                      f"just a word for one, so it stayed on this machine")
     if c < float(_cfg("routing", "complexity_threshold", 0.40) or 0.40):
         return local_decision("complexity", f"complexity {c} is under the threshold")
 
@@ -404,7 +477,8 @@ def status() -> dict:
     return {"budget": Budget.load().status(),
             "complexity_threshold": _cfg("routing", "complexity_threshold", 0.40),
             "degrade_chain": _cfg("budget", "degrade_chain", []),
-            "private_terms": len(_PRIVATE_TERMS)}
+            "private_terms": len(_PRIVATE_TERMS),
+            "secret_patterns": len(_SECRET_PATTERNS)}
 
 
 if __name__ == "__main__":
