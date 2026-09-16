@@ -194,7 +194,11 @@ def _from_zip(where: Path):
                 + (" (there is a zip inside this zip; unpack it first)"
                    if inner else ""))
         entries.sort(key=lambda n: -z.getinfo(n).file_size)
-        print(f"  {where.name}: reading {len(entries)} JSON file(s)")
+        # Sizes, because "1 JSON file" is ambiguous in the one way that
+        # matters: a whole history in a single file, or an almost empty one.
+        total = sum(z.getinfo(n).file_size for n in entries)
+        print(f"  {where.name}: reading {len(entries)} JSON file(s), "
+              f"{total / 1e6:.1f} MB uncompressed")
         for name in entries:
             try:
                 with z.open(name) as fh:
@@ -285,6 +289,57 @@ def load(where: Path) -> object:
         raise SystemExit(f"{where.name} is not valid JSON: {exc}")
 
 
+def stats(node, acc: dict, depth: int = 0) -> dict:
+    """Count what is in a document, without showing any of it.
+
+    Needed because "0 code blocks" has two completely different causes and the
+    message cannot tell them apart: the history may genuinely contain none, or
+    the reader may be wrong about the shape of the file. One is a dead end, the
+    other is a bug, and guessing between them wastes a round trip each time.
+
+    Everything here is a COUNT or a key name. No message text, no file
+    contents, no URLs - so the output can be pasted into a chat, which is the
+    whole point of having it.
+    """
+    if depth > 60:
+        return acc
+    if isinstance(node, list):
+        acc["lists"] += 1
+        for item in node:
+            stats(item, acc, depth + 1)
+        return acc
+    if isinstance(node, dict):
+        acc["dicts"] += 1
+        for k in node:
+            acc["keys"][k] = acc["keys"].get(k, 0) + 1
+        if "chat_messages" in node or "messages" in node:
+            acc["conversations"] += 1
+        for v in node.values():
+            stats(v, acc, depth + 1)
+        return acc
+    if isinstance(node, str):
+        acc["strings"] += 1
+        acc["chars"] += len(node)
+        if len(node) > 400:
+            acc["long_strings"] += 1
+        n = node.count("```")
+        if n:
+            acc["fences"] += n
+            acc["strings_with_fences"] += 1
+        for m in _ANY_PY.finditer(node):
+            name = m.group(1)
+            if name.startswith("jarvis_"):
+                acc["jarvis_py_mentions"][name] = \
+                    acc["jarvis_py_mentions"].get(name, 0) + 1
+    return acc
+
+
+def new_stats() -> dict:
+    return {"dicts": 0, "lists": 0, "strings": 0, "chars": 0,
+            "long_strings": 0, "fences": 0, "strings_with_fences": 0,
+            "conversations": 0, "keys": {}, "jarvis_py_mentions": {}}
+
+
 _URLISH = re.compile(r"https?://|^[A-Za-z0-9_\-]{40,}$")
 
 
@@ -344,6 +399,11 @@ def main() -> int:
                     help="overwrite files that already exist in --out")
     ap.add_argument("--all", action="store_true",
                     help="also write modules that are not jarvis_*")
+    ap.add_argument("--stats", action="store_true",
+                    help="count what is in the export - messages, code fences, "
+                         "mentions of jarvis_*.py - and show nothing of its "
+                         "content. Safe to paste. Use when a search finds "
+                         "nothing and you need to know whether that is real.")
     ap.add_argument("--inspect", action="store_true",
                     help="show what the file CONTAINS and stop, with URLs and "
                          "long keys hidden so the output is safe to paste")
@@ -355,7 +415,12 @@ def main() -> int:
 
     found: list = []
     read_any = False
+    acc = new_stats()
     for label, data in sources(args.export):
+        if args.stats:
+            stats(data, acc)
+            read_any = True
+            continue
         if args.inspect:
             print(f"\nWhat is inside {label}:\n")
             for line in inspect(data):
@@ -370,6 +435,29 @@ def main() -> int:
         if got:
             print(f"    {label}: {got} code block(s)")
         read_any = True
+
+    if args.stats:
+        print(f"\n{'dicts':<24}{acc['dicts']:>12,}")
+        print(f"{'lists':<24}{acc['lists']:>12,}")
+        print(f"{'text values':<24}{acc['strings']:>12,}")
+        print(f"{'characters of text':<24}{acc['chars']:>12,}")
+        print(f"{'text values over 400ch':<24}{acc['long_strings']:>12,}")
+        print(f"{'``` fence markers':<24}{acc['fences']:>12,}")
+        print(f"{'values holding a fence':<24}{acc['strings_with_fences']:>12,}")
+        print(f"{'things with messages':<24}{acc['conversations']:>12,}")
+        print("\nmost common keys (names only, no values):")
+        for k, n in sorted(acc["keys"].items(), key=lambda kv: -kv[1])[:30]:
+            print(f"  {k:<34}{n:>10,}")
+        if acc["jarvis_py_mentions"]:
+            print("\njarvis_*.py filenames mentioned anywhere:")
+            for k, n in sorted(acc["jarvis_py_mentions"].items(),
+                               key=lambda kv: -kv[1]):
+                print(f"  {k:<34}{n:>10,}")
+        else:
+            print("\nNo jarvis_*.py filename is mentioned anywhere in this "
+                  "export.")
+        print("\nCounts and key names only - no message text. Safe to paste.")
+        return 0
 
     if args.inspect:
         if read_any:
