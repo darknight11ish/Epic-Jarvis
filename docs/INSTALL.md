@@ -265,8 +265,17 @@ mattering.
 
 The server refuses to start on a non-loopback bind with no token, which is
 correct. Its refusal message tells you to edit `bind_address` in
-`jarvis-framework.toml` — **ignore that**, the module that reads that file does
-not exist. `JARVIS_HUD_BIND` is the only thing that works.
+`jarvis-framework.toml`.
+
+**That advice used to be wrong and is now right.** This page said "ignore that,
+the module that reads that file does not exist" — true at the time, because
+`jarvis_framework.py` was one of the ten missing modules, so
+`[security].bind_address` was a setting nothing read. It was rebuilt on
+2026-09-16 and the setting works: with `bind_address = "100.64.1.5"` in the
+TOML, `jarvis_hud._bind_address()` returns `100.64.1.5`. Verified, not assumed.
+
+`JARVIS_HUD_BIND` still wins over the file, so the command above is still the
+quickest way to do it once. Use the TOML if you want it to persist.
 
 **The token is now made for you.** On first run the backend writes a random one
 to `%USERPROFILE%\.openjarvis\token` and the desktop app reads it from there,
