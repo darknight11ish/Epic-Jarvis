@@ -11,20 +11,22 @@ no local build. Everything below assumes it.
 
 ## 1. Where things stand right now
 
-**Branch:** `claude/android-apk-build-q435fi`. HEAD is `75e61b8`.
-Working tree clean, everything pushed.
+**Corrected 2026-09-16, against live GitHub data, not assumed:** everything
+below this note through "Known facts about the failure" describes a CI outage
+that is **over**. Runs 65, 66, 67 and 68's `build` job (verified directly via
+`mcp__github__actions_get`/`actions_list`, not by re-reading this file) are
+all green. The specific test this section was hunting —
+`EventStreamContractTest.cancellingTheCollectorEndsTheConnection` — was found
+and fixed in `9cbac9f` ("Hold the Call, not the Response, and hold it before
+execute()"), whose own run (65) passed both jobs including the emulator step.
+**Do not re-open this investigation** on the strength of this section's old
+present-tense wording; check a fresh `list_workflow_runs` first. The
+debugging lessons below (log tail truncation, etc.) are kept because they are
+real and could recur with a different test.
 
-**CI is RED and has been since run 44.** A test fails on the emulator and
-**the failing test's name is still unknown.**
+**Branch:** `claude/android-apk-build-q435fi`.
 
-**The APK on GitHub is nine commits stale.** The rolling `client-latest`
-release still points at commit `2987835`. It only republishes when the emulator
-smoke job passes, and that has not happened since run 43. **Tell the owner not
-to download it** until a run goes green.
-
-### The immediate task
-
-Find out which instrumentation test is failing, and fix it.
+### Historical: how a hidden test name was finally found (resolved in `9cbac9f`)
 
 Three runs were spent on *seeing* the failure rather than fixing it, and that
 is worth knowing so it is not repeated:
@@ -35,21 +37,13 @@ is worth knowing so it is not repeated:
   the emulator's exit trap dumped 120 lines of boot properties *after* them.
   Fixed in `9c95a7b` (ordering) and `75e61b8` (capped the dump to 12 lines).
 
-**Run 54 is the first run where the name should actually be readable.** Check
-it first — do not re-derive any of the above.
+### Known facts about the failure (historical — fixed in `9cbac9f`)
 
-If the name is *still* not visible, stop adjusting log formatting. Make the
-test write its result somewhere unambiguous instead (an `::error::` annotation
-carrying the test name, or a tiny file the next step `cat`s at the very top of
-its output).
-
-### Known facts about the failure
-
-- It is a **test failure, not a compile error**. `androidTest` compiles: run 50
+- It was a **test failure, not a compile error**. `androidTest` compiles: run 50
   passed "Compile the app and the test".
-- It is not `TokenStoreTest.anUnreadableBlobIsDroppedRatherThanThrown` — that
+- It was not `TokenStoreTest.anUnreadableBlobIsDroppedRatherThanThrown` — that
   one was found and fixed in `ca38fcf`.
-- Prime suspects are the two new contract tests added in `8f3e620`
+- The actual cause: the two new contract tests added in `8f3e620`
   (`ApiContractTest`, `EventStreamContractTest`). They had never run against an
   emulator before run 52. The SSE ones involve real timing (a ~3s reconnect
   backoff, a 60s held-open body) on a 2-core runner, so a timing assumption is
@@ -122,25 +116,28 @@ the two things only the owner can do (below).
 
 ## 4. Open items, in priority order
 
-1. **Fix the failing emulator test.** See §1.
-2. **Switch the published APK to the release variant**, once the smoke job has
-   run against it. This is the single biggest user-visible win: the debug build
-   runs with optimisations off and every class interpreted, and it leaves
-   `adb shell run-as` open on the app's data directory.
-3. **A sleeping desktop renders as a red alarm.** `JarvisRuntime.resolveFace`
+Items 1 and 2 as originally written here are DONE, verified against live CI
+on 2026-09-16, not left in this list on the strength of an old draft:
+the failing emulator test was fixed in `9cbac9f` (see §1's correction), and
+the published APK was switched to the release build behind its own gate in
+`edee026` ("Publish the release build, behind a gate that starts it first")
+— run 66 and later show `Assemble release APK` and `Publish the APK to a
+rolling release` both succeeding. What remains:
+
+1. **A sleeping desktop renders as a red alarm.** `JarvisRuntime.resolveFace`
    returns `FaceState.ERROR` 12s after the link drops, before considering
    anything else, and `STANDBY`/`BANKED` are only reachable *with* a
    connection. Close the laptop at 23:00 and the phone pulses rose until
    morning, every night. Three of four reviewers found this independently.
    Needs a spec decision (a new `unreachable` state) — see
    `docs/CROSS-CLIENT-CONTRACT.md`.
-4. **`versionCode` is 1 and `CrashLog` carries no build stamp**, so a crash
+2. **`versionCode` is 1 and `CrashLog` carries no build stamp**, so a crash
    report cannot say which build produced it.
-5. **`ApprovalNotifier.assigned` is in-memory**, so after the process is
+3. **`ApprovalNotifier.assigned` is in-memory**, so after the process is
    reclaimed the new process cannot cancel notifications the old one posted.
    Fails safe (a stale tap hits `decisionBlocker`), so it is a lingering
    notification, not a wrong decision. `getActiveNotifications()` fixes it.
-6. **`cancelHold` is unreachable** — no route serves a hold handle. The code
+4. **`cancelHold` is unreachable** — no route serves a hold handle. The code
    says so itself. Noted so it is not rediscovered.
 
 ## 5. Only the owner can do these
@@ -187,12 +184,10 @@ this codebase (`PairingScreen.kt`'s Keystore comment, `VoiceModels.kt`'s
 lock-screen redaction, `Speaker.kt`'s on-device-only fix, and §4 item 3's
 "sleeping desktop looks like an alarm" bug above) rather than invented copy.
 
-**Not verified by CI**, because there was no green run to verify it against —
-CI was already red for the unrelated emulator failure in §1 before this
-change. This is Kotlin source only (no XML, no manifest change, no new
-dependency), reviewed by hand against exact import and API patterns already
-proven to compile elsewhere in this file tree (`ReadinessScreen.kt`,
-`MainActivity.kt`), since there is no local build to check it against
-directly. Whoever picks up §1's task should know this file exists and is not
-the cause of the emulator failure — it adds no test, touches no network code,
-and the failure predates it.
+**Correction, 2026-09-16, after the fact:** this section originally said CI
+was red for the emulator failure in §1 at the time of this commit, and that
+was wrong — carried over from §1's stale wording without checking live CI
+first. Runs 65-67 (before this commit) and this commit's own run (68) were
+checked directly against GitHub's API afterward: all green. §1 above is now
+corrected to match. This change's own build did pass, including both debug
+and release APK assembly.
