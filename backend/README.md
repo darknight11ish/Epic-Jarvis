@@ -1545,3 +1545,70 @@ toast is a prompt to open the app.
 `test_approval_notice.py`: 37 checks. The central one feeds a row stuffed with
 private strings and attacker text and asserts that none of them appear in the
 notice, end to end through the doorbell.
+
+---
+
+# Standalone tools
+
+Not patches - scripts you run once, on demand, that call the patched backend
+rather than change it. `grade-peers.py` and `jarvis_research.py` are the
+other two in this directory; this is the third.
+
+## `import_history.py` — feed an old Claude or Gemini export into the review queue
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; python "C:\Users\pcadmin\Epic-Jarvis\backend\import_history.py" --claude "C:\path\to\claude-export.zip" --gemini "C:\path\to\takeout.zip"
+```
+
+(One or both of `--claude`/`--gemini`. Run it from the backend folder, or
+set `$env:JARVIS_BACKEND` first, the same as the test suites.)
+
+This does not add anything to memory by itself. It calls the exact same
+`jarvis_extract.propose()` a live conversation triggers once it goes quiet -
+once per historical conversation found in the export - so every guarantee
+that function already has keeps holding for free: the model call is
+whatever `_local_llm` is (Ollama, on this machine, never a cloud lane), and
+nothing becomes a fact without a human accepting it in the Brain window.
+
+**There is deliberately no bulk-approve here, and there will not be one.**
+Two full histories can be thousands of conversations, which is exactly the
+amount of data that tempts a shortcut around "no approve-all anywhere in
+Jarvis" - the rule holds anyway. Every proposal this produces gets exactly
+one decision, the same as a proposal from yesterday's conversation would.
+Practically, that means importing a big history is reviewed over several
+sittings, not in one pass: when the review queue fills (`review_queue_max`,
+default 200), the script stops on its own, tells you to go clear some of it,
+and picks up exactly where it left off when you run it again - it remembers
+which conversations it has already offered, in `<config dir>/import-history-
+progress.json`, so re-running never re-asks the local model about the same
+conversation twice.
+
+**Claude's export format is the one this project has actually seen.**
+`scripts/recover_from_claude_export.py`, built and run against a real
+export earlier in this project's history, found the shape this parser uses:
+many JSON files, not one (`conversations.json` is an index with no message
+text; the real conversations are one file each), `chat_messages`, a
+`sender` of `human`/`assistant`, text as a bare string or as content blocks.
+
+**Gemini's export format is not verified against a real file.** It is
+written against Google Takeout's documented "Gemini Apps" activity export
+shape. Takeout's activity log has historically captured the *prompt* you
+sent more reliably than the *response* you got back, so a Gemini import may
+end up mostly one-sided. If the field names in your real export don't match
+what `gemini_conversations()` looks for, it says "0 conversations found in
+this file" rather than guessing or crashing - open the JSON, check the real
+key names, and the handful of `.get(...)` calls in that one function are
+what to adjust.
+
+### Test it
+
+```powershell
+python test_import_history.py
+```
+
+Eighteen checks, against synthetic export files - no real conversation data,
+no network, no model. The ones that matter most: importing only ever adds a
+*proposal*, never a fact; a full queue stops the run rather than dropping
+anything silently; and resuming after a pause calls the local model exactly
+once more, for the one conversation that had not been offered yet, not once
+for every conversation from the start again.

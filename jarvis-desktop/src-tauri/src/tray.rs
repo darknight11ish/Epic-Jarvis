@@ -783,13 +783,29 @@ fn waiting_label(link: &LinkState) -> String {
         1 => "1 thing waiting to be told".to_string(),
         n => format!("{n} things waiting to be told"),
     };
-    match link.attention.blocked_by.as_deref() {
+    let body = match link.attention.blocked_by.as_deref() {
         Some(reason) if link.attention.pending > 0 => format!("{head} · {reason}"),
         _ if link.attention.pending > 0 => format!(
             "{head} · {} of {} interruptions left",
             link.attention.remaining, link.attention.limit
         ),
         _ => head,
+    };
+    // `digest_due` was read off `/api/attention` into `Attention` and never
+    // looked at again anywhere in this client - the field computed
+    // server-side specifically to say "it is time for the daily brief" had
+    // no effect on anything the owner could see. This does not invent a new
+    // proactive notification for it (this struct is only refreshed on
+    // connect, resume and after a mute - "poll only on resume" is this
+    // module's own stated design, and a timely alert would need an actual
+    // periodic check, which is a bigger decision than this one line). What
+    // it does is stop the flag being silently dropped on every occasion the
+    // client already happens to be looking: if there is something to tell
+    // AND the server says it is due, the row says so.
+    if link.attention.digest_due && link.attention.pending > 0 {
+        format!("{body} · today's brief is ready")
+    } else {
+        body
     }
 }
 
@@ -1445,6 +1461,29 @@ mod tests {
             budgeted.attention.known,
             "the row is enabled on `known`, so a label test that left it false \
              would be asserting the disabled case by accident"
+        );
+
+        // digest_due was read off the wire into Attention and then never
+        // looked at by anything - the field computed server-side
+        // specifically to say "it is time for the daily brief" had no
+        // effect anywhere. The row now says so when there is something to
+        // tell and the server says it is due.
+        budgeted.attention.pending = 3;
+        budgeted.attention.limit = 6;
+        budgeted.attention.remaining = 2;
+        budgeted.attention.digest_due = true;
+        assert_eq!(
+            waiting_label(&budgeted),
+            "3 things waiting to be told · 2 of 6 interruptions left · \
+             today's brief is ready"
+        );
+        // But not when there is nothing to tell - "the brief is ready" over
+        // an empty digest would be the same false confidence the zero-
+        // pending case above was fixed to avoid.
+        budgeted.attention.pending = 0;
+        assert_eq!(
+            waiting_label(&budgeted),
+            "Nothing waiting — the brief and the budget"
         );
     }
     /// Contrast ratio between two opaque colours, WCAG's formula.

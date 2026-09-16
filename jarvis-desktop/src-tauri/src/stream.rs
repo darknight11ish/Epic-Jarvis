@@ -729,6 +729,23 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
         // source of wording, so this and the phone cannot describe the same
         // waiting decision two different ways.
         let notice = &item["notice"];
+
+        // "weight: 'heavy' interrupts; 'normal' waits to be found" -
+        // docs/ARCHITECTURE.md's own rule 1 for any client reading this
+        // contract. This used to toast for every arrival regardless of
+        // weight, with a comment claiming "the weight is still honoured: a
+        // heavy item gets the tray's attention state" - which was true of
+        // EVERY pending item, heavy or not (tray.rs escalates on
+        // `link.approvals > 0`, not on weight), so the one field that exists
+        // to let a person tell "needs you now" from "can wait" was computed
+        // server-side and read nowhere. Missing `weight` (an older backend)
+        // defaults to interrupting, same as the missing-notice fallback
+        // below already assumes the more attention-worthy case rather than
+        // the quieter one.
+        if notice["weight"].as_str() == Some("normal") {
+            continue;
+        }
+
         let (title, body) = match (notice["title"].as_str(), notice["body"].as_str()) {
             (Some(t), Some(b)) => (t.to_string(), b.to_string()),
             // A backend without approval-notice.patch. The old wording, which
@@ -751,8 +768,10 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
         // So the phone can offer Deny and Windows cannot, and pretending
         // otherwise here would mean a button that silently does nothing.
         //
-        // The weight is still honoured: a heavy item gets the tray's
-        // attention state, which is the loudest thing this surface has.
+        // The tray's attention state is unconditional on any pending item,
+        // heavy or not - that is the "waits to be found" half of the same
+        // rule, a passive, glanceable signal rather than an interruption,
+        // and it is correct for it to stay unconditional.
         crate::commands::notify(app, &title, &body);
     }
 
