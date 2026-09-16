@@ -149,12 +149,27 @@ def walk(node, out: list, depth: int = 0) -> None:
             when = node[key]
             break
 
-    # 1. An attachment or file: it carries its own real name.
-    fname = node.get("file_name") or node.get("filename") or node.get("name")
-    body = node.get("extracted_content") or node.get("content") or node.get("text")
-    if (isinstance(fname, str) and fname.endswith(".py")
-            and isinstance(body, str) and body.strip()):
-        out.append((fname, body, when, "attachment"))
+    # 1. Anything carrying a filename and a body.
+    #
+    # `file_path` and `path` matter as much as `file_name`, and were missing.
+    # A claude.ai export names an ATTACHMENT with `file_name`, but a Claude
+    # Code transcript records a file being WRITTEN as a tool call:
+    #
+    #     {"name": "Write", "input": {"file_path": "...", "content": "..."}}
+    #
+    # which is how most of these modules would have reached disk in the first
+    # place. Reading only `file_name` found the ones that were pasted into a
+    # message and silently skipped every one that was actually written.
+    fname = (node.get("file_name") or node.get("filename")
+             or node.get("file_path") or node.get("path") or node.get("name"))
+    body = (node.get("extracted_content") or node.get("content")
+            or node.get("text") or node.get("new_str") or node.get("file_text"))
+    if isinstance(fname, str) and fname.endswith(".py") and isinstance(body, str) and body.strip():
+        # A path, not a name: "/home/x/jarvis_power.py" must land as
+        # jarvis_power.py. Both separators, because the transcript may come
+        # from either kind of machine.
+        base = fname.replace("\\", "/").rsplit("/", 1)[-1]
+        out.append((base, body, when, "written file"))
 
     # 2. Message text, which may hold fenced blocks.
     for key in ("text", "content", "input", "prompt"):
@@ -248,9 +263,11 @@ def sources(where: Path):
         # `is_zipfile(f) or suffix == ".json"`, which quietly dropped a
         # truncated .zip before anything was reported - and a truncated archive
         # is exactly what a spent one-time link produces.
+        # rglob, not iterdir: Claude Code keeps transcripts one directory per
+        # project, so the interesting files are never at the top level.
         files = sorted(
-            [f for f in where.iterdir()
-             if f.is_file() and f.suffix.lower() in (".zip", ".json")],
+            [f for f in where.rglob("*")
+             if f.is_file() and f.suffix.lower() in (".zip", ".json", ".jsonl")],
             key=lambda f: -f.stat().st_size)
         if not files:
             raise SystemExit(
@@ -262,8 +279,42 @@ def sources(where: Path):
     yield from _one(where)
 
 
+def load_lines(where: Path) -> object:
+    """A JSON Lines transcript: one JSON object per line, not one document.
+
+    Claude Code and Cowork keep their history on disk as `.jsonl` - a file of
+    independent objects, one per line - rather than as the single array a
+    claude.ai export uses. `json.loads` on the whole file fails immediately
+    with "Extra data", which reads like corruption rather than like a
+    different, perfectly valid format.
+
+    This matters here because the claude.ai export turned out NOT to contain
+    the lost modules, and a local transcript store is the remaining place they
+    could be. A bad line is skipped rather than fatal: these files are appended
+    to as a session runs, so the last line can be a half-written record.
+    """
+    out, bad = [], 0
+    with open(where, encoding="utf-8-sig", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError:
+                bad += 1
+    if bad:
+        print(f"    ({bad} unreadable line(s) skipped - normal for a live "
+              f"session)")
+    if not out:
+        raise SystemExit(f"{where.name} has no readable JSON lines")
+    return out
+
+
 def load(where: Path) -> object:
     """Read one JSON file from disk. Archives are handled by _from_zip."""
+    if where.suffix.lower() == ".jsonl":
+        return load_lines(where)
     size = where.stat().st_size
 
     # Named .zip but is not one. This is what a SPENT one-time link produces:
