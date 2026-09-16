@@ -81,12 +81,48 @@ def _stem(w: str) -> str:
         w = w[:-3] + "y"
     elif len(w) > 4 and w.endswith(("sses", "shes", "ches", "xes", "zes")):
         w = w[:-2]
+    elif len(w) > 3 and w.endswith("oes"):
+        # A shorter gate than its neighbours above, deliberately: "goes" and
+        # "does" are both four letters, and joining the len>4 group above
+        # left them falling through to the "-s"-only branch below instead,
+        # which stripped one letter ("goes" -> "goe") - too short for the
+        # trailing-e check further down (len must be > 3) and stranded one
+        # letter short of "go". "does"/"go[es]" matching "does"/"go" at 0.0
+        # meant "what car does Mario drive" could not recall a fact that
+        # shared only "Mario" and a verb the stemmer split apart.
+        w = w[:-2]
     elif len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us", "is")):
         w = w[:-1]
     for suf in ("ingly", "edly", "ing", "ed"):
         if len(w) > len(suf) + 2 and w.endswith(suf):
             w = w[: -len(suf)]
             break
+    # A SEPARATE, EARLIER MANGLING to compensate for: `_content_words` is
+    # jarvis_memory._words(), verbatim from memory-safety.patch and pinned -
+    # not this module's to change - and it folds a trailing "'?s$" BEFORE
+    # checking its own stopword list, not after. "does" -> strip "s" -> "doe"
+    # -> "doe" is not itself in that stopword list, so a word meant to be
+    # filtered out entirely arrives here disguised as a content word, and
+    # already one letter short of recoverable by the "-oes" rule above (which
+    # needs to see "does", not "doe"). Only short words land here this way -
+    # "doe"/"goe" (3 letters) - because _words() only strips ONE trailing
+    # letter, not "es". Genuine short "-oe" words (doe the animal, toe, hoe,
+    # foe) collide with this and stem the same as their verb-form lookalikes;
+    # accepted, because the failure mode is an extra candidate fact scored
+    # low among many, not a missing one - the asymmetry this whole function
+    # exists to avoid.
+    if len(w) in (3, 4) and w.endswith("oe"):
+        w = w[:-1]
+    # UNDOUBLE, Porter's own rule (step 1b): a doubled final consonant left
+    # by stripping -ing/-ed came from the CVC-doubling English spelling adds
+    # before a vowel suffix - "run" -> "running", "stop" -> "stopping",
+    # "plan" -> "planning" - and stripping only the suffix left "runn",
+    # "stopp", "plann", none of which matched the word actually typed. l/s/z
+    # are excluded because THEIR doubling is the word's own spelling, not an
+    # artefact of suffixing - "call"/"calling" must both land on "call", not
+    # "cal"; same for "miss"/"missing" and "buzz"/"buzzing".
+    if (len(w) > 3 and w[-1] == w[-2] and w[-1] not in "aeioulsz"):
+        w = w[:-1]
     # Both "drive" and "drives"(-> "drive") end here, and both become "driv".
     if len(w) > 3 and w.endswith("e"):
         w = w[:-1]

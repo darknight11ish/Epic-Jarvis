@@ -59,6 +59,10 @@ class Engine:
         self.enabled = bool(enabled)
         self.checks: list = []
         self.findings: list = []
+        # A running total, never decremented. The doorbell announces this,
+        # not the unseen COUNT - see file()'s comment for why the count is
+        # the wrong thing to key a change-feed on.
+        self._filed_total = 0
         self.beats = 0
         self.errors = 0
         self._thread: Optional[threading.Thread] = None
@@ -148,6 +152,29 @@ class Engine:
         The finding's text came from reading something - a mailbox, a page, a
         file - and `[privacy] never_leaves_device` covers all three. The event
         bus reaches a lock screen, so the doorbell carries how many, not what.
+
+        TWO BUGS, both in how this told jarvis_events about itself, neither
+        in what it stored - self.findings and drain() were never wrong.
+
+        ONE: `note()` was called with no `announce_first`. It is a REPORT,
+        not a poller's observation - something just happened - and
+        jarvis_events.Bus.note()'s own docstring names this exact call as the
+        example: without the flag, the first finding filed after every
+        restart raised no event at all, because the bus had never seen the
+        key "findings" and treated the sighting as a baseline. The row was
+        still stored and still in drain()'s output - only the doorbell was
+        silent, for the one finding a restarted Jarvis most needs to surface.
+
+        TWO: the value announced was the UNSEEN count, and that count is not
+        monotonic - mark_seen() lowers it without calling note(), so nothing
+        re-baselines when it does. A fresh finding that happens to bring the
+        unseen count back to a number already announced compares equal under
+        note()'s dedupe and is swallowed: file A (2 unseen, announced) ->
+        owner reads A (1 unseen, no event, nothing to re-baseline against) ->
+        file B, a finding nobody has heard of (2 unseen again) -> dropped,
+        because 2 == the last value note() saw for this key. `_filed_total`
+        fixes it by never going backwards; the unseen COUNT for a human to
+        read is still carried in `extra`, unchanged.
         """
         with self._lock:
             # The id is built INSIDE the lock. Outside it, len(self.findings)
@@ -158,10 +185,13 @@ class Engine:
                    "source": str(source), "at": time.time(),
                    "finding": finding, "seen": False}
             self.findings.append(row)
+            self._filed_total += 1
+            total = self._filed_total
             n = len([f for f in self.findings if not f["seen"]])
         try:
             import jarvis_events
-            jarvis_events.BUS.note("findings", n, "finding")
+            jarvis_events.BUS.note("findings", total, "finding",
+                                   extra={"count": n}, announce_first=True)
         except Exception:
             pass
         return row

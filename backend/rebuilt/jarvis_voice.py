@@ -352,7 +352,18 @@ def load_profile(path: Optional[Path] = None) -> Optional[VoiceProfile]:
     cent = raw.get("centroid")
     if not isinstance(cent, (list, tuple)) or not cent:
         return None
-    if any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in cent):
+    if any(isinstance(x, bool) or not isinstance(x, (int, float))
+           or not math.isfinite(x) for x in cent):
+        # NaN/Infinity are floats, so the check above alone let them through.
+        # json.loads accepts the bare tokens NaN/Infinity/-Infinity as a
+        # Python-specific extension, so a truncated or corrupted write of the
+        # profile file could pass every earlier check and build a
+        # VoiceProfile that reports itself enrolled and usable. It still
+        # fails SAFE at verify() time - cosine()'s isfinite guard scores it
+        # 0.0 - so this was never a false accept. It was a silent, permanent
+        # lockout: status() said "enrolled": True, load_profile()'s own
+        # docstring promises None on "anything wrong", and the owner had no
+        # way to learn "your profile is corrupt, re-enrol" from either.
         return None
     try:
         prof = VoiceProfile(

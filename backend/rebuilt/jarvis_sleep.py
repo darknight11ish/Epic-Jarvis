@@ -60,8 +60,14 @@ def remind() -> bool:
 
 
 def hour() -> int:
+    # The TOML key is `remind_hour_local` (jarvis-framework.toml:367), not
+    # "hour" - the same class of typo as jarvis_power's old
+    # quiet_hours_start/quiet_start mismatch, in a different module. There is
+    # no current caller (grepped the whole repo), so nothing has silently
+    # used 3am instead of the owner's configured hour yet - but the moment
+    # reminder_card() or anything else gates on this, it would have.
     try:
-        h = int(_cfg("hour", 3))
+        h = int(_cfg("remind_hour_local", 3))
     except (TypeError, ValueError):
         return 3
     return h if 0 <= h <= 23 else 3

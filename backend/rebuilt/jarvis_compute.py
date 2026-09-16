@@ -74,9 +74,17 @@ class Plan:
         for d in self.devices:
             v = d.get("total_mb") if isinstance(d, dict) else getattr(d, "total_mb", 0)
             try:
-                total += int(v or 0)
+                v = int(v or 0)
             except (TypeError, ValueError):
                 continue
+            # Negative is not zero. `if pl.total_mb: return pl.total_mb`
+            # above only falls through to the honest default on exactly 0 -
+            # a negative reading (corrupt or injected device data; real
+            # nvidia-smi cannot emit one, but nothing here enforced that)
+            # is truthy and was trusted as a genuine measurement, reported
+            # with simulated=False as if it were real VRAM.
+            if v > 0:
+                total += v
         return total
 
     def as_dict(self) -> dict:

@@ -141,7 +141,8 @@ _WARNED: set = set()
 
 
 def _warn_once(msg: str, key: Optional[str] = None) -> None:
-    """Say it to stderr, once PER PROBLEM.
+    """Say it to stderr, once per PROBLEM - where the problem is identified
+    by `key`, not merely by having occurred before.
 
     A config problem that prints on every one of fifty-six calls is noise
     nobody reads; one that prints never is a silent default nobody notices.
@@ -150,6 +151,17 @@ def _warn_once(msg: str, key: Optional[str] = None) -> None:
     latched it, and every later problem - three more bad tiers, "config could
     not be parsed", "no TOML parser available" - was then silent for the rest
     of the process. Keyed now, so each distinct problem gets its one line.
+
+    THE KEY MUST NAME THE VALUE, not just the setting, for anything a config
+    reload can toggle back and forth. `unknown_action_tier` calls this with
+    `key=f"unknown_tier_permissive:{val}"` rather than a bare
+    "unknown_tier_permissive" - an admin who sets `unknown_action_tier =
+    "auto"` (warned), fixes it, and later sets it to "auto" again gets a
+    second warning, because that is a second occurrence of a dangerous
+    config someone should see, not a repeat of the first one. A key that
+    named only the setting would latch on the first bad value and stay
+    silent for the rest of the process no matter how many times the danger
+    came back.
     """
     k = key or msg
     if k in _WARNED:
@@ -263,29 +275,38 @@ DEFAULT_UNKNOWN_TIER = "ask"
 
 def unknown_action_tier() -> str:
     """The tier for an action that is in no table. Read from
-    `[autonomy].unknown_action_tier`, and "ask" if that is missing or invalid.
+    `[autonomy].unknown_action_tier`, and "ask" if that is missing, invalid,
+    or MORE PERMISSIVE than "ask".
 
-    Fails closed twice over, deliberately: a config that says
-    `unknown_action_tier = "auto"` is almost certainly a mistake or an attack,
-    but this is not the place to refuse it - the gate decides policy. What is
-    refused here is a value that is not a tier at all, because passing
-    "definitely" back to a caller that compares against "never" would read as
-    permission.
+    THIS CLAMPS, and an earlier version of this function did not - it is the
+    "no approve-all anywhere in Jarvis; do not build one" rule, applied to a
+    fallback rather than a feature. `[autonomy].unknown_action_tier = "auto"`
+    used to be honoured after one stderr line, on the reasoning that
+    jarvis_jobs._freeze_caps enforces a ceiling downstream and this module
+    only reads config. That module is real - it is on the machine that runs
+    Jarvis, not in this repository - but nothing HERE can verify it, and a
+    single edit to one config key is exactly the shape of "a control that
+    approves everything nobody got round to classifying". The config's own
+    comment already says the honest answer: "'ask' is the only defensible
+    answer" for this key. Only "ask" and "never" are honoured now - both are
+    at or below the safe default, so passing them through creates no
+    approval, only a stricter one. "auto" and "notify" are refused exactly
+    like a value that is not a tier at all: warned about, and clamped.
     """
     val = section("autonomy").get("unknown_action_tier", DEFAULT_UNKNOWN_TIER)
     val = str(val).strip().lower()
     if val in ("auto", "notify"):
-        # Honoured - the gate decides policy, not this module - but never
-        # silently. jarvis_jobs._freeze_caps refuses only "never", so an
-        # unclassified action landing on "auto" is frozen as auto-approved
-        # with nothing printed anywhere.
         _warn_once(
             f"[autonomy].unknown_action_tier is {val!r}: an action NOBODY "
-            f"CLASSIFIED is auto-approved. The shipped config says \"ask\".",
-            key="unknown_tier_permissive")
+            f"CLASSIFIED would be auto-approved. Refusing to honour it - "
+            f"there is no approve-all in Jarvis - and using "
+            f"{DEFAULT_UNKNOWN_TIER!r} instead.",
+            key=f"unknown_tier_permissive:{val}")
+        return DEFAULT_UNKNOWN_TIER
     if val not in TIERS:
         _warn_once(f"[autonomy].unknown_action_tier is {val!r}, which is not "
-                   f"one of {TIERS}. Using {DEFAULT_UNKNOWN_TIER!r}.")
+                   f"one of {TIERS}. Using {DEFAULT_UNKNOWN_TIER!r}.",
+                   key=f"unknown_tier_invalid:{val}")
         return DEFAULT_UNKNOWN_TIER
     return val
 
@@ -430,15 +451,24 @@ def audit_log(event: str, detail: Optional[dict] = None) -> bool:
             name = f"jarvis-{time.strftime('%Y-%m-%d', time.gmtime())}.jsonl"
             with open(where / name, "a", encoding="utf-8", newline="\n") as fh:
                 fh.write(line + "\n")
-        _LOG_FAILED = False
+            _LOG_FAILED = False
         return True
     except Exception as exc:
         # "log_write_failures_are_visible = true". Once per outage, not once
         # per call: a disk that is full fails on every write, and a hundred
         # identical lines on stderr buries whatever the program was actually
         # doing.
-        if not _LOG_FAILED:
+        #
+        # THE CHECK-AND-SET IS INSIDE THE LOCK. It used to sit in this except
+        # block, entered only after _LOG_LOCK had already been released by the
+        # `with` above - so two threads hitting the same outage could both
+        # read _LOG_FAILED as False before either set it, and both print.
+        # Moving the flag write on the success path inside the lock (above)
+        # is the other half: it closes the same window from that side.
+        with _LOG_LOCK:
+            already = _LOG_FAILED
             _LOG_FAILED = True
+        if not already:
             print(f"jarvis_framework: audit log write FAILED ({type(exc).__name__}: "
                   f"{exc}) to {where}. Events are not being recorded.",
                   file=sys.stderr)

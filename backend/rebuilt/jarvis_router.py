@@ -70,7 +70,12 @@ def _cfg(section: str, key: str, default=None):
 _PRIVATE_TERMS = [
     r"\bpassword\b", r"\bpassphrase\b", r"\bapi[ _-]?key\b", r"\bsecret\b",
     r"\btoken\b", r"\bcredential\b", r"\bprivate key\b", r"\bseed phrase\b",
-    r"\bssn\b", r"\bsocial security\b", r"\bpassport\b", r"\bdriver'?s licence\b",
+    r"\bssn\b", r"\bsocial security\b", r"\bpassport\b",
+    # Both spellings. The list otherwise uses American terms (ssn,
+    # social security) and only had the British "licence" - so "what's
+    # my driver's license number" typed in the owner's own words missed
+    # the one backstop meant to catch literal private phrases.
+    r"\bdriver'?s licen[cs]e\b",
     r"\biban\b", r"\bsort code\b", r"\brouting number\b", r"\baccount number\b",
     r"\bcredit card\b", r"\bcvv\b",
     r"\bdiagnos\w*\b", r"\bprescription\b", r"\bbiopsy\b", r"\bmedical record\b",
@@ -356,10 +361,26 @@ def degrade(lane: str, lanes: Optional[list] = None,
     guard, and that guard should never fire.
 
     The chain is `[budget].degrade_chain` when the current lane is in it,
-    otherwise the caller's own `lanes` list, and local is always the floor.
+    otherwise the caller's own `lanes` list, and local is always the floor -
+    checked FIRST, unconditionally, before `chain` or `lanes` is even read.
+
+    THAT ORDERING IS THE FIX. It used to be checked last: `order` was built
+    from `chain` or `lanes`, and if `lane` (already equal to `local`) happened
+    to appear inside that list with something after it, the walk returned
+    THAT NEXT ENTRY instead of ever reaching the floor. `jarvis_hud:1738`
+    documents that a `lanes` list containing `local_model` is a real state -
+    it exists specifically so degrading FROM a cloud lane can land ON local -
+    but the same list read the other way, starting the walk AT local, handed
+    back a CLOUD lane. Reproduced: `degrade("local", ["local","a","b"],
+    "local")` returned `"a"`. `choose()` pins a conversation to `local`
+    unconditionally on taint or the private backstop - this was the one path
+    that could still walk it back out to the cloud, the moment the local
+    model refused or timed out and jarvis_hud asked what to try next.
     """
     lane = str(lane or "")
     local = local_model or "local"
+    if lane == local:
+        return None
     chain = list(_cfg("budget", "degrade_chain", []) or [])
     order = chain if lane in chain else list(lanes or [])
 
@@ -375,9 +396,8 @@ def degrade(lane: str, lanes: Optional[list] = None,
             if nxt and nxt not in seen:
                 return nxt
             seen.add(nxt)
-    # Bottom of the chain, or a lane nobody listed. Local is always the floor,
-    # and the floor has nothing below it.
-    return local if lane != local else None
+    # Bottom of the chain, or a lane nobody listed. Local is always the floor.
+    return local
 
 
 def status() -> dict:

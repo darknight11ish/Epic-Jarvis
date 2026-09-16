@@ -113,6 +113,32 @@ class Framework(unittest.TestCase):
         self.assertEqual(FW.action_tier(""), "ask")
         self.assertEqual(FW.action_tier("../../etc/passwd"), "ask")
 
+    def test_an_unclassified_action_cannot_be_configured_permissive(self):
+        """"There is no approve-all anywhere in Jarvis; do not build one" is
+        a hard product constraint, and [autonomy].unknown_action_tier used to
+        be one config edit away from being exactly that: "auto" or "notify"
+        were honoured after a single stderr line, on the reasoning that a
+        module outside this repository enforces a ceiling. Nothing in this
+        repository can verify that, so nothing here may return anything more
+        permissive than "ask" for an action nobody classified."""
+        orig = FW.load_framework
+        for permissive in ("auto", "notify", "AUTO", " Auto "):
+            FW.load_framework = lambda *a, v=permissive, **k: {
+                "autonomy": {"unknown_action_tier": v}}
+            try:
+                self.assertEqual(FW.unknown_action_tier(), "ask",
+                                 f"{permissive!r} must not be honoured")
+            finally:
+                FW.load_framework = orig
+        # "never" is stricter than the default, not more permissive - trust
+        # it. Same for the shipped default itself.
+        FW.load_framework = lambda *a, **k: {
+            "autonomy": {"unknown_action_tier": "never"}}
+        try:
+            self.assertEqual(FW.unknown_action_tier(), "never")
+        finally:
+            FW.load_framework = orig
+
     def test_a_typod_tier_is_not_permission(self):
         """A tier value that is not one of the four must be treated as
         unclassified. Reading "atuo" as anything but "ask" would turn a typo
@@ -839,8 +865,43 @@ class Recall(unittest.TestCase):
         """A stemmer that moves one form and not its pair is worse than none.
         A first version turned "lives" into "liv" and left "live" alone."""
         for a, b in [("drive", "drives"), ("live", "lives"),
-                     ("prefer", "prefers"), ("space", "spaces")]:
+                     ("prefer", "prefers"), ("space", "spaces"),
+                     # "-oes": "goes"/"does" are four letters, same as the
+                     # word being stemmed, so they fell through the sses/
+                     # shes/ches/xes/zes group's length gate into the plain
+                     # "-s" branch, which stripped one letter too few and
+                     # stranded them at "goe"/"doe".
+                     ("go", "goes"), ("do", "does"),
+                     # CVC-doubling before -ing: "run"/"stop"/"plan" all
+                     # geminate their final consonant in English spelling,
+                     # and stripping only "-ing" left the double letter in
+                     # place - "runn", "stopp", "plann" - matching nothing.
+                     ("run", "running"), ("stop", "stopping"),
+                     ("shop", "shopping"), ("plan", "planning")]:
             self.assertEqual(RC._stem(a), RC._stem(b), f"{a}/{b}")
+
+    def test_undoubling_does_not_break_a_genuinely_doubled_root(self):
+        """CONTROL on the CVC-doubling fix above. Porter's own rule excludes
+        L, S and Z because their doubling is the WORD's spelling, not an
+        artefact of adding -ing/-ed: "call"/"calling" must both land on
+        "call", not "cal", or the fix would trade one asymmetry for another."""
+        for a, b in [("call", "calling"), ("miss", "missing"),
+                     ("buzz", "buzzing"), ("pass", "passing")]:
+            stem_a, stem_b = RC._stem(a), RC._stem(b)
+            self.assertEqual(stem_a, stem_b, f"{a}/{b}")
+            self.assertFalse(stem_a.endswith(a[-1] * 1) and len(stem_a) < len(a) - 1,
+                             f"{a} was over-stripped to {stem_a!r}")
+
+    def test_a_relevant_fact_is_found_across_a_verb_the_stemmer_used_to_split(self):
+        """End to end, the module's own worked example pattern: "what car
+        does Mario drive" against "Mario drives a 1998 Volvo" is the docstring
+        case _stem exists for. This is the same failure with "go"/"goes":
+        select_facts("does Mario go", ...) returned [] before the fix."""
+        facts = [{"text": "Mario goes running every day"},
+                {"text": "Mario prefers tabs"},
+                {"text": "Mario has a cat"}]
+        got = RC.select_facts("does Mario go", facts, text_of=lambda f: f["text"])
+        self.assertTrue(any("running" in f["text"] for f in got), got)
 
     def test_a_small_corpus_is_not_weighted(self):
         """Below three documents there is nothing to measure - with one fact,
@@ -861,6 +922,17 @@ class Recall(unittest.TestCase):
 class Router(unittest.TestCase):
 
     LANES = ["jarvis-escalate", "jarvis-bulk"]
+
+    def test_the_private_backstop_catches_both_spellings(self):
+        """The list otherwise uses American terms (ssn, social security) and
+        only had the British "licence" - so "what's my driver's license
+        number", typed the way most of this project's owners would type it,
+        missed the one backstop meant to catch literal private phrases."""
+        for spelling in ("licence", "license"):
+            d = RT.choose(f"what's my driver's {spelling} number, explain in "
+                          f"detail and compare step by step " * 2,
+                          local_model="local", lanes=self.LANES)
+            self.assertEqual(d.lane, "local", f"{spelling!r} was not caught")
 
     def test_a_cloud_lane_is_never_handed_memory(self):
         """JARVIS-FRAMEWORK.md section 1: "There is no third option where a
@@ -889,6 +961,36 @@ class Router(unittest.TestCase):
                       local_model="local", lanes=self.LANES)
         self.assertEqual(d.lane, "local")
         self.assertEqual(d.gate, "private")
+
+    def test_local_is_an_unconditional_floor_for_degrade(self):
+        """THE TOP FINDING of this audit round. choose() pins a conversation
+        to "local" unconditionally on taint or the private backstop - but
+        `lanes` can legitimately CONTAIN "local" (jarvis_hud:1738 is cited as
+        real evidence for this), and degrade() used to walk past it to
+        whatever came next in that list. Reproduced exactly:
+        degrade("local", ["local","a","b"], "local") returned "a" - a CLOUD
+        lane, for a turn that had already fallen back to local because the
+        local model refused or timed out. Local must have nothing beneath it,
+        whatever `lanes` or the configured chain contains."""
+        for lanes in (["local", "jarvis-escalate", "jarvis-bulk"],
+                     ["jarvis-escalate", "local", "jarvis-bulk"],
+                     self.LANES):
+            self.assertIsNone(RT.degrade("local", lanes, "local"),
+                              f"local leaked to a cloud lane via {lanes}")
+        # CONTROL: degrading a CLOUD lane down TO local must still work -
+        # that direction is the documented, real use of local appearing in
+        # the list. Stubbed degrade_chain, not the module's shipped default:
+        # the real chain is ["jarvis-escalate","jarvis-bulk","jarvis-critic"],
+        # which does not contain "local" at all, and "jarvis-bulk" being IN
+        # that chain means degrade() prefers it over any custom `lanes` this
+        # test passes - exactly as documented, and not what this control is
+        # checking.
+        keep_cfg = RT._cfg
+        RT._cfg = lambda *a, **k: (["cloud-x", "local"] if a[:2] == ("budget", "degrade_chain") else keep_cfg(*a, **k))
+        try:
+            self.assertEqual(RT.degrade("cloud-x", [], "local"), "local")
+        finally:
+            RT._cfg = keep_cfg
 
     def test_degrade_never_returns_its_own_input(self):
         """jarvis_hud retries with the result. Returning the input is an
@@ -966,7 +1068,18 @@ class Voice(unittest.TestCase):
                      '{"centroid": []}', '{"centroid": ["a","b"]}',
                      '{"centroid": "1234", "samples": 3}',
                      '{"centroid": {"0":1,"1":0}, "samples": 3}',
-                     '{"centroid": [1,2], "threshold": "x"}'):
+                     '{"centroid": [1,2], "threshold": "x"}',
+                     # json.loads accepts the bare tokens NaN/Infinity as a
+                     # Python-specific extension, and NaN IS a float - so it
+                     # passed the isinstance(x, (int,float)) check that
+                     # rejects strings and dicts. Fails safe at verify() time
+                     # either way (cosine's isfinite guard scores it 0.0),
+                     # but load_profile()'s own docstring promises None on
+                     # "anything wrong", and a permanently unusable profile
+                     # that reports itself enrolled is a silent lockout with
+                     # no "corrupt, re-enrol" diagnostic anywhere.
+                     '{"centroid": [NaN,NaN,NaN,NaN], "samples": 3}',
+                     '{"centroid": [1,Infinity,0,0], "samples": 3}'):
             self.prof.write_text(junk, encoding="utf-8")
             self.assertIsNone(VO.load_profile(), junk)
             self.assertFalse(VO.verify(b"\x00\x01" * 4000).is_owner, junk)
@@ -1047,6 +1160,20 @@ class Small(unittest.TestCase):
                      "tts_resident", "simulated"):
             self.assertTrue(hasattr(p, attr), attr)
 
+    def test_a_negative_device_reading_is_not_a_measurement(self):
+        """`if pl.total_mb: return pl.total_mb` (jarvis_models.py:489, quoted
+        in the property's own docstring) treats exactly 0 as "not measured,
+        use the honest default" and anything else as real. A negative number
+        - corrupt or injected device data; real nvidia-smi cannot emit one,
+        but nothing here enforced that - is not zero, so it was trusted as a
+        genuine reading instead of falling through to the safe default."""
+        bad = CP.Device(index=0, name="Fake", total_mb=-1000, free_mb=-500)
+        good = CP.Device(index=1, name="Real", total_mb=8192, free_mb=4000)
+        p = CP.Plan(text_model="m", text_on="cuda:1", devices=[bad, good])
+        self.assertEqual(p.total_mb, 8192, "the negative reading was counted")
+        p2 = CP.Plan(text_model="m", text_on="cuda:0", devices=[bad])
+        self.assertEqual(p2.total_mb, 0, "a lone negative reading must be 0")
+
     def test_the_two_shells_say_they_are_shells(self):
         """Neither was reconstructible. Reporting them as working would be
         the worst outcome: a Jarvis that looks proactive and is not."""
@@ -1072,6 +1199,109 @@ class Small(unittest.TestCase):
             self.assertIsNone(SL.reminder_card())
         finally:
             SL._cfg = keep
+
+    def test_sleep_hour_reads_the_real_config_key(self):
+        """hour() read config key "hour" under [memory.sleep_time]; the TOML
+        key is remind_hour_local (jarvis-framework.toml:367) - the same class
+        of typo as the historical quiet_hours_start/quiet_start bug, in a
+        different module. No caller wires this in yet (grepped the whole
+        repo), so nothing has silently used 3am instead of the owner's
+        configured hour - but the moment anything gates on it, it would."""
+        keep = SL._cfg
+        SL._cfg = lambda k, d=None: {"remind_hour_local": 21}.get(k, d)
+        try:
+            self.assertEqual(SL.hour(), 21)
+        finally:
+            SL._cfg = keep
+        # And still degrades honestly when the key is missing or garbage.
+        SL._cfg = lambda k, d=None: {}.get(k, d)
+        try:
+            self.assertEqual(SL.hour(), 3)
+        finally:
+            SL._cfg = keep
+        SL._cfg = lambda k, d=None: {"remind_hour_local": 99}.get(k, d)
+        try:
+            self.assertEqual(SL.hour(), 3)
+        finally:
+            SL._cfg = keep
+
+
+# ==========================================================================
+#   jarvis_initiative
+# ==========================================================================
+
+class Initiative(unittest.TestCase):
+    """No dedicated coverage existed for this module before this round - only
+    two incidental tests inside Small. That gap is why the doorbell bug below
+    went uncaught: file() is the one call site that fires an event, and
+    nothing exercised it."""
+
+    def test_the_first_finding_after_a_restart_still_rings(self):
+        """jarvis_events.Bus.note()'s own docstring names this exact call as
+        its example: set_activity() and Notebook.file() are REPORTS, not a
+        poller's observation, and the first one after a restart is the most
+        important there is. file() called note() with no announce_first, so
+        the bus - which has never seen the key "findings" - took the very
+        first finding filed after every restart as a baseline and published
+        nothing for it."""
+        e = IN.Engine(heartbeat_minutes=30)
+        bus = EV.Bus()
+        import jarvis_events as _ev_mod
+        keep = _ev_mod.BUS
+        _ev_mod.BUS = bus
+        try:
+            e.file("watcher", {"text": "something noticed"})
+            got = [ev for ev in bus.since(0)[0] if ev.kind == "finding"]
+            self.assertEqual(len(got), 1, "the first finding must still ring")
+        finally:
+            _ev_mod.BUS = keep
+
+    def test_a_same_size_change_in_unseen_count_still_rings(self):
+        """The bug: file() announced the UNSEEN count, which is not
+        monotonic - mark_seen() lowers it without re-baselining. A fresh
+        finding that happened to bring the unseen count back to an
+        already-announced value compared equal under note()'s dedupe and was
+        silently swallowed: file A (2 unseen, announced) -> owner reads A (1
+        unseen, no re-baseline) -> file B, brand new (2 unseen again) ->
+        dropped. Keying on `_filed_total` instead (never decremented) means
+        A, B and C - EVERY filing - now rings, which is what this checks:
+        three findings in, three events out, none swallowed by a count that
+        happened to repeat."""
+        e = IN.Engine(heartbeat_minutes=30)
+        bus = EV.Bus()
+        import jarvis_events as _ev_mod
+        keep = _ev_mod.BUS
+        _ev_mod.BUS = bus
+        try:
+            a = e.file("watcher", {"text": "finding A"})
+            e.file("watcher", {"text": "finding B"})        # unseen=2
+            e.mark_seen([a["id"]])                           # unseen drops to 1
+            e.file("watcher", {"text": "finding C, brand new"})  # unseen=2 again
+            got = [ev for ev in bus.since(0)[0] if ev.kind == "finding"]
+            self.assertEqual(len(got), 3, "finding C's doorbell was swallowed")
+        finally:
+            _ev_mod.BUS = keep
+
+    def test_mark_seen_does_not_touch_a_different_id(self):
+        e = IN.Engine(heartbeat_minutes=30)
+        a = e.file("s", "one")
+        b = e.file("s", "two")
+        e.mark_seen([a["id"]])
+        unseen = [f["id"] for f in e.findings if not f["seen"]]
+        self.assertEqual(unseen, [b["id"]])
+
+    def test_concurrent_filing_produces_no_duplicate_ids(self):
+        e = IN.Engine(heartbeat_minutes=30)
+        rows = []
+        lock = threading.Lock()
+
+        def spam():
+            r = e.file("s", "x")
+            with lock:
+                rows.append(r["id"])
+        ts = [threading.Thread(target=spam) for _ in range(40)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        self.assertEqual(len(rows), len(set(rows)), "duplicate ids were filed")
 
 
 if __name__ == "__main__":
