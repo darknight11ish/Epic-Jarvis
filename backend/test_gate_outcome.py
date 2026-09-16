@@ -150,6 +150,67 @@ def t_a_real_denial_is_denied():
     check("and it is not flagged as a timeout", v is not None and not v.timed_out)
 
 
+def t_a_denial_proposes_a_constraint_never_writes_one():
+    """A denial only ever PROPOSES a standing rule - propose() is the one
+    choke point every fact this project learns already goes through
+    (memory-safety.patch removed the sole auto-accept path that used to be
+    inside it), and a denial writing to memory directly would be a second,
+    unreviewed door into the same room - the shape no-auto-approve.patch
+    found and fixed for tier confirmation, one module over."""
+    import threading
+    calls = []
+    stub = types.ModuleType("jarvis_extract")
+
+    def fake_propose(turns, **kw):
+        calls.append({"turns": turns, "kwargs": kw})
+        return []
+    stub.propose = fake_propose
+    sys.modules["jarvis_extract"] = stub
+
+    box = {}
+
+    def ask():
+        box["v"] = G.check("send_email", {"to": "someone"},
+                           prompt="send an email", timeout=20.0)
+    t = threading.Thread(target=ask, daemon=True)
+    t.start()
+    rid = None
+    for _ in range(200):
+        time.sleep(0.05)
+        pend = G.pending()
+        if pend:
+            rid = pend[0]["id"]
+            break
+    if not rid:
+        check("a denial proposes a constraint", False, "no pending row ever appeared")
+        return
+    G.decide(rid, False, by="the test")
+    t.join(timeout=20)
+
+    check("propose() was called exactly once", len(calls) == 1, f"got {len(calls)} calls")
+    if calls:
+        check("it was tagged source=gate_denial",
+              calls[0]["kwargs"].get("source") == "gate_denial", calls[0]["kwargs"])
+        text = calls[0]["turns"][0]["content"]
+        check("the candidate constraint names the denied action",
+              "send email" in text, text)
+        check("this module has no direct write path - only propose exists on the stub",
+              not hasattr(stub, "add_fact") and not hasattr(stub, "_accept"))
+
+
+def t_a_timeout_never_proposes_anything():
+    """Nobody decided anything here - a timeout must not seed a constraint,
+    the same reason it must not be recorded as a denial."""
+    calls = []
+    stub = types.ModuleType("jarvis_extract")
+    stub.propose = lambda *a, **k: calls.append((a, k))
+    sys.modules["jarvis_extract"] = stub
+
+    v = G.check("send_email", {"to": "someone"}, prompt="send an email", timeout=1.0)
+    check("it really did time out (test setup)", v.outcome == "timed_out", v.outcome)
+    check("a timeout calls propose() zero times", len(calls) == 0, f"got {len(calls)} calls")
+
+
 def t_an_approval_is_approved():
     import threading
     box = {}
@@ -319,7 +380,10 @@ def t_there_is_still_no_approve_all():
 
 def main():
     for fn in (t_the_type_fails_closed, t_nobody_answered_is_timed_out_not_denied,
-               t_a_real_denial_is_denied, t_an_approval_is_approved,
+               t_a_real_denial_is_denied,
+               t_a_denial_proposes_a_constraint_never_writes_one,
+               t_a_timeout_never_proposes_anything,
+               t_an_approval_is_approved,
                t_the_tool_hook_says_something_different,
                t_the_refused_tiers_are_marked,
                t_the_auto_approve_flag_does_not_bypass_anything,

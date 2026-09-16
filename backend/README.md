@@ -41,7 +41,7 @@ on a throwaway copy instead.
 | `bitemporal.patch` | `jarvis_memory.py`, `jarvis_hud.py` | The second time axis. Adds `retired_at` — when we stopped believing a fact, as distinct from when it stopped being true. Needs `memory-safety` and `memory-pane`. |
 | `embedding-guard.patch` | `jarvis_memory.py` | A NaN or all-zero embedding was stored without complaint and the row was then unreachable forever. Needs `memory-safety`. |
 | `gpu-offload.patch` | `jarvis_models.py`, `jarvis_hud.py` | Says when the model is running on the CPU instead of the graphics card. Nothing did, and the only symptom was that everything got slow. |
-| `gate-outcome.patch` | `jarvis_gate.py` | A timeout was indistinguishable from a refusal. Adds `Verdict.outcome`, which fails closed by default. |
+| `gate-outcome.patch` | `jarvis_gate.py` | A timeout was indistinguishable from a refusal. Adds `Verdict.outcome`, which fails closed by default. A real denial now proposes a standing constraint through `jarvis_extract.propose()` — never applies one. |
 | `no-auto-approve.patch` | `jarvis_gate.py` | **`confirm_auto()` granted every `ask` action with nobody asked.** An approve-all, inside the module that forbids one. |
 | `memory-noise.patch` | `jarvis_extract.py`, `jarvis_hud.py` | A discarded proposal came straight back, and recalled facts carried no date. |
 | `decide-once.patch` | `jarvis_extract.py` | Found during a self-improvement audit: `decide()` was a plain check-then-act, so two concurrent accepts on one proposal could both win. A full queue also dropped proposals with no record. Needs `memory-noise`. |
@@ -1272,6 +1272,56 @@ Two things make it safe rather than decorative, both from codex by way of
 to the **model** as the tool result, and "denied" tells it to find another way
 — which, for a tool the owner would have approved, means routing around a gate
 nobody answered.
+
+## Added since: a denial can teach a standing rule — but only as a proposal
+
+A prior audit found the gap and the raw material for closing it in the same
+pass: every `check()`/`decide()` branch already calls `_audit(...)`, so a
+structured, queryable record of every denial (`approvals.state`, the action,
+who decided) has existed since this patch landed — nothing had ever read it
+back to learn anything from it. "The owner said no to this once" just stayed
+a line in a log.
+
+`Verdict.outcome == "denied"` now calls `_propose_constraint_from_denial(action,
+detail)` — added to both places a denial is returned (the on-time path and the
+late-poll path; `timed_out` calls it from neither, on purpose: nobody decided
+anything there, and seeding a rule from silence would teach Jarvis something
+that never happened). It builds one plain-language sentence — *"Remember
+this: I do not want Jarvis to `<action>` without asking me first. I just said
+no when it asked."* — and hands it to `jarvis_extract.propose()` tagged
+`source="gate_denial"`.
+
+**Why `propose()` and not a direct write.** It is the one choke point every
+fact this project learns already goes through — `memory-safety.patch` removed
+the single auto-accept branch that used to live inside it, specifically so
+nothing writes to memory without a human deciding. A denial calling
+`store.add_fact()` directly would be a second, parallel door into the same
+room: the exact shape `no-auto-approve.patch` (next section) found and fixed
+one gate up. So a denial only ever *proposes* — the candidate lands in the
+same review queue as every extracted fact, "Keep" or "Discard" in the Brain
+window's Memory tab, one at a time, same as always. Best-effort: a failed or
+missing `jarvis_extract` import is swallowed, because a completed denial must
+never become an error the owner has to do something about.
+
+Two new tests in `test_gate_outcome.py`, stubbing `jarvis_extract` the same
+way the rest of the file stubs `jarvis_framework`: a real denial (the same
+thread-and-poll setup `t_a_real_denial_is_denied` already uses) calls
+`propose()` exactly once, tagged correctly, naming the denied action; a real
+timeout calls it zero times. The function itself was also run directly
+against a stub outside the full gate loop — normal call, a missing
+`jarvis_extract` module, a `propose()` that raises, and an empty action name
+all verified not to leak an exception past the function's own boundary.
+
+**Not built:** a "confirmation card" surfacing this on a client. That would
+mean this becoming its own gated, tier-`ask` action through
+`jarvis_gate.check()`/`decide()` — but neither function's signature is visible
+anywhere in this repository (every patch touching `jarvis_gate.py` does so
+through narrow, pre-existing diff context that never happens to include the
+function definitions themselves), so calling into either from here would be
+guessing at an interface this session cannot verify. What ships instead
+already satisfies the invariant that matters: nothing is written to memory
+without a human decision, via the exact same review queue every other
+learned fact already goes through — silently proposed, not silently applied.
 
 ---
 

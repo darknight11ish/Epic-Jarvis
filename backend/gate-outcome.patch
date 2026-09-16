@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -530,6 +530,28 @@
+@@ -530,6 +530,62 @@
  #   The decision
  # --------------------------------------------------------------------------
  
@@ -26,10 +26,44 @@
 +})
 +
 +
++def _propose_constraint_from_denial(action: str, detail: dict) -> None:
++    """Turns a "no" into a candidate standing rule - never an applied one.
++
++    Called from the two DENIED branches below, never from timed_out: a
++    timeout is the absence of an answer, and proposing a rule from silence
++    would teach Jarvis something nobody actually decided.
++
++    Goes through propose(), the one choke point this project already has
++    for every fact it ever learns - memory-safety.patch removed the single
++    auto-accept path that used to exist inside it, for exactly this reason.
++    A denial writing straight to memory would be a second, parallel door
++    into the same room: the shape of bug no-auto-approve.patch found and
++    fixed for tier confirmation, one module over. So this only ever
++    PROPOSES - the same review queue that already holds every extracted
++    fact, "Keep" or "Discard" in the Brain window's Memory tab, one at a
++    time, same as always.
++
++    Best-effort by design: a failed or skipped proposal must never turn a
++    completed denial into an error the owner has to do something about.
++    """
++    try:
++        import jarvis_extract
++    except Exception:
++        return  # memory layer not importable - nothing to propose into
++    readable = str(action or "an action").replace("_", " ").strip() or "an action"
++    turns = [{"role": "user", "content":
++              f"Remember this: I do not want Jarvis to {readable} without "
++              f"asking me first. I just said no when it asked."}]
++    try:
++        jarvis_extract.propose(turns, source="gate_denial")
++    except Exception:
++        pass
++
++
  @dataclass
  class Verdict:
      allowed: bool
-@@ -537,6 +559,30 @@
+@@ -537,6 +593,30 @@
      action: str
      reason: str
      request_id: Optional[str] = None
@@ -60,7 +94,7 @@
  
      def as_dict(self) -> dict:
          return asdict(self)
-@@ -656,7 +702,8 @@
+@@ -656,7 +736,8 @@
          # Cannot read the policy -> cannot claim the action is permitted.
          _audit("gate.policy_unreadable", {"action": action, "error": str(exc)})
          return Verdict(False, "unknown", action,
@@ -70,7 +104,7 @@
  
      # The one rule above the tier table: nothing gets to edit the tier table.
      hit = _touches_protected(prompt, detail)
-@@ -664,7 +711,7 @@
+@@ -664,7 +745,7 @@
          _audit("gate.refused_protected", {"action": action, "file": hit})
          return Verdict(False, "never", action,
                         f"this touches {hit}, which no tool may modify; "
@@ -79,7 +113,7 @@
  
      # Outside text that tried to rush the reader raises the effective tier of
      # whatever comes next. One direction only: this can turn auto into ask, it
-@@ -679,7 +726,8 @@
+@@ -679,7 +760,8 @@
          _audit("gate.refused", {"action": action, "tier": tier, "detail": detail})
          return Verdict(False, tier, action,
                         "this action is set to 'never' in jarvis-framework.toml; "
@@ -89,7 +123,7 @@
  
      # Any joplin action at all - including a read on the "auto" tier - pins
      # the conversation local. Done before the tier branches so it happens even
-@@ -689,7 +737,7 @@
+@@ -689,7 +771,7 @@
  
      if tier == "auto":
          _audit("gate.auto", {"action": action, "detail": detail})
@@ -98,7 +132,7 @@
  
      if tier == "notify":
          _audit("gate.notify", {"action": action, "detail": detail})
-@@ -703,7 +751,8 @@
+@@ -703,7 +785,8 @@
          # knows or guesses the string reads every message. On this tier there
          # is no human in the loop at all, so nothing else was going to catch it.
          _push(f"Jarvis did: {action}", _safe_detail(detail, 400))
@@ -108,7 +142,7 @@
  
      # ---- "ask", and anything unrecognised, waits for a human ----
      try:
-@@ -719,7 +768,8 @@
+@@ -719,7 +802,8 @@
      except Exception as exc:
          _audit("gate.queue_unavailable", {"action": action, "error": str(exc)})
          return Verdict(False, tier, action,
@@ -118,7 +152,7 @@
  
      _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
      # An unclassified action is safe (it became "ask") but opaque: you cannot
-@@ -772,11 +822,13 @@
+@@ -772,11 +856,14 @@
              if row["state"] == "approved":
                  _audit("gate.approved", {"id": rid, "action": action,
                                           "by": row["decided_by"]})
@@ -129,12 +163,13 @@
                  _audit("gate.denied", {"id": rid, "action": action,
                                         "by": row["decided_by"]})
 -                return Verdict(False, tier, action, "denied by a human", rid)
++                _propose_constraint_from_denial(action, detail)
 +                return Verdict(False, tier, action, "denied by a human", rid,
 +                               outcome="denied")
      finally:
          if watch is not None:
              try:
-@@ -799,16 +851,23 @@
+@@ -799,16 +886,24 @@
                  if row and row["state"] == "approved":
                      _audit("gate.approved", {"id": rid, "action": action,
                                               "by": row["decided_by"], "late": True})
@@ -145,6 +180,7 @@
                      _audit("gate.denied", {"id": rid, "action": action,
                                             "by": row["decided_by"], "late": True})
 -                    return Verdict(False, tier, action, "denied by a human", rid)
++                    _propose_constraint_from_denial(action, detail)
 +                    return Verdict(False, tier, action, "denied by a human", rid,
 +                                   outcome="denied")
      except Exception:
@@ -161,7 +197,7 @@
  
  
  def confirm(prompt: str) -> bool:
-@@ -860,6 +919,15 @@
+@@ -860,6 +955,15 @@
      v = check(action, detail, prompt=f"tool {name} {detail['args']}")
      if v.allowed:
          return None
