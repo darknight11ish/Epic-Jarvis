@@ -163,23 +163,47 @@ def walk(node, out: list, depth: int = 0) -> None:
         walk(value, out, depth + 1)
 
 
-def load(where: Path) -> object:
-    """Read the export, whether it is the zip or a file inside it."""
-    if where.is_dir():
-        for cand in ("conversations.json", "conversations/conversations.json"):
-            p = where / cand
-            if p.is_file():
-                where = p
-                break
-        else:
-            found = sorted(where.rglob("conversations.json"))
-            if not found:
-                raise SystemExit(
-                    f"No conversations.json anywhere under {where}.\n"
-                    "Point this at the .zip Claude emailed you, or at the "
-                    "folder you unzipped it into.")
-            where = found[0]
+def sources(where: Path):
+    """Every JSON document worth reading, from whatever was pointed at.
 
+    An export is FIVE archives, not one - conversations, projects, memories,
+    feedback and metadata - because `get-export.ps1` downloads the lot. The
+    modules could be in a Project as easily as in a chat, so a folder means
+    "read all of them", not "find the conversations one".
+
+    Yields (label, parsed) and keeps going when one file is unreadable: with
+    five single-use downloads behind this, one bad archive must not throw away
+    the other four.
+    """
+    if where.is_dir():
+        # Anything NAMED like an export file is a candidate, even if it turns
+        # out not to be readable. A first version filtered on
+        # `is_zipfile(f) or suffix == ".json"`, which quietly dropped a
+        # truncated .zip before anything was reported - and a truncated
+        # archive is the exact thing a spent one-time link produces. A file
+        # that cannot be read has to be NAMED, because it is the one the user
+        # may have to get a fresh export for.
+        files = sorted(
+            [f for f in where.iterdir()
+             if f.is_file() and f.suffix.lower() in (".zip", ".json")],
+            key=lambda f: -f.stat().st_size)
+        if not files:
+            raise SystemExit(
+                f"No archives or .json files in {where}.\n"
+                "Point this at the folder get-export.ps1 wrote to.")
+        for f in files:
+            try:
+                yield f.name, load(f)
+            except SystemExit as exc:
+                print(f"  {f.name}: UNREADABLE - {str(exc).splitlines()[0]}")
+            except (zipfile.BadZipFile, json.JSONDecodeError, OSError) as exc:
+                print(f"  {f.name}: UNREADABLE - {type(exc).__name__}: {exc}")
+        return
+    yield where.name, load(where)
+
+
+def load(where: Path) -> object:
+    """Read one export file, whether it is an archive or the JSON inside it."""
     # Look at the CONTENT, not the extension. The export Claude emails is
     # named like `manifest-<uuid>-<numbers>-<hash>-<date>` with no `.zip` on
     # the end at all, so deciding by suffix reads a perfectly good archive as
@@ -205,6 +229,24 @@ def load(where: Path) -> object:
                 return json.load(io.TextIOWrapper(fh, encoding="utf-8"))
 
     size = where.stat().st_size
+
+    # Named .zip but is not one. This is what a SPENT one-time link produces:
+    # claude.ai answers a used link with an HTML page, which saves happily
+    # under the name you asked for. Saying "not valid JSON" here would send
+    # someone looking at the wrong thing entirely.
+    if where.suffix.lower() == ".zip":
+        head = where.read_bytes()[:200].lstrip()
+        html = head[:1] == b"<"
+        raise SystemExit(
+            f"{where.name} is named .zip but is not one "
+            f"({size / 1024:.0f} KB)."
+            + ("\n  It looks like an HTML page, which is what claude.ai "
+               "returns for a link\n  that has already been used. That file "
+               "needs a fresh export."
+               if html else
+               "\n  The download was probably cut short. That file needs a "
+               "fresh export."))
+
     print(f"Reading {where.name} ({size / 1e6:.0f} MB). This can take a minute.")
     # utf-8-sig, not utf-8: a BOM would otherwise read as a corrupt file.
     try:
@@ -288,24 +330,31 @@ def main() -> int:
         print(f"Nothing at {args.export}")
         return 1
 
-    data = load(args.export)
+    found: list = []
+    read_any = False
+    for label, data in sources(args.export):
+        if args.inspect:
+            print(f"\nWhat is inside {label}:\n")
+            for line in inspect(data):
+                print("  " + line)
+            read_any = True
+            continue
+        before = len(found)
+        walk(data, found)
+        print(f"  {label}: {len(found) - before} code block(s)")
+        read_any = True
 
     if args.inspect:
-        print(f"\nWhat is inside {args.export.name}:\n")
-        for line in inspect(data):
-            print("  " + line)
-        print("\n(Anything that looked like a URL or a key is hidden. This "
-              "output is\nsafe to paste; the file itself is not.)")
+        if read_any:
+            print("\n(Anything that looked like a URL or a key is hidden. "
+                  "This output is\nsafe to paste; the file itself is not.)")
         return 0
-
-    found: list = []
-    walk(data, found)
 
     # A manifest is an INDEX of the export, not the export. It is small, it
     # holds no messages, and it is what you get if you save the wrong link -
     # so say that, rather than "no modules found", which reads as "your
     # history is empty" and sends you looking in the wrong place.
-    size = args.export.stat().st_size if args.export.is_file() else 0
+    size = args.export.stat().st_size if args.export.is_file() else 1 << 30
     if not found and size < 2_000_000:
         print(f"\n{args.export.name} is {size / 1024:.0f} KB and contains no "
               f"messages at all.")
