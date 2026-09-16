@@ -91,6 +91,24 @@ LOG_DIR: Path = CONFIG_DIR / "logs"
 CONFIG_NAME = "jarvis-framework.toml"
 
 
+def _explicit() -> Optional[Path]:
+    """The JARVIS_FRAMEWORK_TOML override, and a complaint if it is wrong.
+
+    An explicit override that cannot be honoured used to be dropped from the
+    candidate list in silence, falling through to whatever copy sat beside the
+    module - a different config, no warning, and a tier table nobody chose.
+    """
+    raw = os.environ.get("JARVIS_FRAMEWORK_TOML")
+    if not raw:
+        return None
+    p = Path(os.path.expanduser(raw))
+    if p.is_file():
+        return p
+    _warn_once(f"JARVIS_FRAMEWORK_TOML points at {p}, which is not a file. "
+               f"Falling back to the search path.", key="explicit_missing")
+    return None
+
+
 def config_path() -> Optional[Path]:
     """Where jarvis-framework.toml actually is, or None.
 
@@ -101,8 +119,7 @@ def config_path() -> Optional[Path]:
     """
     here = Path(__file__).resolve().parent
     candidates = [
-        Path(os.path.expanduser(os.environ["JARVIS_FRAMEWORK_TOML"]))
-        if os.environ.get("JARVIS_FRAMEWORK_TOML") else None,
+        _explicit(),
         CONFIG_DIR / CONFIG_NAME,
         here / CONFIG_NAME,
         here.parent / CONFIG_NAME,
@@ -120,17 +137,25 @@ def config_path() -> Optional[Path]:
 _LOCK = threading.RLock()
 _CACHE: Optional[dict] = None
 _CACHE_KEY: Optional[tuple] = None
-_WARNED = False
+_WARNED: set = set()
 
 
-def _warn_once(msg: str) -> None:
-    """Say it to stderr, once. A config problem that prints on every one of
-    fifty-six calls is noise nobody reads; one that prints never is a silent
-    default nobody notices. Once is the only useful number."""
-    global _WARNED
-    if not _WARNED:
-        _WARNED = True
-        print(f"jarvis_framework: {msg}", file=sys.stderr)
+def _warn_once(msg: str, key: Optional[str] = None) -> None:
+    """Say it to stderr, once PER PROBLEM.
+
+    A config problem that prints on every one of fifty-six calls is noise
+    nobody reads; one that prints never is a silent default nobody notices.
+
+    A single global flag was the wrong "once": the first bad tier value
+    latched it, and every later problem - three more bad tiers, "config could
+    not be parsed", "no TOML parser available" - was then silent for the rest
+    of the process. Keyed now, so each distinct problem gets its one line.
+    """
+    k = key or msg
+    if k in _WARNED:
+        return
+    _WARNED.add(k)
+    print(f"jarvis_framework: {msg}", file=sys.stderr)
 
 
 def load_framework(*_args: Any, **_kwargs: Any) -> dict:
@@ -249,6 +274,15 @@ def unknown_action_tier() -> str:
     """
     val = section("autonomy").get("unknown_action_tier", DEFAULT_UNKNOWN_TIER)
     val = str(val).strip().lower()
+    if val in ("auto", "notify"):
+        # Honoured - the gate decides policy, not this module - but never
+        # silently. jarvis_jobs._freeze_caps refuses only "never", so an
+        # unclassified action landing on "auto" is frozen as auto-approved
+        # with nothing printed anywhere.
+        _warn_once(
+            f"[autonomy].unknown_action_tier is {val!r}: an action NOBODY "
+            f"CLASSIFIED is auto-approved. The shipped config says \"ask\".",
+            key="unknown_tier_permissive")
     if val not in TIERS:
         _warn_once(f"[autonomy].unknown_action_tier is {val!r}, which is not "
                    f"one of {TIERS}. Using {DEFAULT_UNKNOWN_TIER!r}.")
@@ -378,7 +412,10 @@ def audit_log(event: str, detail: Optional[dict] = None) -> bool:
         # default=str so a Path, a datetime or a set cannot make the line
         # unserialisable. Losing the audit entry to a TypeError over a value's
         # type is a worse outcome than logging its repr.
-        line = json.dumps(row, default=str, ensure_ascii=False)
+        # allow_nan=False: the default emits bare NaN/Infinity tokens, which
+        # Python reads back but jq and every strict parser reject - one such
+        # value makes that audit line unreadable to anything but Python.
+        line = json.dumps(row, default=str, ensure_ascii=False, allow_nan=False)
     except Exception:
         line = json.dumps({"t": row["t"], "event": row["event"],
                            "detail": "<unserialisable>"})

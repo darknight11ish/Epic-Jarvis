@@ -59,13 +59,26 @@ def _parse_hhmm(s: str) -> Optional[_time]:
 def in_quiet_hours(now: Optional[datetime] = None) -> bool:
     """Is the clock inside the configured quiet window?
 
+    THE KEY NAMES ARE THE ONES IN THE FILE. This read `quiet_hours_start` and
+    `quiet_hours_end`; the shipped `[power]` section has `quiet_start` and
+    `quiet_end`. Every lookup returned the default, so quiet hours never fired
+    at any time of day - a setting that looked configured and did nothing.
+    Measured against the real config: False at 00:30, 03:30, 06:30, 22:30 and
+    23:30 with a 23:00-07:00 window.
+
     Handles a window that crosses midnight (22:00-07:00), which is the normal
     case and the one a naive `start <= t <= end` gets silently wrong - it
     would return False all night, every night, and the setting would look
     like it did nothing.
     """
-    start = _parse_hhmm(_cfg("quiet_hours_start", ""))
-    end = _parse_hhmm(_cfg("quiet_hours_end", ""))
+    # `schedule_enabled` is also in the config and was also ignored. Fixing
+    # only the names would have switched quiet hours ON while the config says
+    # the schedule is off - a different wrong answer, arrived at by fixing
+    # half the bug.
+    if not bool(_cfg("enabled", True)) or not bool(_cfg("schedule_enabled", False)):
+        return False
+    start = _parse_hhmm(_cfg("quiet_start", ""))
+    end = _parse_hhmm(_cfg("quiet_end", ""))
     if not start or not end:
         return False
     t = (now or datetime.now()).time()
@@ -118,7 +131,11 @@ def idle_seconds() -> float:
 
 
 def should_standby() -> bool:
-    mins = _cfg("idle_standby_minutes", 0)
+    # `idle_minutes`, gated by `idle_enabled` - both real keys, neither read
+    # before. The old name `idle_standby_minutes` is in no config anywhere.
+    if not bool(_cfg("enabled", True)) or not bool(_cfg("idle_enabled", False)):
+        return False
+    mins = _cfg("idle_minutes", 0)
     try:
         mins = float(mins)
     except (TypeError, ValueError):
@@ -166,6 +183,8 @@ def status() -> dict:
         s = dict(_state)
     s["mode"] = current()
     s["quiet_hours"] = in_quiet_hours()
+    s["schedule_enabled"] = bool(_cfg("schedule_enabled", False))
+    s["idle_enabled"] = bool(_cfg("idle_enabled", False))
     s["idle_seconds"] = round(idle_seconds(), 1)
     return s
 

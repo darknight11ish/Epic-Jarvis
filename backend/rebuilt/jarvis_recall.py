@@ -167,13 +167,22 @@ def rank(query: str, texts: Sequence[str], top_k: int = 8, near_k: int = 0,
          min_score: float = 0.0, **_extra):
     """Score every text against the query.
 
-    Returns (scores, order):
-      scores  a list parallel to `texts`, in the SAME order as the input
+    Returns (scored, order):
+      scored  a list of (index, score) PAIRS, in input order
       order   the indices of the kept texts, best first
 
-    The caller at jarvis_hud:1014 takes `[0]`, so element zero has to be the
-    parallel score list - it is zipped back against its own corpus. Returning
-    them sorted would silently mis-associate every score with the wrong fact.
+    PAIRS, not a bare list of floats. jarvis_hud.py:1013 does
+
+        all_scores = dict(jarvis_recall.rank(...)[0])
+        ...
+        neighbours = adj.get(corpus[idx]["id"], ())
+
+    so element zero is fed to `dict()` and its KEYS are used as corpus
+    indices. A flat list raised "cannot convert dictionary update sequence
+    element #0 to a sequence", and `/api/retrieve` has no try/except around
+    it - the connection dropped with no response on every query. Pairs keep
+    the parallel-order guarantee the docstring always argued for AND satisfy
+    dict().
 
     `near_k` is accepted and, at 0, does nothing. It is the number of
     graph-adjacent facts to pull in alongside a hit; the caller passes 0 and
@@ -183,6 +192,7 @@ def rank(query: str, texts: Sequence[str], top_k: int = 8, near_k: int = 0,
     qw = {_stem(w) for w in _content_words(query)}
     idf = _idf(texts)
     scores = [score_one(qw, t, idf) for t in texts]
+    scored = list(enumerate(scores))
 
     order = [i for i, s in enumerate(scores) if s > min_score or
              (min_score <= 0.0 and s >= 0.0)]
@@ -198,7 +208,7 @@ def rank(query: str, texts: Sequence[str], top_k: int = 8, near_k: int = 0,
 
     if near_k:
         order = order[:max(0, top_k - near_k)] if top_k else order
-    return scores, order
+    return scored, order
 
 
 def select_facts(query: str, facts: Sequence, text_of: Optional[Callable] = None,
@@ -237,9 +247,13 @@ def explain(query: str, facts: Sequence, text_of: Optional[Callable] = None) -> 
     """
     get = text_of or (lambda f: f.get("text", "") if isinstance(f, dict) else str(f))
     qw = {_stem(w) for w in _content_words(query)}
+    # The SAME idf map rank() uses. Without it this pane showed a different
+    # number from the one that actually decided - a "why was this chosen"
+    # explanation that disagrees with the choice is worse than none.
+    idf = _idf([str(get(f) or "") for f in facts])
     out = []
     for f in facts:
         t = str(get(f) or "")
         shared = sorted(qw & {_stem(w) for w in _content_words(t)})
-        out.append({"text": t[:120], "score": score_one(qw, t), "shared": shared})
+        out.append({"text": t[:120], "score": score_one(qw, t, idf), "shared": shared})
     return sorted(out, key=lambda r: -r["score"])

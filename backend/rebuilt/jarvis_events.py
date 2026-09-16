@@ -89,7 +89,8 @@ API_VERSION = 1
 @dataclass
 class Event:
     id: int
-    kind: str                  # approval | finding | power | persona | model | voice | hello
+    kind: str                  # hello | approval | proposal | finding | power
+                               # | persona | model | voice | activity
     data: dict = field(default_factory=dict)
     at: float = field(default_factory=time.time)
 
@@ -115,9 +116,29 @@ class Event:
             payload = json.dumps({"error": "unserialisable"})
         # No stray newline can reach the wire even if json.dumps is replaced.
         payload = payload.replace("\r", " ").replace("\n", " ")
-        return (f"id: {self.id}\n"
-                f"event: {self.kind}\n"
-                f"data: {payload}\n\n").encode("utf-8")
+
+        # kind and id are sanitised too. Only `data` was, and a kind carrying
+        # a newline splits one frame into two - a forged event, from anything
+        # that can influence a kind string.
+        kind = str(self.kind).replace("\r", " ").replace("\n", " ")
+        try:
+            ident = int(self.id)
+        except (TypeError, ValueError):
+            ident = 0
+
+        head = "" if ident <= 0 else f"id: {ident}\n"
+        text = f"{head}event: {kind}\ndata: {payload}\n\n"
+        # errors="replace", and this is the important one. The encode used to
+        # sit OUTSIDE the try above, so a single lone surrogate - which
+        # json.dumps(ensure_ascii=False) emits happily, and which arrives from
+        # any surrogateescape-decoded filename or environment string - raised
+        # UnicodeEncodeError out of the generator. That killed the stream for
+        # EVERY connected client, and each reconnect re-read the same poisoned
+        # event and died again: a 3-second reconnect loop on a phone until the
+        # event fell off the ring. The docstring already promised "a value
+        # that will not serialise must not take the whole stream down"; only
+        # json.dumps was guarded.
+        return text.encode("utf-8", "replace")
 
 
 # --------------------------------------------------------------------------
@@ -158,7 +179,8 @@ class Bus:
             self._cv.notify_all()
             return ev
 
-    def note(self, key: str, value: object, kind: str) -> Optional[Event]:
+    def note(self, key: str, value: object, kind: str,
+             extra: Optional[dict] = None) -> Optional[Event]:
         """Announce a change ONLY if this key's value actually changed.
 
         Shape recovered from extraction-wiring.patch @ 159, which calls it and
@@ -181,16 +203,35 @@ class Bus:
             # Compared by value, and normalised so an equal-but-differently-
             # ordered list does not read as a change. The approvals poller
             # already sorts its ids; this makes that not matter.
-            token = json.dumps(value, sort_keys=True, default=str)
+            #
+            # default= returns the TYPE NAME, not str(o). With default=str an
+            # object with the usual repr tokenises to "<X object at 0x7f...>",
+            # whose address changes every poll - so an unchanged value fired
+            # an event every single second. A type name cannot distinguish two
+            # instances either, but it fails in the quiet direction.
+            token = json.dumps(value, sort_keys=True,
+                               default=lambda o: f"<{type(o).__name__}>")
         except Exception:
-            token = repr(value)
+            token = f"<{type(value).__name__}>"
 
         with self._cv:
             if self._seen.get(key) == token:
                 return None
             self._seen[key] = token
 
-        return self.publish(kind, {"key": key, "value": value})
+        # `extra` is merged BEFORE publish, so subscribers waiting on the
+        # condition variable see the complete payload. The recovered caller
+        # pattern - `ev = bus.note(...); if ev: ev.data.update({...})` - is
+        # still supported and still works for a client that RESUMES, because
+        # the Event in the ring is the same object. But a LIVE subscriber is
+        # woken by publish() and reads the frame before that update lands:
+        # measured, 4990 of 5000 approval events reached a live stream with no
+        # `count` and no `items`, while a resuming client got the same event
+        # id WITH them. Same id, two payloads. Pass `extra` to avoid the race.
+        data = {"key": key, "value": value}
+        if extra:
+            data.update(extra)
+        return self.publish(kind, data)
 
     def forget(self, key: Optional[str] = None) -> None:
         """Drop the last-seen value so the next note() fires. INFERRED - used
@@ -287,6 +328,16 @@ def activity() -> dict:
 _DOORBELL_KEYS = ("id", "action", "tier", "created")
 
 
+def _scalar(v, limit: int = 200):
+    """A value safe to put on a doorbell: a number, a bool, None, or a short
+    string. Anything else becomes its type name rather than its contents."""
+    if v is None or isinstance(v, (bool, int, float)):
+        return v
+    if isinstance(v, str):
+        return v[:limit]
+    return f"<{type(v).__name__}>"
+
+
 def _doorbell_item(item: dict) -> dict:
     """One queue entry, reduced to what a notification may say.
 
@@ -294,7 +345,12 @@ def _doorbell_item(item: dict) -> dict:
     same token. This says only that something is waiting, and enough about it
     to sort and de-duplicate.
     """
-    out = {k: item.get(k) for k in _DOORBELL_KEYS}
+    # Keys AND types. An allowlist of key names lets a non-scalar through
+    # wholesale - {"id": {"nested": "SECRET"}} passed intact - so each value is
+    # coerced to the scalar it is supposed to be. Not reachable today (these
+    # come from SQLite columns) but the guarantee should not depend on that
+    # staying true one schema change from now.
+    out = {k: _scalar(item.get(k)) for k in _DOORBELL_KEYS}
 
     # The notice IS allowed through, and it is the one piece of prose that is.
     # jarvis_gate.notice_for builds it from the action name and the risk table
@@ -302,7 +358,7 @@ def _doorbell_item(item: dict) -> dict:
     # everything else on the row it cannot carry text somebody else wrote.
     notice = item.get("notice")
     if isinstance(notice, dict):
-        out["notice"] = {k: notice.get(k) for k in
+        out["notice"] = {k: _scalar(notice.get(k)) for k in
                          ("title", "body", "weight", "deny_ok", "approve_ok")}
 
     # A BOOLEAN, never the object. The rule in docs/ARCHITECTURE.md - "an item
@@ -333,10 +389,9 @@ def _poll_approvals(bus: Bus) -> None:
         return
 
     ids = sorted(str(p.get("id", "")) for p in pending)
-    ev = bus.note("approvals", ids, "approval")
-    if ev is not None:
-        ev.data.update({"count": len(pending),
-                        "items": [_doorbell_item(i) for i in pending[:10]]})
+    bus.note("approvals", ids, "approval",
+             extra={"count": len(pending),
+                    "items": [_doorbell_item(i) for i in pending[:10]]})
 
 
 def _poll_power(bus: Bus) -> None:
@@ -349,12 +404,21 @@ def _poll_power(bus: Bus) -> None:
 
 
 def _poll_persona(bus: Bus) -> None:
-    try:
-        import jarvis_hud
-        node = jarvis_hud.persona_state()          # type: ignore[attr-defined]
-    except Exception:
-        return
-    bus.note("persona", node, "persona")
+    """Persona changes.
+
+    NOT WIRED, AND SAYING SO. This called `jarvis_hud.persona_state()`, which
+    DOES NOT EXIST in jarvis_hud - the AttributeError was swallowed by the
+    poller's own except, so `persona` events were documented in JARVIS-API.md,
+    parsed by both clients, and never emitted. That is precisely the failure
+    this module's header describes for the pump ("documented, parsed by both
+    clients, and fiction"), reintroduced by a reconstruction that guessed a
+    function name.
+
+    Guessing another name would repeat the mistake. The poller stays, does
+    nothing, and reports itself through status() so the gap is visible rather
+    than silent. Wire it when the real accessor is identified in jarvis_hud.
+    """
+    return
 
 
 def _poll_proposals(bus: Bus) -> None:
@@ -371,9 +435,10 @@ def _poll_proposals(bus: Bus) -> None:
         return
     if not isinstance(rows, list):
         return
-    ev = bus.note("proposals", len(rows), "finding")
-    if ev is not None:
-        ev.data.update({"count": len(rows)})
+    # kind "proposal", which is what extraction-wiring.patch emits and adds
+    # to the documented kind list. A reconstruction had it as "finding",
+    # which is a different kind with a different meaning on both clients.
+    bus.note("proposals", len(rows), "proposal", extra={"count": len(rows)})
 
 
 #: VERBATIM from extraction-wiring.patch @ 255, plus _poll_proposals, which
@@ -485,7 +550,13 @@ def stream(last_id: object = 0, bus: Optional[Bus] = None) -> Iterator[bytes]:
 
     yield f"retry: {RETRY_MS}\n\n".encode("utf-8")
 
-    hello_ev = Event(id=latest, kind="hello", data={
+    # NO `id:` LINE ON HELLO. It used to carry `id=latest`, which duplicated a
+    # real event's id and then replayed events counting UP FROM BELOW it -
+    # ids going backwards inside one stream. A client that treats
+    # Last-Event-ID as monotonic, which the spec's own example invites,
+    # discards the whole replay. A frame with no id leaves the client's cursor
+    # where it was, which is exactly right for a handshake.
+    hello_ev = Event(id=0, kind="hello", data={
         "resumed_from": cursor,
         "stale": stale,
         "latest": latest,
@@ -495,7 +566,18 @@ def stream(last_id: object = 0, bus: Optional[Bus] = None) -> Iterator[bytes]:
 
     # A stale client is told to re-fetch, so replaying the ring at it would be
     # the exact thing rule 2 forbids. Start it at the live edge.
-    if stale:
+    #
+    # A FIRST-TIME client is the same case. With no Last-Event-ID the cursor
+    # is 0, `stale` is False by the `bool(cursor and ...)` short-circuit, and
+    # the whole ring - up to 512 events, including doorbells for approvals
+    # already decided - was replayed at a phone on connect. Rule 1 says the
+    # client re-fetches state anyway, so the replay buys nothing and costs a
+    # notification storm.
+    if stale or not cursor:
+        cursor = latest
+    elif cursor > latest:
+        # A corrupted Last-Event-ID from the future would otherwise leave the
+        # client receiving nothing until the bus caught up.
         cursor = latest
 
     started = time.monotonic()
@@ -596,7 +678,8 @@ def status() -> dict:
     """INFERRED. For `python jarvis_events.py` and the brain map."""
     return {"latest": BUS.latest, "oldest": BUS.oldest,
             "ring": RING, "pollers": len(POLLERS),
-            "poll_seconds": POLL_SECONDS, "activity": activity()}
+            "poll_seconds": POLL_SECONDS, "activity": activity(),
+            "persona_events": "NOT WIRED - see _poll_persona"}
 
 
 if __name__ == "__main__":

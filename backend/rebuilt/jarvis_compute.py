@@ -54,10 +54,36 @@ class Plan:
     devices: list = field(default_factory=list)
     why: str = ""
 
+    @property
+    def total_mb(self) -> int:
+        """Total VRAM across the cards, in MB. 0 when nothing was measured.
+
+        jarvis_models.py:489 reads this to size its model budget:
+
+            pl = C.plan()
+            if pl.total_mb: return pl.total_mb
+            ...
+            return int(os.environ.get("JARVIS_VRAM_MB", "8192"))
+
+        wrapped in `except Exception: pass`. Without the attribute the
+        AttributeError was SWALLOWED and every machine silently scored its
+        models against a fabricated 8192 MB. 0 here falls through to that same
+        default honestly, because 0 means "no card was measured".
+        """
+        total = 0
+        for d in self.devices:
+            v = d.get("total_mb") if isinstance(d, dict) else getattr(d, "total_mb", 0)
+            try:
+                total += int(v or 0)
+            except (TypeError, ValueError):
+                continue
+        return total
+
     def as_dict(self) -> dict:
         d = asdict(self)
         d["devices"] = [asdict(x) if not isinstance(x, dict) else x
                         for x in self.devices]
+        d["total_mb"] = self.total_mb      # a property, so asdict misses it
         return d
 
 

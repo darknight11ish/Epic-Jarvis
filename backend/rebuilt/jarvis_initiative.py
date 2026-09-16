@@ -118,6 +118,30 @@ class Engine:
         self.beats += 1
         return new
 
+    @property
+    def heartbeat_minutes(self) -> float:
+        """jarvis_hud.py:2242 prints `{_ENGINE.heartbeat_minutes:g}`."""
+        return self.heartbeat / 60.0
+
+    @property
+    def watchers(self) -> list:
+        """jarvis_hud.py:2243 prints `len(_ENGINE.watchers)`. Same list as
+        `checks`; the HUD's name for it, kept so the banner works."""
+        return self.checks
+
+    def drain(self) -> list:
+        """Unseen findings, marked seen. jarvis_hud.py:1415 is the caller.
+
+        Read-and-clear in one call, under one lock, because two calls would
+        let a finding filed between them be marked seen without being
+        returned - lost silently, which for an inbox is the worst failure.
+        """
+        with self._lock:
+            out = [dict(f) for f in self.findings if not f["seen"]]
+            for f in self.findings:
+                f["seen"] = True
+        return out
+
     def file(self, source: str, finding) -> dict:
         """Record something noticed. Announces a COUNT, never the content.
 
@@ -125,10 +149,14 @@ class Engine:
         file - and `[privacy] never_leaves_device` covers all three. The event
         bus reaches a lock screen, so the doorbell carries how many, not what.
         """
-        row = {"id": f"f{int(time.time()*1000)}{len(self.findings)}",
-               "source": str(source), "at": time.time(),
-               "finding": finding, "seen": False}
         with self._lock:
+            # The id is built INSIDE the lock. Outside it, len(self.findings)
+            # was read before the append, so eight threads filing at once
+            # produced duplicate ids - and mark_seen(one id) then marked two
+            # rows, one of which nobody had read.
+            row = {"id": f"f{int(time.time()*1000)}{len(self.findings)}",
+                   "source": str(source), "at": time.time(),
+                   "finding": finding, "seen": False}
             self.findings.append(row)
             n = len([f for f in self.findings if not f["seen"]])
         try:

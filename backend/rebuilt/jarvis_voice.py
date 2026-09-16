@@ -122,6 +122,43 @@ def _pcm(audio) -> list:
     return vals
 
 
+def _spectrum(x: list) -> list:
+    """Magnitude spectrum via an iterative radix-2 FFT. Standard library only.
+
+    len(x) must be a power of two; the caller guarantees it. Returns the first
+    half (the rest is the mirror of a real signal).
+    """
+    n = len(x)
+    re = list(x)
+    im = [0.0] * n
+    # bit-reversal permutation
+    j = 0
+    for i in range(1, n):
+        bit = n >> 1
+        while j & bit:
+            j ^= bit
+            bit >>= 1
+        j |= bit
+        if i < j:
+            re[i], re[j] = re[j], re[i]
+            im[i], im[j] = im[j], im[i]
+    size = 2
+    while size <= n:
+        ang = -2 * math.pi / size
+        wr, wi = math.cos(ang), math.sin(ang)
+        for start in range(0, n, size):
+            cr, ci = 1.0, 0.0
+            for k in range(start, start + size // 2):
+                l = k + size // 2
+                tr = re[l] * cr - im[l] * ci
+                ti = re[l] * ci + im[l] * cr
+                re[l], im[l] = re[k] - tr, im[k] - ti
+                re[k], im[k] = re[k] + tr, im[k] + ti
+                cr, ci = cr * wr - ci * wi, cr * wi + ci * wr
+        size *= 2
+    return [re[k] * re[k] + im[k] * im[k] for k in range(n // 2)]
+
+
 def _norm(v: list) -> list:
     n = math.sqrt(sum(x * x for x in v))
     return [x / n for x in v] if n > 1e-12 else []
@@ -153,32 +190,36 @@ class Embedder:
         x = _pcm(audio)
         if len(x) < 512:
             return []
-        # Downsample by averaging so the DFT below stays cheap on a clip that
+        # Downsample by averaging so the transform stays cheap on a clip that
         # may be 16 kHz for several seconds.
-        step = max(1, len(x) // 4096)
+        step = max(1, len(x) // 2048)
         x = [sum(x[i:i + step]) / step for i in range(0, len(x) - step, step)]
-        n = min(len(x), 2048)
+        n = 1
+        while n * 2 <= min(len(x), 2048):
+            n *= 2
+        if n < 64:
+            return []
         x = x[:n]
         # Hann window, or the band edges smear into each other.
         x = [v * (0.5 - 0.5 * math.cos(2 * math.pi * i / (n - 1)))
              for i, v in enumerate(x)]
-        half = n // 2
-        mags = []
-        # Only `dim` bands are needed, so the DFT is evaluated at band centres
-        # rather than every bin - O(dim*n) instead of O(n^2).
+
+        # A REAL FFT, because the hand-rolled band DFT that was here ALIASED.
+        # It evaluated each bin with `for i in range(0, n, 8)` - striding the
+        # INPUT by 8 - which with n=2048 uses 256 samples and makes bin k
+        # identical to bin k+256. Measured: E(3) == E(259) exactly. The 24
+        # "bands" therefore held 256 distinct frequencies repeated four times,
+        # and a 120 Hz tone scored 0.61 against white noise. Nothing that
+        # aliased could separate two voices, which is the only thing this
+        # class is for.
+        mags = _spectrum(x)
+        half = len(mags)
         edges = [int(half * (b / self.dim) ** 1.5) for b in range(self.dim + 1)]
+        bands = []
         for b in range(self.dim):
             lo, hi = edges[b], max(edges[b] + 1, edges[b + 1])
-            energy = 0.0
-            for k in range(lo, min(hi, half)):
-                re = im = 0.0
-                for i in range(0, n, 8):          # stride: a profile, not a spectrum
-                    ang = -2 * math.pi * k * i / n
-                    re += x[i] * math.cos(ang)
-                    im += x[i] * math.sin(ang)
-                energy += re * re + im * im
-            mags.append(math.log1p(energy))
-        return _norm(mags)
+            bands.append(math.log1p(sum(mags[lo:min(hi, half)])))
+        return _norm(bands)
 
     def embed_many(self, clips: list) -> list:
         """Several clips. Named separately because `embed` takes ONE.
@@ -265,6 +306,24 @@ class VoiceProfile:
         return p
 
 
+#: The lowest bar that still means anything. A cosine of 0 accepts every
+#: vector that is not actively opposite; a negative one accepts everything.
+#: Both were storable: a config or a hand-written profile saying
+#: `threshold = -1` turned the gate off while still reading as "owner" mode.
+MIN_THRESHOLD = 0.05
+
+
+def _clamp_threshold(v) -> float:
+    """A usable similarity bar, whatever was in the config or the profile."""
+    try:
+        t = float(v)
+    except (TypeError, ValueError):
+        return 0.35
+    if not math.isfinite(t):
+        return 0.35
+    return max(MIN_THRESHOLD, min(1.0, t))
+
+
 def load_profile(path: Optional[Path] = None) -> Optional[VoiceProfile]:
     """The enrolled voice, or None. Nine call sites.
 
@@ -281,14 +340,27 @@ def load_profile(path: Optional[Path] = None) -> Optional[VoiceProfile]:
         raw = json.loads(p.read_text(encoding="utf-8-sig"))
     except Exception:
         return None
-    if not isinstance(raw, dict) or not raw.get("centroid"):
+    # A LIST of numbers, specifically. `not raw.get("centroid")` only tested
+    # truthiness, so a centroid of the STRING "1234" became [1.0,2.0,3.0,4.0]
+    # and a dict {"0":1,...} iterated its keys - both built a usable profile,
+    # and combined with the unnormalised cosine both accepted a stranger.
+    if not isinstance(raw, dict):
+        # A JSON list or string parses fine and is not a profile. Dropping
+        # this guard while tightening the centroid check turned "refuse" into
+        # AttributeError - caught by the suite, which is what it is for.
+        return None
+    cent = raw.get("centroid")
+    if not isinstance(cent, (list, tuple)) or not cent:
+        return None
+    if any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in cent):
         return None
     try:
         prof = VoiceProfile(
             name=str(raw.get("name", "owner")),
             embedder=str(raw.get("embedder", "")),
             centroid=[float(x) for x in raw["centroid"]],
-            threshold=float(raw.get("threshold", _cfg("threshold", 0.35) or 0.35)),
+            threshold=_clamp_threshold(
+                raw.get("threshold", _cfg("threshold", 0.35) or 0.35)),
             samples=int(raw.get("samples", 0)),
             created=float(raw.get("created", 0.0)))
     except (TypeError, ValueError):
@@ -312,13 +384,22 @@ def enroll(clips: list, embedder=None, path: Optional[Path] = None) -> VoiceProf
         raise ValueError("no usable audio in those clips")
 
     dim = len(vecs[0])
+    # One width. Mixed widths either raised IndexError or - worse, when the
+    # short clip came first - silently truncated everyone to the shortest,
+    # producing a 2-value "voice print" with no warning.
+    vecs = [v for v in vecs if len(v) == dim]
     centroid = _norm([sum(v[i] for v in vecs) / len(vecs) for i in range(dim)])
+    if not centroid:
+        # All-zero or non-finite clips. Saving this reports enrolment as a
+        # success and then locks the owner out for ever, because load_profile
+        # correctly refuses it on every subsequent call.
+        raise ValueError("those clips produced no usable voice print")
 
-    configured = float(_cfg("threshold", 0.35) or 0.35)
+    configured = _clamp_threshold(_cfg("threshold", 0.35) or 0.35)
     if len(vecs) > 1:
         sims = [cosine(v, centroid) for v in vecs]
         loosest = min(sims)
-        threshold = min(configured, round(max(0.05, loosest - 0.05), 4))
+        threshold = min(configured, round(max(MIN_THRESHOLD, loosest - 0.05), 4))
     else:
         threshold = configured
 
@@ -334,10 +415,36 @@ def enroll(clips: list, embedder=None, path: Optional[Path] = None) -> VoiceProf
 # --------------------------------------------------------------------------
 
 def cosine(a: list, b: list) -> float:
+    """A real cosine: the dot product DIVIDED BY BOTH NORMS.
+
+    THE BUG THIS FIXES, and it opened the gate. This was a clamped dot
+    product that assumed both inputs were unit vectors:
+
+        cosine([10, 0], [0.1, 0.995])  ->  1.0      (the true cosine is 0.10)
+
+    Nothing in the embedder contract requires embed() to normalise -
+    jarvis_speech.hear(raw, embedder=...) accepts any object with .embed - so
+    any embedder returning its model's raw output scored 1.0 against
+    everything and `verify` answered "recognised" to a stranger. An embedder
+    stuck on a constant vector did the same.
+
+    Clamping is still here for floating-point overshoot, but it can no longer
+    hide an unnormalised input, because the division has already happened.
+    """
     if not a or not b or len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
-    return 0.0 if not math.isfinite(dot) else max(-1.0, min(1.0, dot))
+    dot = na = nb = 0.0
+    for x, y in zip(a, b):
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+            return 0.0
+        dot += x * y
+        na += x * x
+        nb += y * y
+    if not (math.isfinite(dot) and math.isfinite(na) and math.isfinite(nb)):
+        return 0.0
+    if na <= 1e-12 or nb <= 1e-12:
+        return 0.0
+    return max(-1.0, min(1.0, dot / (math.sqrt(na) * math.sqrt(nb))))
 
 
 @dataclass
@@ -390,6 +497,14 @@ def verify(audio, embedder=None) -> Verdict:
 
     try:
         vec = emb.embed(audio)
+        # Anything not list-shaped: a scalar, a string, a generator. len() on
+        # a float raised TypeError straight out of verify(), and
+        # jarvis_speech.hear() does not wrap this call - so a bad embedder
+        # crashed the request instead of refusing, contradicting "every path
+        # that is not a clean pass returns is_owner=False".
+        if isinstance(vec, (str, bytes)) or not hasattr(vec, "__len__"):
+            vec = list(vec) if hasattr(vec, "__iter__") and not isinstance(vec, (str, bytes)) else []
+        vec = [float(x) for x in vec]
     except Exception as exc:
         return Verdict(False, threshold=prof.threshold, mode=mode,
                        reason=f"could not read the audio ({type(exc).__name__})")
@@ -426,7 +541,7 @@ def status() -> dict:
         "mode": str(_cfg("mode", "owner") or "owner"),
         "enrolled": prof is not None,
         "samples": prof.samples if prof else 0,
-        "threshold": prof.threshold if prof else float(_cfg("threshold", 0.35) or 0.35),
+        "threshold": prof.threshold if prof else _clamp_threshold(_cfg("threshold", 0.35)),
         "embedder": model,
         "speaker_model": model == "ecapa",
         "wake_phrase": _cfg("wake_phrase", "hey_jarvis"),

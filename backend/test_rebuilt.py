@@ -44,6 +44,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _where import BACKEND, REPO, explain, missing  # noqa: E402
 
+
+def _words_of(text):
+    import jarvis_memory as _m
+    return _m._words(text)
+
 REBUILT = Path(__file__).resolve().parent / "rebuilt"
 
 # The rebuilt modules are the ones under test, so they come FIRST on the path -
@@ -367,7 +372,20 @@ class Memory(unittest.TestCase):
         "Mario prefers tabs over spaces in Go"."""
         go = self.s.add("Mario prefers tabs over spaces in Go")
         self.s.add("Mario lives at 12 Oak Street")
-        self.assertNotEqual(self.s.find_one("Mario drives a 1998 Volvo"), go)
+        hit = self.s.find_one("Mario drives a 1998 Volvo")
+        self.assertNotEqual((hit or {}).get("id"), go)
+
+    def test_a_possessive_is_not_a_free_overlap_token(self):
+        """`_words` folds "'?s$" and drops single characters. Without that,
+        "Mario's" splits into {"mario", "s"} and the bare "s" is shared by
+        every fact containing an apostrophe - so one real word plus "s"
+        cleared the two-word bar. Measured: find_one("Mario's allergy")
+        returned "Mario's editor is Vim", the exact pair the patch names."""
+        self.s.add("Mario's editor is Vim")
+        self.s.add("Mario drives a 1998 Volvo")
+        self.assertNotIn("s", _words_of("Mario's car"))
+        for q in ("Mario's allergy", "Mario's car", "Mario's address"):
+            self.assertIsNone(self.s.find_one(q), q)
 
     def test_find_one_returns_none_rather_than_a_guess(self):
         """None means "store the new fact and retire nothing". Two facts that
@@ -381,7 +399,34 @@ class Memory(unittest.TestCase):
         """The bar has to be clearable, or corrections never supersede."""
         volvo = self.s.add("Mario drives a 1998 Volvo estate")
         self.s.add("Mario prefers tabs over spaces in Go")
-        self.assertEqual(self.s.find_one("Mario drives a 1998 Volvo"), volvo)
+        hit = self.s.find_one("Mario drives a 1998 Volvo")
+        # A DICT, not an id: the patched jarvis_extract._accept does
+        # target["id"], so an int raised TypeError on the one path that matters.
+        self.assertIsInstance(hit, dict)
+        self.assertEqual(hit["id"], volvo)
+
+    def test_search_with_k_zero_returns_nothing(self):
+        """Recall width zero means recall OFF. The truncation appends and THEN
+        checks `len(out) >= k`, so k=0 used to return exactly one fact - into
+        a prompt, from the function that decides what private text goes there."""
+        self.s.add("Mario takes lisinopril 10mg daily")
+        for k in (0, -1, -5):
+            self.assertEqual(self.s.search("Mario", k=k), [], f"k={k}")
+
+    def test_superseding_a_missing_fact_is_reported(self):
+        """add() returns the new id either way, so a caller that believed it
+        filed a correction had nothing to check."""
+        self.s.add("a fact about something specific")
+        self.s.add("a replacement fact", supersedes=999999)
+        self.assertTrue(self.s.last_supersede_failed)
+
+    def test_a_retired_fact_cannot_be_rewritten(self):
+        """bitemporal's premise is that a superseded version stays readable as
+        it was. Editing one makes "where did I live last year" answer with
+        today's words."""
+        old = self.s.add("Mario lives at 12 Oak Street")
+        self.s.add("Mario lives at 40 Elm Road", supersedes=old)
+        self.assertFalse(self.s.edit(old, "rewritten history"))
 
     def test_a_nan_embedding_never_makes_a_fact_unreachable(self):
         """embedding-guard.patch: a NaN row is unreachable FOREVER, because
@@ -480,17 +525,34 @@ class Recall(unittest.TestCase):
         """jarvis_hud.py:1014 takes rank(...)[0] and zips it against its own
         corpus. A sorted score list silently mislabels every fact."""
         texts = ["nothing to do with it", "Mario drives a Volvo", "also unrelated"]
-        scores, _ = RC.rank("Mario Volvo", texts, top_k=len(texts),
+        scored, _ = RC.rank("Mario Volvo", texts, top_k=len(texts),
                             near_k=0, min_score=0.0)
-        self.assertEqual(len(scores), len(texts))
-        self.assertGreater(scores[1], scores[0])
-        self.assertGreater(scores[1], scores[2])
+        # PAIRS, because jarvis_hud.py:1013 does `dict(rank(...)[0])` and then
+        # uses the keys as corpus indices. A flat list raised TypeError there
+        # and dropped the connection on every /api/retrieve query.
+        by_index = dict(scored)
+        self.assertEqual(sorted(by_index), list(range(len(texts))))
+        self.assertGreater(by_index[1], by_index[0])
+        self.assertGreater(by_index[1], by_index[2])
+
+    def test_the_hud_can_dict_the_result(self):
+        """The exact expression from jarvis_hud.py:1013, which used to raise."""
+        corpus = [{"text": "sage green kitchen wall", "id": 7},
+                  {"text": "unrelated", "id": 8},
+                  {"text": "also unrelated", "id": 9}]
+        all_scores = dict(RC.rank("what colour is the kitchen wall",
+                                  [c["text"] for c in corpus],
+                                  top_k=len(corpus), near_k=0, min_score=0.0)[0])
+        for idx, score in all_scores.items():
+            corpus[idx]["id"]           # the caller indexes the corpus by key
+        self.assertEqual(len(all_scores), 3)
 
     def test_the_hud_call_returns_a_score_for_every_item(self):
         texts = [f"row {i}" for i in range(7)]
-        scores, _ = RC.rank("nothing matches this", texts, top_k=len(texts),
+        scored, _ = RC.rank("nothing matches this", texts, top_k=len(texts),
                             near_k=0, min_score=0.0)
-        self.assertEqual(len(scores), 7)
+        self.assertEqual(len(scored), 7)
+        self.assertEqual([i for i, _ in scored], list(range(7)))
 
     def test_nothing_relevant_means_nothing_injected(self):
         """Padding the prompt with the least-irrelevant facts spends context,
@@ -538,8 +600,8 @@ class Recall(unittest.TestCase):
         """Below three documents there is nothing to measure - with one fact,
         every word is in every document and all scores would collapse to
         zero. Stated as a test so the behaviour is deliberate, not a surprise."""
-        self.assertEqual(RC._idf(["a b", "a c"]), {})
-        self.assertTrue(RC._idf(["a b", "a c", "a d"]))
+        self.assertEqual(RC._idf(["aa bb", "aa cc"]), {})
+        self.assertTrue(RC._idf(["aa bb", "aa cc", "aa dd"]))
 
     def test_empty_inputs_do_not_raise(self):
         self.assertEqual(RC.select_facts("", [], text_of=lambda f: ""), [])
@@ -656,6 +718,8 @@ class Voice(unittest.TestCase):
     def test_a_corrupt_profile_means_refuse(self):
         for junk in ("{}", "[]", "not json",
                      '{"centroid": []}', '{"centroid": ["a","b"]}',
+                     '{"centroid": "1234", "samples": 3}',
+                     '{"centroid": {"0":1,"1":0}, "samples": 3}',
                      '{"centroid": [1,2], "threshold": "x"}'):
             self.prof.write_text(junk, encoding="utf-8")
             self.assertIsNone(VO.load_profile(), junk)
@@ -702,8 +766,12 @@ class Small(unittest.TestCase):
         and the setting looks like it does nothing."""
         import datetime as dt
         keep = PW._cfg
-        PW._cfg = lambda k, d=None: {"quiet_hours_start": "22:00",
-                                     "quiet_hours_end": "07:00"}.get(k, d)
+        # The key names in the SHIPPED config. This test read
+        # quiet_hours_start/end, which appear in no config anywhere, so it
+        # passed against a module that also read them - two wrongs agreeing.
+        PW._cfg = lambda k, d=None: {"enabled": True, "schedule_enabled": True,
+                                     "quiet_start": "22:00",
+                                     "quiet_end": "07:00"}.get(k, d)
         try:
             at = lambda h: dt.datetime(2026, 1, 1, h, 30)
             self.assertTrue(PW.in_quiet_hours(at(23)))
@@ -711,6 +779,13 @@ class Small(unittest.TestCase):
             self.assertTrue(PW.in_quiet_hours(at(6)))
             self.assertFalse(PW.in_quiet_hours(at(12)))
             self.assertFalse(PW.in_quiet_hours(at(21)))
+            # schedule_enabled=false must switch the whole thing off, or
+            # fixing the key names would turn quiet hours ON against a config
+            # that says the schedule is disabled.
+            PW._cfg = lambda k, d=None: {"enabled": True, "schedule_enabled": False,
+                                         "quiet_start": "22:00",
+                                         "quiet_end": "07:00"}.get(k, d)
+            self.assertFalse(PW.in_quiet_hours(at(23)))
         finally:
             PW._cfg = keep
 

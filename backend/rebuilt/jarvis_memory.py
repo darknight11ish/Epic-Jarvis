@@ -60,6 +60,7 @@ import re
 import sqlite3
 import struct
 import threading
+import zlib
 import time
 from contextlib import closing
 from pathlib import Path
@@ -121,7 +122,16 @@ def _finite(v: list[float]) -> bool:
         return False
     total = 0.0
     for x in v:
-        if not isinstance(x, (int, float)) or not math.isfinite(x):
+        # bool is a subclass of int, and [True]*dim is not an embedding.
+        if isinstance(x, bool) or not isinstance(x, (int, float)):
+            return False
+        if not math.isfinite(x):
+            return False
+        # _pack writes float32. struct.pack('f', 1e39) does NOT raise - it
+        # silently produces +inf, so a value this check called finite became
+        # a non-finite vector on disk, counted as embedded, with meaningless
+        # distances. The float32 ceiling is ~3.4e38.
+        if abs(float(x)) > 3.4e38:
             return False
         total += float(x) * float(x)
     return total > 1e-12
@@ -143,8 +153,36 @@ _STOP = {
 }
 
 
+#: How far a vector hit may be before it stops counting. Without this a k-NN
+#: scan returns its nearest rows for ANY query, so a full k facts came back for
+#: "why is the sky blue" - and put the owner's medication in that prompt.
+_MAX_VEC_DISTANCE = float(os.environ.get("JARVIS_MEMORY_MAX_DISTANCE", "1.0"))
+
+
+def _words(text: str) -> set:
+    """Content words, lowercased, possessives folded. For overlap tests.
+
+    VERBATIM from memory-safety.patch, and the two details that look cosmetic
+    are the whole point. Folding "'?s$" and dropping single characters is what
+    stops "Mario's" splitting into {"mario", "s"} - because a bare "s" is then
+    a free overlap token shared by every fact containing an apostrophe, and
+    find_one's "at least two overlapping words" bar is cleared by one real
+    word plus "s".
+
+    Measured with the naive split: find_one("Mario's allergy") returned
+    "Mario's editor is Vim" - the exact pair memory-safety.patch was written
+    about, reproduced by a reconstruction that had dropped two lines.
+    """
+    out = set()
+    for w in re.findall(r"[\w\-]+", str(text).lower()):
+        w = re.sub(r"'?s$", "", w) or w
+        if len(w) > 1 and w not in _STOP:
+            out.add(w)
+    return out
+
+
 def _content_words(text: str) -> list[str]:
-    return [w for w in re.findall(r"[\w\-]+", str(text).lower()) if w not in _STOP]
+    return sorted(_words(text))
 
 
 # --------------------------------------------------------------------------
@@ -174,7 +212,13 @@ class HashEmbedder:
         for t in texts:
             v = [0.0] * self.dim
             for w in _content_words(t):
-                v[hash(w) % self.dim] += 1.0
+                # zlib.crc32, not hash(). Python's hash() is seed-randomised
+                # PER PROCESS, so "deterministic" was false across restarts:
+                # the same text embedded to different vectors each run, and
+                # because the embedder NAME stayed "hash-v1" the meta-table
+                # rebuild never fired - facts_vec quietly accumulated vectors
+                # from many different seeds, all marked embedded=1.
+                v[zlib.crc32(w.encode()) % self.dim] += 1.0
             n = math.sqrt(sum(x * x for x in v))
             out.append([x / n for x in v] if n else v)
         return out
@@ -290,8 +334,21 @@ class MemoryStore:
             c.execute("INSERT OR REPLACE INTO temp._vec_probe (id, embedding) "
                       "VALUES (1, ?)", (_pack([0.0, 1.0]),))
             c.execute("DROP TABLE temp._vec_probe")
+            # COMMIT, or the rest of _init() runs inside the implicit deferred
+            # transaction this INSERT opened. That turns "INSERT OR REPLACE
+            # INTO meta" into a read->write upgrade, which SQLite refuses with
+            # SQLITE_BUSY WITHOUT invoking the busy handler - so the 30-second
+            # timeout is skipped and __init__ raises "database is locked"
+            # instantly. Measured: 5 of 6 concurrent processes failed to
+            # construct a store, and jarvis_hud reports that as "memory layer
+            # failed to start".
+            c.commit()
             return True
         except Exception:
+            try:
+                c.rollback()
+            except Exception:
+                pass
             return False
 
     def _init(self) -> None:
@@ -336,8 +393,20 @@ class MemoryStore:
             row = c.execute("SELECT v FROM meta WHERE k='embedder'").fetchone()
             if row and row["v"] != self.embedder.name:
                 # A different model: the vectors are not comparable. Rebuild.
+                #
+                # DROP, not DELETE. `CREATE VIRTUAL TABLE IF NOT EXISTS` above
+                # has already run, so a DELETE leaves the table DECLARED AT THE
+                # OLD WIDTH - and every later insert of a differently-sized
+                # vector fails silently inside _embed_rows. Measured with a
+                # 256-dim stand-in replaced by a 384-dim model: unembedded only
+                # ever climbed, backfill returned 0 for ever, and
+                # "vector_search": true throughout.
                 if self._vec_ok:
-                    c.execute("DELETE FROM facts_vec")
+                    c.execute("DROP TABLE IF EXISTS facts_vec")
+                    c.execute(f"""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS facts_vec USING vec0(
+                            fact_id INTEGER PRIMARY KEY,
+                            embedding float[{self.embedder.dim}])""")
                 c.execute("UPDATE facts SET embedded=0")
             c.execute("INSERT OR REPLACE INTO meta VALUES ('embedder', ?)", (self.embedder.name,))
             c.commit()
@@ -358,8 +427,23 @@ class MemoryStore:
                 (text, source, now, valid_from or now, json.dumps(meta or {})))
             fid = cur.lastrowid
             if supersedes:
-                c.execute("UPDATE facts SET valid_to=?, retired_by=? WHERE id=? AND valid_to IS NULL",
-                          (now, fid, supersedes))
+                done = c.execute(
+                    "UPDATE facts SET valid_to=?, retired_by=? WHERE id=? AND valid_to IS NULL",
+                    (now, fid, supersedes))
+                if done.rowcount == 0:
+                    # The caller believes it filed a correction that retired
+                    # the old fact. It did not - the id does not exist, or was
+                    # already retired - and add() returning the new id either
+                    # way said nothing. retire() reports this; so does this.
+                    self.last_supersede_failed = True
+                    try:
+                        if fw is not None:
+                            fw.audit_log("memory.supersede_missed",
+                                         {"new": fid, "wanted": supersedes})
+                    except Exception:
+                        pass
+                else:
+                    self.last_supersede_failed = False
             self._embed_rows(c, [(fid, text)])
             c.commit()
         return fid
@@ -388,8 +472,27 @@ class MemoryStore:
         if not text:
             return False
         with _LOCK, closing(self._connect()) as c:
+            # A retired fact is history. bitemporal's whole premise is that a
+            # superseded version stays readable as it was; rewriting one makes
+            # "where did I live last year" answer with today's words.
+            row = c.execute("SELECT valid_to FROM facts WHERE id=?", (fact_id,)).fetchone()
+            if row is None or row["valid_to"] is not None:
+                return False
             cur = c.execute("UPDATE facts SET text=?, embedded=0 WHERE id=?", (text, fact_id))
             if cur.rowcount:
+                # DELETE THE OLD VECTOR FIRST. The FTS trigger has already
+                # reindexed the new words, but if the new text fails to embed
+                # - NaN, model down, width mismatch - _embed_rows skips its
+                # INSERT OR REPLACE and the PREVIOUS text's vector stays in
+                # facts_vec. Words and meaning then point at different facts:
+                # measured, a row edited from "allergic to penicillin" to
+                # "enjoys long walks" was still returned for "allergic to
+                # penicillin" with zero word overlap.
+                if self._vec_ok:
+                    try:
+                        c.execute("DELETE FROM facts_vec WHERE fact_id=?", (fact_id,))
+                    except Exception:
+                        pass
                 self._embed_rows(c, [(int(fact_id), text)])
             c.commit()
             return cur.rowcount > 0
@@ -409,7 +512,15 @@ class MemoryStore:
             return 0
         done = 0
         for (fid, _), v in zip(rows, vecs):
-            v = list(v)
+            try:
+                v = list(v)
+            except TypeError:
+                # An embedder that returned a scalar, or a flat list of floats
+                # for one text (the single-vector API mistake). Outside the
+                # try this raised out of add() and the fact was never stored -
+                # "DEGRADES, NEVER FAILS" says it must be stored and merely
+                # unembedded.
+                continue
             if not _finite(v):
                 # Leave embedded=0. The row stays findable by WORDS, and
                 # backfill will try it again when a better model is installed.
@@ -435,10 +546,10 @@ class MemoryStore:
                     break
                 wrote = self._embed_rows(c, [(r["id"], r["text"]) for r in rows])
                 c.commit()
-                if not self._vec_ok or not wrote:
-                    # No progress. Without this the loop is infinite whenever a
-                    # row cannot be embedded at all - which is exactly what a
-                    # NaN-producing model causes.
+                if not wrote:
+                    # No vector table, no embedder, or every row was refused.
+                    # The next SELECT would return these same rows, so
+                    # continuing spins on them forever.
                     break
                 done += wrote
         return done
@@ -474,19 +585,27 @@ class MemoryStore:
         query = " ".join(str(query).split())
         if not query:
             return []
+        if k <= 0:
+            # The truncation below appends and THEN checks `len(out) >= k`, so
+            # k=0 returned exactly one fact. That reads as an off-by-one and is
+            # worse than one, because this is the function that decides what
+            # private text goes into a prompt: someone setting the recall width
+            # to zero to turn recall OFF still got a fact in every request.
+            return []
         at = time.time() if at is None else at
         with _LOCK, closing(self._connect()) as c:
             ranks: dict[int, float] = {}
             # words
+            terms = sorted(_words(query))
             try:
-                words = _content_words(query)
-                if words:
-                    q = " OR ".join(f'"{w}"' for w in words)
-                    rows = c.execute(
-                        "SELECT rowid, bm25(facts_fts) AS s FROM facts_fts WHERE facts_fts MATCH ?"
-                        " ORDER BY s LIMIT ?", (q, candidates)).fetchall()
-                    for r, row in enumerate(rows, 1):
-                        ranks[row["rowid"]] = ranks.get(row["rowid"], 0) + 1.0 / (60 + r)
+                if not terms:
+                    raise sqlite3.OperationalError("no content terms")
+                q = " OR ".join(f'"{w}"' for w in terms)
+                rows = c.execute(
+                    "SELECT rowid, bm25(facts_fts) AS s FROM facts_fts WHERE facts_fts MATCH ?"
+                    " ORDER BY s LIMIT ?", (q, candidates)).fetchall()
+                for r, row in enumerate(rows, 1):
+                    ranks[row["rowid"]] = ranks.get(row["rowid"], 0) + 1.0 / (60 + r)
             except sqlite3.OperationalError:
                 pass
             # meaning
@@ -498,6 +617,13 @@ class MemoryStore:
                             "SELECT fact_id, distance FROM facts_vec WHERE embedding MATCH ?"
                             " ORDER BY distance LIMIT ?", (_pack(qv), candidates)).fetchall()
                         for r, row in enumerate(rows, 1):
+                            # Sorted by distance, so the first one that is too
+                            # far ends it. Without this floor a k-NN scan
+                            # returns its nearest rows for ANY query and a full
+                            # k facts come back for "why is the sky blue".
+                            if (row["distance"] is not None
+                                    and row["distance"] > _MAX_VEC_DISTANCE):
+                                break
                             ranks[row["fact_id"]] = ranks.get(row["fact_id"], 0) + 1.0 / (60 + r)
                 except Exception:
                     pass
@@ -524,43 +650,48 @@ class MemoryStore:
                 break
         return out
 
-    def find_one(self, description: str, at: Optional[float] = None) -> Optional[int]:
-        """Which single existing fact does this describe? None if unsure.
+    def get(self, fact_id: int) -> Optional[dict]:
+        """One fact by id, retired or not. None if it is not there."""
+        with _LOCK, closing(self._connect()) as c:
+            row = c.execute("SELECT * FROM facts WHERE id=?", (int(fact_id),)).fetchone()
+        return dict(row) if row else None
 
-        THE MOST IMPORTANT FUNCTION IN THIS FILE, and the reason
-        memory-safety.patch exists. `_accept` used to resolve a correction's
-        free-text `replaces` with search(k=1) and retire whatever came back.
-        search has no relevance floor, so it ALWAYS came back with something:
-        accepting "Mario drives a 1998 Volvo" retired "Mario prefers tabs over
-        spaces in Go", and the reply was {"ok": true} either way.
+    def find_one(self, text: str, *, min_overlap: float = 0.5) -> Optional[dict]:
+        """The one current fact a correction is about, or None.
 
-        Two bars, both must clear:
-          * at least two overlapping CONTENT words (stopwords do not count), and
-          * 50% containment - half the description's content words appear in
-            the candidate.
+        VERBATIM contract from memory-safety.patch, including the DICT return
+        type - a first reconstruction returned an int, and the patched
+        `jarvis_extract._accept` does `target["id"]`, so it raised TypeError
+        on the one path that matters.
 
-        RETURNS None RATHER THAN A GUESS, and None means "store the new fact,
-        retire nothing". Two facts that disagree can be sorted out later by a
-        human looking at the memory pane. A deleted allergy cannot: retire()
-        has no way back.
+        search() is the wrong tool for this and using it cost data: it is a
+        ranker, it returns its top-k whatever the query, and the top-1 for a
+        string that matches nothing is an arbitrary fact - which then got
+        retired. Accepting "Mario drives a 1998 Volvo" retired "Mario prefers
+        tabs over spaces"; a replaces string reading "Mario's allergy" retired
+        the note about Vim.
+
+        Containment, not Jaccard: a correction names the old fact in fewer
+        words than the fact itself, so the shorter side is the denominator.
+        Two content words minimum, whatever the ratio - "where Mario is"
+        reduces to the single word "mario", which is in half the store, and
+        one common word is not an identification. When it is ambiguous the
+        answer is None: two facts that disagree can be sorted out later, a
+        fact retired in error cannot be got back.
         """
-        want = set(_content_words(description))
-        if len(want) < 2:
-            # One word cannot identify a fact. "address", "allergy", "car" -
-            # each matches a dozen rows and picking one is the original bug.
+        want = _words(text)
+        if not want:
             return None
-        best_id, best_score = None, 0.0
-        for row in self.search(description, k=5, at=at):
-            have = set(_content_words(row["text"]))
-            overlap = want & have
-            if len(overlap) < 2:
+        best, best_score = None, 0.0
+        for cand in self.search(text, k=5):
+            have = _words(cand["text"])
+            shared = want & have
+            if len(shared) < 2:
                 continue
-            containment = len(overlap) / len(want)
-            if containment < 0.5:
-                continue
-            if containment > best_score:
-                best_id, best_score = row["id"], containment
-        return best_id
+            score = len(shared) / min(len(want), len(have))
+            if score > best_score:
+                best, best_score = cand, score
+        return best if best_score >= min_overlap else None
 
     def timeline(self, query: str, k: int = 20) -> list[dict]:
         """Every version of the matching facts, retired ones included, oldest

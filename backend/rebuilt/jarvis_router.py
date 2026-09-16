@@ -117,8 +117,14 @@ class Budget:
                 path=cls._store_path())
         try:
             raw = json.loads(b.path.read_text(encoding="utf-8"))
-            b.minute_hits = [float(x) for x in raw.get("minute", [])]
-            b.day_hits = [float(x) for x in raw.get("day", [])]
+            # Each list separately: one corrupt element in `minute` used to
+            # discard a perfectly good `day` array, and `day` is the cap that
+            # matters.
+            for key, dest in (("minute", "minute_hits"), ("day", "day_hits")):
+                try:
+                    setattr(b, dest, [float(x) for x in (raw.get(key) or [])])
+                except (TypeError, ValueError):
+                    continue
         except Exception:
             # A missing or corrupt budget file means "no cloud calls recorded",
             # which is the permissive direction - but the alternative is
@@ -146,8 +152,27 @@ class Budget:
             pass
 
     def spend(self, n: int = 1) -> None:
+        """Record cloud requests, re-reading the file first.
+
+        jarvis_hud calls Budget.load() PER REQUEST on a threading server, so
+        several Budget objects exist at once, each holding a snapshot. Without
+        the re-read, two of them each spending five wrote five to disk instead
+        of ten - half the day's usage lost, and a cap that does not cap.
+        """
         with self._lock:
             now = time.time()
+            fresh = {"minute": [], "day": []}
+            if self.path is not None:
+                try:
+                    fresh = json.loads(self.path.read_text(encoding="utf-8"))
+                except Exception:
+                    fresh = {"minute": list(self.minute_hits),
+                             "day": list(self.day_hits)}
+            try:
+                self.minute_hits = [float(x) for x in fresh.get("minute", [])]
+                self.day_hits = [float(x) for x in fresh.get("day", [])]
+            except (TypeError, ValueError):
+                pass
             for _ in range(max(1, n)):
                 self.minute_hits.append(now)
                 self.day_hits.append(now)
@@ -234,8 +259,9 @@ def complexity(query: str) -> float:
 
 
 def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
-           has_image: bool = False, tainted: bool = False,
-           budget: Optional[Budget] = None, **_extra) -> Decision:
+           has_image: bool = False, conversation_tainted: bool = False,
+           budget: Optional[Budget] = None, tainted: Optional[bool] = None,
+           **_extra) -> Decision:
     """Which lane answers this turn.
 
     Five gates, in this order, and the order is the policy. Each one can only
@@ -249,25 +275,55 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
       4. budget spent                -> local
       otherwise                      -> the first cloud lane
 
-    `**_extra` absorbs keyword arguments this rebuild does not know about.
-    jarvis_hud passes at least query, local_model, lanes and has_image, and
-    the call is cut off mid-argument-list in the source I could read. A
-    TypeError here would take down every chat turn; ignoring an argument only
-    loses whatever that argument did.
+    THE PARAMETER IS `conversation_tainted`, AND THAT IS NOT A DETAIL.
+
+    This was called `tainted`, with `**_extra` to absorb anything unexpected.
+    jarvis_hud.py:1714 passes `conversation_tainted=tainted`, so `**_extra`
+    silently ate it and gate 1 - the one described here as "local,
+    unconditionally" - NEVER FIRED from the only production caller. A
+    conversation that had read outside text went to a cloud lane, with
+    `decision.tainted` reported False so the route header agreed. No
+    exception, no log line.
+
+    That is the whole argument against a permissive `**kwargs` on a function
+    that makes a privacy decision: it converts a TypeError at startup, which
+    someone fixes in a minute, into an open gate nobody can see. `**_extra`
+    is still here so an unknown argument cannot take down every chat turn -
+    but anything it catches is now RECORDED, because a silently ignored
+    argument to this function is exactly the bug above.
     """
+    if tainted is not None:
+        # The older spelling, kept working rather than broken.
+        conversation_tainted = bool(conversation_tainted) or bool(tainted)
+    if _extra:
+        try:
+            if fw is not None:
+                fw.audit_log("router.unknown_argument",
+                             {"names": sorted(_extra.keys())})
+        except Exception:
+            pass
     lanes = list(lanes or [])
     c = complexity(query)
     local = local_model or "local"
+    # Whether the "local" lane IS local, rather than assuming it. `local_model`
+    # comes from a state file (jarvis_models.current_model()), not a constant,
+    # so a caller can hand this function a CLOUD model as its "local" lane.
+    # Computing inject_memory from the gate meant every safe-looking gate then
+    # returned that cloud lane WITH memory attached - the exact thing the
+    # module docstring promises cannot happen. Computed from the lane now.
+    local_is_local = is_local_lane(local, local_model)
 
     def local_decision(gate: str, why: str) -> Decision:
-        # inject_memory is True only here. There is no path in this function
-        # that returns a cloud lane with inject_memory set, and that is the
-        # single most important property of this file.
-        return Decision(local, why, gate, c, inject_memory=True, tainted=tainted)
+        return Decision(local, why, gate, c,
+                        inject_memory=local_is_local,
+                        tainted=conversation_tainted)
 
     if not lanes:
-        return local_decision("no-lanes", "no cloud lane was offered")
-    if tainted:
+        # "unavailable", not "no-lanes": jarvis_hud.py:1717 tests for exactly
+        # this string to rewrite the reason when Jarvis is injecting memory
+        # itself. A different name left that branch dead.
+        return local_decision("unavailable", "no cloud lane was offered")
+    if conversation_tainted:
         return local_decision(
             "taint",
             "this conversation has read outside text, so it stays on this machine")
@@ -287,7 +343,7 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         if vision:
             lane = vision
     return Decision(lane, f"complexity {c} and budget available", "escalate", c,
-                    inject_memory=False, tainted=tainted)
+                    inject_memory=False, tainted=conversation_tainted)
 
 
 def degrade(lane: str, lanes: Optional[list] = None,
@@ -307,12 +363,20 @@ def degrade(lane: str, lanes: Optional[list] = None,
     chain = list(_cfg("budget", "degrade_chain", []) or [])
     order = chain if lane in chain else list(lanes or [])
 
+    # Seen lanes are skipped, so a chain that lists a lane twice - or a
+    # `lanes` list that CONTAINS local_model, which jarvis_hud:1738 shows is a
+    # real state - cannot produce a 2-cycle. It could before: degrade("a",
+    # ["a","b"], "a") gave "b" and degrade("b", ["a","b"], "a") gave "a",
+    # which never returns its own input and so slipped past the caller's
+    # `nxt == lane` guard while re-opening a lane that had just refused.
     if lane in order:
-        i = order.index(lane)
-        for nxt in order[i + 1:]:
-            if nxt and nxt != lane:
+        seen = {lane}
+        for nxt in order[order.index(lane) + 1:]:
+            if nxt and nxt not in seen:
                 return nxt
-    # Bottom of the chain, or a lane nobody listed. Local is always below.
+            seen.add(nxt)
+    # Bottom of the chain, or a lane nobody listed. Local is always the floor,
+    # and the floor has nothing below it.
     return local if lane != local else None
 
 
