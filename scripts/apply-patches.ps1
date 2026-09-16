@@ -86,6 +86,30 @@ $PATCHES = @(
     'approval-notice.patch'
 )
 
+# --- the six patches whose fixes are already IN the rebuilt modules --------
+#
+# Ten of the backend's twenty-six modules were rebuilt after the originals were
+# found to exist nowhere, and two of them - jarvis_memory and jarvis_events -
+# were rebuilt WITH the fixes these patches make. So on a backend carrying the
+# rebuilt modules, six patches cannot apply: their context lines are the
+# unfixed code, which no longer exists.
+#
+# That is correct and expected, and the script still refused the whole run over
+# it, applying none of the other fifteen. The owner was blocked by a state this
+# repository created.
+#
+# Four of the six ALSO patch a surviving file, and that half is still needed.
+# backend/rebuilt-patches/ holds those halves, split by target file. The other
+# two touch only a rebuilt module and are skipped entirely.
+$REBUILT_SUPERSEDES = @{
+    'memory-safety.patch'     = 'jarvis_memory.py, already in the rebuild'
+    'extraction-wiring.patch' = 'jarvis_events.py, already in the rebuild'
+    'bitemporal.patch'        = 'jarvis_memory.py, already in the rebuild'
+    'embedding-guard.patch'   = 'jarvis_memory.py only - nothing else to apply'
+    'event-allowlist.patch'   = 'jarvis_events.py only - nothing else to apply'
+    'approval-notice.patch'   = 'jarvis_events.py, already in the rebuild'
+}
+
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
 $PatchDir   = Join-Path $RepoRoot 'backend'
 $Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
@@ -95,6 +119,16 @@ $Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
 # documented in backend/README.md, and never added here, so it silently did
 # not get applied. A missing patch produces no error anywhere; it just is not
 # there. Checked on every run.
+# Is this backend carrying the rebuilt modules? Detected by a marker the
+# rebuild puts in its own docstring, not by a version number nobody maintains.
+$SplitDir = Join-Path $PatchDir 'rebuilt-patches'
+$UsingRebuilt = $false
+$memPath = Join-Path $BackendPath 'jarvis_memory.py'
+if (Test-Path -LiteralPath $memPath) {
+    $head = Get-Content -LiteralPath $memPath -TotalCount 12 -ErrorAction SilentlyContinue
+    if ($head -join "`n" -match 'PART RECOVERED, PART REBUILT') { $UsingRebuilt = $true }
+}
+
 $onDisk = @(Get-ChildItem -LiteralPath $PatchDir -Filter '*.patch' -ErrorAction SilentlyContinue |
             Select-Object -ExpandProperty Name)
 $unlisted = @($onDisk | Where-Object { $PATCHES -notcontains $_ })
@@ -139,6 +173,20 @@ Say "Backend : $BackendPath"
 Say "Patches : $PatchDir"
 Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
 
+# --- substitute the split patches, if the rebuilt modules are installed ------
+if ($UsingRebuilt) {
+    $swapped = @()
+    foreach ($name in $PATCHES) {
+        if (-not $REBUILT_SUPERSEDES.ContainsKey($name)) { $swapped += $name; continue }
+        $half = Join-Path $SplitDir $name
+        if (Test-Path -LiteralPath $half) {
+            $swapped += "rebuilt-patches\$name"
+        }
+        # else: the whole patch is superseded, so it is simply left out.
+    }
+    $PATCHES = $swapped
+}
+
 # --- line endings ------------------------------------------------------------
 #
 # A unified diff's context lines must match the target byte for byte, so CRLF
@@ -165,6 +213,7 @@ $crlfPatches = 0
 foreach ($name in $PATCHES) {
     $src = Join-Path $PatchDir $name
     if (-not (Test-Path -LiteralPath $src)) { continue }
+    $flat = Split-Path -Leaf $name
     # Byte-level. Get-Content/Set-Content would re-encode, and a patch can
     # carry any bytes its target carries.
     $raw = [IO.File]::ReadAllBytes($src)
@@ -178,7 +227,7 @@ foreach ($name in $PATCHES) {
         }
         $out.Add($raw[$i])
     }
-    [IO.File]::WriteAllBytes((Join-Path $LfDir $name), $out.ToArray())
+    [IO.File]::WriteAllBytes((Join-Path $LfDir $flat), $out.ToArray())
 }
 # Everything that applies a patch reads from here, never from $PatchDir.
 $PatchSrc = $LfDir
@@ -340,7 +389,7 @@ try {
         $removed = 0
         $backwards = @($PATCHES); [array]::Reverse($backwards)
         foreach ($name in $backwards) {
-            $full = Join-Path $PatchSrc $name
+            $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
             if (-not (Test-Path -LiteralPath $full)) { continue }
             if ((Invoke-Patch -File $full -Check -Reverse).Ok) {
                 $r = Invoke-Patch -File $full -Reverse
@@ -397,7 +446,7 @@ try {
         $reversedAll = $true
         $backwards = @($PATCHES); [array]::Reverse($backwards)
         foreach ($name in $backwards) {
-            $full = Join-Path $PatchSrc $name
+            $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
             if (-not (Test-Path -LiteralPath $full)) { $reversedAll = $false; break }
             if (-not (Invoke-Patch -File $full -Reverse).Ok) { $reversedAll = $false; break }
         }
@@ -414,7 +463,7 @@ try {
             Reset-Rehearsal
             Push-Location -LiteralPath $rehearsal
             foreach ($name in $PATCHES) {
-                $full = Join-Path $PatchSrc $name
+                $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
                 if (-not (Test-Path -LiteralPath $full)) {
                     $broken += @{ Name = $name; Why = "missing from $PatchDir" }
                     Bad "$name - not found"
@@ -455,7 +504,7 @@ try {
 
     # --- 2. back up, then apply ----------------------------------------------
     if (-not $already) {
-        $todo = @($PATCHES | ForEach-Object { Join-Path $PatchSrc $_ })
+        $todo = @($PATCHES | ForEach-Object { Join-Path $PatchSrc (Split-Path -Leaf $_) })
         $backup = Join-Path $BackendPath "_jarvis-backup-$Stamp"
         New-Item -ItemType Directory -Path $backup | Out-Null
 
