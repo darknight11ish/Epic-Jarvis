@@ -792,6 +792,116 @@ was simply never installed.
 
 ---
 
+# `jarvis_speech.py` — the module `voice-503.patch` was answering the absence of
+
+Ships as a whole file, not a patch, the same way `jarvis_research.py` does:
+`jarvis_speech.py` does not exist anywhere handed over, so there is nothing to
+patch against. It implements exactly the interface the four `/api/voice/*`
+routes already expect — `status()`, `hear(raw, source=...)`, `say(text)`,
+`set_wake_enabled(enabled)` — using sherpa-onnx, per
+`docs/ARCHITECTURE.md`'s "Decisions already taken" table.
+
+**Worth flagging rather than quietly overriding:** `backend/.gitignore` lists
+`jarvis_speech.py` alongside `jarvis_hud.py`, `jarvis_memory.py` and
+`jarvis_gate.py` — modules confirmed to genuinely exist on the owner's
+machine — under the rule "the backend sources themselves live on the owner's
+machine, not here... a stale copy in git would be worse than no copy." That
+placement, read alone, would suggest a real `jarvis_speech.py` might already
+be sitting on the owner's machine, unlike the ten modules rebuilt into
+`backend/rebuilt/` because they were confirmed to exist nowhere. Against
+that: `docs/ARCHITECTURE.md` §10, "Things that do not exist," states flatly
+"`jarvis_speech.py` — absent" with no hedge — contrast the very next line,
+about five *other* modules, which says "present nowhere in anything handed
+over. **Some may exist on the owner's machine**," a qualifier `jarvis_speech`
+pointedly does not get. Read together, the more likely explanation is that
+the `.gitignore` entry is prophylactic boilerplate for every known backend
+module name rather than a claim that this one currently exists — but this
+file is committed with `git add -f` specifically *because* that is a
+judgment call on evidence that disagrees with itself, not a settled fact.
+**If a real `jarvis_speech.py` does turn out to already exist on your
+machine: do not let this one overwrite it.** Diff the two first — this one
+was written to the interface the patches already expect, so if the real file
+implements the same four functions, keeping yours and discarding this one
+loses nothing.
+
+## Order matters, and it is the one thing this file exists to protect
+
+`hear()` runs the owner-voice check (`jarvis_voice.verify()`, rebuilt in an
+earlier pass) **before** it ever runs speech-to-text. A voice that is not the
+owner's is never turned into words — refusing after transcribing would leave
+a stranger's speech in memory on the way to saying no. `test_speech.py` proves
+this with real code, not a comment: it patches the transcription function to
+raise `AssertionError` if it is ever called, then drives `hear()` with a clip
+that matches no enrolled profile. If the ordering were ever reversed, that
+test fails instead of merely reading wrong.
+
+## A disagreement recorded rather than silently resolved
+
+`jarvis-framework.toml`'s own `[voice]` section — the real, checked-in
+config — reads `stt_engine = "faster-whisper"` / `stt_model = "small.en"`,
+naming a different engine than this file implements, and its own comment
+names `openWakeWord` as the wake-word engine. Neither `faster_whisper` nor
+`openwakeword` is installed anywhere this was written or tested; only
+`sherpa_onnx` is. Rather than overwrite those keys — silently breaking
+whatever already reads them — this file adds its own (`sherpa_stt_model`,
+`sherpa_stt_tokens`, `tts_model`, `tts_voices`, `tts_tokens`, `tts_data_dir`,
+…) and only engages sherpa-onnx STT when `stt_engine = "sherpa-onnx"` is set
+explicitly. Until that line is added, `status()` says so in its `note` field
+rather than pretending to be the active engine. TTS has no such conflict —
+the TOML has no TTS section — so `tts_engine` defaults to `"sherpa-onnx"`.
+
+## What is not here
+
+Model files. No STT model, no Kokoro voice, no Silero VAD weight ships in
+this repository or was available anywhere this was built — they are tens to
+hundreds of megabytes of binary ONNX assets that belong on the owner's own
+machine. Every engine is constructed lazily, on first real use, from paths
+read out of `[voice]`; verified against the real, installed `sherpa_onnx`
+package that pointing any of its three model configs at a nonexistent path
+raises `RuntimeError` — not a hang, not a process abort — so a missing or
+corrupt model degrades to an honest "not available" rather than a crash.
+`status()` reports `stt_available`/`tts_available` from a cheap file-existence
+check, not by constructing the model, so polling it never pays for a load.
+
+**Not done in this pass, and why:** wiring the desktop's mic button to this
+module instead of the disabled Web Speech API (`hud_bootstrap.js` §2b, "when
+the local pipeline lands, this block is what to delete"). `jarvis_hud.html`'s
+actual mic-button JavaScript — what it calls on `start()`, what shape it
+expects back — is vendored from the backend and not visible anywhere in this
+repository, the same category of gap as `jarvis_gate.py`'s real interface.
+Building a replacement without seeing what it replaces would be guessing at
+an invisible contract, which is exactly what this project's own rules exist
+to prevent. What is real and ready for that wiring: the four routes above,
+backed by real code, reachable the moment `stt_engine`/`tts_engine` name
+`sherpa-onnx` and the model paths point at real files.
+
+**Also not done:** routing `set_wake_enabled()` through an approval gate.
+The route's own comment says turning on the wake word "is gated as
+`change_own_config`, because widening where Jarvis listens is a change to
+its exposure" — but `jarvis_gate.py`'s real `check()`/`decide()` signature is
+not visible anywhere in this repository either, so `set_wake_enabled()` here
+takes effect immediately, in its own small state file
+(`~/.openjarvis/voice/wake_override.json`), deliberately not the framework
+TOML. Wiring a real gate check in front of it is left for whoever holds
+`jarvis_gate.py`'s actual source, the same shape of gap already recorded
+above for the secret-scan and denial-constraint features.
+
+## Test it
+
+```powershell
+python test_speech.py
+```
+
+Twenty-two checks, against the real `sherpa_onnx` package and the real
+`jarvis_voice` gate — no mocks for either. A synthesised WAV clip is encoded,
+decoded and compared sample-for-sample; a real spectral voice profile is
+enrolled and then matched against the same clip and refused against a
+different one; engine construction is pointed at files that do not exist and
+confirmed to degrade rather than raise or hang; and `status()` is proven not
+to construct an engine just to report on one.
+
+---
+
 # `degrade-filter.patch` — read this one first
 
 **A cloud turn that stepped down to the local model and back out again sent
