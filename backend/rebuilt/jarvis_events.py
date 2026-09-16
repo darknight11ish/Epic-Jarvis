@@ -1,0 +1,604 @@
+"""jarvis_events.py - the one event bus. A doorbell, not a database.
+
+PART RECOVERED, PART REBUILT. READ THIS FIRST.
+
+The original is gone - see jarvis_framework.py for where it was searched for.
+But unlike most of the missing ten, a real fraction of this file survived, as
+context lines inside the patches in `backend/`. These are VERBATIM original
+source, not reconstruction:
+
+    the Event dataclass and its four fields      extraction-wiring.patch @ 63
+    _poll_approvals's note()/data.update() shape extraction-wiring.patch @ 159
+    POLLERS = [_poll_approvals, _poll_power, _poll_persona]              @ 255
+    class Pump                                                          @ 258
+    _DOORBELL_KEYS and _doorbell_item            event-allowlist.patch @ 181
+    the notice passthrough                       approval-notice.patch @ 223
+
+The wire format is not guesswork either. `JARVIS-API.md` section 3 specifies
+it exactly - frame layout, event kinds, the 512-event ring, the 20-second
+keepalive, `hello.stale` - and three clients already parse it. Where this file
+had to be invented, the comment says INFERRED.
+
+THE ONE RULE, from JARVIS-API.md, and everything here follows from it:
+
+    "An event says SOMETHING CHANGED, not HERE IS THE STATE. The bus is a
+     doorbell, not a database."
+
+That is why `note()` exists and why `_doorbell_item` throws almost everything
+away. An event that carried the state would be a second, unauthenticated copy
+of /api/pending - and it reaches lock screens.
+
+WHAT WENT WRONG HERE BEFORE, so it is not reintroduced:
+
+  * Nothing ever STARTED the pump. `Pump` existed, `POLLERS` listed three
+    pollers, the docstring said "Started by the proxy" - and the proxy never
+    instantiated it. `approval` events were documented, parsed by both
+    clients, and fiction. Fixed by events-pump.patch, in jarvis_hud.
+  * The doorbell shipped `raised` - the field that quotes hostile text - to
+    every subscriber, because it filtered with a DENYLIST naming `detail` and
+    `prompt`, and `raised` was added later. It is an allowlist now, and
+    `raised` travels as a boolean.
+"""
+from __future__ import annotations
+
+import json
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Callable, Iterator, Optional
+
+# --------------------------------------------------------------------------
+#   Tuning
+# --------------------------------------------------------------------------
+
+#: How many events the ring holds. JARVIS-API.md names this number to clients:
+#: "hello.stale == true means you fell off the back of the ring buffer (512
+#: events)". Changing it changes a documented contract.
+RING = 512
+
+#: Seconds between poller sweeps. Printed at startup by events-pump.patch as
+#: "pump on, {n} pollers every {POLL_SECONDS:g}s", so it is a float and small.
+POLL_SECONDS = 1.0
+
+#: Seconds between `: keepalive` comment lines. JARVIS-API.md tells clients
+#: "~20 s" and that a longer silence means the connection is dead - so this
+#: must stay at or under that, or a healthy stream looks dead.
+KEEPALIVE_SECONDS = 20.0
+
+#: How long a stream is held open before the server closes it politely. The
+#: HUD's own comment says "the stream lives for an hour with keepalives".
+STREAM_MAX_SECONDS = 3600.0
+
+#: What a client should wait before reconnecting, in milliseconds. Sent as the
+#: SSE `retry:` field and echoed in hello.retry_ms.
+RETRY_MS = 3000
+
+#: The API version reported by hello(). JARVIS-API.md section 2: "api": 1.
+API_VERSION = 1
+
+
+# --------------------------------------------------------------------------
+#   An event
+# --------------------------------------------------------------------------
+#
+# VERBATIM from extraction-wiring.patch. The comment listing the kinds is the
+# original's, and it is one longer than JARVIS-API.md's list - the doc says
+# hello, approval, finding, power, persona, model, voice; the code also has
+# `voice`. Kept as the code had it, because the code is what clients met.
+
+@dataclass
+class Event:
+    id: int
+    kind: str                  # approval | finding | power | persona | model | voice | hello
+    data: dict = field(default_factory=dict)
+    at: float = field(default_factory=time.time)
+
+    def frame(self) -> bytes:
+        """This event as an SSE frame.
+
+        INFERRED - the original's framing code did not survive, but the exact
+        output is pinned by JARVIS-API.md's worked example:
+
+            id: 414
+            event: approval
+            data: {"key":"approvals","value":["a1","a2"],"count":2,"items":[...]}
+
+        Newlines inside the payload are the one hazard: a raw \\n in a data
+        line ends the frame early and the client sees two broken events rather
+        than one good one. json.dumps escapes them, so the payload is always
+        one line - but the JSON is generated defensively anyway, because a
+        value that will not serialise must not take the whole stream down.
+        """
+        try:
+            payload = json.dumps(self.data, default=str, ensure_ascii=False)
+        except Exception:
+            payload = json.dumps({"error": "unserialisable"})
+        # No stray newline can reach the wire even if json.dumps is replaced.
+        payload = payload.replace("\r", " ").replace("\n", " ")
+        return (f"id: {self.id}\n"
+                f"event: {self.kind}\n"
+                f"data: {payload}\n\n").encode("utf-8")
+
+
+# --------------------------------------------------------------------------
+#   The bus
+# --------------------------------------------------------------------------
+
+class Bus:
+    """A ring of recent events, and the waiters watching it.
+
+    Thread-safe because the pollers run on the pump's thread while HTTP
+    handlers publish from theirs, and `stream()` reads from a third per
+    connected client.
+    """
+
+    def __init__(self, size: int = RING) -> None:
+        self._size = max(8, int(size))
+        self._events: list[Event] = []
+        self._next = 1
+        self._seen: dict[str, object] = {}
+        self._cv = threading.Condition()
+
+    # ---- writing ----------------------------------------------------------
+
+    def publish(self, kind: str, data: Optional[dict] = None) -> Event:
+        """Announce that something changed. Always emits.
+
+        Five surviving call sites use this, all as BUS.publish(kind, dict).
+        """
+        with self._cv:
+            ev = Event(id=self._next, kind=str(kind),
+                       data=dict(data or {}), at=time.time())
+            self._next += 1
+            self._events.append(ev)
+            # Trim from the front. A client that was on an id now gone will be
+            # told `stale` by hello() rather than silently missing events.
+            if len(self._events) > self._size:
+                del self._events[:len(self._events) - self._size]
+            self._cv.notify_all()
+            return ev
+
+    def note(self, key: str, value: object, kind: str) -> Optional[Event]:
+        """Announce a change ONLY if this key's value actually changed.
+
+        Shape recovered from extraction-wiring.patch @ 159, which calls it and
+        then conditionally updates the result:
+
+            ev = bus.note("approvals", ids, "approval")
+            if ev is not None:
+                ev.data.update({...})
+
+        The `is not None` is the whole point: pollers run every second, and
+        without this every subscriber would get 86,400 identical "approvals
+        unchanged" events a day. Returning None when nothing moved is what
+        makes a one-second poll acceptable on a phone.
+
+        The caller mutating `ev.data` afterwards means the Event this returns
+        must be the same object that is in the ring - not a copy - or those
+        extra fields would never reach a subscriber.
+        """
+        try:
+            # Compared by value, and normalised so an equal-but-differently-
+            # ordered list does not read as a change. The approvals poller
+            # already sorts its ids; this makes that not matter.
+            token = json.dumps(value, sort_keys=True, default=str)
+        except Exception:
+            token = repr(value)
+
+        with self._cv:
+            if self._seen.get(key) == token:
+                return None
+            self._seen[key] = token
+
+        return self.publish(kind, {"key": key, "value": value})
+
+    def forget(self, key: Optional[str] = None) -> None:
+        """Drop the last-seen value so the next note() fires. INFERRED - used
+        by tests that need a poller to re-announce without changing state."""
+        with self._cv:
+            if key is None:
+                self._seen.clear()
+            else:
+                self._seen.pop(key, None)
+
+    # ---- reading ----------------------------------------------------------
+
+    @property
+    def latest(self) -> int:
+        with self._cv:
+            return self._next - 1
+
+    @property
+    def oldest(self) -> int:
+        with self._cv:
+            return self._events[0].id if self._events else self._next
+
+    def since(self, last_id: int) -> tuple:
+        """Events after last_id, AND the new cursor.
+
+        A PAIR, not a list. test_jobs.py:807 unpacks it:
+
+            got, _ = self.bus.since(0)
+
+        and the shape is right for what it is for - a caller resuming a stream
+        needs to know where it got to, and deriving that from `out[-1].id`
+        breaks on an empty result, which is the common case.
+        """
+        with self._cv:
+            out = [e for e in self._events if e.id > last_id]
+            return out, (out[-1].id if out else max(last_id, self._next - 1))
+
+    def wait(self, last_id: int, timeout: float) -> list[Event]:
+        """Block until there is something after last_id, or timeout."""
+        deadline = time.monotonic() + timeout
+        with self._cv:
+            while True:
+                out = [e for e in self._events if e.id > last_id]
+                if out:
+                    return out
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return []
+                self._cv.wait(left)
+
+
+#: The one bus. Six surviving call sites reach it as `jarvis_events.BUS`.
+BUS = Bus()
+
+
+# --------------------------------------------------------------------------
+#   Activity
+# --------------------------------------------------------------------------
+
+_ACTIVITY = {"state": "idle", "detail": "", "at": time.time()}
+
+
+def set_activity(state: str, detail: str = "") -> None:
+    """What Jarvis is doing right now. Called by jarvis_hud._activity.
+
+    Deduplicated through note(), because this is called around every turn and
+    an unchanged "idle" does not need to wake a sleeping phone's radio.
+    """
+    _ACTIVITY.update({"state": str(state), "detail": str(detail or ""),
+                      "at": time.time()})
+    BUS.note("activity", {"state": _ACTIVITY["state"],
+                          "detail": _ACTIVITY["detail"]}, "activity")
+
+
+def activity() -> dict:
+    return dict(_ACTIVITY)
+
+
+# --------------------------------------------------------------------------
+#   The doorbell
+# --------------------------------------------------------------------------
+#
+# VERBATIM from event-allowlist.patch, including the reasoning, because this
+# is the third place in this project where a rule stated in one module was not
+# enforced at the next one along.
+
+# The approval event is a DOORBELL. Everything needed to render the queue comes
+# from /api/pending, behind the same token; this says only that something is
+# waiting, and enough about it to sort and de-duplicate.
+#
+# A denylist fails silently - a new column ships itself. An allowlist fails
+# visibly - a new field is missing until someone adds it, and the person who
+# added the column is the person who notices.
+_DOORBELL_KEYS = ("id", "action", "tier", "created")
+
+
+def _doorbell_item(item: dict) -> dict:
+    """One queue entry, reduced to what a notification may say.
+
+    Everything needed to RENDER the queue comes from /api/pending, behind the
+    same token. This says only that something is waiting, and enough about it
+    to sort and de-duplicate.
+    """
+    out = {k: item.get(k) for k in _DOORBELL_KEYS}
+
+    # The notice IS allowed through, and it is the one piece of prose that is.
+    # jarvis_gate.notice_for builds it from the action name and the risk table
+    # and never reads detail, prompt or the contents of raised - so unlike
+    # everything else on the row it cannot carry text somebody else wrote.
+    notice = item.get("notice")
+    if isinstance(notice, dict):
+        out["notice"] = {k: notice.get(k) for k in
+                         ("title", "body", "weight", "deny_ok", "approve_ok")}
+
+    # A BOOLEAN, never the object. The rule in docs/ARCHITECTURE.md - "an item
+    # carrying `raised` never belongs in a group that can be actioned quickly"
+    # - needs to survive out here, and a client cannot apply it without
+    # knowing the flag. Its CONTENTS are the attacker's words and stay behind
+    # the token.
+    out["raised"] = bool(item.get("raised"))
+    return out
+
+
+# --------------------------------------------------------------------------
+#   Pollers
+# --------------------------------------------------------------------------
+#
+# Each one answers "has this changed?" and says nothing when it has not. They
+# import lazily and swallow their own failures on purpose: a poller for a
+# module that is not installed must not stop the other two, and the pump
+# thread must not die because a database was briefly locked.
+
+def _poll_approvals(bus: Bus) -> None:
+    try:
+        import jarvis_gate
+        pending = jarvis_gate.pending()
+    except Exception:
+        return
+    if not isinstance(pending, list):
+        return
+
+    ids = sorted(str(p.get("id", "")) for p in pending)
+    ev = bus.note("approvals", ids, "approval")
+    if ev is not None:
+        ev.data.update({"count": len(pending),
+                        "items": [_doorbell_item(i) for i in pending[:10]]})
+
+
+def _poll_power(bus: Bus) -> None:
+    try:
+        import jarvis_power
+        mode = jarvis_power.current()
+    except Exception:
+        return
+    bus.note("power", mode, "power")
+
+
+def _poll_persona(bus: Bus) -> None:
+    try:
+        import jarvis_hud
+        node = jarvis_hud.persona_state()          # type: ignore[attr-defined]
+    except Exception:
+        return
+    bus.note("persona", node, "persona")
+
+
+def _poll_proposals(bus: Bus) -> None:
+    """Memory proposals waiting for review. Added by extraction-wiring.
+
+    Counts only. A proposal's TEXT is a sentence extracted from a private
+    conversation, which is the category the privacy section says never leaves
+    the device - and an event reaches a lock screen.
+    """
+    try:
+        import jarvis_extract
+        rows = jarvis_extract.pending()
+    except Exception:
+        return
+    if not isinstance(rows, list):
+        return
+    ev = bus.note("proposals", len(rows), "finding")
+    if ev is not None:
+        ev.data.update({"count": len(rows)})
+
+
+#: VERBATIM from extraction-wiring.patch @ 255, plus _poll_proposals, which
+#: that same patch adds. events-pump.patch prints len(POLLERS) at startup.
+POLLERS: list[Callable] = [_poll_approvals, _poll_power, _poll_persona,
+                           _poll_proposals]
+
+
+# --------------------------------------------------------------------------
+#   The pump
+# --------------------------------------------------------------------------
+
+class Pump:
+    """Runs the pollers on a background thread. Started by the proxy.
+
+    "Started by the proxy" is the original docstring, quoted in
+    events-pump.patch - and for a long time it was false, because this file is
+    not the proxy and jarvis_hud never instantiated it. The patch fixes the
+    other half. This half must keep its side of the bargain: never raise out
+    of the thread, and never let one poller's failure stop the others.
+    """
+
+    def __init__(self, engine: object = None, bus: Optional[Bus] = None,
+                 interval: float = POLL_SECONDS) -> None:
+        # `engine=` is how events-pump.patch constructs it:
+        #     _PUMP = _ev.Pump(engine=_ENGINE)
+        # Nothing surviving shows what the pump does with it, so it is kept
+        # and exposed, not used. Inventing a use would be worse than holding
+        # it: a wrong use of the engine is a wrong answer, an unused one is
+        # only a missing feature. INFERRED, and deliberately inert.
+        self.engine = engine
+        self.bus = bus or BUS
+        self.interval = max(0.05, float(interval))
+        self._thread: Optional[threading.Thread] = None
+        self._stop = threading.Event()
+        self.ticks = 0
+        self.errors = 0
+
+    def start(self) -> "Pump":
+        if self._thread and self._thread.is_alive():
+            return self
+        self._stop.clear()
+        # daemon: the pump must never be the reason the process will not exit.
+        self._thread = threading.Thread(target=self._run, name="jarvis-events",
+                                        daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self, timeout: float = 2.0) -> None:
+        self._stop.set()
+        t = self._thread
+        if t and t.is_alive():
+            t.join(timeout)
+
+    @property
+    def running(self) -> bool:
+        return bool(self._thread and self._thread.is_alive())
+
+    def tick(self) -> None:
+        """One sweep. Separate from _run so a test can drive it without a
+        thread and without waiting a second per assertion."""
+        for poll in POLLERS:
+            try:
+                poll(self.bus)
+            except Exception:
+                # Counted, not printed. A poller that fails every second would
+                # otherwise produce 86,400 identical lines a day, and the
+                # count is what tells you it is happening.
+                self.errors += 1
+        self.ticks += 1
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            self.tick()
+            # Event.wait rather than sleep, so stop() is immediate instead of
+            # up to a full interval late.
+            self._stop.wait(self.interval)
+
+
+# --------------------------------------------------------------------------
+#   The stream
+# --------------------------------------------------------------------------
+
+def stream(last_id: object = 0, bus: Optional[Bus] = None) -> Iterator[bytes]:
+    """The SSE body. Yields bytes; jarvis_hud writes each chunk and flushes.
+
+    Frame layout is fixed by JARVIS-API.md section 3 and by three clients that
+    already parse it.
+
+    `last_id` arrives from a `Last-Event-ID` header or a `?since=` query, so it
+    is whatever the client sent - a string, empty, or nonsense. Coerced here
+    rather than trusted: a ValueError in this generator closes the stream on
+    connect, which looks to the client exactly like the server being down.
+    """
+    bus = bus or BUS
+    try:
+        cursor = int(str(last_id).strip() or 0)
+    except (TypeError, ValueError):
+        cursor = 0
+    if cursor < 0:
+        cursor = 0
+
+    # `stale` means "you fell off the back of the ring - re-fetch everything
+    # and do not replay". Computed BEFORE anything is sent, because the ring
+    # can move while this stream is being set up.
+    oldest = bus.oldest
+    latest = bus.latest
+    stale = bool(cursor and cursor < oldest - 1)
+
+    yield f"retry: {RETRY_MS}\n\n".encode("utf-8")
+
+    hello_ev = Event(id=latest, kind="hello", data={
+        "resumed_from": cursor,
+        "stale": stale,
+        "latest": latest,
+        "retry_ms": RETRY_MS,
+    })
+    yield hello_ev.frame()
+
+    # A stale client is told to re-fetch, so replaying the ring at it would be
+    # the exact thing rule 2 forbids. Start it at the live edge.
+    if stale:
+        cursor = latest
+
+    started = time.monotonic()
+    last_beat = time.monotonic()
+
+    while time.monotonic() - started < STREAM_MAX_SECONDS:
+        # A short wait, not KEEPALIVE_SECONDS: the keepalive deadline has to be
+        # checked on a timer of its own, or a quiet bus would delay it.
+        events = bus.wait(cursor, timeout=1.0)
+        if events:
+            for ev in events:
+                yield ev.frame()
+                cursor = max(cursor, ev.id)
+            last_beat = time.monotonic()
+            continue
+
+        if time.monotonic() - last_beat >= KEEPALIVE_SECONDS:
+            # A comment line. Every SSE client ignores these; their ABSENCE is
+            # how a client detects a dead connection the socket has not
+            # noticed yet.
+            yield b": keepalive\n\n"
+            last_beat = time.monotonic()
+
+
+# --------------------------------------------------------------------------
+#   Handshake
+# --------------------------------------------------------------------------
+
+def _capability_probe() -> dict:
+    """What is installed on THIS machine right now.
+
+    JARVIS-API.md is emphatic about why this is probed rather than declared:
+    "A capability that is false means hide the UI for it, not show a button
+    that 404s." So each one is an actual import attempt, not a constant.
+    """
+    def has(mod: str) -> bool:
+        try:
+            __import__(mod)
+            return True
+        except Exception:
+            return False
+
+    caps: dict = {
+        "approvals": has("jarvis_gate"),
+        "memory": has("jarvis_memory"),
+        "models": has("jarvis_models"),
+        "skills": has("jarvis_skills"),
+        "power": has("jarvis_power"),
+        "voice": has("jarvis_voice"),
+        "persona": has("jarvis_style"),
+        "connectors": {},
+    }
+
+    # Voice is the one the doc singles out: "false until the models are
+    # downloaded", so importable is not the same as available. Ask the module
+    # if it can say.
+    if caps["voice"]:
+        try:
+            import jarvis_voice
+            st = jarvis_voice.status()
+            if isinstance(st, dict):
+                caps["voice"] = st
+        except Exception:
+            caps["voice"] = False
+    return caps
+
+
+def hello(client: str = "") -> dict:
+    """The /api/version handshake body. Shape from JARVIS-API.md section 2.
+
+    `client` is the X-Jarvis-Client header. It is echoed so a client can
+    confirm the server saw it, and it is NOT used for anything else - the
+    doc's own note says "Do not rely on X-Jarvis-Client for security".
+    """
+    return {
+        "api": API_VERSION,
+        "server": "jarvis-hud",
+        "client": str(client or ""),
+        "auth": {
+            "token_required": True,
+            "header": "X-Jarvis-Token",
+            "note": "Native clients: always the header. "
+                    "Do not rely on X-Jarvis-Client for security.",
+        },
+        "events": {
+            "path": "/api/events",
+            "resume_header": "Last-Event-ID",
+            "resume_query": "since",
+            "retry_ms": RETRY_MS,
+            "ring": RING,
+            "latest": BUS.latest,
+        },
+        "capabilities": _capability_probe(),
+    }
+
+
+def status() -> dict:
+    """INFERRED. For `python jarvis_events.py` and the brain map."""
+    return {"latest": BUS.latest, "oldest": BUS.oldest,
+            "ring": RING, "pollers": len(POLLERS),
+            "poll_seconds": POLL_SECONDS, "activity": activity()}
+
+
+if __name__ == "__main__":
+    for k, v in status().items():
+        print(f"  {k:<16} {v}")

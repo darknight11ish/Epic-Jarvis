@@ -22,3 +22,12 @@ jarvis_persona.py
 jarvis_structured.py
 jarvis_speech.py
 *.py.bak
+
+# EXCEPT the rebuilt ones. backend/rebuilt/ holds modules reconstructed after
+# ten of the backend's twenty-six were found to exist nowhere - not on the
+# machine, not in any installer, not in a 104 MB conversation export, not in
+# any local transcript. The rule above ("a stale copy in git is worse than no
+# copy") assumed the real file existed somewhere else. For these ten there is
+# no elsewhere, so this directory IS the only copy and must be committed.
+!rebuilt/
+!rebuilt/**
