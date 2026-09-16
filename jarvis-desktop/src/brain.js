@@ -634,6 +634,30 @@ function renderMemory() {
 let memoryAsOf = null;
 let memoryAsOfRows = null;
 
+/**
+ * Asks, optionally, for the date a fact stopped being true — the bi-temporal
+ * correction `jarvis_memory.retire()` has supported since `bitemporal.patch`
+ * but that neither Reword nor Forget had any way to ask for until now.
+ *
+ * Returns a unix-seconds timestamp, `null` for "just now" (the field left
+ * blank — the common case, and identical to the old behaviour), or
+ * `undefined` if the owner cancelled. `undefined` is a distinct answer from
+ * `null` on purpose: the caller must abort the whole action on a cancel,
+ * not quietly fall back to "just now" for a date the owner never confirmed.
+ */
+function promptValidTo(message) {
+  const raw = window.prompt(message, "");
+  if (raw === null) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const ts = Date.parse(trimmed);
+  if (Number.isNaN(ts)) {
+    window.alert(`"${trimmed}" is not a date I understand. Try YYYY-MM-DD.`);
+    return undefined;
+  }
+  return ts / 1000;
+}
+
 /** Re-read the pane's own sections and repaint. Used after every write. */
 async function refreshMemory() {
   await load(VIEW_SECTIONS.memory, { quiet: true });
@@ -851,7 +875,16 @@ function renderFacts() {
             if (next === null) return;
             const text = next.trim();
             if (!text || text === String(f.text || "")) return;
-            await memoryWrite("brain_memory_edit", { id: Number(f.id), text },
+            const validTo = promptValidTo(
+              "When did the old wording stop being true?\n\n" +
+              "Leave blank for \"just now\" — the usual case. Only answer this " +
+              "if the change is really old news, like correcting an address " +
+              "you moved out of months ago."
+            );
+            if (validTo === undefined) return; // the date prompt was cancelled
+            const args = { id: Number(f.id), text };
+            if (validTo !== null) args.valid_to = validTo;
+            await memoryWrite("brain_memory_edit", args,
               "Reworded. The old wording is kept as history.");
           }, { title: "Replace the wording. The old one is retired, not erased." }),
           button("Forget", async () => {
@@ -860,7 +893,16 @@ function renderFacts() {
               "It stays in the history but Jarvis will not use it again. " +
               "This cannot be undone."
             )) return;
-            await memoryWrite("brain_memory_forget", { id: Number(f.id) },
+            const validTo = promptValidTo(
+              "When did this actually stop being true?\n\n" +
+              "Leave blank for \"just now\" — the usual case. Only answer this " +
+              "if it stopped being true a while ago and you are only telling " +
+              "Jarvis about it now."
+            );
+            if (validTo === undefined) return; // the date prompt was cancelled
+            const args = { id: Number(f.id) };
+            if (validTo !== null) args.valid_to = validTo;
+            await memoryWrite("brain_memory_forget", args,
               "Forgotten. It stays in the history and will not be recalled.");
           }, { danger: true, title: "Stop this being recalled. There is no undo." })
         );

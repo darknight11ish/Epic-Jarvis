@@ -129,6 +129,47 @@ def t_one_id_at_a_time():
           '"unchanged": True' in block)
 
 
+def t_backdated_corrections_are_reachable():
+    """The gap a prior audit found: the store has supported "this was true
+    until date X" since bitemporal.patch (retire(valid_to=...), add()'s
+    supersede fallback), but nothing ever let a caller supply a date - both
+    routes always retired at "now". These pin that a caller finally can.
+    """
+    src = SRC.read_text(encoding="utf-8")
+    i = src.index('route in ("/api/memory/forget"')
+    block = src[i:src.index('if route == "/api/memory/decide":', i)]
+
+    check("forget accepts an optional valid_to",
+          'valid_to = body.get("valid_to")' in block)
+    check("forget passes it straight through to retire(), not just to now",
+          'st.retire(body["id"], valid_to=valid_to)' in block)
+    check("edit accepts the same optional field",
+          block.count('valid_to = body.get("valid_to")') == 2,
+          "both forget and edit need their own valid_to, since they are two "
+          "separate branches of the same route")
+    check("a non-numeric valid_to is refused, not coerced or ignored",
+          block.count("valid_to must be a unix timestamp") == 2)
+
+    # Ordering matters: add()'s own supersede fallback ("callers that know
+    # the real date call retire() with it before adding", jarvis_memory.py)
+    # only works if retire() actually runs BEFORE add_fact() in the edit
+    # branch - the other order silently retires at "now" regardless of what
+    # the caller sent.
+    edit_i = block.index('# /api/memory/edit')
+    edit_block = block[edit_i:]
+    retire_at = edit_block.index('st.retire(body["id"], valid_to=valid_to)')
+    add_at = edit_block.index('add_fact(text, source="edited"')
+    check("a backdated edit retires the old fact BEFORE superseding it",
+          retire_at < add_at,
+          "add()'s same-fact supersede path only backdates correctly when "
+          "retire(valid_to=...) has already run")
+
+    check("an edit with the same wording but a new valid_to is NOT a no-op",
+          'text == str(fact.get("text") or "") and valid_to is None' in block,
+          "supplying only a date to correct is a real correction, not "
+          "nothing happening")
+
+
 def t_reads_are_honest():
     src = SRC.read_text(encoding="utf-8")
     i = src.index('if path == "/api/memory/facts":')
@@ -162,6 +203,7 @@ def t_it_is_reachable():
 
 if __name__ == "__main__":
     for fn in (t_learning_switch, t_qs_int, t_one_id_at_a_time,
+               t_backdated_corrections_are_reachable,
                t_reads_are_honest, t_it_is_reachable):
         print(f"\n--- {fn.__name__} ---")
         try:

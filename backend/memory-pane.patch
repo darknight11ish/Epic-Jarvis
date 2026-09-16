@@ -85,7 +85,7 @@
                  if path == "/api/memory/status":
                      return self._send(200, {"available": True, **jarvis_memory.store().status(),
                                              "sleep_time": {"enabled": jarvis_sleep.enabled(),
-@@ -1853,6 +1915,68 @@
+@@ -1853,6 +1915,89 @@
                  return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
              return self._send(code, out)
  
@@ -124,8 +124,15 @@
 +                # It does not delete: the row stays and stops being current, so
 +                # the history of what you once believed survives. Nothing here
 +                # can remove a row, and that is on purpose.
++                #
++                # `valid_to`, optional: when the fact you are forgetting
++                # actually stopped being true, if that was before now. Absent,
++                # retire() defaults to now exactly as it always has.
++                valid_to = body.get("valid_to")
++                if valid_to is not None and not isinstance(valid_to, (int, float)):
++                    return self._send(400, {"error": "valid_to must be a unix timestamp"})
 +                try:
-+                    ok = st.retire(body["id"])
++                    ok = st.retire(body["id"], valid_to=valid_to)
 +                except Exception as exc:
 +                    return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
 +                return self._send(200 if ok else 409, {
@@ -139,9 +146,23 @@
 +            text = " ".join(str(body.get("text") or "").split())
 +            if len(text) < 3:
 +                return self._send(400, {"error": "need the new wording"})
-+            if text == str(fact.get("text") or ""):
++            # Same optional field as forget, same meaning: when the fact being
++            # replaced stopped being true, if that was before now rather than
++            # at the moment of this correction.
++            valid_to = body.get("valid_to")
++            if valid_to is not None and not isinstance(valid_to, (int, float)):
++                return self._send(400, {"error": "valid_to must be a unix timestamp"})
++            if text == str(fact.get("text") or "") and valid_to is None:
 +                return self._send(200, {"ok": True, "unchanged": True, "id": body["id"]})
 +            try:
++                # A backdated correction retires the old fact with the real
++                # date FIRST - the workflow add()'s own supersede logic
++                # expects (jarvis_memory.py: "callers that know the real date
++                # call retire() with it before adding"). Without a date,
++                # add_fact's own supersede path retires it at "now" exactly
++                # as before.
++                if valid_to is not None:
++                    st.retire(body["id"], valid_to=valid_to)
 +                # Supersede rather than overwrite. Editing a fact in place would
 +                # throw away when the old wording was true, which is the one
 +                # thing this store is built to keep.

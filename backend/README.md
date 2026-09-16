@@ -36,7 +36,7 @@ on a throwaway copy instead.
 | `voice-503.patch` | `jarvis_hud.py` | Four voice routes answered a missing speech module in four different shapes, two of them a 500 for something that did not break. |
 | `degrade-filter.patch` | `jarvis_hud.py` | **A cloud turn that stepped down to local and back out again went upstream unfiltered.** The worst thing in this directory. |
 | `vram-estimate.patch` | `jarvis_models.py` | The estimator that advises on model choice was wrong in both directions at once. |
-| `memory-pane.patch` | `jarvis_hud.py` | Routes to read, edit, forget and export what Jarvis has learned. Gives `retire()` its first caller. Needs `extraction-wiring` for the learning switch. |
+| `memory-pane.patch` | `jarvis_hud.py` | Routes to read, edit, forget, backdate and export what Jarvis has learned. Gives `retire()` its first caller. Needs `extraction-wiring` for the learning switch. |
 | `token-file.patch` | `jarvis_hud.py` | Makes a token on first run. **The phone has never been pairable without this.** |
 | `bitemporal.patch` | `jarvis_memory.py`, `jarvis_hud.py` | The second time axis. Adds `retired_at` — when we stopped believing a fact, as distinct from when it stopped being true. Needs `memory-safety` and `memory-pane`. |
 | `embedding-guard.patch` | `jarvis_memory.py` | A NaN or all-zero embedding was stored without complaint and the row was then unreachable forever. Needs `memory-safety`. |
@@ -888,8 +888,8 @@ in, was in.
 |---|---|
 | `GET /api/memory/facts?limit=` | every fact, newest first, **retired ones included**, each marked `current` |
 | `GET /api/memory/export` | the whole store as JSON, for a copy that does not depend on this program continuing to work |
-| `POST /api/memory/forget` | `{id}` → `retire()`. Its first caller. |
-| `POST /api/memory/edit` | `{id, text}` → supersede |
+| `POST /api/memory/forget` | `{id, valid_to?}` → `retire()`. Its first caller. |
+| `POST /api/memory/edit` | `{id, text, valid_to?}` → supersede |
 | `POST /api/memory/learning` | `{enabled}` → the switch |
 
 ## Four things it deliberately does
@@ -910,6 +910,18 @@ makes a superseded fact look deleted when it is not.
 **One integer id per write, no list form.** Same rule as
 `/api/memory/decide`. Forgetting is irreversible, so a list form would be an
 approve-all with another name.
+
+**A correction can be backdated.** `bitemporal.patch` gave `retire()` a
+`valid_to` parameter and `add()` a documented workflow for using it — "call
+retire() with the real date before adding" — the moment this store learned
+"I moved in January" told in March. Nothing called either with a date until
+now: both routes always retired at "now", so the one case bitemporal.patch
+was built for was unreachable from any real UI. Both `forget` and `edit`
+now accept an optional `valid_to` (a unix timestamp) and pass it straight to
+`retire()` — `edit` calling it *before* `add_fact(supersedes=id)`, which is
+the order `add()`'s own same-fact fallback needs to backdate correctly
+rather than silently retiring at "now" regardless of what was sent. Omit it
+and both behave exactly as before.
 
 ## The learning switch, and its floor
 
@@ -936,14 +948,18 @@ still commute.
 python test_memory_pane.py
 ```
 
-Twenty-nine checks. The switch and the query-string clamp are lifted out of
+Thirty-four checks. The switch and the query-string clamp are lifted out of
 the source with `ast` and executed — including that a corrupt switch file reads
 as on rather than raising, and that `limit=all`, `limit=-1` and
 `limit=99999999` reach a `LIMIT` clause as the default, 1 and 5000 rather than
 as a traceback. The rest are controls on shape: that no write route grows a
 list form, that `forget` calls `retire()` and not a `DELETE`, that `edit` never
-emits an `UPDATE`, and that both new read routes are actually in the whitelist
-— because a route nothing can call is the defect this project keeps producing.
+emits an `UPDATE`, that both new read routes are actually in the whitelist
+— because a route nothing can call is the defect this project keeps producing
+— and that `valid_to` actually reaches `retire()` on both routes, rejects a
+non-numeric value, and is applied *before* `edit` supersedes rather than
+after, which is the one ordering that makes a backdated correction land as a
+correction rather than as "now" regardless of what was sent.
 
 ---
 

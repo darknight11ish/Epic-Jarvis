@@ -291,27 +291,42 @@ pub async fn brain_memory_decide(
 /// The server retires rather than deletes: the row stays and stops being
 /// current, so the history of what was once true survives. There is no undo,
 /// and the UI says so before asking.
+///
+/// `valid_to`, optional: unix seconds for when the fact actually stopped
+/// being true, if that was before now — "I moved in January" told in March.
+/// Omitted, the server retires at "now" exactly as it always has.
 #[tauri::command]
-pub async fn brain_memory_forget(app: AppHandle, id: i64) -> Result<serde_json::Value, String> {
-    post(&app, "/api/memory/forget", serde_json::json!({ "id": id })).await
+pub async fn brain_memory_forget(
+    app: AppHandle,
+    id: i64,
+    valid_to: Option<f64>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::json!({ "id": id });
+    if let Some(vt) = valid_to {
+        body["valid_to"] = serde_json::json!(vt);
+    }
+    post(&app, "/api/memory/forget", body).await
 }
 
 /// Rewords a fact by superseding it.
 ///
 /// Separate from forget because they are different powers: this one adds a
 /// replacement and can be corrected again, that one cannot be undone at all.
+///
+/// `valid_to`, optional, same meaning as [`brain_memory_forget`]'s: when the
+/// fact being replaced stopped being true, if not now.
 #[tauri::command]
 pub async fn brain_memory_edit(
     app: AppHandle,
     id: i64,
     text: String,
+    valid_to: Option<f64>,
 ) -> Result<serde_json::Value, String> {
-    post(
-        &app,
-        "/api/memory/edit",
-        serde_json::json!({ "id": id, "text": text }),
-    )
-    .await
+    let mut body = serde_json::json!({ "id": id, "text": text });
+    if let Some(vt) = valid_to {
+        body["valid_to"] = serde_json::json!(vt);
+    }
+    post(&app, "/api/memory/edit", body).await
 }
 
 /// Turns the background learner on or off.
