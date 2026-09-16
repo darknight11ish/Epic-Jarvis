@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-view="galaxy">
+<html lang="en" data-view="memory">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -50,18 +50,11 @@
              reachable by Tab — and `brain.js` moves it with the selection. -->
         <ul class="rail-nav" id="rail-nav" role="tablist" aria-label="Brain views" aria-orientation="vertical">
           <li>
-            <button class="rail-item" role="tab" id="tab-galaxy" data-goto="galaxy"
-                    aria-selected="true" aria-controls="view-galaxy" tabindex="0">
-              <span class="rail-glyph" aria-hidden="true">◍</span>
-              <span class="rail-label">Galaxy</span>
-            </button>
-          </li>
-          <li>
-            <button class="rail-item" role="tab" id="tab-live" data-goto="live"
-                    aria-selected="false" aria-controls="view-live" tabindex="-1">
-              <span class="rail-glyph" aria-hidden="true">≋</span>
-              <span class="rail-label">Live</span>
-              <span class="rail-count" id="count-live" hidden></span>
+            <button class="rail-item" role="tab" id="tab-memory" data-goto="memory"
+                    aria-selected="true" aria-controls="view-memory" tabindex="0">
+              <span class="rail-glyph" aria-hidden="true">✦</span>
+              <span class="rail-label">Memory</span>
+              <span class="rail-count" id="count-memory" hidden></span>
             </button>
           </li>
           <li>
@@ -72,14 +65,6 @@
             </button>
           </li>
           <li>
-            <button class="rail-item" role="tab" id="tab-memory" data-goto="memory"
-                    aria-selected="false" aria-controls="view-memory" tabindex="-1">
-              <span class="rail-glyph" aria-hidden="true">✦</span>
-              <span class="rail-label">Memory</span>
-              <span class="rail-count" id="count-memory" hidden></span>
-            </button>
-          </li>
-          <li>
             <button class="rail-item" role="tab" id="tab-work" data-goto="work"
                     aria-selected="false" aria-controls="view-work" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">▤</span>
@@ -87,7 +72,26 @@
               <span class="rail-count" id="count-work" hidden></span>
             </button>
           </li>
-          <li>
+          <!-- The other four views are unchanged and still fully wired — see
+               the module note in brain.js — just hidden until "Advanced" is
+               opened, so the window's everyday surface is the three things
+               most sessions actually need. -->
+          <li hidden>
+            <button class="rail-item" role="tab" id="tab-galaxy" data-goto="galaxy"
+                    aria-selected="false" aria-controls="view-galaxy" tabindex="-1">
+              <span class="rail-glyph" aria-hidden="true">◍</span>
+              <span class="rail-label">Galaxy</span>
+            </button>
+          </li>
+          <li hidden>
+            <button class="rail-item" role="tab" id="tab-live" data-goto="live"
+                    aria-selected="false" aria-controls="view-live" tabindex="-1">
+              <span class="rail-glyph" aria-hidden="true">≋</span>
+              <span class="rail-label">Live</span>
+              <span class="rail-count" id="count-live" hidden></span>
+            </button>
+          </li>
+          <li hidden>
             <button class="rail-item" role="tab" id="tab-trust" data-goto="trust"
                     aria-selected="false" aria-controls="view-trust" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">⛨</span>
@@ -95,7 +99,7 @@
               <span class="rail-count" id="count-trust" hidden></span>
             </button>
           </li>
-          <li>
+          <li hidden>
             <button class="rail-item" role="tab" id="tab-watch" data-goto="watch"
                     aria-selected="false" aria-controls="view-watch" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">◈</span>
@@ -104,6 +108,13 @@
             </button>
           </li>
         </ul>
+
+        <button class="rail-item rail-advanced-toggle" id="rail-advanced-toggle" type="button"
+                aria-expanded="false" aria-controls="rail-nav">
+          <span class="rail-glyph" aria-hidden="true">⋯</span>
+          <span class="rail-label">Advanced</span>
+          <span class="rail-count" id="count-advanced" hidden></span>
+        </button>
 
         <div class="rail-foot">
           <label class="rail-theme">

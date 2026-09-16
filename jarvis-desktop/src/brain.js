@@ -33,16 +33,26 @@ import {
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
-/** Every view, and what the topbar says about it. */
+/**
+ * Every view, and what the topbar says about it.
+ *
+ * Order here is the rail's order (see `TAB_ORDER` below): the three
+ * everyday views first, then the four moved behind "Advanced" — galaxy,
+ * live, trust, watch, unchanged and still fully wired, just not on the
+ * rail by default.
+ */
 const VIEWS = {
+  memory: { title: "Memory", sub: "what Jarvis has learned about you" },
+  faculties: { title: "Faculties", sub: "models, compute, skills, memory" },
+  work: { title: "Work", sub: "jobs in flight and what can be put back" },
   galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
   live: { title: "Live", sub: "what Jarvis is doing" },
-  faculties: { title: "Faculties", sub: "models, compute, skills, memory" },
-  memory: { title: "Memory", sub: "what Jarvis has learned about you" },
-  work: { title: "Work", sub: "jobs in flight and what can be put back" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
   watch: { title: "Watch", sub: "the GitHub watchlist" },
 };
+
+/** Views tucked behind the "Advanced" disclosure until it is opened. */
+const ADVANCED_VIEWS = ["galaxy", "live", "trust", "watch"];
 
 /** Which sections each view needs, so a switch reads only what it will show. */
 const VIEW_SECTIONS = {
@@ -70,6 +80,8 @@ const dom = {
   toast: $("toast"),
   themePicker: $("theme-picker"),
   rail: $("rail-nav"),
+  advancedToggle: $("rail-advanced-toggle"),
+  countAdvanced: $("count-advanced"),
 
   canvas: $("graph-canvas"),
   graphEmpty: $("graph-empty"),
@@ -120,7 +132,7 @@ const dom = {
 };
 
 const state = {
-  view: "galaxy",
+  view: "memory",
   /** Section name → last body read. */
   data: {},
   /** True while a read is in flight, so a repaint cannot stack them. */
@@ -128,6 +140,9 @@ const state = {
   graph: null,
   trace: [],
 };
+
+/** Whether the four views behind "Advanced" are on the rail right now. */
+let advancedOpen = false;
 
 /* ==========================================================================
    Plumbing
@@ -342,17 +357,26 @@ function renderCounts() {
     jobs.filter((j) => j.state === "running" || j.state === "queued").length
   );
   const risk = state.data.content_risk;
-  set(dom.countTrust, risk && risk.rush ? 1 : 0);
+  const trustCount = risk && risk.rush ? 1 : 0;
+  set(dom.countTrust, trustCount);
   const watch = state.data.watch;
-  set(dom.countWatch, (watch && watch.waiting_for_you) || 0);
+  const watchCount = (watch && watch.waiting_for_you) || 0;
+  set(dom.countWatch, watchCount);
   const attention = currentLink().attention;
-  set(dom.countLive, attention.known ? attention.pending : 0);
+  const liveCount = attention.known ? attention.pending : 0;
+  set(dom.countLive, liveCount);
   // Proposals waiting. This is the badge that matters most, because the
   // extractor fills that queue on its own - nobody asked for the thing that
   // is waiting, so nothing else would tell you it is there.
   const proposed = state.data.memory_pending;
   set(dom.countMemory,
       (proposed && Array.isArray(proposed.pending) && proposed.pending.length) || 0);
+
+  // Live, Trust and Watch carry their own badges but sit behind "Advanced"
+  // by default, where nobody sees them. Rolled into one count on the
+  // toggle itself while it is collapsed, so closing it cannot make
+  // something waiting on the user go quiet.
+  set(dom.countAdvanced, advancedOpen ? 0 : liveCount + trustCount + watchCount);
 }
 
 /* ==========================================================================
@@ -2200,21 +2224,57 @@ for (const key of TAB_ORDER) {
  *
  * Vertical rail, so Up/Down are the axis and Left/Right are accepted too —
  * costs nothing and saves the reader guessing which one this rail thinks it is.
+ *
+ * Cycles only the tabs currently on the rail: while "Advanced" is collapsed
+ * its four tabs are `hidden` and cannot take focus, so including them here
+ * would let arrowing past Work land nowhere.
  */
+function visibleTabOrder() {
+  return TAB_ORDER.filter((key) => advancedOpen || !ADVANCED_VIEWS.includes(key));
+}
+
 dom.rail?.addEventListener("keydown", (event) => {
   const STEP = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
-  const here = TAB_ORDER.indexOf(state.view);
+  const order = visibleTabOrder();
+  const here = order.indexOf(state.view);
   let next = null;
-  if (event.key in STEP) next = (here + STEP[event.key] + TAB_ORDER.length) % TAB_ORDER.length;
+  if (event.key in STEP) next = (here + STEP[event.key] + order.length) % order.length;
   else if (event.key === "Home") next = 0;
-  else if (event.key === "End") next = TAB_ORDER.length - 1;
+  else if (event.key === "End") next = order.length - 1;
   if (next === null || here < 0) return;
   event.preventDefault();
   // Selection follows focus, which is the right choice for a tablist whose
   // panels are already loaded: it is what a reader expects, and the alternative
   // (arrow to move, Enter to open) makes them press two keys for every view.
-  showView(TAB_ORDER[next]);
-  $(`tab-${TAB_ORDER[next]}`)?.focus();
+  showView(order[next]);
+  $(`tab-${order[next]}`)?.focus();
+});
+
+/**
+ * "Advanced" reveals the four views this window used to always show —
+ * Galaxy, Live, Trust, Watch — unchanged, just not on the rail by default.
+ * Collapsing it again hides the tabs but never touches `state.view`: a view
+ * that was open when the rail collapsed stays open, it just has no visible
+ * tab until Advanced is reopened.
+ */
+dom.advancedToggle?.addEventListener("click", () => {
+  advancedOpen = !advancedOpen;
+  dom.advancedToggle.setAttribute("aria-expanded", String(advancedOpen));
+  for (const key of ADVANCED_VIEWS) {
+    const item = $(`tab-${key}`)?.closest("li");
+    if (item) item.hidden = !advancedOpen;
+  }
+  // Roving tabindex needs exactly one reachable stop at all times. showView()
+  // already keeps that true whenever the active view is on the visible rail;
+  // the one gap is collapsing Advanced while one of ITS views is the active
+  // one, which would otherwise leave every tab at -1 and the rail untabbable.
+  if (!advancedOpen && ADVANCED_VIEWS.includes(state.view)) {
+    for (const key of TAB_ORDER) {
+      const tab = $(`tab-${key}`);
+      if (tab) tab.tabIndex = key === "memory" ? 0 : -1;
+    }
+  }
+  renderCounts();
 });
 
 dom.refresh.addEventListener("click", async () => {
@@ -2374,7 +2434,7 @@ onEvent((frame) => {
   }
 
   repaintTrace();
-  await showView("galaxy");
+  await showView("memory");
 })();
 
 console.info(

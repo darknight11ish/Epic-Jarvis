@@ -164,6 +164,23 @@ body {
   color: var(--text);
 }
 
+/* Sits below the rail's tablist as a plain disclosure, not a tab — its own
+   top border does the separating a `<li>` boundary would otherwise do. */
+.rail-advanced-toggle {
+  margin-top: 2px;
+  border-top: var(--stroke-hair) solid var(--border);
+  border-radius: 0;
+  padding-top: 12px;
+}
+
+.rail-advanced-toggle .rail-glyph {
+  color: var(--text-faint);
+}
+
+.rail-advanced-toggle[aria-expanded="true"] {
+  color: var(--text);
+}
+
 .rail-foot {
   border-top: var(--stroke-hair) solid var(--border);
   padding-top: 10px;
