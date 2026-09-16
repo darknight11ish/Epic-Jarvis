@@ -15,7 +15,7 @@ path. On tier `notify` that fires with no human in the loop at all.
 Runs against a stubbed network and a stubbed framework module. No requests are
 made and no approvals database is touched.
 """
-import ast, json, re, sys, types, traceback
+import ast, copy, json, re, sys, types, traceback
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -171,26 +171,40 @@ _SAFE_SOURCES = ("_safe_detail", "notice_for", "_note", "risk_for", "action")
 _NEVER = ("detail", "prompt", "raised")
 
 
-def _names(node):
-    """Every bare name and attribute used in an expression."""
-    out = set()
-    for n in ast.walk(node):
-        if isinstance(n, ast.Name):
-            out.add(n.id)
-        elif isinstance(n, ast.Attribute):
-            out.add(n.attr)
-    return out
+def _mask_redacted(node):
+    """A copy of the expression with every `_safe_detail(...)` call replaced.
+
+    Not "subtract the names that appear inside a _safe_detail call from the
+    names in the whole argument" - that was the first version and it laundered
+    a name for the ENTIRE expression. One mention anywhere made the raw name
+    free everywhere, so
+
+        _safe_detail(detail, 300) + json.dumps(detail)[:400]
+
+    passed: the second half is the pre-patch line gate-push.patch was written
+    to delete, sitting beside the redacted copy. Masking the call and reading
+    what is left cannot do that.
+    """
+    class Mask(ast.NodeTransformer):
+        def visit_Call(self, n):
+            if getattr(n.func, "id", "") == "_safe_detail":
+                return ast.copy_location(ast.Name(id="_REDACTED",
+                                                  ctx=ast.Load()), n)
+            return self.generic_visit(n)
+    return Mask().visit(copy.deepcopy(node))
 
 
-def _redacted_names(node):
-    """Names that appear only inside a _safe_detail(...) call."""
-    out = set()
-    for n in ast.walk(node):
-        if (isinstance(n, ast.Call)
-                and getattr(n.func, "id", "") == "_safe_detail"):
-            for a in n.args:
-                out |= _names(a)
-    return out
+def _leaks(node):
+    """Which payload names this expression reaches, by any route.
+
+    A SOURCE scan over the masked expression, not a walk of Name nodes. The
+    node walk missed every indirect route, and they are the likely ones:
+    `row['prompt']` is an ast.Constant, `getattr(req, 'prompt')` is a string,
+    and an f-string hides both. All three passed a Name-based check while
+    putting the request text on an unauthenticated ntfy.sh topic.
+    """
+    src = ast.unparse(_mask_redacted(node))
+    return sorted({w for w in _NEVER if re.search(rf"\b{w}\b", src)})
 
 
 def t_call_sites_redact():
@@ -201,24 +215,65 @@ def t_call_sites_redact():
     check("both _push call sites are present", len(calls) == 2, f"found {len(calls)}")
     for i, call in enumerate(calls):
         where = f"line {call.lineno}"
-        for j, arg in enumerate(call.args):
-            arg_src = ast.unparse(arg)
-            used = _names(arg)
-            safe = _redacted_names(arg)
-            leaked = sorted((used & set(_NEVER)) - safe)
-            check(f"call site {i + 1} arg {j + 1} carries no payload name",
+        # KEYWORDS TOO. _push is `def _push(title, body)` today, and a check
+        # that reads only call.args would be blind to the day it grows a third
+        # field - `_push(title, body, extra=prompt)` passed everything.
+        args = [(f"arg {j + 1}", a) for j, a in enumerate(call.args)]
+        args += [(f"keyword {k.arg}", k.value) for k in call.keywords]
+        for label, arg in args:
+            leaked = _leaks(arg)
+            check(f"call site {i + 1} {label} carries no payload name",
                   not leaked,
-                  f"{where}: {arg_src[:90]} uses {leaked}")
+                  f"{where}: {ast.unparse(arg)[:90]} reaches {leaked}")
         body_src = ast.unparse(call.args[1]) if len(call.args) > 1 else ""
         check(f"call site {i + 1} builds its body from a safe source",
               any(t in body_src for t in _SAFE_SOURCES),
               f"{where}: {body_src[:90]} is none of {list(_SAFE_SOURCES)}")
 
 
+def t_the_call_site_check_can_actually_fail():
+    """CONTROL ON THE CONTROL. A guard nobody has watched fail is a guess.
+
+    Every expression below leaks, and an earlier version of the check above
+    passed four of the six. They are run here rather than described.
+    """
+    leaky = [
+        '_push("t", prompt)',
+        '_push("t", json.dumps(detail))',
+        '_push("t", raised["quote"])',
+        '_push(_note["title"], _note["body"] + f"(id {rid}) {row[\'prompt\']}")',
+        '_push("t", getattr(req, "prompt"))',
+        '_push("t", _safe_detail(detail, 300) + json.dumps(detail)[:400])',
+        '_push("t", _safe_detail(prompt, 300) or prompt[:300])',
+    ]
+    for code in leaky:
+        call = ast.parse(code).body[0].value
+        args = list(call.args) + [k.value for k in call.keywords]
+        check(f"REJECTED: {code[:58]}", any(_leaks(a) for a in args),
+              "this leaks and the check let it through")
+
+    kw = ast.parse('_push(_note["title"], _note["body"], extra=prompt)').body[0].value
+    check("REJECTED: a payload smuggled in as a keyword",
+          any(_leaks(k.value) for k in kw.keywords))
+
+    # And the three shapes that are SAFE must still pass, or the check is
+    # merely strict rather than correct.
+    for code in ('_push(f"Jarvis did: {action}", risk_for(action)["why"])',
+                 '_push(_note["title"], _note["body"] + f"(id {rid})")',
+                 '_push(f"Jarvis wants to: {action}", _safe_detail(detail, 400))'):
+        call = ast.parse(code).body[0].value
+        args = list(call.args) + [k.value for k in call.keywords]
+        body = ast.unparse(call.args[1])
+        check(f"ACCEPTED: {code[:58]}",
+              not any(_leaks(a) for a in args)
+              and any(t in body for t in _SAFE_SOURCES))
+
+
 if __name__ == "__main__":
     for fn in (t_redact_keeps_shape_drops_values, t_push_sends_only_what_it_was_given,
                t_the_push_redaction_does_not_ride_the_logging_switch,
-               t_push_refuses_while_tainted, t_call_sites_redact):
+               t_push_refuses_while_tainted, t_call_sites_redact,
+               t_the_call_site_check_can_actually_fail):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

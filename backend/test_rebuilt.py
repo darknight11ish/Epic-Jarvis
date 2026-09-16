@@ -35,6 +35,7 @@ Run it beside the backend:
 import json
 import math
 import os
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -302,7 +303,15 @@ class Events(unittest.TestCase):
         b = EV.Bus(size=4)
         ev = b.publish("approval", {"count": 1})
         self.assertIsInstance(ev.sse(), str)
-        self.assertEqual(ev.frame(), ev.sse().encode("utf-8", "replace"))
+        self.assertEqual(ev.sse(),
+                         'id: 1\nevent: approval\ndata: {"count": 1}\n\n')
+        # Not `frame() == sse().encode(...)` - that re-derives the expectation
+        # from the implementation and would still pass if frame() switched to
+        # errors="strict", which is the exact regression frame() exists to
+        # prevent. A lone surrogate is what that regression looks like.
+        bad = b.publish("approval", {"name": "caf\uDCE9"})
+        self.assertIsInstance(bad.frame(), bytes)
+        self.assertIn(b"event: approval", bad.frame())
 
     def test_a_frame_cannot_be_forged_from_inside_its_payload(self):
         """A raw newline in a data line ends the frame early. If a value can
@@ -363,6 +372,59 @@ class Events(unittest.TestCase):
         got, _ = b.since(0)
         self.assertEqual(len(got), 800)
         self.assertEqual(len({e.id for e in got}), 800)
+
+    def test_a_report_is_not_swallowed_as_a_baseline(self):
+        """announce_first. The baseline rule is for POLLERS, which ask "has
+        the world moved?". set_activity() and Notebook.file() are reporting
+        that something just happened, and for them the first call after a
+        restart is the most important one there is - the first thing the
+        watcher notices, the first "thinking" of the first turn. Without the
+        flag the only frame a client saw for that whole turn was the "idle"
+        that followed it."""
+        b = EV.Bus(size=8)
+        self.assertIsNotNone(b.note("activity", {"state": "thinking"},
+                                    "activity", announce_first=True))
+        # Still deduplicated: it is note(), not publish().
+        self.assertIsNone(b.note("activity", {"state": "thinking"},
+                                 "activity", announce_first=True))
+
+    def test_set_activity_reports_the_first_turn(self):
+        """The live caller, not the mechanism. _ACTIVITY starts at "idle"."""
+        EV.BUS.forget()
+        before = EV.BUS.latest
+        EV.set_activity("thinking", "answering")
+        got = [e for e in EV.BUS.since(before)[0] if e.kind == "activity"]
+        self.assertEqual([e.data["value"]["state"] for e in got], ["thinking"])
+
+    def test_forget_makes_the_next_note_fire(self):
+        """Its name is the contract. Deleting the key instead made it a
+        baseline, so forget() followed by note() published nothing at all -
+        the opposite of what it says."""
+        b = EV.Bus(size=8)
+        b.note("power", "active", "power")          # baseline
+        self.assertIsNone(b.note("power", "active", "power"))
+        b.forget("power")
+        self.assertIsNotNone(b.note("power", "active", "power"),
+                             "forget() must re-arm, not re-baseline")
+
+    def test_the_proposal_doorbell_is_keyed_on_the_ids(self):
+        """Keyed on the COUNT, a queue that changes without changing size is
+        silent for ever: the owner reviews proposal 7 while the extractor
+        queues 8, the count stays 1, and the new one never rings."""
+        import types as _t
+        x = _t.ModuleType("jarvis_extract")
+        x.pending = lambda: [{"id": 7}]
+        sys.modules["jarvis_extract"] = x
+        b = EV.Bus(size=8)
+        EV._poll_proposals(b)                       # baseline
+        x.pending = lambda: [{"id": 9}]             # 7 reviewed, 9 arrived
+        EV._poll_proposals(b)
+        got = [e for e in b.since(0)[0] if e.kind == "proposal"]
+        self.assertEqual(len(got), 1, "a same-size change must still ring")
+        self.assertEqual(got[0].data["value"], [9])
+        self.assertEqual(got[0].data["count"], 1)
+        blob = got[0].sse()
+        self.assertNotIn("text", blob, "the doorbell carries ids, never text")
 
     def test_a_poller_that_throws_does_not_stop_the_others(self):
         b = EV.Bus(size=16)
@@ -543,6 +605,92 @@ class Memory(unittest.TestCase):
         ts = [threading.Thread(target=spam, args=(n,)) for n in range(6)]
         [t.start() for t in ts]; [t.join() for t in ts]
         self.assertEqual(self.s.status()["facts"], 120)
+
+    def test_a_correction_dated_in_the_past_still_links_the_versions(self):
+        """"I moved in January, I am telling you in March", which is the whole
+        reason the second axis exists. retire()'s docstring tells a caller who
+        knows the real date to call it BEFORE adding - which sets valid_to, so
+        add(supersedes=) matched nothing, left retired_by NULL, broke the
+        chain timeline() walks, and logged memory.supersede_missed on a
+        correction filed exactly as instructed."""
+        january = time.time() - 60 * 86400
+        old = self.s.add("Mario lives in Lisbon")
+        self.assertTrue(self.s.retire(old, valid_to=january))
+        new = self.s.add("Mario lives in Berlin", valid_from=january,
+                         supersedes=old)
+        row = self.s.get(old)
+        self.assertEqual(row["retired_by"], new, "the versions must be linked")
+        self.assertFalse(self.s.last_supersede_failed, "and not reported lost")
+        self.assertAlmostEqual(row["valid_to"], january,
+                               msg="linking must not overwrite the real date",
+                               delta=1)
+
+    def test_last_supersede_failed_can_be_read_on_a_fresh_store(self):
+        """add() only assigns it when a supersede is attempted, so the memory
+        pane rendering a correction card got AttributeError instead of 'no'."""
+        self.assertIs(MEM.MemoryStore(Path(self.dir) / "fresh.db",
+                                      MEM.HashEmbedder()).last_supersede_failed,
+                      False)
+
+    def test_all_four_readers_agree_about_a_future_valid_to(self):
+        """A lease recorded in October as ending in December. current_facts,
+        status and search called it current; known_at did not, because
+        retire() stamped retired_at unconditionally. The memory pane's as-of
+        view showed the lease gone while recall went on injecting it into
+        prompts - two screens, opposite answers, no error anywhere."""
+        fid = self.s.add("Mario's lease runs to December")
+        self.s.retire(fid, valid_to=time.time() + 90 * 86400)
+        self.assertIn(fid, [f["id"] for f in self.s.current_facts()])
+        self.assertIn(fid, [f["id"] for f in self.s.known_at(time.time() + 1)])
+        self.assertEqual(self.s.status()["current"], 1)
+        self.assertTrue(self.s.search("lease", k=5)[0]["current"])
+        self.assertTrue(self.s.timeline("lease")[0]["current"])
+        self.assertIsNone(self.s.get(fid)["retired_at"],
+                          "nothing was retracted, so nothing is stamped")
+
+    def test_an_embedder_that_returns_nonsense_never_duplicates_a_fact(self):
+        """memory-safety.patch's own words: add()'s INSERT has already
+        committed by the time _embed_rows runs, "so an exception escaping here
+        reported failure for a fact that was in fact stored - and each retry
+        of the 'failed' accept wrote another copy of it"."""
+        class Null(MEM.Embedder):
+            name, dim, semantic = "null", 8, True
+
+            def embed(self, texts):
+                return None
+
+        s = MEM.MemoryStore(Path(self.dir) / "null.db", Null())
+        for _ in range(3):
+            s.add("a fact that keeps being retried")
+        self.assertEqual(s.status()["facts"], 3, "three adds, three rows")
+
+    def test_an_old_store_survives_two_processes_opening_it_at_once(self):
+        """The migration reads PRAGMA table_info and then runs a bare ALTER
+        TABLE with nothing holding a write lock between them, so two openers
+        can both decide the column is missing. The loser's
+        "duplicate column name" escaped __init__ as "memory layer failed to
+        start". Measured with eight processes: a failure in 2 trials of 8.
+
+        Simulated here rather than raced: the second _init() on a store that
+        already has the column is the same code path the loser takes.
+        """
+        db = Path(self.dir) / "old.db"
+        c = sqlite3.connect(db)
+        c.executescript("""
+            CREATE TABLE facts (
+                id INTEGER PRIMARY KEY, text TEXT NOT NULL, source TEXT,
+                created REAL NOT NULL, valid_from REAL NOT NULL, valid_to REAL,
+                retired_by INTEGER, embedded INTEGER NOT NULL DEFAULT 0,
+                meta TEXT);
+            CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);""")
+        c.commit()
+        # The loser's exact race: it read the table BEFORE the winner's ALTER.
+        winner = MEM.MemoryStore(db, MEM.HashEmbedder())
+        c.execute("ALTER TABLE facts ADD COLUMN spare REAL")
+        c.commit(); c.close()
+        loser = MEM.MemoryStore(db, MEM.HashEmbedder())   # must not raise
+        self.assertEqual(winner.status()["facts"], 0)
+        self.assertEqual(loser.status()["facts"], 0)
 
     def test_a_borrowed_connection_keeps_what_it_writes(self):
         """jarvis_extract owns the review queue but not a database.

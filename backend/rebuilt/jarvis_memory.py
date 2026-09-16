@@ -335,6 +335,12 @@ def _make_embedder():
 
 class MemoryStore:
 
+    #: Did the last add(supersedes=...) actually retire what it was aiming at?
+    #: A CLASS default, because add() only assigns it when a supersede is
+    #: attempted - so anything reading it on a fresh store (the memory pane
+    #: rendering a correction card) got AttributeError instead of "no".
+    last_supersede_failed = False
+
     def __init__(self, path: Optional[Path] = None, embedder=None) -> None:
         self.path = Path(path or DOCS_DB)
         self.embedder = embedder or _make_embedder()
@@ -459,7 +465,26 @@ class MemoryStore:
             # instead would swallow a real failure as "already there".
             have = {r["name"] for r in c.execute("PRAGMA table_info(facts)")}
             if "retired_at" not in have:
-                c.execute("ALTER TABLE facts ADD COLUMN retired_at REAL")
+                try:
+                    c.execute("ALTER TABLE facts ADD COLUMN retired_at REAL")
+                except sqlite3.OperationalError as e:
+                    # NOTHING HOLDS A LOCK between the PRAGMA above and this
+                    # ALTER, so two processes opening the same pre-retired_at
+                    # store can both read "no retired_at" and both try to add
+                    # it. The loser gets "duplicate column name", which
+                    # escapes _init() -> __init__ -> store() and surfaces as
+                    # "memory layer failed to start". Measured with eight
+                    # processes released at the same instant: a failure in 2
+                    # trials of 8, only on the ONE run that migrates an old
+                    # database - which is the owner's upgrade path.
+                    #
+                    # Narrow: only this error, and only here. Anything else
+                    # from an ALTER is a real problem and still raises. This
+                    # is the one case where "already there" is the truth
+                    # rather than a swallowed failure, because the PRAGMA
+                    # said otherwise a moment ago.
+                    if "duplicate column name" not in str(e).lower():
+                        raise
                 # The best available guess for rows retired before the column
                 # existed, and it is only a guess: back then the two axes were
                 # the same number, so every historical retirement reads as
@@ -539,6 +564,23 @@ class MemoryStore:
                     " WHERE id=? AND valid_to IS NULL",
                     (now, now, fid, supersedes))
                 if done.rowcount == 0:
+                    # Already retired - and that is the DOCUMENTED workflow,
+                    # not a failure. retire()'s own docstring tells a caller
+                    # who knows the real date to "call retire() with it before
+                    # adding", which sets valid_to and makes the UPDATE above
+                    # match nothing. So "I moved in January, I am telling you
+                    # in March" left retired_by NULL, broke the chain
+                    # timeline() walks, and logged memory.supersede_missed on
+                    # a correction that was filed exactly as instructed.
+                    #
+                    # Link it without touching either date: the valid_to the
+                    # caller set is the one they meant, and retire() is still
+                    # one-way. retired_by IS NULL so this cannot re-point a
+                    # fact that some other version already superseded.
+                    done = c.execute(
+                        "UPDATE facts SET retired_by=?"
+                        " WHERE id=? AND retired_by IS NULL", (fid, supersedes))
+                if done.rowcount == 0:
                     # The caller believes it filed a correction that retired
                     # the old fact. It did not - the id does not exist, or was
                     # already retired - and add() returning the new id either
@@ -576,10 +618,24 @@ class MemoryStore:
         """
         with _LOCK, closing(self._connect()) as c:
             now = time.time()
+            vt = now if valid_to is None else float(valid_to)
+            # retired_at only once the fact has actually STOPPED being
+            # recalled. A valid_to in the future has not happened yet - the
+            # docstring above says so, current_facts(), status() and search()
+            # all agree, and known_at() did not: it reads retired_at, so a
+            # lease recorded in October as ending in December vanished from
+            # the memory pane's as-of view the moment it was entered, while
+            # recall went on injecting it into prompts. Two screens, opposite
+            # answers, no error anywhere. Nothing was retracted, so nothing is
+            # stamped; when December arrives the fact leaves current_facts on
+            # the valid-time axis, which is the axis that ended it.
+            #
+            # This diverges from bitemporal.patch, which stamps now
+            # unconditionally. The patch predates retire() taking a date.
+            ra = now if vt <= now else None
             cur = c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
                             " WHERE id=? AND valid_to IS NULL",
-                            (now if valid_to is None else float(valid_to),
-                             now, replaced_by, fact_id))
+                            (vt, ra, replaced_by, fact_id))
             c.commit()
             # rowcount, not None. "Retired a fact that was already retired" and
             # "retired the fact" have to be distinguishable, or the caller
@@ -632,12 +688,32 @@ class MemoryStore:
         A count, not None: backfill_embeddings loops until this stops making
         progress, and a version that returned nothing would either loop for
         ever or stop after one batch depending on how the caller guessed.
+
+        AND IT NEVER RAISES. Restored from memory-safety.patch, whose copy of
+        this docstring is the original's: "add_fact's INSERT has already
+        committed by the time this runs (isolation_level=None), so an
+        exception escaping here reported failure for a fact that was in fact
+        stored - and each retry of the 'failed' accept wrote another copy of
+        it." Measured with an embedder whose embed() returns None: add()
+        raised TypeError, one row was in facts, the retry raised again, and
+        two identical facts were stored.
+
+        The shipped embedders cannot do that. A test double, a half-installed
+        fastembed, or a future embedder can, and the caller cannot tell the
+        difference - so the whole body is guarded, not only the parts that
+        looked risky.
         """
         if not rows or not self._vec_ok:
             return 0
         try:
-            vecs = self.embedder.embed([t for _, t in rows])
+            vecs = list(self.embedder.embed([t for _, t in rows]))
         except Exception:
+            return 0
+        try:
+            dim = int(self.embedder.dim)
+        except Exception:
+            # An embedder with no usable dim cannot be width-checked, so
+            # nothing it produces may be stored.
             return 0
         done = 0
         for (fid, _), v in zip(rows, vecs):
@@ -650,7 +726,7 @@ class MemoryStore:
                 # "DEGRADES, NEVER FAILS" says it must be stored and merely
                 # unembedded.
                 continue
-            if not _usable_vector(v, self.embedder.dim):
+            if not _usable_vector(v, dim):
                 # Leave embedded=0, exactly as a failed INSERT does. The row
                 # stays findable by WORDS, and backfill will try it again when
                 # a better model is installed. Storing it would make the fact
@@ -860,8 +936,14 @@ class MemoryStore:
             hist = [dict(r) for r in c.execute(
                 f"SELECT * FROM facts WHERE id IN ({marks}) ORDER BY valid_from, id",
                 list(seen))]
+        now = time.time()
         for h in hist:
-            h["current"] = h["valid_to"] is None
+            # Same rule as search() and current_facts(). This line said
+            # `h["valid_to"] is None`, so the same row came back current from
+            # search and not-current from timeline - the exact disagreement
+            # retire()'s docstring forbids: "nothing that reads these rows may
+            # treat valid_to is not NULL as not current".
+            h["current"] = h["valid_to"] is None or h["valid_to"] > now
         return hist
 
     def current_facts(self, limit: int = 400) -> list[dict]:

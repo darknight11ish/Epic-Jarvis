@@ -165,6 +165,12 @@ class Event:
 #   The bus
 # --------------------------------------------------------------------------
 
+#: Parked under a key by forget(). json.dumps never produces this, so the next
+#: note() for that key compares unequal and fires - while the key stays PRESENT,
+#: which is what keeps it from being read as a fresh baseline.
+_REARMED = object()
+
+
 class Bus:
     """A ring of recent events, and the waiters watching it.
 
@@ -200,7 +206,8 @@ class Bus:
             return ev
 
     def note(self, key: str, value: object, kind: str,
-             extra: Optional[dict] = None) -> Optional[Event]:
+             extra: Optional[dict] = None,
+             announce_first: bool = False) -> Optional[Event]:
         """Announce a change ONLY if this key's value actually changed.
 
         Shape recovered from extraction-wiring.patch @ 159, which calls it and
@@ -215,17 +222,34 @@ class Bus:
         unchanged" events a day. Returning None when nothing moved is what
         makes a one-second poll acceptable on a phone.
 
-        THE FIRST OBSERVATION IS A BASELINE, and also returns None. A key that
-        has never been seen has not CHANGED - there is nothing to compare it
-        against - and this is a change feed, not a snapshot feed. Publishing
-        the first sighting meant every start of the pump fired one approval,
-        one power and one proposal event describing a queue that had been
-        sitting there unchanged for a week, to clients that were about to read
-        /api/pending anyway. On a phone that is three notifications for
-        nothing, at the moment the desktop comes back.
+        THE FIRST OBSERVATION IS A BASELINE for a POLLER, and also returns
+        None. A key a poller has never seen has not CHANGED - there is nothing
+        to compare it against - and this is a change feed, not a snapshot
+        feed. Publishing the first sighting meant every start of the pump
+        fired one approval, one power and one proposal event describing a
+        queue that had been sitting there unchanged for a week, to clients
+        about to read /api/pending anyway. On a phone that is three
+        notifications for nothing, at the moment the desktop comes back.
 
-        Nothing is lost by staying quiet: both clients fetch the real state on
-        connect, and every later change is announced.
+        `announce_first=True` IS FOR THE OTHER KIND OF CALLER, and leaving it
+        off is a bug that only shows up once. A poller asks "has the world
+        moved?". set_activity() and Notebook.file() are not asking: something
+        just happened and they are reporting it. For those the first call
+        after a restart is the most important one there is - the first thing
+        the watcher notices, the first "thinking" of the first turn - and the
+        baseline rule swallowed it whole. Measured: after a restart the first
+        turn published only `idle`, never `thinking`, and the Brain window
+        (which has no fallback poll) never redrew.
+
+        Nothing is lost by a poller staying quiet: both clients fetch the real
+        state on connect, and every later change is announced.
+
+        The baseline is taken at the first SUCCESSFUL poll, not at process
+        start, because a poller that cannot reach its source returns without
+        noting. If the gate's database is locked for the first few seconds,
+        whatever is queued when it unlocks is the baseline. The 30-second
+        fallback poll in the HUD covers that; a client driven purely by this
+        stream would be told on the next change instead.
 
         The caller mutating `ev.data` afterwards means the Event this returns
         must be the same object that is in the ring - not a copy - or those
@@ -251,7 +275,7 @@ class Bus:
             if not first and self._seen[key] == token:
                 return None
             self._seen[key] = token
-            if first:
+            if first and not announce_first:
                 return None
 
         # `extra` is merged BEFORE publish, so subscribers waiting on the
@@ -269,19 +293,26 @@ class Bus:
         return self.publish(kind, data)
 
     def forget(self, key: Optional[str] = None) -> None:
-        """Drop the last-seen value, so this key re-baselines.
+        """Re-arm a key, so the NEXT note() for it fires whatever it carries.
 
-        The next note() for it is a first observation again and therefore
-        silent; the one after that announces any change. INFERRED, and there
-        are no callers - it is here because a poller whose source is replaced
-        wholesale (a store reopened on a different file) should be able to say
-        so rather than report the swap as a change.
+        Not a delete. Deleting would make the key unseen, and an unseen key is
+        a baseline - so `forget()` followed by `note()` published nothing at
+        all, which is the exact opposite of what the name promises. The key is
+        instead set to a token no real value can produce, so it counts as seen
+        (not a baseline) and compares equal to nothing (so the next note is a
+        change).
+
+        INFERRED, and there are no callers. It is here because a poller whose
+        source is replaced wholesale - a store reopened on a different file -
+        should be able to re-announce rather than report the swap as a change.
         """
         with self._cv:
             if key is None:
-                self._seen.clear()
+                for k in list(self._seen):
+                    self._seen[k] = _REARMED
             else:
-                self._seen.pop(key, None)
+                if key in self._seen:
+                    self._seen[key] = _REARMED
 
     # ---- reading ----------------------------------------------------------
 
@@ -340,11 +371,18 @@ def set_activity(state: str, detail: str = "") -> None:
 
     Deduplicated through note(), because this is called around every turn and
     an unchanged "idle" does not need to wake a sleeping phone's radio.
+
+    announce_first, because this is a REPORT, not an observation: the caller
+    knows something just happened. _ACTIVITY starts at "idle", so without it
+    the first "thinking" of the first turn after a restart was taken as the
+    baseline and swallowed, and the only frame a client saw for that whole
+    turn was the "idle" that followed it.
     """
     _ACTIVITY.update({"state": str(state), "detail": str(detail or ""),
                       "at": time.time()})
     BUS.note("activity", {"state": _ACTIVITY["state"],
-                          "detail": _ACTIVITY["detail"]}, "activity")
+                          "detail": _ACTIVITY["detail"]}, "activity",
+             announce_first=True)
 
 
 def activity() -> dict:
@@ -409,7 +447,15 @@ def _doorbell_item(item: dict) -> dict:
     # everything else on the row it cannot carry text somebody else wrote.
     notice = item.get("notice")
     if isinstance(notice, dict):
-        out["notice"] = {k: _scalar(notice.get(k)) for k in
+        # A longer limit than the row fields, because this one is PROSE and
+        # cutting it loses meaning rather than detail. notice_for builds body
+        # as the risk table's `why` plus a fixed ~116 characters ending in
+        # "nothing has happened yet." - the reassurance test_approval_notice
+        # requires - so a 200-character cap would truncate it for any `why`
+        # over about 84 characters. It is still capped: this is a
+        # notification, and a cap is what stops an unbounded string reaching
+        # a tray.
+        out["notice"] = {k: _scalar(notice.get(k), 600) for k in
                          ("title", "body", "weight", "deny_ok", "approve_ok")}
 
     # A BOOLEAN, never the object. The rule in docs/ARCHITECTURE.md - "an item
@@ -489,13 +535,24 @@ def _poll_proposals(bus: Bus) -> None:
     # kind "proposal", which is what extraction-wiring.patch emits and adds
     # to the documented kind list. A reconstruction had it as "finding",
     # which is a different kind with a different meaning on both clients.
-    bus.note("proposals", len(rows), "proposal", extra={"count": len(rows)})
+    # The IDS, not the count, and extraction-wiring.patch @ 372 is explicit
+    # about it: "A doorbell, like approvals: the count AND the ids". Keyed on
+    # the count, a queue that changes without changing SIZE is silent for
+    # ever - the owner reviews proposal 7 while the extractor queues 8, the
+    # count stays 1, and the new one never rings. The ids are still safe on a
+    # lock screen: an id is a row number, the TEXT is what quotes the
+    # conversation and it is not here.
+    ids = sorted(int(p.get("id") or 0) for p in rows if isinstance(p, dict))
+    bus.note("proposals", ids, "proposal", extra={"count": len(rows)})
 
 
-#: VERBATIM from extraction-wiring.patch @ 255, plus _poll_proposals, which
-#: that same patch adds. events-pump.patch prints len(POLLERS) at startup.
-POLLERS: list[Callable] = [_poll_approvals, _poll_power, _poll_persona,
-                           _poll_proposals]
+#: VERBATIM from extraction-wiring.patch @ 385, which is where _poll_proposals
+#: joins the list - second, not last. Order has no effect (Pump.tick runs them
+#: all and none depends on another) but the comment said "verbatim" while the
+#: list was reordered, and a provenance note that is not true is worse than no
+#: note. events-pump.patch prints len(POLLERS) at startup.
+POLLERS: list[Callable] = [_poll_approvals, _poll_proposals, _poll_power,
+                           _poll_persona]
 
 
 # --------------------------------------------------------------------------
