@@ -196,6 +196,10 @@
   };
 
   var linkUp = false;
+  // Matches LinkState::default() on the Rust side: stale until the first
+  // hello says otherwise, so approve/deny is refused for the first instant
+  // of every launch rather than enabled against a queue nobody has read.
+  var linkStale = true;
 
   function deliver(payload) {
     if (!payload || !payload.kind) return;
@@ -219,6 +223,9 @@
   }
 
   function linkChanged(link) {
+    // Read before the early return below, so a payload that only flips
+    // `stale` (not `connected`) still updates the gate in section 4.
+    linkStale = !!(link && link.stale);
     var up = !!(link && link.connected);
     if (up === linkUp) return;
     linkUp = up;
@@ -302,6 +309,64 @@
   );
 
   /* ---------------------------------------------------------------- *
+   * 2c. Approve/deny: route to the real backend, gated on the link
+   *
+   * jarvis_hud.html's apprDecide() is the one decision path in the file
+   * that does not go through the page's own jfetch() helper - it calls
+   * bare fetch("/api/approve" | "/api/deny", ...) with a relative URL and
+   * no JARVIS.headers(). Two consequences, both confirmed against that
+   * exact line rather than assumed:
+   *
+   *   1. A relative fetch resolves against this webview's own origin,
+   *      http://tauri.localhost - not JARVIS.url()'s backend base. Nothing
+   *      proxies tauri.localhost to the backend, so today this request
+   *      never reaches Jarvis at all on the desktop build, and it carries
+   *      no X-Jarvis-Token either: the one unauthenticated call in the
+   *      page.
+   *   2. Even reaching the backend, nothing here checks whether the
+   *      shell's event stream is stale first - the exact gate
+   *      decide_approval (commands.rs) enforces for the Quickbar and the
+   *      Widget, quoting DESKTOP-BUILD's checklist: "disable approve/deny
+   *      while the stream is stale, because answering a queue you cannot
+   *      confirm is live is how you approve something twice."
+   *
+   * Fixed the same way as window.JARVIS and window.EventSource above:
+   * intercepted here, not in jarvis_hud.html, so the next vendored drop
+   * of that file needs no re-patching. This does not reach into Tauri's
+   * IPC - the HUD's CSP and its empty capability grant (see hud.json)
+   * both stay exactly as they are; this only stops the page's own fetch
+   * from leaving through the wrong door.
+   * ---------------------------------------------------------------- */
+  var realFetch = window.fetch ? window.fetch.bind(window) : null;
+  if (realFetch) {
+    window.fetch = function (input, init) {
+      var path = typeof input === "string" ? input : "";
+      if (path === "/api/approve" || path === "/api/deny") {
+        if (linkStale) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                ok: false,
+                error:
+                  "the event stream is stale, so the approval queue cannot " +
+                  "be confirmed live - nothing can be answered until it reconnects",
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } }
+            )
+          );
+        }
+        var jarvis = window.JARVIS;
+        if (jarvis && typeof jarvis.url === "function") {
+          var merged = Object.assign({}, init);
+          merged.headers = jarvis.headers(init && init.headers);
+          return realFetch(jarvis.url(path), merged);
+        }
+      }
+      return realFetch(input, init);
+    };
+  }
+
+  /* ---------------------------------------------------------------- *
    * 3. Fonts, served locally
    *
    * The vendored page links Chakra Petch and IBM Plex from
@@ -326,4 +391,55 @@
   }
   if (document.head) localFonts();
   else document.addEventListener("DOMContentLoaded", localFonts, { once: true });
+
+  /* ---------------------------------------------------------------- *
+   * 4. Relabel the "Brain" tab to "Galaxy"
+   *
+   * The separate Brain window (brain.html) is the one place "Brain" is
+   * meant to mean anything in this app. Inside the HUD, a second tab also
+   * labelled "Brain" opens something else entirely - confirmed against
+   * the markup, not guessed: it is a live constellation of memory nodes
+   * (canvas id="galaxy", a ".brain-search" bar, "reset view" / "pause
+   * spin" controls). The page's own code already calls this visual the
+   * galaxy; only the tab label and the stage title still said "Brain".
+   * Having both surfaces answer to the same name is what made "open the
+   * Brain" ambiguous.
+   *
+   * Relabelled here, not in jarvis_hud.html, for the same reason as
+   * everything else in this file: the next vendored drop needs no
+   * re-patching. `data-view="brain"` and `id="brain"` are left exactly as
+   * they are - the page's own script keys off those strings, and nothing
+   * here touches them; only the two visible text labels change.
+   * ---------------------------------------------------------------- */
+  function relabelBrainTab() {
+    var btn = document.querySelector('button.mode[data-view="brain"]');
+    if (btn) {
+      for (var i = 0; i < btn.childNodes.length; i++) {
+        var n = btn.childNodes[i];
+        if (n.nodeType === 3 && n.textContent.trim() === "Brain") {
+          n.textContent = n.textContent.replace("Brain", "Galaxy");
+        }
+      }
+    }
+    // setView(), defined by the page's own script (which has already run
+    // by the time DOMContentLoaded fires), sets #stage-title to "Brain
+    // map" on every switch into this tab - not just the first, so the
+    // title is wrapped rather than patched once.
+    if (typeof window.setView === "function") {
+      var original = window.setView;
+      window.setView = function (v) {
+        var result = original(v);
+        if (v === "brain") {
+          var title = document.getElementById("stage-title");
+          if (title && title.textContent === "Brain map") title.textContent = "Galaxy";
+        }
+        return result;
+      };
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", relabelBrainTab, { once: true });
+  } else {
+    relabelBrainTab();
+  }
 })();
