@@ -547,6 +547,7 @@ pub fn run() {
             sidecar::stop_backend,
             commands::get_theme,
             commands::set_theme,
+            commands::finish_onboarding,
             commands::get_api_settings,
             commands::set_api_settings,
             appearance::get_appearance,
@@ -800,6 +801,18 @@ pub fn run() {
                 "[jarvis] Jarvis Desktop {} online — Alt+Space to summon",
                 handle.package_info().version
             );
+
+            // The first-run walkthrough. Last, deliberately: everything above
+            // this line is what makes Jarvis actually work, and a walkthrough
+            // that opened before the tray icon or the event stream existed
+            // would be explaining surfaces that were not there yet.
+            if !commands::onboarding_seen(&handle) {
+                if let Err(err) = windows::show_onboarding(&handle) {
+                    logfile::log(&format!(
+                        "[jarvis] the first-run walkthrough could not be opened: {err}"
+                    ));
+                }
+            }
 
             Ok(())
         })

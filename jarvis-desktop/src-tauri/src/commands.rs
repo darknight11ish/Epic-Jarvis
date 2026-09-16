@@ -219,6 +219,45 @@ pub fn set_theme(app: AppHandle, theme: String) -> Result<String, String> {
     Ok(theme)
 }
 
+/// True once the owner has closed the first-run walkthrough.
+///
+/// Not a command: `windows.rs` decides whether to build the onboarding window
+/// at all from this, before anything on screen could ask for it. The
+/// walkthrough itself never checks its own flag — it only exists to close
+/// itself, which is [`mark_onboarding_seen`] below.
+pub fn onboarding_seen(app: &AppHandle) -> bool {
+    use tauri_plugin_store::StoreExt;
+
+    app.store(SETTINGS_STORE)
+        .ok()
+        .and_then(|store| store.get("onboarding_seen"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// Persists that the walkthrough has been seen, so it never opens again, and
+/// closes it — one command rather than two, since the page has no reason to
+/// do either without the other.
+#[tauri::command]
+pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("settings store unavailable: {e}"))?;
+    store.set("onboarding_seen", serde_json::Value::Bool(true));
+    store
+        .save()
+        .map_err(|e| format!("could not save onboarding state: {e}"))?;
+
+    let window = app
+        .get_webview_window(windows::ONBOARDING_LABEL)
+        .ok_or_else(|| "the walkthrough window was not found".to_string())?;
+    window
+        .close()
+        .map_err(|e| format!("unable to close the walkthrough: {e}"))
+}
+
 /// Reports the base and whether a token is configured — never the token
 /// itself, so a log or a screenshot of this cannot leak it.
 #[tauri::command]

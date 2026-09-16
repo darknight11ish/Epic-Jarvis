@@ -494,6 +494,40 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
     .map_err(|e| format!("unable to open Faces: {e}"))
 }
 
+/// Label of the first-run walkthrough.
+pub const ONBOARDING_LABEL: &str = "onboarding";
+
+/// Opens the first-run walkthrough: three plain-language screens covering the
+/// tray icon, an approval, and memory — the three things DESKTOP-BUILD's own
+/// support notes said a new owner asks about first.
+///
+/// Called at most once per install, from the end of `setup()` in `lib.rs`,
+/// gated on `commands::onboarding_seen`. Fixed size and not resizable: three
+/// short screens of plain text do not need a resize handle, and giving it one
+/// invites a half-width window that wraps mid-sentence.
+pub fn show_onboarding(app: &AppHandle) -> Result<(), String> {
+    if app.get_webview_window(ONBOARDING_LABEL).is_some() {
+        return Ok(()); // already open — a second setup pass must not open two
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        ONBOARDING_LABEL,
+        tauri::WebviewUrl::App("onboarding.html".into()),
+    )
+    .title("Jarvis — Welcome")
+    .inner_size(480.0, 560.0)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .center()
+    .focused(true)
+    .theme(Some(tauri::Theme::Dark))
+    .build()
+    .map(|_| ())
+    .map_err(|e| format!("unable to open the walkthrough: {e}"))
+}
+
 /// Shows the HUD and brings it forward, whatever state it was in.
 ///
 /// Separate from [`toggle_hud`] because the tray's "Show HUD Window" and its

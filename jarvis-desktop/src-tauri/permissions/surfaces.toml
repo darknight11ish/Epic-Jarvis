@@ -232,3 +232,15 @@ permissions = [
 identifier = "appearance"
 description = "Read and write which face Jarvis wears and how each state looks. Cosmetic; approves nothing."
 permissions = ["allow-get-appearance", "allow-set-appearance"]
+
+# ---------------------------------------------------------------------------
+# The first-run walkthrough: closes itself, and nothing else.
+#
+# It does not read `onboarding_seen` — `lib.rs` decides whether to build this
+# window at all from that flag, before the page exists. The one thing the page
+# itself can do is say "seen" and close, once, so it never reopens.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "onboarding-surface"
+description = "Mark the first-run walkthrough as seen and close it. Opens at most once."
+permissions = ["allow-finish-onboarding"]

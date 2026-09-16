@@ -59,6 +59,8 @@ fn main() {
             // that offer a picker.
             "get_theme",
             "set_theme",
+            // The first-run walkthrough — one command, closes itself.
+            "finish_onboarding",
             // Connection settings — settings window only
             "get_api_settings",
             "set_api_settings",
