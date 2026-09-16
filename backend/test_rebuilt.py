@@ -38,7 +38,9 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -229,9 +231,25 @@ class Events(unittest.TestCase):
         """Pollers run every second. Without dedupe every subscriber gets
         86,400 identical events a day, which is a phone battery."""
         b = EV.Bus(size=8)
-        self.assertIsNotNone(b.note("approvals", ["a1"], "approval"))
+        b.note("approvals", ["a1"], "approval")          # baseline, silent
         self.assertIsNone(b.note("approvals", ["a1"], "approval"))
         self.assertIsNotNone(b.note("approvals", ["a1", "a2"], "approval"))
+
+    def test_the_first_observation_is_a_baseline_not_an_event(self):
+        """A key never seen has not CHANGED, and this is a change feed.
+
+        test_events_pump.py:43 states it as the contract - "the first tick is
+        a baseline, not an event". Publishing the first sighting meant every
+        start of the pump fired approval, power and proposal events describing
+        queues that had been sitting unchanged for a week, at the moment the
+        desktop came back. Both clients read the real state on connect anyway.
+        """
+        b = EV.Bus(size=8)
+        self.assertIsNone(b.note("approvals", ["a1"], "approval"),
+                          "the first sighting of a key must be silent")
+        self.assertEqual(b.since(0)[0], [], "and must publish nothing at all")
+        # CONTROL: it is a baseline, not a mute. The next change is announced.
+        self.assertIsNotNone(b.note("approvals", [], "approval"))
 
     def test_note_returns_the_event_that_is_actually_in_the_ring(self):
         """extraction-wiring.patch does:
@@ -239,6 +257,7 @@ class Events(unittest.TestCase):
                if ev is not None: ev.data.update({...})
         A copy would mean those extra fields never reach a subscriber."""
         b = EV.Bus(size=8)
+        b.note("approvals", [], "approval")              # baseline, silent
         ev = b.note("approvals", ["a1"], "approval")
         ev.data.update({"count": 1})
         got, _ = b.since(0)
@@ -274,12 +293,23 @@ class Events(unittest.TestCase):
                                  "invented_later": "a private thing"})
         self.assertNotIn("a private thing", json.dumps(out))
 
+    def test_the_frame_is_reachable_under_its_recovered_name(self):
+        """test_extraction_wiring.py:351 calls `events[-1].sse()` and then
+        greps the result for an email address. A rebuild that offered only
+        frame(), returning bytes, made that line raise AttributeError - so the
+        leak check guarding a lock screen silently stopped running. Both names
+        exist, sse() is the text and frame() is the same thing encoded."""
+        b = EV.Bus(size=4)
+        ev = b.publish("approval", {"count": 1})
+        self.assertIsInstance(ev.sse(), str)
+        self.assertEqual(ev.frame(), ev.sse().encode("utf-8", "replace"))
+
     def test_a_frame_cannot_be_forged_from_inside_its_payload(self):
         """A raw newline in a data line ends the frame early. If a value can
         contain one, anything that can influence a value can forge an event."""
         ev = EV.Event(1, "approval",
                       {"t": "x\n\nid: 999\nevent: forged\ndata: {}\n\n"})
-        raw = ev.frame().decode()
+        raw = ev.sse()
         # Count real SSE FIELD LINES, not substrings. The escaped \n inside
         # the JSON payload is a literal backslash-n on the wire, so "event:"
         # appears twice as text and once as a field - and it is the field that
@@ -513,6 +543,74 @@ class Memory(unittest.TestCase):
         ts = [threading.Thread(target=spam, args=(n,)) for n in range(6)]
         [t.start() for t in ts]; [t.join() for t in ts]
         self.assertEqual(self.s.status()["facts"], 120)
+
+    def test_a_borrowed_connection_keeps_what_it_writes(self):
+        """jarvis_extract owns the review queue but not a database.
+
+        It writes through `with closing(store._connect()) as c` and never
+        calls commit(), because these connections have always been autocommit.
+        Under the sqlite3 DEFAULT that opens an implicit transaction and
+        close() discards it, so propose() returned the rows it had just
+        inserted while pending() found an empty queue - every proposal, for
+        ever, with no error anywhere. Measured on the owner's machine:
+        `proposed [{'id': 1, 'text': 'Mario drives a 1998 Volvo', ...}],
+        pending []`.
+
+        jarvis_extract is not in this repository, so this stands in for it:
+        the same borrow, the same lack of a commit.
+        """
+        with closing(self.s._connect()) as c:
+            c.execute("CREATE TABLE IF NOT EXISTS proposals "
+                      "(id INTEGER PRIMARY KEY, text TEXT)")
+            c.execute("INSERT INTO proposals (text) VALUES ('a proposal')")
+        with closing(self.s._connect()) as c:
+            rows = c.execute("SELECT text FROM proposals").fetchall()
+        self.assertEqual([r["text"] for r in rows], ["a proposal"],
+                         "a borrowed connection must not need a commit")
+
+    def test_the_embedder_base_class_is_there_to_subclass(self):
+        """`class Broken(M.Embedder)` is how two suites build an embedder that
+        returns NaN, the wrong width, or raises. Without the base class those
+        files die at import with AttributeError and NONE of their assertions
+        run - which is what happened: test_memory_safety.py and
+        test_embedding_guard.py both reported nothing at all."""
+        self.assertTrue(hasattr(MEM, "Embedder"))
+        self.assertTrue(issubclass(MEM.HashEmbedder, MEM.Embedder))
+
+        class Fake(MEM.Embedder):
+            name, dim, semantic = "fake", 4, True
+
+            def embed(self, texts):
+                return [[1.0, 0.0, 0.0, 0.0] for _ in texts]
+
+        s = MEM.MemoryStore(Path(self.dir) / "sub.db", Fake())
+        s.add("a fact stored by a subclassed embedder")
+        self.assertEqual(s.status()["facts"], 1)
+
+    def test_both_time_axes_are_recorded_separately(self):
+        """"I moved in January, I am telling you in March." One axis cannot
+        hold it: with valid_to alone you either lie about when the move
+        happened or lie about when you were told."""
+        january = time.time() - 60 * 86400
+        old = self.s.add("Mario lives in Lisbon")
+        self.s.retire(old, valid_to=january)
+        row = self.s.get(old)
+        self.assertAlmostEqual(row["valid_to"], january, delta=1)
+        self.assertAlmostEqual(row["retired_at"], time.time(), delta=60)
+        # And what was believed a week ago is still answerable.
+        week = time.time() - 7 * 86400
+        self.assertEqual([f["id"] for f in self.s.known_at(week)], [])
+
+    def test_a_lease_that_ends_in_december_is_current_today(self):
+        """CONTROL. Three places computed "current" and one said
+        `valid_to is None`, which disagrees with its own neighbour for a
+        valid_to in the future."""
+        fid = self.s.add("Mario's lease runs to December")
+        self.s.retire(fid, valid_to=time.time() + 90 * 86400)
+        self.assertIn(fid, [f["id"] for f in self.s.current_facts()])
+        self.assertEqual(self.s.status()["current"], 1)
+        hits = self.s.search("lease", k=5)
+        self.assertTrue(hits and hits[0]["current"] is True)
 
 
 # ==========================================================================

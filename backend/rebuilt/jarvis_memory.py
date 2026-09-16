@@ -18,14 +18,33 @@ Two ideas, both of which the patches explain in the original's own words:
      separately and the two result lists fused with reciprocal rank fusion, so
      a fact that does well on either is found.
 
-  2. Bi-temporal facts. "Mario lives at X" with no dates means that when he
-     moves, both addresses sit there as equals. Every fact carries valid_from
-     and valid_to. A fact that is contradicted is RETIRED - its valid_to is
-     set and it records what replaced it - not deleted, so "where do I live"
-     returns the current answer and "where did I live last year" also works.
+  2. Bi-temporal facts: know WHEN a fact was true, AND when we found out.
+     Two different questions, two different axes, and conflating them loses
+     the one case this store exists for.
+
+     VALID TIME - valid_from, valid_to - is when the fact was true in the
+     world. "Mario lives at X" with no dates means that when he moves, both
+     addresses sit there as equals.
+
+     TRANSACTION TIME - created, retired_at - is when this machine believed
+     it. created is stamped on insert; retired_at is stamped when the fact
+     stops being recalled.
+
+     Retiring sets BOTH: retired_at is always now, because that is when we
+     learned, and valid_to defaults to now but can be set earlier. That is
+     what makes "I moved in January, I am telling you in March" storable. One
+     axis cannot hold it: with valid_to alone you either lie about when the
+     move happened or lie about when you were told, and a fact accepted late
+     out of the review queue has the same problem.
+
+     A fact is never deleted, so "where do I live" returns the current answer,
+     "where did I live last year" works, and "what did you think you knew in
+     June" is answerable from the same rows.
+
      This is the Graphiti idea done natively in the one SQLite file the
-     project already uses, because Graphiti wants a graph database server and
-     the whole point here is one file, no daemons.
+     project already uses, because Graphiti requires a graph database server -
+     neo4j>=5.26 is not optional there - and the whole point here is one file,
+     no daemons. See docs/PEERS.md.
 
 DEGRADES, NEVER FAILS. If the embedding model is not installed or cannot
 download, search falls back to words alone and says so in status(); it does
@@ -45,7 +64,8 @@ THE FIVE WAYS THIS FILE USED TO DESTROY DATA, all fixed, none to be undone:
      matched almost the whole store on "the" and "is". _STOP below.
   3. A NaN or all-zero embedding was stored without complaint, and the row was
      then UNREACHABLE FOREVER - every distance comparison against NaN is
-     false, so the fact could never be returned by any query. _finite() below.
+     false, so the fact could never be returned by any query.
+     _usable_vector() below.
   4. A different embedding model silently made old vectors incomparable.
      The `meta` table records which model wrote them and rebuilds on change.
   5. retire() with no row matched returned nothing distinguishable from
@@ -105,20 +125,28 @@ def _pack(v: Iterable[float]) -> bytes:
     return struct.pack(f"{len(v)}f", *v)
 
 
-def _finite(v: list[float]) -> bool:
-    """Is this vector safe to store?
+def _usable_vector(v, dim: int) -> bool:
+    """Is this embedding safe to store or query with?
 
     THE BUG THIS EXISTS FOR, from embedding-guard.patch. `_pack` will happily
     serialise NaN - struct does not care - and a NaN row is then unreachable
     FOREVER, because every distance comparison against NaN is false. The fact
     is in the database, counts in status(), and can never be returned by any
     query. An all-zero vector is the same class of problem from the other
-    direction: it is equidistant from everything, so it either never ranks or
-    always does.
+    direction: cosine divides by the norm, so it makes every score NaN rather
+    than merely inaccurate. Jan documents that case for the same reason
+    (evaluateEmbeddingVector, janhq/jan, Apache-2.0).
 
     Silent, permanent, and invisible in every count. Checked before the write.
+
+    The WIDTH check is here for a different failure. facts_vec is declared
+    float[dim] at creation and sqlite-vec raises on a mismatch; the store
+    already handles the model CHANGING width by dropping the table, but a
+    single short row from a partial read would raise per-insert for ever.
+
+    Cheap: one pass over 384 floats, on a path that has just run a transformer.
     """
-    if not v:
+    if not isinstance(v, (list, tuple)) or len(v) != dim:
         return False
     total = 0.0
     for x in v:
@@ -134,6 +162,9 @@ def _finite(v: list[float]) -> bool:
         if abs(float(x)) > 3.4e38:
             return False
         total += float(x) * float(x)
+    # Not `total == 0`: an all-but-zero vector normalises to garbage just as
+    # badly, and float error means an exact zero is not the only way to get
+    # there. This threshold is far below any real unit vector, whose norm is 1.
     return total > 1e-12
 
 
@@ -189,7 +220,43 @@ def _content_words(text: str) -> list[str]:
 #   Embedders
 # --------------------------------------------------------------------------
 
-class HashEmbedder:
+class Embedder:
+    """The base every embedder subclasses, and the shape the store relies on.
+
+    Four things, and the store touches nothing else:
+
+        name       str   identifies the MODEL. Written into the meta table; a
+                         change to it is what triggers the facts_vec rebuild,
+                         so two different models must never share one.
+        dim        int   how many floats embed() returns per text. facts_vec is
+                         declared float[dim] at creation and sqlite-vec raises
+                         on a mismatch.
+        semantic   bool  whether these vectors mean anything. False for the
+                         hash fallback, and search() checks it before
+                         consulting vectors at all.
+        embed(ts)  ->    one vector per text, in order. A LIST in, a list of
+                         lists out - never a single text.
+
+    It exists as a real class rather than as a convention because the suites
+    subclass it: `class Broken(M.Embedder)` in test_memory_safety.py and
+    `class Bad(M.Embedder)` in test_embedding_guard.py are how a store gets an
+    embedder that returns NaN, or the wrong width, or raises. Without the base
+    class those files fail at import with AttributeError and none of their
+    assertions run - which is exactly what happened.
+
+    The defaults below are deliberately useless: a subclass that forgets to
+    set `dim` should be obviously wrong, not quietly one-dimensional.
+    """
+
+    name = "base"
+    dim = 0
+    semantic = False
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        raise NotImplementedError
+
+
+class HashEmbedder(Embedder):
     """A deterministic non-semantic embedder. The fallback, not the plan.
 
     INFERRED. The original's fallback did not survive, but the module docstring
@@ -224,7 +291,7 @@ class HashEmbedder:
         return out
 
 
-class FastEmbedder:
+class FastEmbedder(Embedder):
     """The real one, if fastembed is installed.
 
     THE GUARD IS THE POINT. embedding-guard.patch found that this class had no
@@ -248,7 +315,7 @@ class FastEmbedder:
             # Zero rather than NaN. The caller (_embed_rows) drops non-finite
             # vectors; returning the wrong LENGTH here would corrupt the vec0
             # table instead, which is worse.
-            out.append(vec if _finite(vec) else [0.0] * self.dim)
+            out.append(vec if _usable_vector(vec, self.dim) else [0.0] * self.dim)
         return out
 
 
@@ -278,7 +345,21 @@ class MemoryStore:
     # ---- plumbing ---------------------------------------------------------
 
     def _connect(self) -> sqlite3.Connection:
-        c = sqlite3.connect(self.path, timeout=30)
+        # isolation_level=None - AUTOCOMMIT, and this is not a preference.
+        #
+        # jarvis_extract owns the review queue but not its own database: it
+        # writes through this store's connection, `with closing(store._connect())
+        # as c`, and never calls commit(). Under the sqlite3 default that opens
+        # an implicit transaction and close() discards it, so propose() returned
+        # the rows it had just inserted while pending() found an empty queue -
+        # the extraction queue silently did nothing, for every proposal, for
+        # ever. Measured: `proposed [{...}], pending []`.
+        #
+        # The store's own writes do call commit(); under autocommit those are
+        # harmless no-ops. Making the caller commit instead would mean editing
+        # a module that is not in this repository, on the owner's machine, to
+        # match a rebuild - which is backwards.
+        c = sqlite3.connect(self.path, timeout=30, isolation_level=None)
         c.row_factory = sqlite3.Row
         # WAL so a read during a write does not raise "database is locked" -
         # the HUD reads this on the request thread while the extractor writes
@@ -334,14 +415,18 @@ class MemoryStore:
             c.execute("INSERT OR REPLACE INTO temp._vec_probe (id, embedding) "
                       "VALUES (1, ?)", (_pack([0.0, 1.0]),))
             c.execute("DROP TABLE temp._vec_probe")
-            # COMMIT, or the rest of _init() runs inside the implicit deferred
-            # transaction this INSERT opened. That turns "INSERT OR REPLACE
-            # INTO meta" into a read->write upgrade, which SQLite refuses with
-            # SQLITE_BUSY WITHOUT invoking the busy handler - so the 30-second
-            # timeout is skipped and __init__ raises "database is locked"
+            # Belt and braces. _connect() is autocommit now, so this INSERT
+            # opens no transaction and this commit() is a no-op. It is kept
+            # because of what happened when it was not: under the sqlite3
+            # default the INSERT opened an implicit deferred transaction, the
+            # rest of _init() ran inside it, and "INSERT OR REPLACE INTO meta"
+            # became a read->write upgrade - which SQLite refuses with
+            # SQLITE_BUSY WITHOUT invoking the busy handler, so the 30-second
+            # timeout was skipped and __init__ raised "database is locked"
             # instantly. Measured: 5 of 6 concurrent processes failed to
-            # construct a store, and jarvis_hud reports that as "memory layer
-            # failed to start".
+            # construct a store, reported by jarvis_hud as "memory layer failed
+            # to start". If the isolation level is ever changed back, this line
+            # is what stops that returning.
             c.commit()
             return True
         except Exception:
@@ -362,11 +447,29 @@ class MemoryStore:
                     created    REAL NOT NULL,
                     valid_from REAL NOT NULL,
                     valid_to   REAL,            -- NULL = still true
+                    retired_at REAL,            -- when WE stopped believing it
                     retired_by INTEGER,         -- the fact that replaced this one
                     embedded   INTEGER NOT NULL DEFAULT 0,
                     meta       TEXT
                 )""")
+            # Stores written before retired_at existed. ALTER TABLE ADD COLUMN
+            # is the one schema change SQLite does cheaply and without
+            # rewriting the file, and it cannot be made conditional in SQL, so
+            # the column list is read first. Doing it inside a try/except
+            # instead would swallow a real failure as "already there".
+            have = {r["name"] for r in c.execute("PRAGMA table_info(facts)")}
+            if "retired_at" not in have:
+                c.execute("ALTER TABLE facts ADD COLUMN retired_at REAL")
+                # The best available guess for rows retired before the column
+                # existed, and it is only a guess: back then the two axes were
+                # the same number, so every historical retirement reads as
+                # "we learned the moment it stopped being true". That is often
+                # false and there is no way to recover the truth. New
+                # retirements record both separately.
+                c.execute("UPDATE facts SET retired_at=valid_to "
+                          "WHERE valid_to IS NOT NULL AND retired_at IS NULL")
             c.execute("CREATE INDEX IF NOT EXISTS ix_facts_valid ON facts(valid_to, valid_from)")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_facts_known ON facts(created, retired_at)")
             c.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
                     text, content='facts', content_rowid='id', tokenize='porter unicode61')""")
@@ -427,9 +530,14 @@ class MemoryStore:
                 (text, source, now, valid_from or now, json.dumps(meta or {})))
             fid = cur.lastrowid
             if supersedes:
+                # Both axes. A correction arriving now means we learned now
+                # (retired_at), and - absent anything better - that the old
+                # fact stopped being true now too (valid_to). Callers that
+                # know the real date call retire() with it before adding.
                 done = c.execute(
-                    "UPDATE facts SET valid_to=?, retired_by=? WHERE id=? AND valid_to IS NULL",
-                    (now, fid, supersedes))
+                    "UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
+                    " WHERE id=? AND valid_to IS NULL",
+                    (now, now, fid, supersedes))
                 if done.rowcount == 0:
                     # The caller believes it filed a correction that retired
                     # the old fact. It did not - the id does not exist, or was
@@ -452,10 +560,26 @@ class MemoryStore:
     #: caller written against either name works.
     add_fact = add
 
-    def retire(self, fact_id: int, replaced_by: Optional[int] = None) -> bool:
+    def retire(self, fact_id: int, replaced_by: Optional[int] = None,
+               valid_to: Optional[float] = None) -> bool:
+        """Stop recalling a fact. Never deletes it.
+
+        retired_at is always now - that is when this machine learned. valid_to
+        is when the fact stopped being TRUE, which defaults to now but is the
+        parameter to pass when you know better: "I moved in January" told in
+        March is retire(id, valid_to=<january>), and the row then says both
+        things at once.
+
+        A valid_to in the future is allowed and means exactly what it says -
+        a lease that ends in December is not retired today - so nothing that
+        reads these rows may treat "valid_to is not NULL" as "not current".
+        """
         with _LOCK, closing(self._connect()) as c:
-            cur = c.execute("UPDATE facts SET valid_to=?, retired_by=? WHERE id=? AND valid_to IS NULL",
-                            (time.time(), replaced_by, fact_id))
+            now = time.time()
+            cur = c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
+                            " WHERE id=? AND valid_to IS NULL",
+                            (now if valid_to is None else float(valid_to),
+                             now, replaced_by, fact_id))
             c.commit()
             # rowcount, not None. "Retired a fact that was already retired" and
             # "retired the fact" have to be distinguishable, or the caller
@@ -497,6 +621,11 @@ class MemoryStore:
             c.commit()
             return cur.rowcount > 0
 
+    # Counted rather than logged: this module has no logger, and a print on a
+    # background thread in a windowed app goes to a closed handle. status() is
+    # where it becomes visible.
+    _bad_vectors = 0
+
     def _embed_rows(self, c, rows: list[tuple[int, str]]) -> int:
         """Embed and index. Returns how many rows were actually written.
 
@@ -521,10 +650,12 @@ class MemoryStore:
                 # "DEGRADES, NEVER FAILS" says it must be stored and merely
                 # unembedded.
                 continue
-            if not _finite(v):
-                # Leave embedded=0. The row stays findable by WORDS, and
-                # backfill will try it again when a better model is installed.
-                # Storing it would make the fact permanently unreachable.
+            if not _usable_vector(v, self.embedder.dim):
+                # Leave embedded=0, exactly as a failed INSERT does. The row
+                # stays findable by WORDS, and backfill will try it again when
+                # a better model is installed. Storing it would make the fact
+                # permanently unreachable and say nothing about it anywhere.
+                self._bad_vectors += 1
                 continue
             try:
                 c.execute("INSERT OR REPLACE INTO facts_vec (fact_id, embedding) VALUES (?, ?)",
@@ -612,7 +743,13 @@ class MemoryStore:
             if self._vec_ok and self.embedder.semantic:
                 try:
                     qv = self.embedder.embed([query])[0]
-                    if _finite(list(qv)):
+                    # A bad QUERY vector is worse than a bad stored one: it
+                    # does not fail, it silently ranks the whole table by
+                    # distance-from-nonsense, and those rows then outrank the
+                    # keyword hits through RRF. Drop the vector vote and let
+                    # FTS5 answer alone - the same thing that happens on a
+                    # machine with no embedding model at all.
+                    if _usable_vector(list(qv), self.embedder.dim):
                         rows = c.execute(
                             "SELECT fact_id, distance FROM facts_vec WHERE embedding MATCH ?"
                             " ORDER BY distance LIMIT ?", (_pack(qv), candidates)).fetchall()
@@ -644,7 +781,13 @@ class MemoryStore:
             valid = f["valid_from"] <= at and (f["valid_to"] is None or f["valid_to"] > at)
             if not valid and not include_retired:
                 continue
-            f["score"] = round(score, 5); f["current"] = f["valid_to"] is None
+            f["score"] = round(score, 5)
+            # Was `f["valid_to"] is None`, which disagreed with the validity
+            # line above it for a valid_to in the FUTURE: the fact counted as
+            # valid and was returned, then arrived flagged not-current.
+            # Unreachable while retire() could only stamp now; reachable the
+            # moment it takes a date. Same rule in both places.
+            f["current"] = f["valid_to"] is None or f["valid_to"] > at
             out.append(f)
             if len(out) >= k:
                 break
@@ -722,9 +865,25 @@ class MemoryStore:
         return hist
 
     def current_facts(self, limit: int = 400) -> list[dict]:
+        """What is true NOW. A valid_to in the future has not happened yet."""
         with _LOCK, closing(self._connect()) as c:
             return [dict(r) for r in c.execute(
-                "SELECT * FROM facts WHERE valid_to IS NULL ORDER BY id DESC LIMIT ?", (limit,))]
+                "SELECT * FROM facts WHERE valid_to IS NULL OR valid_to > ?"
+                " ORDER BY id DESC LIMIT ?", (time.time(), limit))]
+
+    def known_at(self, when: float, limit: int = 400) -> list[dict]:
+        """What this machine BELIEVED at a past moment, right or wrong.
+
+        The transaction-time query, and the reason retired_at exists. A fact
+        entered on Tuesday and retired on Friday is in Wednesday's answer even
+        though it is not in today's, and a fact learned yesterday about last
+        year is not in last year's answer at all.
+        """
+        with _LOCK, closing(self._connect()) as c:
+            return [dict(r) for r in c.execute(
+                "SELECT * FROM facts WHERE created <= ?"
+                " AND (retired_at IS NULL OR retired_at > ?)"
+                " ORDER BY id DESC LIMIT ?", (when, when, limit))]
 
     def status(self) -> dict:
         with _LOCK, closing(self._connect()) as c:
@@ -733,9 +892,20 @@ class MemoryStore:
                 "SELECT COUNT(*) FROM facts WHERE valid_to IS NULL OR valid_to > ?",
                 (time.time(),)).fetchone()[0]
             pending = c.execute("SELECT COUNT(*) FROM facts WHERE embedded=0").fetchone()[0]
-        return {"db": str(self.path), "facts": total, "current": current, "retired": total - current,
-                "embedder": self.embedder.name, "semantic": self.embedder.semantic,
-                "vector_search": self._vec_ok, "unembedded": pending}
+        out = {"db": str(self.path), "facts": total, "current": current,
+               "retired": total - current,
+               "embedder": self.embedder.name, "semantic": self.embedder.semantic,
+               "vector_search": self._vec_ok, "unembedded": pending}
+        if self._bad_vectors:
+            # Only when it has happened. A permanent "bad_vectors: 0" line is
+            # noise on every screen that renders status().
+            out["bad_vectors"] = self._bad_vectors
+            out["bad_vectors_note"] = (
+                f"{self._bad_vectors} embedding(s) came back unusable - not a "
+                "number, or all zeros - and were not stored. Those facts are "
+                "still found by keyword. If this keeps climbing the embedding "
+                "model is broken, not the store.")
+        return out
 
 
 # --------------------------------------------------------------------------

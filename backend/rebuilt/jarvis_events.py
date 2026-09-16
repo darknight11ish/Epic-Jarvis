@@ -94,11 +94,17 @@ class Event:
     data: dict = field(default_factory=dict)
     at: float = field(default_factory=time.time)
 
-    def frame(self) -> bytes:
+    def sse(self) -> str:
         """This event as an SSE frame.
 
-        INFERRED - the original's framing code did not survive, but the exact
-        output is pinned by JARVIS-API.md's worked example:
+        THE NAME IS RECOVERED, the body is inferred. test_extraction_wiring.py
+        line 351 calls `events[-1].sse()` and then tests `"prompt" not in blob`
+        against the result - so the original method was called sse() and
+        returned a STRING. A rebuild that called it frame() and returned bytes
+        made that assertion raise AttributeError, and the leak check it guards
+        - an email body reaching a phone lock screen - stopped running.
+
+        The exact output is pinned by JARVIS-API.md's worked example:
 
             id: 414
             event: approval
@@ -137,8 +143,22 @@ class Event:
         # event and died again: a 3-second reconnect loop on a phone until the
         # event fell off the ring. The docstring already promised "a value
         # that will not serialise must not take the whole stream down"; only
-        # json.dumps was guarded.
-        return text.encode("utf-8", "replace")
+        # json.dumps was guarded. The encode now lives in frame(), below.
+        return text
+
+    def frame(self) -> bytes:
+        """The same frame, encoded, because stream() yields bytes.
+
+        errors="replace", and this is the important one. The encode used to sit
+        outside the try in sse(), so a single lone surrogate - which
+        json.dumps(ensure_ascii=False) emits happily, and which arrives from
+        any surrogateescape-decoded filename or environment string - raised
+        UnicodeEncodeError out of the generator. That killed the stream for
+        EVERY connected client, and each reconnect re-read the same poisoned
+        event and died again: a 3-second reconnect loop on a phone until the
+        event fell off the ring.
+        """
+        return self.sse().encode("utf-8", "replace")
 
 
 # --------------------------------------------------------------------------
@@ -195,6 +215,18 @@ class Bus:
         unchanged" events a day. Returning None when nothing moved is what
         makes a one-second poll acceptable on a phone.
 
+        THE FIRST OBSERVATION IS A BASELINE, and also returns None. A key that
+        has never been seen has not CHANGED - there is nothing to compare it
+        against - and this is a change feed, not a snapshot feed. Publishing
+        the first sighting meant every start of the pump fired one approval,
+        one power and one proposal event describing a queue that had been
+        sitting there unchanged for a week, to clients that were about to read
+        /api/pending anyway. On a phone that is three notifications for
+        nothing, at the moment the desktop comes back.
+
+        Nothing is lost by staying quiet: both clients fetch the real state on
+        connect, and every later change is announced.
+
         The caller mutating `ev.data` afterwards means the Event this returns
         must be the same object that is in the ring - not a copy - or those
         extra fields would never reach a subscriber.
@@ -215,9 +247,12 @@ class Bus:
             token = f"<{type(value).__name__}>"
 
         with self._cv:
-            if self._seen.get(key) == token:
+            first = key not in self._seen
+            if not first and self._seen[key] == token:
                 return None
             self._seen[key] = token
+            if first:
+                return None
 
         # `extra` is merged BEFORE publish, so subscribers waiting on the
         # condition variable see the complete payload. The recovered caller
@@ -234,8 +269,14 @@ class Bus:
         return self.publish(kind, data)
 
     def forget(self, key: Optional[str] = None) -> None:
-        """Drop the last-seen value so the next note() fires. INFERRED - used
-        by tests that need a poller to re-announce without changing state."""
+        """Drop the last-seen value, so this key re-baselines.
+
+        The next note() for it is a first observation again and therefore
+        silent; the one after that announces any change. INFERRED, and there
+        are no callers - it is here because a poller whose source is replaced
+        wholesale (a store reopened on a different file) should be able to say
+        so rather than report the swap as a change.
+        """
         with self._cv:
             if key is None:
                 self._seen.clear()
@@ -328,23 +369,33 @@ def activity() -> dict:
 _DOORBELL_KEYS = ("id", "action", "tier", "created")
 
 
-def _scalar(v, limit: int = 200):
-    """A value safe to put on a doorbell: a number, a bool, None, or a short
-    string. Anything else becomes its type name rather than its contents."""
-    if v is None or isinstance(v, (bool, int, float)):
-        return v
-    if isinstance(v, str):
-        return v[:limit]
-    return f"<{type(v).__name__}>"
-
-
 def _doorbell_item(item: dict) -> dict:
     """One queue entry, reduced to what a notification may say.
 
     Everything needed to RENDER the queue comes from /api/pending, behind the
     same token. This says only that something is waiting, and enough about it
     to sort and de-duplicate.
+
+    SELF-CONTAINED ON PURPOSE. _scalar is nested rather than a module
+    function, and this is not style. Two suites - test_gate_egress.py and
+    test_approval_notice.py - audit this filter by pulling _DOORBELL_KEYS and
+    this function out of the source with ast and exec-ing the two of them in
+    an empty namespace, deliberately, so the check needs no sqlite, no import
+    and no running server. A module-level helper is not in that namespace, so
+    the audit died with NameError and both suites recorded the doorbell test
+    as failed without ever running a row through it - the leak check that
+    exists to stop an attacker's words reaching a lock screen was silently
+    not being performed. Anything this function needs, it defines.
     """
+    def _scalar(v, limit: int = 200):
+        """A value safe to put on a doorbell: a number, a bool, None, or a
+        short string. Anything else becomes its TYPE NAME, not its contents."""
+        if v is None or isinstance(v, (bool, int, float)):
+            return v
+        if isinstance(v, str):
+            return v[:limit]
+        return f"<{type(v).__name__}>"
+
     # Keys AND types. An allowlist of key names lets a non-scalar through
     # wholesale - {"id": {"nested": "SECRET"}} passed intact - so each value is
     # coerced to the scalar it is supposed to be. Not reachable today (these

@@ -47,6 +47,39 @@ on a throwaway copy instead.
 | `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
 | `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Needs `event-allowlist`. |
 
+## Nineteen of the twenty-one actually apply, and that is correct
+
+Ten backend modules were lost and rebuilt from scratch (`backend/rebuilt/` —
+see the header of any file in there). The rebuild was written against the
+*patched* behaviour, because the patches were the specification: their `+`
+lines were often the only surviving copy of the original code.
+
+So six of the twenty-one patches are already half-applied by the rebuild:
+
+| patch | half in `rebuilt/` | half still applied, from `rebuilt-patches/` |
+|---|---|---|
+| `memory-safety.patch` | `jarvis_memory.py` | `jarvis_extract.py` |
+| `extraction-wiring.patch` | `jarvis_events.py` | `jarvis_hud.py` |
+| `bitemporal.patch` | `jarvis_memory.py` | `jarvis_hud.py` |
+| `approval-notice.patch` | `jarvis_events.py` | `jarvis_gate.py` |
+| `embedding-guard.patch` | `jarvis_memory.py` | *(nothing — skipped entirely)* |
+| `event-allowlist.patch` | `jarvis_events.py` | *(nothing — skipped entirely)* |
+
+`apply-patches.ps1` detects the rebuilt modules by a marker in their header and
+substitutes the split versions, which is why a clean run reports **19**.
+
+**The hazard this creates, and it has already bitten once.** "The rebuild
+contains that half" is an assumption, not a fact, and nothing checked it. Four
+of those six halves were missing or wrong in the first rebuild: the whole
+second time axis (`retired_at`, `known_at`, `retire(valid_to=)`), the
+`_usable_vector` guard and its counter, the `Embedder` base class two suites
+subclass, and the framing method's recovered name. The patches were skipped on
+the assumption, the tests that would have caught it could not run, and the
+backend shipped without features the README said it had.
+
+The tests here are the only thing that closes that gap, and they only run
+against a real backend — so run them.
+
 ## Run the tests
 
 They live here; the modules they test live in your backend folder. Point them

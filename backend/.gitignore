@@ -30,4 +30,11 @@ jarvis_speech.py
 # copy") assumed the real file existed somewhere else. For these ten there is
 # no elsewhere, so this directory IS the only copy and must be committed.
 !rebuilt/
-!rebuilt/**
+!rebuilt/*.py
+!rebuilt/*.toml
+
+# ...but NOT its bytecode. `!rebuilt/**` un-ignored everything under the
+# directory, including __pycache__, and ten .pyc files were committed - binary
+# noise that changes on every run and conflicts on every merge. The exception
+# is for the SOURCES that exist nowhere else, not for build output.
+rebuilt/__pycache__/

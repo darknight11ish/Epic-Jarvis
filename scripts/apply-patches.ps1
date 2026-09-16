@@ -624,8 +624,13 @@ if ($fail.Count -eq 0) {
         Say "===== $($f.Name) =====" Yellow
         Say ($f.Output -split "`n" | Select-Object -Last 25 | Out-String)
     }
-    Say "Send the block above back. A failing suite here is a real finding:" Cyan
-    Say "these all pass in CI, so a failure means your backend differs from" Cyan
-    Say "the one the patches were written against." Cyan
+    Say "Send the block above back. A failing suite here is a real finding." Cyan
+    Say "" 
+    Say "These suites do NOT run in CI - CI builds the desktop app, and the" Cyan
+    Say "Python backend is not in the repository, so there is nothing there" Cyan
+    Say "for them to run against. Your machine is the first place they meet" Cyan
+    Say "the real modules. A failure means the backend here differs from the" Cyan
+    Say "one the patches were written against, or that a rebuilt module is" Cyan
+    Say "wrong - and the second one has happened." Cyan
     exit 1
 }

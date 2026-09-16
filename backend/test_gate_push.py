@@ -144,6 +144,55 @@ def t_the_push_redaction_does_not_ride_the_logging_switch():
           G._safe_detail({}, 100) == "(no details)", G._safe_detail({}, 100))
 
 
+# Every source a _push argument is allowed to be built from, and why each one
+# is safe by CONSTRUCTION rather than by having been checked:
+#
+#   _safe_detail(...)  the redactor. Keeps the shape, drops the values, and
+#                      does not consult the logging switch.
+#   notice_for(...)    reads the action NAME and one boolean, and nothing
+#                      else on the row. See approval-notice.patch.
+#   _note[...]         the dict notice_for just returned.
+#   risk_for(...)      the tier table, keyed by action name.
+#   action             an action name out of that same table - never text
+#                      anyone typed, and never text a web page supplied.
+#
+# This list grew when approval-notice.patch replaced `_safe_detail(detail, 400)`
+# at both sites with strictly SAFER text: a notice built from the action name
+# is not a redacted payload, it never touched the payload. The old assertion
+# ("_safe_detail is in the expression") then failed on code that leaks less
+# than the code it was written to protect - so the rule is stated as what it
+# always meant, and the control below is what actually holds the line.
+_SAFE_SOURCES = ("_safe_detail", "notice_for", "_note", "risk_for", "action")
+
+#: Never, in any argument. These are the three locals in jarvis_gate that hold
+#: the payload: the request's own detail dict, the prompt text, and the quoted
+#: outside text behind `raised`. `detail` is permitted inside a _safe_detail()
+#: call, which is why _redacted_names() exists.
+_NEVER = ("detail", "prompt", "raised")
+
+
+def _names(node):
+    """Every bare name and attribute used in an expression."""
+    out = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name):
+            out.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            out.add(n.attr)
+    return out
+
+
+def _redacted_names(node):
+    """Names that appear only inside a _safe_detail(...) call."""
+    out = set()
+    for n in ast.walk(node):
+        if (isinstance(n, ast.Call)
+                and getattr(n.func, "id", "") == "_safe_detail"):
+            for a in n.args:
+                out |= _names(a)
+    return out
+
+
 def t_call_sites_redact():
     """CONTROL. The rule lives at the call sites; _push cannot enforce it."""
     src = (BACKEND / "jarvis_gate.py").read_text()
@@ -151,13 +200,19 @@ def t_call_sites_redact():
              if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_push"]
     check("both _push call sites are present", len(calls) == 2, f"found {len(calls)}")
     for i, call in enumerate(calls):
+        where = f"line {call.lineno}"
+        for j, arg in enumerate(call.args):
+            arg_src = ast.unparse(arg)
+            used = _names(arg)
+            safe = _redacted_names(arg)
+            leaked = sorted((used & set(_NEVER)) - safe)
+            check(f"call site {i + 1} arg {j + 1} carries no payload name",
+                  not leaked,
+                  f"{where}: {arg_src[:90]} uses {leaked}")
         body_src = ast.unparse(call.args[1]) if len(call.args) > 1 else ""
-        check(f"call site {i + 1} redacts before sending",
-              "_safe_detail" in body_src,
-              f"line {call.lineno}: {body_src[:90]}")
-        check(f"call site {i + 1} does not fall back to the raw prompt",
-              "prompt" not in body_src,
-              f"line {call.lineno}: {body_src[:90]}")
+        check(f"call site {i + 1} builds its body from a safe source",
+              any(t in body_src for t in _SAFE_SOURCES),
+              f"{where}: {body_src[:90]} is none of {list(_SAFE_SOURCES)}")
 
 
 if __name__ == "__main__":
