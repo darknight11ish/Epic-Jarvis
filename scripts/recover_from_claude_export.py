@@ -61,8 +61,17 @@ WANTED = [
     "jarvis_sleep", "jarvis_initiative",
 ]
 
+#: ANY language tag, not just python. This was `(?:python|py)?` and it was
+#: subtly, silently wrong: for a ```bash or ```json block the opening fence did
+#: not match, so finditer moved on and latched onto that block's CLOSING fence
+#: as an opening - capturing the PROSE that followed until the next fence.
+#: Measured on a real 104 MB history: 9,727 "blocks" extracted, median length
+#: 56 characters, and the longest ones were plain English. It found nothing not
+#: because there was nothing, but because it was reading the gaps between the
+#: code rather than the code. Filtering the language tag afterwards is the
+#: right shape; refusing to match it is not.
 _FENCE = re.compile(
-    r"```(?:python|py)?[ \t]*\n(.*?)```",
+    r"```[A-Za-z0-9_+#.-]*[ \t]*\r?\n(.*?)```",
     re.DOTALL,
 )
 #: `# jarvis_memory.py` or `#!/usr/bin/env python3` then the name, in the
