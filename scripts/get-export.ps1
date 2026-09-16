@@ -12,18 +12,23 @@
 
   That sentence is why this script exists rather than five clicks.
 
-  A one-time URL is spent whether or not the download worked. Click one while
-  signed out, or lose the connection half way, and the link is gone - the file
-  is not, but you cannot fetch it again without requesting a whole new export
-  and waiting for a second email. So every download here is verified the moment
-  it lands, and the files are kept: if something later goes wrong reading them,
-  nothing has to be fetched twice.
+  A download that succeeds cannot be redone, so every file is verified the
+  moment it lands and then kept: if something later goes wrong reading them,
+  nothing is fetched twice.
 
-  Verified means checked, not assumed. A spent or unauthenticated link does not
-  answer with an error - it answers with an HTML page, which saves perfectly
-  happily as `conversations-000.zip` and fails much later with an error about
-  the archive being corrupt. So each file is opened and its first two bytes read:
-  a real zip starts `PK`. An HTML page starts `<!`.
+  Verified means checked, not assumed. A link that is spent, but still
+  reachable, answers with an HTML page rather than an error - and that saves
+  perfectly happily as `conversations-000.zip`, then fails much later as "the
+  archive is corrupt", which sends you to look at the archive. So each file is
+  opened and its first two bytes read: a real zip starts `PK`.
+
+  THE BIG CAVEAT, learned by running this. These URLs sit behind your claude.ai
+  login. PowerShell has none of your browser's cookies, so all five answered
+  403 Forbidden - refused at the door, before any download. That is NOT a spent
+  link, and an earlier version of this script announced that it was, which is a
+  frightening thing to be told about data you cannot get back and was never
+  something it could know. On a 403 it now says so and prints the URLs to open
+  in the browser instead.
 
   All five are downloaded, not just the conversations. They are all one-use, a
   second export means a second wait, and the missing modules could as easily be
@@ -100,8 +105,8 @@ Say "Manifest : $Manifest"
 Say "Created  : $($m.created_at)"
 Say "Saving to: $OutDir"
 Say ""
-Say "THESE LINKS WORK ONCE EACH. Do not re-run this on the same manifest -" Yellow
-Say "a second attempt gets nothing and the files are already spent." Yellow
+Say "THESE LINKS WORK ONCE EACH, so a download that SUCCEEDS cannot be redone." Yellow
+Say "A request refused at the door - 403, not signed in - does not spend one." Yellow
 Say ""
 
 function Test-Zip([string] $path) {
@@ -123,7 +128,7 @@ function Test-Zip([string] $path) {
     } catch { return $false }
 }
 
-$good = @(); $bad = @()
+$good = @(); $bad = @(); $forbidden = 0
 
 foreach ($f in $m.data_files) {
     $name = $f.filename
@@ -140,7 +145,10 @@ foreach ($f in $m.data_files) {
     try {
         Invoke-WebRequest -Uri $f.export_url -OutFile $dest -UseBasicParsing -TimeoutSec 600
     } catch {
+        $code = $null
+        if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
         Bad "$name - $($_.Exception.Message)"
+        if ($code -eq 403) { $forbidden++ }
         $bad += $name
         continue
     }
@@ -165,8 +173,32 @@ Say "$($good.Count) of $($m.data_files.Count) archives are here." Cyan
 if ($bad.Count -gt 0) {
     Say ""
     Bad "$($bad.Count) did not arrive: $($bad -join ', ')"
-    Say "  Those links are spent. To get those files you need a NEW export" Yellow
-    Say "  (Settings -> Privacy -> Export data) and a new manifest." Yellow
+
+    # A 403 is almost certainly NOT a spent link. These URLs sit behind your
+    # claude.ai login, and Invoke-WebRequest carries no browser cookies - so it
+    # is refused at the door, before the download that would spend the link.
+    # An earlier version of this script announced "those links are spent" for
+    # any failure at all, which is a frightening thing to be told and was not
+    # something it could know.
+    if ($forbidden -gt 0) {
+        Say ""
+        Say "  $forbidden of them answered 403 Forbidden. That means NOT SIGNED IN," Cyan
+        Say "  not 'already used' - these links sit behind your claude.ai login" Cyan
+        Say "  and PowerShell has none of your browser's cookies." Cyan
+        Say ""
+        Say "  Your links are very probably still good. Download them in the" Green
+        Say "  BROWSER you are signed into claude.ai with:" Green
+        Say ""
+        foreach ($f in $m.data_files) {
+            Say "    $($f.export_url)" White
+        }
+        Say ""
+        Say "  Paste each into the address bar. Save them anywhere, then:" Cyan
+        Say "      python .\scripts\recover_from_claude_export.py `"$env:USERPROFILE\Downloads`"" Cyan
+    } else {
+        Say "  If a link was already used it cannot be retried - that needs a" Yellow
+        Say "  NEW export (Settings -> Privacy -> Export data) and a new manifest." Yellow
+    }
 }
 
 if ($good.Count -eq 0) { exit 1 }
