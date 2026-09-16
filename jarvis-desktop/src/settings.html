@@ -240,6 +240,135 @@
         <p class="state" id="logs-state">—</p>
       </section>
 
+      <section class="card">
+        <h2>Frequently asked questions</h2>
+        <p class="note">
+          Answers specific to this program, the one running on this computer.
+          Jarvis on your phone is a different app with its own FAQ, because
+          the two run into different problems.
+        </p>
+
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary class="faq-q">Does anything I say to Jarvis leave this computer?</summary>
+            <p class="faq-a">
+              No, not on its own. Jarvis answers using a language model that
+              runs on this machine. It only reaches the internet for
+              something specific, and only after it explains what it needs
+              and you say yes — there is no standing permission to go
+              online, and this program never opens a public tunnel to
+              itself.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Why is there no "approve everything" button?</summary>
+            <p class="faq-a">
+              On purpose. Anything Jarvis wants to do that is not
+              completely safe stops and asks first, one action at a time.
+              A single button to wave all of those through would undo that
+              protection, so this program is built with no way to add one,
+              anywhere in it.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">My Alt+Space shortcut does not do anything.</summary>
+            <p class="faq-a">
+              Something else on this computer has already claimed that
+              combination — usually PowerToys Run, or on recent Windows 11
+              builds, the Copilot app. Open Shortcuts above: a binding that
+              is not working says <em>in use</em> there. Pick a different
+              combination and press Save shortcuts.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Can my phone talk to Jarvis?</summary>
+            <p class="faq-a">
+              Yes, over Tailscale — a private network between only the
+              devices you own, never the open internet. Turn it on above,
+              in Connection, under "Let my phone reach this over
+              Tailscale," by typing this computer's own Tailscale address.
+              Leave that box blank and nothing changes: Jarvis stays
+              reachable from this computer alone.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Why does the microphone button do nothing?</summary>
+            <p class="faq-a">
+              Windows dictation and browser speech recognition both send
+              your voice to a company's servers to turn it into text, which
+              breaks the rule that nothing private leaves this machine — so
+              this program switches that off rather than use it. An
+              offline replacement that never leaves the computer is being
+              built; until it is finished, dictation stays off rather than
+              quietly sending your voice somewhere you did not ask it to
+              go.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Jarvis suddenly got slow. What happened?</summary>
+            <p class="faq-a">
+              Open the Brain window → Models. If the language model has
+              fallen off the graphics card onto the processor instead,
+              there is a yellow line at the top of that list saying so,
+              with the percentage. That is almost always the cause — a
+              graphics card doing the work is fast, a processor doing the
+              same work is not.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">What is the difference between Quiet and Standby?</summary>
+            <p class="faq-a">
+              Both are ways for Jarvis to use less power while you are not
+              using it. Quiet stops the things Jarvis does on its own in
+              the background, but keeps the model loaded, so it still
+              answers you instantly. Standby also unloads the model from
+              the graphics card — the real drop in power use — at the cost
+              of a slower first answer (five to fifteen seconds) after you
+              wake it back up.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Will Jarvis update itself without asking?</summary>
+            <p class="faq-a">
+              No. It can check whether a newer version exists and tell you
+              about it, above under Updates, but it never installs one on
+              its own. Installing is always the Install button, pressed by
+              you.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">I closed the window, but Jarvis is still running. Is that a bug?</summary>
+            <p class="faq-a">
+              No — that is how this program is built. Closing any window,
+              including the main assistant window's own close button, just
+              hides it; Jarvis keeps running so it can still answer you
+              instantly. To actually quit, use "Quit" on the tray icon,
+              near your clock.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Is my pairing token safe?</summary>
+            <p class="faq-a">
+              It is stored on this computer only, it is never shown again
+              once you save it here, and this page never sends it anywhere
+              except the backend address you configured above. It is
+              stored as plain text on disk, not scrambled, so treat this
+              computer's own user account the way you would treat any
+              other place a password lives.
+            </p>
+          </details>
+        </div>
+      </section>
+
       <footer class="page-foot">
         <span id="store-path"></span>
       </footer>
