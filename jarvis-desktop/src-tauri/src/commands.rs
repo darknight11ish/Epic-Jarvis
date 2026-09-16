@@ -265,16 +265,88 @@ pub fn get_api_settings(app: AppHandle) -> serde_json::Value {
     serde_json::json!({
         "base": jarvis_base(&app),
         "hasToken": jarvis_token_for(&app).is_some(),
+        "bindAddress": supervised_bind_address(&app).unwrap_or_default(),
         "store": SETTINGS_STORE,
     })
 }
 
-/// Persists the base URL and, optionally, the token.
+/// The address a supervised backend should bind on, beyond loopback — empty
+/// (the default) means "let the backend pick its own default", which is
+/// loopback-only. Read by `sidecar::start()` when it launches the child.
+///
+/// Not the same setting as `base`: `base` is where THIS client's own windows
+/// look for Jarvis (almost always loopback); this is where the backend
+/// ALSO listens, so a phone on the same tailnet can reach it too. Two
+/// different questions, so two different settings — conflating them would
+/// mean a Tailscale address here also becoming the origin the desktop's own
+/// webviews try to fetch, when they should keep talking to loopback.
+pub fn supervised_bind_address(app: &AppHandle) -> Option<String> {
+    use tauri_plugin_store::StoreExt;
+
+    app.store(SETTINGS_STORE)
+        .ok()
+        .and_then(|store| store.get("bind_address"))
+        .and_then(|v| v.as_str().map(str::to_string))
+        .map(|b| b.trim().to_string())
+        .filter(|b| !b.is_empty())
+}
+
+/// Checks a bind address before it is persisted.
+///
+/// This is not `validate_base`: a bind address is a bare host (an IP, a
+/// Tailscale `100.x` address, a hostname) with no scheme, path or port — the
+/// backend derives the port itself from `JARVIS_HUD_PORT`. Empty is always
+/// accepted; it means "clear this and let the backend bind loopback only",
+/// the safe default.
+///
+/// `0.0.0.0` is refused outright rather than merely discouraged.
+/// `docs/INSTALL.md` is explicit that this setting exists to reach a
+/// specific tailnet address, never the whole network: "Bind to the specific
+/// Tailscale address, not 0.0.0.0. Then the port is not reachable from the
+/// café Wi-Fi at all." Typing the wildcard here would quietly turn a
+/// same-tailnet feature into a same-network one — every device on whatever
+/// Wi-Fi the machine is on, not just the owner's own tailnet — which is
+/// exactly the "no public tunnel" line this project does not cross.
+fn validate_bind_address(addr: &str) -> Result<(), String> {
+    if addr.is_empty() {
+        return Ok(()); // clearing it falls back to loopback-only
+    }
+    if addr == "0.0.0.0" || addr == "::" {
+        return Err(
+            "refusing to bind every network interface (0.0.0.0) — set the \
+             machine's own Tailscale address instead, so this is reachable \
+             from the tailnet and nowhere else"
+                .to_string(),
+        );
+    }
+    if addr.contains('/') || addr.contains('?') || addr.contains('#') || addr.contains('@') {
+        return Err(
+            "the bind address must be a bare host — no path, query, fragment \
+                     or credentials"
+                .to_string(),
+        );
+    }
+    if addr.contains(':') {
+        return Err(
+            "the bind address must not include a port — the backend already \
+             knows its port from JARVIS_HUD_PORT"
+                .to_string(),
+        );
+    }
+    if addr.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("the bind address contains whitespace or control characters".to_string());
+    }
+    Ok(())
+}
+
+/// Persists the base URL, the token and the supervised bind address —
+/// each optional, so a caller can change one without resending the others.
 #[tauri::command]
 pub fn set_api_settings(
     app: AppHandle,
     base: Option<String>,
     token: Option<String>,
+    bind_address: Option<String>,
 ) -> Result<(), String> {
     use tauri_plugin_store::StoreExt;
 
@@ -288,6 +360,11 @@ pub fn set_api_settings(
     }
     if let Some(token) = token {
         store.set("token", serde_json::Value::String(token.trim().to_string()));
+    }
+    if let Some(bind_address) = bind_address {
+        let bind_address = bind_address.trim().to_string();
+        validate_bind_address(&bind_address)?;
+        store.set("bind_address", serde_json::Value::String(bind_address));
     }
     store
         .save()
@@ -1275,7 +1352,7 @@ fn assistant_reply(body: &str) -> String {
 
 #[cfg(test)]
 mod capture_tests {
-    use super::{assistant_reply, validate_external_url};
+    use super::{assistant_reply, validate_bind_address, validate_external_url};
 
     #[test]
     fn reads_the_non_streaming_openai_shape() {
@@ -1318,6 +1395,45 @@ mod capture_tests {
         assert!(validate_external_url("http://127.0.0.1:4719/api/status").is_ok());
         // A `@` after the host is a legitimate path character.
         assert!(validate_external_url("https://example.com/users/@someone").is_ok());
+    }
+
+    /// Empty clears the setting back to loopback-only — always allowed.
+    #[test]
+    fn an_empty_bind_address_is_accepted() {
+        assert!(validate_bind_address("").is_ok());
+    }
+
+    /// The one input this exists to stop: the wildcard would turn a
+    /// same-tailnet feature into a same-network one.
+    #[test]
+    fn the_wildcard_addresses_are_refused() {
+        assert!(validate_bind_address("0.0.0.0").is_err());
+        assert!(validate_bind_address("::").is_err());
+    }
+
+    #[test]
+    fn a_real_tailscale_address_is_accepted() {
+        assert!(validate_bind_address("100.64.12.3").is_ok());
+    }
+
+    #[test]
+    fn a_path_query_fragment_or_credential_is_refused() {
+        assert!(validate_bind_address("100.64.12.3/api").is_err());
+        assert!(validate_bind_address("100.64.12.3?x=1").is_err());
+        assert!(validate_bind_address("100.64.12.3#frag").is_err());
+        assert!(validate_bind_address("user@100.64.12.3").is_err());
+    }
+
+    /// The port is the backend's own job via `JARVIS_HUD_PORT`, not this field's.
+    #[test]
+    fn a_port_is_refused() {
+        assert!(validate_bind_address("100.64.12.3:4719").is_err());
+    }
+
+    #[test]
+    fn whitespace_or_control_characters_are_refused() {
+        assert!(validate_bind_address("100.64.12.3 ").is_err());
+        assert!(validate_bind_address("100.64.12.3\n").is_err());
     }
 }
 

@@ -426,6 +426,18 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
         command.env("HUD_TOKEN", token);
     }
 
+    // Off by default: with no bind address configured, the backend binds
+    // its own default, which is loopback-only. Set only when the owner has
+    // deliberately typed their machine's own Tailscale address into
+    // Settings — see commands::validate_bind_address for why this can never
+    // be "every interface". Before this, "the desktop app never tells the
+    // backend to listen anywhere but loopback" (docs/INSTALL.md §3.2) meant
+    // a backend this app started was unreachable from the phone no matter
+    // what was set on the phone's side.
+    if let Some(bind) = commands::supervised_bind_address(app) {
+        command.env("JARVIS_HUD_BIND", bind);
+    }
+
     // The whole reason the backend's failures were invisible. A release build
     // is `windows_subsystem = "windows"`, so this process has no console and
     // its standard handles are dead; inheriting them - which is what Command

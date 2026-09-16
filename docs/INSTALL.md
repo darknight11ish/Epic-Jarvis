@@ -235,8 +235,7 @@ switch cannot lift.
 
 ## Part 3 — The phone
 
-**Read this part before you start it.** One piece is not built yet and you will
-hit it. (The other — nothing generating a pairing token — is fixed; see 3.2.)
+**Read this part before you start it.**
 
 ### 3.1 What works
 
@@ -244,24 +243,36 @@ Tailscale, on both devices, on the same tailnet, with MagicDNS on. The backend
 already expects this — its own comments say so. A private mesh between two
 devices you own is not a public tunnel; nothing is exposed to the internet.
 
-### 3.2 What does not work yet
+### 3.2 Reaching a supervised backend from the phone
 
-**The desktop app never tells the backend to listen anywhere but loopback.** It
-passes three environment variables to a supervised backend and the bind address
-is not one of them. So a backend the app started is unreachable from the phone,
-no matter what you do on the phone.
+**Fixed 2026-09-16.** The desktop app used to never tell a backend it started
+to listen anywhere but loopback — it passed three environment variables to a
+supervised backend and the bind address was not one of them, so that backend
+was unreachable from the phone no matter what you did on the phone's side.
 
-Until that is fixed, start the backend by hand with both set:
+It is now a setting: **Settings → Connection → "Let my phone reach this over
+Tailscale."** Type this machine's own Tailscale address there (it looks like
+`100.x.x.x`; find it in the Tailscale app) and save. The desktop sets
+`JARVIS_HUD_BIND` on the supervised backend from that value every time it
+starts it. Leave the field blank — the default — and nothing changes: the
+backend stays loopback-only.
+
+That field refuses `0.0.0.0` outright, on either side: the setting will not
+save it, and if it somehow reached the backend, `jarvis_hud._bind_address()`
+would still be binding every interface on the machine, not just the tailnet.
+Type the specific Tailscale address, never the wildcard — that is what keeps
+the port unreachable from the café Wi-Fi and the Windows Firewall profile out
+of the picture.
+
+If you start the backend yourself rather than letting the desktop supervise
+it, the desktop's setting does not apply — set the environment variable by
+hand instead:
 
 ```powershell
 $env:HUD_TOKEN = "<a long random string you invent>"
 $env:JARVIS_HUD_BIND = "<your Tailscale 100.x address>"
 C:\...\python.exe jarvis_hud.py
 ```
-
-Bind to the **specific Tailscale address**, not `0.0.0.0`. Then the port is not
-reachable from the café Wi-Fi at all and the Windows Firewall profile stops
-mattering.
 
 The server refuses to start on a non-loopback bind with no token, which is
 correct. Its refusal message tells you to edit `bind_address` in

@@ -38,6 +38,7 @@ const dom = {
   base: $("base"),
   token: $("token"),
   tokenState: $("token-state"),
+  bindAddress: $("bind-address"),
   saveConnection: $("save-connection"),
   clearToken: $("clear-token"),
   connectionStatus: $("connection-status"),
@@ -120,6 +121,7 @@ async function loadConnection() {
   dom.base.value = settings.base || "";
   dom.tokenState.textContent = settings.hasToken ? "set" : "not set";
   dom.clearToken.disabled = !settings.hasToken;
+  dom.bindAddress.value = settings.bindAddress || "";
   dom.storePath.textContent = settings.store || "";
 }
 
@@ -132,6 +134,7 @@ dom.saveConnection.addEventListener("click", () =>
     await invoke("set_api_settings", {
       base,
       token: token.length ? token : null,
+      bindAddress: dom.bindAddress.value.trim(),
     });
     dom.token.value = "";
     await loadConnection();

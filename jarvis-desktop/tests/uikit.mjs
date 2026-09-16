@@ -309,7 +309,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute, decideFails, appearanceFails, memoryRefuses, learningFloor }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute, decideFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -334,8 +334,21 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { services: [{ name: "ollama", online: true },
                                 { name: "litellm", online: false }] };
           case "get_api_settings":
-            return { base: "http://127.0.0.1:4719", token_set: true,
-                     store_path: "C:\\Users\\pcadmin\\AppData\\Roaming\\jarvis-desktop.json" };
+            return { base: window.__apiSettings.base, hasToken: window.__apiSettings.hasToken,
+                     bindAddress: window.__apiSettings.bindAddress,
+                     store: "C:\\Users\\pcadmin\\AppData\\Roaming\\jarvis-desktop.json" };
+          case "set_api_settings": {
+            window.__calls.push(["__savedApiSettings", args]);
+            if (window.__bindAddressRefuses && "bindAddress" in args &&
+                args.bindAddress && window.__bindAddressRefuses.includes(args.bindAddress)) {
+              throw new Error(window.__bindAddressRefusalMessage || "refused");
+            }
+            if (args.base !== undefined) window.__apiSettings.base = args.base || "";
+            if (args.token) window.__apiSettings.hasToken = true;
+            if (args.token === "") window.__apiSettings.hasToken = false;
+            if ("bindAddress" in args) window.__apiSettings.bindAddress = args.bindAddress || "";
+            return null;
+          }
           case "supervisor_status":
             return { supervise: true, owned: true, configured: true, pid: 24188,
                      uptime_seconds: 5127, launcher_exited: false,
@@ -480,6 +493,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__found = found || null;
   window.__installFails = installFails || null;
   window.__refuse = refuse || [];
+  window.__apiSettings = { base: "http://127.0.0.1:4719", hasToken: true, bindAddress: "",
+                            ...(apiSettings || {}) };
+  window.__bindAddressRefuses = bindAddressRefuses || null;
+  window.__bindAddressRefusalMessage = bindAddressRefusalMessage || null;
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;
@@ -510,7 +527,8 @@ export async function open(browser, base, file, data, viewport) {
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, noRoute: false, decideFails: null, appearanceFails: null,
-    memoryRefuses: null, learningFloor: false,
+    memoryRefuses: null, learningFloor: false, apiSettings: null,
+    bindAddressRefuses: null, bindAddressRefusalMessage: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,
   });

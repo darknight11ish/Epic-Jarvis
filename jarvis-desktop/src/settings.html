@@ -63,6 +63,21 @@
                  placeholder="leave blank to keep the current one" />
         </label>
 
+        <label class="field">
+          <span class="label">Let my phone reach this over Tailscale</span>
+          <input id="bind-address" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="leave blank to keep this on this machine only" />
+        </label>
+        <p class="note">
+          Only fill this in if you use Tailscale and want your phone to talk to
+          Jarvis too. Type this computer's own Tailscale address here — it looks
+          like <code>100.x.x.x</code>, and you can find it in the Tailscale app.
+          Leave it blank and nothing changes: Jarvis stays reachable from this
+          computer alone, which is the default and the safe choice. This never
+          opens Jarvis to the whole internet, or even to your home Wi-Fi — only
+          to devices on your own Tailscale network.
+        </p>
+
         <div class="row">
           <button class="btn" id="save-connection" type="button">Save connection</button>
           <button class="btn ghost" id="clear-token" type="button">Clear token</button>
