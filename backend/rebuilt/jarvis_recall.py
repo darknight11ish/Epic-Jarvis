@@ -52,6 +52,47 @@ except Exception:                                      # pragma: no cover
                 if w not in _STOP]
 
 
+def _stem(w: str) -> str:
+    """A very light stemmer, so "drive" matches "drives".
+
+    WHY THIS IS HERE AND NOT JUST NICE-TO-HAVE. Without it, "what car does
+    Mario drive" and "Mario drives a 1998 Volvo" share exactly one content
+    word: the owner's name. Combined with the corpus weighting above - which
+    correctly gives a word in every fact a weight of zero - the score comes
+    out at 0 and the ONE relevant fact is not injected. Two individually
+    correct rules producing a wrong answer together; caught by a test, not by
+    reading either rule.
+
+    Porter-lite on purpose. jarvis_memory's FTS index is declared
+    `tokenize='porter unicode61'`, so the word index already stems; matching
+    that behaviour approximately is better than not stemming at all and much
+    better than pulling in a stemming dependency for a backend whose docstring
+    promises standard library only.
+    """
+    w = w.lower()
+
+    # THE BUG A FIRST VERSION HAD, worth keeping written down: stripping "es"
+    # from "lives" gave "liv" while "live" stayed "live", so the two never
+    # matched and the stemmer made things WORSE than not stemming - it moved
+    # one word and not its pair. A stemmer is only useful if both forms land
+    # on the same string, which is why the trailing "e" comes off at the end
+    # regardless of which branch ran.
+    if len(w) > 4 and w.endswith("ies"):
+        w = w[:-3] + "y"
+    elif len(w) > 4 and w.endswith(("sses", "shes", "ches", "xes", "zes")):
+        w = w[:-2]
+    elif len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us", "is")):
+        w = w[:-1]
+    for suf in ("ingly", "edly", "ing", "ed"):
+        if len(w) > len(suf) + 2 and w.endswith(suf):
+            w = w[: -len(suf)]
+            break
+    # Both "drive" and "drives"(-> "drive") end here, and both become "driv".
+    if len(w) > 3 and w.endswith("e"):
+        w = w[:-1]
+    return w
+
+
 def _cfg(key: str, default=None):
     if fw is None:
         return default
@@ -61,7 +102,37 @@ def _cfg(key: str, default=None):
         return default
 
 
-def score_one(query_words: set, text: str) -> float:
+def _idf(texts: Sequence[str]) -> dict:
+    """How much each word narrows things down, across THIS corpus.
+
+    THE PROBLEM THIS SOLVES, caught by a test rather than by reading. Every
+    fact about the owner contains the owner's name. Asking "what car does
+    Mario drive" then scores "Mario prefers tabs over spaces" above the floor
+    on the strength of "mario" alone, and an irrelevant fact gets injected
+    into the prompt.
+
+    It is the same defect as the FTS stoplist in jarvis_memory - "FTS5 has no
+    stoplist of its own, so an OR-query built from every word in the question
+    matched almost the whole store on 'the' and 'is'" - except the word here
+    is not a general stopword. It is a word that happens to be in every fact
+    in THIS store, which no fixed list can know in advance. So it is measured
+    rather than listed.
+
+    A word in every document scores 0: it cannot distinguish between them.
+    Below three documents there is nothing to measure, so weighting is off -
+    with one fact, df == N always, and every score would collapse to zero.
+    """
+    n = len(texts)
+    if n < 3:
+        return {}
+    df: dict = {}
+    for t in texts:
+        for w in {_stem(x) for x in _content_words(t)}:
+            df[w] = df.get(w, 0) + 1
+    return {w: max(0.0, math.log(n / d)) for w, d in df.items()}
+
+
+def score_one(query_words: set, text: str, idf: Optional[dict] = None) -> float:
     """How relevant is this text to that question? 0 to 1.
 
     Overlap of content words, weighted so that a rare word counts for more
@@ -70,16 +141,25 @@ def score_one(query_words: set, text: str) -> float:
     having asked for it needs a reason that can be stated in one line, and
     "it shares three uncommon words with your question" is such a reason.
     """
-    have = _content_words(text)
+    have = {_stem(w) for w in _content_words(text)}
     if not have or not query_words:
         return 0.0
-    hits = [w for w in have if w in query_words]
+    hits = have & query_words
     if not hits:
         return 0.0
-    # Longer words are more discriminating than short ones. Cheap proxy for
-    # inverse document frequency without keeping corpus statistics.
-    weight = sum(1.0 + math.log(1 + len(w)) for w in set(hits))
-    ideal = sum(1.0 + math.log(1 + len(w)) for w in query_words) or 1.0
+
+    def w_of(w: str) -> float:
+        # Longer words are more discriminating than short ones - a cheap
+        # prior, used alone when the corpus is too small to measure.
+        base = 1.0 + math.log(1 + len(w))
+        if idf is None:
+            return base
+        # A word absent from the corpus map is one the query introduced; it
+        # cannot be scored against documents, so it keeps the prior.
+        return base * idf.get(w, 1.0)
+
+    weight = sum(w_of(w) for w in hits)
+    ideal = sum(w_of(w) for w in query_words) or 1.0
     return round(min(weight / ideal, 1.0), 5)
 
 
@@ -100,8 +180,9 @@ def rank(query: str, texts: Sequence[str], top_k: int = 8, near_k: int = 0,
     then does its own neighbour walk with kg_neighbours(), so implementing it
     here would double-count. Honoured only when asked for.
     """
-    qw = set(_content_words(query))
-    scores = [score_one(qw, t) for t in texts]
+    qw = {_stem(w) for w in _content_words(query)}
+    idf = _idf(texts)
+    scores = [score_one(qw, t, idf) for t in texts]
 
     order = [i for i, s in enumerate(scores) if s > min_score or
              (min_score <= 0.0 and s >= 0.0)]
@@ -155,10 +236,10 @@ def explain(query: str, facts: Sequence, text_of: Optional[Callable] = None) -> 
     an answer.
     """
     get = text_of or (lambda f: f.get("text", "") if isinstance(f, dict) else str(f))
-    qw = set(_content_words(query))
+    qw = {_stem(w) for w in _content_words(query)}
     out = []
     for f in facts:
         t = str(get(f) or "")
-        shared = sorted(qw & set(_content_words(t)))
+        shared = sorted(qw & {_stem(w) for w in _content_words(t)})
         out.append({"text": t[:120], "score": score_one(qw, t), "shared": shared})
     return sorted(out, key=lambda r: -r["score"])

@@ -1,0 +1,759 @@
+"""The ten rebuilt modules: does each one still do what its callers need?
+
+WHY THIS SUITE IS DIFFERENT FROM THE OTHERS IN THIS DIRECTORY
+
+The rest of `backend/test_*.py` proves a PATCH does what it claims. This one
+proves a RECONSTRUCTION matches a contract, which is a weaker thing and has to
+be tested harder: there is no original to diff against. Ten modules were
+rebuilt from a config file, a spec document, and fifty-six call sites, after
+the originals were found to exist nowhere - not on the machine, not in any
+installer, not in a 104 MB export of every conversation.
+
+So every test here is tied to EVIDENCE, not to an opinion about how the module
+should behave. Each one says where its expectation comes from: a surviving
+test's assertion, a line in JARVIS-API.md, a comment in jarvis-framework.toml,
+or a fragment of verbatim original source quoted in one of the patches.
+
+THE THREE BUGS THAT PROMPTED HALF OF THESE
+
+Written down because all three passed a careful reading and were caught only by
+running something:
+
+  1. sqlite-vec was loaded on the connection that CREATED the vec0 table and on
+     no other. Every later connection raised "no such module: vec0" inside an
+     `except: continue`, so facts were stored, never embedded, never findable
+     by meaning - while status() reported "vector_search": true throughout.
+  2. Bus.since() returned a list. test_jobs.py unpacks it as `got, _ =`.
+  3. Embedder.embed() took a list of clips. jarvis_voice's real shape is one
+     clip in, one vector out, and with the wrong signature the surviving
+     test's stub was never called at all.
+
+Run it beside the backend:
+
+    $env:JARVIS_BACKEND = "C:\\...\\Desktop program"; python backend\\test_rebuilt.py
+"""
+import json
+import math
+import os
+import sys
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _where import BACKEND, REPO, explain, missing  # noqa: E402
+
+REBUILT = Path(__file__).resolve().parent / "rebuilt"
+
+# The rebuilt modules are the ones under test, so they come FIRST on the path -
+# ahead of any copy that may be sitting in the backend folder. Testing whichever
+# copy happened to be found first is how you get a green suite for code nobody
+# is running.
+sys.path.insert(0, str(REBUILT))
+
+# A hash embedder, so no model download is needed and results are deterministic.
+os.environ.setdefault("JARVIS_NO_EMBED", "1")
+
+_TMP = tempfile.mkdtemp(prefix="jarvis-rebuilt-")
+os.environ.setdefault("OPENJARVIS_CONFIG_DIR", os.path.join(_TMP, "cfg"))
+
+# The real 979-line config, if it is anywhere to be found. Several tests assert
+# against values in it; they skip rather than invent one.
+_CONFIG = None
+for _c in (BACKEND / "jarvis-framework.toml",
+           BACKEND.parent / "jarvis-framework.toml",
+           REPO / "backend" / "jarvis-framework.toml"):
+    if _c.is_file():
+        _CONFIG = _c
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(_c)
+        break
+
+import jarvis_framework as FW      # noqa: E402
+import jarvis_events as EV         # noqa: E402
+import jarvis_memory as MEM        # noqa: E402
+import jarvis_recall as RC         # noqa: E402
+import jarvis_router as RT         # noqa: E402
+import jarvis_voice as VO          # noqa: E402
+import jarvis_power as PW          # noqa: E402
+import jarvis_compute as CP        # noqa: E402
+import jarvis_sleep as SL          # noqa: E402
+import jarvis_initiative as IN     # noqa: E402
+
+
+# ==========================================================================
+#   jarvis_framework
+# ==========================================================================
+
+class Framework(unittest.TestCase):
+
+    def test_the_surviving_assertion(self):
+        """test_jobs.py:253 asserts this exact thing, and it is the only
+        behaviour of action_tier that is KNOWN rather than inferred:
+
+            self.assertEqual(fw.action_tier("web_research"), "auto")
+        """
+        if _CONFIG is None:
+            self.skipTest("jarvis-framework.toml not found; " + explain())
+        self.assertEqual(FW.action_tier("web_research"), "auto")
+
+    def test_an_unclassified_action_fails_closed(self):
+        """jarvis-framework.toml's own words: "an action nobody classified is
+        not thereby safe." Both the config default and the code default are
+        "ask", so the fallback chain cannot bottom out in permission."""
+        self.assertEqual(FW.action_tier("no_such_action_anywhere"), "ask")
+        self.assertEqual(FW.action_tier(""), "ask")
+        self.assertEqual(FW.action_tier("../../etc/passwd"), "ask")
+
+    def test_a_typod_tier_is_not_permission(self):
+        """A tier value that is not one of the four must be treated as
+        unclassified. Reading "atuo" as anything but "ask" would turn a typo
+        into an unattended action."""
+        orig = FW.load_framework
+
+        def fake(*a, **k):
+            d = orig(*a, **k)
+            d.setdefault("autonomy", {}).setdefault("tiers", {})["typo_action"] = "atuo"
+            return d
+        FW.load_framework = fake
+        try:
+            self.assertEqual(FW.action_tier("typo_action"), "ask")
+        finally:
+            FW.load_framework = orig
+
+    def test_mutating_the_returned_config_cannot_poison_the_cache(self):
+        """The surviving suites wrap load_framework and MUTATE its result:
+
+            d = _orig_load(*a, **k)
+            d.setdefault("logging", {})["log_directory"] = _TMP
+
+        If a cached object were handed out, that write would leak into every
+        module loaded afterwards - a test quietly reconfiguring the process.
+        """
+        a = FW.load_framework()
+        a.setdefault("logging", {})["log_directory"] = "/tmp/poison-me"
+        b = FW.load_framework()
+        self.assertNotEqual(b.get("logging", {}).get("log_directory"),
+                            "/tmp/poison-me")
+
+    def test_load_framework_takes_the_arguments_the_wrappers_forward(self):
+        """Those wrappers are `def _patched_load(*a, **k)` calling
+        `_orig_load(*a, **k)`. A signature of () breaks all of them."""
+        FW.load_framework()
+        FW.load_framework(1, 2, three=3)
+
+    def test_a_broken_config_does_not_stop_the_backend_booting(self):
+        """Fifteen modules import this at startup. An exception here means the
+        whole backend fails to start over a stray character, with a traceback
+        pointing at whichever module imported first."""
+        bad = Path(_TMP) / "broken.toml"
+        bad.write_text("this is [not valid = toml\n", encoding="utf-8")
+        keep = os.environ.get("JARVIS_FRAMEWORK_TOML")
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(bad)
+        try:
+            FW.reload_framework()
+            self.assertEqual(FW.load_framework(), {})
+            self.assertEqual(FW.action_tier("web_research"), "ask")  # fails closed
+        finally:
+            if keep:
+                os.environ["JARVIS_FRAMEWORK_TOML"] = keep
+            else:
+                os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+            FW.reload_framework()
+
+    def test_audit_log_survives_an_unserialisable_value(self):
+        d = Path(_TMP) / "logs1"
+        orig = FW.load_framework
+        FW.load_framework = lambda *a, **k: {"logging": {"enabled": True,
+                                                         "log_directory": str(d)}}
+        try:
+            self.assertTrue(FW.audit_log("weird", {"p": Path("/x"), "s": {1, 2}}))
+            written = "".join(f.read_text() for f in d.glob("*.jsonl"))
+            self.assertIn("weird", written)
+            json.loads(written.strip().splitlines()[-1])   # still one valid line
+        finally:
+            FW.load_framework = orig
+
+    def test_audit_log_lines_are_never_interleaved(self):
+        """One JSON line each, from many threads. A torn line is an audit
+        entry that cannot be parsed, which is the same as not having it."""
+        d = Path(_TMP) / "logs2"
+        orig = FW.load_framework
+        FW.load_framework = lambda *a, **k: {"logging": {"enabled": True,
+                                                         "log_directory": str(d)}}
+        try:
+            def spam(n):
+                for i in range(40):
+                    FW.audit_log("gate.asked", {"who": n, "i": i, "pad": "x" * 200})
+            ts = [threading.Thread(target=spam, args=(n,)) for n in range(8)]
+            [t.start() for t in ts]; [t.join() for t in ts]
+            lines = [l for f in d.glob("*.jsonl")
+                     for l in f.read_text().splitlines() if l.strip()]
+            self.assertEqual(len(lines), 320)
+            for l in lines:
+                json.loads(l)
+        finally:
+            FW.load_framework = orig
+
+
+# ==========================================================================
+#   jarvis_events
+# ==========================================================================
+
+class Events(unittest.TestCase):
+
+    def test_since_returns_a_pair(self):
+        """test_jobs.py:807 does `got, _ = self.bus.since(0)`. Returning a
+        list makes that ValueError: too many values to unpack."""
+        b = EV.Bus(size=8)
+        b.publish("job", {"state": "running"})
+        got, cursor = b.since(0)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(cursor, got[-1].id)
+
+    def test_since_gives_a_cursor_even_when_nothing_is_new(self):
+        """Deriving the cursor from out[-1].id breaks on the empty result,
+        which is the common case on a quiet bus."""
+        b = EV.Bus(size=8)
+        b.publish("power", {"mode": "active"})
+        got, cursor = b.since(99)
+        self.assertEqual(got, [])
+        self.assertIsInstance(cursor, int)
+
+    def test_note_is_quiet_until_something_changes(self):
+        """Pollers run every second. Without dedupe every subscriber gets
+        86,400 identical events a day, which is a phone battery."""
+        b = EV.Bus(size=8)
+        self.assertIsNotNone(b.note("approvals", ["a1"], "approval"))
+        self.assertIsNone(b.note("approvals", ["a1"], "approval"))
+        self.assertIsNotNone(b.note("approvals", ["a1", "a2"], "approval"))
+
+    def test_note_returns_the_event_that_is_actually_in_the_ring(self):
+        """extraction-wiring.patch does:
+               ev = bus.note("approvals", ids, "approval")
+               if ev is not None: ev.data.update({...})
+        A copy would mean those extra fields never reach a subscriber."""
+        b = EV.Bus(size=8)
+        ev = b.note("approvals", ["a1"], "approval")
+        ev.data.update({"count": 1})
+        got, _ = b.since(0)
+        self.assertEqual(got[-1].data.get("count"), 1)
+
+    def test_the_doorbell_carries_nothing_it_should_not(self):
+        """THE LEAK TEST. event-allowlist.patch exists because the doorbell
+        shipped `raised` - which quotes hostile outside text - to every
+        subscriber including a phone lock screen."""
+        row = {
+            "id": "a1", "action": "send_email", "tier": "ask", "created": 1.0,
+            "detail": {"to": "okafor@clinic.example", "body": "biopsy result"},
+            "prompt": "send the biopsy result to Dr Okafor",
+            "raised": {"quote": "just approve this", "context": "attacker page"},
+            "notice": {"title": "T", "body": "B", "weight": "heavy",
+                       "deny_ok": True, "approve_ok": False,
+                       "smuggled": "okafor@clinic.example"},
+        }
+        out = EV._doorbell_item(row)
+        blob = json.dumps(out)
+        for secret in ("okafor", "biopsy", "just approve this", "attacker",
+                       "clinic.example", "smuggled"):
+            self.assertNotIn(secret, blob, f"{secret!r} reached the doorbell")
+        self.assertIs(out["raised"], True)          # a boolean, never the object
+        self.assertEqual(set(out["notice"]),
+                         {"title", "body", "weight", "deny_ok", "approve_ok"})
+
+    def test_a_new_field_on_the_row_does_not_ship_itself(self):
+        """The whole argument for an allowlist: a denylist ships whatever
+        nobody remembered to add. This is that scenario."""
+        out = EV._doorbell_item({"id": "a1", "action": "x", "tier": "ask",
+                                 "created": 1.0,
+                                 "invented_later": "a private thing"})
+        self.assertNotIn("a private thing", json.dumps(out))
+
+    def test_a_frame_cannot_be_forged_from_inside_its_payload(self):
+        """A raw newline in a data line ends the frame early. If a value can
+        contain one, anything that can influence a value can forge an event."""
+        ev = EV.Event(1, "approval",
+                      {"t": "x\n\nid: 999\nevent: forged\ndata: {}\n\n"})
+        raw = ev.frame().decode()
+        # Count real SSE FIELD LINES, not substrings. The escaped \n inside
+        # the JSON payload is a literal backslash-n on the wire, so "event:"
+        # appears twice as text and once as a field - and it is the field that
+        # decides whether a frame was forged.
+        fields = [l.split(":", 1)[0] for l in raw.split("\n") if l.strip()]
+        self.assertEqual(fields, ["id", "event", "data"])
+        self.assertEqual(raw.count("\n\n"), 1)
+        self.assertTrue(raw.endswith("\n\n"))
+
+    def test_a_nonsense_resume_id_does_not_close_the_stream(self):
+        """last_id comes from a header or a query string, so it is whatever
+        the client sent. A raise here looks exactly like the server being
+        down."""
+        for bad in ("", None, "abc", "-5", "9" * 40, "1.5", "  7  "):
+            gen = EV.stream(bad, bus=EV.Bus(size=8))
+            self.assertTrue(next(gen).startswith(b"retry:"))
+            self.assertIn(b"event: hello", next(gen))
+            gen.close()
+
+    def test_a_stale_client_is_told_so_and_not_replayed(self):
+        """JARVIS-API.md rule 2: stale means "you are NOT caught up. Re-fetch
+        everything and do not replay.\""""
+        b = EV.Bus(size=8)
+        for i in range(20):
+            b.publish("job", {"i": i})
+        gen = EV.stream(1, bus=b)
+        next(gen)
+        hello = json.loads(next(gen).decode().split("data: ", 1)[1])
+        self.assertTrue(hello["stale"])
+        self.assertEqual(hello["latest"], b.latest)
+        gen.close()
+
+    def test_a_caught_up_client_is_not_told_it_is_stale(self):
+        b = EV.Bus(size=64)
+        for i in range(5):
+            b.publish("job", {"i": i})
+        gen = EV.stream(b.latest, bus=b)
+        next(gen)
+        hello = json.loads(next(gen).decode().split("data: ", 1)[1])
+        self.assertFalse(hello["stale"])
+        gen.close()
+
+    def test_ids_are_unique_under_concurrent_publishers(self):
+        b = EV.Bus(size=4096)
+
+        def spam():
+            for _ in range(100):
+                b.publish("job", {})
+        ts = [threading.Thread(target=spam) for _ in range(8)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        got, _ = b.since(0)
+        self.assertEqual(len(got), 800)
+        self.assertEqual(len({e.id for e in got}), 800)
+
+    def test_a_poller_that_throws_does_not_stop_the_others(self):
+        b = EV.Bus(size=16)
+        calls = []
+
+        def boom(_bus):
+            raise RuntimeError("no")
+
+        def fine(_bus):
+            calls.append(1)
+
+        keep = EV.POLLERS[:]
+        EV.POLLERS[:] = [boom, fine]
+        try:
+            p = EV.Pump(bus=b)
+            p.tick()
+            self.assertEqual(calls, [1])
+            self.assertEqual(p.errors, 1)
+        finally:
+            EV.POLLERS[:] = keep
+
+
+# ==========================================================================
+#   jarvis_memory
+# ==========================================================================
+
+class Memory(unittest.TestCase):
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="mem-")
+        MEM.reset()
+        self.s = MEM.MemoryStore(Path(self.dir) / "m.db", MEM.HashEmbedder())
+
+    def test_a_correction_never_retires_an_unrelated_fact(self):
+        """THE BUG THIS STORE EXISTS TO PREVENT, measured in
+        memory-safety.patch: accepting "Mario drives a 1998 Volvo" retired
+        "Mario prefers tabs over spaces in Go"."""
+        go = self.s.add("Mario prefers tabs over spaces in Go")
+        self.s.add("Mario lives at 12 Oak Street")
+        self.assertNotEqual(self.s.find_one("Mario drives a 1998 Volvo"), go)
+
+    def test_find_one_returns_none_rather_than_a_guess(self):
+        """None means "store the new fact and retire nothing". Two facts that
+        disagree can be sorted out later; a deleted allergy cannot."""
+        self.s.add("Mario prefers tabs over spaces in Go")
+        for vague in ("Mario allergy", "address", "the", "", "his car",
+                      "something about Mario"):
+            self.assertIsNone(self.s.find_one(vague), f"guessed on {vague!r}")
+
+    def test_find_one_does_find_the_right_one(self):
+        """The bar has to be clearable, or corrections never supersede."""
+        volvo = self.s.add("Mario drives a 1998 Volvo estate")
+        self.s.add("Mario prefers tabs over spaces in Go")
+        self.assertEqual(self.s.find_one("Mario drives a 1998 Volvo"), volvo)
+
+    def test_a_nan_embedding_never_makes_a_fact_unreachable(self):
+        """embedding-guard.patch: a NaN row is unreachable FOREVER, because
+        every distance comparison against NaN is false. The fact must stay
+        findable by WORDS."""
+        class Nan(MEM.HashEmbedder):
+            name = "nan-v1"
+            def embed(self, texts):
+                return [[float("nan")] * self.dim for _ in texts]
+
+        s = MEM.MemoryStore(Path(self.dir) / "nan.db", Nan())
+        s.add("Mario is allergic to penicillin")
+        hits = s.search("penicillin allergy")
+        self.assertTrue(hits, "a NaN embedding made the fact unreachable")
+        self.assertEqual(s.status()["unembedded"], 1, "status is not honest")
+
+    def test_an_embedder_that_explodes_does_not_lose_the_fact(self):
+        class Boom(MEM.HashEmbedder):
+            name = "boom-v1"
+            def embed(self, texts):
+                raise RuntimeError("model died")
+
+        s = MEM.MemoryStore(Path(self.dir) / "boom.db", Boom())
+        s.add("Mario is allergic to penicillin")
+        self.assertTrue(s.search("penicillin"))
+
+    def test_backfill_terminates_when_nothing_can_be_embedded(self):
+        """Without a progress check this loop is infinite whenever a row
+        cannot be embedded - which is exactly what a NaN model causes."""
+        class Nan(MEM.HashEmbedder):
+            name = "nan2-v1"
+            def embed(self, texts):
+                return [[float("nan")] * self.dim for _ in texts]
+
+        s = MEM.MemoryStore(Path(self.dir) / "nan2.db", Nan())
+        for i in range(5):
+            s.add(f"fact number {i} about something")
+        self.assertEqual(s.backfill_embeddings(), 0)   # returns, does not hang
+
+    def test_vector_search_does_not_claim_to_work_when_it_does_not(self):
+        """THE BUG THE TESTS CAUGHT. sqlite-vec loads per CONNECTION. Loading
+        it only on the connection that created the table left every later one
+        raising "no such module: vec0" inside an except, while status()
+        reported vector_search: true and nothing was ever embedded."""
+        st = self.s.status()
+        if st["vector_search"]:
+            self.s.add("a fact worth embedding about penicillin")
+            self.assertEqual(self.s.status()["unembedded"], 0,
+                             "vector_search says true but nothing embeds")
+
+    def test_retire_reports_whether_it_changed_anything(self):
+        f = self.s.add("Mario lives at 12 Oak Street")
+        self.assertTrue(self.s.retire(f))
+        self.assertFalse(self.s.retire(f), "a no-op reported as a change")
+        self.assertFalse(self.s.retire(999999))
+
+    def test_a_superseded_fact_leaves_history_behind(self):
+        """bitemporal.patch: "where do I live" returns the current answer and
+        "where did I live last year" also works."""
+        old = self.s.add("Mario lives at 12 Oak Street")
+        self.s.add("Mario lives at 40 Elm Road", supersedes=old)
+        live = [r["text"] for r in self.s.search("Mario lives")]
+        self.assertIn("Mario lives at 40 Elm Road", live)
+        self.assertNotIn("Mario lives at 12 Oak Street", live)
+        self.assertIn("Mario lives at 12 Oak Street",
+                      [r["text"] for r in self.s.timeline("Mario lives")])
+
+    def test_stopwords_do_not_match_the_whole_store(self):
+        """FTS5 has no stoplist; an OR-query built from every word matched
+        almost everything on "the" and "is"."""
+        for i in range(10):
+            self.s.add(f"this is the fact number {i} and it is here")
+        self.assertEqual(self.s.search("the is and it"), [])
+
+    def test_an_empty_fact_is_refused(self):
+        for bad in ("", "   ", "\n\t"):
+            with self.assertRaises(ValueError):
+                self.s.add(bad)
+
+    def test_concurrent_writers_do_not_lose_facts(self):
+        def spam(n):
+            for i in range(20):
+                self.s.add(f"thread {n} fact {i} about something specific")
+        ts = [threading.Thread(target=spam, args=(n,)) for n in range(6)]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        self.assertEqual(self.s.status()["facts"], 120)
+
+
+# ==========================================================================
+#   jarvis_recall
+# ==========================================================================
+
+class Recall(unittest.TestCase):
+
+    def test_scores_are_parallel_to_the_input(self):
+        """jarvis_hud.py:1014 takes rank(...)[0] and zips it against its own
+        corpus. A sorted score list silently mislabels every fact."""
+        texts = ["nothing to do with it", "Mario drives a Volvo", "also unrelated"]
+        scores, _ = RC.rank("Mario Volvo", texts, top_k=len(texts),
+                            near_k=0, min_score=0.0)
+        self.assertEqual(len(scores), len(texts))
+        self.assertGreater(scores[1], scores[0])
+        self.assertGreater(scores[1], scores[2])
+
+    def test_the_hud_call_returns_a_score_for_every_item(self):
+        texts = [f"row {i}" for i in range(7)]
+        scores, _ = RC.rank("nothing matches this", texts, top_k=len(texts),
+                            near_k=0, min_score=0.0)
+        self.assertEqual(len(scores), 7)
+
+    def test_nothing_relevant_means_nothing_injected(self):
+        """Padding the prompt with the least-irrelevant facts spends context,
+        evicts the persona block, and invites the model to use what does not
+        apply. The caller writes `if chosen_facts:`."""
+        facts = [{"text": "Mario drives a Volvo"}, {"text": "Mario likes Go"}]
+        self.assertEqual(
+            RC.select_facts("what is the capital of Peru", facts,
+                            text_of=lambda f: str(f.get("text", ""))), [])
+
+    FACTS = [{"text": "Mario drives a 1998 Volvo estate"},
+             {"text": "Mario prefers tabs over spaces"},
+             {"text": "Mario lives at 12 Oak Street"},
+             {"text": "Mario is allergic to penicillin"}]
+
+    def _pick(self, q):
+        return RC.select_facts(q, self.FACTS,
+                               text_of=lambda f: str(f.get("text", "")))
+
+    def test_the_one_relevant_fact_is_chosen_and_only_it(self):
+        """Every fact about the owner contains the owner's NAME. Without
+        corpus weighting, "what car does Mario drive" scores every fact above
+        the floor on "mario" alone and four facts get injected for a question
+        about one."""
+        for q, want in [("what car does Mario drive", "Volvo"),
+                        ("where does Mario live", "Oak Street"),
+                        ("is Mario allergic to anything", "penicillin")]:
+            got = self._pick(q)
+            self.assertEqual(len(got), 1, f"{q!r} chose {[g['text'] for g in got]}")
+            self.assertIn(want, got[0]["text"])
+
+    def test_a_word_in_every_fact_selects_none_of_them(self):
+        """Asking just the owner's name matches everything, which
+        distinguishes nothing. Injecting the lot would be the wrong answer."""
+        self.assertEqual(self._pick("Mario"), [])
+
+    def test_stems_agree_in_both_directions(self):
+        """A stemmer that moves one form and not its pair is worse than none.
+        A first version turned "lives" into "liv" and left "live" alone."""
+        for a, b in [("drive", "drives"), ("live", "lives"),
+                     ("prefer", "prefers"), ("space", "spaces")]:
+            self.assertEqual(RC._stem(a), RC._stem(b), f"{a}/{b}")
+
+    def test_a_small_corpus_is_not_weighted(self):
+        """Below three documents there is nothing to measure - with one fact,
+        every word is in every document and all scores would collapse to
+        zero. Stated as a test so the behaviour is deliberate, not a surprise."""
+        self.assertEqual(RC._idf(["a b", "a c"]), {})
+        self.assertTrue(RC._idf(["a b", "a c", "a d"]))
+
+    def test_empty_inputs_do_not_raise(self):
+        self.assertEqual(RC.select_facts("", [], text_of=lambda f: ""), [])
+        self.assertEqual(RC.select_facts("anything", []), [])
+
+
+# ==========================================================================
+#   jarvis_router
+# ==========================================================================
+
+class Router(unittest.TestCase):
+
+    LANES = ["jarvis-escalate", "jarvis-bulk"]
+
+    def test_a_cloud_lane_is_never_handed_memory(self):
+        """JARVIS-FRAMEWORK.md section 1: "There is no third option where a
+        cloud model quietly receives your memory." Every branch, not just the
+        happy one."""
+        for q in ["explain in detail how a transformer works and compare it "
+                  "to an RNN, step by step, with trade-offs" * 3,
+                  "what is my password", "hello"]:
+            for tainted in (True, False):
+                d = RT.choose(q, local_model="local", lanes=self.LANES,
+                              tainted=tainted)
+                if d.lane in self.LANES:
+                    self.assertFalse(d.inject_memory,
+                                     f"memory offered to cloud lane for {q[:30]!r}")
+
+    def test_taint_pins_the_turn_local(self):
+        long_q = ("explain in detail and compare the trade-offs, step by step, "
+                  "why this design was chosen " * 4)
+        d = RT.choose(long_q, local_model="local", lanes=self.LANES, tainted=True)
+        self.assertEqual(d.lane, "local")
+        self.assertEqual(d.gate, "taint")
+
+    def test_the_private_backstop_pins_the_turn_local(self):
+        d = RT.choose("what is the api key for my bank account and the cvv, "
+                      "explain in detail step by step and compare " * 3,
+                      local_model="local", lanes=self.LANES)
+        self.assertEqual(d.lane, "local")
+        self.assertEqual(d.gate, "private")
+
+    def test_degrade_never_returns_its_own_input(self):
+        """jarvis_hud retries with the result. Returning the input is an
+        infinite retry against a service that is already refusing."""
+        for lane in ["jarvis-escalate", "jarvis-bulk", "jarvis-critic",
+                     "local", "unknown-lane", ""]:
+            nxt = RT.degrade(lane, self.LANES, "local")
+            self.assertNotEqual(nxt, lane, f"degrade({lane!r}) returned itself")
+
+    def test_degrade_terminates(self):
+        lane, seen = "jarvis-escalate", set()
+        for _ in range(20):
+            lane = RT.degrade(lane, self.LANES, "local")
+            if lane is None:
+                break
+            self.assertNotIn(lane, seen, "degrade went round in a circle")
+            seen.add(lane)
+        else:
+            self.fail("degrade did not terminate")
+
+    def test_a_corrupt_budget_file_does_not_stop_a_turn(self):
+        p = Path(_TMP) / "budget.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{not json", encoding="utf-8")
+        orig = RT.Budget._store_path
+        RT.Budget._store_path = classmethod(lambda cls: p)
+        try:
+            self.assertIsInstance(RT.Budget.load().status(), dict)
+        finally:
+            RT.Budget._store_path = orig
+
+    def test_the_decision_exposes_what_the_hud_reads(self):
+        d = RT.Decision("local", "because", "manual", 0.0, inject_memory=True)
+        for attr in ("lane", "reason", "gate", "inject_memory"):
+            self.assertTrue(hasattr(d, attr), attr)
+        self.assertIsInstance(d.as_dict(), dict)
+
+
+# ==========================================================================
+#   jarvis_voice
+# ==========================================================================
+
+class Voice(unittest.TestCase):
+    """The safe failure is to ignore a stranger. Accepting one hands the
+    microphone of a machine with an approval queue to whoever is in the room.
+    """
+
+    def setUp(self):
+        self.prof = Path(_TMP) / "voice.json"
+        VO.PROFILE_PATH = self.prof
+        if self.prof.exists():
+            self.prof.unlink()
+        self._cfg = VO._cfg
+        VO._cfg = lambda k, d=None: {"enabled": True, "mode": "owner",
+                                     "threshold": 0.5}.get(k, d)
+
+    def tearDown(self):
+        VO._cfg = self._cfg
+
+    def test_embed_takes_one_clip_and_returns_one_vector(self):
+        """THE BUG THE SURVIVING TEST CAUGHT. test_speech.py's stub is
+            class FakeEmbedder(V.Embedder):
+                def embed(self, audio): return self.vec
+        With a list signature the stub is never called at all."""
+        v = VO.Embedder().embed(b"\x00\x01" * 2000)
+        self.assertTrue(all(isinstance(x, float) for x in v), v)
+
+    def test_no_profile_means_refuse(self):
+        v = VO.verify(b"\x00\x01" * 4000)
+        self.assertFalse(v.is_owner)
+        self.assertIn("no enrolled", v.reason)
+
+    def test_a_corrupt_profile_means_refuse(self):
+        for junk in ("{}", "[]", "not json",
+                     '{"centroid": []}', '{"centroid": ["a","b"]}',
+                     '{"centroid": [1,2], "threshold": "x"}'):
+            self.prof.write_text(junk, encoding="utf-8")
+            self.assertIsNone(VO.load_profile(), junk)
+            self.assertFalse(VO.verify(b"\x00\x01" * 4000).is_owner, junk)
+
+    def test_a_different_voice_is_refused(self):
+        class Fixed(VO.Embedder):
+            def __init__(self, v): self.v = list(v)
+            def embed(self, audio): return self.v
+
+        VO.VoiceProfile(centroid=[1.0, 0.0, 0.0, 0.0], threshold=0.5,
+                        samples=3).save(self.prof)
+        self.assertFalse(VO.verify(b"x", Fixed([0.0, 1.0, 0.0, 0.0])).is_owner)
+        self.assertTrue(VO.verify(b"x", Fixed([1.0, 0.0, 0.0, 0.0])).is_owner)
+
+    def test_broad_mode_is_always_visible_in_the_verdict(self):
+        VO._cfg = lambda k, d=None: {"enabled": True, "mode": "broad"}.get(k, d)
+        v = VO.verify(b"x")
+        self.assertTrue(v.is_owner)
+        self.assertEqual(v.mode, "broad")
+        self.assertIn("broad", v.reason)
+
+    def test_enrolment_never_raises_the_bar_above_the_config(self):
+        """The config's promise: "a strict value here cannot lock you out."
+        Lowering is the feature; raising would be a silent policy change."""
+        class Fixed(VO.Embedder):
+            def __init__(self): self.n = 0
+            def embed(self, audio):
+                self.n += 1
+                return [1.0, 0.0] if self.n % 2 else [0.7, 0.714]
+
+        prof = VO.enroll([b"a", b"b", b"c"], Fixed(), path=self.prof)
+        self.assertLessEqual(prof.threshold, 0.5)
+
+
+# ==========================================================================
+#   the small ones
+# ==========================================================================
+
+class Small(unittest.TestCase):
+
+    def test_quiet_hours_across_midnight(self):
+        """A naive start <= t <= end returns False all night, every night,
+        and the setting looks like it does nothing."""
+        import datetime as dt
+        keep = PW._cfg
+        PW._cfg = lambda k, d=None: {"quiet_hours_start": "22:00",
+                                     "quiet_hours_end": "07:00"}.get(k, d)
+        try:
+            at = lambda h: dt.datetime(2026, 1, 1, h, 30)
+            self.assertTrue(PW.in_quiet_hours(at(23)))
+            self.assertTrue(PW.in_quiet_hours(at(2)))
+            self.assertTrue(PW.in_quiet_hours(at(6)))
+            self.assertFalse(PW.in_quiet_hours(at(12)))
+            self.assertFalse(PW.in_quiet_hours(at(21)))
+        finally:
+            PW._cfg = keep
+
+    def test_an_unknown_power_mode_is_refused_not_stored(self):
+        with self.assertRaises(ValueError):
+            PW.set_mode("sleeping")
+        self.assertIn(PW.current(), PW.MODES)
+
+    def test_compute_plan_never_raises_and_admits_guessing(self):
+        p = CP.plan()
+        self.assertIsInstance(p.as_dict(), dict)
+        for attr in ("text_model", "text_on", "vision_resident",
+                     "tts_resident", "simulated"):
+            self.assertTrue(hasattr(p, attr), attr)
+
+    def test_the_two_shells_say_they_are_shells(self):
+        """Neither was reconstructible. Reporting them as working would be
+        the worst outcome: a Jarvis that looks proactive and is not."""
+        self.assertFalse(SL.status()["implemented"])
+        e = IN.build_from_config()
+        self.assertEqual(e.status()["checks"], 0)
+        self.assertIn("not recoverable", e.status()["note"])
+
+    def test_a_check_that_throws_does_not_kill_the_heartbeat(self):
+        e = IN.Engine(heartbeat_minutes=1)
+        e.register("bad", lambda: (_ for _ in ()).throw(RuntimeError("no")))
+        e.register("good", lambda: {"found": 1})
+        got = e.beat()
+        self.assertEqual(len(got), 1)
+        self.assertEqual(e.errors, 1)
+
+    def test_sleep_offers_once_a_day_not_once_a_tick(self):
+        keep = SL._cfg
+        SL._cfg = lambda k, d=None: {"enabled": False, "remind": True}.get(k, d)
+        SL._seen.clear()
+        try:
+            self.assertIsNotNone(SL.reminder_card())
+            self.assertIsNone(SL.reminder_card())
+        finally:
+            SL._cfg = keep
+
+
+if __name__ == "__main__":
+    print(f"rebuilt modules: {REBUILT}")
+    print(f"config:          {_CONFIG or 'NOT FOUND - some tests will skip'}")
+    unittest.main(verbosity=1)

@@ -1,0 +1,979 @@
+# ==============================================================================
+# JARVIS OPERATING FRAMEWORK — enforced config
+#
+# This is what the code actually reads. JARVIS-FRAMEWORK.md is what you read
+# and approve — every section name here matches a section heading there.
+# If you change a number in one, change the matching sentence in the other in
+# the same sitting. jarvis_router.py loads [budget] and the complexity
+# threshold from here today; the rest are specified for the pieces that still
+# need wiring into OpenJarvis itself (see each section's "day to day" note in
+# the .md file).
+# ==============================================================================
+
+[meta]
+version = "1.0"
+owner = "Mario"
+commercial = false          # this build is not a commercial product
+
+
+# ------------------------------------------------------------------------
+# 1. PRIVACY BOUNDARIES
+# ------------------------------------------------------------------------
+[privacy]
+# Matching any of these keeps a turn local, no matter the complexity score.
+# Kept in sync with the _PRIVATE regex in jarvis_router.py by hand for now —
+# if you edit one, edit the other.
+never_leaves_device = [
+    "email", "inbox", "calendar",
+    "password", "api_key", "token", "secret", "credential",
+    "ssh_key", "private_key",
+    "bank", "invoice", "tax", "financial",
+    "medical",
+    "stored_memory", "knowledge_graph",
+    "files_on_disk",
+]
+# Once true for a conversation, stays true for every later turn in it.
+taint_persists_for_conversation = true
+# Free ":free" OpenRouter models may take public research questions, but
+# never anything on the list above and never stored memory.
+allow_free_tier_models_for_research = true
+
+
+# ------------------------------------------------------------------------
+# 2. AUTONOMY LIMITS
+# ------------------------------------------------------------------------
+# auto = just do it | notify = do it, tell you after | ask = wait for yes,
+# every time | never = refuse; changing this requires editing this file,
+# not asking in conversation.
+[autonomy]
+# Enforcement now EXISTS: jarvis_gate.py reads the tiers below, queues an
+# "ask" action, and blocks the tool call until a human answers in the HUD (or
+# denies it by letting it time out). "never" is refused outright, without
+# asking anyone.
+#
+# It is not CONNECTED until you run the patcher, because the auto-approving
+# callback lives in OpenJarvis, not in this repo:
+#
+#     python patch_openjarvis.py --dry-run     # see what it would change
+#     python patch_openjarvis.py               # apply, then restart Jarvis
+#     python patch_openjarvis.py --revert      # undo
+#
+# Then set the flag below to true. Leave it false while it is still false -
+# a flag claiming a protection you do not have is worse than no flag.
+enforcement_available = true
+wired_into_approval_endpoint = false
+
+# What happens to an action that is not listed in [autonomy.tiers] at all, or
+# to a confirmation prompt the gate cannot map onto one of these names. "ask"
+# is the only defensible answer: an action nobody classified is not thereby
+# safe. Seconds to wait for that answer before refusing.
+unknown_action_tier = "ask"
+approval_timeout_seconds = 180
+
+[autonomy.tiers]
+web_research              = "auto"
+read_calendar             = "auto"
+read_files_readonly       = "auto"
+draft_email               = "auto"
+send_email                = "ask"
+edit_calendar_event       = "ask"
+delete_calendar_event     = "ask"
+delete_file               = "ask"
+run_shell_on_host         = "ask"
+spend_money               = "ask"
+control_computer          = "ask"
+change_own_config         = "ask"
+modify_own_code           = "ask"        # additional gate — see [self_modification]
+post_to_external_service  = "never"
+open_public_tunnel        = "never"      # see [security].allow_public_tunnel
+
+# --- Notes: two stores, deliberately different rules -------------------
+# Joplin is the personal vault, so it is the strict one: reading is free
+# because it is yours, creating announces itself, overwriting a personal
+# record waits for you, and deleting is not reachable by asking at all.
+read_joplin_note          = "auto"
+create_joplin_note        = "notify"
+edit_joplin_note          = "ask"
+delete_joplin_note        = "never"
+
+# Logseq is the dev hub and the agent's own scratchpad. An agent that must
+# ask permission to write its own log will not keep a log, so writing is
+# auto - but note that create_or_update_page APPENDS by default. Only the
+# overwrite path destroys anything, and that is edit_logseq_page.
+read_logseq_page          = "auto"
+append_logseq_journal     = "auto"
+create_logseq_page        = "auto"
+edit_logseq_page          = "ask"
+delete_logseq_page        = "never"
+
+# --- Models: three separate decisions, deliberately not bundled --------
+# Reading public catalogues says nothing about you (see the privacy note in
+# jarvis_models.py) so it is free. A download spends bandwidth and disk. A
+# switch changes which model reads your email - a different question, asked
+# separately, so approving the download cannot smuggle it in. Reverting is
+# "auto" because a revert that waits for permission arrives too late to be
+# a revert.
+browse_model_catalog      = "auto"
+download_model            = "ask"
+switch_model              = "ask"
+rollback_model            = "auto"
+
+# --- Power: turning the assistant down, at two depths --------------------
+# Putting Jarvis into quiet/standby, or waking it, is the safe direction
+# either way, so it does not interrupt you for a yes. Changing the rules
+# that put it under on their OWN (quiet hours, the idle timer) is a config
+# change and waits - see change_own_config above.
+power_manage              = "auto"
+
+
+# ------------------------------------------------------------------------
+# 3. SELF-MODIFICATION RULES
+# ------------------------------------------------------------------------
+[self_modification]
+enabled = true
+# All must pass before a change is even offered to you for approval. Any
+# single failure blocks it outright — it never reaches the approval step.
+required_checks = [
+    "runs_in_isolated_shadow_copy_first",
+    "existing_tests_still_pass",
+    "diff_reviewed_by_critic_lane",
+    "no_new_network_egress_introduced",
+    "no_change_to_this_framework_file_itself",
+]
+# Passing every check above still isn't enough — always ask, no exceptions,
+# no auto-apply-after-N-clean-runs shortcut.
+tier_override = "ask"
+human_approval_required = true
+rollback_directory = "~/.openjarvis/self-mod-backups/"
+max_rollback_generations = 20
+
+# NOT YET ENFORCED: no shadow-copy runner or critic-lane review pipeline
+# exists in the codebase yet. This section specifies the target, not
+# something already running.
+pipeline_implemented = false
+
+
+# ------------------------------------------------------------------------
+# 4. SECURITY & EXPOSURE
+# ------------------------------------------------------------------------
+[security]
+require_server_auth_key = true
+max_tokens = 2048
+# NOW ENFORCED (it was read by nothing until this pass - the bind was
+# hardcoded to loopback regardless of what this said). Anything other than
+# loopback here makes the proxy reachable from other machines, so the server
+# REFUSES TO START on a non-loopback bind unless HUD_TOKEN is set.
+#
+# For a phone over Tailscale you want the tailnet address rather than
+# 0.0.0.0 - "0.0.0.0" also exposes the port on any coffee-shop wifi the
+# laptop happens to join.
+bind_address = "127.0.0.1"
+allow_public_tunnel = false                # `jarvis tunnel` permanently forbidden
+remote_access_method = "tailscale_serve_only"
+sandbox_web_research = true
+sandbox_code_execution = true
+sandbox_file_work = true
+sandbox_email_calendar = true
+computer_control_containerized = false     # not possible on Windows (WSL2 has no desktop)
+computer_control_always_on = false         # host-side, started on demand only
+
+
+# ------------------------------------------------------------------------
+# 5. COST & RATE BUDGETS
+# ------------------------------------------------------------------------
+# Enforced today in jarvis_router.py (Budget class). Real OpenRouter free
+# tier is 20/min, 1000/day — these stay under it on purpose.
+[budget]
+requests_per_minute = 15
+requests_per_day = 800
+on_minute_limit_hit = "degrade_to_next_lane_silently"
+on_day_limit_hit = "hold_local_until_reset_and_notify"
+degrade_chain = ["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]
+
+# Also enforced today (jarvis_router.py `choose()` gate 2).
+[routing]
+complexity_threshold = 0.40
+
+
+# ------------------------------------------------------------------------
+# 6. LOGGING & AUDIT TRAIL
+# ------------------------------------------------------------------------
+[logging]
+enabled = true
+log_directory = "~/.openjarvis/logs/"
+retention_days = 90
+log_every_routing_decision = true      # lane, gate, reason, complexity score
+log_every_tool_call = true
+log_every_self_modification_attempt = true   # pass or fail, applied or not
+redact_private_content_in_logs = true  # log that a gate fired, never the private text
+
+# PARTIALLY ENFORCED. Written today, one JSON line each, to log_directory:
+#   - every routing decision (lane, gate, reason, complexity, taint)
+#   - every gate event: auto, notify, asked, approved, denied, expired, refused
+# Not written yet: self-modification attempts, since no self-mod pipeline
+# exists to attempt anything (see pipeline_implemented above).
+# A failed log write now prints once to stderr instead of vanishing.
+persistence_implemented = true
+log_write_failures_are_visible = true
+
+# OFF by default, and it should stay off except while you are deliberately
+# tuning the classifier. The gate maps a free-text confirmation prompt onto an
+# action name; when it cannot, it falls back to "ask", which is safe but tells
+# you nothing about WHICH phrasing it failed on. Turning this on records the
+# prompt text of unclassified actions only, so `python jarvis_gate.py --review`
+# can show you what to add to _ACTION_PATTERNS.
+#
+# It logs prompt text. That is the one thing redact_private_content_in_logs
+# otherwise guarantees never lands on disk, which is why this is a separate
+# switch and not part of normal logging. Turn it off when you are done.
+log_unclassified_prompts = false
+
+
+# ------------------------------------------------------------------------
+# 6b. LEDGER - the record of what was done, and whether it has been edited
+# ------------------------------------------------------------------------
+# The log above answers "did this happen". It cannot answer "has anyone
+# changed this since", because a JSON-lines file is editable with any text
+# editor and says nothing about it. The ledger is the other half: a chain
+# where altering one past entry alters every hash after it.
+#
+# WHAT IS CHAINED IS THE DECISION, NOT THE CONTENT. Sequence, time, event,
+# action, tier, lane, the rule that fired, which memories were retrieved -
+# BY TITLE AND TIME - and which were skipped and why. The content itself, the
+# command or the mail body or the retrieved text, is encrypted into a
+# separate table that can be dropped on its own. Chaining the content too
+# would be un-redactable by construction, and "forget this" would mean
+# destroying the chain. With the split, a redacted entry still verifies and
+# reads honestly: content removed on <date>, decision preserved.
+#
+# IT IS MACed WITH A LOCAL KEY, NOT SIGNED. Ed25519 was considered and
+# rejected. A signature a third party can verify makes this log credible
+# AGAINST you - to a court, an employer, whoever is holding the laptop.
+# Non-repudiation is not a feature that was skipped; it is one that was
+# declined. The key is on this machine, so code running as you can forge a
+# chain; what this catches is someone editing the record afterwards, which
+# is the threat that actually exists.
+#
+# PAYLOAD ENCRYPTION IS STDLIB-ONLY and says so in the module: SHA-256 in
+# counter mode, encrypt-then-MAC with HMAC-SHA256, tag checked before
+# decryption. It protects a copy of the database - a backup, a synced
+# folder, a disk image - and protects nothing at all from someone who also
+# has ~/.openjarvis/ledger.key. Swap it for a real AEAD if a dependency is
+# ever allowed.
+[ledger]
+enabled = true
+
+# How long a payload is kept before expire() drops it. The metadata link is
+# never dropped, so old history keeps verifying; it just stops holding
+# content. Without a number here "kept encrypted" quietly means "forever",
+# and an encrypted copy of every command from three years ago is a breach
+# waiting for a key to leak. 0 means keep payloads indefinitely - a real
+# choice for a full record, and NOT read as "expire everything now".
+retention_days = 30
+
+# How often the head hash is appended to ledger-anchors.jsonl, a file this
+# process only ever opens in append mode. It bounds the window in which a
+# rewrite goes unnoticed: to alter entry 300 you would have to match every
+# anchor that already covers it. An anchor file copied off this disk, or a
+# medium that physically cannot be rewritten, is the strong version of this;
+# append mode on the same filesystem is the practical one.
+anchor_every_entries = 25
+anchor_every_minutes = 60
+
+# A long string in the metadata is almost always a body that belongs in the
+# payload, where it can be encrypted and later dropped. Over this length the
+# record is REFUSED rather than truncated - a half-record that looks whole is
+# worse than an error at the call site.
+max_meta_value_chars = 500
+max_payload_kb = 512
+
+# Which metadata field groups entries into one turn, for the why-trace.
+turn_key = "turn"
+
+
+# ------------------------------------------------------------------------
+# 7. NOTES
+# ------------------------------------------------------------------------
+# Two stores with one dividing line: Joplin holds things about your life,
+# Logseq holds things about the work. That line is what decides both the
+# autonomy tiers above and whether a turn may leave the machine.
+
+[notes.joplin]
+enabled = true
+port = 41184
+token_env = "JOPLIN_TOKEN"        # Joplin: Tools > Options > Web Clipper
+timeout_seconds = 3.0
+# Touching Joplin pins the conversation to the local model for the rest of
+# the turn, no exceptions. Enforced in three places, because one is not
+# enough: the tool marks its own results, jarvis_router._PRIVATE matches
+# "joplin", and jarvis_gate latches a timed flag the proxy reads even when
+# the tool's output never reaches it.
+always_taint_conversation = true
+taint_latch_minutes = 30
+# NOT indexed into RAG, on purpose. See exclude_from_rag below.
+exclude_from_rag = true
+
+[notes.logseq]
+enabled = true
+# Leave empty to fall back to <config dir>/notes.
+graph_directory = ""
+auto_index_rag = true
+recent_journal_days_indexed = 14
+max_rag_chars_per_file = 2000
+
+
+# ------------------------------------------------------------------------
+# 8. MEMORY
+# ------------------------------------------------------------------------
+# Four layers, chosen together. Hybrid search and the temporal store are
+# always on. Auto-extraction and sleep-time consolidation are the two that
+# write to memory on their own, so they are the two with switches.
+
+[memory]
+# Meaning-based search runs on the CPU with this model (33M params, ~130MB
+# on disk, downloaded once from Hugging Face). If it is missing, search is
+# keyword-only and status() says so; nothing fails.
+embedding_model = "BAAI/bge-small-en-v1.5"
+# One-time import of the old memory_facts.jsonl into the temporal store.
+import_legacy_on_start = true
+
+[memory.extraction]
+# mem0-style: watch conversations and propose durable facts by itself.
+# Only ever runs on the LOCAL model - extraction is reading your words,
+# and that never goes to a cloud lane. Proposals land in a review queue;
+# nothing enters memory until you accept it (auto_accept = false).
+#
+# SETUP REQUIRED. This is a working scaffold, not a tuned system: the
+# prompt, the accept threshold, and what counts as "durable" all need
+# tuning against real conversations once Jarvis is actually running.
+# The boot banner will say so until setup_complete is flipped.
+enabled = true
+auto_accept = false
+setup_complete = false
+review_queue_max = 200
+
+[memory.sleep_time]
+# Letta/MemGPT-style: while you are not talking, use the idle GPU to
+# re-read memory, merge duplicates, retire contradicted facts, and
+# rewrite the summary of you. OFF by default, on purpose: 8B-class models
+# are unreliable at editing structured data about themselves, so this is
+# a prototype until you have watched it work. The deterministic parts
+# (duplicate merge, contradiction detection) are safe and run either way.
+enabled = false
+# While disabled, a once-a-day card in the HUD explains what it would do,
+# the upside and the risk, and offers to turn it on. Set remind = false
+# to stop being asked.
+remind = true
+remind_hour_local = 9
+# When enabled: only between these local hours, and only if the
+# assistant has been idle for this long.
+window_start_hour = 2
+window_end_hour = 6
+idle_minutes_required = 30
+
+# ------------------------------------------------------------------------
+# 9. COMPUTE
+# ------------------------------------------------------------------------
+# Nothing else hardcodes a VRAM number. jarvis_compute.py asks nvidia-smi
+# what is installed and plans model tiers from that, so adding a second
+# card changes the plan without changing code.
+[compute]
+# "speed": the current-size model on the fastest card at full speed, the
+#          second card carries vision + voice resident so nothing swaps.
+# "capability": the biggest model the pair can hold, generation bounded
+#          by the slower card (a P100 is Pascal: ~2-3x slower per token).
+prefer = "speed"
+
+# ------------------------------------------------------------------------
+# 10. INITIATIVE - acting without being asked
+# ------------------------------------------------------------------------
+# Every finding or event that turns into an ACTION still goes through the
+# autonomy gate. A proactive Jarvis is not a Jarvis with fewer rules.
+[initiative]
+enabled = true
+heartbeat_minutes = 30
+# HEARTBEAT.md in the config directory lists the checks in plain words;
+# it is created with sensible defaults the first time the engine runs.
+watch_folders = []                 # e.g. ["~/Downloads", "C:/Jarvis/inbox"]
+calendar_folder = ""               # a folder of .ics files (vdirsyncer/Radicale)
+calendar_lead_minutes = 10
+# Mail needs JARVIS_IMAP_HOST / _USER / _PASSWORD in the environment.
+# Subjects and senders only; bodies are never fetched by the watcher.
+mail_enabled = false
+
+# ------------------------------------------------------------------------
+# 11. MODEL STEWARD - finding, judging and adopting local models
+# ------------------------------------------------------------------------
+# The privacy shape of this feature, because it is the part worth checking:
+# discovery fetches a fixed set of PUBLIC urls - trending GGUF models, the
+# Ollama library page, the EvalPlus results file - identical no matter who
+# is asking. Nothing about your work is ever a search term. The profile that
+# personalises the ranking is built on this machine, from the memory store
+# and the Logseq graph, and is used only to sort a catalogue already in
+# hand. jarvis_models.outbound_requests() lists every url so the claim can
+# be checked rather than believed, and test_models.py asserts that no token
+# from the profile appears in any of them.
+#
+# The Joplin vault is deliberately NOT read for the profile. It is the
+# personal store; what you write there should not steer what gets suggested.
+[models]
+enabled = true
+
+# How often the heartbeat looks for something newer. Weekly. Discovery
+# never installs or switches on its own - it produces cards and stops.
+check_every_hours = 168
+suggest_count = 3
+
+# VRAM headroom kept free. The estimate is a floor (weights + KV cache +
+# ~1.5 GB of runtime overhead), and the cost of being wrong is a model
+# that spills into system RAM and runs at a fraction of the speed.
+vram_margin = 0.10
+# Context length assumed when sizing the KV cache for a model that is not
+# installed yet. Raise it if you routinely feed Jarvis long documents -
+# the cache, not the weights, is what grows.
+assume_context = 8192
+
+# The bar a "you'd be better off on X for this" suggestion has to clear.
+# It exists because the honest answer is usually no: switching costs a
+# download, disk, and a 5-15 second swap on every request if the new model
+# is bigger than the resident one.
+min_benefit = 0.05          # measured points, 0..1 (e.g. 0.05 = 5 pts HumanEval+)
+max_download_gb = 12
+
+# ------------------------------------------------------------------------
+# 12. SKILLS - capabilities Jarvis writes for itself, and ones from elsewhere
+# ------------------------------------------------------------------------
+# A skill is a folder with a SKILL.md: frontmatter naming it, then a body
+# of instructions the agent reads only when the skill is relevant. That is
+# also, exactly, a file of instructions the agent will follow - so the
+# scanner in jarvis_skills.py runs on the raw bytes BEFORE any of it reaches
+# a model, and a "refuse" verdict never reaches the approval queue.
+#
+# It refuses on the patterns actually used to distribute malware through the
+# OpenClaw skill marketplaces in 2025-26: curl-pipe-bash droppers, base64'd
+# setup steps, fake password prompts, "ignore your instructions", and files
+# padded past a scanner's size limit. A clean or warned skill still needs
+# your approval to install (modify_own_code) - clean does not mean automatic.
+#
+# Bundled scripts are NEVER run by the loader. If a skill tells the agent to
+# run one, that is an ordinary shell call and goes through the gate like any
+# other.
+[skills]
+enabled = true
+# third_party is the strictest trust level: bundled executables are a
+# warning on their own, and warned skills need accept_warnings before they
+# are even offered for approval. self = skills Jarvis wrote; local = ones
+# you wrote by hand.
+default_trust = "third_party"
+max_skill_md_kb = 64            # a skill padded past this is refused as evasion
+auto_write_after_complex_task = false   # Jarvis proposes; you approve each one
+
+# ------------------------------------------------------------------------
+# 12b. CONTENT RISK - what to do about text that arrived from outside
+# ------------------------------------------------------------------------
+# Skill bodies, MCP tool descriptions, tool results, connector text: all of it
+# is written by someone who is not you and read by a model that treats it as
+# instructions. Three rules, none of which asks a model anything.
+[content_risk]
+enabled = true
+
+# 1. Rushing language raises the tier of whatever comes next, for this long.
+#    Ten minutes is long enough to cover the action the rushing text was
+#    setting up, short enough that one hostile web page does not put the whole
+#    evening behind an approval prompt.
+rush_latch_minutes = 10
+
+# What a raised tier becomes. Never below the table's own answer - this rule
+# can only ever raise. Setting this to "auto" does not lower anything; it
+# simply makes the rule do nothing.
+rush_raises_to = "ask"
+
+# 2. How far a skill or tool description may drift, cumulatively, across
+#    re-approvals before a diff stops being an honest basis for saying yes and
+#    you are asked to read the whole thing again. 0.35 = roughly a third of
+#    the text changed since the first approval. Salami-slicing - twenty benign
+#    deltas summing to a hostile whole - is what this number exists to stop.
+full_reread_drift = 0.35
+
+# ------------------------------------------------------------------------
+# 13. CONNECTORS - your own life, read from where it already sits
+# ------------------------------------------------------------------------
+# Mail, calendar, browser history and documents. The one rule: reading any
+# of them pins the conversation to the local model (belt: the result is
+# stamped; braces: the gate's timed taint flag is latched), so personal data
+# reaches a cloud lane by no path. Jarvis never touches your Google or
+# iCloud account - the calendar is a LOCAL CalDAV server's .ics files.
+[connectors]
+enabled = true
+
+[connectors.mail]
+enabled = false                # set true and fill the env vars to turn on
+# Reads headers into a local SQLite mirror; a body is fetched live, for one
+# message, only on an explicit request - never bulk-stored.
+# Needs JARVIS_IMAP_HOST / _USER / _PASSWORD in the environment.
+sync_limit = 200
+
+[connectors.browser]
+enabled = true
+# Reads each browser's own history DB by COPYING it first, because Chrome
+# and Firefox hold an exclusive lock while running. Chrome, Edge, Brave,
+# Firefox, on Windows/macOS/Linux.
+default_hours = 24
+
+[connectors.documents]
+enabled = true
+# Docling (MIT), CPU-only, so a receipt or PDF is read here and nothing
+# about it leaves the machine. Falls back to a plain PDF text pull if
+# Docling is not installed.
+
+# ------------------------------------------------------------------------
+# 14. VOICE - who may talk to Jarvis, and how it wakes
+# ------------------------------------------------------------------------
+# Two gates in front of the mic. WAKE: nothing is transcribed until the
+# openWakeWord "hey jarvis" model fires (CPU-only, never phones home;
+# Picovoice is ruled out - its free tier ended June 2026 and it calls home).
+# VOICE: the captured turn is checked against your enrolled voice-print
+# (SpeechBrain ECAPA, ~20 MB) before any command runs.
+#
+# This matters because the tiers govern what a command may DO, not who may
+# give one. An assistant that reads your email and answers anyone in earshot
+# is a hole the tiers cannot close. The voice-print is what makes "only me"
+# real - and it fails CLOSED: no model, no profile, or a processing error
+# all mean "not the owner", never "assume it is".
+[voice]
+enabled = true
+# "owner" = only your enrolled voice may command it (the default, because
+# the safe failure is to ignore a stranger). "broad" = accept anyone.
+mode = "owner"
+wake_phrase = "hey_jarvis"
+wake_threshold = 0.5
+# Cosine-similarity bar for accepting a voice as yours. Enrolment lowers it
+# automatically if your own sample clips are loosely clustered, so a strict
+# value here cannot lock you out.
+threshold = 0.35
+awake_timeout_s = 8            # a wake with no speech goes back to sleep
+
+# --- The PHONE's ears -----------------------------------------------------
+# Push-to-talk always works and needs nothing here. The wake word on a phone
+# is a separate decision and ships OFF.
+#
+# Why it is not simply "the same as the desktop": your desktop microphone
+# sits in one room you control. Your phone's goes wherever you do - pocket,
+# car, other people's houses, work. "Always listening for hey jarvis" means
+# something materially different on a device that travels, so it is a choice
+# you make rather than one you inherit.
+#
+# Nothing is lost by leaving it off. Both modes post one complete utterance
+# to the same endpoint; the wake word is only a different way to START the
+# capture. Turning it on is gated as change_own_config, because widening
+# where Jarvis listens is a change to its exposure and not a preference.
+wake_word_enabled = false
+
+# Speech to text runs HERE, never on the phone. The owner voice-print gate
+# above can only check a voice if it is given the voice; a client that
+# transcribed locally would send text and the gate would have nothing left to
+# check. CPU by default: the local model already holds most of the card, and
+# a push-to-talk clip is transcribed after the fact rather than streamed, so
+# spending VRAM to finish a two-second clip sooner is the wrong trade here.
+# Set JARVIS_STT_DEVICE=cuda to override. "none" disables transcription and
+# says so rather than returning empty text.
+stt_engine = "faster-whisper"
+stt_model = "small.en"
+
+
+# ------------------------------------------------------------------------
+# 15. POWER - sleep, at two depths
+# ------------------------------------------------------------------------
+# A 24/7 assistant does work you ask for and work it does on its own. Sleep
+# turns the second kind down. QUIET stops everything Jarvis does on its own
+# - heartbeat, watchers, background model checks, sleep-time memory work -
+# while still answering you the instant you speak; the model stays loaded,
+# so no wake-up delay. STANDBY adds unloading the local model from the GPU:
+# the real drop in power and VRAM, at the cost of a slower first reply
+# (~5-15 s to reload) after waking.
+#
+# NOTE the name clash: [memory.sleep_time] does the OPPOSITE of this - it
+# uses the idle GPU to do MORE while you are away. Entering STANDBY is what
+# suspends that pass.
+#
+# Four ways in and out, and a person's explicit choice always beats an
+# automatic one: a manual/voice wake during quiet hours holds until the
+# window ends rather than snapping back a moment later.
+[power]
+enabled = true
+# What "auto after idle" and "quiet hours" drop TO. "quiet" or "standby".
+schedule_mode = "quiet"
+idle_mode = "quiet"
+
+# Scheduled quiet hours. Local time, and a window may cross midnight.
+schedule_enabled = false
+quiet_start = "23:00"
+quiet_end = "07:00"
+
+# Drop to sleep on its own after this long with no interaction. Off by
+# default - turn it on if you want screensaver behaviour.
+idle_enabled = false
+idle_minutes = 45
+
+# ------------------------------------------------------------------------
+# 16. PERSONALITY MODES
+# ------------------------------------------------------------------------
+# A mode is a lens on top of the pipeline, not a fork of it. The privacy
+# router, the autonomy gate, the self-modification checks and the budget
+# ceilings run identically in every mode; a mode only shapes what happens
+# AFTER those gates have already cleared an action.
+#
+# What a mode may change: length, tone, whether it shows reasoning, whether
+# it asks clarifying questions about the task, how readily it interrupts you
+# with background findings, how much memory it pulls, and how a caveat is
+# WORDED.
+#
+# What no mode may change - and these are enforced by the schema having no
+# field for them, not by a policy note: autonomy tiers, the privacy
+# boundary, whether it tells you it is unsure, whether it is willing to
+# disagree with you, and audit logging. A "personality" that could turn
+# those off would be a security hole with a friendly name: the mode you
+# reach for when you are tired and rushed must not be the mode that stops
+# telling you the truth.
+#
+# NAMING: the persona mode is NIGHT, never "quiet" - [power] above already
+# owns QUIET/STANDBY as compute states. They are independent axes: an
+# all-nighter wants POWER=ACTIVE with NIGHT persona.
+[persona]
+enabled = true
+default_mode = "standard"
+# Built-ins: standard, work, field, sounding-board, tutor, red-team,
+# off-duty, night. Your own live in ~/.openjarvis/personas/*.json and may
+# only set the same whitelisted fields - a custom file containing a
+# forbidden knob is rejected, not ignored.
+allow_custom = true
+# Context may propose a mode; it may never apply one. Silent personality
+# switching is an injection surface, since this system reads email subjects
+# and calendar titles.
+suggest_on_context = true
+auto_switch = false        # not settable to true; set_mode refuses non-human callers
+
+
+# ------------------------------------------------------------------------
+# 17. LONG FUSE - jobs that outlive the conversation
+# ------------------------------------------------------------------------
+# "Research this and tell me tomorrow." "Watch that repo." A job is started
+# in one conversation and finishes in another, usually while nobody is
+# looking, and that changes three things.
+#
+# Permission moves forward in time: the actions a job may take are written
+# onto its row when it is scheduled and frozen there. Execution may use that
+# set and may never exceed it — an action outside the set queues a one-shot
+# grant and the job parks until someone answers, rather than escalating.
+# Nothing widens the set, so an action set to "never" in [autonomy.tiers]
+# cannot be frozen onto a job in the first place.
+#
+# Privacy moves with the job, not with the clock: if the conversation that
+# scheduled it was tainted (mail, files, credentials, memory), the row is
+# tainted for the job's whole life. The gate's taint latch is a timer and
+# will have expired long before Wednesday; the row has not.
+#
+# And results never speak. A job that finishes at 03:00 leaves its result on
+# the row; the delivery arbiter collects it and decides at breakfast whether
+# it is worth a line. jarvis_jobs.py has no voice path at all.
+[jobs]
+enabled = true
+
+# How many due jobs one scheduler tick runs, in the tick's own thread. Small
+# on purpose: a tick that runs everything it finds is a tick that blocks the
+# heartbeat behind a slow web fetch.
+max_jobs_per_tick = 4
+
+# A running job with no progress report for this long is assumed to have
+# died with its process, and is taken back on the next start. ctx.progress()
+# is the liveness signal, so a handler whose steps are longer than this must
+# call it inside them.
+stale_running_seconds = 900
+
+# How many times a job may be reclaimed from a dead process before it is
+# failed instead. Reclaim retries; an exception inside a handler does not —
+# a job body that threw will throw again, and a retried job that already
+# sent half of something sends it twice.
+max_attempts = 3
+
+# How soon a job parked on a capability grant is looked at again. It re-runs
+# from the top of its handler, so handlers must be idempotent up to their
+# first side effect.
+approval_retry_seconds = 30
+
+# A parked job waits for ever by default. That is the point: if nobody is
+# there to approve the extra capability, the job stays queued rather than
+# proceeding without it.
+waiting_expires_hours = 0
+
+# Progress events are published to the shared event stream (kind "job") at
+# most this often per job, so a tight loop cannot flood three clients. State
+# changes always publish, whatever this says.
+progress_event_seconds = 1.0
+
+# SQLite: one writer thread serves every thread in this process (see
+# jarvis_jobs.py for why a connection per thread was rejected), and these
+# two cover the other process writing to the same file.
+busy_timeout_seconds = 10
+write_timeout_seconds = 15
+
+# ------------------------------------------------------------------------
+# 18. UNDO SHELF - the machinery behind the word "reversible"
+# ------------------------------------------------------------------------
+# Every approval card says what an action costs to get wrong, and until
+# jarvis_undo.py existed "reversible: yes" was a claim with nothing behind
+# it. Now every action lands on a shelf, and three of the six categories -
+# files, git, config key-values - can actually be put back, because this
+# module keeps its own before-image of each. Email and browser actions
+# cannot be undone by anyone, and they stay ON the shelf marked
+# non-revertible with the reason: a shelf that listed only the recoverable
+# things would read as a complete record of the evening and be wrong in
+# exactly the direction that matters.
+#
+# The shelf is a second copy of everything you deleted today, so it is
+# treated as sensitive data, not as a cache. It never leaves this machine
+# (the phone sees the list and can press revert; the bytes stay here), and
+# it refuses outright to shelf a write whose purpose was removing a
+# credential - undoing "strip the API key" would put the API key back.
+[undo]
+enabled = true
+
+# How long a before-image is kept. A CLOCK, not a count: the risk is the
+# window in which deleted content exists twice, and that is measured in
+# hours, not in how many other things happened since. Expired entries are
+# deleted - index row and bytes together - at the top of every call, not by
+# a background sweeper that only runs while something is up. 0 means keep
+# nothing, and is read as exactly that.
+ttl_hours = 24
+
+# Files bigger than this are not shadowed; the action is still shelved, and
+# says it has no undo. Copying a 2GB file on every write is how a shelf
+# becomes a disk-filling attack rather than a safety net.
+max_shadow_mb = 8
+
+# A disk backstop, NOT the expiry policy - ttl_hours above is that. Only
+# here so a runaway loop cannot fill the volume inside one TTL window; set
+# high enough that ordinary use never reaches it.
+max_entries = 500
+
+# Characters of the before-image a LOCAL card may show, so you can see what
+# would come back. Never sent to a remote client, and credential-shaped
+# strings are stripped even from this. 0 turns previews off.
+local_preview_chars = 120
+
+# ------------------------------------------------------------------------
+# 19. PREVIEW - the pane you read before you say yes
+# ------------------------------------------------------------------------
+# [autonomy] decides whether you are asked. This decides what you are shown
+# when you are, and jarvis_preview.py computes every word of it with code.
+# Nothing on the authoritative pane is written by a model, because the text
+# being judged is the text an attacker controls, and the sentence directly
+# above the Approve button is the whole prize. A model gloss may be attached
+# in a separate labelled field and rendered below a fold; this module never
+# writes one.
+#
+# The pane always reports its own COVERAGE - "resolved 3 of 5 tokens". A
+# pane that looks confident about a command it half parsed is worse than no
+# pane, because afterwards you believe you checked.
+[preview]
+enabled = true
+
+# A command the parser could not finish reading splits in two, because not
+# everything unreadable is unreadable in the same way.
+#
+# SHAPES WITH NO HONEST VERSION -- a pipe into an interpreter, a fetched
+# script run in place, an -EncodedCommand payload, a substitution that
+# reaches the network ("rm -rf $(curl ...)" lets a server choose what gets
+# deleted). There is nothing here for you to weigh up, so you are not
+# offered a button. This is unknown_tier, and "never" means only an edit to
+# this file unblocks it.
+unknown_tier = "never"
+
+# MERELY UNREAD -- a variable standing where a path should be, a plain
+# $(...) or backtick, an unterminated quote, three grammars disagreeing.
+# You can read these and decide; what you must not be handed is a pane that
+# hides how little of it was parsed, and the coverage line is what fixes
+# that. The first version of this module sent all of the above to "never"
+# too, which reads as rigour and behaves as breakage: "ls $(pwd)" is an
+# ordinary thing to type, and a rule that refuses it teaches you to widen
+# the setting, which is how a safety rule ends up switched off.
+# Cannot be lowered below "ask" whatever you put here.
+unread_tier = "ask"
+
+# Which shell grammar to assume when the caller does not declare one.
+# Leave it empty and the command is parsed under all three (posix,
+# powershell, cmd): if they agree the ambiguity had no consequence and
+# nothing is reported, and if they disagree that disagreement IS the
+# finding, because one of those readings is what the machine will do and
+# the pane cannot say which.
+default_grammar = ""
+
+# Paths that may be touched without ceremony. EMPTY MEANS NOTHING IS
+# DECLARED SAFE, not that everything is - an allowlist that starts
+# permissive is a setting nobody ever tightens. Paths are compared
+# component-wise, so "~/docs" does not also admit "~/docs-old".
+path_allowlist = []
+
+# How many files to count under a path before the card says "at least".
+# The count is what turns "destructive" into "412 files, 2.1 GB", and it is
+# also a directory walk on the path a hostile command chose, so it stops.
+max_walk_entries = 20000
+
+# The phone card: three lines, and this many characters each. The budget is
+# the point. A wall of diff on a six-inch screen gets swipe-approved unread,
+# which is worse than showing nothing, because now you believe you checked.
+card_line_chars = 72
+
+# Unified diffs are against what is on DISK, never against what the caller
+# remembers writing - the two differ exactly when something else changed the
+# file since, which is when a diff matters most.
+diff_context_lines = 3
+max_diff_kb = 200
+
+# How many addresses to list per header before the card says "and N more".
+# To, Cc and Bcc are always counted separately and never summed: a Bcc of
+# 200 is the fact that should stop you, and it is the one a combined
+# "203 recipients" hides.
+recipients_shown = 5
+
+# THE SEND-HOLD. SMTP has no unsend, so the only honest undo is to not have
+# handed the message over yet. A message sits here for this long and
+# cancel_hold() throws it away; only what survives the window reaches a
+# transport. The queue is in memory on purpose - a hold that survived a
+# restart would mean "the machine rebooted so your mail went out anyway".
+default_hold_seconds = 30
+
+# commit_before(): make "you can revert this" a fact rather than a claim.
+# It refuses a dirty tree (committing someone's unrelated work-in-progress
+# to make room for yours is a second uninvited edit, not a safety feature)
+# and refuses when the commit would stage a credential - the obvious
+# `git add -A` in a repo with an untracked .env and a remote is an
+# exfiltration waiting for the next push. Set marker_commits = false to
+# report HEAD as the restore point instead of writing a named empty commit.
+marker_commits = true
+secret_scan_kb = 64
+
+# ------------------------------------------------------------------------
+# 20. ATTENTION - how much of your day Jarvis is allowed to spend
+# ------------------------------------------------------------------------
+# Every feature here can want you. The heartbeat finds something, a Long Fuse
+# job finishes, the steward spots a newer model, the gate raises a card. Each
+# is reasonable alone; together they are a machine for interrupting you all
+# day, and what people do with that is turn the whole lot off - which costs
+# them the one notification that mattered along with the forty that did not.
+#
+# So there is one budget, in one place, and every feature respects it. What
+# does not fit drains into one daily digest.
+#
+# Anything you ASKED for is exempt and is not counted. A card for the action
+# you just requested is foreground: you are already here, waiting.
+[arbiter]
+enabled = true
+
+# Spoken, unprompted interruptions per day. Not notifications - a tray badge
+# or a phone count costs nothing until you look at it. This number is the one
+# that makes noise in the room.
+spoken_per_day = 3
+
+# When the digest arrives, as an hour of the day, 0-23. It arrives once, and
+# only if there is something in it: a brief that turns up empty teaches you it
+# is not worth opening, and then the one that matters is not opened either.
+digest_hour = 18
+
+# Minutes of no keyboard or mouse before you count as away. While you are away
+# - or the session is locked, or power mode is quiet or standby - the spoken
+# budget is zero and everything goes to the digest.
+#
+# This is what replaced the webcam. An earlier design used face detection to
+# decide whether to speak; it was killed because the operating system already
+# knows the answer, and asking it costs no camera handle for a compromise to
+# inherit and creates no record of who else was in the room. 0 turns the idle
+# part off and leaves only the session lock.
+away_after_idle_minutes = 15
+
+# How long a delivered or dropped item stays on file. Only affects history;
+# anything still waiting is never dropped by this, however old, because old
+# and still waiting is exactly the case a digest exists for.
+keep_delivered_days = 14
+
+# ------------------------------------------------------------------------
+# 21. TRIPWIRE - a smoke test when the model changes
+# ------------------------------------------------------------------------
+# Eight small probes, run against the outgoing model before a swap and the
+# incoming one after it. They catch a model that is BROKEN: answering in
+# another language, looping instead of stopping, unable to produce JSON,
+# refusing ordinary requests, returning nothing.
+#
+# They cannot tell you the new model is better, and the screen says so in
+# those words. The original design was an evaluation suite scored by a judge
+# model against tasks taken from your own transcripts; it was cut twice over.
+# Thirty to fifty tasks judged locally has a noise floor of two or three, so
+# no number it printed would be real - and a suite built from your transcripts
+# is a frozen second copy of your life sitting outside everything the memory
+# system does about forgetting.
+#
+# The probes here are written into the module, about nothing in particular.
+# Nothing in that file reads a transcript.
+[tripwire]
+enabled = true
+
+# ------------------------------------------------------------------------
+# 22. STYLE - sounding like you, without changing any weights
+# ------------------------------------------------------------------------
+# Before drafting something in your voice, Jarvis retrieves a few examples of
+# how you have written about similar things and shows them to the model.
+#
+# Two rules make that safe. It goes through the memory store, so it trips the
+# same privacy latch as reading your mail and the turn stays on the local
+# model. And names, addresses, amounts and long numbers are stripped first:
+# examples are picked by how similar they are, not by how sensitive, so the
+# phrasing of a private message will sometimes be the closest match for a note
+# to a colleague.
+#
+# Deliberately absent: fine-tuning. An adapter does not fit on 8 GB, it
+# memorises your writing in a way nobody can extract or audit, and rolling
+# back a search index is free where rolling back weights is not.
+[style]
+enabled = true
+exemplars = 3          # how many examples to show the model
+min_words = 6          # shorter than this carries no style worth copying
+
+# ------------------------------------------------------------------------
+# 23. WATCH - what is new on GitHub for the things you care about
+# ------------------------------------------------------------------------
+# You name a topic. Jarvis searches GitHub for it, remembers what it has
+# already shown you, and tells you what is new and what has moved THE NEXT
+# TIME YOU ASK.
+#
+# It is a pull, deliberately, and that is the default rather than a setting
+# you have to find. "Keep me updated if I ask" is a different feature from
+# "tell me when something happens", and building the second and calling it the
+# first is how a tool ends up muted. A single topic can be marked notify and
+# then it reaches the daily brief - but never the room: it goes through the
+# arbiter with can_defer set, because nothing about a new repository was ever
+# urgent.
+#
+# A repository description is written by whoever published it and lands in
+# front of a model that reads it as if you had typed it, so every field goes
+# through the same scanner as a skill. A repository whose text is refused is
+# still LISTED - being attacked is not a reason to hide that it exists - but
+# its text is replaced with the reason and never reaches a model. A search
+# also never raises your approval tier, whatever a README says: otherwise
+# anyone could make your next action harder by publishing a repository.
+#
+# The token is read from the environment (JARVIS_GITHUB_TOKEN, GITHUB_TOKEN
+# or GH_TOKEN) and from nowhere else. Without one you get 10 searches a
+# minute instead of 30, which is enough for a handful of topics.
+[watch]
+enabled = true
+
+# What counts as "this repository grew". Proportional with a floor, so 40
+# stars going to 400 is news and 40,000 going to 40,060 is not. A plain
+# threshold would report the popular projects every week and never the small
+# one that suddenly mattered.
+star_jump = 0.5        # fraction of the current count
+star_floor = 25        # ...but never fewer than this many
+
+# Always reported regardless of the above, because each one changes whether
+# you can use the thing at all: a licence change, being archived, a new
+# release, a changed description.
