@@ -448,6 +448,8 @@ class MainActivity : FragmentActivity() {
                                 }
                             }
                         },
+                        notice = notice,
+                        onDismissNotice = { JarvisRuntime.clearNotice() },
                         modifier = root,
                     )
                 }
@@ -472,6 +474,8 @@ class MainActivity : FragmentActivity() {
                     onRandomise = { appearance.randomise() },
                     onResetBindings = { appearance.resetBindings() },
                     onBack = { nav.back() },
+                    notice = notice,
+                    onDismissNotice = { JarvisRuntime.clearNotice() },
                     modifier = root,
                 )
 

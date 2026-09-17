@@ -34,6 +34,7 @@ import com.jarvis.client.face.FaceView
 import com.jarvis.client.face.Faces
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
+import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -67,6 +68,9 @@ fun AppearanceScreen(
     onRandomise: () -> Unit,
     onResetBindings: () -> Unit,
     onBack: () -> Unit,
+    /** What the store refused, e.g. "one theme change at a time". Null hides it. */
+    notice: String? = null,
+    onDismissNotice: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -78,6 +82,10 @@ fun AppearanceScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
+            if (notice != null) {
+                item(key = "notice") { Notice(notice, onDismissNotice) }
+            }
+
             item(key = "themes") {
                 Section("Theme") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

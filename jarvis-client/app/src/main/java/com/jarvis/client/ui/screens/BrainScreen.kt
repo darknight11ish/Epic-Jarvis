@@ -32,6 +32,7 @@ import com.jarvis.client.ui.parts.Freshness
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Meter
+import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -80,6 +81,9 @@ fun BrainScreen(
     /** Which proposal, if any, has a decision in flight - never two at once. */
     memoryDecideBusyId: Long?,
     onDecideMemory: (id: Long, accept: Boolean) -> Unit,
+    /** What a Keep/Discard send failed with, e.g. not connected. Null hides it. */
+    notice: String? = null,
+    onDismissNotice: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -103,6 +107,10 @@ fun BrainScreen(
             // screen full of numbers that distinction has to lead.
             item(key = "freshness") {
                 Freshness(link, stale, brain.fetchedAtMs)
+            }
+
+            if (notice != null) {
+                item(key = "notice") { Notice(notice, onDismissNotice) }
             }
 
             item(key = "doing") {

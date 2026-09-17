@@ -360,6 +360,33 @@ fun Quiet(
     }
 }
 
+/**
+ * A dismissible warning line: what went wrong, or what the desktop said no to.
+ *
+ * Lifted out of HomeScreen, where it was private and therefore used on one
+ * screen out of five — the same gap [Freshness] closed for staleness. Every
+ * other screen either had nowhere to put `JarvisRuntime.notice` at all
+ * (Appearance's own comment used to say the store "refuses the change
+ * anyway - the notice explains it in words instead", except nothing on that
+ * screen rendered one) or reinvented it.
+ */
+@Composable
+fun Notice(text: String, onDismiss: () -> Unit) {
+    val chrome = LocalChrome.current
+    Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.warnInk,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Quiet("Dismiss", onClick = onDismiss)
+        }
+    }
+}
+
 /** A hairline rule. */
 @Composable
 fun Rule(modifier: Modifier = Modifier) {

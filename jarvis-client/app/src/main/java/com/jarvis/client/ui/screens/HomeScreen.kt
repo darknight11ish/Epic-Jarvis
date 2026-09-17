@@ -51,6 +51,7 @@ import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
+import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -349,23 +350,6 @@ private fun LinkBar(state: HomeState, actions: HomeActions) {
         )
         Quiet("Look", color = chrome.textMid, onClick = actions.onOpenAppearance)
         Quiet("Help", color = chrome.textMid, onClick = actions.onOpenFaq)
-    }
-}
-
-@Composable
-private fun Notice(text: String, onDismiss: () -> Unit) {
-    val chrome = LocalChrome.current
-    Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = chrome.warnInk,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            Quiet("Dismiss", onClick = onDismiss)
-        }
     }
 }
 
