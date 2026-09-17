@@ -1040,6 +1040,7 @@ in, was in.
 | `POST /api/memory/forget` | `{id, valid_to?}` → `retire()`. Its first caller. |
 | `POST /api/memory/edit` | `{id, text, valid_to?}` → supersede |
 | `POST /api/memory/learning` | `{enabled}` → the switch |
+| `POST /api/memory/sleep_time` | `{enabled?}` and/or `{remind?}` → the overnight-offer card's own "enable" / "stop asking" actions |
 
 ## Four things it deliberately does
 
@@ -1072,6 +1073,30 @@ the order `add()`'s own same-fact fallback needs to backdate correctly
 rather than silently retiring at "now" regardless of what was sent. Omit it
 and both behave exactly as before.
 
+## The overnight-memory offer
+
+`GET /api/memory/pending` now carries `setup.sleep_time_offer`:
+`jarvis_sleep.reminder_card()`, unedited, since a client that reads `setup`
+for one thing should not need a second route for a related one. The card is
+`null` most of the time — it is once-a-day, server-side, and null whenever
+the pass is already on, reminders are off, or today already offered it once.
+
+**That "once" is per process, not per client.** `reminder_card()` marks
+itself seen the moment it is *called*, and now two clients call it: whichever
+of the desktop or the phone polls `/api/memory/pending` first on a given day
+gets the card, and the other does not, until tomorrow. Accepted rather than
+rewriting `jarvis_sleep.py`'s own tested once-a-day contract for two callers
+it was never asked to serve.
+
+`POST /api/memory/sleep_time` answers the card's own three actions. "enable"
+and "stop asking" are one write each — `jarvis_sleep.set_enabled()` /
+`set_remind()`, added alongside this route, in the same `CONFIG_DIR` JSON
+sidecar `extraction-wiring.patch`'s `learning.json` already uses for the same
+reason: the TOML is the owner's own hand-edited file, and neither switch was
+ever going to rewrite it from an HTTP handler. "not now" sends nothing at
+all — the card already tracks "already offered today" itself, so a dismiss
+with no write still does not return until tomorrow.
+
 ## The learning switch, and its floor
 
 `learning_enabled()` reads `CONFIG_DIR/learning.json`, so the pane can turn
@@ -1097,7 +1122,7 @@ still commute.
 python test_memory_pane.py
 ```
 
-Thirty-four checks. The switch and the query-string clamp are lifted out of
+Forty-one checks. The switch and the query-string clamp are lifted out of
 the source with `ast` and executed — including that a corrupt switch file reads
 as on rather than raising, and that `limit=all`, `limit=-1` and
 `limit=99999999` reach a `LIMIT` clause as the default, 1 and 5000 rather than

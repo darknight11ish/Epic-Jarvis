@@ -20,10 +20,21 @@ used it for a while". A consolidation pass that reorganises memory unattended
 is exactly the thing that decision was about, so this module reports and
 offers; it does not consolidate. An INFERRED implementation of the pass itself
 would be a silent, unreviewed rewrite of the fact store.
+
+`set_enabled`/`set_remind` answer the card's own three actions ("enable",
+"not now", "stop asking") so a client can act on it, added when the card was
+first wired into the desktop and phone UIs rather than only ever printed to a
+console. Neither writes `jarvis-framework.toml` - that file is the owner's
+own, hand-edited, and this module was never going to start rewriting it from
+an HTTP handler. They write a small JSON file next to it instead, the same
+shape `extraction-wiring.patch`'s `learning.json` already uses for the same
+reason, and `_cfg` reads it first, ahead of the TOML.
 """
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -32,8 +43,37 @@ except Exception:
     fw = None  # type: ignore
 
 
+def _override_path() -> Optional[Path]:
+    if fw is None:
+        return None
+    try:
+        return fw.CONFIG_DIR / "sleep_time.json"
+    except Exception:
+        return None
+
+
+def _override() -> dict:
+    """A correction on top of the TOML, written by `_set` below."""
+    path = _override_path()
+    if path is None or not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 def _cfg(key: str, default=None):
-    """`[memory.sleep_time]`, one key. Called directly by jarvis_hud."""
+    """`[memory.sleep_time]`, one key. Called directly by jarvis_hud.
+
+    The override file wins when it has an opinion - it is the newer of the
+    two, since it can only exist by someone acting on the card this module
+    itself offered - and falls through to the TOML otherwise.
+    """
+    override = _override()
+    if key in override:
+        return override[key]
     if fw is None:
         return default
     try:
@@ -42,6 +82,44 @@ def _cfg(key: str, default=None):
         return node.get(key, default) if isinstance(node, dict) else default
     except Exception:
         return default
+
+
+def _set(key: str, value: bool) -> dict:
+    """Writes one key to the override file, leaving any other key alone.
+
+    Same atomic write as `extraction-wiring.patch`'s `set_learning`: a
+    temp file written in full, then renamed over the real one, so a crash
+    mid-write leaves the old file intact rather than a half-written one.
+    """
+    path = _override_path()
+    if path is None:
+        return {"ok": False, "error": "no config directory available",
+                "enabled": enabled(), "remind": remind()}
+    try:
+        data = _override()
+        data[key] = bool(value)
+        data["changed"] = time.time()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        tmp.replace(path)
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}",
+                "enabled": enabled(), "remind": remind()}
+    return {"ok": True, "enabled": enabled(), "remind": remind()}
+
+
+def set_enabled(on: bool) -> dict:
+    """The card's "enable" action. Still starts nothing by itself - turning
+    this on only stops `reminder_card()` from offering again; the
+    consolidation pass itself remains unimplemented, see the module
+    docstring."""
+    return _set("enabled", on)
+
+
+def set_remind(on: bool) -> dict:
+    """The card's "stop asking" action, sent as `set_remind(False)`."""
+    return _set("remind", on)
 
 
 def enabled() -> bool:

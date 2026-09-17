@@ -184,6 +184,31 @@ def t_reads_are_honest():
           block.count("finally:") >= 1 and block.count("c.close()") >= 1)
 
 
+def t_sleep_time_offer():
+    """The overnight-memory card, and its two backend-facing actions."""
+    src = SRC.read_text(encoding="utf-8")
+    i = src.index('if path == "/api/memory/pending":')
+    block = src[i:src.index('if path == "/api/memory/facts":', i)]
+    check("the pending route carries the daily card",
+          "jarvis_sleep.reminder_card()" in block)
+    check("the card rides inside setup, not a second top-level key",
+          '"sleep_time_offer"' in block and 'setup["sleep_time_offer"]' in block,
+          "a client already reading setup for one thing should not have to "
+          "read a second field for a related one")
+
+    j = src.index('route == "/api/memory/sleep_time"')
+    route_block = src[j:j + 1100]
+    check("the enable action calls set_enabled", "jarvis_sleep.set_enabled(" in route_block)
+    check("the stop-asking action calls set_remind", "jarvis_sleep.set_remind(" in route_block)
+    check("a body with neither key is refused, not silently accepted",
+          "not isinstance(sleep_enabled, bool) and not isinstance(sleep_remind, bool)"
+          in route_block)
+    check("a write that failed to persist is reported as a failure, not 200",
+          "200 if out.get(\"ok\") else 500" in route_block)
+    check("sleep_time is in the shared write whitelist",
+          '"/api/memory/sleep_time"' in src[src.index('route in ("/api/memory/forget"'):][:200])
+
+
 def t_it_is_reachable():
     """CONTROL. A route nothing can call is the defect this project keeps
     producing, so check both whitelists actually name them."""
@@ -204,7 +229,7 @@ def t_it_is_reachable():
 if __name__ == "__main__":
     for fn in (t_learning_switch, t_qs_int, t_one_id_at_a_time,
                t_backdated_corrections_are_reachable,
-               t_reads_are_honest, t_it_is_reachable):
+               t_reads_are_honest, t_sleep_time_offer, t_it_is_reachable):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

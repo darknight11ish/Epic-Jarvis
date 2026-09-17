@@ -1283,6 +1283,58 @@ class Small(unittest.TestCase):
         finally:
             SL._cfg = keep
 
+    def test_set_enabled_and_set_remind_answer_the_cards_own_actions(self):
+        """`reminder_card()` offers three actions - "enable", "not now",
+        "stop asking" - and until these two functions existed nothing
+        answered the first or the third; a client had the card and nothing
+        to send back for it."""
+        tmp = Path(tempfile.mkdtemp()) / "sleep_time.json"
+        keep = SL._override_path
+        SL._override_path = lambda: tmp
+        try:
+            self.assertFalse(SL.enabled())
+            out = SL.set_enabled(True)
+            self.assertTrue(out["ok"])
+            self.assertTrue(SL.enabled())
+
+            out = SL.set_remind(False)
+            self.assertTrue(out["ok"])
+            self.assertFalse(SL.remind())
+            # Setting remind must not have touched the enabled key it wrote
+            # moments before - each call writes ONE key, not the whole file.
+            self.assertTrue(SL.enabled())
+        finally:
+            SL._override_path = keep
+
+    def test_the_override_file_wins_over_the_toml(self):
+        """`_cfg`'s whole point: a decision made from the card has to stick
+        even though the TOML underneath it was never touched and still says
+        the opposite."""
+        tmp = Path(tempfile.mkdtemp()) / "sleep_time.json"
+        keep_path = SL._override_path
+        keep_fw = FW.load_framework
+        SL._override_path = lambda: tmp
+        FW.load_framework = lambda: {"memory": {"sleep_time": {"enabled": False}}}
+        try:
+            self.assertFalse(SL.enabled(), "the TOML value should read through untouched")
+            SL.set_enabled(True)
+            self.assertTrue(SL.enabled(), "the override did not take priority over the TOML")
+        finally:
+            SL._override_path = keep_path
+            FW.load_framework = keep_fw
+
+    def test_a_missing_config_directory_fails_the_write_honestly(self):
+        """No silent no-op: a client that shows `out["ok"]` would otherwise
+        tell the owner their tap enabled something that was never written."""
+        keep = SL._override_path
+        SL._override_path = lambda: None
+        try:
+            out = SL.set_enabled(True)
+            self.assertFalse(out["ok"])
+            self.assertIn("error", out)
+        finally:
+            SL._override_path = keep
+
 
 # ==========================================================================
 #   jarvis_initiative

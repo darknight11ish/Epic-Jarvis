@@ -347,6 +347,28 @@ pub async fn brain_memory_learning(
     .await
 }
 
+/// Answers the daily "let Jarvis tidy its memory overnight?" card.
+///
+/// Two independent fields because the card offers two independent actions:
+/// "enable" sends `enabled`, "stop asking" sends `remind`. "not now" calls
+/// nothing at all — the server's own once-a-day tracking already keeps the
+/// card from returning today regardless, so a plain dismiss needs no request.
+#[tauri::command]
+pub async fn brain_memory_sleep_time(
+    app: AppHandle,
+    enabled: Option<bool>,
+    remind: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::json!({});
+    if let Some(e) = enabled {
+        body["enabled"] = serde_json::json!(e);
+    }
+    if let Some(r) = remind {
+        body["remind"] = serde_json::json!(r);
+    }
+    post(&app, "/api/memory/sleep_time", body).await
+}
+
 /// Every fact and every pending proposal, for the owner to keep a copy of.
 ///
 /// A command rather than a read section because it is large and wanted rarely;

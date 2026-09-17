@@ -478,6 +478,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "brain_memory_forget":
           case "brain_memory_edit":
           case "brain_memory_learning":
+          case "brain_memory_sleep_time":
             window.__memoryWrites.push({ cmd, ...args });
             if (window.__memoryRefuses) {
               return { ok: false, error: String(window.__memoryRefuses) };
@@ -491,6 +492,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 ? { ok: true, enabled: false, floor: false,
                     note: "JARVIS_EXTRACT is off in the environment, which overrides this switch." }
                 : { ok: true, enabled: args.enabled };
+            }
+            if (cmd === "brain_memory_sleep_time") {
+              return { ok: true, enabled: args.enabled ?? true, remind: args.remind ?? true };
             }
             return { ok: true };
           case "brain_memory_export":

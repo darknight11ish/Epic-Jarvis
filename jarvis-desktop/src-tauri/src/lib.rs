@@ -541,6 +541,7 @@ pub fn run() {
             brain::brain_memory_forget,
             brain::brain_memory_edit,
             brain::brain_memory_learning,
+            brain::brain_memory_sleep_time,
             brain::brain_memory_export,
             brain::brain_memory_as_of,
             brain::brain_model,

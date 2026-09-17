@@ -176,6 +176,106 @@ await check("a refused write surfaces rather than looking like success", async (
   assert.match(toast, /not importable/, `the toast said "${toast}"`);
 });
 
+/* ── The overnight-memory offer ──────────────────────────────────────────── */
+
+const OFFER = {
+  kind: "sleep_time_offer",
+  title: "Let Jarvis tidy its memory overnight?",
+  body: "Once a night it would re-read what it learned that day.",
+  actions: ["enable", "not now", "stop asking"],
+};
+
+const withOffer = (extra = {}) => ({
+  brain: { ...K.BRAIN, memory_pending: {
+    ...K.BRAIN.memory_pending,
+    setup: { ...K.BRAIN.memory_pending.setup, sleep_time_offer: OFFER },
+  } },
+  ...extra,
+});
+
+await check("the daily card shows when the server offers it", async () => {
+  const page = await memoryTab(withOffer());
+  const text = await page.locator("#memory-learning").innerText();
+  await page.close();
+  assert.match(text, /tidy its memory overnight/i, `said "${text}"`);
+});
+
+await check("nothing offers it when the server sends none", async () => {
+  const page = await memoryTab();
+  const text = await page.locator("#memory-learning").innerText();
+  await page.close();
+  assert.doesNotMatch(text, /tidy its memory overnight/i,
+    "the default fixture carries no offer, so nothing should show one");
+});
+
+await check("Enable sends {enabled: true} and stops offering", async () => {
+  const page = await memoryTab(withOffer());
+  await page.getByRole("button", { name: "Enable", exact: true }).click();
+  await page.waitForTimeout(300);
+  const sent = await writes(page);
+  const stillThere = await page.locator("#memory-learning").innerText();
+  await page.close();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].cmd, "brain_memory_sleep_time");
+  assert.equal(sent[0].enabled, true);
+  assert.doesNotMatch(stillThere, /tidy its memory overnight/i,
+    "the card outlived the decision it was asking about");
+});
+
+await check("Stop asking sends {remind: false} and stops offering", async () => {
+  const page = await memoryTab(withOffer());
+  await page.getByRole("button", { name: "Stop asking" }).click();
+  await page.waitForTimeout(300);
+  const sent = await writes(page);
+  await page.close();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].cmd, "brain_memory_sleep_time");
+  assert.equal(sent[0].remind, false);
+});
+
+await check("Not now dismisses without sending anything", async () => {
+  const page = await memoryTab(withOffer());
+  await page.getByRole("button", { name: "Not now" }).click();
+  await page.waitForTimeout(200);
+  const sent = await writes(page);
+  const text = await page.locator("#memory-learning").innerText();
+  await page.close();
+  assert.equal(sent.length, 0, "declining today should not be a network request");
+  assert.doesNotMatch(text, /tidy its memory overnight/i);
+});
+
+await check("a failed Enable leaves the card in place, not dismissed", async () => {
+  // Dismissing before the write is known to have landed would cost the
+  // owner their only way to turn this on until tomorrow's offer, over
+  // nothing worse than a network hiccup.
+  const page = await memoryTab(withOffer({ memoryRefuses: "memory layer not importable" }));
+  await page.getByRole("button", { name: "Enable", exact: true }).click();
+  await page.waitForTimeout(300);
+  const text = await page.locator("#memory-learning").innerText();
+  await page.close();
+  assert.match(text, /tidy its memory overnight/i,
+    "a refused write must not look like a handled decision");
+});
+
+await check("the card survives an unrelated write refreshing the pane", async () => {
+  // The real server marks itself as having offered the moment the route is
+  // polled at all, not when the owner acts - so a second read (here forced
+  // by nulling the fixture, standing in for the server's own once-a-day
+  // drop-off) must still show the card the owner already saw. Without a
+  // client-side cache it would vanish before they had a chance to read it.
+  const page = await memoryTab(withOffer());
+  const beforeText = await page.locator("#memory-learning").innerText();
+  await page.evaluate(() => { window.__brain.memory_pending.setup.sleep_time_offer = null; });
+  await page.locator("#memory-proposals .row-item").first()
+            .getByRole("button", { name: "Keep" }).click();
+  await page.waitForTimeout(300);
+  const afterText = await page.locator("#memory-learning").innerText();
+  await page.close();
+  assert.match(beforeText, /tidy its memory overnight/i);
+  assert.match(afterText, /tidy its memory overnight/i,
+    "the offer disappeared once the server stopped resending it, though the owner never dismissed it");
+});
+
 /* ── Controls ────────────────────────────────────────────────────────────── */
 
 await check("CONTROL: an empty queue says which of the two reasons it is", async () => {

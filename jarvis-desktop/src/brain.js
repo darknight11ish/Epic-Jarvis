@@ -635,6 +635,38 @@ let memoryAsOf = null;
 let memoryAsOfRows = null;
 
 /**
+ * The daily "tidy memory overnight?" card, cached client-side once seen.
+ *
+ * The server marks itself as having offered the moment `/api/memory/pending`
+ * is polled at all — not when the owner acts on it — so a second poll the
+ * same day, from ANY write on this pane refreshing the section, comes back
+ * with the card already gone. Without this cache the card would flash once
+ * and vanish the instant the owner clicked Keep or Discard on an unrelated
+ * proposal, before they had a chance to read it.
+ *
+ * `dismissed` is a second, separate flag rather than just clearing the cache:
+ * `state.data` can still be holding the very same non-null offer from the
+ * last real fetch (nothing forced a re-read since), so a plain
+ * `cachedSleepOffer = null` followed by this function's own re-render would
+ * immediately re-adopt the exact offer just turned down. Both flags reset
+ * only on a fresh launch of this window - matching what "not now" and "stop
+ * asking" actually promise, which is today, not forever.
+ */
+let cachedSleepOffer = null;
+let sleepOfferDismissed = false;
+
+function noteSleepOffer(setup) {
+  if (setup && setup.sleep_time_offer && !cachedSleepOffer && !sleepOfferDismissed) {
+    cachedSleepOffer = setup.sleep_time_offer;
+  }
+}
+
+function dismissSleepOffer() {
+  cachedSleepOffer = null;
+  sleepOfferDismissed = true;
+}
+
+/**
  * Asks, optionally, for the date a fact stopped being true — the bi-temporal
  * correction `jarvis_memory.retire()` has supported since `bitemporal.patch`
  * but that neither Reword nor Forget had any way to ask for until now.
@@ -702,6 +734,52 @@ function renderLearning() {
 
   const on = facts.learning === true;
   const setup = pending.setup || {};
+  noteSleepOffer(setup);
+
+  if (cachedSleepOffer) {
+    const offer = cachedSleepOffer;
+    const list = el("div", "rows");
+    list.append(
+      row({
+        tag: "offer",
+        state: "warn",
+        title: String(offer.title || "Let Jarvis tidy its memory overnight?"),
+        meta: [String(offer.body || "")],
+        actions: [
+          // Dismissed only once the write is KNOWN to have landed, never
+          // speculatively before it - a failed Enable must leave the card
+          // exactly where it was, or a network hiccup would cost the owner
+          // their only way to turn this on until tomorrow's offer.
+          // `memoryWrite` already re-renders this pane on its way back
+          // (`refreshMemory()`), before the dismiss below runs, so a second
+          // plain `render("memory")` is needed here too - it just repaints
+          // from what is already loaded, no second fetch.
+          button("Enable", async () => {
+            const out = await memoryWrite("brain_memory_sleep_time", { enabled: true },
+              "Jarvis will tidy its memory overnight.");
+            if (out && out.ok !== false) {
+              dismissSleepOffer();
+              render("memory");
+            }
+          }, { title: "Once a night, re-read what was learned that day, merge "
+                     + "duplicates and retire facts newer ones replaced." }),
+          button("Not now", () => {
+            dismissSleepOffer();
+            render("memory");
+          }, { title: "Dismiss for today. It offers again another day." }),
+          button("Stop asking", async () => {
+            const out = await memoryWrite("brain_memory_sleep_time", { remind: false },
+              "Won't ask again. Turn it on any time from here.");
+            if (out && out.ok !== false) {
+              dismissSleepOffer();
+              render("memory");
+            }
+          }, { title: "Never offer this again. You can still turn it on yourself." }),
+        ],
+      })
+    );
+    dom.memoryLearning.append(list);
+  }
 
   const dl = el("dl", "kv");
   dl.append(el("dt", "", "Learning"), el("dd", "", on ? "on" : "off"));

@@ -33,10 +33,20 @@
              if not _origin_ok(self):
                  return self._send(403, {"error": "cross-origin request refused"})
              if not _token_ok(self):
-@@ -1667,6 +1684,51 @@
+@@ -1667,6 +1684,59 @@
                  if path == "/api/memory/pending":
-                     return self._send(200, {"available": True, "pending": jarvis_extract.pending(),
-                                             "setup": jarvis_extract.setup_status()})
+-                    return self._send(200, {"available": True, "pending": jarvis_extract.pending(),
+-                                            "setup": jarvis_extract.setup_status()})
++                    setup = jarvis_extract.setup_status()
++                    # `reminder_card()` marks itself seen the moment it is
++                    # called (jarvis_sleep.py's own `_seen` dict), so the
++                    # first of the two clients to poll this route on a given
++                    # day gets the card and the other does not, until
++                    # tomorrow. Accepted rather than rewriting that
++                    # function's own tested once-a-day contract.
++                    setup["sleep_time_offer"] = jarvis_sleep.reminder_card()
++                    return self._send(200, {"available": True, "pending": jarvis_extract.pending(),
++                                            "setup": setup})
 +                if path == "/api/memory/facts":
 +                    # Everything the store holds, retired rows included, newest
 +                    # first. Retired ones are NOT hidden: the whole point of a
@@ -85,12 +95,12 @@
                  if path == "/api/memory/status":
                      return self._send(200, {"available": True, **jarvis_memory.store().status(),
                                              "sleep_time": {"enabled": jarvis_sleep.enabled(),
-@@ -1853,6 +1915,89 @@
+@@ -1853,6 +1923,107 @@
                  return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
              return self._send(code, out)
- 
+
 +        if route in ("/api/memory/forget", "/api/memory/edit",
-+                     "/api/memory/learning"):
++                     "/api/memory/learning", "/api/memory/sleep_time"):
 +            if not _origin_ok(self):
 +                return self._send(403, {"error": "cross-origin request refused"})
 +            if not _token_ok(self):
@@ -108,6 +118,24 @@
 +                if not isinstance(body.get("enabled"), bool):
 +                    return self._send(400, {"error": 'need {"enabled": true|false}'})
 +                return self._send(200, set_learning(body["enabled"]))
++
++            if route == "/api/memory/sleep_time":
++                # The daily card's own two backend-facing actions - "enable"
++                # and "stop asking" - become one write each. "not now" needs
++                # no call at all: the card already tracks "already offered
++                # today" itself (jarvis_sleep.py's own `_seen`), so a dismiss
++                # with no write still does not return until tomorrow.
++                sleep_enabled = body.get("enabled")
++                sleep_remind = body.get("remind")
++                if not isinstance(sleep_enabled, bool) and not isinstance(sleep_remind, bool):
++                    return self._send(400, {
++                        "error": 'need {"enabled": true|false} or {"remind": true|false}'})
++                out = {}
++                if isinstance(sleep_enabled, bool):
++                    out = jarvis_sleep.set_enabled(sleep_enabled)
++                if isinstance(sleep_remind, bool):
++                    out = jarvis_sleep.set_remind(sleep_remind)
++                return self._send(200 if out.get("ok") else 500, out)
 +
 +            # One integer id, like /api/memory/decide. There is deliberately no
 +            # list form: forgetting is irreversible and editing supersedes, so
