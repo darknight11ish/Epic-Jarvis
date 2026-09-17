@@ -81,6 +81,21 @@ fun BrainScreen(
     /** Which proposal, if any, has a decision in flight - never two at once. */
     memoryDecideBusyId: Long?,
     onDecideMemory: (id: Long, accept: Boolean) -> Unit,
+    /**
+     * The daily "tidy memory overnight?" card, or null to show none.
+     *
+     * Passed in already decided rather than read fresh from `brain.memory`
+     * every recomposition: the server marks itself as having offered the
+     * moment `/api/memory/pending` is polled at all, not when the owner
+     * acts on it, so a second read - which any OTHER write on this screen
+     * triggers via its own refresh - comes back with the offer already
+     * gone. The caller holds the sticky, once-seen copy; this composable
+     * only ever renders what it is handed.
+     */
+    sleepOffer: JsonObject? = null,
+    sleepOfferBusy: Boolean = false,
+    onSleepTimeAction: (enabled: Boolean?, remind: Boolean?) -> Unit = { _, _ -> },
+    onDismissSleepOffer: () -> Unit = {},
     /** What a Keep/Discard send failed with, e.g. not connected. Null hides it. */
     notice: String? = null,
     onDismissNotice: () -> Unit = {},
@@ -179,6 +194,10 @@ fun BrainScreen(
                     busyId = memoryDecideBusyId,
                     onKeep = { id -> onDecideMemory(id, true) },
                     onDiscard = { id -> onDecideMemory(id, false) },
+                    sleepOffer = sleepOffer,
+                    sleepOfferBusy = sleepOfferBusy,
+                    onSleepTimeAction = onSleepTimeAction,
+                    onDismissSleepOffer = onDismissSleepOffer,
                 )
             }
             item(key = "initiative") {
@@ -428,9 +447,23 @@ private fun MemoryQueue(
     busyId: Long?,
     onKeep: (id: Long) -> Unit,
     onDiscard: (id: Long) -> Unit,
+    sleepOffer: JsonObject?,
+    sleepOfferBusy: Boolean,
+    onSleepTimeAction: (enabled: Boolean?, remind: Boolean?) -> Unit,
+    onDismissSleepOffer: () -> Unit,
 ) {
     val chrome = LocalChrome.current
     Section("Memory awaiting review") {
+        if (sleepOffer != null) {
+            SleepOfferCard(
+                offer = sleepOffer,
+                busy = sleepOfferBusy,
+                onEnable = { onSleepTimeAction(true, null) },
+                onNotNow = onDismissSleepOffer,
+                onStopAsking = { onSleepTimeAction(null, false) },
+            )
+            Gap(10)
+        }
         Plate {
             if (data == null) {
                 Text(
@@ -467,6 +500,50 @@ private fun MemoryQueue(
                     onDiscard = id?.let { { onDiscard(it) } },
                 )
             }
+        }
+    }
+}
+
+/**
+ * The daily overnight-tidy offer. `offer` is `setup.sleep_time_offer` from
+ * `/api/memory/pending`, verbatim - the same object [MemoryQueue]'s caller
+ * decided to keep showing, so this composable never reads staleness or
+ * once-a-day tracking itself.
+ */
+@Composable
+private fun SleepOfferCard(
+    offer: JsonObject,
+    busy: Boolean,
+    onEnable: () -> Unit,
+    onNotNow: () -> Unit,
+    onStopAsking: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
+        Text(
+            offer.str("title") ?: "Let Jarvis tidy its memory overnight?",
+            style = MaterialTheme.typography.titleSmall,
+            color = chrome.textHi,
+        )
+        offer.str("body")?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        Gap(10)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Quiet(
+                if (busy) "Enabling…" else "Enable",
+                color = chrome.okInk,
+                enabled = !busy,
+                onClick = onEnable,
+            )
+            Quiet("Not now", color = chrome.textMid, enabled = !busy, onClick = onNotNow)
+            Quiet(
+                if (busy) "Working…" else "Stop asking",
+                color = chrome.textLo,
+                enabled = !busy,
+                onClick = onStopAsking,
+            )
         }
     }
 }

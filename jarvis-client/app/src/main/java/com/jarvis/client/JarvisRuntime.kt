@@ -731,6 +731,26 @@ object JarvisRuntime {
         return result
     }
 
+    /**
+     * Answers the daily "let Jarvis tidy its memory overnight?" card. Same
+     * shape as [decideMemory]: a live link is required for the same reason -
+     * the desktop's own `/api/memory/sleep_time` handler is behind the same
+     * connection this queue is.
+     */
+    suspend fun setSleepTime(enabled: Boolean? = null, remind: Boolean? = null): ApiResult<Unit> {
+        if (_stale.value || _link.value != LinkState.CONNECTED) {
+            val blocker = "Not connected to the desktop, so this decision cannot be delivered."
+            _notice.value = blocker
+            return ApiResult.Failed(ApiError.Unreachable(blocker))
+        }
+        val result = api.setSleepTime(enabled, remind)
+        when (result) {
+            is ApiResult.Ok -> refreshBrain()
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
+        return result
+    }
+
     // ------------------------------------------------------------ faces ----
 
     /**

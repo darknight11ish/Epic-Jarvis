@@ -289,6 +289,25 @@ class JarvisApi(
     suspend fun decideMemory(id: Long, accept: Boolean): ApiResult<Unit> =
         postJson("/api/memory/decide", """{"id":$id,"accept":$accept}""")
 
+    /**
+     * Answers the daily "let Jarvis tidy its memory overnight?" card - see
+     * `BrainSnapshot.memory`'s own `setup.sleep_time_offer`. This app's two
+     * real actions ("enable" and "stop asking") each send exactly one of
+     * [enabled]/[remind]; "not now" needs no call at all, since the card
+     * already tracks "already offered today" itself
+     * (`jarvis_sleep.py`'s own `_seen`), so a plain dismiss still does not
+     * return until tomorrow. The server reports a write that failed to
+     * persist as a non-2xx status, same as every other write here, so no
+     * response body needs reading.
+     */
+    suspend fun setSleepTime(enabled: Boolean? = null, remind: Boolean? = null): ApiResult<Unit> {
+        val fields = buildList {
+            enabled?.let { add(""""enabled":$it""") }
+            remind?.let { add(""""remind":$it""") }
+        }
+        return postJson("/api/memory/sleep_time", "{${fields.joinToString(",")}}")
+    }
+
     suspend fun cancelJob(id: String): ApiResult<Unit> = postId("/api/jobs/cancel", id)
 
     /**

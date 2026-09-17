@@ -57,6 +57,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 
 /**
  * The one activity.
@@ -194,6 +195,18 @@ class MainActivity : FragmentActivity() {
         var busy by rememberSaveable { mutableStateOf(false) }
         var draft by rememberSaveable { mutableStateOf("") }
         var memoryDecideBusyId by remember { mutableStateOf<Long?>(null) }
+        // The daily "tidy memory overnight?" card, cached the first time it is
+        // seen. See BrainScreen.kt's own doc comment on `sleepOffer`: the
+        // server marks itself as having offered the moment the route is
+        // polled at all, so a second read - which refreshBrain() triggers
+        // after every OTHER memory write - would otherwise make the card
+        // vanish before the owner had a chance to read it. `dismissed` is a
+        // separate flag from clearing the cache, so a later recomposition
+        // reading the same still-cached server data cannot re-adopt an offer
+        // just turned down.
+        var cachedSleepOffer by remember { mutableStateOf<JsonObject?>(null) }
+        var sleepOfferDismissed by remember { mutableStateOf(false) }
+        var sleepOfferBusy by remember { mutableStateOf(false) }
 
         val tick = permissionTick.intValue
         val chrome by appearance.chrome.collectAsState()
@@ -250,6 +263,14 @@ class MainActivity : FragmentActivity() {
         // still thinking — for ever.
         LaunchedEffect(chat) {
             chat.error.collectLatest { if (it != null) JarvisRuntime.setNotice(it) }
+        }
+
+        LaunchedEffect(brain.memory) {
+            val offer = (brain.memory?.get("setup") as? JsonObject)
+                ?.get("sleep_time_offer") as? JsonObject
+            if (offer != null && cachedSleepOffer == null && !sleepOfferDismissed) {
+                cachedSleepOffer = offer
+            }
         }
 
         // "Follow the system" defers rather than fires.
@@ -447,6 +468,38 @@ class MainActivity : FragmentActivity() {
                                     memoryDecideBusyId = null
                                 }
                             }
+                        },
+                        sleepOffer = cachedSleepOffer,
+                        sleepOfferBusy = sleepOfferBusy,
+                        onSleepTimeAction = { enabled, remind ->
+                            if (!sleepOfferBusy) {
+                                val answered = cachedSleepOffer
+                                sleepOfferBusy = true
+                                // Dismissed BEFORE the write, not after: a
+                                // successful setSleepTime() calls
+                                // refreshBrain() internally before it returns,
+                                // and that recomposition has to see the flag
+                                // already set or the LaunchedEffect above
+                                // re-adopts the very offer this click is
+                                // answering, from whatever brain.memory still
+                                // holds. Rolled back below on failure, so a
+                                // network hiccup never costs the owner their
+                                // only way to act on this until tomorrow.
+                                cachedSleepOffer = null
+                                sleepOfferDismissed = true
+                                scope.launch {
+                                    val result = JarvisRuntime.setSleepTime(enabled, remind)
+                                    sleepOfferBusy = false
+                                    if (result !is ApiResult.Ok) {
+                                        cachedSleepOffer = answered
+                                        sleepOfferDismissed = false
+                                    }
+                                }
+                            }
+                        },
+                        onDismissSleepOffer = {
+                            cachedSleepOffer = null
+                            sleepOfferDismissed = true
                         },
                         notice = notice,
                         onDismissNotice = { JarvisRuntime.clearNotice() },
