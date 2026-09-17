@@ -1,5 +1,6 @@
 package com.jarvis.client.ui.screens
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -32,6 +33,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.Activity
@@ -369,6 +373,8 @@ private fun Notice(text: String, onDismiss: () -> Unit) {
 private fun Reply(reply: () -> String, streaming: Boolean) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val text = reply()
     AnimatedVisibility(
         visible = text.isNotBlank() || streaming,
@@ -385,6 +391,24 @@ private fun Reply(reply: () -> String, streaming: Boolean) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = chrome.textHi,
             )
+            // Only once there is a finished answer to act on - copying or
+            // sharing a reply mid-stream would grab a sentence Jarvis has not
+            // finished writing yet.
+            if (!streaming && text.isNotBlank()) {
+                Gap(8)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Quiet("Copy", color = chrome.textMid) {
+                        clipboard.setText(AnnotatedString(text))
+                    }
+                    Quiet("Share", color = chrome.textMid) {
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, text)
+                        }
+                        context.startActivity(Intent.createChooser(intent, null))
+                    }
+                }
+            }
         }
     }
 }

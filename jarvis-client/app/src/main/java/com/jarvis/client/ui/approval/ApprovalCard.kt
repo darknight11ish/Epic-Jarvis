@@ -30,8 +30,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.IntOffset
@@ -79,6 +81,22 @@ fun ApprovalCard(
     val expired = expiry != null && now >= expiry
     val canDecide = blocker == null && !expired
 
+    // A decision on this screen is felt, not just seen - a swipe is answered
+    // with no visual confirmation until the card has already animated off
+    // screen, and the tap targets are exactly where a thumb already is.
+    // Captured as plain values here (a @Composable read) so the closures
+    // below - one of them a suspend lambda inside `pointerInput`, which is
+    // not a composable context - can call them without one.
+    val haptics = LocalHapticFeedback.current
+    val approve: () -> Unit = {
+        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+        onApprove()
+    }
+    val deny: () -> Unit = {
+        haptics.performHapticFeedback(HapticFeedbackType.Reject)
+        onDeny()
+    }
+
     // Swipe-to-approve, for exactly one class of item.
     //
     // A swipe is a gesture people make without reading. That is fine for
@@ -95,11 +113,11 @@ fun ApprovalCard(
                         when {
                             offset.value > swipeThresholdPx -> {
                                 offset.animateTo(size.width.toFloat())
-                                onApprove()
+                                approve()
                             }
                             offset.value < -swipeThresholdPx -> {
                                 offset.animateTo(-size.width.toFloat())
-                                onDeny()
+                                deny()
                             }
                             else -> offset.animateTo(0f)
                         }
@@ -227,8 +245,8 @@ fun ApprovalCard(
         // 99.7 wide. Shape survives that, and survives a photograph, a still
         // frame and peripheral vision with it.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Affirm("Approve", enabled = canDecide, onClick = onApprove)
-            Refuse("Deny", enabled = canDecide, onClick = onDeny)
+            Affirm("Approve", enabled = canDecide, onClick = approve)
+            Refuse("Deny", enabled = canDecide, onClick = deny)
         }
         Spacer(Modifier.height(8.dp))
         Text(

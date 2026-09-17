@@ -26,8 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -65,6 +67,7 @@ fun VoiceButton(
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
+    val haptics = LocalHapticFeedback.current
     var wouldCancel by remember { mutableStateOf(false) }
     val cancelPx = with(LocalDensity.current) { CANCEL_SLIDE_DP.dp.toPx() }
 
@@ -104,6 +107,7 @@ fun VoiceButton(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
                     wouldCancel = false
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onBegin()
                     var cancelled = false
                     // try/finally, because this coroutine is cancellable and the
@@ -124,7 +128,14 @@ fun VoiceButton(
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            cancelled = (down.position.y - change.position.y) > cancelPx
+                            val nowCancelled = (down.position.y - change.position.y) > cancelPx
+                            // Fires once, on the transition into "would cancel" -
+                            // not on every event while the finger sits past the
+                            // threshold, which is most of them.
+                            if (nowCancelled && !cancelled) {
+                                haptics.performHapticFeedback(HapticFeedbackType.Reject)
+                            }
+                            cancelled = nowCancelled
                             wouldCancel = cancelled
                             if (!change.pressed) { change.consume(); break }
                             change.consume()
