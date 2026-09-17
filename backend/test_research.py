@@ -106,6 +106,68 @@ def t_run_refuses_without_approval():
           repr(out))
 
 
+def t_authenticated_requests_are_opt_in_and_disclosed():
+    import os
+    saved = os.environ.pop(R.TOKEN_ENV, None)
+    try:
+        check("no token configured by default", R.authenticated() is False)
+        p = R.plan("a habit tracker", ["local notifications"])
+        check("an unauthenticated plan says so", p.authenticated is False)
+        card = R.describe(p)
+        check("the card says it is public, not authenticated",
+              "No account of yours is used" in card, card)
+        check("an unauthenticated card never claims a token is sent",
+              "your GitHub token" not in card, card)
+
+        os.environ[R.TOKEN_ENV] = "not-a-real-token"
+        check("setting the env var flips authenticated()", R.authenticated() is True)
+        p2 = R.plan("a habit tracker", ["local notifications"])
+        check("a plan made now captures that", p2.authenticated is True)
+        card2 = R.describe(p2)
+        check("the card discloses authentication", "Authenticated:" in card2, card2)
+        check("but never prints the token itself",
+              "not-a-real-token" not in card2, card2)
+
+        # run() must send the header when authenticated - proven with a fake
+        # transport, never a socket.
+        seen_headers = {}
+        def fetch(url):
+            return {"items": []}
+        # _get is what actually sets headers; run() takes a fetch override for
+        # the network call itself, so exercise _get directly with NoNetwork
+        # to prove it WOULD attach the header, without opening a socket.
+        import urllib.request
+        real_urlopen = urllib.request.urlopen
+        def fake_urlopen(req, timeout=None):
+            seen_headers.update(dict(req.header_items()))
+            class Resp:
+                def __enter__(self_): return self_
+                def __exit__(self_, *a): return False
+                def read(self_): return b'{"items": []}'
+            return Resp()
+        urllib.request.urlopen = fake_urlopen
+        try:
+            R._get(p2.queries[0].url)
+        finally:
+            urllib.request.urlopen = real_urlopen
+        check("an authenticated request carries the bearer token",
+              seen_headers.get("Authorization") == "Bearer not-a-real-token",
+              repr(seen_headers))
+
+        # The staleness guard: the token disappearing between describe() and
+        # run() must refuse, not silently downgrade to anonymous.
+        del os.environ[R.TOKEN_ENV]
+        with NoNetwork():
+            out = R.run(p2, approved=True)
+        check("run() refuses a plan whose auth state changed underneath it",
+              out["ok"] is False and "changed" in out["reason"], repr(out))
+    finally:
+        if saved is None:
+            os.environ.pop(R.TOKEN_ENV, None)
+        else:
+            os.environ[R.TOKEN_ENV] = saved
+
+
 def t_grading():
     g = R.grade_repo(repo(), NOW)
     check("popular + maintained + permissive is ADOPT", g["verdict"] == "ADOPT", repr(g))
@@ -189,7 +251,9 @@ def t_a_failed_request_is_not_a_clear_result():
 
 if __name__ == "__main__":
     for fn in (t_planning_touches_nothing, t_the_card_prints_the_whole_request,
-               t_run_refuses_without_approval, t_grading, t_the_matrix,
+               t_run_refuses_without_approval,
+               t_authenticated_requests_are_opt_in_and_disclosed,
+               t_grading, t_the_matrix,
                t_a_failed_request_is_not_a_clear_result):
         print(f"\n--- {fn.__name__} ---")
         try:

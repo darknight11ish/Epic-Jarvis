@@ -1788,6 +1788,103 @@ notice, end to end through the doorbell.
 
 ---
 
+# Three new capabilities, and the one honest gap in all three: no call site yet
+
+`jarvis_research.py` gained authenticated GitHub search. `jarvis_ui_control.py`
+and `jarvis_android_control.py` are new - a `microsoft/UFO`-style way to click
+inside other Windows programs, and a `Genymobile/scrcpy`-style way to tap the
+paired phone, both built to the shape `docs/UFO-SAFETY-DESIGN.md` specifies
+rather than by taking either project as a dependency. All three ship as whole
+files, the same way `jarvis_research.py` and `jarvis_speech.py` already do -
+there is nothing on the owner's machine to patch for something new.
+
+**None of the three is reachable from the running app yet.** This project's
+own stated "characteristic defect" (`docs/ARCHITECTURE.md`, top of file) is
+capability with no call site - a function nobody calls, an event kind no
+client handles. This is exactly that, stated plainly rather than left for
+someone to discover: `jarvis_hud.py` is not in this repository (§9 of the
+architecture doc), so a route that calls `plan()`/`run()` on these three
+modules, queues the result through `jarvis_gate`, and returns it from
+`/api/pending` cannot be written and verified here - it would be a patch
+against a file this session has never seen. What follows is everything the
+wiring needs, precisely enough that adding it is mechanical rather than a
+second design pass.
+
+### `jarvis_research.py` — the new part
+
+`JARVIS_GITHUB_TOKEN` in the environment authenticates every request; unset,
+behaviour is exactly what it was before. `Plan.authenticated` is captured at
+`plan()` time and `run()` refuses if the live state has since changed -
+described under "AUTHENTICATED REQUESTS" in the module's own docstring.
+**This needed no route changes at all** - if `jarvis_hud.py` already calls
+`jarvis_research.plan()`/`run()` (it needs a call site regardless, per
+"Stage 1" in the task history - check before assuming one exists), setting
+the environment variable is the entire owner-side change.
+
+### `jarvis_ui_control.py` and `jarvis_android_control.py` — wiring a NEW route needs
+
+Both follow `jarvis_research.py`'s exact shape: `plan(...)` reads only,
+`describe(plan)` renders the card text, `run(plan, approved=True, ...)`
+executes. For each, `jarvis_hud.py` needs:
+
+1. **A route** (`POST /api/ui_control/plan` and `/api/ui_control/run`, or
+   folded into whatever generic "propose an action" route already exists) -
+   call `plan()`, and queue the result the same way any other approval-worthy
+   action is queued today, so it shows up via `/api/pending` and
+   `notice_for()` like everything else. `describe(plan)` is the `detail`; do
+   not write a second summary.
+2. **A tier entry in `jarvis-framework.toml`.** Something has to map the
+   action name (say `ui_control` / `android_control`) to a tier. Given
+   §2 invariant 3 and this capability's own risk, that tier should be `ask`,
+   not `notify` or `auto`, for both - there is no case here where clicking in
+   another program or tapping the phone should happen with nobody deciding.
+3. **A `_RISK` entry** so `jarvis_gate.notice_for()` can generate an honest
+   title/body from the action name alone, per the notification contract in
+   `docs/ARCHITECTURE.md` §3 - weight `heavy` when `Plan.weight == "heavy"`
+   (either module), because an irreversible UI action or one that leaves the
+   machine earns exactly that, on the same three named reasons every other
+   heavy action in this project already uses.
+4. **The `announce` hook wired to `jarvis_events.set_activity`** - both
+   `run()` functions take an `announce(text)` callback; call it with
+   `lambda text: jarvis_events.set_activity("working", text)` (or a state of
+   its own, if one is added) so the owner sees, live, that Jarvis is in the
+   middle of controlling a window or the phone - not only the before/after
+   approval card. This is the piece that answers "give updates while it's
+   actively using this," and it costs one line at the call site; nothing in
+   either module hard-imports `jarvis_events`, so it stays testable without
+   the rest of the backend present.
+5. **A client surface for a UI-control card that lists several steps.**
+   The existing approval card already renders arbitrary `notice` /`detail`
+   text generically, so the numbered step list `describe()` produces should
+   show up with zero new client code - confirm this rather than assume it,
+   the first time a real card is generated, since neither client has been
+   asked to render one before.
+
+### What has and has not been verified
+
+All three modules' own logic is tested here and now, on this machine -
+`python3 test_research.py`, `test_ui_control.py`, `test_android_control.py` -
+covering exactly the properties that matter: `plan()` performs no real
+action (proven by making the real reader/actor/process-spawner raise if
+reached at all, the same technique `test_research.py` uses on `socket`),
+`run()` refuses without `approved=True`, and each `run()` re-verifies its
+target is still what was planned before every step and stops rather than
+guessing when it is not.
+
+**None of the three has run against a real Windows desktop, a real paired
+phone, or a real GitHub token.** `jarvis_ui_control.py`'s default reader/actor
+need the `uiautomation` package and an actual window to point at;
+`jarvis_android_control.py`'s need a real `adb` binary and a real device;
+`jarvis_research.py`'s authenticated path needs a real token. All three were
+written so the injectable seam (`read`/`act`, `run_adb`, `fetch`) is the ONLY
+place real I/O happens, specifically so the logic above the seam is provable
+without any of that - but "provable without it" is not "tried with it." The
+first real run of each is the owner's to do, on their own machine, and is
+worth doing once deliberately before it is wired into anything the owner
+would trust unattended.
+
+---
+
 # Standalone tools
 
 Not patches - scripts you run once, on demand, that call the patched backend

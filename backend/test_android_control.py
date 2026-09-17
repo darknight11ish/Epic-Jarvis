@@ -1,0 +1,192 @@
+"""jarvis_android_control.py: literal adb commands, never a live session.
+
+Proves: plan() never runs adb, run() refuses without approval, every command
+is a real argv list (no shell string, no injection surface), and run()
+re-checks the device is still connected before every step rather than
+sending a tap toward whatever phone happens to be plugged in now.
+
+    python3 test_android_control.py
+"""
+import sys
+import traceback
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import jarvis_android_control as A
+
+FAILED, PASSED = [], []
+
+
+def check(name, cond, detail=""):
+    (PASSED if cond else FAILED).append(name)
+    print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+class Result:
+    def __init__(self, returncode=0, stdout=b"", stderr=b""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+class NoRealProcess:
+    """Fail loudly if the real subprocess-calling adb ever runs."""
+
+    def __enter__(self):
+        self.real = A._real_adb
+        def boom(argv, timeout=15.0):
+            raise AssertionError(f"a real process was started: {argv}")
+        A._real_adb = boom
+        return self
+
+    def __exit__(self, *a):
+        A._real_adb = self.real
+        return False
+
+
+DEVICES_OUT = b"List of devices attached\nEMULATOR123\tdevice\n\n"
+
+
+def adb_ok(devices_out=DEVICES_OUT):
+    """A fake `run_adb` that answers `adb devices` and succeeds otherwise."""
+    def caller(argv):
+        if argv[:2] == ["adb", "devices"]:
+            return Result(0, devices_out)
+        return Result(0, b"")
+    return caller
+
+
+def t_planning_runs_nothing():
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "open the app and tap through onboarding",
+                   [{"action": "tap", "x": 100, "y": 200, "why": "tap the app icon"},
+                    {"action": "text", "value": "hello there", "why": "type a greeting",
+                     "irreversible": False}])
+    check("both requests became steps", len(p.steps) == 2, repr(p.steps))
+    check("nothing rejected", p.rejected == [], repr(p.rejected))
+    check("the tap step is a literal argv, not a shell string",
+          p.steps[0].argv == ["adb", "-s", "EMULATOR123", "shell", "input", "tap", "100", "200"],
+          repr(p.steps[0].argv))
+    check("text spaces are escaped adb's way, not shell-quoted",
+          "%s" in " ".join(p.steps[1].argv) and "hello there" not in p.steps[1].argv,
+          repr(p.steps[1].argv))
+
+
+def t_unknown_action_is_rejected_not_guessed():
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "do something weird",
+                   [{"action": "levitate", "why": "x"}])
+    check("an unknown action becomes 0 steps", p.steps == [], repr(p.steps))
+    check("and is reported as rejected", len(p.rejected) == 1, repr(p.rejected))
+
+
+def t_missing_fields_are_rejected_not_guessed():
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap somewhere",
+                   [{"action": "tap", "x": 5, "why": "missing y"}])
+    check("a tap missing y is rejected, not defaulted to 0", p.steps == [], repr(p.steps))
+    check("card explains why", "y" in A.describe(p) or "reason" in repr(p.rejected))
+
+
+def t_the_card_prints_every_command_in_full():
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap the button",
+                   [{"action": "tap", "x": 1, "y": 2, "why": "because the button is there"}])
+    card = A.describe(p)
+    check("the device is named", "EMULATOR123" in card, card)
+    check("the literal command is on the card", "input tap 1 2" in card, card)
+    check("the reason is on the card", "because the button is there" in card, card)
+    check("it says this stays with the owner's own phone",
+          "own paired phone" in card, card)
+    check("it says what refusing costs", "If you say no" in card, card)
+
+
+def t_run_refuses_without_approval():
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
+        out = A.run(p, run_adb=lambda argv: (_ for _ in ()).throw(
+            AssertionError("adb ran without approval")))
+    check("run() does nothing without approval", out["ok"] is False, repr(out))
+    check("and says so plainly", "not approved" in out["reason"], out["reason"])
+
+
+def t_run_refuses_if_the_device_disconnected():
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
+        out = A.run(p, run_adb=adb_ok(devices_out=b"List of devices attached\n\n"),
+                    approved=True)
+    check("a vanished device stops execution", out["ok"] is False, repr(out))
+    check("and says which device and why", "EMULATOR123" in out["reason"]
+          and "no longer connected" in out["reason"], out["reason"])
+    check("nothing is reported done", out["done"] == [], repr(out))
+
+
+def t_run_stops_at_the_first_failed_command():
+    calls = []
+    def caller(argv):
+        if argv[:2] == ["adb", "devices"]:
+            return Result(0, DEVICES_OUT)
+        calls.append(argv)
+        if len(calls) == 1:
+            return Result(0, b"")
+        return Result(1, b"", b"device offline mid-command")
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "two taps",
+                   [{"action": "tap", "x": 1, "y": 1, "why": "first"},
+                    {"action": "tap", "x": 2, "y": 2, "why": "second"}])
+        out = A.run(p, run_adb=caller, approved=True)
+    check("the first command ran", len(calls) == 2, repr(calls))  # devices check not counted
+    check("run() reports the failure", out["ok"] is False, repr(out))
+    check("names the failing step and the exit reason",
+          "step 2" in out["reason"] and "device offline" in out["reason"], out["reason"])
+    check("exactly one step reported done", len(out["done"]) == 1, repr(out["done"]))
+    check("the failed step is in not_run, not silently dropped",
+          len(out["not_run"]) == 1, repr(out["not_run"]))
+
+
+def t_run_executes_every_approved_step_and_reports_screenshots():
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "look then tap",
+                   [{"action": "screenshot", "why": "see what's on screen"},
+                    {"action": "tap", "x": 5, "y": 5, "why": "tap it"}])
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, DEVICES_OUT)
+            if "screencap" in argv:
+                return Result(0, b"\x89PNGfakebytes")
+            return Result(0, b"")
+        out = A.run(p, run_adb=caller, approved=True)
+    check("CONTROL: a fully valid plan runs to completion", out["ok"] is True, repr(out))
+    check("both steps done, nothing left", len(out["done"]) == 2 and out["not_run"] == [], repr(out))
+    check("the screenshot bytes are returned", out["screenshots"] == [b"\x89PNGfakebytes"], repr(out))
+
+
+def t_announce_is_called_and_is_optional():
+    heard = []
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
+        out = A.run(p, run_adb=adb_ok(), announce=heard.append, approved=True)
+    check("announce heard the step and a final message", len(heard) == 2, repr(heard))
+    check("the step text names the device", "EMULATOR123" in heard[0], heard[0])
+    with NoRealProcess():
+        p2 = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
+        out2 = A.run(p2, run_adb=adb_ok(), approved=True)
+    check("CONTROL: omitting announce still runs to completion", out2["ok"] is True, repr(out2))
+
+
+if __name__ == "__main__":
+    for fn in (t_planning_runs_nothing, t_unknown_action_is_rejected_not_guessed,
+               t_missing_fields_are_rejected_not_guessed,
+               t_the_card_prints_every_command_in_full, t_run_refuses_without_approval,
+               t_run_refuses_if_the_device_disconnected,
+               t_run_stops_at_the_first_failed_command,
+               t_run_executes_every_approved_step_and_reports_screenshots,
+               t_announce_is_called_and_is_optional):
+        print(f"\n--- {fn.__name__} ---")
+        try:
+            fn()
+        except Exception:
+            FAILED.append(fn.__name__)
+            traceback.print_exc()
+    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    if FAILED:
+        print("failed: " + ", ".join(FAILED))
+    sys.exit(1 if FAILED else 0)

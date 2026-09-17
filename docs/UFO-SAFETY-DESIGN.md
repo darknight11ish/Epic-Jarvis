@@ -120,11 +120,23 @@ the thing this project's own invariants forbid trading away.
 Don't take a dependency on `microsoft/UFO`. Its value here is one idea — read
 the accessibility tree, don't guess coordinates — and that idea is a page of
 Windows UI Automation calls (`windows-rs`, from Rust, or `pywinauto`/`uiautomation`
-from Python), not a framework. If this is ever built, build it the shape
-above, in whichever side of the stack already owns local device control, and
-give it its own `test_ui_control.py` the same way `jarvis_research.py` has
-`test_research.py` proving `plan()` sends no input and `run()` cannot be
-tricked into running an unapproved step.
+from Python), not a framework.
 
-Not started. This document is the design; there is no code yet, and it should
-stay that way until the owner decides the capability itself is worth having.
+## Update — built, not wired
+
+The owner asked for this to be built, per the shape above. `backend/jarvis_ui_control.py`
+now exists: `plan()`/`describe()`/`run()`, `uiautomation`-based, with `run()`
+re-verifying every target against the live accessibility tree right before
+acting on it and stopping rather than guessing the moment it does not match.
+`backend/test_ui_control.py` (28 checks) proves `plan()` sends no input,
+`run()` refuses without `approved=True`, and a control that changes or
+vanishes mid-plan stops execution at exactly that step - all against
+injected fakes, never a real Windows desktop.
+
+**It is not reachable from the running app.** `jarvis_hud.py` is not in this
+repository, so the route that would call this module, queue its plan through
+`jarvis_gate`, and wire its `announce` callback to `jarvis_events.set_activity`
+cannot be written here. `backend/README.md`'s new section spells out exactly
+what that route needs. Until it exists, this module is tested, real code with
+no caller - worth stating plainly rather than leaving to be discovered, since
+that exact gap is this codebase's own most-repeated defect.

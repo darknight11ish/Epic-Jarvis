@@ -31,16 +31,26 @@ printed on the card, and it expires with the audit. That is the same shape as
 approving a single shell command that happens to have several arguments.
 
 WHAT ACTUALLY LEAVES
-Only a search term. GitHub's code and repository search is public and needs no
-credential of the owner's, so this module holds no key and stores none. The
-search term is derived from the idea locally, and it is shown on the card
-verbatim - because the honest version of "may I search for this" is to print
-the string, not to summarise it.
+Only a search term, by default. GitHub's code and repository search is public
+and needs no credential of the owner's, so unauthenticated use of this module
+stores no key and needs none. The search term is derived from the idea
+locally, and it is shown on the card verbatim - because the honest version of
+"may I search for this" is to print the string, not to summarise it.
+
+AUTHENTICATED REQUESTS - OPT IN, NEVER STORED HERE
+If `JARVIS_GITHUB_TOKEN` is set in the environment, requests carry it and can
+therefore see private repositories and a much higher rate limit. This module
+never writes that token to disk, never logs it, and never puts it in a Plan or
+a Query - `describe()` says only THAT a request is authenticated, never with
+what. Persisting the token between runs (so the owner is not setting an
+environment variable every session) is deliberately left to whatever process
+already handles the pairing token with the same care - not duplicated here.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 import urllib.parse
@@ -49,6 +59,20 @@ from dataclasses import dataclass, field, asdict
 from typing import Callable, Optional
 
 GITHUB_API = "https://api.github.com"
+
+#: Set this, per the owner's own machine, to search private repositories too
+#: and stop hitting the public rate limit. Read fresh on every request rather
+#: than cached at import time, so rotating it needs no restart.
+TOKEN_ENV = "JARVIS_GITHUB_TOKEN"
+
+
+def _token() -> str:
+    return os.environ.get(TOKEN_ENV, "").strip()
+
+
+def authenticated() -> bool:
+    """Whether a token is configured. Never reveals the token itself."""
+    return bool(_token())
 
 # Licences that can be taken into a project without changing its terms. This
 # is a compatibility judgement, not legal advice, and it is deliberately
@@ -105,6 +129,11 @@ class Plan:
     # What happens if this is refused. Written at plan time, not improvised
     # afterwards, so the person deciding can see the cost of saying no.
     if_refused: str = ""
+    # Captured at plan() time, not read fresh by describe()/run(): the person
+    # approves the card that was PRINTED. If the token gets set or unset
+    # between the card being shown and run() actually executing, run() must
+    # refuse rather than silently do something other than what was disclosed.
+    authenticated: bool = False
 
     def hosts(self) -> list:
         return sorted({q.host for q in self.queries})
@@ -162,7 +191,8 @@ def plan(idea: str, capabilities: Optional[list] = None) -> Plan:
         idea=str(idea), queries=queries, capabilities=caps,
         if_refused=("no GitHub audit: the matrix will be empty and every "
                     "capability defaults to BUILD CUSTOM, which may mean "
-                    "rewriting something that already exists and is better"))
+                    "rewriting something that already exists and is better"),
+        authenticated=authenticated())
 
 
 def describe(p: Plan) -> str:
@@ -174,17 +204,24 @@ def describe(p: Plan) -> str:
     if not p.queries:
         return ("Nothing to ask. No search terms could be derived from that "
                 "idea, so there is nothing to look up and nothing will be sent.")
+    auth_line = (
+        "Authenticated: this will identify you to GitHub with your configured "
+        "token, to reach private repositories and a higher rate limit."
+        if p.authenticated else
+        "Public repository search. No account of yours is used and no "
+        "credential is sent."
+    )
     lines = [f"Jarvis would like to search GitHub about: {p.idea}",
              "",
              f"{len(p.queries)} request(s), to {', '.join(p.hosts())}.",
-             "Public repository search. No account of yours is used and no "
-             "credential is sent.",
+             auth_line,
              ""]
     for i, q in enumerate(p.queries, 1):
         lines += [f"  {i}. {q.why}", f"     {q.url}", ""]
     lines += ["What leaves this machine: the search terms above, and nothing "
               "else. Not the idea in your words, not your files, not your "
-              "conversation.",
+              "conversation" + (", and your GitHub token, to that request "
+              "only." if p.authenticated else "."),
               "",
               f"If you say no: {p.if_refused}"]
     return "\n".join(lines)
@@ -195,10 +232,14 @@ def describe(p: Plan) -> str:
 # --------------------------------------------------------------------------
 
 def _get(url: str, timeout: float = 20.0) -> dict:
-    req = urllib.request.Request(url, headers={
+    headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "jarvis-research",
-    })
+    }
+    token = _token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
@@ -216,6 +257,18 @@ def run(p: Plan, *, fetch: Optional[Callable[[str], dict]] = None,
     """
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was sent",
+                "plan": p.as_dict()}
+    # The person approved the card that was printed, and that card said
+    # whether this was authenticated. If the token was set or unset in the
+    # gap between the card being shown and run() actually being called, this
+    # is no longer the plan that was approved - refuse rather than silently
+    # send something other than what was disclosed.
+    if p.authenticated != authenticated():
+        return {"ok": False,
+                "reason": ("refused: whether a GitHub token is configured "
+                           "changed since this plan was approved - the "
+                           "approved card no longer describes what would "
+                           "actually be sent"),
                 "plan": p.as_dict()}
     get = fetch or _get
     found: dict = {}
