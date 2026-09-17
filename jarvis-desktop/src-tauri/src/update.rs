@@ -293,12 +293,16 @@ pub async fn install_update(app: AppHandle) -> Result<String, String> {
 /// Restarts the app — reachable only from the button the install's own
 /// success message now offers, never called automatically.
 ///
-/// `request_restart` rather than `restart`: it fires the same
-/// `ExitRequested`/`Exit` sequence a normal quit does, off any thread, so
-/// `sidecar::stop_on_exit` still stops a supervised backend first. `restart`
-/// skips straight to re-executing when called off the main thread — which an
-/// async command handler always is — and would leave that backend running
-/// with no window left to stop it from.
+/// `request_restart` rather than `restart`: `restart` only skips the normal
+/// `ExitRequested`/`Exit` sequence when it is called ON Tauri's main thread,
+/// where it cleans up and re-execs directly; called from anywhere else it
+/// falls back to that same event sequence anyway. This command handler is
+/// dispatched off the main thread regardless — sync command handlers like
+/// this one run on Tauri's own threadpool, not literally on the main thread —
+/// so `restart` here would already take the safe path. `request_restart` is
+/// kept anyway because it always takes that path outright, with no dependency
+/// on which thread happens to call it, so `sidecar::stop_on_exit` reliably
+/// stops a supervised backend first.
 #[tauri::command]
 pub fn restart_app(app: AppHandle) {
     app.request_restart();

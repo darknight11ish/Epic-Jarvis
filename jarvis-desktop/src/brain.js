@@ -682,7 +682,13 @@ function promptValidTo(message) {
   if (raw === null) return undefined;
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  const ts = Date.parse(trimmed);
+  // A bare YYYY-MM-DD is parsed as local midnight, not Date.parse's UTC
+  // midnight - west of Greenwich that shift lands the timestamp on the
+  // previous calendar day, the same trap the "as of" picker above avoids.
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  const ts = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])).getTime()
+    : Date.parse(trimmed);
   if (Number.isNaN(ts)) {
     window.alert(`"${trimmed}" is not a date I understand. Try YYYY-MM-DD.`);
     return undefined;
@@ -746,19 +752,27 @@ function renderLearning() {
         title: String(offer.title || "Let Jarvis tidy its memory overnight?"),
         meta: [String(offer.body || "")],
         actions: [
-          // Dismissed only once the write is KNOWN to have landed, never
-          // speculatively before it - a failed Enable must leave the card
-          // exactly where it was, or a network hiccup would cost the owner
-          // their only way to turn this on until tomorrow's offer.
-          // `memoryWrite` already re-renders this pane on its way back
-          // (`refreshMemory()`), before the dismiss below runs, so a second
-          // plain `render("memory")` is needed here too - it just repaints
-          // from what is already loaded, no second fetch.
+          // Dismissed BEFORE the write, not after: `memoryWrite`'s own
+          // success path calls `refreshMemory()` internally, before this
+          // handler gets a chance to run anything of its own, and that
+          // re-render has to see `sleepOfferDismissed` already set - or
+          // `noteSleepOffer` re-adopts the very offer this click is
+          // answering, from whatever `pending.setup` that fetch still holds.
+          // Rolled back below only if the write actually fails, so a network
+          // hiccup never costs the owner their only way to act on this until
+          // tomorrow's offer. The immediate `render("memory")` also closes
+          // the double-click window that dismissing-after left open: the
+          // card leaves the DOM right away, taking its buttons with it,
+          // instead of staying clickable for the length of the write.
           button("Enable", async () => {
+            const answered = cachedSleepOffer;
+            dismissSleepOffer();
+            render("memory");
             const out = await memoryWrite("brain_memory_sleep_time", { enabled: true },
               "Jarvis will tidy its memory overnight.");
-            if (out && out.ok !== false) {
-              dismissSleepOffer();
+            if (!out || out.ok === false) {
+              cachedSleepOffer = answered;
+              sleepOfferDismissed = false;
               render("memory");
             }
           }, { title: "Once a night, re-read what was learned that day, merge "
@@ -768,10 +782,14 @@ function renderLearning() {
             render("memory");
           }, { title: "Dismiss for today. It offers again another day." }),
           button("Stop asking", async () => {
+            const answered = cachedSleepOffer;
+            dismissSleepOffer();
+            render("memory");
             const out = await memoryWrite("brain_memory_sleep_time", { remind: false },
               "Won't ask again. Turn it on any time from here.");
-            if (out && out.ok !== false) {
-              dismissSleepOffer();
+            if (!out || out.ok === false) {
+              cachedSleepOffer = answered;
+              sleepOfferDismissed = false;
               render("memory");
             }
           }, { title: "Never offer this again. You can still turn it on yourself." }),
