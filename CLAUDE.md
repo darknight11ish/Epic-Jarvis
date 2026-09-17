@@ -38,7 +38,11 @@ the owner's desktop.
    local model. The app sends none of it anywhere.
 2. The app never opens a public tunnel. No ngrok, no Cloudflare Tunnel, no
    Tailscale Funnel, no "share my Jarvis".
-3. No API keys in the app. The only secret it stores is the pairing token.
+3. API keys are allowed in the app - the owner reversed the old blanket ban
+   on 2026-09-17, to unblock things like a GitHub API integration. Any key
+   still gets the same care the pairing token already gets: never logged,
+   sent only to the one service it authenticates against, and kept out of
+   anything the app writes to disk in plain text.
 4. The app never auto-approves anything, and blocks acting when the event
    stream is stale.
 5. Non-commercial build. Sideloaded via adb, never listed on Play.
