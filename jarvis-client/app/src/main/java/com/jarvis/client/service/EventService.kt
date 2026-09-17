@@ -81,7 +81,13 @@ class EventService : Service() {
         }
         if (intent?.action == ACTION_DENY) {
             denyFromNotification(intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID))
-            return START_NOT_STICKY
+            // START_STICKY, not START_NOT_STICKY: the sticky flag is the
+            // system's restart policy going forward, not a per-call receipt,
+            // and this branch does not call stopSelf() the way ACTION_STOP
+            // above does. Returning NOT_STICKY here would leave the link
+            // unable to auto-restart after some later, unrelated kill, purely
+            // because the last onStartCommand happened to be a Deny tap.
+            return START_STICKY
         }
         JarvisRuntime.startStream()
         return START_STICKY

@@ -66,7 +66,7 @@ object ApprovalNotifier {
 
         for (item in pending) {
             val notificationId = assigned.getOrPut(item.id) { nextId++ }
-            runCatching { manager.notify(notificationId, build(context, item)) }
+            runCatching { manager.notify(notificationId, build(context, item, notificationId)) }
                 .onFailure { Log.w(TAG, "could not post approval ${item.id}", it) }
         }
 
@@ -132,7 +132,7 @@ object ApprovalNotifier {
         return item.title to body
     }
 
-    private fun build(context: Context, item: PendingItem): Notification {
+    private fun build(context: Context, item: PendingItem, notificationId: Int): Notification {
         val (title, body) = textFor(item)
 
         // Which channel, not which priority. On Android 8 and later the
@@ -185,7 +185,7 @@ object ApprovalNotifier {
                     addAction(
                         R.drawable.ic_notification,
                         context.getString(R.string.approval_deny_action),
-                        denyIntent(context, item),
+                        denyIntent(context, item, notificationId),
                     )
                 }
             }
@@ -218,17 +218,20 @@ object ApprovalNotifier {
      * approval came from - the notification cannot exist otherwise - so there
      * is no cold-start case where the app has to be spun up just to read it.
      */
-    private fun denyIntent(context: Context, item: PendingItem): PendingIntent {
+    private fun denyIntent(context: Context, item: PendingItem, notificationId: Int): PendingIntent {
         val intent = Intent(context, EventService::class.java)
             .setAction(EventService.ACTION_DENY)
             .putExtra(EXTRA_APPROVAL_ID, item.id)
         return PendingIntent.getService(
             context,
-            // Distinct from openCard()'s request code for the same id, or
-            // FLAG_UPDATE_CURRENT would overwrite one pending intent's extras
-            // with the other's the second time this item's notification is
-            // rebuilt.
-            item.id.hashCode() xor DENY_REQUEST_SALT,
+            // notificationId, not item.id.hashCode(): it comes from [assigned],
+            // the same collision-free counter that already exists to keep two
+            // live approvals from colliding on a notification id, so reusing it
+            // here keeps two live approvals from colliding on a Deny action
+            // too. It is still distinct from openCard()'s request code range
+            // (FIRST_ID and up vs. a raw hashCode), so FLAG_UPDATE_CURRENT
+            // can't overwrite one pending intent's extras with the other's.
+            notificationId,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -265,7 +268,4 @@ object ApprovalNotifier {
     private const val GROUP = "jarvis_approvals"
     private const val FIRST_ID = 0x4B00
     private const val SUMMARY_ID = 0x4AFF
-
-    /** Keeps a Deny PendingIntent's request code out of openCard()'s range. */
-    private const val DENY_REQUEST_SALT = 0x4C00
 }

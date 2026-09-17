@@ -204,8 +204,17 @@ class MainActivity : FragmentActivity() {
         // separate flag from clearing the cache, so a later recomposition
         // reading the same still-cached server data cannot re-adopt an offer
         // just turned down.
+        //
+        // `sleepOfferDismissed` is rememberSaveable, like `paired`/`busy`/
+        // `draft` above, so a rotation can't resurrect a card the owner just
+        // turned down. `cachedSleepOffer` stays plain `remember`: a raw
+        // JsonObject isn't Bundle-saveable, and it doesn't need to be - the
+        // LaunchedEffect(brain.memory) block below re-populates it from the
+        // still-cached server data on the next recomposition, and the
+        // survived `dismissed` flag is what stops that from re-adopting the
+        // offer just turned down.
         var cachedSleepOffer by remember { mutableStateOf<JsonObject?>(null) }
-        var sleepOfferDismissed by remember { mutableStateOf(false) }
+        var sleepOfferDismissed by rememberSaveable { mutableStateOf(false) }
         var sleepOfferBusy by remember { mutableStateOf(false) }
 
         val tick = permissionTick.intValue
