@@ -5,7 +5,11 @@
 > is the detail.
 
 
-Twenty-two patches against the Jarvis backend, each with an executable test.
+Twenty-three patches against the Jarvis backend, each with an executable test.
+The twenty-third, `ui-control-wiring.patch`, sits outside the ordered stack
+below - it only adds new dictionary entries, touches no line any other patch
+touches, and can be applied before, after, or interleaved with the rest. See
+its own section, after the table.
 
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
@@ -47,6 +51,7 @@ on a throwaway copy instead.
 | `decide-once.patch` | `jarvis_extract.py` | Found during a self-improvement audit: `decide()` was a plain check-then-act, so two concurrent accepts on one proposal could both win. A full queue also dropped proposals with no record. Needs `memory-noise`. |
 | `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
 | `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Needs `event-allowlist`. |
+| `ui-control-wiring.patch` | `jarvis_gate.py` | Registers the three new capabilities below with the gate's own `_RISK`/`_TOOL_ACTIONS` tables. Textually independent of everything above it — see its own section. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -1788,7 +1793,7 @@ notice, end to end through the doorbell.
 
 ---
 
-# Three new capabilities, and the one honest gap in all three: no call site yet
+# `ui-control-wiring.patch` — the gate now knows these three capabilities exist
 
 `jarvis_research.py` gained authenticated GitHub search. `jarvis_ui_control.py`
 and `jarvis_android_control.py` are new - a `microsoft/UFO`-style way to click
@@ -1798,67 +1803,88 @@ rather than by taking either project as a dependency. All three ship as whole
 files, the same way `jarvis_research.py` and `jarvis_speech.py` already do -
 there is nothing on the owner's machine to patch for something new.
 
-**None of the three is reachable from the running app yet.** This project's
-own stated "characteristic defect" (`docs/ARCHITECTURE.md`, top of file) is
-capability with no call site - a function nobody calls, an event kind no
-client handles. This is exactly that, stated plainly rather than left for
-someone to discover: `jarvis_hud.py` is not in this repository (§9 of the
-architecture doc), so a route that calls `plan()`/`run()` on these three
-modules, queues the result through `jarvis_gate`, and returns it from
-`/api/pending` cannot be written and verified here - it would be a patch
-against a file this session has never seen. What follows is everything the
-wiring needs, precisely enough that adding it is mechanical rather than a
-second design pass.
+This section was rewritten once the owner sent over the real `jarvis_hud.py`
+and `jarvis_gate.py` - the first draft, written without them, guessed wrong
+about where the missing piece lives. Real ground:
 
-### `jarvis_research.py` — the new part
+**`jarvis_hud.py` needs NO changes.** `GET /api/pending` already just calls
+`jarvis_gate.pending()`/`.history()` - generic over every action name there
+is, including three that did not exist an hour ago. Once `jarvis_gate` knows
+about an action, anything that reaches `jarvis_gate.check()` for it shows up
+correctly, formatted by `notice_for()`, with zero HUD-side code.
+
+**`jarvis_gate.py` needed real entries, and now has them** -
+`ui-control-wiring.patch`, verified with `git apply --check` AND `patch
+--dry-run` against the owner's actual file, not written blind:
+
+- `_RISK["control_phone"]` and `_RISK["research_authenticated"]` - two new
+  entries; `control_computer` already existed and is reused as-is for native
+  UI control, exactly as it already covers `browser_click`/`browser_type`.
+- `_TOOL_ACTIONS` gains `jarvis_ui_control_plan`/`_run`,
+  `jarvis_android_control_plan`/`_run`, `jarvis_research_plan`,
+  `jarvis_research_run`, and `jarvis_research_run_authenticated` - each
+  `_plan` tool is `auto` (matches the read-only bucket `model_list` and
+  `browser_axtree` are already in - nothing is sent), each `_run` tool maps
+  to a real `_RISK` action.
+- The owner's real `jarvis-framework.toml` already has `control_computer =
+  "ask"` (confirmed against the sample in `backend/rebuilt/`) - so
+  `jarvis_ui_control_run` needs **no TOML change at all**. `control_phone`
+  and `research_authenticated` are new action names; absent from
+  `[autonomy.tiers]` they fail closed to `ask` via `unknown_action_tier`
+  (already `"ask"` by default), so this is *safe* without a TOML edit too -
+  but add explicit lines for both, the same way every other real action has
+  one, rather than relying on the fallback silently:
+  ```toml
+  control_phone         = "ask"
+  research_authenticated = "ask"
+  ```
+
+**What is still genuinely missing, and where it actually lives - this was
+the wrong guess in the first draft of this section:** `jarvis_gate.py`
+answers "may this run"; something else has to actually CALL
+`jarvis_ui_control.plan()`/`run()` (and the other two) as a real, LLM-callable
+tool in the first place, and wire its `announce` callback to
+`jarvis_events.set_activity`. `jarvis_gate.py`'s own docstring names that
+something: **OpenJarvis**, a separate process (port 8000) with its own tool
+registry - `_TOOL_ACTIONS` maps its ~50 existing tool names to actions, but
+does not define the tools themselves. OpenJarvis is not in this repository,
+was not mentioned as a separate component in `docs/ARCHITECTURE.md` or
+anywhere else handed over so far, and this session has never seen its source.
+**Registering these three capabilities as real tools OpenJarvis can call
+happens there, not in this repo, and not in `jarvis_hud.py`.** If you want
+that written as a real, verified patch too, the same way this one was: find
+wherever your existing tools - `shell_exec`, `web_search`, `browser_click` -
+are actually defined and dispatched (likely near something called
+`ToolExecutor` or a tool registry, per `jarvis_gate.gate_tool()`'s own
+docstring), and send that over the same way.
+
+### `jarvis_research.py`'s new part needs nothing beyond the patch above
 
 `JARVIS_GITHUB_TOKEN` in the environment authenticates every request; unset,
 behaviour is exactly what it was before. `Plan.authenticated` is captured at
 `plan()` time and `run()` refuses if the live state has since changed -
 described under "AUTHENTICATED REQUESTS" in the module's own docstring.
-**This needed no route changes at all** - if `jarvis_hud.py` already calls
-`jarvis_research.plan()`/`run()` (it needs a call site regardless, per
-"Stage 1" in the task history - check before assuming one exists), setting
-the environment variable is the entire owner-side change.
 
-### `jarvis_ui_control.py` and `jarvis_android_control.py` — wiring a NEW route needs
+### A line-ending discovery worth checking against the other twenty-two
 
-Both follow `jarvis_research.py`'s exact shape: `plan(...)` reads only,
-`describe(plan)` renders the card text, `run(plan, approved=True, ...)`
-executes. For each, `jarvis_hud.py` needs:
+The owner's real `jarvis_gate.py`, as sent, is CRLF on essentially every
+line. `ui-control-wiring.patch`, like the other twenty-two, is stored LF -
+this project's own convention, and what `apply-patches.ps1`'s line-ending
+section always forces every patch to before applying, regardless of what
+target it is going against. Verified directly: an LF patch applies cleanly
+against an LF copy of the real file, and fails outright (`patch does not
+apply`) against the real CRLF one, unmodified - not a guess, a real `git
+apply --check` run against both. If the *other* twenty-two have never
+actually been run against this exact backend copy, this is worth ruling out
+before assuming a failure is about anything else. Fix once, for all
+twenty-three, by normalizing the backend `.py` files to LF - safe, because
+Python treats `\r\n` and `\n` identically (`compile()` and every parser in
+CPython read both as a newline), so this changes nothing about how the code
+runs:
 
-1. **A route** (`POST /api/ui_control/plan` and `/api/ui_control/run`, or
-   folded into whatever generic "propose an action" route already exists) -
-   call `plan()`, and queue the result the same way any other approval-worthy
-   action is queued today, so it shows up via `/api/pending` and
-   `notice_for()` like everything else. `describe(plan)` is the `detail`; do
-   not write a second summary.
-2. **A tier entry in `jarvis-framework.toml`.** Something has to map the
-   action name (say `ui_control` / `android_control`) to a tier. Given
-   §2 invariant 3 and this capability's own risk, that tier should be `ask`,
-   not `notify` or `auto`, for both - there is no case here where clicking in
-   another program or tapping the phone should happen with nobody deciding.
-3. **A `_RISK` entry** so `jarvis_gate.notice_for()` can generate an honest
-   title/body from the action name alone, per the notification contract in
-   `docs/ARCHITECTURE.md` §3 - weight `heavy` when `Plan.weight == "heavy"`
-   (either module), because an irreversible UI action or one that leaves the
-   machine earns exactly that, on the same three named reasons every other
-   heavy action in this project already uses.
-4. **The `announce` hook wired to `jarvis_events.set_activity`** - both
-   `run()` functions take an `announce(text)` callback; call it with
-   `lambda text: jarvis_events.set_activity("working", text)` (or a state of
-   its own, if one is added) so the owner sees, live, that Jarvis is in the
-   middle of controlling a window or the phone - not only the before/after
-   approval card. This is the piece that answers "give updates while it's
-   actively using this," and it costs one line at the call site; nothing in
-   either module hard-imports `jarvis_events`, so it stays testable without
-   the rest of the backend present.
-5. **A client surface for a UI-control card that lists several steps.**
-   The existing approval card already renders arbitrary `notice` /`detail`
-   text generically, so the numbered step list `describe()` produces should
-   show up with zero new client code - confirm this rather than assume it,
-   the first time a real card is generated, since neither client has been
-   asked to render one before.
+```
+$dir = if ($env:JARVIS_BACKEND) { $env:JARVIS_BACKEND } else { "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program" }; $backup = "$dir-backup-$(Get-Date -Format yyyyMMdd-HHmmss)"; Copy-Item -Recurse -LiteralPath $dir -Destination $backup; Get-ChildItem -LiteralPath $dir -Filter *.py | ForEach-Object { $text = [IO.File]::ReadAllText($_.FullName) -replace "`r`n", "`n"; [IO.File]::WriteAllText($_.FullName, $text) }; Write-Host "Backed up to $backup and converted every .py file in $dir to LF."
+```
 
 ### What has and has not been verified
 

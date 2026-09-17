@@ -87,6 +87,11 @@ $PATCHES = @(
     # doorbell copy in jarvis_events.py that event-allowlist wrote. Its
     # context lines are their output, so it cannot go earlier.
     'approval-notice.patch'
+    # Textually independent of everything above - it only ADDS new entries
+    # to two dictionaries in jarvis_gate.py, touching no line any other
+    # patch here touches. Listed last for readability, not because order
+    # matters for this one.
+    'ui-control-wiring.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
