@@ -29,4 +29,5 @@
         you. Shown without a sound.</string>
     <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
     <string name="approvals_waiting">%1$d approvals waiting</string>
+    <string name="approval_deny_action">Deny</string>
 </resources>

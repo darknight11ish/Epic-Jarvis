@@ -79,8 +79,40 @@ class EventService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_DENY) {
+            denyFromNotification(intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID))
+            return START_NOT_STICKY
+        }
         JarvisRuntime.startStream()
         return START_STICKY
+    }
+
+    /**
+     * The Deny button on an approval notification.
+     *
+     * Reachable only because this service is already running the stream that
+     * put the approval in `JarvisRuntime.pending` in the first place - the
+     * notification cannot exist otherwise, so the lookup below is not a race
+     * against something that might not have started yet.
+     *
+     * No confirmation, no biometric: this is the same unguarded
+     * `decide(item, approve = false)` InboxScreen's own Deny button already
+     * sends, on the same "refusing something you have not read costs only a
+     * retry" reasoning `notice.deny_ok` states server-side.
+     *
+     * Nothing here cancels the notification directly. `decide`'s own success
+     * path calls `refreshPending()`, which changes `JarvisRuntime.pending` and
+     * runs this service's own watcher, which resyncs the drawer - the same
+     * path that already removes a notification approved or denied from the
+     * desktop instead. A failure leaves the item, and the notification, right
+     * where they were: this queue never shows "gone" before the desktop has
+     * actually said so, the same rule the Brain screen's memory queue holds
+     * by staying busy rather than optimistically hiding a row.
+     */
+    private fun denyFromNotification(id: String?) {
+        val item = id?.let { target -> JarvisRuntime.pending.value.firstOrNull { it.id == target } }
+            ?: return
+        scope.launch { JarvisRuntime.decide(item, approve = false) }
     }
 
     override fun onDestroy() {
@@ -187,6 +219,7 @@ class EventService : Service() {
         const val CHANNEL_ID = "jarvis_link"
         private const val NOTIFICATION_ID = 0x4A56
         const val ACTION_STOP = "com.jarvis.client.STOP_LINK"
+        const val ACTION_DENY = "com.jarvis.client.DENY_APPROVAL"
 
         /**
          * Set when the platform refused to let the service go foreground. Read by

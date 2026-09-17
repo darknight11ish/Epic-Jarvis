@@ -160,23 +160,35 @@ object ApprovalNotifier {
             .setOnlyAlertOnce(true)
             .setGroup(GROUP)
             .setContentIntent(openCard(context, item.id))
-            // Still deliberately no Approve/Deny actions, and this survived
-            // being asked for.
+            // Deny only, never Approve - and Deny only when the desktop's own
+            // notice says refusing without reading is safe.
             //
-            // The desktop's notification contract permits a Deny action -
-            // `deny_ok` is true on every notice - on the reasoning that
-            // refusing something you have not read costs only a retry. That
-            // reasoning is sound and the owner declined it anyway, which is
-            // their call to make: the extra tap is cheap and this surface is
-            // the one where a mistaken tap is least recoverable.
+            // Approve is not offered on any account, and would be ignored by
+            // EventService if it somehow arrived: approving from a
+            // notification is refused on this side's own terms, not on the
+            // server's say-so. Both gates that make an approval safe live
+            // inside the app - the staleness check, which refuses to send a
+            // decision the phone cannot confirm is still live, and the
+            // fingerprint on anything outbound or irreversible - and a
+            // notification action from the lock screen routes around both.
             //
-            // `approve_ok` is false there too, and would be ignored here if it
-            // were not. Approving from a notification is refused on this side's
-            // own terms, not on the server's say-so: both gates that make a
-            // decision safe live inside the app - the staleness check, which
-            // refuses to send a decision the phone cannot confirm is still
-            // live, and the fingerprint on anything outbound or irreversible.
-            // A notification action routes around both from the lock screen.
+            // Deny carries neither gate even inside the app - see
+            // MainActivity.onDeny, which sends `decide(item, approve = false)`
+            // with no biometric prompt - so offering it here moves the same
+            // unguarded call to a second surface rather than weakening
+            // anything. This was declined once before on the reasoning that
+            // the extra tap is cheap and a notification is the surface where
+            // a mistaken tap is least recoverable; asked again, the answer
+            // was to add it.
+            .apply {
+                if (item.notice?.denyOk != false) {
+                    addAction(
+                        R.drawable.ic_notification,
+                        context.getString(R.string.approval_deny_action),
+                        denyIntent(context, item),
+                    )
+                }
+            }
             .build()
     }
 
@@ -199,6 +211,28 @@ object ApprovalNotifier {
             .setGroupSummary(true)
             .setContentIntent(openCard(context, null))
             .build()
+
+    /**
+     * Routes to [EventService], not a standalone receiver: the service is
+     * already running and already holds the live `JarvisRuntime.pending` this
+     * approval came from - the notification cannot exist otherwise - so there
+     * is no cold-start case where the app has to be spun up just to read it.
+     */
+    private fun denyIntent(context: Context, item: PendingItem): PendingIntent {
+        val intent = Intent(context, EventService::class.java)
+            .setAction(EventService.ACTION_DENY)
+            .putExtra(EXTRA_APPROVAL_ID, item.id)
+        return PendingIntent.getService(
+            context,
+            // Distinct from openCard()'s request code for the same id, or
+            // FLAG_UPDATE_CURRENT would overwrite one pending intent's extras
+            // with the other's the second time this item's notification is
+            // rebuilt.
+            item.id.hashCode() xor DENY_REQUEST_SALT,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
 
     private fun openCard(context: Context, approvalId: String?): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
@@ -231,4 +265,7 @@ object ApprovalNotifier {
     private const val GROUP = "jarvis_approvals"
     private const val FIRST_ID = 0x4B00
     private const val SUMMARY_ID = 0x4AFF
+
+    /** Keeps a Deny PendingIntent's request code out of openCard()'s range. */
+    private const val DENY_REQUEST_SALT = 0x4C00
 }
