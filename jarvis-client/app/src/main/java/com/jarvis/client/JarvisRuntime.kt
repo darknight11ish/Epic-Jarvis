@@ -709,6 +709,28 @@ object JarvisRuntime {
         return result
     }
 
+    /**
+     * Keeps or discards one fact Jarvis proposed to remember. Mirrors
+     * [decide]'s own shape - the same "not connected" refusal, since the
+     * desktop's `brain_memory_decide` requires a live link before it will
+     * act on this queue either - but against `BrainSnapshot.memory` rather
+     * than the approval queue, because a proposed fact and a pending
+     * approval are different queues with different lifetimes.
+     */
+    suspend fun decideMemory(id: Long, accept: Boolean): ApiResult<Unit> {
+        if (_stale.value || _link.value != LinkState.CONNECTED) {
+            val blocker = "Not connected to the desktop, so this decision cannot be delivered."
+            _notice.value = blocker
+            return ApiResult.Failed(ApiError.Unreachable(blocker))
+        }
+        val result = api.decideMemory(id, accept)
+        when (result) {
+            is ApiResult.Ok -> refreshBrain()
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
+        return result
+    }
+
     // ------------------------------------------------------------ faces ----
 
     /**

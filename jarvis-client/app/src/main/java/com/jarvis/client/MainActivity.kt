@@ -193,6 +193,7 @@ class MainActivity : FragmentActivity() {
         var paired by rememberSaveable { mutableStateOf(JarvisRuntime.isPaired()) }
         var busy by rememberSaveable { mutableStateOf(false) }
         var draft by rememberSaveable { mutableStateOf("") }
+        var memoryDecideBusyId by remember { mutableStateOf<Long?>(null) }
 
         val tick = permissionTick.intValue
         val chrome by appearance.chrome.collectAsState()
@@ -437,6 +438,16 @@ class MainActivity : FragmentActivity() {
                         brain = brain,
                         onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
                         onBack = { nav.back() },
+                        memoryDecideBusyId = memoryDecideBusyId,
+                        onDecideMemory = { id, accept ->
+                            if (memoryDecideBusyId == null) {
+                                memoryDecideBusyId = id
+                                scope.launch {
+                                    JarvisRuntime.decideMemory(id, accept)
+                                    memoryDecideBusyId = null
+                                }
+                            }
+                        },
                         modifier = root,
                     )
                 }

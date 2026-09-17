@@ -77,6 +77,9 @@ fun BrainScreen(
     brain: BrainSnapshot,
     onRefresh: () -> Unit,
     onBack: () -> Unit,
+    /** Which proposal, if any, has a decision in flight - never two at once. */
+    memoryDecideBusyId: Long?,
+    onDecideMemory: (id: Long, accept: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -160,8 +163,15 @@ fun BrainScreen(
                 // The QUEUE, not the corpus. /api/graph is desktop-only by the
                 // contract's own instruction, and a memory graph is not a thing
                 // to read on a phone; what belongs here is the short list of
-                // facts waiting for a yes or no.
-                Probed("Memory awaiting review", brain.memory, "Proposed facts")
+                // facts waiting for a yes or no - and, unlike every other
+                // Probed section, this one actually answers them, the same
+                // one-at-a-time way the desktop's own Memory tab does.
+                MemoryQueue(
+                    data = brain.memory,
+                    busyId = memoryDecideBusyId,
+                    onKeep = { id -> onDecideMemory(id, true) },
+                    onDiscard = { id -> onDecideMemory(id, false) },
+                )
             }
             item(key = "initiative") {
                 Probed("Findings", brain.initiative, "What Jarvis noticed on its own")
@@ -388,6 +398,100 @@ private fun Probed(title: String, data: JsonObject?, blurb: String) {
                 if (i > 0) Rule()
                 Field(label, value, machine = value.looksMachine())
             }
+        }
+    }
+}
+
+/**
+ * The one section on this screen that answers back rather than only
+ * reporting. `data` is `/api/memory/pending`'s own JSON — the SAME payload
+ * `JarvisRuntime.refreshBrain()` already fetched for the generic [Probed]
+ * view this replaces — read directly rather than through a typed model, for
+ * the reason [JarvisApi.probe] gives: the contract names this route with no
+ * field list, and a data class would mean inventing keys.
+ *
+ * One fact, one decision, same as [com.jarvis.client.ui.approval.ApprovalCard]
+ * - no "keep all" here either, and `busyId` exists so a second tap on the
+ * same row before the first decision lands cannot fire twice.
+ */
+@Composable
+private fun MemoryQueue(
+    data: JsonObject?,
+    busyId: Long?,
+    onKeep: (id: Long) -> Unit,
+    onDiscard: (id: Long) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Section("Memory awaiting review") {
+        Plate {
+            if (data == null) {
+                Text(
+                    "Not available on this backend.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.textMid,
+                )
+                Gap(4)
+                Text("Proposed facts", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                return@Plate
+            }
+            val items = (data["pending"] as? JsonArray).orEmpty()
+                .mapNotNull { it as? JsonObject }
+            if (items.isEmpty()) {
+                Text(
+                    "Nothing is waiting. Either Jarvis has not heard anything " +
+                        "worth keeping, or learning is off.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.textMid,
+                )
+                return@Plate
+            }
+            items.forEachIndexed { i, item ->
+                if (i > 0) Rule()
+                val id = item.str("id")?.toLongOrNull()
+                MemoryProposalRow(
+                    text = item.str("text") ?: "(no text)",
+                    source = item.str("source"),
+                    busy = id != null && id == busyId,
+                    // A row with no readable id can be shown but not decided -
+                    // the same "say what you can, act on what you know" rule
+                    // as a section with no data at all.
+                    onKeep = id?.let { { onKeep(it) } },
+                    onDiscard = id?.let { { onDiscard(it) } },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemoryProposalRow(
+    text: String,
+    source: String?,
+    busy: Boolean,
+    onKeep: (() -> Unit)?,
+    onDiscard: (() -> Unit)?,
+) {
+    val chrome = LocalChrome.current
+    Column {
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        if (source != null) {
+            Gap(2)
+            Text("from $source", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        Gap(6)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Quiet(
+                if (busy) "Keeping…" else "Keep",
+                color = chrome.okInk,
+                enabled = !busy && onKeep != null,
+                onClick = { onKeep?.invoke() },
+            )
+            Quiet(
+                if (busy) "Discarding…" else "Discard",
+                color = chrome.badInk,
+                enabled = !busy && onDiscard != null,
+                onClick = { onDiscard?.invoke() },
+            )
         }
     }
 }

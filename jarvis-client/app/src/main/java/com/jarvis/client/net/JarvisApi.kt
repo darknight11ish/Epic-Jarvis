@@ -277,6 +277,18 @@ class JarvisApi(
 
     private suspend fun decide(path: String, id: String): ApiResult<Unit> = postId(path, id)
 
+    /**
+     * Keeps or discards ONE proposed fact from `/api/memory/pending` (the
+     * same route [probe] reads that section from). One integer id, one
+     * decision - the extractor fills this queue on its own and there is no
+     * list form, matching the desktop's own `brain_memory_decide`: forgetting
+     * is irreversible and a "keep all" would be an approve-all with another
+     * name. This is the QUEUE, never the corpus - deciding a fact Jarvis
+     * proposed is not the memory graph the phone is not meant to hold.
+     */
+    suspend fun decideMemory(id: Long, accept: Boolean): ApiResult<Unit> =
+        postJson("/api/memory/decide", """{"id":$id,"accept":$accept}""")
+
     suspend fun cancelJob(id: String): ApiResult<Unit> = postId("/api/jobs/cancel", id)
 
     /**
