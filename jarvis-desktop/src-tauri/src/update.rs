@@ -63,6 +63,20 @@ pub struct Status {
     pub check_on_start: bool,
 }
 
+/// How far a download has gotten. Sent while `install_update` is in flight —
+/// informational only, the same as [`Status`]: nothing here starts, resumes
+/// or retries anything on its own.
+#[derive(Debug, Clone, Serialize)]
+pub struct DownloadProgress {
+    /// Bytes received so far, this download.
+    pub downloaded: u64,
+    /// Total size, when the server reported one. A release behind a proxy
+    /// that strips `Content-Length` leaves this `None` rather than a fake
+    /// number — better an unknown total than a progress bar that lies about
+    /// how far along a hundred-plus-megabyte download actually is.
+    pub total: Option<u64>,
+}
+
 /// The last answer a check produced.
 ///
 /// Without this, `update_status` rebuilt a blank `Status` every time — so the
@@ -247,12 +261,47 @@ pub async fn install_update(app: AppHandle) -> Result<String, String> {
         .ok_or_else(|| "there is no newer version to install".to_string())?;
 
     let version = update.version.clone();
+    // `on_chunk` reports the size of the piece JUST received, not a running
+    // total — the settings window showed no percentage at all before this,
+    // for exactly that reason: nothing here was turning "another chunk
+    // arrived" into "how far along am I" or telling anyone either number.
+    let downloaded = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let progress_app = app.clone();
+    let progress_downloaded = downloaded.clone();
     // The signature is checked inside this call, before anything is executed.
     update
-        .download_and_install(|_chunk, _total| {}, || {})
+        .download_and_install(
+            move |chunk_len, total| {
+                let so_far = progress_downloaded
+                    .fetch_add(chunk_len as u64, std::sync::atomic::Ordering::Relaxed)
+                    + chunk_len as u64;
+                let _ = progress_app.emit(
+                    crate::events::UPDATE_PROGRESS,
+                    DownloadProgress {
+                        downloaded: so_far,
+                        total,
+                    },
+                );
+            },
+            || {},
+        )
         .await
         .map_err(|e| format!("the update failed to install: {e}"))?;
     Ok(version)
+}
+
+/// Restarts the app — reachable only from the button the install's own
+/// success message now offers, never called automatically.
+///
+/// `request_restart` rather than `restart`: it fires the same
+/// `ExitRequested`/`Exit` sequence a normal quit does, off any thread, so
+/// `sidecar::stop_on_exit` still stops a supervised backend first. `restart`
+/// skips straight to re-executing when called off the main thread — which an
+/// async command handler always is — and would leave that backend running
+/// with no window left to stop it from.
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.request_restart();
 }
 
 /// The startup look, if the owner has left it on.

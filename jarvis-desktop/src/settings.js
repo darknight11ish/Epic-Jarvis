@@ -66,7 +66,10 @@ const dom = {
   updateState: $("update-state"),
   updateCheck: $("update-check"),
   updateInstall: $("update-install"),
+  updateRestart: $("update-restart"),
   updateStatus: $("update-status"),
+  updateProgress: $("update-progress"),
+  updateProgressFill: $("update-progress-fill"),
   updateNotes: $("update-notes"),
   updateNotesBody: $("update-notes-body"),
 
@@ -695,25 +698,73 @@ dom.updateCheck.addEventListener("click", async () => {
   }
 });
 
+/** Bytes to a short human string. `formatBytes(0)` reads as "0 B", not "". */
+function formatBytes(n) {
+  if (!Number.isFinite(n)) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = n;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
+}
+
+function paintProgress({ downloaded, total }) {
+  dom.updateProgress.hidden = false;
+  if (total) {
+    dom.updateProgress.dataset.indeterminate = "false";
+    dom.updateProgressFill.style.width = `${Math.min(100, (downloaded / total) * 100)}%`;
+    report(dom.updateStatus,
+      `Downloading… ${formatBytes(downloaded)} of ${formatBytes(total)}`, "");
+  } else {
+    // No Content-Length reported — say so honestly rather than a percentage
+    // that would be invented.
+    dom.updateProgress.dataset.indeterminate = "true";
+    report(dom.updateStatus, `Downloading… ${formatBytes(downloaded)} so far`, "");
+  }
+}
+
 dom.updateInstall.addEventListener("click", async () => {
   // No confirmation dialog, because the button is the confirmation: it only
   // appears once a check has found something, and it names the version.
   report(dom.updateStatus, "Downloading and verifying…", "");
   dom.updateInstall.disabled = true;
   dom.updateCheck.disabled = true;
+  dom.updateProgress.hidden = false;
+  dom.updateProgress.dataset.indeterminate = "true";
+  dom.updateProgressFill.style.width = "";
   try {
     const version = await invoke("install_update");
-    report(dom.updateStatus, `${version} installed. Restart Jarvis to run it.`, "ok");
+    dom.updateProgress.hidden = true;
+    report(dom.updateStatus, `${version} installed.`, "ok");
     announce(dom.updateStatus.textContent, "assertive");
+    dom.updateInstall.hidden = true;
+    dom.updateRestart.hidden = false;
   } catch (error) {
     // A signature that does not verify lands here, and it is the one failure
     // that must not read as a routine network problem.
+    dom.updateProgress.hidden = true;
     report(dom.updateStatus, String(error.message || error), "bad");
     announce(dom.updateStatus.textContent, "assertive");
     dom.updateInstall.disabled = false;
   } finally {
     dom.updateCheck.disabled = false;
   }
+});
+
+dom.updateRestart.addEventListener("click", () => {
+  // No confirmation here either, same reasoning as Install: the button only
+  // appears once an install has already finished, and it says what it does.
+  dom.updateRestart.disabled = true;
+  report(dom.updateStatus, "Restarting…", "");
+  invoke("restart_app").catch((error) => {
+    // Reachable only if the restart itself could not even be requested — the
+    // process is gone by the time this would normally resolve.
+    dom.updateRestart.disabled = false;
+    report(dom.updateStatus, String(error.message || error), "bad");
+  });
 });
 
 dom.updateAuto.addEventListener("change", async () => {
@@ -734,5 +785,7 @@ dom.updateAuto.addEventListener("change", async () => {
 
 // The startup check finishes after this window may already be open.
 if (IS_TAURI) TAURI.event.listen("update-status", (event) => paintUpdate(event.payload));
+// Emitted only while `install_update` is downloading — see `paintProgress`.
+if (IS_TAURI) TAURI.event.listen("update-progress", (event) => paintProgress(event.payload));
 
 loadUpdate();

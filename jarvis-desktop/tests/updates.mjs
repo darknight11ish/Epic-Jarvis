@@ -141,6 +141,100 @@ await check("a failed install is reported, not swallowed", async () => {
   assert.equal(tone, "bad");
 });
 
+/* ── Download progress and restart ───────────────────────────────────────── */
+
+await check("the progress bar is hidden until a download starts", async () => {
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  await page.waitForTimeout(300);
+  const hidden = await page.evaluate(() => document.getElementById("update-progress").hidden);
+  await page.close();
+  assert.equal(hidden, true, "the progress bar shows with nothing downloading");
+});
+
+await check("a progress event with a total paints a percentage", async () => {
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  await page.locator("#update-install").click();
+  // Exact multiples of a MiB, so the rendered text has no rounding to guess at.
+  const mib = 1024 * 1024;
+  await page.evaluate(
+    ([downloaded, total]) => window.__emit("update-progress", { downloaded, total }),
+    [2 * mib, 4 * mib]
+  );
+  await page.waitForTimeout(100);
+  const hidden = await page.evaluate(() => document.getElementById("update-progress").hidden);
+  const indeterminate = await page.evaluate(() =>
+    document.getElementById("update-progress").dataset.indeterminate);
+  const width = await page.evaluate(() => document.getElementById("update-progress-fill").style.width);
+  const status = await page.locator("#update-status").innerText();
+  await page.close();
+  assert.equal(hidden, false, "a download in progress hid its own bar");
+  assert.equal(indeterminate, "false", "a known total was treated as unknown");
+  assert.equal(width, "50%", `expected 50%, painted "${width}"`);
+  assert.match(status, /2\.0 MB of 4\.0 MB/i, `said "${status}"`);
+});
+
+await check("a progress event with no total says so instead of guessing", async () => {
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  await page.locator("#update-install").click();
+  await page.evaluate(() => window.__emit("update-progress", { downloaded: 500_000, total: null }));
+  await page.waitForTimeout(100);
+  const indeterminate = await page.evaluate(() =>
+    document.getElementById("update-progress").dataset.indeterminate);
+  const status = await page.locator("#update-status").innerText();
+  await page.close();
+  assert.equal(indeterminate, "true", "an unknown total was painted as a fixed percentage");
+  assert.match(status, /so far/i, `said "${status}", which claims a size it does not have`);
+});
+
+await check("a finished install swaps Install for Restart, not back to a status line alone", async () => {
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  await page.locator("#update-install").click();
+  await page.waitForTimeout(300);
+  const installHidden = await page.locator("#update-install").isHidden();
+  const restartHidden = await page.locator("#update-restart").isHidden();
+  const progressHidden = await page.evaluate(() => document.getElementById("update-progress").hidden);
+  await page.close();
+  assert.equal(installHidden, true, "Install is still offered after it already installed");
+  assert.equal(restartHidden, false, "nothing offers a restart after a successful install");
+  assert.equal(progressHidden, true, "the progress bar outlives the download it tracked");
+});
+
+await check("pressing Restart calls the one command that can restart the app", async () => {
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  await page.locator("#update-install").click();
+  await page.waitForTimeout(300);
+  await page.locator("#update-restart").click();
+  await page.waitForTimeout(100);
+  const seen = await calls(page);
+  await page.close();
+  assert.ok(seen.includes("__restarted"), "the Restart button did not call restart_app");
+});
+
+await check("a restart that could not even be requested is reported, not silent", async () => {
+  const page = await open({
+    update: { ...K.UPDATE_NONE, ...FOUND },
+    restartFails: "no window left to restart from",
+  });
+  await page.locator("#update-install").click();
+  await page.waitForTimeout(300);
+  await page.locator("#update-restart").click();
+  await page.waitForTimeout(100);
+  const status = await page.locator("#update-status").innerText();
+  const disabled = await page.locator("#update-restart").isDisabled();
+  await page.close();
+  assert.match(status, /no window left to restart from/i, `said "${status}"`);
+  assert.equal(disabled, false, "a failed restart left the button stuck disabled with no way to retry");
+});
+
+await check("CONTROL: restart_app asks Tauri to restart, and only from the button", async () => {
+  const rust = read("src-tauri/src/update.rs");
+  assert.match(rust, /pub fn restart_app\(app: AppHandle\)/, "there is no restart_app command");
+  const fn = rust.slice(rust.indexOf("pub fn restart_app"));
+  assert.match(fn, /request_restart\(\)/,
+    "restart_app does not call request_restart — an async command runs off the main thread, " +
+    "where plain restart() skips the exit event the sidecar shutdown depends on");
+});
+
 await check("a result found at startup is still there when Settings opens", async () => {
   // The window is opened LATER — after a startup check has already found
   // something. Without a cache, `update_status` rebuilt a blank answer and the

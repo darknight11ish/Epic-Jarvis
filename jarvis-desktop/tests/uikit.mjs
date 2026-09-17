@@ -309,7 +309,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, appearance, noRoute, decideFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -421,6 +421,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (window.__installFails) throw new Error(window.__installFails);
             window.__calls.push(["__installed"]);
             return window.__update.available;
+          case "restart_app":
+            if (window.__restartFails) throw new Error(window.__restartFails);
+            window.__calls.push(["__restarted"]);
+            return null;
           case "reset_hotkeys":
             window.__hotkeys = window.__hotkeys.map((h) => ({
               ...h, accelerator: h.default, registered: true, error: null,
@@ -523,6 +527,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__learningFloor = Boolean(learningFloor);
   window.__found = found || null;
   window.__installFails = installFails || null;
+  window.__restartFails = restartFails || null;
   window.__refuse = refuse || [];
   window.__apiSettings = { base: "http://127.0.0.1:4719", hasToken: true, bindAddress: "",
                             ...(apiSettings || {}) };
@@ -557,7 +562,7 @@ export async function open(browser, base, file, data, viewport) {
     link: {}, pending: [], attention: ATTENTION_CLEAR, digest: DIGEST,
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
-    installFails: null, noRoute: false, decideFails: null, appearanceFails: null,
+    installFails: null, restartFails: null, noRoute: false, decideFails: null, appearanceFails: null,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },

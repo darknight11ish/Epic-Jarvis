@@ -324,6 +324,35 @@ select:focus-visible {
   color: var(--bad-text);
 }
 
+/* Shown only while a download is actually in flight — hidden the rest of the
+   time, so it never reads as a stalled bar sitting at 0%. */
+.progress-track {
+  height: 6px;
+  margin: 4px 0 10px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--cyan);
+  transition: width 160ms var(--ease, linear);
+}
+
+/* No total was reported (a proxy stripped Content-Length) — a fixed-width
+   sweep says "still moving" without claiming a percentage that isn't real. */
+.progress-track[data-indeterminate="true"] .progress-fill {
+  width: 30%;
+  animation: progress-sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(333%); }
+}
+
 /* The release notes are published text: arbitrary length, and not ours. A
    disclosure keeps them out of the way of the button. */
 .update-notes {

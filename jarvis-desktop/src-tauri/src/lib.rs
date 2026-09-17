@@ -94,6 +94,10 @@ pub mod events {
     /// Payload: [`crate::update::Status`] — the result of an update check.
     /// Carries no action: nothing that receives this may install anything.
     pub const UPDATE_STATUS: &str = "update-status";
+    /// Payload: [`crate::update::DownloadProgress`] — bytes downloaded so far
+    /// while an install already pressed is in flight. Informational only,
+    /// same as `UPDATE_STATUS`: nothing here starts or resumes anything.
+    pub const UPDATE_PROGRESS: &str = "update-progress";
     /// Payload: none. The appearance document (which face, which state
     /// bindings) changed — the tray already repaints on this via
     /// `on_appearance_changed`; sent to every window too so a display-mode
@@ -557,6 +561,7 @@ pub fn run() {
             update::check_for_update,
             update::set_update_check_on_start,
             update::install_update,
+            update::restart_app,
             hotkeys::get_hotkeys,
             hotkeys::set_hotkeys,
             hotkeys::reset_hotkeys,
