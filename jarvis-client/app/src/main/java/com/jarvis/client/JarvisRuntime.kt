@@ -24,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOn
@@ -31,6 +32,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.launch
 
@@ -171,6 +174,18 @@ object JarvisRuntime {
     private val _pending = MutableStateFlow<List<PendingItem>>(emptyList())
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
+    /**
+     * The ids whose approve or deny is in flight right now.
+     *
+     * Two taps on Approve about 100ms apart both got past [decisionBlocker] and
+     * both POSTed: the blocker's "no longer pending" test reads `_pending`, and
+     * `_pending` does not change until the first POST has come back. The brain
+     * screen already holds a `busyId` for exactly this on memory decisions;
+     * approvals never got the same treatment.
+     */
+    private val _deciding = MutableStateFlow<Set<String>>(emptySet())
+    val deciding: StateFlow<Set<String>> = _deciding.asStateFlow()
+
     private val _attention = MutableStateFlow(Attention())
     val attention: StateFlow<Attention> = _attention.asStateFlow()
 
@@ -219,7 +234,36 @@ object JarvisRuntime {
     private var watchdog: Job? = null
     private var faceJob: Job? = null
 
+    /** The forced restart in flight, so two taps on Reconnect do not stack. */
+    private var restartJob: Job? = null
+
     @Volatile private var lastFrameAt = 0L
+
+    /**
+     * Whether the approval queue has actually been re-read since the connection
+     * now open was opened.
+     *
+     * The watchdog's un-stale branch used to fire on "connected and stale"
+     * alone. [onOpen] sets CONNECTED on its first line but only clears
+     * staleness after four sequential HTTP calls, so during a slow refresh the
+     * watchdog could open the gate over the queue cached from *before* the
+     * disconnect. Cleared again whenever a refresh fails, so a queue that could
+     * not be confirmed never counts as confirmed.
+     */
+    @Volatile private var refreshedSinceOpen = false
+
+    /**
+     * Whether this connection has already had its one full refresh.
+     *
+     * EventStream announces the connect as `Open(null)` and then the hello frame
+     * as `Open(hello)`, and both land in [onOpen] — so every single connect ran
+     * `refreshAll` twice, eight HTTP requests to learn one state.
+     */
+    @Volatile private var openRefreshDone = false
+
+    /** The newest resume point not yet written to disk. See [noteResumePoint]. */
+    @Volatile private var resumePointPending: String? = null
+    @Volatile private var resumePointWrittenAt = 0L
 
     @Synchronized
     fun initialize(context: Context) {
@@ -328,16 +372,66 @@ object JarvisRuntime {
 
     // ----------------------------------------------------------- stream ----
 
-    fun startStream() {
-        if (!started || streamJob?.isActive == true) return
+    /**
+     * @param force true only for a reconnect the owner asked for by tapping.
+     *   Automatic callers must leave it false: the early return when a stream is
+     *   already running is what stops the retry paths stacking connections.
+     */
+    fun startStream(force: Boolean = false) {
+        if (!started) return
+        val running = streamJob
+        if (running?.isActive == true) {
+            // On a half-open socket the job stays "active" until OkHttp's 90s
+            // read timeout recycles it, so the Reconnect button did nothing at
+            // all for up to a minute and a half — the tap hit this early return
+            // and the user had no way to tell the button from a dead one. A
+            // reconnect the owner asked for replaces the job instead.
+            if (!force || restartJob?.isActive == true) return
+            Log.i(TAG, "reconnect asked for; replacing the running stream")
+            streamJob = null
+            watchdog?.cancel(); watchdog = null
+            _link.value = LinkState.RECONNECTING
+            _stale.value = true
+            refreshedSinceOpen = false
+            openRefreshDone = false
+            restartJob = scope.launch {
+                // cancelAndJoin, not cancel(). Cancelling and dropping the
+                // handle in the same breath — which is what stopStream does —
+                // leaves the old collector alive for a moment beside the new
+                // one, both writing `lastEventId`, and that is how the
+                // persisted resume point goes backwards.
+                running.cancelAndJoin()
+                // Released before re-entering, or the guard below would see a
+                // restart in flight and refuse to start the replacement.
+                restartJob = null
+                startStream()
+            }
+            return
+        }
+        // A forced restart is already tearing the old stream down and will start
+        // the new one itself; an automatic caller landing in that window would
+        // otherwise open a second connection beside it.
+        if (restartJob?.isActive == true) return
         if (linkDownSince == 0L) linkDownSince = System.currentTimeMillis()
         _link.value = LinkState.RECONNECTING
+        // A new connection has confirmed nothing and refreshed nothing yet.
+        refreshedSinceOpen = false
+        openRefreshDone = false
 
         streamJob = scope.launch {
             stream.connect(
                 lastEventId = settings.lastEventId,
-                onResumePoint = { settings.lastEventId = it },
+                onResumePoint = { noteResumePoint(it) },
             )
+                // Stamped HERE, upstream of `flowOn`'s buffer, so the clock the
+                // watchdog reads advances when a frame ARRIVES rather than when
+                // the collector gets round to it. The collector suspends for
+                // tens of seconds inside onOpen -> refreshAll (four HTTP calls)
+                // and onEvent -> refreshPending; stamping below the buffer meant
+                // every keepalive that arrived during that work went uncounted,
+                // and the 70s watchdog declared a perfectly healthy stream stale
+                // and refused every approval on it.
+                .onEach { lastFrameAt = SystemClock.elapsedRealtime() }
                 // The one blocking socket in the app, and it was on the CPU
                 // pool. Dispatchers.Default is sized to the core count — two on
                 // a small phone — and this parks one of those threads on a
@@ -346,12 +440,11 @@ object JarvisRuntime {
                 // Every other call in this app already uses Dispatchers.IO.
                 .flowOn(Dispatchers.IO)
                 .collect { signal ->
-                lastFrameAt = SystemClock.elapsedRealtime()
                 when (signal) {
                     is EventStream.Signal.Open -> onOpen(signal.hello)
                     is EventStream.Signal.Event -> onEvent(signal.event.kind)
-                    // Nothing to do beyond the lastFrameAt above, which is the
-                    // entire point of it arriving.
+                    // Nothing to do beyond the stamp in `onEach` above, which
+                    // is the entire point of it arriving.
                     EventStream.Signal.Alive -> Unit
                     is EventStream.Signal.Down -> {
                         if (linkDownSince == 0L) linkDownSince = System.currentTimeMillis()
@@ -359,6 +452,12 @@ object JarvisRuntime {
                             if (signal.attempt == 0) LinkState.RECONNECTING else LinkState.OFFLINE
                         _linkDetail.value = signal.reason
                         _stale.value = true
+                        // This connection is over, so the next Open is a new one
+                        // and owes us its own refresh before the watchdog may
+                        // clear staleness or a second refreshAll may run.
+                        refreshedSinceOpen = false
+                        openRefreshDone = false
+                        flushResumePoint()
                     }
                 }
             }
@@ -389,13 +488,22 @@ object JarvisRuntime {
                     Log.w(TAG, "no frame for ${since}ms; treating the link as stale")
                     _stale.value = true
                     _linkDetail.value = "No keepalive for ${since / 1000}s"
-                } else if (_link.value == LinkState.CONNECTED && _stale.value && lastFrameAt != 0L) {
+                } else if (_link.value == LinkState.CONNECTED && _stale.value &&
+                    lastFrameAt != 0L && refreshedSinceOpen
+                ) {
                     // And back again. Staleness used to be a one-way door: the
                     // only `_stale = false` in this file is in onOpen, so a link
                     // the watchdog had given up on stayed condemned until the
                     // stream was torn down and rebuilt — up to an hour of every
                     // approval being refused with "not connected" on a
                     // connection that was answering.
+                    //
+                    // `refreshedSinceOpen` is the load-bearing half of the test
+                    // above. Without it the branch fired on keepalives alone,
+                    // and onOpen sets CONNECTED before it re-fetches anything —
+                    // so a slow refresh left a window in which the watchdog
+                    // opened the gate over the queue cached from before the
+                    // disconnect, and the owner could approve against it.
                     Log.i(TAG, "keepalives resumed after ${since}ms; link is live again")
                     _stale.value = false
                     _linkDetail.value = null
@@ -405,11 +513,44 @@ object JarvisRuntime {
     }
 
     fun stopStream() {
+        restartJob?.cancel(); restartJob = null
         streamJob?.cancel(); streamJob = null
         watchdog?.cancel(); watchdog = null
+        // Whatever the coalescing in noteResumePoint was still holding back, or
+        // stopping the service would throw away the last few events' progress.
+        flushResumePoint()
         if (linkDownSince == 0L) linkDownSince = System.currentTimeMillis()
         _link.value = LinkState.OFFLINE
         _stale.value = true
+        refreshedSinceOpen = false
+        openRefreshDone = false
+    }
+
+    /**
+     * Remembers the resume point without writing it every time.
+     *
+     * Called once per event, from the stream thread, and the setter it feeds
+     * writes SharedPreferences. A replay after time offline delivers hundreds of
+     * events in a burst, which queued hundreds of `apply()` writes off that
+     * thread. So only the newest id is kept and it is written at most once per
+     * [RESUME_WRITE_GAP_MS]; the remainder is flushed when the connection ends.
+     * Losing a second of progress to a process kill costs a short replay, and a
+     * replayed event is only a doorbell — the refresh it rings for is
+     * idempotent, so re-delivery is harmless where a skipped id is not.
+     */
+    private fun noteResumePoint(id: String) {
+        resumePointPending = id
+        val now = SystemClock.elapsedRealtime()
+        if (now - resumePointWrittenAt >= RESUME_WRITE_GAP_MS) {
+            resumePointWrittenAt = now
+            flushResumePoint()
+        }
+    }
+
+    private fun flushResumePoint() {
+        val id = resumePointPending ?: return
+        resumePointPending = null
+        settings.lastEventId = id
     }
 
     private suspend fun onOpen(hello: com.jarvis.client.net.HelloPayload?) {
@@ -423,6 +564,10 @@ object JarvisRuntime {
             // is deliberate — keeping it would invite a later attempt to
             // continue from an id the server no longer has.
             Log.i(TAG, "resumed stale; re-fetching all state")
+            // The held-back id goes too. Otherwise the next flush writes it
+            // straight back and resurrects the resume point this branch exists
+            // to forget.
+            resumePointPending = null
             settings.clearResumePoint()
         }
 
@@ -431,8 +576,20 @@ object JarvisRuntime {
         hello?.activity?.let { _activity.value = Activity.from(it) }
         hello?.power?.let { _power.value = it }
 
+        // At most one refresh per connection. EventStream emits Open twice —
+        // once on connect, once when the hello frame lands — and both used to
+        // run the full refresh, so a single connect cost eight HTTP requests.
+        // The connect-time one already reads state from after the socket opened,
+        // which is everything the second would fetch, the stale-resume case
+        // above included.
+        if (openRefreshDone) return
+        openRefreshDone = true
+
         refreshAll()
-        _stale.value = false
+        // Only open the gate if the queue was actually re-read: refreshPending
+        // clears this flag when the fetch failed, and approving against a queue
+        // that could not be confirmed is the exact hazard the gate is for.
+        if (refreshedSinceOpen) _stale.value = false
     }
 
     /**
@@ -492,6 +649,9 @@ object JarvisRuntime {
             is ApiResult.Ok -> {
                 _pending.value = r.value
                 _absent.value = _absent.value - "approvals"
+                // What is on screen is now what the desktop holds. This is the
+                // only thing that earns the gate the right to open.
+                refreshedSinceOpen = true
             }
             is ApiResult.Failed ->
                 // Gating switched off on the desktop. An empty approvals list
@@ -501,6 +661,22 @@ object JarvisRuntime {
                 if (r.error == ApiError.NotAvailable) {
                     _pending.value = emptyList()
                     _absent.value = _absent.value + "approvals"
+                    // Answered, just with "there is no queue here". Nothing is
+                    // being hidden, so this does not hold the gate shut.
+                    refreshedSinceOpen = true
+                } else {
+                    // Every other failure used to be swallowed whole: no log, no
+                    // notice, `_pending` silently keeping its old contents while
+                    // `_stale` stayed false — so the owner could approve from an
+                    // arbitrarily old list, and one malformed item turned the
+                    // whole refresh into a silent no-op. A queue that could not
+                    // be re-read is precisely what stale means, so say so and let
+                    // the gate that already reads it do the refusing.
+                    Log.w(TAG, "could not re-read the approval queue: ${r.error}")
+                    refreshedSinceOpen = false
+                    _stale.value = true
+                    _linkDetail.value = "Could not re-read what is waiting"
+                    _notice.value = describe(r.error)
                 }
         }
     }
@@ -677,6 +853,12 @@ object JarvisRuntime {
         if (_stale.value || _link.value != LinkState.CONNECTED) {
             return "Not connected to the desktop, so this decision cannot be delivered."
         }
+        if (item.id in _deciding.value) {
+            // A double-tap on Approve sent two POSTs: both taps reached here
+            // before the first reply came back, and the test below reads
+            // `_pending`, which does not change until it has.
+            return "That decision is already on its way."
+        }
         if (_pending.value.none { it.id == item.id }) {
             return "That request is no longer pending."
         }
@@ -693,20 +875,28 @@ object JarvisRuntime {
             _notice.value = blocker
             return ApiResult.Failed(ApiError.Unreachable(blocker))
         }
-        val result = if (approve) api.approve(item.id) else api.deny(item.id)
-        when (result) {
-            is ApiResult.Ok -> refreshPending()
-            is ApiResult.Failed -> {
-                if (result.error == ApiError.AlreadyHandled) {
-                    // Routine when the desktop and the phone are both open.
-                    _notice.value = "Already handled on the desktop."
-                    refreshPending()
-                } else {
-                    _notice.value = describe(result.error)
+        // Claimed before the POST and released in `finally`, so a screen that
+        // goes away mid-flight (cancellation) or a throw cannot leave the id
+        // latched and every later attempt at it refused.
+        _deciding.update { it + item.id }
+        try {
+            val result = if (approve) api.approve(item.id) else api.deny(item.id)
+            when (result) {
+                is ApiResult.Ok -> refreshPending()
+                is ApiResult.Failed -> {
+                    if (result.error == ApiError.AlreadyHandled) {
+                        // Routine when the desktop and the phone are both open.
+                        _notice.value = "Already handled on the desktop."
+                        refreshPending()
+                    } else {
+                        _notice.value = describe(result.error)
+                    }
                 }
             }
+            return result
+        } finally {
+            _deciding.update { it - item.id }
         }
-        return result
     }
 
     /**
@@ -830,6 +1020,9 @@ object JarvisRuntime {
      */
     /** The three keys refreshInbox owns; it must not touch the rest of the set. */
     private val INBOX_KEYS = setOf("digest", "undo", "jobs")
+
+    /** How often the coalesced resume point may reach SharedPreferences. */
+    private const val RESUME_WRITE_GAP_MS = 2_000L
 
     private const val KEEPALIVE_GAP_MS = 70_000L
     private const val WATCHDOG_TICK_MS = 10_000L
