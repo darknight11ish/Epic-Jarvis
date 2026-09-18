@@ -50,13 +50,8 @@ class ResolveVectorsTest {
         var checked = 0
         val wrong = mutableListOf<String>()
 
-        var diverged = 0
         for (v in fixture["vectors"]!!.jsonArray.map { it.jsonObject }) {
             if (!v["exact"]!!.jsonPrimitive.boolean) continue
-            if (isBoundGradient(v)) {
-                diverged += 1
-                continue
-            }
             val bind = bindingOf(v) ?: continue
             checked += 1
 
@@ -75,14 +70,14 @@ class ResolveVectorsTest {
             }
         }
 
-        assertTrue("no exact vectors ran - the fixture did not load", checked > 50)
-        assertEquals(
-            "the fixture's bound-gradient vectors are asserted by " +
-                "`a bound gradient deliberately differs from the reference`, not skipped. " +
-                "If that count changed, the other test must cover the new ones too.",
-            2,
-            diverged,
-        )
+        // 113 previously, 111 of them exact and 2 carved out into a separate
+        // divergence test - `faces.html`'s own gradient rule had not yet been
+        // brought into line with `spec.rs`, so the fixture was generated from
+        // the wrong reference. The desktop fixed the reference and regenerated
+        // it (docs/CROSS-CLIENT-CONTRACT-REPLY-2.md); those two vectors now
+        // agree with `Resolve.kt` outright, so the carve-out is retired rather
+        // than left pointing at a divergence that no longer exists.
+        assertTrue("no exact vectors ran - the fixture did not load", checked > 100)
         assertEquals(
             "this port disagrees with the reference implementation on ${wrong.size} of " +
                 "$checked vectors:\n" + wrong.take(12).joinToString("\n"),
@@ -140,94 +135,6 @@ class ResolveVectorsTest {
             )
         }
         assertTrue("no flicker vectors ran - the fixture did not load", checked > 0)
-    }
-
-    /**
-     * The one place this port deliberately does NOT match the reference.
-     *
-     * The reference's gradient lets a bound colour replace only the `from`
-     * hue and keeps the pattern's own magenta as `to`, so ANY bound colour
-     * still swings through pink. That is a real result, not a rounding
-     * difference: binding ice-5 rendered nineteen of the twenty speaking
-     * tiles in the audit pink, and `Resolve.kt` was changed so a bound
-     * colour with no explicit `to` runs between the colour and its own
-     * darker step instead.
-     *
-     * That change predates this fixture. The fixture is generated from the
-     * reference, so it encodes the reference's rule, and these two vectors
-     * are where the two rules meet. Neither side is a bug in the other.
-     *
-     * Both sides are pinned here by value. If the reference changes, or if
-     * `Resolve.kt` is brought back into line, this test fails and the
-     * divergence has to be looked at again rather than quietly drifting -
-     * which is the only reason it is safe to skip these two above.
-     *
-     * NOTE for whoever resolves this: the case that motivated the change no
-     * longer exists. `FaceState.SPEAKING` is now `REACTIVE` on ice, not a
-     * gradient, so the pink faces were fixed a second time at a different
-     * layer. What the divergence still covers is a colour a USER binds to a
-     * gradient. It is a cross-client visual difference either way: on the
-     * same binding, this phone and the desktop tray will not render the
-     * same face.
-     */
-    @Test
-    fun `a bound gradient deliberately differs from the reference`() {
-        // t=1, gradient's own periodS=7, so k = sin(2PI/7)/2 + 0.5.
-        val cases = listOf(
-            // colour id     ours a           ours b          reference a        reference b
-            Case("ember-1", t(51, 20, 5), t(74, 30, 8), t(236, 102, 186), t(96, 40, 30)),
-            Case("#ff0000", t(169, 0, 0), t(244, 0, 0), t(255, 99, 185), t(255, 12, 23)),
-        )
-
-        var seen = 0
-        for (v in fixture["vectors"]!!.jsonArray.map { it.jsonObject }) {
-            if (!isBoundGradient(v)) continue
-            seen += 1
-            val id = v["bind"]!!.jsonObject["color"]!!.jsonPrimitive.content
-            val case = cases.single { it.colour == id }
-            val bind = requireNotNull(bindingOf(v)) { "could not build a binding for $id" }
-
-            val got = resolveRaw(
-                bind,
-                t = v["t"]!!.jsonPrimitive.float,
-                amp = v["amp"]!!.jsonPrimitive.float,
-                seed = v["seed"]!!.jsonPrimitive.int,
-            )
-            assertEquals("gradient bound to $id, first colour", case.oursA, rgb8(got.a))
-            assertEquals("gradient bound to $id, second colour", case.oursB, rgb8(got.b))
-
-            // And the reference still wants what it wanted. If this half
-            // starts passing, the fixture was regenerated against a changed
-            // reference and the divergence may be over.
-            val want = v["expect"]!!.jsonObject
-            assertEquals(
-                "the fixture no longer holds the reference value for $id",
-                case.refA,
-                css(want["a"]!!.jsonPrimitive.content),
-            )
-            assertEquals(
-                "the fixture no longer holds the reference value for $id",
-                case.refB,
-                css(want["b"]!!.jsonPrimitive.content),
-            )
-        }
-        assertEquals("the fixture's bound-gradient vectors did not load", cases.size, seen)
-    }
-
-    private data class Case(
-        val colour: String,
-        val oursA: Triple<Int, Int, Int>,
-        val oursB: Triple<Int, Int, Int>,
-        val refA: Triple<Int, Int, Int>,
-        val refB: Triple<Int, Int, Int>,
-    )
-
-    private fun t(r: Int, g: Int, b: Int) = Triple(r, g, b)
-
-    /** A gradient vector that carries a bound colour - the divergence above. */
-    private fun isBoundGradient(v: JsonObject): Boolean {
-        val b = v["bind"]!!.jsonObject
-        return b["pattern"]?.jsonPrimitive?.content == "gradient" && b["color"] != null
     }
 
     // ------------------------------------------------------------------ --
