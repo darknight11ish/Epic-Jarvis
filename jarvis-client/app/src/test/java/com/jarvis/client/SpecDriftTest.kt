@@ -327,9 +327,10 @@ class SpecDriftTest {
      * invisible until someone holds the two screens side by side.
      *
      * `iris` is one of those and is already in this app. That is recorded here
-     * rather than endorsed — it shipped before this rule existed, and it is the
-     * one face whose fidelity to the desktop nothing can check. Rime and
-     * Orbital were chosen over flashier candidates precisely to avoid a second.
+     * rather than endorsed — it shipped before this rule existed, and it is
+     * one of the two faces whose fidelity to the desktop nothing can check.
+     * Rime and Orbital were chosen over flashier candidates precisely to
+     * avoid a third.
      *
      * Spectrum, coreplate, workbench, swarm, shoal, accretion and cascade are
      * also marked `integrates_per_frame: true` in the spec, because their
@@ -343,14 +344,26 @@ class SpecDriftTest {
      * *reference's* technique, not this port's, and is wrong for these seven
      * specifically, not wrong to check in general.
      *
+     * `membrane` is not in that carve-out, and should not be. Its
+     * `MembraneRenderer` genuinely runs a Verlet spring-mass simulation every
+     * frame - each height comes from the previous two, not from `t` alone -
+     * so calling `draw` twice with the same `FaceFrame` does NOT draw the
+     * same picture twice; it depends on everything that happened before it,
+     * exactly the property the seven above were engineered to avoid and this
+     * one cannot. So `membrane` joins `iris` in the expected set itself,
+     * argued here rather than quietly carved out the way the seven were.
+     *
      * An exact set rather than a blanket ban, so adding another stateful face
      * fails this test and has to be argued rather than done quietly.
      */
     @Test
-    fun `iris is the only offered face that cannot be pinned`() {
+    fun `iris and membrane are the only offered faces that cannot be pinned`() {
         // See the class comment above: these seven are deterministic in this
         // port despite the spec marking their id `integrates_per_frame: true`
         // for the desktop reference's own, genuinely stateful, technique.
+        // membrane is deliberately NOT in this set - unlike these seven, it
+        // really does carry state, so it belongs in the assertion below
+        // instead of being carved out of it.
         val deterministicDespiteSpecFlag = setOf(
             "spectrum", "coreplate", "workbench", "swarm", "shoal", "accretion", "cascade",
         )
@@ -363,7 +376,7 @@ class SpecDriftTest {
             "the set of simulation-driven faces this app offers has changed. Each one is a " +
                 "face that cannot be verified against the desktop, so this should be a " +
                 "deliberate decision rather than a test update",
-            setOf("iris"),
+            setOf("iris", "membrane"),
             Faces.all.map { it.id }.filter { it in stateful }.toSet(),
         )
     }

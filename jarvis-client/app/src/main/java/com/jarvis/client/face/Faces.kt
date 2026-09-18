@@ -42,28 +42,28 @@ interface Face {
 }
 
 /**
- * Nineteen faces, not twenty.
+ * Twenty faces. All of them.
  *
- * The brief is explicit that porting all twenty is the real cost of going fully
- * native. Seventeen of these are from the spec's `stays_on_canvas` list — line,
- * stroke, point and glow art that Compose draws correctly and cheaply. Nucleus
- * needs a real fragment shader and gets one (AGSL, via
- * `android.graphics.RuntimeShader`) rather than a rasterised approximation —
- * see its own doc comment. Tokamak needs more than that - a real OpenGL mesh,
- * GLES 3.0, with its own vertex and index buffers and per-vertex normals - and
- * gets that instead: a `GLSurfaceView` embedded alongside this file's
- * `DrawScope`-based faces (`com.jarvis.client.face.gl`, `TokamakRenderer`).
- * `Face.draw` is never called for it; `FaceView` checks
- * `MeshFaces.rendererFor` first and swaps the whole rendering path. Membrane
- * is still absent: it needs the same mesh pipeline PLUS a live spring-mass
- * simulation stepped every frame, which is real, separate work on top of what
- * tokamak already proved out, tracked as its own follow-up rather than
- * finished here as a side effect of another task. A rasterised version of
- * either is the faceted, upscaled thing the first audit was about, and
- * shipping it would be worse than not offering them.
+ * The brief called porting all twenty the real cost of going fully native,
+ * and treated it as a multi-stage undertaking: seventeen from the spec's
+ * `stays_on_canvas` list (line, stroke, point and glow art `DrawScope`
+ * draws correctly and cheaply), one needing a real fragment shader
+ * (Nucleus, AGSL via `android.graphics.RuntimeShader`), and two needing a
+ * real OpenGL mesh - GLES 3.0, vertex and index buffers, per-vertex
+ * normals - which a `GLSurfaceView` embedded alongside this file's
+ * `DrawScope` faces now provides (`com.jarvis.client.face.gl`; Tokamak's
+ * torus proved the pipeline, Membrane's spring-mass skin needed its own
+ * live physics step on top of it). `Face.draw` is never called for any of
+ * the three; `FaceView` checks `MeshFaces.rendererFor` first and swaps the
+ * whole rendering path for whichever one it returns non-null for. A
+ * rasterised version of any of them is the faceted, upscaled thing the
+ * first audit was about, and shipping that would have been worse than not
+ * offering them - which is why this took three separate, argued
+ * increments to reach twenty rather than being done in the first pass.
  *
- * The picker shows only what is actually rendered — not all twenty with most of
- * them missing.
+ * The picker shows only what is actually rendered — a promise that mattered
+ * more while it was seventeen, or eighteen, or nineteen of twenty; it still
+ * holds now that the count and the desktop's own agree.
  *
  * Rime, Orbital, Geodesic and Kirkwood are stateless outright: the spec marks
  * them `integrates_per_frame: false`, meaning a pure function of `t`, which
@@ -84,13 +84,22 @@ interface Face {
  * and it draws the same picture twice. That makes these seven exactly as
  * pinnable as Rime and Kirkwood, even though the spec's flag — describing the
  * *reference's* technique, not this port's — says otherwise. See
- * `SpecDriftTest`'s `iris is the only offered face that cannot be pinned`
- * for where that distinction is enforced and argued in more detail.
+ * `SpecDriftTest`'s `iris and membrane are the only offered faces that
+ * cannot be pinned` for where that distinction is enforced and argued in
+ * more detail.
+ *
+ * Membrane is the one face here that genuinely cannot make that same claim.
+ * Its Verlet simulation needs the previous two frames' heights to compute
+ * the next one - a real dependency on its own history, not a description of
+ * a technique this port declined to use. It joins `iris` in that same test's
+ * pinned exact set, by name, argued there rather than folded into the
+ * deterministic seven above where it would not belong.
  */
 object Faces {
     val all: List<Face> = listOf(
         Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital, Geodesic, Kirkwood,
         Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion, Cascade, Nucleus, Tokamak,
+        Membrane,
     )
     val default: Face = Arc
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default
@@ -1530,6 +1539,54 @@ object Tokamak : Face {
         error(
             "Tokamak renders through com.jarvis.client.face.gl.TokamakRenderer, " +
                 "not DrawScope - FaceView should have checked MeshFaces.rendererFor(\"tokamak\") " +
+                "before this was ever called.",
+        )
+    }
+}
+
+/**
+ * A real spring-mass drum skin, Verlet-integrated on a GLES 3.0 mesh - the
+ * twentieth face, and the last one. The simulation, the shaders, and the
+ * mesh upload live in `com.jarvis.client.face.gl.MembraneRenderer`, with
+ * the reasoning for what was ported faithfully and what genuinely has no
+ * Android equivalent (a global `SPEED` slider driving substeps, a
+ * touch-driven strike point, camera auto-rotation this face's own
+ * reference never had) in its own doc comment there.
+ *
+ * `draw` below is never called, for the same reason as `Tokamak`'s:
+ * `FaceView` checks `MeshFaces.rendererFor` first and swaps in the GL
+ * surface for any id that returns a renderer.
+ *
+ * Unlike every other face this session added, this one genuinely cannot be
+ * pinned: `MembraneRenderer` holds real per-frame simulation state (Verlet
+ * needs the previous two heights to compute the next one, not just `t`),
+ * so it joins `iris` by name in `SpecDriftTest`'s pinned exact set of
+ * unpinnable faces, argued there rather than loosened quietly.
+ */
+object Membrane : Face {
+    override val id = "membrane"
+    override val name = "Membrane"
+
+    // MembraneRenderer never reads f.angle - its camera is touch-only and
+    // its physics runs on real elapsed time, both by design (see its own
+    // doc comment). These numbers exist only to satisfy Face's shared
+    // contract with something in the same range every other face uses, not
+    // because anything here consumes them; they borrow the reference's own
+    // per-state "drive" values rather than inventing separate ones.
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.85f
+        FaceState.THINKING -> 1.25f
+        FaceState.SPEAKING -> 0.60f
+        else -> 0.30f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) {
+        error(
+            "Membrane renders through com.jarvis.client.face.gl.MembraneRenderer, " +
+                "not DrawScope - FaceView should have checked MeshFaces.rendererFor(\"membrane\") " +
                 "before this was ever called.",
         )
     }

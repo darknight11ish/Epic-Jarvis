@@ -224,3 +224,18 @@ tempted to "finish the port" — it isn't a small addition on top of what's
 here; it's a second rendering pipeline (Compose Canvas has no shader path at
 all) plus twelve more face geometries, and the owner's own framing of the
 work stands: ask before starting it, don't infer it from this note.
+
+**Superseded, 2026-09-18: the owner asked for exactly this, and it is done.**
+Everything the paragraph above warned against has since happened, on the
+owner's own explicit instruction (not inferred) across several deliberate,
+argued increments rather than one undifferentiated push: the 9 remaining
+canvas-only faces first, then `Nucleus` on a real fragment shader
+(`android.graphics.RuntimeShader`, AGSL), then the GPU mesh pipeline this
+section said didn't exist yet (`com.jarvis.client.face.gl`, `GLSurfaceView`,
+real GLES 3.0) proved out on `Tokamak`, then `Membrane`'s own live
+spring-mass simulation on top of it. `Faces.all` is all 20 of the kit's
+faces as of this note. The instruction above is kept rather than deleted so
+the history stays readable, but it no longer describes this app's state and
+should not be read as still standing — check `Faces.kt`'s own header comment
+for the current, maintained account, the same correction discipline §8
+above already models for a stale claim about CI.

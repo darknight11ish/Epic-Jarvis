@@ -259,21 +259,24 @@ fun AppearanceScreen(
                             // The seven that looked stateful (spectrum, coreplate,
                             // workbench, swarm, shoal, accretion, cascade) turned
                             // out portable without a shader or new state
-                            // machinery: each is a deterministic function of
-                            // (time, amp, a fixed seed) instead of the desktop's
-                            // running simulation, which is exactly what
-                            // SpecDriftTest's `iris`-is-the-only-exception test
-                            // checks stays true. Nucleus needed an actual GPU
-                            // fragment shader and got one (AGSL). Tokamak needed
-                            // more than that - a real OpenGL mesh with its own
-                            // vertex and index buffers - and got one too
-                            // (GLSurfaceView, GLES 3.0). What's left after that,
-                            // membrane, needs the same mesh plus its own live
-                            // physics step running every frame, which this app
-                            // has never built.
-                            "${Faces.all.size} of the desktop's twenty. The rest need a live " +
-                                "physics step this app doesn't have yet, on top of the mesh " +
-                                "pipeline tokamak just proved out.",
+                            // machinery. Nucleus needed a real GPU fragment
+                            // shader (AGSL) and got one. Tokamak and membrane
+                            // needed more than that - a real OpenGL mesh, GLES
+                            // 3.0, with membrane's own live physics step run on
+                            // top of it - and both got that too. All twenty are
+                            // offered now, which is why this caption stopped
+                            // explaining a gap: there isn't one left to explain.
+                            //
+                            // Still counted rather than written as a bare
+                            // "Twenty", for the same reason the "Six" bug
+                            // happened in the first place - if a face is ever
+                            // archived or the desktop's own count changes, this
+                            // sentence is prose a drift test cannot check, and
+                            // it is the number that has to stay honest, not the
+                            // word "twenty" next to it.
+                            "All ${Faces.all.size} of the desktop's twenty faces render here now " +
+                                "- line and stroke art, one GPU shader, and a real OpenGL mesh, " +
+                                "whichever each one needed.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,
                         )

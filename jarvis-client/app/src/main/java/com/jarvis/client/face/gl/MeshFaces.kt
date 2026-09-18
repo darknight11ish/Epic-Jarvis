@@ -17,10 +17,15 @@ package com.jarvis.client.face.gl
  * for whichever `GLSurfaceView` a given `FaceView` composition actually
  * creates - unlike every stateless `Face` singleton in `Faces.kt`, which is
  * safe to share because it holds nothing but a compiled, reusable program.
+ * `MembraneRenderer` needs this even more than `TokamakRenderer` does: its
+ * simulation grid is real per-surface state, not just GL object ids, and a
+ * fresh instance per composition is what keeps two concurrent surfaces
+ * (were this app ever to show two at once) from corrupting each other's.
  */
 object MeshFaces {
     fun rendererFor(id: String): MeshRenderer? = when (id) {
         "tokamak" -> TokamakRenderer()
+        "membrane" -> MembraneRenderer()
         else -> null
     }
 }
