@@ -16,7 +16,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,6 +44,7 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.serialization.json.JsonArray
@@ -111,6 +116,15 @@ fun BrainScreen(
     modelBusy: Boolean = false,
     onSwitchModel: (ref: String) -> Unit = {},
     onRollbackModel: () -> Unit = {},
+    /**
+     * "What did I believe on this date?" - `GET /api/memory/facts?known_at=`,
+     * the route named in the desktop's 2026-09-18 feature audit. Read-only
+     * and optional: null result with `memoryAsOfBusy` false just means
+     * nothing has been asked for yet.
+     */
+    memoryAsOf: JsonObject? = null,
+    memoryAsOfBusy: Boolean = false,
+    onQueryMemoryAsOf: (epochSeconds: Long) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -225,6 +239,15 @@ fun BrainScreen(
                     onSleepTimeAction = onSleepTimeAction,
                     onDismissSleepOffer = onDismissSleepOffer,
                 )
+            }
+            item(key = "memory-as-of") {
+                Section("What did I believe on this date?") {
+                    MemoryAsOfPlate(
+                        busy = memoryAsOfBusy,
+                        result = memoryAsOf,
+                        onQuery = onQueryMemoryAsOf,
+                    )
+                }
             }
             item(key = "initiative") {
                 Probed("Findings", brain.initiative, "What Jarvis noticed on its own")
@@ -544,6 +567,75 @@ private fun JobPlate(job: JobRecord) {
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textMid,
             )
+        }
+    }
+}
+
+/**
+ * A read-only "what did the memory store believe was true on this date"
+ * lookup - `docs/ANDROID-FEATURE-AUDIT.md` §4 P3, marked optional there. A
+ * plain typed date, not a `DatePickerDialog`: the audit's own rule against
+ * deep config UI on the phone argues just as well against importing a whole
+ * calendar picker for one field that is asked for rarely. `YYYY-MM-DD` is
+ * parsed as a UTC midnight, which is what the query's own name - "known at"
+ * a moment, not a day - actually needs.
+ */
+@Composable
+private fun MemoryAsOfPlate(
+    busy: Boolean,
+    result: JsonObject?,
+    onQuery: (epochSeconds: Long) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    var text by rememberSaveable { mutableStateOf("") }
+    val epochSeconds = remember(text) {
+        runCatching {
+            java.time.LocalDate.parse(text).atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond()
+        }.getOrNull()
+    }
+    val rows = remember(result) { result?.let { flatten(it) }.orEmpty() }
+    Plate {
+        Text(
+            "Read-only. Not the memory graph - one moment's worth of facts, " +
+                "never a browsable one.",
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+        Gap(10)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextInput(
+                value = text,
+                onValueChange = { text = it },
+                placeholder = "YYYY-MM-DD",
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Quiet(
+                if (busy) "…" else "Look up",
+                enabled = !busy && epochSeconds != null,
+                onClick = { epochSeconds?.let(onQuery) },
+            )
+        }
+        if (text.isNotBlank() && epochSeconds == null) {
+            Gap(6)
+            Text("Use the form YYYY-MM-DD.", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        if (result != null) {
+            Gap(12)
+            Rule()
+            Gap(10)
+            if (rows.isEmpty()) {
+                Text(
+                    "Nothing on record for that date.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.textMid,
+                )
+            } else {
+                rows.forEachIndexed { i, (label, value) ->
+                    if (i > 0) Rule()
+                    Field(label, value, machine = value.looksMachine())
+                }
+            }
         }
     }
 }

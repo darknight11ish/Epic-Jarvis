@@ -20,13 +20,14 @@ import kotlin.random.Random
 /**
  * What the app looks like: the theme, the face, and the seven state bindings.
  *
- * Per device, and the picker says so. There is no route that syncs any of this
- * — `POST /api/config` is 501 by design and nothing in the 38-endpoint table
- * reads or writes a preference — so faking sync would be worse than admitting
- * its absence. Bindings are the part that *should* sync eventually, because
- * they are a shared vocabulary rather than a taste: a phone whose `thinking` is
- * violet while the desktop's is green has learned a private language. That
- * needs a backend route; see the audit.
+ * The theme stays per device - Compose and the desktop's CSS cannot share
+ * drawing code, and it is a taste, not a vocabulary. The face and its
+ * bindings ARE a shared vocabulary: a phone whose `thinking` is violet while
+ * the desktop's is green has learned a private language, so [toSyncDocument]
+ * and [applySyncDocument] read and write `/api/appearance`, per
+ * `docs/APPEARANCE-API.md` on the desktop branch. Gated on the `appearance`
+ * capability by [JarvisRuntime], so a backend that predates the route is
+ * simply never asked, and this store works exactly as it always did.
  */
 class AppearanceStore(context: Context) {
 
@@ -215,7 +216,10 @@ class AppearanceStore(context: Context) {
      * [loadBindings] still reads the old one, so an existing install migrates
      * on its next write rather than losing its face.
      */
-    private fun encode(b: Bindings): String {
+    private fun encode(b: Bindings): String = bindingsToJson(b).toString()
+
+    /** The object [encode] serialises - factored out so the sync document can share it. */
+    private fun bindingsToJson(b: Bindings): JSONObject {
         val root = JSONObject()
         for ((state, binding) in b.byState) {
             val o = JSONObject()
@@ -235,7 +239,34 @@ class AppearanceStore(context: Context) {
             if (p.length() > 0) o.put("params", p)
             root.put(state.wireId, o)
         }
-        return root.toString()
+        return root
+    }
+
+    /**
+     * `POST /api/appearance`'s body, per `docs/APPEARANCE-API.md`: `face` and
+     * `bindings`, nothing else - the server owns `updated` and stamps it
+     * itself, and the theme is deliberately not here. Faces and bindings are a
+     * shared vocabulary across the owner's devices; the theme is a per-screen
+     * taste the desktop's own CSS and this app's Compose theme cannot share
+     * drawing code for anyway, and the contract does not ask for it.
+     */
+    fun toSyncDocument(): JSONObject {
+        val root = JSONObject()
+        _faceId.value.takeIf { it.isNotBlank() }?.let { root.put("face", it) }
+        root.put("bindings", bindingsToJson(_bindings.value))
+        return root
+    }
+
+    /**
+     * Applies a document read from `GET /api/appearance` (or an unwrapped
+     * `POST` echo). Unknown fields are ignored per the contract's own
+     * tolerate-both-directions rule; a state missing from `bindings` keeps
+     * the spec default, the same as [loadBindings] already does for a local
+     * document with gaps in it.
+     */
+    fun applySyncDocument(doc: JSONObject) {
+        doc.optString("face").takeIf { it.isNotEmpty() }?.let { setFace(it) }
+        doc.optJSONObject("bindings")?.let { setBindings(parseBindings(it)) }
     }
 
     /**
@@ -250,7 +281,18 @@ class AppearanceStore(context: Context) {
      */
     private fun loadBindings(): Bindings = runCatching {
         val raw = prefs.getString(KEY_BINDINGS, null) ?: return Bindings.DEFAULTS
-        val root = JSONObject(raw)
+        parseBindings(JSONObject(raw))
+    }.getOrDefault(Bindings.DEFAULTS)
+
+    /**
+     * Shared by [loadBindings] (a local document, possibly in the old
+     * enum-keyed shape) and [applySyncDocument] (a synced document, always
+     * wire-shaped). Anything unreadable falls back to the spec default for
+     * that state rather than throwing - a corrupt or partial document must
+     * not be a phone that will not open, or that loses every OTHER state's
+     * choice over one bad entry.
+     */
+    private fun parseBindings(root: JSONObject): Bindings {
         val out = Bindings.DEFAULTS.byState.toMutableMap()
         for (state in FaceState.entries) {
             // Both shapes. The wire id is what is written now; the enum name is
@@ -288,8 +330,8 @@ class AppearanceStore(context: Context) {
                 ),
             )
         }
-        Bindings(out)
-    }.getOrDefault(Bindings.DEFAULTS)
+        return Bindings(out)
+    }
 
     private companion object {
         const val PREFS = "jarvis_appearance"

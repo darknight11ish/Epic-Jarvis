@@ -326,6 +326,11 @@ class MainActivity : FragmentActivity() {
         val models by JarvisRuntime.models.collectAsState()
         val activityDetail by JarvisRuntime.activityDetail.collectAsState()
         var modelBusy by remember { mutableStateOf(false) }
+        // Held here rather than in JarvisRuntime: a one-shot read the Brain
+        // screen asks for, thrown away the moment a different date is asked
+        // for - not app state anything else reads.
+        var memoryAsOfResult by remember { mutableStateOf<JsonObject?>(null) }
+        var memoryAsOfBusy by remember { mutableStateOf(false) }
         val absent by JarvisRuntime.absent.collectAsState()
         val streaming by chat.streaming.collectAsState()
         val voicePhase by voice.phase.collectAsState()
@@ -504,6 +509,11 @@ class MainActivity : FragmentActivity() {
                                 // suspended within about a minute, which is
                                 // exactly how approvals silently stop arriving.
                                 EventService.start(this@MainActivity)
+                                // Picks up whatever face the owner's other
+                                // device already chose, the moment there is
+                                // somewhere to ask. A no-op, silently, on a
+                                // backend without the capability.
+                                JarvisRuntime.refreshAppearance()
                             }
                         }
                     },
@@ -684,6 +694,18 @@ class MainActivity : FragmentActivity() {
                                 }
                             }
                         },
+                        memoryAsOf = memoryAsOfResult,
+                        memoryAsOfBusy = memoryAsOfBusy,
+                        onQueryMemoryAsOf = { epochSeconds ->
+                            if (!memoryAsOfBusy) {
+                                memoryAsOfBusy = true
+                                scope.launch {
+                                    val result = JarvisRuntime.memoryAsOf(epochSeconds)
+                                    if (result is ApiResult.Ok) memoryAsOfResult = result.value
+                                    memoryAsOfBusy = false
+                                }
+                            }
+                        },
                         modifier = root,
                     )
                 }
@@ -727,9 +749,22 @@ class MainActivity : FragmentActivity() {
                         }
                     },
                     onFollowSystem = appearance::setFollowSystem,
-                    onPickFace = { appearance.setFace(it.id) },
-                    onRandomise = { appearance.randomise() },
-                    onResetBindings = { appearance.resetBindings() },
+                    // Each pushes the shared document afterward - a no-op,
+                    // silently, on a backend without the `appearance`
+                    // capability. The theme itself is never pushed; only the
+                    // face and its bindings are the shared vocabulary.
+                    onPickFace = {
+                        appearance.setFace(it.id)
+                        scope.launch { JarvisRuntime.pushAppearance() }
+                    },
+                    onRandomise = {
+                        appearance.randomise()
+                        scope.launch { JarvisRuntime.pushAppearance() }
+                    },
+                    onResetBindings = {
+                        appearance.resetBindings()
+                        scope.launch { JarvisRuntime.pushAppearance() }
+                    },
                     onBack = { nav.back() },
                     notice = notice,
                     onDismissNotice = { JarvisRuntime.clearNotice() },

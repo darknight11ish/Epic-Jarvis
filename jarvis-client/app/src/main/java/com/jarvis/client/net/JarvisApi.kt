@@ -317,6 +317,28 @@ class JarvisApi(
     /** `POST /api/models/rollback {}` - tier `auto`, never waits. */
     suspend fun rollbackModel(): ApiResult<Unit> = postJson("/api/models/rollback", "{}")
 
+    // ------------------------------------------------------- appearance ----
+
+    /**
+     * `GET /api/appearance` - the face and bindings document the owner's
+     * other device may have written, per `docs/APPEARANCE-API.md`. Through
+     * [probe]: `{"available": false}` when the capability is not installed
+     * reads the same way every other absent capability does here, and the
+     * document's own fields (`face`, `bindings`, `updated`) belong to
+     * [com.jarvis.client.data.AppearanceStore], not this layer.
+     */
+    suspend fun getAppearance(): ApiResult<JsonObject> = probe("/api/appearance")
+
+    /**
+     * `POST /api/appearance`. `bodyJson` is
+     * [com.jarvis.client.data.AppearanceStore.toSyncDocument] already
+     * serialised - this layer never builds the document itself, the same
+     * boundary [probe]'s callers keep. The server owns `updated` and stamps
+     * it on write, so the client never sends one.
+     */
+    suspend fun postAppearance(bodyJson: String): ApiResult<Unit> =
+        postJson("/api/appearance", bodyJson)
+
     // ----------------------------------------------------------- writes ----
 
     suspend fun approve(id: String): ApiResult<Unit> = decide("/api/approve", id)
@@ -342,6 +364,18 @@ class JarvisApi(
      */
     suspend fun decideMemory(id: Long, accept: Boolean): ApiResult<Unit> =
         postJson("/api/memory/decide", """{"id":$id,"accept":$accept}""")
+
+    /**
+     * "What did I believe as of this moment?" - `GET /api/memory/facts?known_at=`,
+     * the exact route the desktop's 2026-09-18 feature audit named for this
+     * (§3, "Memory consolidation", P3). Read-only, and still not the memory
+     * graph: a fact list for one point in time, never a browsable graph -
+     * that stays desktop-only by the contract's own instruction. Through
+     * [probe], like every other route this contract does not give a field
+     * list for.
+     */
+    suspend fun memoryFacts(knownAtEpochSeconds: Long): ApiResult<JsonObject> =
+        probe("/api/memory/facts?known_at=$knownAtEpochSeconds")
 
     /**
      * Answers the daily "let Jarvis tidy its memory overnight?" card - see

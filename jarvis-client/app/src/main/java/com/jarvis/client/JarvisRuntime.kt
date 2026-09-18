@@ -658,10 +658,10 @@ object JarvisRuntime {
             "hello" -> Unit
             "proposal" -> Unit
             // Face and bindings changed on another device. Each device renders
-            // its own face and the server is only the sync channel, so this is
-            // for a later change that reloads the appearance store - not a
-            // reason to redraw anything now.
-            "appearance" -> Unit
+            // its own face and the server is only the sync channel, so this
+            // just re-reads the shared document; nothing here redraws
+            // anything directly.
+            "appearance" -> refreshAppearance()
             else -> Log.d(TAG, "unhandled event kind '${event.kind}'")
         }
     }
@@ -737,6 +737,35 @@ object JarvisRuntime {
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
         return result
+    }
+
+    // -------------------------------------------------------- appearance ----
+
+    /**
+     * Pulls the shared face/bindings document - after pairing, on the
+     * `appearance` SSE event, or on demand. Gated on the capability per §2's
+     * rule for a false one: a backend without the route is simply never
+     * asked, and [AppearanceStore] keeps behaving exactly as it did before
+     * this existed. Silent on failure - the local store already has a face,
+     * and a sync miss is not worth a notice banner on every reconnect.
+     */
+    suspend fun refreshAppearance() {
+        if (!can("appearance")) return
+        val result = api.getAppearance()
+        if (result is ApiResult.Ok) {
+            appearance.applySyncDocument(org.json.JSONObject(result.value.toString()))
+        }
+    }
+
+    /**
+     * Pushes this device's face/bindings so the owner's other device picks
+     * it up - called after any local change to either. Same silent-on-
+     * failure reasoning as [refreshAppearance]: this is a convenience sync,
+     * not a decision, and nothing on this screen depends on it succeeding.
+     */
+    suspend fun pushAppearance() {
+        if (!can("appearance")) return
+        api.postAppearance(appearance.toSyncDocument().toString())
     }
 
     suspend fun refreshPending() {
@@ -859,6 +888,19 @@ object JarvisRuntime {
     suspend fun refreshMemoryQueue() {
         val memory = api.probe("/api/memory/pending").orNull()
         _brain.update { it.copy(memory = memory, fetchedAtMs = System.currentTimeMillis()) }
+    }
+
+    /**
+     * "What did I believe on this date?" - a one-shot read, never held as app
+     * state the way [brain] is: the Brain screen asks for exactly one moment
+     * and throws the answer away the moment a different one is asked for. A
+     * failure is surfaced through the same shared [notice] every other read
+     * on this screen uses, rather than a dedicated error field.
+     */
+    suspend fun memoryAsOf(epochSeconds: Long): ApiResult<JsonObject> {
+        val result = api.memoryFacts(epochSeconds)
+        if (result is ApiResult.Failed) _notice.value = describe(result.error)
+        return result
     }
 
     private fun <T> ApiResult<T>.orNull(): T? = (this as? ApiResult.Ok)?.value
