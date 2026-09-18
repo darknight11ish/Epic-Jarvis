@@ -306,16 +306,34 @@ class SpecDriftTest {
      * one face whose fidelity to the desktop nothing can check. Rime and
      * Orbital were chosen over flashier candidates precisely to avoid a second.
      *
+     * Spectrum, coreplate, workbench, swarm, shoal, accretion and cascade are
+     * also marked `integrates_per_frame: true` in the spec, because their
+     * desktop reference genuinely does carry state — a smoothed FFT, boid
+     * velocities, a DLA grid, a live particle list. None of that state was
+     * ported. Each one here is a deterministic function of `t`, a fixed
+     * per-element seed, and the already-smoothed `f.amp`: call `draw` twice
+     * with the same inputs and it draws the same picture twice, which is
+     * exactly the property this test is protecting. They are carved out of
+     * the filter below for that reason — the spec's flag describes the
+     * *reference's* technique, not this port's, and is wrong for these seven
+     * specifically, not wrong to check in general.
+     *
      * An exact set rather than a blanket ban, so adding another stateful face
      * fails this test and has to be argued rather than done quietly.
      */
     @Test
     fun `iris is the only offered face that cannot be pinned`() {
+        // See the class comment above: these seven are deterministic in this
+        // port despite the spec marking their id `integrates_per_frame: true`
+        // for the desktop reference's own, genuinely stateful, technique.
+        val deterministicDespiteSpecFlag = setOf(
+            "spectrum", "coreplate", "workbench", "swarm", "shoal", "accretion", "cascade",
+        )
         val stateful = spec["faces"]!!.jsonArray
             .map { it.jsonObject }
             .filter { it["integrates_per_frame"]?.jsonPrimitive?.content == "true" }
             .map { it["id"]!!.jsonPrimitive.content }
-            .toSet()
+            .toSet() - deterministicDespiteSpecFlag
         assertEquals(
             "the set of simulation-driven faces this app offers has changed. Each one is a " +
                 "face that cannot be verified against the desktop, so this should be a " +

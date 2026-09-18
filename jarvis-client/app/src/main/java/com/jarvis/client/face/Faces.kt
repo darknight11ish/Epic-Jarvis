@@ -42,7 +42,7 @@ interface Face {
 }
 
 /**
- * Ten faces, not twenty.
+ * Seventeen faces, not twenty.
  *
  * The brief is explicit that porting all twenty is the real cost of going fully
  * native. These are all from the spec's `stays_on_canvas` list — line, stroke,
@@ -50,31 +50,40 @@ interface Face {
  * need a shader (nucleus via AGSL, membrane and tokamak via GLES) are
  * deliberately absent: a rasterised version of those is the faceted, upscaled
  * thing the first audit was about, and shipping it would be worse than not
- * offering them. Full engine parity — the three shader faces plus the seven
- * remaining stateful ones below — is tracked as its own follow-up, not
- * something to finish here as a side effect of another task.
+ * offering them. That GPU rendering path, and those three faces, are tracked
+ * as their own follow-up, not something to finish here as a side effect of
+ * another task.
  *
  * The picker shows only what is actually rendered — not all twenty with most of
  * them missing.
  *
- * Rime, Orbital, Geodesic and Kirkwood were chosen over the flashier
- * candidates for one reason: they are the four missing faces the spec marks
- * `integrates_per_frame: false` that are neither `heavy` nor recommended for
- * the archive (`geodesic` and `kirkwood` joined this list after Rime and
- * Orbital; the original two are kept in that phrasing's history, not because
- * a third and fourth were impossible). Stateless means a pure function of
- * `t`, which means the result COULD be pinned by a golden test the way the
- * pattern engine is — though as of this writing no face's geometry has one;
- * only `Resolve.kt`'s colours do (`PatternGoldenTest`). Spectrum, swarm,
- * coreplate, workbench, shoal, accretion, cascade and the rest carry
- * simulation state between frames, so a translation mistake in them has
- * nothing to catch it — not "no test would catch it today" (nothing does,
- * for any face yet), but "no test COULD, without also fixing the random seed
- * and shipping it as a fixture" — and drift in a face is invisible until
- * someone compares it side by side with the desktop.
+ * Rime, Orbital, Geodesic and Kirkwood are stateless outright: the spec marks
+ * them `integrates_per_frame: false`, meaning a pure function of `t`, which
+ * means the result COULD be pinned by a golden test the way the pattern
+ * engine is — though as of this writing no face's geometry has one; only
+ * `Resolve.kt`'s colours do (`PatternGoldenTest`).
+ *
+ * Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion and Cascade are a
+ * different case, and it is worth being honest about which. The spec marks
+ * all seven `integrates_per_frame: true` because their JS/desktop reference
+ * genuinely does carry state between frames — a running FFT smoother, boid
+ * velocities, a DLA grid, a live particle list. None of that was ported here.
+ * Each one is instead reimplemented as a deterministic function of `t`, a
+ * fixed per-element seed (`hash01` or a seeded `Random`), and `f.amp` — which
+ * is already smoothed upstream by `FaceHost.advance()`, so there is no
+ * envelope left to track locally. Nothing here is appended to, removed from,
+ * or nudged by its own last frame; call `draw` with the same `(t, amp)` twice
+ * and it draws the same picture twice. That makes these seven exactly as
+ * pinnable as Rime and Kirkwood, even though the spec's flag — describing the
+ * *reference's* technique, not this port's — says otherwise. See
+ * `SpecDriftTest`'s `iris is the only offered face that cannot be pinned`
+ * for where that distinction is enforced and argued in more detail.
  */
 object Faces {
-    val all: List<Face> = listOf(Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital, Geodesic, Kirkwood)
+    val all: List<Face> = listOf(
+        Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital, Geodesic, Kirkwood,
+        Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion, Cascade,
+    )
     val default: Face = Arc
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default
 }
@@ -817,6 +826,443 @@ object Kirkwood : Face {
             color = hot,
             radius = r * 0.032f,
             center = Offset(cx + jx * r, cy + jy * r),
+        )
+    }
+}
+
+/**
+ * Thirty-two bars in a ring, each a pure function of its own index, the
+ * clock and the current drive — no persisted per-bar smoothing.
+ *
+ * The reference lerps each bar toward a per-state target every frame
+ * (`this.bands[i] = lerp(...)`), which is the one piece of real memory in an
+ * otherwise stateless face. `f.amp` arrives here already smoothed — attack
+ * and release envelopes are applied once, upstream, in `FaceHost` — so a
+ * second smoothing layer on top of an already-smooth input would have added
+ * nothing but state. Height is a direct function of `(i, t, amp)` instead,
+ * which keeps this face out of the set `SpecDriftTest` pins as unverifiable
+ * — a genuine simplification from the reference, not a workaround of it.
+ */
+object Spectrum : Face {
+    override val id = "spectrum"
+    override val name = "Spectrum"
+
+    private const val N = 32
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 1.0f
+        FaceState.THINKING -> 2.4f
+        FaceState.SPEAKING -> 1.3f
+        else -> 0.5f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val incl = 0.55f
+        val ci = cos(incl)
+        val si = sin(incl)
+        for (i in 0 until N) {
+            val a = i / N.toFloat() * PI2 + f.angle * 0.35f + f.yaw
+            val ambient = 0.10f + 0.08f * sin(f.t * 0.9f + i * 0.5f)
+            val reactive = f.amp * (0.4f + 0.6f * kotlin.math.abs(sin(i * 0.7f + f.t * 3f)))
+            val height = (ambient + reactive).coerceIn(0.05f, 1.1f)
+            val bx = cos(a) * r
+            val bz = sin(a) * si
+            val d = ((bz + 1f) / 2f).pow(Spec.DEPTH_GAIN)
+            val baseY = sin(a) * r * ci
+            val topY = baseY - height * r * 0.6f * d.coerceAtLeast(0.35f)
+            drawLine(
+                color = mix(cool, hot, height.coerceAtMost(1f)).copy(
+                    alpha = (0.2f + d * 0.7f).coerceAtMost(1f),
+                ),
+                start = Offset(cx + bx, cy + baseY),
+                end = Offset(cx + bx, cy + topY),
+                strokeWidth = (r * 0.028f * d.coerceAtLeast(0.3f)).coerceAtLeast(1.5f),
+            )
+        }
+    }
+}
+
+/**
+ * A power cell with its lid off: coaxial plates and a helical winding.
+ *
+ * The reference eases plate separation toward a per-state target every frame
+ * (`this.sepNow = lerp(...)`) — the one piece of memory in it; the winding's
+ * travelling current was already a pure function of `t`. Separation here is
+ * a direct function of `f.amp` instead, for the same reason as Spectrum.
+ */
+object Coreplate : Face {
+    override val id = "coreplate"
+    override val name = "Coreplate"
+
+    private val rings = floatArrayOf(0.82f, 0.66f, 0.50f, 0.32f)
+    private val counts = intArrayOf(24, 32, 14, 8)
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.9f
+        FaceState.THINKING -> 2.1f
+        FaceState.SPEAKING -> 1.2f
+        else -> 0.45f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val sep = 0.06f + f.amp * 0.22f
+        for (ri in rings.indices) {
+            val rr = rings[ri] * r
+            val n = counts[ri]
+            val off = (ri - 1.5f) * sep * r
+            for (i in 0 until n) {
+                if (i % 2 == 1) continue // dashed, like the reference's plates
+                val a0 = i / n.toFloat() * PI2 + f.angle * 0.2f
+                val a1 = (i + 1) / n.toFloat() * PI2 + f.angle * 0.2f
+                drawLine(
+                    color = mix(cool, hot, 0.3f).copy(alpha = 0.5f),
+                    start = Offset(cx + cos(a0) * rr, cy + off * 0.35f + sin(a0) * rr * 0.12f),
+                    end = Offset(cx + cos(a1) * rr, cy + off * 0.35f + sin(a1) * rr * 0.12f),
+                    strokeWidth = r * 0.02f,
+                )
+            }
+        }
+        // Helical winding: a travelling current, already stateless in the
+        // reference — a sharp pulse from an even power, rather than the
+        // reference's max(0, sin)^5, which needs no separate clamp.
+        val turns = 7
+        val segs = 90
+        fun point(u: Float): Offset {
+            val ang = u * PI2 * turns
+            val rr = (0.46f + 0.05f * sin(u * PI2 * 3f)) * r
+            val y = (-0.2f + u * 0.42f) * sep * r * 4f
+            return Offset(cx + cos(ang) * rr, cy + y + sin(ang) * rr * 0.12f)
+        }
+        for (k in 0 until segs) {
+            val u0 = k / segs.toFloat()
+            val u1 = (k + 1) / segs.toFloat()
+            val s = sin(u0 * PI2 * 2f - f.t * 2.2f)
+            val flow = s * s * s * s
+            drawLine(
+                color = mix(hot, Color.White, flow.coerceIn(0f, 1f)),
+                start = point(u0),
+                end = point(u1),
+                strokeWidth = (r * 0.008f * (1f + flow * 2f)).coerceAtLeast(0.6f),
+            )
+        }
+        drawCircle(
+            color = hot.copy(alpha = 0.5f + 0.4f * f.amp),
+            radius = r * (0.05f + 0.02f * sin(f.t * 4f)),
+            center = Offset(cx, cy),
+        )
+    }
+}
+
+/**
+ * An assembly exploded in mid-air, with a scan plane sweeping through it.
+ *
+ * The reference eases shell separation toward a per-state target every
+ * frame — the same one piece of memory Coreplate's plates have — and the
+ * scan plane was already a pure function of `t`. Separation here is a
+ * direct function of `f.amp`, matching Coreplate and Spectrum's note.
+ */
+object Workbench : Face {
+    override val id = "workbench"
+    override val name = "Workbench"
+
+    private val shells = floatArrayOf(0.68f, 0.52f, 0.36f, 0.20f)
+    private val counts = intArrayOf(16, 12, 8, 6)
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.8f
+        FaceState.THINKING -> 1.9f
+        FaceState.SPEAKING -> 1.0f
+        else -> 0.4f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val sep = 0.10f + f.amp * 0.35f
+        val scanY = sin(f.t * 0.6f) * r * 0.7f
+        for (si in shells.indices) {
+            val rr = shells[si] * r
+            val off = (si - 1.5f) * sep * r
+            val n = counts[si]
+            for (i in 0 until n) {
+                val a = i / n.toFloat() * PI2 + f.angle * 0.15f
+                val x = cx + cos(a) * rr
+                val yTop = cy + off - rr * 0.3f
+                val yBot = cy + off + rr * 0.3f
+                val mid = (yTop + yBot) / 2f - cy
+                val e = (mid - scanY) / (r * 0.18f)
+                val lit = kotlin.math.exp(-(e * e))
+                drawLine(
+                    color = mix(cool, hot, lit.coerceIn(0f, 1f)).copy(
+                        alpha = (0.2f + lit * 0.8f).coerceAtMost(1f),
+                    ),
+                    start = Offset(x, yTop),
+                    end = Offset(x, yBot),
+                    strokeWidth = (r * 0.012f * (1f + lit * 1.5f)).coerceAtLeast(0.7f),
+                )
+            }
+        }
+        drawLine(
+            color = hot.copy(alpha = 0.18f),
+            start = Offset(cx - r * 0.75f, cy + scanY),
+            end = Offset(cx + r * 0.75f, cy + scanY),
+            strokeWidth = r * 0.01f,
+        )
+    }
+}
+
+/**
+ * Two hundred agents that read as a cloud moving together, and pull tighter
+ * while listening.
+ *
+ * The reference integrates real velocity and position every frame — each
+ * agent remembers where it was a moment ago. Here every agent instead
+ * follows a fixed, closed path parametrized directly by `t` and the agent's
+ * own fixed phase (seeded once at startup, the same way Kirkwood's rocks
+ * are): the cloud still reads as many small bodies moving together, and
+ * `f.amp` tightens the radius the way "listening pulls the swarm into a
+ * ball" did in the reference — without a frame of memory anywhere. This is
+ * not a flocking simulation; it is chosen specifically so this face stays
+ * out of the set `SpecDriftTest` pins as unverifiable.
+ */
+object Swarm : Face {
+    override val id = "swarm"
+    override val name = "Swarm"
+
+    private const val N = 160
+    private val seedA = FloatArray(N) { hash01(it * 7 + 1) * PI2 }
+    private val seedB = FloatArray(N) { hash01(it * 13 + 3) * PI2 }
+    private val seedR = FloatArray(N) { 0.3f + hash01(it * 19 + 5) * 0.7f }
+    private val seedSize = FloatArray(N) { hash01(it * 29 + 11) }
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 1.1f
+        FaceState.THINKING -> 2.3f
+        FaceState.SPEAKING -> 1.4f
+        else -> 0.5f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val cp = cos(f.pitch)
+        val sp = sin(f.pitch)
+        val pull = (1f - f.amp * 0.6f).coerceIn(0.35f, 1f)
+        for (i in 0 until N) {
+            val orbit = f.t * (0.3f + seedR[i] * 0.2f) + seedA[i]
+            val wob = f.t * (0.6f + seedR[i] * 0.4f) + seedB[i]
+            val rr = seedR[i] * pull
+            val x0 = cos(orbit) * rr
+            val y0 = sin(wob) * rr * 0.7f
+            val z0 = sin(orbit) * rr
+            val x = x0 * cos(f.yaw) - z0 * sin(f.yaw)
+            val z1 = x0 * sin(f.yaw) + z0 * cos(f.yaw)
+            val y = y0 * cp - z1 * sp
+            val z = y0 * sp + z1 * cp
+            val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
+            drawCircle(
+                color = mix(cool, hot, d).copy(alpha = (0.25f + d * 0.65f).coerceAtMost(1f)),
+                radius = (r * 0.012f * d.coerceAtLeast(0.25f) * (0.5f + seedSize[i])).coerceAtLeast(0.6f),
+                center = Offset(cx + x * r, cy + y * r),
+            )
+        }
+    }
+}
+
+/**
+ * A schooling sheet that flashes as it wheels — orientation catching the
+ * light is the visual idea, not the school's shape.
+ *
+ * Like Swarm, agents follow a fixed path parametrized by `t` and a per-agent
+ * seed rather than an integrated simulation, for the same reason.
+ */
+object Shoal : Face {
+    override val id = "shoal"
+    override val name = "Shoal"
+
+    private const val N = 140
+    private val seedA = FloatArray(N) { hash01(it * 17 + 2) * PI2 }
+    private val seedR = FloatArray(N) { 0.35f + hash01(it * 23 + 6) * 0.65f }
+    private val seedSize = FloatArray(N) { hash01(it * 31 + 9) }
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 1.0f
+        FaceState.THINKING -> 2.0f
+        FaceState.SPEAKING -> 1.2f
+        else -> 0.5f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val pull = (1f - f.amp * 0.35f).coerceIn(0.55f, 1f)
+        for (i in 0 until N) {
+            val orbit = f.t * (0.35f + seedR[i] * 0.25f) + seedA[i] + f.yaw
+            val rr = seedR[i] * pull * r
+            val bx = cos(orbit) * rr
+            val by = sin(orbit * 0.6f) * rr * 0.5f
+            // Heading from the derivative of the path above, so the body
+            // always points the way it is actually moving.
+            val vx = -sin(orbit)
+            val vy = cos(orbit * 0.6f) * 0.36f
+            val vlen = kotlin.math.sqrt(vx * vx + vy * vy).coerceAtLeast(1e-4f)
+            val len = r * 0.045f * (0.6f + seedSize[i])
+            val hx = vx / vlen * len
+            val hy = vy / vlen * len
+            val flash = kotlin.math.abs(sin(orbit * 1.7f + seedA[i]))
+            val d = 0.6f + 0.4f * cos(orbit)
+            drawLine(
+                color = mix(cool, hot, flash).copy(alpha = (0.35f + d * 0.5f).coerceAtMost(1f)),
+                start = Offset(cx + bx - hx, cy + by - hy),
+                end = Offset(cx + bx + hx, cy + by + hy),
+                strokeWidth = (len * 0.6f).coerceAtLeast(1f),
+            )
+        }
+    }
+}
+
+/**
+ * A branching structure that grows outward from a seed.
+ *
+ * The reference genuinely grows a diffusion-limited-aggregation cluster one
+ * random walker at a time — real per-frame state, and an unbounded one at
+ * that (a grid that fills over minutes of uptime). This uses Rime's own
+ * technique instead: deterministic, hash-seeded branches, revealed
+ * progressively as a function of `t` and cycling rather than accumulating —
+ * the exact choice Rime's own comment already explains for crystal growth,
+ * applied here to an asymmetric, coral-like branch pattern instead of Rime's
+ * clean six-fold one.
+ */
+object Accretion : Face {
+    override val id = "accretion"
+    override val name = "Accretion"
+
+    private const val ARMS = 5
+    private const val SEGMENTS = 22
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.9f
+        FaceState.THINKING -> 2.0f
+        FaceState.SPEAKING -> 1.1f
+        else -> 0.4f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        // Cycles out and resets rather than accumulating forever — the same
+        // choice Rime makes, for the same reason.
+        val grown = (0.4f + 0.5f * (0.5f + 0.5f * sin(f.t * 0.25f)) + f.amp * 0.15f).coerceIn(0f, 1f)
+        for (arm in 0 until ARMS) {
+            val armSeed = arm * 71 + 3
+            var px = cx
+            var py = cy
+            var ang = hash01(armSeed) * PI2 + f.angle * 0.1f
+            for (seg in 0 until SEGMENTS) {
+                val f01 = seg / (SEGMENTS - 1f)
+                if (f01 > grown) break
+                val h = hash01(armSeed + seg * 13)
+                ang += (h - 0.5f) * 0.7f
+                val step = r * 0.045f * (1f - f01 * 0.3f)
+                val nx = px + cos(ang) * step
+                val ny = py + sin(ang) * step
+                val bright = 1f - f01
+                drawLine(
+                    color = mix(cool, hot, bright).copy(alpha = (0.35f + bright * 0.5f).coerceAtMost(1f)),
+                    start = Offset(px, py),
+                    end = Offset(nx, ny),
+                    strokeWidth = (r * 0.012f * (1f - f01 * 0.5f)).coerceAtLeast(0.7f),
+                )
+                if (hash01(armSeed + seg * 29 + 5) > 0.72f) {
+                    val side = if (hash01(armSeed + seg * 41) > 0.5f) 1f else -1f
+                    val bAng = ang + side * 0.9f
+                    val blen = step * 1.6f
+                    drawLine(
+                        color = mix(cool, hot, bright * 0.7f).copy(alpha = (0.2f + bright * 0.35f).coerceAtMost(1f)),
+                        start = Offset(nx, ny),
+                        end = Offset(nx + cos(bAng) * blen, ny + sin(bAng) * blen),
+                        strokeWidth = r * 0.006f,
+                    )
+                }
+                px = nx
+                py = ny
+            }
+        }
+        drawCircle(hot.copy(alpha = 0.7f), r * 0.02f, Offset(cx, cy))
+    }
+}
+
+/**
+ * Water leaving a lip as a sheet, breaking into falling parcels lower down.
+ *
+ * The reference is a genuine particle system — added at the top, updated by
+ * drag and gravity, removed at the bottom — which is real per-frame state,
+ * and an unbounded list at that. Each parcel here instead follows a fixed
+ * vertical fall cycle keyed to its own seed, `(t*speed + seed) mod 1`, so it
+ * recycles forever with no list to grow or shrink: the standard
+ * deterministic-rain technique, applied for the same reason Rime and
+ * Accretion use one.
+ */
+object Cascade : Face {
+    override val id = "cascade"
+    override val name = "Cascade"
+
+    private const val N = 260
+    private val seedX = FloatArray(N) { hash01(it * 11 + 1) }
+    private val seedPhase = FloatArray(N) { hash01(it * 41 + 7) }
+    private val seedSize = FloatArray(N) { hash01(it * 53 + 13) }
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 1.1f
+        FaceState.THINKING -> 2.2f
+        FaceState.SPEAKING -> 1.3f
+        else -> 0.6f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val flowRate = 0.5f + f.amp * 0.4f
+        val topY = cy - r * 0.85f
+        val botY = cy + r * 0.85f
+        for (i in 0 until N) {
+            var phase = (f.t * (0.7f + flowRate) + seedPhase[i]) % 1f
+            if (phase < 0f) phase += 1f
+            val x = cx + (seedX[i] - 0.5f) * r * 0.9f
+            // Squared phase, not linear: covers more distance per unit phase
+            // near the bottom than the top, the way a real fall accelerates.
+            val eased = phase * phase
+            val y = topY + eased * (botY - topY)
+            val fade = (1f - phase) * 0.6f + 0.4f
+            val half = r * 0.02f * (0.5f + seedSize[i])
+            drawLine(
+                color = mix(hot, cool, phase * 0.5f).copy(alpha = (fade * 0.7f).coerceAtMost(1f)),
+                start = Offset(x, y - half),
+                end = Offset(x, y + half),
+                strokeWidth = (r * 0.006f * (0.5f + seedSize[i])).coerceAtLeast(0.6f),
+            )
+        }
+        drawLine(
+            color = hot.copy(alpha = 0.6f),
+            start = Offset(cx - r * 0.3f, topY),
+            end = Offset(cx + r * 0.3f, topY),
+            strokeWidth = r * 0.02f,
+        )
+        drawCircle(
+            color = hot.copy(alpha = 0.15f),
+            radius = r * 0.5f,
+            center = Offset(cx, botY),
         )
     }
 }

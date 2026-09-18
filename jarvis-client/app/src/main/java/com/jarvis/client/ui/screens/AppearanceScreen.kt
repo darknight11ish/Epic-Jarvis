@@ -256,17 +256,19 @@ fun AppearanceScreen(
                             // test can check, so the caption told the owner a
                             // number contradicted by the grid directly above it.
                             //
-                            // "Shader faces" alone stopped being the whole reason
-                            // once Geodesic and Kirkwood joined the list: three of
-                            // the missing ten need a GPU shader this app doesn't
-                            // have, and the other seven carry their own
-                            // frame-to-frame state, which SpecDriftTest pins as
-                            // exactly one exception (`iris`) precisely so a second
-                            // one can't be added without the reason showing up
-                            // here too.
-                            "${Faces.all.size} of the desktop's twenty. The rest either need a " +
-                                "shader this app doesn't have, or carry their own state between " +
-                                "frames, which is a bigger, separate piece of work.",
+                            // The seven that looked stateful (spectrum, coreplate,
+                            // workbench, swarm, shoal, accretion, cascade) turned
+                            // out portable without a shader or new state
+                            // machinery: each is a deterministic function of
+                            // (time, amp, a fixed seed) instead of the desktop's
+                            // running simulation, which is exactly what
+                            // SpecDriftTest's `iris`-is-the-only-exception test
+                            // checks stays true. What's left after that — nucleus,
+                            // membrane, tokamak — all three genuinely need a GPU
+                            // shader this app doesn't have yet.
+                            "${Faces.all.size} of the desktop's twenty. The rest need a GPU " +
+                                "shader this app doesn't have yet, which is a bigger, separate " +
+                                "piece of work.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,
                         )
