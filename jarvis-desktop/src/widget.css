@@ -475,6 +475,116 @@ body {
 .appr-risk[data-reversible="no"] { color: var(--bad); }
 
 
+/* Multiple-choice options - docs/AUTONOMY-PROPOSALS.md §3a. Stacked, not a
+   row: a label long enough to distinguish two plans does not fit three
+   across a 320px card. */
+.appr-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+.appr-option {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid rgb(var(--accent-rgb) / 0.3);
+  border-radius: 6px;
+  background: rgb(var(--accent-rgb) / 0.08);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition: filter 140ms var(--ease), background 140ms var(--ease);
+}
+
+.appr-option:hover:not(:disabled) {
+  background: rgb(var(--accent-rgb) / 0.16);
+}
+
+.appr-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.35);
+}
+
+.appr-option .opt-label {
+  display: block;
+  font-weight: 650;
+}
+
+.appr-option .opt-summary {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.appr-option:disabled {
+  opacity: 1;
+  background: var(--surface-raised);
+  border-color: var(--hairline);
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* A note before the first decision - §3b. Same shape as .capture-row, since
+   it is the same idea (type, then one action) in a different place. Tighter
+   margin than .capture-row on purpose: this card already fights for height
+   against a two-line clamped raised-quote (see tests/blockers.mjs), so every
+   row added here has to earn its space. */
+.appr-note-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+
+.appr-note-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.appr-note-input::placeholder {
+  color: var(--text-muted);
+}
+
+.appr-note-input:focus {
+  outline: none;
+  border-color: rgb(var(--accent-rgb) / 0.45);
+  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.12);
+}
+
+.appr-note-input:disabled {
+  opacity: 0.68;
+}
+
+/* Live progress while a bounded task runs - §3c. Quiet on purpose: this is
+   an ambient status, not something demanding attention the way the
+   approval card does. */
+.widget-progress {
+  margin: 0;
+  padding: 4px 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .approval-actions {
   display: flex;
   gap: 6px;

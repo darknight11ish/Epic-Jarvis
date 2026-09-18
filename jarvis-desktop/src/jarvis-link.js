@@ -37,6 +37,11 @@ let link = {
   power: "active",
   powerSetBy: null,
   activity: "idle",
+  // What `announce()` last said, if anything - docs/AUTONOMY-PROPOSALS.md
+  // §3c. Purely additive: a backend that has not been patched to send
+  // `activity_detail` yet leaves this "" forever, same as `activity` did
+  // before this field existed, and nothing here changes for it.
+  activityDetail: "",
   approvals: 0,
   attention: emptyAttention(),
   error: null,
@@ -93,6 +98,12 @@ function normaliseLink(payload) {
     power: String(payload.power || "active"),
     powerSetBy: payload.power_set_by || null,
     activity: String(payload.activity || "idle"),
+    // Capped defensively on the client too, even though the backend contract
+    // in AUTONOMY-PROPOSALS.md already caps it - the same "don't trust a
+    // single enforcement point" reasoning `_MAX_TOOL_CONTENT_CHARS` and
+    // friends already use server-side.
+    activityDetail: typeof payload.activity_detail === "string"
+      ? payload.activity_detail.slice(0, 500) : "",
     approvals: Number(payload.approvals || 0),
     attention: normaliseAttention(payload.attention),
     error: payload.error || null,
@@ -149,6 +160,19 @@ export function normaliseApproval(row) {
 
   const risk = row.risk && typeof row.risk === "object" ? row.risk : null;
   const raised = row.raised && typeof row.raised === "object" ? row.raised : null;
+  // docs/AUTONOMY-PROPOSALS.md §3a. Zero or one entry means "behaves exactly
+  // as today" - callers check `.length > 1`, never truthiness alone, so an
+  // absent `options` and a one-item `options` render identically.
+  const options = Array.isArray(row.options)
+    ? row.options
+        .map((o) => (o && typeof o === "object" ? {
+          id: String(o.id ?? ""),
+          label: String(o.label || "Approve"),
+          summary: String(o.summary || ""),
+          weight: String(o.weight || "normal"),
+        } : null))
+        .filter((o) => o && o.id)
+    : [];
 
   return {
     id,
@@ -157,6 +181,7 @@ export function normaliseApproval(row) {
     prompt: typeof row.prompt === "string" ? row.prompt : "",
     created: Number(row.created || 0),
     detail,
+    options,
     risk: risk
       ? {
           reversible: String(risk.reversible || "no"),
@@ -361,15 +386,47 @@ export function onEvent(fn) {
  * one place a decision is sent. Refuses while the stream is stale, because
  * approving against a queue that cannot be confirmed live is how something gets
  * approved twice — DESKTOP-BUILD's checklist asks for exactly this.
+ *
+ * `optionId`, added for docs/AUTONOMY-PROPOSALS.md §3a, names WHICH of a
+ * plan's options is being approved when there is more than one - omitted for
+ * every gate that has zero or one, which is every gate that exists in the
+ * API today, so this stays backward compatible with the two-argument call
+ * every existing caller already makes.
  */
-export async function decide(id, approved) {
+export async function decide(id, approved, optionId = null) {
   if (!IS_TAURI) throw new Error("no desktop backend to send the decision to");
   if (link.stale) {
     throw new Error(
       "the event stream is offline, so the approval queue cannot be confirmed live"
     );
   }
-  return TAURI.core.invoke("decide_approval", { id: String(id), approved });
+  const args = { id: String(id), approved };
+  if (optionId !== null && optionId !== undefined) args.option_id = String(optionId);
+  return TAURI.core.invoke("decide_approval", args);
+}
+
+/**
+ * Sends a note before the first decision - docs/AUTONOMY-PROPOSALS.md §3b.
+ *
+ * This is NOT a decision and approves nothing - `amend_approval` is a
+ * distinct, unconfirmed route from `decide_approval` on purpose, so a
+ * backend that has not implemented it yet fails this call rather than
+ * silently approving or denying anything. The expected result is a NEW
+ * proposal for the same id, delivered the normal way through
+ * `approvals-changed` - this function only sends the note; it does not wait
+ * for or apply the new plan itself.
+ *
+ * Route name and shape are marked DRAFT in the design doc - confirm against
+ * the real `jarvis_hud.py` before this is load-bearing.
+ */
+export async function amend(id, note) {
+  if (!IS_TAURI) throw new Error("no desktop backend to send the note to");
+  if (link.stale) {
+    throw new Error(
+      "the event stream is offline, so the approval queue cannot be confirmed live"
+    );
+  }
+  return TAURI.core.invoke("amend_approval", { id: String(id), note: String(note || "") });
 }
 
 /** Asks the backend to reconnect its stream now rather than serve out a backoff. */

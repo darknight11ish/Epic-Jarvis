@@ -98,6 +98,13 @@
           <button class="btn btn-quiet" type="button" id="widget-offline-retry">Reconnect</button>
         </div>
 
+        <!-- What Jarvis is doing right now, one bounded step at a time -
+             docs/AUTONOMY-PROPOSALS.md §3c. `announce()` already fires this
+             text on the backend today; this is the first place on the
+             desktop that shows it, rather than only the coarse "thinking"
+             face. Empty and hidden whenever there is nothing to say. -->
+        <p class="widget-progress" id="widget-progress" hidden></p>
+
         <section class="telemetry-grid">
           <div class="meter" id="meter-vram">
             <div class="meter-head">
@@ -153,6 +160,41 @@
                gate at read time and is the only thing that tells send_email
                apart from switch_model, which are both tier `ask`. -->
           <p class="appr-risk" id="appr-risk" data-reversible="no">--</p>
+
+          <!-- Multiple concrete options - docs/AUTONOMY-PROPOSALS.md §3a.
+               Empty and hidden when the plan carries zero or one option; the
+               card then behaves exactly as it always has (the static
+               Approve button below). Each option here IS a full, bounded
+               plan of its own, never a checkbox on one shared plan. -->
+          <div
+            class="appr-options"
+            id="appr-options"
+            hidden
+            role="group"
+            aria-label="Choose which version to approve"
+          ></div>
+
+          <!-- A note before the first decision - §3b. Submitting sends it
+               back for a NEW proposal; it never edits the one on screen,
+               same rule as everything else here: a plan that can change
+               after being shown is not fully enumerated any more. -->
+          <div class="appr-note-row">
+            <input
+              id="appr-note"
+              class="appr-note-input"
+              type="text"
+              spellcheck="true"
+              autocomplete="off"
+              placeholder="Add something before deciding…"
+            />
+            <button
+              class="icon-btn"
+              id="btn-appr-note-send"
+              title="Send this note - Jarvis will propose again"
+              aria-label="Send note"
+            >↵</button>
+          </div>
+
           <div class="approval-actions">
             <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
             <button class="btn btn-deny" id="btn-appr-no">Deny</button>

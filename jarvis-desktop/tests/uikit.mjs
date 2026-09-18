@@ -101,6 +101,19 @@ export const APPROVAL_RAISED = {
   prompt: "Send the reply?", risk: RISK_OUTBOUND, raised: RAISED,
 };
 
+// docs/AUTONOMY-PROPOSALS.md §3a - a plan with more than one concrete option.
+export const APPROVAL_WITH_OPTIONS = {
+  id: "a3", action: "browser_control", tier: "ask", created: 1,
+  detail: JSON.stringify({ goal: "reply to the support chat" }),
+  prompt: "Reply to the support chat?", risk: RISK_OUTBOUND, raised: null,
+  options: [
+    { id: "opt_wait", label: "Wait, don't reply yet",
+      summary: "1 step: re-read the thread, no message sent.", weight: "normal" },
+    { id: "opt_reply", label: "Reply and ask for a refund",
+      summary: "2 steps: send the drafted message, then request a refund.", weight: "heavy" },
+  ],
+};
+
 export const ATTENTION_BANKED = {
   known: true, limit: 6, remaining: 0, spent: 6, muted: false,
   blocked_by: null, pending: 3, banked: true, digest_hour: 18, digest_due: true,
@@ -309,7 +322,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -401,8 +414,22 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { enabled: window.__autostart, supported: true };
           case "decide_approval":
             window.__decides = window.__decides || [];
-            window.__decides.push({ id: args.id, approved: args.approved });
+            // `option_id` is undefined on every existing scenario's call —
+            // recorded as-is rather than defaulted, so a test can assert
+            // "no option was sent" for the zero/one-option path and "this
+            // exact option was sent" for the multi-option one.
+            window.__decides.push({ id: args.id, approved: args.approved, optionId: args.option_id });
             if (window.__decideFails) throw new Error(window.__decideFails);
+            return { ok: true };
+          // docs/AUTONOMY-PROPOSALS.md §3b - DRAFT route, unconfirmed
+          // against the real jarvis_hud.py. Records the note; a scenario
+          // that wants to see a follow-up proposal arrive still has to
+          // `__emit("approvals-changed", ...)` itself, same as
+          // `approval-resolved` already works in decide.mjs.
+          case "amend_approval":
+            window.__amends = window.__amends || [];
+            window.__amends.push({ id: args.id, note: args.note });
+            if (window.__amendFails) throw new Error(window.__amendFails);
             return { ok: true };
           case "get_appearance":
             if (window.__appearanceFails) throw new Error(window.__appearanceFails);
@@ -533,8 +560,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__appearance = JSON.parse(JSON.stringify(appearance));
   window.__noRoute = Boolean(noRoute);
   window.__decideFails = decideFails || null;
+  window.__amendFails = amendFails || null;
   window.__appearanceFails = appearanceFails || null;
   window.__decides = [];
+  window.__amends = [];
   window.__memoryWrites = [];
   window.__memoryRefuses = memoryRefuses || null;
   window.__chatReplies = [...(chatReplies || [])];
@@ -576,7 +605,7 @@ export async function open(browser, base, file, data, viewport) {
     link: {}, pending: [], attention: ATTENTION_CLEAR, digest: DIGEST,
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
-    installFails: null, restartFails: null, noRoute: false, decideFails: null, appearanceFails: null,
+    installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },

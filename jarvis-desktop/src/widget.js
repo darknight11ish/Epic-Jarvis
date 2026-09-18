@@ -18,6 +18,7 @@
 
 import {
   announce,
+  amend as amendOnBackend,
   currentLink,
   decide as decideOnBackend,
   onLink,
@@ -103,8 +104,13 @@ const dom = {
   apprRaisedQuote: $("appr-raised-quote"),
   apprAction: $("appr-action"),
   apprDetail: $("appr-detail"),
+  apprOptions: $("appr-options"),
+  apprNoteInput: $("appr-note"),
+  btnApprNoteSend: $("btn-appr-note-send"),
   btnApprYes: $("btn-appr-yes"),
   btnApprNo: $("btn-appr-no"),
+
+  widgetProgress: $("widget-progress"),
 
   captureTarget: $("capture-target"),
   captureInput: $("capture-input"),
@@ -131,6 +137,11 @@ const state = {
   /** The id already answered from this window, so a second click cannot send
    *  a contradictory decision before the resolution broadcast lands. */
   decided: null,
+  /** A note is being sent for the current approval. Its own flag, on
+   *  purpose - `busy` (the Logseq/Joplin capture) and `deciding` already
+   *  learned this lesson once: one shared flag makes two unrelated actions
+   *  silently no-op each other. */
+  noteBusy: false,
 };
 
 /**
@@ -393,6 +404,10 @@ function openApproval(approval) {
   dom.apprRaisedChip.textContent = raised ? raised.text : "";
   dom.apprRaisedQuote.textContent = raised && raised.quote ? `“${raised.quote}”` : "";
   dom.apprRaisedQuote.hidden = !(raised && raised.quote);
+  renderOptions(approval);
+  // A note about a still-open card is stale; a note about a fresh one has
+  // nothing typed yet either way, so this is safe unconditionally.
+  dom.apprNoteInput.value = "";
   dom.apprCard.hidden = false;
   syncApprovalButtons();
   // A gate is the one thing worth opening the widget for on its own — but only
@@ -402,9 +417,50 @@ function openApproval(approval) {
   else syncSize();
 }
 
+/**
+ * Renders a plan's options — docs/AUTONOMY-PROPOSALS.md §3a.
+ *
+ * Zero or one option: `.appr-options` stays empty and hidden, and the
+ * static Approve button (below) is the only way to approve — the exact
+ * behaviour this card had before options existed at all. Two or more:
+ * the static Approve button is hidden (Deny is not — denying never needs
+ * to say which option) and one button per option appears instead, each a
+ * full plan of its own to approve, never a modifier on a shared one.
+ */
+function renderOptions(approval) {
+  const options = Array.isArray(approval.options) ? approval.options : [];
+  dom.apprOptions.replaceChildren();
+  const multiple = options.length > 1;
+  dom.apprOptions.hidden = !multiple;
+  dom.btnApprYes.hidden = multiple;
+  if (!multiple) return;
+  for (const option of options) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "appr-option";
+    btn.dataset.optionId = option.id;
+    const label = document.createElement("span");
+    label.className = "opt-label";
+    label.textContent = option.label; // textContent: model-authored text.
+    btn.append(label);
+    if (option.summary) {
+      const summary = document.createElement("span");
+      summary.className = "opt-summary";
+      summary.textContent = option.summary;
+      btn.append(summary);
+    }
+    btn.addEventListener("click", () => decide(true, option.id));
+    dom.apprOptions.append(btn);
+  }
+}
+
 function closeApproval() {
   state.approval = null;
   dom.apprCard.hidden = true;
+  dom.apprOptions.replaceChildren();
+  dom.apprOptions.hidden = true;
+  dom.btnApprYes.hidden = false;
+  dom.apprNoteInput.value = "";
   syncSize();
 }
 
@@ -417,9 +473,19 @@ function syncApprovalButtons() {
   const blocked = currentLink().stale || state.busy;
   dom.btnApprYes.disabled = blocked;
   dom.btnApprNo.disabled = blocked;
+  for (const opt of dom.apprOptions.children) opt.disabled = blocked;
+  // The note is a separate action from deciding (see `state.noteBusy`'s own
+  // comment) but it still needs the stream live to mean anything, and it
+  // still needs to stop once a decision on THIS card is in flight or has
+  // already landed — sending a note for a plan already being decided would
+  // arrive after the fact.
+  const noteBlocked = blocked || state.noteBusy || state.deciding
+    || (state.approval && state.decided === state.approval.id);
+  dom.apprNoteInput.disabled = noteBlocked;
+  dom.btnApprNoteSend.disabled = noteBlocked;
 }
 
-async function decide(approved) {
+async function decide(approved, optionId = null) {
   if (!state.approval || state.deciding) return;
   // The id latch the spotlight has and this window did not. `deciding` is
   // released in `finally`, but the card only closes when the backend
@@ -436,7 +502,7 @@ async function decide(approved) {
   syncApprovalButtons();
 
   try {
-    await decideOnBackend(state.approval.id, approved);
+    await decideOnBackend(state.approval.id, approved, optionId);
     // The backend broadcasts approval-resolved, which closes the card.
     flash(approved ? "Approved." : "Denied.", approved ? "ok" : null);
   } catch (error) {
@@ -549,6 +615,40 @@ async function sendCapture() {
   }
 }
 
+/**
+ * Sends a note before the first decision on the open card —
+ * docs/AUTONOMY-PROPOSALS.md §3b. Approves nothing: the expected result is
+ * a NEW proposal for the same id, arriving the normal way through the
+ * queue, which `onQueue` below already repaints from — this function does
+ * not apply anything itself, only sends the text and reports whether it
+ * landed.
+ */
+async function sendNote() {
+  const note = dom.apprNoteInput.value.trim();
+  if (!note || !state.approval || state.noteBusy) return;
+  const id = state.approval.id;
+
+  state.noteBusy = true;
+  syncApprovalButtons();
+  flash("Sending your note…");
+
+  try {
+    await amendOnBackend(id, note);
+    dom.apprNoteInput.value = "";
+    flash(
+      "Sent — waiting for a new proposal.",
+      "ok",
+      "Jarvis will read this note and propose again for the same request; " +
+        "nothing has been approved or denied."
+    );
+  } catch (error) {
+    flash(String((error && error.message) || error), "bad");
+  } finally {
+    state.noteBusy = false;
+    syncApprovalButtons();
+  }
+}
+
 /* ==========================================================================
    Events
    ========================================================================== */
@@ -561,6 +661,13 @@ dom.btnJoplin.addEventListener("click", () => invoke("prefill_quickbar", { targe
 
 dom.btnApprYes.addEventListener("click", () => decide(true));
 dom.btnApprNo.addEventListener("click", () => decide(false));
+dom.btnApprNoteSend.addEventListener("click", sendNote);
+dom.apprNoteInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    sendNote();
+  }
+});
 
 dom.captureTarget.addEventListener("click", () =>
   setCaptureTarget(state.captureTarget === "logseq" ? "joplin" : "logseq")
@@ -667,6 +774,14 @@ startLink();
         ? clip(`Not answering: ${link.error}`, 90)
         : "Jarvis is not answering.";
     }
+
+    // Live progress — docs/AUTONOMY-PROPOSALS.md §3c. Only shown while
+    // something is actually reported in progress; offline already has its
+    // own row above, and an idle Jarvis has nothing to narrate.
+    const detail = link.connected && link.activity === "working" ? link.activityDetail : "";
+    dom.widgetProgress.hidden = !detail;
+    if (detail) dom.widgetProgress.textContent = detail;
+
     syncApprovalButtons();
     syncSize();
   });
