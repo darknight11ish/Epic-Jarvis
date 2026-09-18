@@ -73,7 +73,7 @@ class ModelsAndOptionsTest {
     }
 
     @Test
-    fun `offload off the card is flagged; on the card is not`() {
+    fun `offload off the card is flagged, on the card is not`() {
         val cpu = models("""{"offload": {"status": "cpu", "note": "spilled"}}""")
         assertTrue(cpu.offload!!.bad)
         val gpu = models("""{"offload": {"status": "gpu"}}""")
