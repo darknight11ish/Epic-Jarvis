@@ -5,6 +5,7 @@ import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.ProposalOption
 import com.jarvis.client.net.Risk
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -22,7 +23,11 @@ import org.junit.Test
  */
 class ModelsAndOptionsTest {
 
-    private fun models(text: String) = JarvisJson.decodeFromString(ModelsInfo.serializer(), text)
+    // Through the raw object, matching what ModelsInfo.from actually takes -
+    // it is a plain class built by hand from a JsonObject, not a
+    // @Serializable one, per its own doc comment.
+    private fun models(text: String) =
+        ModelsInfo.from(JarvisJson.parseToJsonElement(text) as JsonObject)
 
     @Test
     fun `installed as bare strings`() {

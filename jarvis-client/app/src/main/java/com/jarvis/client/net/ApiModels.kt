@@ -3,6 +3,7 @@ package com.jarvis.client.net
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -103,44 +104,59 @@ data class StatusInfo(
  * strings or objects with `ref`/`name`/`model`, and `offload` saying whether
  * the model is actually on the graphics card.
  *
- * Tolerant on purpose. The route's shape is documented by that consumer and
- * nothing else, so every field is optional and [entries] accepts both spellings
- * of an installed model rather than assuming one.
+ * Read from the raw [JsonObject] rather than through a `@Serializable` data
+ * class - deliberately, matching [JarvisApi.probe]'s own reasoning: the
+ * contract documents this route by one consumer's behaviour and nothing
+ * else, so a typed decode would mean inventing keys, and `installed` mixes
+ * bare strings with objects in the one shape that consumer actually reads.
+ * A `List<JsonElement>` property has no precedent anywhere in this codebase
+ * inside a class the serialization compiler plugin generates code for -
+ * every other raw-JSON field here (`BrainSnapshot`'s) sits on a PLAIN data
+ * class assigned to directly, never decoded - so this does the same thing
+ * `BrainScreen.kt`'s own `flatten()`/`str()` helpers do: read the object by
+ * hand.
  */
-@Serializable
 data class ModelsInfo(
-    val current: String? = null,
-    val active: String? = null,
-    val previous: String? = null,
-    val installed: List<JsonElement> = emptyList(),
-    val offload: ModelOffload? = null,
+    val currentRef: String?,
+    val previous: String?,
+    val entries: List<ModelEntry>,
+    val offload: ModelOffload?,
 ) {
-    /** The running model, whichever key the server used. */
-    val currentRef: String? get() = (current ?: active)?.takeIf { it.isNotBlank() }
-
-    /** Installed models, normalised. Falls back to the current one alone. */
-    val entries: List<ModelEntry>
-        get() {
+    companion object {
+        fun from(json: JsonObject): ModelsInfo {
+            val current = json.str("current") ?: json.str("active")
+            val previous = json.str("previous")
+            val installed = (json["installed"] as? JsonArray).orEmpty()
             val listed = installed.mapNotNull { el ->
                 when (el) {
                     is JsonPrimitive -> el.content.takeIf { it.isNotBlank() }?.let { ModelEntry(it) }
                     is JsonObject -> {
                         val ref = listOf("ref", "name", "model")
-                            .firstNotNullOfOrNull { k -> (el[k] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() } }
+                            .firstNotNullOfOrNull { k -> el.str(k) }
                         ref?.let {
                             ModelEntry(
                                 ref = it,
-                                sizeBytes = (el["size"] as? JsonPrimitive)?.content?.toLongOrNull(),
-                                family = (el["family"] as? JsonPrimitive)?.content,
+                                sizeBytes = el.str("size")?.toLongOrNull(),
+                                family = el.str("family"),
                             )
                         }
                     }
                     else -> null
                 }
             }
-            if (listed.isNotEmpty()) return listed
-            return listOfNotNull(currentRef?.let { ModelEntry(it) })
+            // Falls back to the current model alone when nothing was listed,
+            // so a backend that only ever reports what is running still
+            // shows one row rather than an empty section.
+            val entries = listed.ifEmpty { listOfNotNull(current?.let { ModelEntry(it) }) }
+            val offload = (json["offload"] as? JsonObject)?.let {
+                ModelOffload(status = it.str("status"), note = it.str("note"))
+            }
+            return ModelsInfo(currentRef = current, previous = previous, entries = entries, offload = offload)
         }
+
+        private fun JsonObject.str(key: String): String? =
+            (this[key] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+    }
 }
 
 data class ModelEntry(
@@ -150,7 +166,6 @@ data class ModelEntry(
 )
 
 /** Whether the model is on the GPU. `status` is `gpu` | `partial` | `cpu` | `unknown`. */
-@Serializable
 data class ModelOffload(
     val status: String? = null,
     val note: String? = null,

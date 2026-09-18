@@ -291,9 +291,16 @@ class JarvisApi(
      * Which models the desktop has and which is running. Read only where the
      * handshake reports the `models` capability; the shape is the one the
      * desktop's own Brain pane reads, see [ModelsInfo].
+     *
+     * Through [probe], not a typed decode - [ModelsInfo] is deliberately a
+     * plain class built by [ModelsInfo.from] from the raw object, for the
+     * reason its own doc comment gives.
      */
     suspend fun models(): ApiResult<ModelsInfo> =
-        get("/api/models", ModelsInfo.serializer())
+        when (val result = probe("/api/models")) {
+            is ApiResult.Ok -> ApiResult.Ok(ModelsInfo.from(result.value))
+            is ApiResult.Failed -> result
+        }
 
     /**
      * `POST /api/models/switch {"ref": ...}` - the body the desktop's
