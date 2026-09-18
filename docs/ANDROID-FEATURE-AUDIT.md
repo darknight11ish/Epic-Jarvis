@@ -210,13 +210,69 @@ there will be none.
 
 ## 6. Bug and performance findings — addendum
 
-*An independent multi-agent review of `jarvis-client/` is running from the
-desktop side: eight specialists (concurrency and lifecycle, networking and
+An independent multi-agent review of `jarvis-client/` at `bf4df72`, run from
+the desktop side: eight specialists (concurrency and lifecycle, networking and
 SSE, Compose state, the audio pipeline, persistence and the exported surface,
 Compose rendering cost, the face-rendering hot path, background and battery
-cost), each finding then attacked by two adversarial reviewers before it
-survives. What survives will be appended here with file and line. Until then
-this section is deliberately empty.*
+cost), 39 findings proposed, each attacked by two adversarial reviewers, 19
+survived and 20 were refuted. Every line number below was re-read against
+`bf4df72` before being written here. If your branch has moved, the file and
+the symbol are the anchor, not the number.
+
+**Verdict first:** the client is in better shape than a 61-file Compose app
+usually is. Nothing below breaks the permission model. The three that matter
+are the voice timeouts, the notification Deny, and the swipe-after-decision.
+Do those before anything in §4.
+
+### Bugs
+
+| # | Sev | Where | What | Fix |
+|---|-----|-------|------|-----|
+| B1 | HIGH | `net/JarvisApi.kt:194` (`readTimeout(0)`), used by `utterance()` at `:439` and `say()` at `:468` | The shared client has **no read timeout** because `/api/events` and `/api/chat` need one open forever. `utterance` and `say` reuse it, so a desktop that accepts the POST and then stalls (Ollama swapping, Piper hung) leaves the voice loop waiting **indefinitely** with no error and no way out short of killing the app. | A third client, built from `client.newBuilder()`, with `readTimeout(60s)` and `callTimeout(120s)`, used only by `utterance` and `say`. Do not touch the stream client. |
+| B2 | HIGH | `service/EventService.kt:118-122` (`denyFromNotification`), called at `:82` | Deny from the notification does `scope.launch { decide(item, approve = false) }` and **discards the result**. If the desktop rejects it (expired, 401, unreachable) the notification is gone and the owner believes they denied something they did not. Also, unlike the other actions, the `ACTION_DENY` branch never calls `JarvisRuntime.startStream()`, so a Deny tapped while the service was cold decides against a stale `pending` list. | Capture the `decide` result; on `Failed`, re-post the notification with the reason in the body. Call `JarvisRuntime.startStream()` in the `ACTION_DENY` branch, same as the others. Deny stays a notification action — that is allowed; Approve is not. |
+| B3 | MED | `ui/approval/ApprovalCard.kt:113-121` | On swipe the card `animateTo(size.width)` **then** calls `approve()`/`deny()`. The card is off-screen before the desktop has answered. A failed decision leaves an invisible card whose item is still pending. This is the same rule §5 quotes — never show "gone" before the desktop says so. | Call `approve()`/`deny()` first; animate off only on `Ok`; `animateTo(0f)` on `Failed`. |
+| B4 | MED | `MainActivity.kt:180` (`rememberCoroutineScope()`), used at `:589-595` for `onApprove` | Approve/deny launch on the composable's scope. A rotation during the round trip **cancels the coroutine mid-request**: the POST may have landed, the result is dropped, the card sits there, a second tap double-decides. | Launch on `JarvisRuntime.scope` (or `lifecycleScope`), which is what the comment at `:181-183` already says the rest moved to. |
+| B5 | MED | `service/ApprovalNotifier.kt:37-38` | `assigned` (approval id → notification id) is an in-memory `LinkedHashMap`. Process death leaves posted notifications the app can no longer find or cancel; after restart the same approval can be posted twice under a new id. | Derive the notification id from the approval id (stable hash) instead of a counter, or persist the map. Stable hash is the smaller change. |
+| B6 | MED | `audio/Speaker.kt:79-95` | `AudioTrack` is built with `USAGE_ASSISTANT` but **no audio focus is requested**. Jarvis talks over music and phone calls, and is not ducked or paused by them. | `AudioManager.requestAudioFocus` with `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` before `play()`, abandon in the `finally`. |
+| B7 | MED | `audio/Speaker.kt:117-119` | `finally { out.stop(); out.release() }` runs as soon as the last `write` returns, not when the last buffered sample has played. The **tail of every utterance is cut** by up to one buffer. | After the last write, wait for `playbackHeadPosition` to reach the frame count (or `setNotificationMarkerPosition`) before `stop()`. |
+| B8 | MED | `face/FaceView.kt:112-127` | In the ≤15 fps branch the loop `delay(stepMs)` before checking input. In BANKED (1 fps) a tap can wait **up to a second** before the face reacts. | Wake the loop on tap (a `Channel`/`select` with the delay), or drop to the display-rate branch for one frame on input. |
+| B9 | LOW | `net/ChatSession.kt:76-84` | Streams the chat body with `buf.readUtf8()` per raw chunk. A multi-byte character split across a chunk boundary decodes as U+FFFD. | `body.charStream().buffered()` — exactly what `EventStream.kt:181` already does. |
+| B10 | LOW | `ui/screens/HomeScreen.kt:453-463` | `ImeAction.Send` is set with **no `keyboardActions`**. The keyboard shows Send; pressing it does nothing. | `keyboardActions = KeyboardActions(onSend = { actions.onSend() })`. |
+| B11 | LOW | `ui/approval/ApprovalCard.kt:247-250` | `canDecide` does not go false while a decision is in flight, so a double-tap on Approve fires twice. | Copy the `busyId` pattern the Brain screen documents at `BrainScreen.kt:441`. |
+| B12 | LOW | `MainActivity.kt:324-329` | `focusApproval` carries the tapped approval's id from the notification, then only calls `refreshPending()` and **drops the id**. With several pending, the tap lands on whatever is first. | Scroll to / highlight the card whose id matches. |
+| B13 | LOW | `service/BootReceiver.kt:21-29` | Starts `EventService` on boot **unconditionally**, paired or not. Unpaired, it posts a foreground notification and loops on a 401. | `if (JarvisRuntime.isPaired()) EventService.start(context)`. |
+
+### Performance
+
+| # | Sev | Where | What | Fix |
+|---|-----|-------|------|-----|
+| P1 | MED | `platform/DisplayRate.kt:80-93` | The maximum panel rate (`rates.maxOrNull()`) is requested **once, for the life of the activity**, including the nine tenths of screen-on time the face runs at 1-15 fps. On a 120 Hz panel that is a measurable battery cost for nothing. | Request `best` only while `Spec.fpsFor(state) > 60`; otherwise clear the preference (`0f`). The face loop already knows the state. |
+| P2 | MED | `JarvisRuntime.kt:555-568` (`refreshBrain`), re-run at `:728` after **every** memory decision | Nine serial round trips (`refreshStatus`, `refreshAttention`, `jobs`, six probes). Deciding ten memory facts costs ninety requests. | Run the probes with `async` in one `coroutineScope`; after a memory decision refresh only `/api/memory/pending`. |
+| P3 | LOW | `net/EventStream.kt:179` (`Open(null)`) then `:190-199` (`Open(hello)`) | Two `Open` signals per connect, and the consumer refreshes on each — a **double refresh per reconnect**, on the reconnect path that backoff already makes busy. | Emit `Open(null)` only if no `hello` arrives within a short grace, or have the consumer ignore an `Open(null)` followed by `Open(hello)`. |
+
+### Order
+
+1. B1, B2, B3 — voice timeouts, notification Deny outcome + `startStream`, swipe after decision. One commit each.
+2. B4, B11 — both are "a decision can fire twice"; fix together.
+3. P2, P1 — cheap and visible.
+4. The rest as you pass through the files.
+
+### What was refuted, so you do not re-find it
+
+Twenty proposals did not survive. The workflow returned only the count, not
+the list, so only the two I re-read myself are named here, with the line:
+
+- The SSE `retry` field is **not** an overflow: `EventStream.kt:189` clamps
+  it to `[MIN_RETRY_MS, MAX_BACKOFF_MS]`.
+- `EventService` does **not** leak the stream on teardown:
+  `EventService.kt:124-136` cancels the watcher, clears notifications, stops
+  the stream and cancels the whole scope.
+
+And one item from §4 P3 is already answered: `data/TokenStore.kt:26` is
+"hand-rolled against the Keystore" with GCM (`:110`), over a `MODE_PRIVATE`
+preferences file (`:38`). It is Keystore-backed. Strike the "confirm
+encrypted storage" line; the Syncthing-style identity is the only P3 work
+left.
 
 ---
 
