@@ -55,6 +55,15 @@ xcap = "0.9"
 # cross-checked from the Linux container this is developed in. On Windows
 # native-tls is schannel, which is the OS's own verifier.
 tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
+# Real microphone capture for the push-to-talk voice loop. WASAPI on Windows -
+# no system audio library needed there, unlike cpal's Linux (ALSA) backend,
+# which is why `cargo check --target x86_64-pc-windows-msvc` (this project's
+# own way of checking Rust without a GTK-shaped Linux dependency graph) is the
+# one that actually proves this compiles.
+cpal = "0.15"
+# Encodes the captured samples as the 16-bit PCM WAV `jarvis_speech._read_wav`
+# requires - confirmed against that function directly, not guessed.
+hound = "3.5"
 
 # Build order step 4: killing the process TREE, not the process. On Windows
 # that is a Job Object; on Unix a process group. Both are a handful of calls,

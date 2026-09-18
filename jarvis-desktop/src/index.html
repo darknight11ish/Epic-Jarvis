@@ -105,6 +105,31 @@
             <span class="route-model" id="route-model" hidden></span>
           </span>
 
+          <!-- Push-to-talk. Hold to record, release to send - there is no
+               automatic listening yet (no voice-activity-detection exists
+               anywhere in this codebase), so holding the control down is
+               the honest way to say "I am talking to you now." Recording
+               happens in Rust (src-tauri/src/voice.rs) and is posted only
+               to the local Jarvis server - never to a cloud vendor, unlike
+               the disabled Web Speech API path this replaces. -->
+          <button
+            id="mic"
+            class="icon-button"
+            type="button"
+            aria-pressed="false"
+            title="Hold to talk to Jarvis"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path
+                d="M8 1.5a2.25 2.25 0 0 0-2.25 2.25v4a2.25 2.25 0 0 0 4.5 0v-4A2.25 2.25 0 0 0 8 1.5Z"
+              />
+              <path
+                d="M4 7.25a.75.75 0 0 0-1.5 0 5.5 5.5 0 0 0 4.75 5.451V14.5H6a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5H8.75v-1.799A5.5 5.5 0 0 0 13.5 7.25a.75.75 0 0 0-1.5 0 4 4 0 0 1-8 0Z"
+              />
+            </svg>
+            <span class="sr-only">Hold to talk to Jarvis</span>
+          </button>
+
           <button
             id="pin"
             class="icon-button"

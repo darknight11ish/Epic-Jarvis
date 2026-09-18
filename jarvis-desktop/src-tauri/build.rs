@@ -96,6 +96,13 @@ fn main() {
             "set_autostart",
             // Shared
             "check_server_health",
+            // Push-to-talk voice: real microphone capture, quickbar only —
+            // see permissions/surfaces.toml's "voice" set and
+            // src-tauri/src/voice.rs's own module docstring.
+            "start_voice_capture",
+            "stop_voice_capture",
+            "cancel_voice_capture",
+            "speak_reply",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and

@@ -30,6 +30,7 @@ pub mod sse;
 pub mod stream;
 pub mod tray;
 pub mod update;
+pub mod voice;
 pub mod windows;
 
 use std::sync::{Arc, Mutex};
@@ -511,6 +512,7 @@ pub fn run() {
         .manage(hotkeys::HotkeyState::default())
         .manage(update::UpdateState::default())
         .manage(appearance::AppearanceState::default())
+        .manage(voice::VoiceCaptureState::default())
         .invoke_handler(tauri::generate_handler![
             // Eight commands used to be registered here with no caller in any
             // window: capture_screen, is_quickbar_pinned, notify_user,
@@ -583,6 +585,10 @@ pub fn run() {
             commands::open_log_folder,
             commands::get_autostart,
             commands::set_autostart,
+            voice::start_voice_capture,
+            voice::stop_voice_capture,
+            voice::cancel_voice_capture,
+            voice::speak_reply,
         ]);
 
     // The global-shortcut plugin owns a single handler for every accelerator we

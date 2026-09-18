@@ -517,9 +517,29 @@ html[data-state="error"] .reactor-core {
   stroke-linejoin: round;
 }
 
-#pin svg {
+#pin svg,
+#mic svg {
   fill: currentColor;
   stroke: none;
+}
+
+/* Recording reuses the same pressed-state accent every other toggled
+   icon-button already gets ([aria-pressed="true"], just above) - one less
+   colour for the eye to learn, and it already reads as "this control is
+   active" everywhere else in the bar. */
+#mic[aria-pressed="true"] {
+  animation: mic-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #mic[aria-pressed="true"] {
+    animation: none;
+  }
 }
 
 .icon-button:hover {

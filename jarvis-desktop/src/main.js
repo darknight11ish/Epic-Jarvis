@@ -161,6 +161,7 @@ const dom = {
   offlineText: $("offline-text"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
+  mic: $("mic"),
   pin: $("pin"),
   submitHint: $("submit-hint"),
   noteChip: $("note-chip"),
@@ -224,6 +225,10 @@ const dom = {
 const state = {
   /** `idle` | `streaming` | `done` | `error` */
   phase: "idle",
+  /** This turn was sent by voice, so its reply gets spoken back too - set
+   *  right before `send()` from the push-to-talk flow, read once in
+   *  `finishStream` and cleared there so a later TYPED turn stays silent. */
+  voiceTurn: false,
   /** Raw markdown accumulated from the stream. */
   buffer: "",
   /** Prompt currently in flight, kept for the retry path. */
@@ -1973,8 +1978,94 @@ function finishStream(phase, statusText) {
   // rather than waiting out the throttle.
   commitWindowHeight();
 
+  // A turn spoken to Jarvis gets a spoken answer back; a typed one stays
+  // silent, the same way a phone call and a text message get different
+  // replies. Read and cleared here, once, so a follow-up typed while this
+  // window is still open does not keep talking back uninvited.
+  const wasVoiceTurn = state.voiceTurn;
+  state.voiceTurn = false;
+  if (wasVoiceTurn && phase !== "error" && state.buffer.trim()) {
+    speakReply(state.buffer);
+  }
+
   // Release the pin so clicking away dismisses the bar again.
   setPinned(false, { silent: true });
+}
+
+/* ==========================================================================
+   Voice: push-to-talk in, a spoken reply out
+   ========================================================================== */
+
+/** Whether the microphone is currently open. Mirrors `dom.mic`'s
+ *  `aria-pressed`, kept separately so a stray extra pointerup (a second
+ *  finger, a mouse button released outside the window) cannot try to stop a
+ *  recording that never started. */
+let micRecording = false;
+
+async function startPushToTalk() {
+  if (micRecording) return;
+  micRecording = true;
+  dom.mic.setAttribute("aria-pressed", "true");
+  try {
+    await invokeStrict("start_voice_capture");
+  } catch (error) {
+    micRecording = false;
+    dom.mic.setAttribute("aria-pressed", "false");
+    announce(String((error && error.message) || error), "assertive");
+  }
+}
+
+async function stopPushToTalk() {
+  if (!micRecording) return;
+  micRecording = false;
+  dom.mic.setAttribute("aria-pressed", "false");
+  try {
+    const heard = await invokeStrict("stop_voice_capture");
+    if (!heard.available) {
+      announce(heard.reason || "Speech recognition is not available here.", "assertive");
+      return;
+    }
+    if (!heard.isOwner) {
+      // Deliberately vague rather than naming a score/threshold: the point
+      // is that a voice which is not the owner's never becomes text, not to
+      // explain how close it came.
+      announce("That did not sound like you, so nothing was sent.", "assertive");
+      return;
+    }
+    const text = heard.text.trim();
+    if (!text) {
+      announce("Nothing was heard.");
+      return;
+    }
+    state.voiceTurn = true;
+    send(text);
+  } catch (error) {
+    announce(String((error && error.message) || error), "assertive");
+  }
+}
+
+/** Releasing push-to-talk outside the button (pointer leaves, or a second
+ *  pointer cancels it) discards the clip rather than sending whatever was
+ *  caught - the same "if you say no, nothing happens" contract the rest of
+ *  this app holds everywhere else. */
+function abandonPushToTalk() {
+  if (!micRecording) return;
+  micRecording = false;
+  dom.mic.setAttribute("aria-pressed", "false");
+  invoke("cancel_voice_capture");
+}
+
+/** Speaks `text` through the backend's TTS and plays it back locally. Best
+ *  effort: a failure here is a missing voice, not a failed chat turn, so it
+ *  is logged rather than shown as an error banner over a perfectly good
+ *  answer already on screen. */
+async function speakReply(text) {
+  try {
+    const dataUri = await invokeStrict("speak_reply", { text });
+    await new Audio(dataUri).play();
+  } catch (error) {
+    console.info("[quickbar] spoken reply unavailable:", error);
+  }
 }
 
 /* ==========================================================================
@@ -2196,6 +2287,31 @@ dom.copy.addEventListener("click", async () => {
 });
 
 dom.pin.addEventListener("click", () => setPinned(!state.pinned));
+
+// Push-to-talk: pointer down starts, pointer up sends, the pointer leaving
+// the button (or a second pointer cancelling it) abandons the clip rather
+// than sending it. `click` fires no `mic` handler at all - a click that
+// isn't a hold-and-release is not this control's gesture.
+dom.mic.addEventListener("pointerdown", (event) => {
+  event.preventDefault(); // do not steal focus from wherever it already is
+  startPushToTalk();
+});
+dom.mic.addEventListener("pointerup", stopPushToTalk);
+dom.mic.addEventListener("pointerleave", abandonPushToTalk);
+dom.mic.addEventListener("pointercancel", abandonPushToTalk);
+// Keyboard: Space/Enter while the button is focused. `keydown` fires
+// repeatedly while held, so `startPushToTalk` guards on `micRecording`
+// already being true; `event.repeat` skips the redundant calls outright.
+dom.mic.addEventListener("keydown", (event) => {
+  if (event.repeat || (event.key !== " " && event.key !== "Enter")) return;
+  event.preventDefault();
+  startPushToTalk();
+});
+dom.mic.addEventListener("keyup", (event) => {
+  if (event.key !== " " && event.key !== "Enter") return;
+  event.preventDefault();
+  stopPushToTalk();
+});
 
 dom.approvalApprove.addEventListener("click", () => decideApproval(true));
 dom.approvalDeny.addEventListener("click", () => decideApproval(false));

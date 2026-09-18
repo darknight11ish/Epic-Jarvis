@@ -40,6 +40,22 @@ identifier = "approvals"
 description = "Answer a pending approval gate."
 permissions = ["allow-decide-approval"]
 
+# Real microphone capture and the spoken reply - see src-tauri/src/voice.rs's
+# own module docstring for why this is granted to the quickbar and NOT to the
+# hud window, which loads a vendored page with no app commands at all.
+# Push-to-talk only: nothing here can start listening on its own, and
+# `cancel_voice_capture` exists specifically so releasing the control early
+# can throw the clip away rather than only ever being able to send it.
+[[set]]
+identifier = "voice"
+description = "Record the microphone on push-to-talk, and play back a spoken reply."
+permissions = [
+  "allow-start-voice-capture",
+  "allow-stop-voice-capture",
+  "allow-cancel-voice-capture",
+  "allow-speak-reply",
+]
+
 # The daily brief and the interruption budget. Granted to the quickbar alone,
 # because that is the only window that renders the panel — the HUD loads the
 # backend's own page and the widget is 320px wide.

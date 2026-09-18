@@ -114,6 +114,21 @@ export const APPROVAL_WITH_OPTIONS = {
   ],
 };
 
+// jarvis_speech.Heard.as_dict(), camelCased for the Tauri IPC boundary the
+// same way src-tauri/src/voice.rs's HeardReply does.
+export const HEARD_OWNER = {
+  isOwner: true, text: "what's on my calendar today", score: 0.91,
+  threshold: 0.75, available: true, source: "push_to_talk", reason: "",
+};
+export const HEARD_STRANGER = {
+  isOwner: false, text: "", score: 0.22, threshold: 0.75,
+  available: true, source: "push_to_talk", reason: "",
+};
+export const HEARD_UNAVAILABLE = {
+  isOwner: false, text: "", score: 0, threshold: 0, available: false,
+  source: "push_to_talk", reason: "no speech-to-text engine is configured",
+};
+
 export const ATTENTION_BANKED = {
   known: true, limit: 6, remaining: 0, spent: 6, muted: false,
   blocked_by: null, pending: 3, banked: true, digest_hour: 18, digest_due: true,
@@ -322,7 +337,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -412,6 +427,29 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_autostart":
             window.__autostart = Boolean(args.enabled);
             return { enabled: window.__autostart, supported: true };
+          // Push-to-talk. A scenario sets window.__heard (a Heard-shaped
+          // object, camelCase - isOwner/text/available/reason) for what
+          // stop_voice_capture answers, window.__captureFails /
+          // __speakFails to make either call reject, and reads
+          // window.__voiceCalls afterwards to see what actually ran.
+          case "start_voice_capture":
+            window.__voiceCalls.push("start");
+            if (window.__captureFails) throw new Error(window.__captureFails);
+            return null;
+          case "stop_voice_capture":
+            window.__voiceCalls.push("stop");
+            if (window.__captureFails) throw new Error(window.__captureFails);
+            return window.__heard;
+          case "cancel_voice_capture":
+            window.__voiceCalls.push("cancel");
+            return null;
+          case "speak_reply":
+            window.__voiceCalls.push(["speak", args.text]);
+            if (window.__speakFails) throw new Error(window.__speakFails);
+            // A tiny, real, silent WAV - short enough to inline, valid
+            // enough that `new Audio(dataUri).play()` does not reject on
+            // the data URI itself being malformed.
+            return "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
           case "decide_approval":
             window.__decides = window.__decides || [];
             // `option_id` is undefined on every existing scenario's call —
@@ -564,6 +602,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__appearanceFails = appearanceFails || null;
   window.__decides = [];
   window.__amends = [];
+  window.__voiceCalls = [];
+  window.__heard = heard || null;
+  window.__captureFails = captureFails || null;
+  window.__speakFails = speakFails || null;
   window.__memoryWrites = [];
   window.__memoryRefuses = memoryRefuses || null;
   window.__chatReplies = [...(chatReplies || [])];
@@ -606,6 +648,7 @@ export async function open(browser, base, file, data, viewport) {
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
+    heard: null, captureFails: null, speakFails: null,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },

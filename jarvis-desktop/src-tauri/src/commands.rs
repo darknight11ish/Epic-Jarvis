@@ -728,7 +728,7 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
 /// There is deliberately no *total* timeout: a chat response is a long-lived
 /// body, and `Client::timeout` covers the read as well as the connect, so it
 /// would guillotine a long answer mid-sentence.
-fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::Client, String> {
+pub(crate) fn jarvis_client(total_timeout: Option<Duration>) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .connect_timeout(CHAT_CONNECT_TIMEOUT)
         // A loopback service; a proxy would only get in the way.

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "quickbar",
-  "description": "The Alt+Space spotlight. Streams chat, renders approval gates, shows the daily brief, and owns its own window geometry. It cannot reach the connection settings or backend supervision.",
+  "description": "The Alt+Space spotlight. Streams chat, renders approval gates, shows the daily brief, records the microphone on push-to-talk and plays back a spoken reply, and owns its own window geometry. It cannot reach the connection settings or backend supervision.",
   "windows": [
     "quickbar"
   ],
@@ -13,6 +13,7 @@
     "jarvis-link",
     "approvals",
     "quickbar-surface",
-    "attention-surface"
+    "attention-surface",
+    "voice"
   ]
 }
