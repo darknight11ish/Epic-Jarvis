@@ -255,7 +255,18 @@ fun AppearanceScreen(
                             // face is one edit, and prose is not something a drift
                             // test can check, so the caption told the owner a
                             // number contradicted by the grid directly above it.
-                            "${Faces.all.size} of the desktop's twenty. The rest are shader faces this app does not draw.",
+                            //
+                            // "Shader faces" alone stopped being the whole reason
+                            // once Geodesic and Kirkwood joined the list: three of
+                            // the missing ten need a GPU shader this app doesn't
+                            // have, and the other seven carry their own
+                            // frame-to-frame state, which SpecDriftTest pins as
+                            // exactly one exception (`iris`) precisely so a second
+                            // one can't be added without the reason showing up
+                            // here too.
+                            "${Faces.all.size} of the desktop's twenty. The rest either need a " +
+                                "shader this app doesn't have, or carry their own state between " +
+                                "frames, which is a bigger, separate piece of work.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,
                         )

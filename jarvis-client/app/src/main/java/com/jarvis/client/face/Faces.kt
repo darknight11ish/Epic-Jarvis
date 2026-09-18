@@ -42,30 +42,39 @@ interface Face {
 }
 
 /**
- * Eight faces, not twenty.
+ * Ten faces, not twenty.
  *
  * The brief is explicit that porting all twenty is the real cost of going fully
- * native and that six to eight is the right number. These are all from the
- * spec's `stays_on_canvas` list — line, stroke, point and glow art that Compose
- * draws correctly and cheaply. The three that need a shader (nucleus via AGSL,
- * membrane and tokamak via GLES) are deliberately absent: a rasterised version
- * of those is the faceted, upscaled thing the first audit was about, and
- * shipping it would be worse than not offering them.
+ * native. These are all from the spec's `stays_on_canvas` list — line, stroke,
+ * point and glow art that Compose draws correctly and cheaply. The three that
+ * need a shader (nucleus via AGSL, membrane and tokamak via GLES) are
+ * deliberately absent: a rasterised version of those is the faceted, upscaled
+ * thing the first audit was about, and shipping it would be worse than not
+ * offering them. Full engine parity — the three shader faces plus the seven
+ * remaining stateful ones below — is tracked as its own follow-up, not
+ * something to finish here as a side effect of another task.
  *
  * The picker shows only what is actually rendered — not all twenty with most of
  * them missing.
  *
- * Rime and Orbital were chosen over the flashier candidates for one reason:
- * they are the only two missing faces the spec marks `integrates_per_frame:
- * false` that are neither `heavy` nor recommended for the archive. Stateless
- * means a pure function of `t`, which means the result can be pinned by a
- * golden test the way the pattern engine is. Swarm, shoal, cascade, membrane
- * and the rest carry simulation state between frames, so there is no value to
- * assert and nothing to catch a drift — and drift in a face is invisible until
+ * Rime, Orbital, Geodesic and Kirkwood were chosen over the flashier
+ * candidates for one reason: they are the four missing faces the spec marks
+ * `integrates_per_frame: false` that are neither `heavy` nor recommended for
+ * the archive (`geodesic` and `kirkwood` joined this list after Rime and
+ * Orbital; the original two are kept in that phrasing's history, not because
+ * a third and fourth were impossible). Stateless means a pure function of
+ * `t`, which means the result COULD be pinned by a golden test the way the
+ * pattern engine is — though as of this writing no face's geometry has one;
+ * only `Resolve.kt`'s colours do (`PatternGoldenTest`). Spectrum, swarm,
+ * coreplate, workbench, shoal, accretion, cascade and the rest carry
+ * simulation state between frames, so a translation mistake in them has
+ * nothing to catch it — not "no test would catch it today" (nothing does,
+ * for any face yet), but "no test COULD, without also fixing the random seed
+ * and shipping it as a fixture" — and drift in a face is invisible until
  * someone compares it side by side with the desktop.
  */
 object Faces {
-    val all: List<Face> = listOf(Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital)
+    val all: List<Face> = listOf(Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital, Geodesic, Kirkwood)
     val default: Face = Arc
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default
 }
@@ -570,6 +579,244 @@ object Orbital : Face {
             color = hot.copy(alpha = 0.7f),
             radius = r * (0.028f + 0.022f * f.amp),
             center = Offset(cx, cy),
+        )
+    }
+}
+
+/**
+ * Subdivided icosahedron, lit by a wave travelling across the surface.
+ *
+ * The reference subdivides each icosahedral face once (42 vertices, three
+ * wave origins on `thinking`) and swaps that count per state. This port uses
+ * the plain icosahedron (12 vertices, 30 edges — every vertex degree 5) and
+ * one wave origin: `speedFor` carries the per-state difference instead, the
+ * same simplification every other 3D face here already makes rather than
+ * re-deriving geometry per state. Brightness is computed against the
+ * UNROTATED vertex positions, same as the reference — the wave lives on the
+ * object, not the camera, so it must not depend on how the sphere is turned.
+ */
+object Geodesic : Face {
+    override val id = "geodesic"
+    override val name = "Geodesic"
+
+    private val verts: Array<FloatArray> = run {
+        val phi = (1f + kotlin.math.sqrt(5f)) / 2f
+        arrayOf(
+            floatArrayOf(-1f, phi, 0f), floatArrayOf(1f, phi, 0f),
+            floatArrayOf(-1f, -phi, 0f), floatArrayOf(1f, -phi, 0f),
+            floatArrayOf(0f, -1f, phi), floatArrayOf(0f, 1f, phi),
+            floatArrayOf(0f, -1f, -phi), floatArrayOf(0f, 1f, -phi),
+            floatArrayOf(phi, 0f, -1f), floatArrayOf(phi, 0f, 1f),
+            floatArrayOf(-phi, 0f, -1f), floatArrayOf(-phi, 0f, 1f),
+        ).map { v ->
+            val len = kotlin.math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+            floatArrayOf(v[0] / len, v[1] / len, v[2] / len)
+        }.toTypedArray()
+    }
+
+    // The 20 triangular faces of the icosahedron, walked once to derive the 30
+    // unique edges — a hand-typed edge list could silently miss or duplicate
+    // one and nothing would catch it, since there is no golden test for any
+    // face's geometry, only for the colour engine (see PatternGoldenTest).
+    private val edges: Array<IntArray> = run {
+        val faces = arrayOf(
+            intArrayOf(0, 11, 5), intArrayOf(0, 5, 1), intArrayOf(0, 1, 7),
+            intArrayOf(0, 7, 10), intArrayOf(0, 10, 11), intArrayOf(1, 5, 9),
+            intArrayOf(5, 11, 4), intArrayOf(11, 10, 2), intArrayOf(10, 7, 6),
+            intArrayOf(7, 1, 8), intArrayOf(3, 9, 4), intArrayOf(3, 4, 2),
+            intArrayOf(3, 2, 6), intArrayOf(3, 6, 8), intArrayOf(3, 8, 9),
+            intArrayOf(4, 9, 5), intArrayOf(2, 4, 11), intArrayOf(6, 2, 10),
+            intArrayOf(8, 6, 7), intArrayOf(9, 8, 1),
+        )
+        val seen = HashSet<Int>()
+        val out = ArrayList<IntArray>()
+        for (tri in faces) {
+            for (k in 0 until 3) {
+                val a = tri[k]
+                val b = tri[(k + 1) % 3]
+                val lo = minOf(a, b)
+                val hi = maxOf(a, b)
+                val key = lo * 100 + hi
+                if (seen.add(key)) out.add(intArrayOf(lo, hi))
+            }
+        }
+        out.toTypedArray()
+    }
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.7f
+        FaceState.THINKING -> 1.7f
+        FaceState.SPEAKING -> 0.9f
+        else -> 0.4f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val n = verts.size
+        val xs = FloatArray(n)
+        val ys = FloatArray(n)
+        val depth = FloatArray(n)
+        val cp = cos(f.pitch)
+        val sp = sin(f.pitch)
+        val cyw = cos(f.angle + f.yaw)
+        val syw = sin(f.angle + f.yaw)
+        for (i in 0 until n) {
+            val v = verts[i]
+            val x0 = v[0] * cyw - v[2] * syw
+            val z0 = v[0] * syw + v[2] * cyw
+            xs[i] = x0
+            ys[i] = v[1] * cp - z0 * sp
+            val z = v[1] * sp + z0 * cp
+            depth[i] = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
+        }
+
+        // One wave origin orbiting the sphere on the unrotated object; a
+        // travelling pulse lights whatever vertex it is currently passing.
+        val rate = 0.6f
+        val originAngle = f.t * rate * 0.6f
+        val ox = cos(originAngle)
+        val oy = sin(originAngle * 0.7f)
+        val oz = sin(originAngle)
+        val bright = FloatArray(n)
+        for (i in 0 until n) {
+            val v = verts[i]
+            val dx = v[0] - ox
+            val dy = v[1] - oy
+            val dz = v[2] - oz
+            val d = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz) / 2f
+            var ph = (f.t * rate - d * 2.2f) % 2f
+            if (ph < 0f) ph += 2f
+            bright[i] = if (ph < 1f) (sin(ph * PI.toFloat())).coerceAtLeast(0f) else 0f
+        }
+        val ampBoost = (f.amp * 0.3f).coerceAtMost(0.3f)
+
+        for (edge in edges) {
+            val i = edge[0]
+            val j = edge[1]
+            val d = (depth[i] + depth[j]) / 2f
+            val b = ((bright[i] + bright[j]) / 2f + ampBoost).coerceAtMost(1f)
+            drawLine(
+                color = (if (b > 0.25f) mix(cool, hot, b) else cool)
+                    .copy(alpha = (0.05f + (d - 0.55f).coerceAtLeast(0f) * 1.5f) * (0.35f + b * 1.6f)),
+                start = Offset(cx + xs[i] * r, cy + ys[i] * r),
+                end = Offset(cx + xs[j] * r, cy + ys[j] * r),
+                strokeWidth = r * (0.006f + 0.012f * b) * d.coerceAtLeast(0.2f),
+            )
+        }
+        for (i in 0 until n) {
+            val b = bright[i]
+            if (b < 0.05f && depth[i] < 0.85f) continue
+            drawCircle(
+                color = (if (b > 0.3f) hot else cool).copy(alpha = (0.18f + b * 0.82f).coerceAtMost(1f)),
+                radius = r * (0.02f + 0.05f * b) * depth[i].coerceAtLeast(0.3f),
+                center = Offset(cx + xs[i] * r, cy + ys[i] * r),
+            )
+        }
+    }
+}
+
+/**
+ * The Kirkwood gaps: an asteroid belt cleared by resonance with a shepherd
+ * body ("Jupiter"), not evenly filled.
+ *
+ * Positions are a fixed, seeded layout — semi-major axis, eccentricity,
+ * phase, a scatter for depth — generated once so the belt is identical every
+ * time this face is picked rather than reshuffling. Only each rock's ANGLE
+ * advances with time, the same way the reference's own random layout is
+ * generated once and cached (`this.rocks`) despite the spec marking this face
+ * `integrates_per_frame: false`: the cache is a frozen layout, not evolving
+ * simulation state.
+ *
+ * Depth comes from Orbit's own squashed-ellipse technique in this file, not a
+ * real camera pitch: this is a flat belt seen at an angle, not a point cloud
+ * on a sphere, so Fullerene's rotation does not apply here.
+ */
+object Kirkwood : Face {
+    override val id = "kirkwood"
+    override val name = "Kirkwood"
+
+    private const val N = 420
+    private const val JUPITER_A = 1.32f
+
+    // a = aJupiter * ratio^(-2/3) — Kepler's third law, solved for the radius
+    // that shares Jupiter's orbital period times a simple fraction. A member
+    // function, not a file-level one, so it reads JUPITER_A directly instead
+    // of a second copy of the same literal that could drift from this one.
+    private fun gapAt(ratio: Float): Float = JUPITER_A * ratio.pow(-2f / 3f)
+
+    private val gaps = floatArrayOf(gapAt(3f), gapAt(5f / 2f), gapAt(2f))
+
+    // Fixed per-rock layout, seeded so it never reshuffles between draws.
+    private val rockA = FloatArray(N)
+    private val rockE = FloatArray(N)
+    private val rockPhase = FloatArray(N)
+    private val rockDepthSeed = FloatArray(N)
+    private val rockSize = FloatArray(N)
+
+    init {
+        val rnd = kotlin.random.Random(20260913)
+        for (i in 0 until N) {
+            rockA[i] = 0.45f + rnd.nextFloat() * 0.55f
+            rockE[i] = rnd.nextFloat() * 0.10f
+            rockPhase[i] = rnd.nextFloat() * PI2
+            rockDepthSeed[i] = (rnd.nextFloat() - 0.5f) * 0.10f
+            rockSize[i] = rnd.nextFloat()
+        }
+    }
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.5f
+        FaceState.THINKING -> 1.4f
+        FaceState.SPEAKING -> 0.6f
+        else -> 0.3f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        for (i in 0 until N) {
+            val a = rockA[i]
+            var clear = 1f
+            for (gap in gaps) {
+                val dd = kotlin.math.abs(a - gap)
+                clear = minOf(clear, (dd / 0.045f).coerceIn(0f, 1f))
+            }
+            if (clear < 0.06f) continue
+
+            // Kepler: inner orbits move faster.
+            val om = a.pow(-1.5f)
+            val ang = rockPhase[i] + f.angle * om + f.yaw
+            val rr = a * (1f - rockE[i] * cos(ang * 2f))
+            val x = cos(ang) * rr
+            // Squashed, like Orbit's own belt: y for the ellipse, a separate
+            // depth term (never read for position) for size and alpha only.
+            val y = sin(ang) * rr * 0.32f
+            val z = sin(ang) * 0.32f + rockDepthSeed[i]
+            val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
+            val bright = if (rockSize[i] > 0.9f) hot else cool
+            drawCircle(
+                color = bright.copy(alpha = ((0.18f + rockSize[i] * 0.5f) * clear * d).coerceIn(0f, 1f)),
+                radius = (r * 0.0035f * d * (0.4f + rockSize[i])).coerceAtLeast(0.5f),
+                center = Offset(cx + x * r, cy + y * r),
+            )
+        }
+
+        // The sun, and Jupiter itself doing the clearing.
+        drawCircle(
+            color = lift(hot, 0.35f).copy(alpha = 0.85f),
+            radius = r * 0.09f,
+            center = Offset(cx, cy),
+        )
+        val ja = f.angle * JUPITER_A.pow(-1.5f) + f.yaw
+        val jx = cos(ja) * JUPITER_A
+        val jy = sin(ja) * JUPITER_A * 0.32f
+        drawCircle(
+            color = hot,
+            radius = r * 0.032f,
+            center = Offset(cx + jx * r, cy + jy * r),
         )
     }
 }
