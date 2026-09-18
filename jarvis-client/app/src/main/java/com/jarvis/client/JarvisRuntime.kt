@@ -11,6 +11,8 @@ import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
 import com.jarvis.client.net.JobRecord
+import com.jarvis.client.net.ModelsInfo
+import com.jarvis.client.net.SseEvent
 import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.ChatSession
@@ -24,7 +26,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOn
@@ -36,6 +40,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * The raw JSON behind the brain screen.
@@ -167,6 +173,25 @@ object JarvisRuntime {
 
     private val _activity = MutableStateFlow(Activity.IDLE)
     val activity: StateFlow<Activity> = _activity.asStateFlow()
+
+    /**
+     * What Jarvis is doing right now, in words, or null when it has nothing to
+     * say. AUTONOMY-PROPOSALS §3c: the backend's per-step `announce()`
+     * sentence, carried as `activity_detail` beside `activity`. Read off the
+     * activity event when it carries one and off `/api/status` otherwise.
+     * Ephemeral by contract - never stored, never fed back anywhere.
+     */
+    private val _activityDetail = MutableStateFlow<String?>(null)
+    val activityDetail: StateFlow<String?> = _activityDetail.asStateFlow()
+
+    /**
+     * `/api/models`, or null when this backend does not offer the capability
+     * or has not been asked yet. Switching is the one config change the owner
+     * allowed onto the phone (CLAUDE.md, 2026-09-18) - between models the
+     * desktop already has, never installing one.
+     */
+    private val _models = MutableStateFlow<ModelsInfo?>(null)
+    val models: StateFlow<ModelsInfo?> = _models.asStateFlow()
 
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
@@ -442,7 +467,7 @@ object JarvisRuntime {
                 .collect { signal ->
                 when (signal) {
                     is EventStream.Signal.Open -> onOpen(signal.hello)
-                    is EventStream.Signal.Event -> onEvent(signal.event.kind)
+                    is EventStream.Signal.Event -> onEvent(signal.event)
                     // Nothing to do beyond the stamp in `onEach` above, which
                     // is the entire point of it arriving.
                     EventStream.Signal.Alive -> Unit
@@ -596,17 +621,29 @@ object JarvisRuntime {
      * An event says *something changed*, not *here is the state*. So every one
      * of these re-fetches the real endpoint; the bus is a doorbell.
      */
-    private suspend fun onEvent(kind: String) {
-        when (kind) {
+    private suspend fun onEvent(event: SseEvent) {
+        when (event.kind) {
             "approval" -> refreshPending()
             "attention" -> refreshAttention()
-            "activity" -> refreshStatus()
+            "activity" -> {
+                // The one field read straight off an event rather than
+                // re-fetched: the progress line is ephemeral and travels on
+                // the doorbell itself. Absent means nothing to say, so the
+                // line clears - a stale "Step 2/3" under an idle face would
+                // be worse than none.
+                _activityDetail.value = (event.data as? JsonObject)
+                    ?.get("activity_detail")?.let { it as? JsonPrimitive }?.content
+                    ?.takeIf { it.isNotBlank() }?.take(ACTIVITY_DETAIL_MAX)
+                refreshStatus()
+            }
             "power", "persona" -> refreshStatus()
             "finding" -> Unit // the digest covers these; nothing to show live
             // A model download publishes progress here. The phone cannot start,
             // cancel or retry one, so rendering a bar for it would invite a tap
-            // on a control that has to be somewhere else.
-            "model" -> Unit
+            // on a control that has to be somewhere else. The LIST is re-read,
+            // though: a switch or a rollback made on the desktop should change
+            // which model the phone's own picker marks as active.
+            "model" -> refreshModels()
             "voice" -> Unit
             // The memory extractor runs on its own once a conversation goes
             // quiet, so the review queue fills without anyone asking. The
@@ -641,7 +678,65 @@ object JarvisRuntime {
             _status.value = s
             s.activity?.let { _activity.value = Activity.from(it) }
             s.power?.let { _power.value = it }
+            // Only ever SET from status, never cleared by it: a status poll
+            // that omits the field says nothing about whether a step is
+            // running, whereas the activity event above is authoritative.
+            s.activityDetail?.takeIf { it.isNotBlank() }?.let {
+                _activityDetail.value = it.take(ACTIVITY_DETAIL_MAX)
+            }
+            // Idle means no step is running, whatever the last event said.
+            if (_activity.value == Activity.IDLE) _activityDetail.value = null
         }
+    }
+
+    /**
+     * Re-reads the model list, on a backend that has one. On any other it is
+     * cleared, so the picker hides rather than showing a stale list.
+     */
+    suspend fun refreshModels() {
+        if (version.value?.can("models") != true) {
+            _models.value = null
+            return
+        }
+        api.models().onOk { _models.value = it }
+    }
+
+    /**
+     * Asks the desktop to make [ref] the active model.
+     *
+     * Asks, not does: `switch_model` is tier `ask` on the server, so a 2xx
+     * here means a decision card was raised, not that the model changed. The
+     * card arrives on the stream like any other and is answered like any
+     * other - which is exactly rule 4 holding for a config change.
+     */
+    suspend fun switchModel(ref: String): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        val result = api.switchModel(ref)
+        when (result) {
+            is ApiResult.Ok -> {
+                refreshPending()
+                refreshModels()
+            }
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
+        return result
+    }
+
+    /** Back to the previous model. Tier `auto` on the server - never waits. */
+    suspend fun rollbackModel(): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        val result = api.rollbackModel()
+        when (result) {
+            is ApiResult.Ok -> refreshModels()
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
+        return result
     }
 
     suspend fun refreshPending() {
@@ -729,18 +824,41 @@ object JarvisRuntime {
      * broken.
      */
     suspend fun refreshBrain() {
-        refreshStatus()
-        refreshAttention()
-        api.jobs().onOk { _jobs.value = it }
-        _brain.value = BrainSnapshot(
-            compute = api.probe("/api/compute").orNull(),
-            memory = api.probe("/api/memory/pending").orNull(),
-            ledger = api.probe("/api/ledger").orNull(),
-            skills = api.probe("/api/skills").orNull(),
-            initiative = api.probe("/api/initiative").orNull(),
-            contentRisk = api.probe("/api/content-risk").orNull(),
-            fetchedAtMs = System.currentTimeMillis(),
-        )
+        // Together, not one after another. This was nine serial round trips
+        // - and it ran again after EVERY memory decision, so keeping ten facts
+        // cost ninety requests. Each read is independent of the others, so
+        // they overlap; the screen still gets one snapshot, stamped once.
+        coroutineScope {
+            val status = async { refreshStatus() }
+            val attention = async { refreshAttention() }
+            val jobs = async { api.jobs().onOk { _jobs.value = it } }
+            val models = async { refreshModels() }
+            val compute = async { api.probe("/api/compute").orNull() }
+            val memory = async { api.probe("/api/memory/pending").orNull() }
+            val ledger = async { api.probe("/api/ledger").orNull() }
+            val skills = async { api.probe("/api/skills").orNull() }
+            val initiative = async { api.probe("/api/initiative").orNull() }
+            val contentRisk = async { api.probe("/api/content-risk").orNull() }
+            _brain.value = BrainSnapshot(
+                compute = compute.await(),
+                memory = memory.await(),
+                ledger = ledger.await(),
+                skills = skills.await(),
+                initiative = initiative.await(),
+                contentRisk = contentRisk.await(),
+                fetchedAtMs = System.currentTimeMillis(),
+            )
+            status.await()
+            attention.await()
+            jobs.await()
+            models.await()
+        }
+    }
+
+    /** Just the review queue - all a memory decision can have changed. */
+    suspend fun refreshMemoryQueue() {
+        val memory = api.probe("/api/memory/pending").orNull()
+        _brain.update { it.copy(memory = memory, fetchedAtMs = System.currentTimeMillis()) }
     }
 
     private fun <T> ApiResult<T>.orNull(): T? = (this as? ApiResult.Ok)?.value
@@ -869,6 +987,19 @@ object JarvisRuntime {
         return null
     }
 
+    /**
+     * [decide], on the runtime's own scope.
+     *
+     * A decision launched from a composable's scope died with the screen: a
+     * rotation during the round trip cancelled the coroutine after the POST
+     * had landed, the result was dropped, the card sat there looking
+     * undecided and a second tap sent it again. This scope outlives every
+     * screen, so the answer is always collected and the card always follows.
+     */
+    fun decideDetached(item: PendingItem, approve: Boolean) {
+        scope.launch { decide(item, approve) }
+    }
+
     suspend fun decide(item: PendingItem, approve: Boolean): ApiResult<Unit> {
         val blocker = decisionBlocker(item)
         if (blocker != null) {
@@ -915,7 +1046,10 @@ object JarvisRuntime {
         }
         val result = api.decideMemory(id, accept)
         when (result) {
-            is ApiResult.Ok -> refreshBrain()
+            // The queue alone. A full refreshBrain here was nine requests per
+            // fact kept or discarded, for five sections the decision cannot
+            // have touched.
+            is ApiResult.Ok -> refreshMemoryQueue()
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
         return result
@@ -1026,6 +1160,9 @@ object JarvisRuntime {
 
     private const val KEEPALIVE_GAP_MS = 70_000L
     private const val WATCHDOG_TICK_MS = 10_000L
+
+    /** A status line, not a log: anything longer is cut before it is shown. */
+    private const val ACTIVITY_DETAIL_MAX = 200
 
     /**
      * How long a reconnect may run before the face admits something is wrong.

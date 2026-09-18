@@ -49,7 +49,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
@@ -115,6 +117,12 @@ fun FaceView(
     // screen and it was being rebuilt sixty times a second.
     val glow = rememberGlowSprite()
 
+    // A tap wakes the sleeping branch of the loop below. In BANKED the loop
+    // sleeps half a second between frames, so a tap could sit unanswered for
+    // that long - the one moment the face is supposed to react instantly.
+    // Conflated: a burst of touches is one wake, not a queue of them.
+    val wake = remember { Channel<Unit>(Channel.CONFLATED) }
+
     LaunchedEffect(state) { host.onStateChange(state) }
 
     // The frame loop is suspended while the app is not at least STARTED.
@@ -141,7 +149,10 @@ fun FaceView(
                     // itself calls nine tenths of screen-on time. Sleeping to the
                     // next due instant costs nothing in between.
                     val stepMs = 1000L / fps
-                    delay(stepMs)
+                    // Sleep to the next due instant - or until a tap arrives,
+                    // whichever is first. The tap's own frame then draws now
+                    // rather than at the end of the step.
+                    withTimeoutOrNull(stepMs) { wake.receive() }
                     val now = System.nanoTime()
                     if (last == 0L) last = now
                     val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
@@ -197,7 +208,12 @@ fun FaceView(
                 liveRegion = LiveRegionMode.Polite
             }
             .pointerInput(Unit) {
-                detectTapGestures(onPress = { host.onTap(it, size.width.toFloat()) })
+                detectTapGestures(
+                    onPress = {
+                        host.onTap(it, size.width.toFloat())
+                        wake.trySend(Unit)
+                    },
+                )
             }
             .pointerInput(Unit) {
                 detectDragGestures(

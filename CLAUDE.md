@@ -52,6 +52,12 @@ config editing on the phone. A client must not do speech-to-text. Never build a
 control that clears a rush latch or approves in bulk. Send
 `X-Jarvis-Client: hud` on every request. Never log the token.
 
+Amended by the owner on 2026-09-18: **switching the local model from the
+phone is allowed** - between models the desktop already has, via
+`/api/models/switch`, which raises an approval card like any other change.
+The catalogue is still off the phone: no browsing, no downloading, no
+`/api/models/install`.
+
 ## Tell the owner when something is wrong
 
 Standing instruction from them: "Tell me plainly when something in the brief is

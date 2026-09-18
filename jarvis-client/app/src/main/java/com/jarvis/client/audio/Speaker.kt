@@ -2,13 +2,16 @@ package com.jarvis.client.audio
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -99,6 +102,15 @@ class Speaker(private val context: Context) {
         }
         track = out
 
+        // Audio focus, asked for and given back. Without it Jarvis spoke over
+        // music and phone calls and was neither ducked nor paused by them:
+        // USAGE_ASSISTANT describes the stream to the mixer, it does not ask
+        // the other apps to make room. TRANSIENT_MAY_DUCK is the assistant
+        // shape - music dips while he talks and comes back when he stops.
+        // A refused request still plays; focus is a courtesy to other apps,
+        // not a permission to speak.
+        val focus = requestFocus()
+
         try {
             out.play()
             var i = 0
@@ -112,6 +124,14 @@ class Speaker(private val context: Context) {
                 _level.value = Wav.rms(pcm.copyOfRange(i, i + n))
                 i += written
             }
+            // Let the last buffer drain. write() returns when the samples
+            // are QUEUED, not when they have been heard, and stop() in the
+            // finally below discards whatever is still queued - so the last
+            // word of every reply was clipped by up to one buffer. Bounded,
+            // so a track that never advances (a HAL that stalled) cannot hold
+            // the voice loop; and skipped on cancel, where cutting the tail
+            // is the whole point.
+            if (!cancelled && i > 0) drain(out, i)
         } catch (e: IllegalStateException) {
             Log.w(TAG, "playback failed", e)
         } finally {
@@ -119,7 +139,40 @@ class Speaker(private val context: Context) {
             out.release()
             track = null
             _level.value = null
+            abandonFocus(focus)
         }
+    }
+
+    /** Waits until the track has played [frames] frames, or a short bound passes. */
+    private suspend fun drain(out: AudioTrack, frames: Int) {
+        val deadline = System.currentTimeMillis() + DRAIN_MAX_MS
+        while (!cancelled && System.currentTimeMillis() < deadline) {
+            val head = runCatching { out.playbackHeadPosition }.getOrDefault(Int.MAX_VALUE)
+            if (head >= frames) return
+            delay(DRAIN_POLL_MS)
+        }
+    }
+
+    private fun requestFocus(): AudioFocusRequest? {
+        val manager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            ?: return null
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build(),
+            )
+            .build()
+        val granted = runCatching { manager.requestAudioFocus(request) }
+            .getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+        return if (granted == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) request else null
+    }
+
+    private fun abandonFocus(request: AudioFocusRequest?) {
+        if (request == null) return
+        val manager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        runCatching { manager.abandonAudioFocusRequest(request) }
     }
 
     /**
@@ -251,5 +304,9 @@ class Speaker(private val context: Context) {
 
     private companion object {
         const val TAG = "JarvisSpeaker"
+
+        /** Longest the tail is waited for; one buffer is a few tens of ms. */
+        const val DRAIN_MAX_MS = 1_500L
+        const val DRAIN_POLL_MS = 20L
     }
 }

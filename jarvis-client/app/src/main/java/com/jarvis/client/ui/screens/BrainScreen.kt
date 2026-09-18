@@ -26,6 +26,7 @@ import com.jarvis.client.BrainSnapshot
 import com.jarvis.client.LinkState
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.JobRecord
+import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
 import com.jarvis.client.ui.parts.Field
@@ -100,6 +101,16 @@ fun BrainScreen(
     /** What a Keep/Discard send failed with, e.g. not connected. Null hides it. */
     notice: String? = null,
     onDismissNotice: () -> Unit = {},
+    /**
+     * The model list, or null on a backend without the `models` capability -
+     * in which case the section is not drawn at all, per §2's rule that a
+     * capability reporting false means hide the UI for it.
+     */
+    models: ModelsInfo? = null,
+    /** True while a switch or rollback is in flight, so neither can double-send. */
+    modelBusy: Boolean = false,
+    onSwitchModel: (ref: String) -> Unit = {},
+    onRollbackModel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -160,6 +171,20 @@ fun BrainScreen(
                                 color = chrome.warnInk,
                             )
                         }
+                    }
+                }
+            }
+
+            if (models != null) {
+                item(key = "models") {
+                    Section("Model") {
+                        ModelsPlate(
+                            models = models,
+                            busy = modelBusy,
+                            canAct = link == LinkState.CONNECTED && !stale,
+                            onSwitch = onSwitchModel,
+                            onRollback = onRollbackModel,
+                        )
                     }
                 }
             }
@@ -305,6 +330,122 @@ private fun RushBanner(rush: JsonObject) {
             color = chrome.textMid,
         )
     }
+}
+
+/**
+ * The installed models, with a switch that ASKS.
+ *
+ * The owner's 2026-09-18 amendment to the standing rules: changing the local
+ * model from the phone is allowed. The catalogue is not - there is no install
+ * here, nothing downloads, and the list is whatever the desktop already
+ * holds. `Use` raises an approval card (tier `ask` on the server), so the
+ * change is decided the same way every other change is; `Roll back` is tier
+ * `auto` and never waits, because returning to the previous model is the safe
+ * direction.
+ *
+ * The cost is said on the plate rather than discovered: a swap unloads one
+ * model and loads another, which the desktop's own topology doc measures at
+ * six to ten seconds of silence. That is a scene change, not a route - fine
+ * once per mode, wrong per request.
+ */
+@Composable
+private fun ModelsPlate(
+    models: ModelsInfo,
+    busy: Boolean,
+    canAct: Boolean,
+    onSwitch: (String) -> Unit,
+    onRollback: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val current = models.currentRef
+    val entries = models.entries
+    Plate {
+        // Is the model actually ON the graphics card? Nothing else on the
+        // phone says, and the only symptom of a spill is that everything got
+        // slow - which reads as "Jarvis is slow", not "the model is on the CPU".
+        val off = models.offload
+        if (off != null && off.bad) {
+            Text(
+                off.note ?: "The model is not on the graphics card, so replies are slow.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.warnInk,
+            )
+            Gap(10)
+        }
+        if (entries.isEmpty()) {
+            Text(
+                "No models reported.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textMid,
+            )
+            return@Plate
+        }
+        entries.forEachIndexed { i, entry ->
+            if (i > 0) Rule()
+            val isCurrent = entry.ref == current
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        entry.ref,
+                        style = com.jarvis.client.ui.theme.JarvisType.machine,
+                        color = chrome.textHi,
+                    )
+                    val meta = listOfNotNull(
+                        entry.family,
+                        entry.sizeBytes?.let { bytes(it) },
+                        if (entry.ref == models.previous && !isCurrent) "the previous model" else null,
+                    )
+                    if (meta.isNotEmpty()) {
+                        Gap(2)
+                        Text(
+                            meta.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                if (isCurrent) {
+                    Pill("Active", color = chrome.okInk)
+                } else {
+                    Quiet(
+                        if (busy) "…" else "Use",
+                        enabled = !busy && canAct,
+                        onClick = { onSwitch(entry.ref) },
+                    )
+                }
+            }
+        }
+        val previous = models.previous?.takeIf { it.isNotBlank() && it != current }
+        if (previous != null) {
+            Gap(6)
+            Quiet(
+                if (busy) "…" else "Roll back to $previous",
+                color = chrome.textMid,
+                enabled = !busy && canAct,
+                onClick = onRollback,
+            )
+        }
+        Gap(8)
+        Text(
+            "Use asks the desktop and raises a card here to approve, like any " +
+                "other change. A switch takes six to ten seconds while one model " +
+                "unloads and the next loads - fine once, not per question. " +
+                "Installing new models stays on the desktop.",
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textLo,
+        )
+    }
+}
+
+/** 4.7 GB, 812 MB. Enough precision for a list; a byte count is noise. */
+private fun bytes(n: Long): String = when {
+    n >= 1_000_000_000L -> "%.1f GB".format(n / 1_000_000_000.0)
+    n >= 1_000_000L -> "%.0f MB".format(n / 1_000_000.0)
+    else -> "$n B"
 }
 
 @Composable

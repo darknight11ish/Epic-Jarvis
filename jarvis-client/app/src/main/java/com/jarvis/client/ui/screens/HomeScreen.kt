@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +40,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.Activity
 import com.jarvis.client.FaceState
@@ -123,6 +125,12 @@ data class HomeState(
      * at all, which is what the screen did before this existed.
      */
     val focusApproval: String?,
+    /**
+     * What Jarvis is doing right now, in words, or null. Shown under the link
+     * label while the stream is live; a sentence about a step that may have
+     * finished is not shown over a link that cannot confirm it.
+     */
+    val activityDetail: String? = null,
 )
 
 @Immutable
@@ -393,11 +401,28 @@ private fun LinkBar(state: HomeState, actions: HomeActions) {
         ) {
             Dot(dot)
             Spacer(Modifier.width(10.dp))
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = chrome.textHi,
-            )
+            Column {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = chrome.textHi,
+                )
+                // The progress line, AUTONOMY-PROPOSALS §3c: the backend's
+                // own per-step sentence, under the state it belongs to. One
+                // line, clipped - it is a status, not a log. Only on a live
+                // link, because "Step 2/3" under "Stale" would be a claim
+                // about work the phone cannot see.
+                val detail = state.activityDetail
+                if (detail != null && state.link == LinkState.CONNECTED && !state.stale) {
+                    Text(
+                        detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textMid,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
 
         if (state.link != LinkState.CONNECTED) {
@@ -526,6 +551,11 @@ private fun Composer(
                 ),
                 cursorBrush = SolidColor(accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                // The keyboard showed a Send key that did nothing: ImeAction
+                // only chooses the key's label, and without this the press is
+                // swallowed. Same guard as the button, so an empty draft or a
+                // dead link cannot be sent from the keyboard either.
+                keyboardActions = KeyboardActions(onSend = { if (canSend) actions.onSend() }),
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
             )

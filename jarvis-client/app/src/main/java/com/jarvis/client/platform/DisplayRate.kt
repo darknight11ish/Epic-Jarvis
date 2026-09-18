@@ -52,6 +52,9 @@ object DisplayRate {
     /** Every rate the panel offers at the current resolution. */
     val modes: StateFlow<List<Float>> = _modes.asStateFlow()
 
+    /** The fastest same-resolution mode, found by [request]. 0 until then. */
+    @Volatile private var bestHz = 0f
+
     /**
      * Asks for the highest rate the panel offers **at the current resolution**.
      *
@@ -77,19 +80,47 @@ object DisplayRate {
         val rates = sameSize.map { it.refreshRate }.distinct().sorted()
         _modes.value = rates
         _panelHz.value = display.refreshRate
+        bestHz = rates.maxOrNull() ?: 0f
+        // Nothing is asked for here any more - see [setHigh]. This used to
+        // pin the panel at its maximum for the life of the activity, across
+        // the nine tenths of screen-on time the face draws at 30, 15 or 2
+        // frames a second. On a 120 Hz panel that is a measurable battery
+        // cost for frames nothing was drawing.
+    }
 
-        val best = rates.maxOrNull() ?: return
-        _requestedHz.value = best
+    /**
+     * Asks for the panel's fastest rate while [high] and lets go of it
+     * otherwise.
+     *
+     * Called from the face's state: only listening, thinking, speaking and
+     * error want every frame the display can give. Everything else draws at
+     * 30 or less, and a panel running at 120 for a 30-frame face is heat and
+     * battery spent on nothing. Repeated calls with the same answer are
+     * free; the request is only re-sent when it changes.
+     */
+    fun setHigh(activity: Activity, view: View?, high: Boolean) {
+        val best = bestHz
+        if (best <= 0f) return
+        val want = if (high) best else 0f
+        if (_requestedHz.value == want) return
+        _requestedHz.value = want
 
         if (Build.VERSION.SDK_INT >= 35 && view != null) {
-            runCatching { view.requestedFrameRate = best }
-                .onFailure { Log.w(TAG, "setRequestedFrameRate refused", it) }
+            runCatching {
+                view.requestedFrameRate =
+                    // `requestedFrameRate` is Float; the category constants are
+                    // Int, and Kotlin does not widen one to the other. Caught
+                    // by reading, not by a compiler - there is none on this
+                    // branch.
+                    if (high) best else View.REQUESTED_FRAME_RATE_CATEGORY_DEFAULT.toFloat()
+            }.onFailure { Log.w(TAG, "setRequestedFrameRate refused", it) }
             return
         }
 
         runCatching {
             val attrs = activity.window.attributes
-            attrs.preferredRefreshRate = best
+            // 0 means "no preference", which hands the choice back to the OS.
+            attrs.preferredRefreshRate = want
             activity.window.attributes = attrs
         }.onFailure { Log.w(TAG, "preferredRefreshRate refused", it) }
     }

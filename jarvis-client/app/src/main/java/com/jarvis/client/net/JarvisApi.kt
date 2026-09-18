@@ -285,6 +285,31 @@ class JarvisApi(
     suspend fun jobs(): ApiResult<List<JobRecord>> =
         get("/api/jobs", ListSerializer(JobRecord.serializer()), JOB_KEYS)
 
+    // ----------------------------------------------------------- models ----
+
+    /**
+     * Which models the desktop has and which is running. Read only where the
+     * handshake reports the `models` capability; the shape is the one the
+     * desktop's own Brain pane reads, see [ModelsInfo].
+     */
+    suspend fun models(): ApiResult<ModelsInfo> =
+        get("/api/models", ModelsInfo.serializer())
+
+    /**
+     * `POST /api/models/switch {"ref": ...}` - the body the desktop's
+     * `brain_model` command sends, copied rather than guessed. Tier `ask` on
+     * the server, so success means "a decision card was raised".
+     *
+     * There is deliberately no `install` here. Downloading weights is the
+     * model catalogue, which stays off the phone; a switch only ever chooses
+     * between models the desktop already holds.
+     */
+    suspend fun switchModel(ref: String): ApiResult<Unit> =
+        postJson("/api/models/switch", """{"ref":${quote(ref)}}""")
+
+    /** `POST /api/models/rollback {}` - tier `auto`, never waits. */
+    suspend fun rollbackModel(): ApiResult<Unit> = postJson("/api/models/rollback", "{}")
+
     // ----------------------------------------------------------- writes ----
 
     suspend fun approve(id: String): ApiResult<Unit> = decide("/api/approve", id)

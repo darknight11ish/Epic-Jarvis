@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.widget.Toast
+import com.jarvis.client.net.ApiResult
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -82,6 +83,13 @@ class EventService : Service() {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_DENY) {
+            // The stream first, same as every other start. This branch used to
+            // skip it, so a Deny tapped while the service was cold - after a
+            // reboot, or after Android reclaimed the process overnight - was
+            // decided against whatever `pending` last held, which is the
+            // stale-queue case the decision blocker exists to refuse. Starting
+            // the stream is idempotent when it is already up.
+            JarvisRuntime.startStream()
             denyFromNotification(intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID))
             // START_STICKY, not START_NOT_STICKY: the sticky flag is the
             // system's restart policy going forward, not a per-call receipt,
@@ -144,7 +152,20 @@ class EventService : Service() {
             if (id != null) runCatching { ApprovalNotifier.cancelFor(this, id) }
             return
         }
-        scope.launch { JarvisRuntime.decide(item, approve = false) }
+        scope.launch {
+            // The result was discarded here. `decide()` already sets a notice
+            // on failure - unreachable, stale, already handled - but a notice
+            // is a view on a screen, and the whole reason this action exists
+            // is that the screen is very likely not open. Without a Toast the
+            // owner walked away believing they had denied something that the
+            // desktop never heard about.
+            val result = JarvisRuntime.decide(item, approve = false)
+            if (result is ApiResult.Failed) {
+                val message = "Could not send the denial: " +
+                    (JarvisRuntime.notice.value ?: "the desktop did not accept it.")
+                runCatching { Toast.makeText(this@EventService, message, Toast.LENGTH_LONG).show() }
+            }
+        }
     }
 
     override fun onDestroy() {

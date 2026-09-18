@@ -82,7 +82,81 @@ data class StatusInfo(
     val power: String? = null,
     val activity: String? = null,
     val held: Boolean = false,
+    /**
+     * What Jarvis is doing right now, in words - "Step 2/3: click 'Send'".
+     *
+     * Proposed by `docs/AUTONOMY-PROPOSALS.md` §3c on the desktop branch as an
+     * additive sibling of `activity`: the sentence the backend's `announce()`
+     * already produces per step, capped and never persisted. Optional here
+     * because no backend sends it yet; absent means there is nothing to say,
+     * and the phone shows nothing.
+     */
+    @SerialName("activity_detail") val activityDetail: String? = null,
 )
+
+// --------------------------------------------------------------- models ----
+
+/**
+ * `GET /api/models`, read the way the desktop's Brain pane reads it
+ * (`brain.js renderModels`): `current` or `active` for the running model,
+ * `previous` for the one a rollback returns to, `installed` as either bare
+ * strings or objects with `ref`/`name`/`model`, and `offload` saying whether
+ * the model is actually on the graphics card.
+ *
+ * Tolerant on purpose. The route's shape is documented by that consumer and
+ * nothing else, so every field is optional and [entries] accepts both spellings
+ * of an installed model rather than assuming one.
+ */
+@Serializable
+data class ModelsInfo(
+    val current: String? = null,
+    val active: String? = null,
+    val previous: String? = null,
+    val installed: List<JsonElement> = emptyList(),
+    val offload: ModelOffload? = null,
+) {
+    /** The running model, whichever key the server used. */
+    val currentRef: String? get() = (current ?: active)?.takeIf { it.isNotBlank() }
+
+    /** Installed models, normalised. Falls back to the current one alone. */
+    val entries: List<ModelEntry>
+        get() {
+            val listed = installed.mapNotNull { el ->
+                when (el) {
+                    is JsonPrimitive -> el.content.takeIf { it.isNotBlank() }?.let { ModelEntry(it) }
+                    is JsonObject -> {
+                        val ref = listOf("ref", "name", "model")
+                            .firstNotNullOfOrNull { k -> (el[k] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() } }
+                        ref?.let {
+                            ModelEntry(
+                                ref = it,
+                                sizeBytes = (el["size"] as? JsonPrimitive)?.content?.toLongOrNull(),
+                                family = (el["family"] as? JsonPrimitive)?.content,
+                            )
+                        }
+                    }
+                    else -> null
+                }
+            }
+            if (listed.isNotEmpty()) return listed
+            return listOfNotNull(currentRef?.let { ModelEntry(it) })
+        }
+}
+
+data class ModelEntry(
+    val ref: String,
+    val sizeBytes: Long? = null,
+    val family: String? = null,
+)
+
+/** Whether the model is on the GPU. `status` is `gpu` | `partial` | `cpu` | `unknown`. */
+@Serializable
+data class ModelOffload(
+    val status: String? = null,
+    val note: String? = null,
+) {
+    val bad: Boolean get() = status == "cpu" || status == "partial"
+}
 
 // ------------------------------------------------------------ approvals ----
 
@@ -167,6 +241,22 @@ data class Notice(
     @SerialName("approve_ok") val approveOk: Boolean = false,
 )
 
+/**
+ * One of several complete, independently bounded plans a proposal offers.
+ *
+ * From `docs/AUTONOMY-PROPOSALS.md` §3a on the desktop branch. Each option is
+ * a whole plan, never a checkbox that mutates one - a plan whose shape can
+ * change after being shown is what "fully enumerated ahead of time" forbids.
+ */
+@Serializable
+data class ProposalOption(
+    val id: String = "",
+    val label: String = "",
+    val summary: String = "",
+    /** `heavy` | `normal` - whether any step is irreversible or leaves the machine. */
+    val weight: String = "",
+)
+
 @Serializable
 data class PendingItem(
     val id: String,
@@ -179,7 +269,23 @@ data class PendingItem(
     val raised: Raised? = null,
     val notice: Notice? = null,
     @SerialName("expires_at_ms") val expiresAtMs: Long? = null,
+    /**
+     * Additive: absent or a single entry means the card behaves exactly as it
+     * always has. Two or more mean the desktop is asking WHICH plan, and a
+     * bare approve no longer names one - see [needsChoice].
+     */
+    val options: List<ProposalOption> = emptyList(),
 ) {
+    /**
+     * Whether approving needs an option named alongside it.
+     *
+     * The phone's approve route today (`/api/approve` with an id) carries no
+     * option, so an item with several cannot be approved from here until the
+     * decide route in AUTONOMY-PROPOSALS §3b exists. Denying needs no option
+     * and stays available: refusing is always the safe direction.
+     */
+    val needsChoice: Boolean get() = options.size > 1
+
     /**
      * Whether a swipe may decide this item.
      *

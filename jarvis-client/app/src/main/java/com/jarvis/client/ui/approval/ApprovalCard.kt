@@ -95,6 +95,11 @@ fun ApprovalCard(
         expired = true
     }
     val canDecide = blocker == null && !expired
+    // A proposal with several options needs one named alongside the approval,
+    // and the phone's approve route carries none yet (AUTONOMY-PROPOSALS §3b's
+    // decide route is not built on any backend). So approving is refused here
+    // and the card says where to choose. Denying needs no option and stays.
+    val canApprove = canDecide && !item.needsChoice
 
     // A decision on this screen is felt, not just seen - a swipe is answered
     // with no visual confirmation until the card has already animated off
@@ -120,19 +125,32 @@ fun ApprovalCard(
     // server-computed field and nothing else - not re-derived here, not cached
     // against an id, and refused outright for anything carrying `raised`.
     val swipeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
-    val swipeModifier = if (canDecide && item.swipeable) {
+    val swipeModifier = if (canApprove && item.swipeable) {
         Modifier.pointerInput(item.id) {
             detectHorizontalDragGestures(
                 onDragEnd = {
                     scope.launch {
+                        // The decision is sent first and the card springs
+                        // back into place; it leaves the screen only when the
+                        // desktop's answer removes it from `pending`.
+                        //
+                        // It used to animate fully off screen and THEN send
+                        // the decision, so a refusal - expired, unreachable,
+                        // already handled on the desktop - left an invisible
+                        // card whose item was still waiting. Nothing on this
+                        // surface may show "gone" before the desktop says so;
+                        // that is the same rule the notification Deny follows.
+                        // The haptic in approve()/deny() is the acknowledgement,
+                        // and the buttons grey out while the decision is in
+                        // flight, so the spring-back does not read as "ignored".
                         when {
                             offset.value > swipeThresholdPx -> {
-                                offset.animateTo(size.width.toFloat())
                                 approve()
+                                offset.animateTo(0f)
                             }
                             offset.value < -swipeThresholdPx -> {
-                                offset.animateTo(-size.width.toFloat())
                                 deny()
+                                offset.animateTo(0f)
                             }
                             else -> offset.animateTo(0f)
                         }
@@ -174,6 +192,15 @@ fun ApprovalCard(
         if (item.summary.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
             Text(item.summary, style = MaterialTheme.typography.bodyMedium, color = T.Ink)
+        }
+
+        // The choices, when the desktop offers more than one plan. Each is a
+        // complete plan of its own (§3a), shown whole: label, what it does,
+        // and whether any step is heavy. Read-only on the phone until a
+        // decide route can carry the chosen id - see `why` below.
+        if (item.options.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            OptionsList(item.options)
         }
 
         // The rush warning, if outside text tried to hurry the reader. The quote
@@ -238,6 +265,9 @@ fun ApprovalCard(
         val why = when {
             expired -> "Expired — ask the desktop to raise this again."
             blocker != null -> blocker
+            item.needsChoice ->
+                "This proposal offers ${item.options.size} options. Choose one on the " +
+                    "desktop - this phone cannot send a choice yet. Deny still works here."
             else -> null
         }
         if (why != null) {
@@ -259,7 +289,7 @@ fun ApprovalCard(
         // 99.7 wide. Shape survives that, and survives a photograph, a still
         // frame and peripheral vision with it.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Affirm("Approve", enabled = canDecide, onClick = approve)
+            Affirm("Approve", enabled = canApprove, onClick = approve)
             Refuse("Deny", enabled = canDecide, onClick = deny)
         }
         Spacer(Modifier.height(8.dp))
@@ -294,6 +324,49 @@ private fun ExpiryCountdown(expiryMs: Long) {
         style = MaterialTheme.typography.labelSmall,
         color = T.Dim,
     )
+}
+
+@Composable
+private fun OptionsList(options: List<com.jarvis.client.net.ProposalOption>) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(T.Plate, RoundedCornerShape(10.dp))
+            .border(1.dp, T.Line, RoundedCornerShape(10.dp))
+            .padding(10.dp),
+    ) {
+        Text(
+            if (options.size == 1) "The plan" else "${options.size} ways to do this",
+            style = MaterialTheme.typography.labelSmall,
+            color = T.Dim,
+        )
+        options.forEachIndexed { i, option ->
+            Spacer(Modifier.height(if (i == 0) 6.dp else 8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    option.label.ifBlank { option.id.ifBlank { "Option ${i + 1}" } },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = T.Ink,
+                    modifier = Modifier.weight(1f),
+                )
+                if (option.weight.equals("heavy", ignoreCase = true)) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "HEAVY",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = T.Warn,
+                        modifier = Modifier
+                            .background(T.Warn.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                    )
+                }
+            }
+            if (option.summary.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(option.summary, style = MaterialTheme.typography.bodySmall, color = T.Dim)
+            }
+        }
+    }
 }
 
 @Composable

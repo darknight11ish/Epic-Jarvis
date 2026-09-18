@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.face.Faces
+import com.jarvis.client.face.Spec
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
@@ -289,6 +290,9 @@ class MainActivity : FragmentActivity() {
         val undo by JarvisRuntime.undo.collectAsState()
         val jobs by JarvisRuntime.jobs.collectAsState()
         val brain by JarvisRuntime.brain.collectAsState()
+        val models by JarvisRuntime.models.collectAsState()
+        val activityDetail by JarvisRuntime.activityDetail.collectAsState()
+        var modelBusy by remember { mutableStateOf(false) }
         val absent by JarvisRuntime.absent.collectAsState()
         val streaming by chat.streaming.collectAsState()
         val voicePhase by voice.phase.collectAsState()
@@ -323,6 +327,14 @@ class MainActivity : FragmentActivity() {
         // still thinking — for ever.
         LaunchedEffect(chat) {
             chat.error.collectLatest { if (it != null) JarvisRuntime.setNotice(it) }
+        }
+
+        // The panel is asked for its fastest rate only while the face wants
+        // every frame - listening, thinking, speaking, error. Idle draws at
+        // 30 and standby and banked far below that, so a 120 Hz request held
+        // through them was battery spent on frames nothing drew.
+        LaunchedEffect(faceState) {
+            DisplayRate.setHigh(this@MainActivity, window.peekDecorView(), Spec.fpsFor(faceState) == 0)
         }
 
         LaunchedEffect(brain.memory) {
@@ -619,6 +631,26 @@ class MainActivity : FragmentActivity() {
                         },
                         notice = notice,
                         onDismissNotice = { JarvisRuntime.clearNotice() },
+                        models = models,
+                        modelBusy = modelBusy,
+                        onSwitchModel = { ref ->
+                            if (!modelBusy) {
+                                modelBusy = true
+                                scope.launch {
+                                    JarvisRuntime.switchModel(ref)
+                                    modelBusy = false
+                                }
+                            }
+                        },
+                        onRollbackModel = {
+                            if (!modelBusy) {
+                                modelBusy = true
+                                scope.launch {
+                                    JarvisRuntime.rollbackModel()
+                                    modelBusy = false
+                                }
+                            }
+                        },
                         modifier = root,
                     )
                 }
@@ -693,6 +725,7 @@ class MainActivity : FragmentActivity() {
                         approvalsOff = "approvals" in absent,
                         deciding = deciding,
                         focusApproval = focusApproval.value,
+                        activityDetail = activityDetail,
                     ),
                     // A lambda, so a streamed token redraws the reply and
                     // nothing else. Passing the string rebuilt HomeState on
@@ -727,18 +760,24 @@ class MainActivity : FragmentActivity() {
                             // "whoever is holding it" and "the owner" need to
                             // be different answers.
                             onApprove = { item ->
+                                // The fingerprint prompt belongs to this
+                                // activity, so it stays on this scope; the
+                                // decision itself does not, and is handed to
+                                // the runtime the moment the prompt clears.
+                                // A rotation mid-request used to cancel the
+                                // coroutine after the POST had landed, drop
+                                // the result, and leave the card on screen
+                                // for a second tap to send again.
                                 scope.launch {
                                     if (confirmed(item)) {
-                                        JarvisRuntime.decide(item, approve = true)
+                                        JarvisRuntime.decideDetached(item, approve = true)
                                     }
                                 }
                             },
                             // Denying is the safe direction and is never gated:
                             // a gate on refusing would make the cautious answer
                             // the slow one.
-                            onDeny = { item ->
-                                scope.launch { JarvisRuntime.decide(item, approve = false) }
-                            },
+                            onDeny = { item -> JarvisRuntime.decideDetached(item, approve = false) },
                             onReconnect = {
                                 // `force = true`, and only because a person
                                 // asked. startStream() returns early whenever
