@@ -92,6 +92,9 @@ $PATCHES = @(
     # patch here touches. Listed last for readability, not because order
     # matters for this one.
     'ui-control-wiring.patch'
+    # Also independent - touches jarvis_hud.py's /api/chat, but a different
+    # few lines than degrade-filter or any other patch that lands there.
+    'ollama-direct.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------

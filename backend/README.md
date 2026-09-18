@@ -5,11 +5,11 @@
 > is the detail.
 
 
-Twenty-three patches against the Jarvis backend, each with an executable test.
-The twenty-third, `ui-control-wiring.patch`, sits outside the ordered stack
-below - it only adds new dictionary entries, touches no line any other patch
-touches, and can be applied before, after, or interleaved with the rest. See
-its own section, after the table.
+Twenty-four patches against the Jarvis backend, each with an executable test.
+The last two, `ui-control-wiring.patch` and `ollama-direct.patch`, sit outside
+the ordered stack below - each only touches its own few lines, shared with no
+other patch here, and can be applied before, after, or interleaved with the
+rest. See their own sections, after the table.
 
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
@@ -52,6 +52,7 @@ on a throwaway copy instead.
 | `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
 | `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Needs `event-allowlist`. |
 | `ui-control-wiring.patch` | `jarvis_gate.py` | Registers the three new capabilities below with the gate's own `_RISK`/`_TOOL_ACTIONS` tables. Textually independent of everything above it — see its own section. |
+| `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -1908,6 +1909,111 @@ without any of that - but "provable without it" is not "tried with it." The
 first real run of each is the owner's to do, on their own machine, and is
 worth doing once deliberately before it is wired into anything the owner
 would trust unattended.
+
+---
+
+# `ollama-direct.patch` — the local lane was calling a program that was never running
+
+`jarvis_hud.py`'s own `/api/chat` route always sent the local lane's completion
+request to `{JARVIS_URL}/v1/chat/completions` (`JARVIS_URL` defaults to
+`http://127.0.0.1:8000`) — the port and API shape of `open-jarvis/OpenJarvis`,
+a separate agent framework. Its docstring at the top of the file even says so
+outright: `"/api/chat - a same-origin proxy to jarvis serve on :8000"`, and the
+error path on a failed request said `"Start it with uv run jarvis serve"` -
+`jarvis serve` being OpenJarvis's own CLI.
+
+**OpenJarvis was never actually part of this setup.** The owner downloaded it
+once, separately, to look at it - it was never installed as this project's
+completion backend. So every local chat turn was silently doomed to a 503 the
+moment it reached `_open()`, unless OpenJarvis happened to be running, which
+it never was. This is worth stating plainly rather than routing around
+quietly: the desktop app the owner has been building this whole session could
+never have actually held a conversation, because the one thing it depends on
+to answer was assumed into existence and never verified.
+
+The fix is narrow on purpose, because everything AROUND `_open()` - lane
+selection, the privacy filter that strips non-user turns before a cloud hop,
+the recalled-facts injection and its careful positioning for the KV cache, the
+downward-only degrade chain - is real, load-bearing, and each piece has its
+own history of a subtle bug already found and fixed once (see
+`degrade-filter.patch`). None of it needed to change. Only the URL the local
+lane's completion request goes to: Ollama already speaks the exact
+OpenAI-compatible shape this code was already sending, at
+`{OLLAMA_URL}/v1/chat/completions` - no new dependency, no new format, one
+new small function (`_completions_url`) deciding which lane goes where. A
+non-local (cloud) lane still goes to `JARVIS_URL`, unchanged - not because
+that's believed to work, but because there is no other cloud-lane transport
+in this codebase yet to redirect it to, and pretending otherwise would trade
+one silent failure for a different one. In practice this doesn't affect the
+owner today: `_lane_names()` reads cloud lane names from `PROXY_FILE`
+(`litellm-proxy.yaml`), which does not exist on this machine, so `lanes` is
+always empty and every turn is already local-only. The moment a real
+cloud-lane transport exists, `_completions_url` is the one place that needs
+to learn about it.
+
+**Tool-calling is a separate, deliberately un-bundled next step.** This patch
+only fixes the local lane's completion transport - the model does not yet
+have any tools to call at all (`/api/chat` never sends a `tools` field to the
+completion request). Wiring in `jarvis_ui_control.py`, `jarvis_android_control.py`,
+`jarvis_research.py`'s authenticated search, and a small set of tools ported
+from OpenJarvis's own catalogue is real, additional work on top of a working
+chat loop, not folded into this patch - each is independently reviewable and
+neither risks the other.
+
+### What was deliberately NOT ported from OpenJarvis, and why
+
+The owner asked to pull useful tools from OpenJarvis "all" of them. That is
+not a safe instruction to follow literally - several of OpenJarvis's ~50
+built-in tools either need something this project has already rejected as a
+dependency, or need a setup decision only the owner can make:
+
+- **Browser automation** (`browser_click`, `browser_axtree`, etc.) needs a
+  real headless-browser dependency (Playwright, in OpenJarvis's case).
+  `docs/ARCHITECTURE.md`'s "Decisions already taken" table already rejected
+  `browser-use` by name ("dies at 8k context by step 2-3"). Not ported.
+- **`code_interpreter_docker` / `docker_shell_exec`** need Docker.
+  `docs/ARCHITECTURE.md` already decided "Git worktrees, not Docker" for
+  sandboxing. Not ported. Plain `shell_exec` (no Docker, tier `ask` already
+  in `jarvis-framework.toml`) is a candidate for the next patch instead.
+- **Connectors** (Gmail, Calendar, Slack, Notion, ...) need OAuth setup per
+  service, and OpenJarvis's own version stores the resulting tokens as
+  plain, unencrypted JSON files (permission-restricted, not encrypted) -
+  looser than this project should copy without asking first. Not ported
+  until the owner picks specific services and a storage approach.
+- **General web search** needs a real search API and, in practice, a key.
+  Rather than fake one with an unreliable scrape, this is left out until the
+  owner wants to pick a provider.
+- **Model management, image/audio generation, OpenJarvis's own eight
+  agent modes** (scheduled digests, continuous monitoring, etc.) all need
+  either a file this session does not have (`jarvis_models.py`'s real API)
+  or a scope decision bigger than "add a tool." Not ported.
+
+What's already safe to add, because it reuses `jarvis_gate.py`'s existing,
+already-tiered action names with nothing new to configure: `calculator`
+(auto), `memory_search` (auto, read-only, over the real `jarvis_memory.py`),
+`file_read` (`read_files_readonly`), `shell_exec` (`run_shell_on_host`, tier
+`ask`), and the three modules already built this session. Deliberately
+**not** included: a `memory_store`/`memory_manage`-style tool that would let
+the model write directly to `facts`. This project's memory system exists
+specifically so nothing reaches `facts` without a human accepting it through
+the review queue (`memory-safety.patch`, `memory-pane.patch`) - a chat-time
+tool that wrote around that queue would reopen the exact hole those patches
+closed. Remembering something new stays the extractor's job, not a tool the
+model calls directly.
+
+### Test it
+
+```powershell
+python test_ollama_direct.py
+```
+
+Structural checks, over the source, that the endpoint fix is what it claims
+to be and touches nothing else: `_completions_url` returns the Ollama URL for
+the local lane and the JARVIS_URL for any other lane, the error message names
+the right service for each case, and the surrounding routing/privacy/degrade
+code - `is_cloud`, the recalled-facts block, `jarvis_router.degrade` - is
+byte-for-byte unchanged by this patch. Cannot start a real HTTP server here to
+prove Ollama actually answers; that part is the owner's own machine to try.
 
 ---
 
