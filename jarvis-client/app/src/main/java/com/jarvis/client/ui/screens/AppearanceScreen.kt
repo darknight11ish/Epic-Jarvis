@@ -264,13 +264,16 @@ fun AppearanceScreen(
                             // running simulation, which is exactly what
                             // SpecDriftTest's `iris`-is-the-only-exception test
                             // checks stays true. Nucleus needed an actual GPU
-                            // fragment shader and got one (AGSL). What's left after
-                            // that - membrane, tokamak - need more than a shader: a
-                            // real OpenGL mesh with its own vertex and index
-                            // buffers, which this app has never built.
-                            "${Faces.all.size} of the desktop's twenty. The rest need an OpenGL " +
-                                "mesh this app doesn't have yet, which is a bigger, separate " +
-                                "piece of work.",
+                            // fragment shader and got one (AGSL). Tokamak needed
+                            // more than that - a real OpenGL mesh with its own
+                            // vertex and index buffers - and got one too
+                            // (GLSurfaceView, GLES 3.0). What's left after that,
+                            // membrane, needs the same mesh plus its own live
+                            // physics step running every frame, which this app
+                            // has never built.
+                            "${Faces.all.size} of the desktop's twenty. The rest need a live " +
+                                "physics step this app doesn't have yet, on top of the mesh " +
+                                "pipeline tokamak just proved out.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,
                         )

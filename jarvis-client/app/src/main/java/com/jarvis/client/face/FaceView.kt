@@ -1,9 +1,12 @@
 package com.jarvis.client.face
 
+import android.opengl.GLSurfaceView
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,8 +26,14 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.viewinterop.AndroidView
 import com.jarvis.client.FaceState
+import com.jarvis.client.face.gl.MeshFaces
+import com.jarvis.client.face.gl.MeshRenderer
 import androidx.compose.foundation.Canvas
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -183,8 +192,132 @@ fun FaceView(
                 }
             },
     ) {
-        Canvas(Modifier.matchParentSize()) {
-            drawFace(frame, face, notches, glow)
+        val mesh = remember(face.id) { MeshFaces.rendererFor(face.id) }
+        if (mesh != null) {
+            GLFaceSurface(mesh, frame, face, notches)
+        } else {
+            Canvas(Modifier.matchParentSize()) {
+                drawFace(frame, face, notches, glow)
+            }
+        }
+    }
+}
+
+/**
+ * The two-layer stand-in for [drawFace], for a face [MeshFaces] hands a real
+ * `GLSurfaceView.Renderer` instead of a `DrawScope` body. A `GLSurfaceView`
+ * is its own `Surface`, not a `DrawScope` call, so it cannot be interleaved
+ * between [drawFace]'s background/glow/overlay draws the way a normal face's
+ * body is - it is a whole layer underneath a second, much smaller Canvas
+ * that draws only the shell-level pieces every face still needs: the
+ * approval clock, the notch ring, the tap ring. The GL surface clears to
+ * [Spec.BACKGROUND] itself (see `TokamakRenderer.onDrawFrame`), so there is
+ * no separate background rect to paint here.
+ *
+ * Two things every canvas face gets are deliberately skipped for a mesh
+ * face: the additive glow sprite, and the shake/flinch/speech-push
+ * positional wobble. Both are z-order tricks specific to one `DrawScope`
+ * pass (the glow relies on the face's own opaque strokes being drawn
+ * OVER it, which only makes sense as two draws on the SAME canvas) and
+ * do not have an honest equivalent split across two separately composited
+ * surfaces - guessing at one without a device to look at it on was a worse
+ * risk than a mesh face sitting still while every other face flinches.
+ */
+@Composable
+private fun GLFaceSurface(mesh: MeshRenderer, frame: FaceFrame, face: Face, notches: Int) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // AndroidView's factory runs exactly once per call site and hands back
+    // the same instance on every later recomposition - this just keeps that
+    // instance reachable from the DisposableEffect below, which runs
+    // independently of it.
+    var glSurfaceView by remember { mutableStateOf<GLSurfaceView?>(null) }
+
+    // fillMaxSize, not matchParentSize: this composable is called from
+    // inside the caller's Box, not written inline as its content lambda, so
+    // there is no BoxScope receiver here for matchParentSize to resolve
+    // against. The two fill the same space in this case regardless, since
+    // nothing else inside that Box competes with either child for it.
+    AndroidView(
+        modifier = Modifier.fillMaxSize(),
+        factory = { ctx ->
+            GLSurfaceView(ctx).apply {
+                setEGLContextClientVersion(3)
+                // The torus mesh needs real depth testing - the near wall
+                // has to hide the far one - and GLSurfaceView's own default
+                // config carries no depth buffer at all unless one is asked
+                // for. RGBA8888 plus a 16-bit depth buffer, no stencil.
+                setEGLConfigChooser(8, 8, 8, 8, 16, 0)
+                setRenderer(mesh)
+                renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+            }.also { glSurfaceView = it }
+        },
+        update = { glView ->
+            val hot = dimmed(frame.swatch.a, frame.dim)
+            val cool = dimmed(frame.swatch.b, frame.dim)
+            glView.queueEvent { mesh.setFrame(frame, hot, cool, face.fit) }
+            glView.requestRender()
+        },
+    )
+
+    // GLSurfaceView owns a real GL thread and EGL context that has to be
+    // told explicitly to pause and resume - Compose disposing the AndroidView
+    // is not enough on its own, and neither is leaving it to the Activity,
+    // since this can be torn down by navigation while the Activity itself
+    // stays resumed.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> glSurfaceView?.onPause()
+                Lifecycle.Event.ON_RESUME -> glSurfaceView?.onResume()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            glSurfaceView?.onPause()
+        }
+    }
+
+    Canvas(Modifier.fillMaxSize()) {
+        val w = size.minDimension
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val radius = w / 2f * 0.5f * face.fit
+        val hot = dimmed(frame.swatch.a, frame.dim)
+        val cool = dimmed(frame.swatch.b, frame.dim)
+
+        // Tokamak's own reference composites a soft, centre-bright radial
+        // wash back over its GPU mesh output after drawing it (the `gr0`
+        // gradient in its own draw() in the desktop's faces.html). Ported as
+        // a post-layer here for the same reason: it already IS one on the
+        // reference, not a new choice made to fit this split.
+        if (face.id == "tokamak") {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(hot.copy(alpha = 0.13f), hot.copy(alpha = 0f)),
+                    center = Offset(cx, cy),
+                    radius = radius * 2.5f,
+                ),
+                radius = radius * 2.5f,
+                center = Offset(cx, cy),
+            )
+        }
+
+        when (frame.overlay) {
+            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, radius, hot, frame)
+            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, radius, cool, notches)
+            else -> Unit
+        }
+
+        val at = frame.ringAt
+        if (at != null && frame.ringFrac in 0f..1f) {
+            drawCircle(
+                color = hot.copy(alpha = (1f - frame.ringFrac) * 0.6f),
+                radius = w * Spec.TAP_RING_FRAC * frame.ringFrac,
+                center = at,
+                style = Stroke(width = 2f),
+            )
         }
     }
 }

@@ -271,24 +271,27 @@ class SpecDriftTest {
 
     /**
      * The faces the spec calls `heavy` stay out, unless they now render on a
-     * real shader.
+     * real shader or a real GPU mesh.
      *
-     * `tokamak`, `membrane` and `nucleus` need a shader to look like anything;
-     * a rasterised version is the faceted, upscaled thing the first visual
-     * audit was about. `heavy` is the spec's way of saying "a Canvas version
-     * of this would be worse than not offering it", which is a claim about
-     * `DrawScope` specifically - it says nothing about a face genuinely
-     * rendered through `android.graphics.RuntimeShader`, which `nucleus` now
-     * is (see its own doc comment in Faces.kt). So `nucleus` is carved out by
-     * name, not exempted as a class: `tokamak` and `membrane` still need the
-     * OpenGL mesh pipeline neither has, and stay pinned as heavy until they
-     * get it, the same as before.
+     * `tokamak`, `membrane` and `nucleus` need more than `DrawScope` to look
+     * like anything; a rasterised version is the faceted, upscaled thing the
+     * first visual audit was about. `heavy` is the spec's way of saying "a
+     * Canvas version of this would be worse than not offering it", which is
+     * a claim about `DrawScope` specifically - it says nothing about a face
+     * genuinely rendered through `android.graphics.RuntimeShader` (`nucleus`)
+     * or a real GLES 3.0 mesh via `GLSurfaceView` (`tokamak`), which is what
+     * both now do (see their own doc comments in Faces.kt, and
+     * `com.jarvis.client.face.gl`). So each is carved out by name as it
+     * earns it, not exempted as a class: `membrane` still needs the same
+     * mesh pipeline tokamak now proves out, plus its own live physics step,
+     * and stays pinned as heavy until it gets both.
      */
     @Test
     fun `no face the spec marks heavy is offered, unless it now renders on a real shader`() {
-        // See the comment above: nucleus is out of the heavy set it belongs to
-        // in the spec because it earned it, not because the check got looser.
-        val rendersOnARealShaderDespiteSpecFlag = setOf("nucleus")
+        // See the comment above: each id here is out of the heavy set it
+        // belongs to in the spec because it earned it, not because the
+        // check got looser.
+        val rendersOnARealShaderDespiteSpecFlag = setOf("nucleus", "tokamak")
         val heavy = spec["faces"]!!.jsonArray
             .map { it.jsonObject }
             .filter { it["heavy"]?.jsonPrimitive?.content == "true" }

@@ -42,21 +42,25 @@ interface Face {
 }
 
 /**
- * Eighteen faces, not twenty.
+ * Nineteen faces, not twenty.
  *
  * The brief is explicit that porting all twenty is the real cost of going fully
  * native. Seventeen of these are from the spec's `stays_on_canvas` list — line,
- * stroke, point and glow art that Compose draws correctly and cheaply. The
- * eighteenth, nucleus, needs a real fragment shader and gets one (AGSL, via
+ * stroke, point and glow art that Compose draws correctly and cheaply. Nucleus
+ * needs a real fragment shader and gets one (AGSL, via
  * `android.graphics.RuntimeShader`) rather than a rasterised approximation —
- * see its own doc comment. Membrane and tokamak are still absent: both need a
- * real OpenGL mesh (GLES 3.0, vertex and index buffers, per-vertex normals),
- * not a shader over the existing Canvas, which is a materially larger piece of
- * infrastructure this app has never had. A rasterised version of either is the
- * faceted, upscaled thing the first audit was about, and shipping it would be
- * worse than not offering them. That mesh pipeline, and those two faces, are
- * tracked as their own follow-up, not something to finish here as a side
- * effect of another task.
+ * see its own doc comment. Tokamak needs more than that - a real OpenGL mesh,
+ * GLES 3.0, with its own vertex and index buffers and per-vertex normals - and
+ * gets that instead: a `GLSurfaceView` embedded alongside this file's
+ * `DrawScope`-based faces (`com.jarvis.client.face.gl`, `TokamakRenderer`).
+ * `Face.draw` is never called for it; `FaceView` checks
+ * `MeshFaces.rendererFor` first and swaps the whole rendering path. Membrane
+ * is still absent: it needs the same mesh pipeline PLUS a live spring-mass
+ * simulation stepped every frame, which is real, separate work on top of what
+ * tokamak already proved out, tracked as its own follow-up rather than
+ * finished here as a side effect of another task. A rasterised version of
+ * either is the faceted, upscaled thing the first audit was about, and
+ * shipping it would be worse than not offering them.
  *
  * The picker shows only what is actually rendered — not all twenty with most of
  * them missing.
@@ -86,7 +90,7 @@ interface Face {
 object Faces {
     val all: List<Face> = listOf(
         Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital, Geodesic, Kirkwood,
-        Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion, Cascade, Nucleus,
+        Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion, Cascade, Nucleus, Tokamak,
     )
     val default: Face = Arc
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default
@@ -1489,4 +1493,44 @@ half4 main(float2 fragCoord) {
     return half4(tonemap(col), 1.0);
 }
 """
+}
+
+/**
+ * A real parametric torus, meshed and shaded on the GPU - this app's second
+ * mesh face, and its first that isn't a single fragment shader. The mesh
+ * generation, both shaders, and the rendering pipeline itself (a
+ * `GLSurfaceView` running real GLES 3.0, embedded in Compose alongside this
+ * file's `DrawScope`-based faces) live in `com.jarvis.client.face.gl` -
+ * `TokamakRenderer` specifically, with the reasoning for what was ported
+ * faithfully and what was deliberately dropped in its own doc comment there,
+ * matching Nucleus's own.
+ *
+ * `draw` below is never called. `FaceView` checks `MeshFaces.rendererFor`
+ * before it ever reaches a face's own `draw`, and swaps in the GL surface
+ * for any id that returns a renderer - `tokamak` is one. This still has to
+ * be a full `Face` (id, name, fit, speedFor) because the picker, `Faces.all`
+ * and every spec-drift check key on those the same way for every face
+ * regardless of how it actually renders; only the drawing itself forks.
+ */
+object Tokamak : Face {
+    override val id = "tokamak"
+    override val name = "Tokamak"
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.5f
+        FaceState.THINKING -> 0.9f
+        FaceState.SPEAKING -> 0.4f
+        else -> 0.3f
+    }
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) {
+        error(
+            "Tokamak renders through com.jarvis.client.face.gl.TokamakRenderer, " +
+                "not DrawScope - FaceView should have checked MeshFaces.rendererFor(\"tokamak\") " +
+                "before this was ever called.",
+        )
+    }
 }
