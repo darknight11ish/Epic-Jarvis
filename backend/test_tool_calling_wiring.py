@@ -153,6 +153,20 @@ def t_a_run_local_turn_failure_after_headers_are_sent_still_reaches_the_client()
     check("that broad handler writes something back to the client rather than "
           "just returning silently",
           "self.wfile.write" in handler_src, handler_src)
+    # The bug this next check guards against: the handler's own comment
+    # names TWO causes it catches - Ollama actually being down, and a bug in
+    # the tool loop - but the message it used to send unconditionally
+    # claimed the first, sending an owner debugging a jarvis_agent.py
+    # exception off to restart a service that was never the problem. The
+    # real exception (`exc`) must still appear, and "Ollama is not
+    # answering" must not be the unqualified opening claim.
+    check("the message includes the real exception rather than only a "
+          "canned diagnosis",
+          "{exc}" in handler_src or "exc)" in handler_src or "str(exc)" in handler_src,
+          handler_src)
+    check("the message does not flatly assert Ollama is down for a class of "
+          "exception that also covers a bug in the tool loop itself",
+          "Ollama is not answering" not in handler_src, handler_src)
 
 
 def t_tools_are_never_offered_on_a_non_local_lane():

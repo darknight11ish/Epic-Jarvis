@@ -115,12 +115,19 @@ _MAX_FILE_READ_BYTES = 200_000
 def _run_file_read(args: dict) -> dict:
     path = str(args.get("path", ""))
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            data = f.read(_MAX_FILE_READ_BYTES + 1)
+        # Binary, capped by actual bytes read, then decoded - not text mode
+        # capped by .read(N), which caps CHARACTERS. A file that is mostly
+        # multi-byte UTF-8 (CJK, emoji) could otherwise return up to ~4x
+        # _MAX_FILE_READ_BYTES despite the name and the cap both claiming
+        # bytes. A cut mid-character at the boundary decodes as U+FFFD via
+        # errors="replace", which is fine for a preview truncation point.
+        with open(path, "rb") as f:
+            raw = f.read(_MAX_FILE_READ_BYTES + 1)
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
-    truncated = len(data) > _MAX_FILE_READ_BYTES
-    return {"ok": True, "content": data[:_MAX_FILE_READ_BYTES], "truncated": truncated}
+    truncated = len(raw) > _MAX_FILE_READ_BYTES
+    content = raw[:_MAX_FILE_READ_BYTES].decode("utf-8", errors="replace")
+    return {"ok": True, "content": content, "truncated": truncated}
 
 
 def _run_shell_exec(args: dict) -> dict:
@@ -441,9 +448,16 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         for call in tool_calls:
             fn = (call.get("function") or {})
             name = fn.get("name", "")
+            raw_args = fn.get("arguments")
             try:
-                args = json.loads(fn.get("arguments") or "{}")
-            except json.JSONDecodeError:
+                # Some OpenAI-compatible backends hand back `arguments`
+                # already parsed into an object rather than a JSON string -
+                # json.loads() on a dict raises TypeError, not
+                # JSONDecodeError, and an uncaught one here used to escape
+                # run_local_turn entirely and get blamed on Ollama being
+                # down by the caller's outer handler.
+                args = raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
+            except (json.JSONDecodeError, TypeError):
                 args = {}
             tool = TOOLS.get(name) if name in names else None
             if tool is None:
@@ -477,7 +491,16 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                        "content": "Too many tool calls in a row; answer with "
                                   "what you have rather than trying again."})
 
-    stream_body = {"model": model, "messages": convo, "tools": tool_schemas, "stream": True}
+    # No `tools` here, on purpose: the loop above already decided this turn
+    # is done asking for tools (a round with none requested, or max_rounds
+    # cutting it off), against this exact `convo`. Offering them again on a
+    # second, independent completion - same messages, nonzero temperature -
+    # let the model change its mind and request a tool a second time, whose
+    # raw tool_call delta JSON would then stream to the client with no
+    # gating and no execution at all, since nothing here reads tool_calls
+    # out of a streamed response. Dropping `tools` forces this call to be
+    # what it was always meant to be: the answer, in prose.
+    stream_body = {"model": model, "messages": convo, "stream": True}
     with streamer(f"{ollama_url}/v1/chat/completions", stream_body) as upstream:
         while True:
             chunk = upstream.read(1024)

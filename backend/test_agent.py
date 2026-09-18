@@ -84,15 +84,27 @@ def t_no_tool_call_streams_straight_through():
     responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
     post, calls = scripted_post(responses)
     streamed = []
+    stream_payloads = []
+    def open_stream(url, payload):
+        stream_payloads.append(payload)
+        return FakeStream([b'{"done":true}\n'])
     with NoRealIO():
         AG.run_local_turn(
             [{"role": "user", "content": "hello"}], "qwen3:8b", ollama_url="http://x",
             stream_out=streamed.append, post=post, gate_check=allow,
-            open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
+            open_stream=open_stream)
     check("exactly one non-streaming round trip when no tool is requested",
           len(calls) == 1, repr(calls))
     check("the final bytes came from the injected stream, not fabricated",
           streamed == [b'{"done":true}\n'], repr(streamed))
+    # The bug this guards against: the loop already decided (in the round
+    # above) that this turn needs no tool. Offering `tools` again on the
+    # final streaming call lets a nondeterministic model change its mind and
+    # request a tool a second time, whose raw tool_call delta JSON would
+    # then stream to the client unexecuted and ungated - nothing here reads
+    # tool_calls out of a streamed response.
+    check("the final streaming call does not offer tools",
+          "tools" not in stream_payloads[0], repr(stream_payloads[0]))
 
 
 def t_a_denied_tool_never_executes():
@@ -146,6 +158,34 @@ def t_an_approved_tool_actually_runs_and_feeds_back_the_result():
         AG.TOOLS["calculator"].execute = real
 
 
+def t_arguments_already_a_dict_does_not_crash_the_loop():
+    """Some OpenAI-compatible backends hand back `function.arguments`
+    already parsed into an object instead of a JSON string. json.loads() on
+    a dict raises TypeError, not JSONDecodeError - uncaught, that used to
+    escape run_local_turn entirely and get blamed on Ollama being down by
+    the caller's own outer handler, rather than treated as "empty args" the
+    way a malformed JSON string already was."""
+    real = AG.TOOLS["calculator"].execute
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True, "value": args}
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator", "arguments": {"expression": "2+2"}}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
+        ]
+        post, calls = scripted_post(responses)
+        with NoRealIO():
+            AG.run_local_turn(
+                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
+                stream_out=lambda b: None, post=post, gate_check=allow,
+                open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
+        check("a dict-shaped arguments value is used directly, not crashed on",
+              '"value": {"expression": "2+2"}' in calls[1]["messages"][-1]["content"],
+              repr(calls[1]["messages"][-1]))
+    finally:
+        AG.TOOLS["calculator"].execute = real
+
+
 def t_an_unknown_tool_name_is_refused_not_guessed():
     responses = [
         {"choices": [{"message": {"role": "assistant", "tool_calls": [
@@ -162,6 +202,43 @@ def t_an_unknown_tool_name_is_refused_not_guessed():
     tool_msg = calls[1]["messages"][-1]
     check("an unregistered tool name produces an error result, not a crash",
           "no such tool" in tool_msg["content"], repr(tool_msg))
+
+
+def t_file_read_caps_by_bytes_not_characters():
+    """Text-mode `open(...).read(N)` caps CHARACTERS, not bytes, while the
+    constant and the tool's contract both claim bytes. A file that is
+    mostly multi-byte UTF-8 could return up to ~4x the stated cap. Written
+    with a real temp file because the bug is specifically about how many
+    bytes actually get read off disk, which a fake can't stand in for."""
+    import tempfile, os
+    real_cap = AG._MAX_FILE_READ_BYTES
+    AG._MAX_FILE_READ_BYTES = 10
+    try:
+        # Each "€" is 3 bytes in UTF-8 - 5 of them is 15 bytes, comfortably
+        # over the 10-byte cap, but only 5 characters, comfortably under a
+        # char-based one.
+        text = "€" * 5
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False,
+                                          encoding="utf-8") as f:
+            f.write(text)
+            path = f.name
+        try:
+            out = AG._run_file_read({"path": path})
+        finally:
+            os.unlink(path)
+        # 5 "€" is 15 bytes but only 5 characters - under the old text-mode
+        # `.read(cap + 1)` bug, reading a 5-character file never even hits an
+        # 11-CHARACTER cap, so it would come back whole with truncated=False
+        # despite being 1.5x the intended 10-BYTE budget. The fix must catch
+        # that on bytes.
+        check("a multi-byte-heavy file is truncated once BYTES exceed the cap, "
+              "not left whole because it has few CHARACTERS",
+              out["truncated"] is True, repr(out))
+        check("the truncated content is genuinely shorter than the original, "
+              "not the whole file returned anyway",
+              out["content"] != text, repr(out))
+    finally:
+        AG._MAX_FILE_READ_BYTES = real_cap
 
 
 def t_every_tool_resolves_to_a_real_jarvis_gate_action():
@@ -262,7 +339,9 @@ def t_max_rounds_stops_an_infinite_tool_loop():
 if __name__ == "__main__":
     for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
+               t_arguments_already_a_dict_does_not_crash_the_loop,
                t_an_unknown_tool_name_is_refused_not_guessed,
+               t_file_read_caps_by_bytes_not_characters,
                t_every_tool_resolves_to_a_real_jarvis_gate_action,
                t_calculator_cannot_reach_names_or_calls,
                t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call,

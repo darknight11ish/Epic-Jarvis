@@ -1,5 +1,5 @@
---- a/jarvis_hud.py	2026-09-18 00:15:30.859049983 +0000
-+++ b/jarvis_hud.py	2026-09-18 00:47:30.839620098 +0000
+--- a/jarvis_hud.py	2026-09-18 01:41:25.358559185 +0000
++++ b/jarvis_hud.py	2026-09-18 01:40:38.019309277 +0000
 @@ -2724,10 +2724,31 @@
          lane = decision.lane
          upstream = None
@@ -36,7 +36,7 @@
              try:
                  upstream = _open(lane)
                  break
-@@ -2812,38 +2833,93 @@
+@@ -2812,38 +2833,105 @@
          try:
              if first_error is not None:
                  raise first_error
@@ -107,9 +107,21 @@
 +                    # (`if (chunk.error) showError(...)`) - the same shape
 +                    # jarvis_router.py's own degrade path relies on - so
 +                    # write one instead of leaving the client to guess.
++                    #
++                    # The message used to flatly claim "Ollama is not
++                    # answering" for this whole except, but this catches a
++                    # bug in the tool loop itself just as often as it
++                    # catches Ollama actually being down - and the two need
++                    # different fixes. Naming the real exception first, and
++                    # offering the Ollama-restart step as one possibility
++                    # rather than the diagnosis, means a bug in jarvis_agent
++                    # doesn't send the owner to restart a service that was
++                    # never the problem.
 +                    message = (
-+                        f"Ollama is not answering on {OLLAMA_URL}. "
-+                        f"Start it with `ollama serve`. ({exc})")
++                        f"Something went wrong while using a tool: "
++                        f"{type(exc).__name__}: {exc}. If Ollama itself is "
++                        f"not running on {OLLAMA_URL}, start it with "
++                        f"`ollama serve`.")
 +                    try:
 +                        self.wfile.write(json.dumps({"error": message}).encode("utf-8") + b"\n")
 +                        self.wfile.flush()

@@ -197,12 +197,15 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
     """Execute an approved plan's commands, in order, against `p.device`.
 
     `approved` has no default of True, same reason as every other module
-    here. Before the FIRST command, and again before any command after a
-    `screenshot` (the one step type most likely to run long enough for the
-    phone to be unplugged mid-plan), this checks `p.device` is still in
+    here. Before EVERY command, this checks `p.device` is still in
     `adb devices`'s own list. If it is not - unplugged, swapped for a
     different phone, wireless adb dropped - execution stops rather than
     sending a tap intended for one phone toward whatever is connected now.
+    Costs one extra `adb devices` process per step; accepted, since a plan
+    that spans a `screenshot` (the step most likely to run long enough for
+    the phone to be unplugged mid-plan) is exactly the case this exists for,
+    and there is no cheaper way to tell "still that phone" from "some phone"
+    between two arbitrary steps.
 
     `announce(text)` is the same live-status hook as jarvis_ui_control.run -
     wire it to `jarvis_events.set_activity("working", text)` so the owner

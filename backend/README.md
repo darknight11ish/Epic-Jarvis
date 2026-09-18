@@ -2124,6 +2124,54 @@ All of `test_agent.py`, `test_research.py`, `test_ui_control.py`,
 six files, run both standalone and, where a `JARVIS_BACKEND` copy of the real
 files was available, against the real patched source).
 
+**A second, independent audit pass found five more, all fixed:**
+
+- The final streaming call in `run_local_turn` still offered `tools`, even
+  though the round just above already decided this turn needs none (a round
+  came back with no `tool_calls`, or `max_rounds` cut it off). Nothing here
+  reads `tool_calls` out of a *streamed* response - so a nondeterministic
+  model (no `temperature`/`seed` is pinned in either request) could change
+  its mind on that second, independent completion and request a tool
+  anyway, and its raw tool-call delta JSON would stream straight to the
+  client, ungated and unexecuted, as a garbled or empty answer. Fixed by
+  dropping `tools` from the final `stream_body` entirely - once the loop
+  above has decided, this call can only ever answer in prose.
+- Tool-call argument parsing only caught `json.JSONDecodeError`. Some
+  OpenAI-compatible backends (including some Ollama versions/models) hand
+  back `function.arguments` already parsed into an object rather than a
+  JSON string; `json.loads()` on a dict raises `TypeError`, which escaped
+  `run_local_turn` entirely and was reported to the owner as "Ollama is not
+  answering" - a real bug in this parsing step, misdiagnosed as Ollama being
+  down. Fixed to use a dict's `arguments` directly and only fall back to
+  `json.loads()` for a string, catching `TypeError` alongside
+  `JSONDecodeError`.
+- `tool-calling-wiring.patch`'s broad `except Exception` (added in the fix
+  just above this section) unconditionally told the owner "Ollama is not
+  answering... start it with `ollama serve`" - but its own comment already
+  admits it also catches "a bug in the tool loop itself." A `TypeError`
+  from the point above, or any other bug in `jarvis_agent.py`, would send a
+  beginner developer to restart a service that was never the problem.
+  Fixed to name the real exception first and offer the Ollama-restart step
+  as one possibility, not the diagnosis.
+- `_run_file_read` opened in text mode and capped with `.read(N)`, which
+  caps *characters*, while `_MAX_FILE_READ_BYTES` and the tool's own
+  contract both claim bytes. A file that is mostly multi-byte UTF-8 (CJK
+  text, emoji) could return up to ~4x the stated budget, and a file with
+  few characters but many bytes could wrongly report `truncated: false`
+  entirely. Fixed to read in binary, cap by the actual bytes read, and
+  decode afterward (`errors="replace"` on a boundary cut mid-character).
+- `jarvis_android_control.py`'s `run()` docstring said the device is
+  re-verified "before the FIRST command, and again... after a screenshot,"
+  but the code actually checks before *every* step - a stale docstring
+  describing behavior the code no longer has (it's safer than documented,
+  not less safe). Fixed the docstring to match.
+
+All six backend test files still pass after these fixes (151 checks total),
+with three new regression tests added: the final call really omits `tools`,
+a dict-shaped `arguments` value doesn't crash the loop, and a multi-byte-
+heavy file is truncated by real byte count rather than reported whole
+because it has few characters.
+
 ### Test it
 
 ```powershell
