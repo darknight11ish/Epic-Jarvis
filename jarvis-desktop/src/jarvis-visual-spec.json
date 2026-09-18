@@ -2073,7 +2073,7 @@
    "max_rad_s": 4,
    "why": "A released face keeps turning and settles instead of stopping dead under the finger."
   },
-  "hover": "Iris looks toward the cursor (catchlight slides with TOUCH.x/y); other faces read TOUCH for their own hover cues.",
+  "hover": "Other faces read TOUCH for their own hover cues; Iris does not track the cursor.",
   "wheel_pinch": "zoom 0.45-3x; double-tap resets the view",
   "planned": [
    "hold = push-to-talk",

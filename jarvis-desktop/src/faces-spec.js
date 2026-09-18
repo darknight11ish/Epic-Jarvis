@@ -610,7 +610,7 @@ window.JARVIS_SPEC = Object.freeze({
       "why": "A released face keeps turning and settles instead of stopping dead under the finger.",
       "yaw_per_px": 0.008
     },
-    "hover": "Iris looks toward the cursor (catchlight slides with TOUCH.x/y); other faces read TOUCH for their own hover cues.",
+    "hover": "Other faces read TOUCH for their own hover cues; Iris does not track the cursor.",
     "planned": [
       "hold = push-to-talk",
       "gyro parallax 2-3px on the rim only (phone)",
