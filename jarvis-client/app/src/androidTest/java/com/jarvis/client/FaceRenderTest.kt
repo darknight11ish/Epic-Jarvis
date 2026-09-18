@@ -1,5 +1,6 @@
 package com.jarvis.client
 
+import android.Manifest
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -42,6 +43,31 @@ class FaceRenderTest {
     @Before
     fun clean() {
         CrashLog.clear(context)
+        grantNotifications()
+    }
+
+    /**
+     * Granted up front, or the app's own permission prompt covers the activity
+     * and it never reaches RESUMED.
+     *
+     * MainActivity asks for POST_NOTIFICATIONS the first time it is paired -
+     * which is the whole point of that ask, because without the permission no
+     * approval is ever announced. A system permission dialog on top means the
+     * activity under it is STARTED rather than RESUMED: Android behaving
+     * correctly, not the app failing to start. So the test grants the
+     * permission instead of weakening the assertion to STARTED - a weaker
+     * assertion would also stop catching "the app did not come up", which is
+     * the only thing this test exists for.
+     *
+     * UiAutomation rather than androidx.test's GrantPermissionRule, so this
+     * does not add a dependency that cannot be resolved or verified from this
+     * branch. grantRuntimePermission is public API from 28; minSdk here is 33.
+     */
+    private fun grantNotifications() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+            context.packageName,
+            Manifest.permission.POST_NOTIFICATIONS,
+        )
     }
 
     @Test
