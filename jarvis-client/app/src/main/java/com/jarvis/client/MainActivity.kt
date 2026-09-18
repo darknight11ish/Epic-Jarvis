@@ -78,6 +78,13 @@ class MainActivity : FragmentActivity() {
     /** The approval a notification asked us to open, or null. */
     private val focusApproval = mutableStateOf<String?>(null)
 
+    /**
+     * Text handed to this app by another app's share sheet, waiting to be
+     * folded into the composer draft. Cleared the moment `App()` consumes it,
+     * so the same share cannot be re-applied on a later recomposition.
+     */
+    private val sharedText = mutableStateOf<String?>(null)
+
     /** Set when the runtime itself failed to start. Shown instead of the app. */
     private val startupError = mutableStateOf<String?>(null)
 
@@ -132,6 +139,7 @@ class MainActivity : FragmentActivity() {
 
         lastCrash.value = CrashLog.read(this)
         readApprovalIntent(intent)
+        readShareIntent(intent)
 
         setContent { App() }
 
@@ -153,11 +161,23 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         readApprovalIntent(intent)
+        readShareIntent(intent)
     }
 
     private fun readApprovalIntent(intent: Intent?) {
         if (intent?.action != ApprovalNotifier.ACTION_OPEN_APPROVAL) return
         focusApproval.value = intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID) ?: ""
+    }
+
+    /**
+     * `singleTask`, so a second share while the app is already open re-delivers
+     * here rather than starting a new instance - same reason [readApprovalIntent]
+     * needs the `onNewIntent` half too.
+     */
+    private fun readShareIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+        if (!text.isNullOrEmpty()) sharedText.value = text
     }
 
     @Composable
@@ -219,6 +239,19 @@ class MainActivity : FragmentActivity() {
         // have the same lifetime: if the work is gone, so is the flag.
         var busy by remember { mutableStateOf(false) }
         var draft by rememberSaveable { mutableStateOf("") }
+
+        // A share from another app's share sheet arrives as an Intent extra,
+        // not through the runtime, so it is folded into the draft here
+        // rather than sent on its own — the owner still decides when and
+        // whether to send it. Appended rather than replacing whatever was
+        // already being typed, so a share never eats an in-progress message.
+        LaunchedEffect(sharedText.value) {
+            val text = sharedText.value ?: return@LaunchedEffect
+            draft = if (draft.isBlank()) text else "$draft\n\n$text"
+            sharedText.value = null
+            nav.resetTo(Screen.HOME)
+        }
+
         var memoryDecideBusyId by remember { mutableStateOf<Long?>(null) }
         // The daily "tidy memory overnight?" card, cached the first time it is
         // seen. See BrainScreen.kt's own doc comment on `sleepOffer`: the
