@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -211,6 +212,24 @@ fun BrainScreen(
             }
 
             item(key = "capabilities") {
+                // Sorted once per handshake, not once per event. `version` holds a
+                // JsonObject, which Compose treats as an unstable type, so this whole
+                // screen re-runs on EVERY server event rather than being skipped — and
+                // this block was doing a full sort of the capability key set plus two
+                // passes of `can()` over it each time, for a list that only changes when
+                // the backend is re-handshaked. Keyed on `capabilities` itself (not on
+                // `version`) because that object is the only input `can()` reads; a
+                // version number that moved without the capability set changing produces
+                // an identical list, so re-deriving it would be pure waste.
+                val caps: Pair<List<String>, List<String>> = remember(version?.capabilities) {
+                    val v = version
+                    if (v == null) {
+                        emptyList<String>() to emptyList<String>()
+                    } else {
+                        val names = v.capabilities.keys.sorted()
+                        names.filter { v.can(it) } to names.filterNot { v.can(it) }
+                    }
+                }
                 Section("This backend") {
                     Plate {
                         if (version == null) {
@@ -230,9 +249,7 @@ fun BrainScreen(
                             // and show the user the same list the app branches
                             // on, so "why is that button missing" has an answer
                             // here. `can()` is the same call the app makes.
-                            val names = version.capabilities.keys.sorted()
-                            val on = names.filter { version.can(it) }
-                            val off = names.filterNot { version.can(it) }
+                            val (on, off) = caps
                             if (on.isEmpty()) {
                                 Text(
                                     "None reported.",
@@ -400,6 +417,18 @@ private fun JobPlate(job: JobRecord) {
 @Composable
 private fun Probed(title: String, data: JsonObject?, blurb: String) {
     val chrome = LocalChrome.current
+    // The expensive part of this composable, done once per payload instead of once
+    // per recomposition. `flatten` walks the object and everything nested under it
+    // (two levels), builds a growing list and re-`humanise`s every key — and five
+    // of these sections are on screen at once. Because `BrainSnapshot` carries
+    // JsonObject fields, Compose cannot mark this screen skippable, so before this
+    // remember all five re-flattened on every single SSE event, which is the
+    // steadiest source of them. Keyed on the JsonObject itself: JsonObject is a
+    // Map, so `==` is a structural compare and a genuinely new payload — the only
+    // thing that can change these rows — always misses the key and re-flattens.
+    // Computed ABOVE the null branch on purpose, so the remember is never behind a
+    // conditional return.
+    val rows = remember(data) { data?.let { flatten(it) }.orEmpty() }
     Section(title) {
         Plate {
             if (data == null) {
@@ -412,7 +441,6 @@ private fun Probed(title: String, data: JsonObject?, blurb: String) {
                 Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
                 return@Plate
             }
-            val rows = flatten(data)
             if (rows.isEmpty()) {
                 Text(
                     "Nothing to report.",
@@ -453,6 +481,15 @@ private fun MemoryQueue(
     onDismissSleepOffer: () -> Unit,
 ) {
     val chrome = LocalChrome.current
+    // Two allocating passes (a cast-filter and a new list) over the pending array,
+    // previously redone on every recomposition of an unskippable screen — i.e. on
+    // every server event, including the many that have nothing to do with memory.
+    // Keyed on the raw payload so a real change to the queue still rebuilds it;
+    // hoisted above the null branch so the remember is not behind a conditional
+    // return.
+    val items = remember(data) {
+        (data?.get("pending") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+    }
     Section("Memory awaiting review") {
         if (sleepOffer != null) {
             SleepOfferCard(
@@ -475,8 +512,6 @@ private fun MemoryQueue(
                 Text("Proposed facts", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
                 return@Plate
             }
-            val items = (data["pending"] as? JsonArray).orEmpty()
-                .mapNotNull { it as? JsonObject }
             if (items.isEmpty()) {
                 Text(
                     "Nothing is waiting. Either Jarvis has not heard anything " +
@@ -586,7 +621,13 @@ private fun FlowChips(items: Collection<String>, muted: Boolean = false) {
     val chrome = LocalChrome.current
     // A simple wrapping run. FlowRow would do it in one line but is still
     // experimental in this BOM, and an opt-in on a layout is not worth it.
-    val rows = items.chunked(3)
+    // `chunked` allocates the outer list plus one inner list per row, and this is
+    // called once per capability list and once per running job — on a screen that
+    // cannot skip recomposition, so it was rebuilding those lists on every server
+    // event for chips whose text never moved. Keyed on the input collection, whose
+    // `==` is a structural compare, so the chips still re-chunk the moment the set
+    // of capabilities actually differs.
+    val rows = remember(items) { items.chunked(3) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

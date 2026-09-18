@@ -669,6 +669,19 @@ object Geodesic : Face {
         out.toTypedArray()
     }
 
+    // Scratch space for one draw, kept on the face instead of reallocated. These
+    // four were `FloatArray(12)` locals inside `draw`, so four fresh arrays came
+    // off the heap every frame - about 250 bytes a frame, 30KB a second at
+    // 120fps, dropped into the nursery in the middle of the draw for no reason.
+    // Fullerene and Orbital already keep their point buffers exactly this way,
+    // and it is safe for the same reason: the face is a singleton drawn on one
+    // thread, and all four are pure scratch - every slot is written at the top of
+    // `draw` before anything reads it, so nothing carries over between frames.
+    private val xs = FloatArray(verts.size)
+    private val ys = FloatArray(verts.size)
+    private val depth = FloatArray(verts.size)
+    private val bright = FloatArray(verts.size)
+
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 0.7f
         FaceState.THINKING -> 1.7f
@@ -681,9 +694,6 @@ object Geodesic : Face {
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
         val n = verts.size
-        val xs = FloatArray(n)
-        val ys = FloatArray(n)
-        val depth = FloatArray(n)
         val cp = cos(f.pitch)
         val sp = sin(f.pitch)
         val cyw = cos(f.angle + f.yaw)
@@ -705,7 +715,6 @@ object Geodesic : Face {
         val ox = cos(originAngle)
         val oy = sin(originAngle * 0.7f)
         val oz = sin(originAngle)
-        val bright = FloatArray(n)
         for (i in 0 until n) {
             val v = verts[i]
             val dx = v[0] - ox
@@ -774,12 +783,24 @@ object Kirkwood : Face {
 
     private val gaps = floatArrayOf(gapAt(3f), gapAt(5f / 2f), gapAt(2f))
 
+    // Jupiter's own angular rate. A constant expression that was sitting in the
+    // draw, so Math.pow ran once a frame for a number fixed at compile time.
+    private val jupiterOmega = JUPITER_A.pow(-1.5f)
+
     // Fixed per-rock layout, seeded so it never reshuffles between draws.
     private val rockA = FloatArray(N)
     private val rockE = FloatArray(N)
     private val rockPhase = FloatArray(N)
     private val rockDepthSeed = FloatArray(N)
     private val rockSize = FloatArray(N)
+
+    // a^-1.5: Kepler's angular rate. It is a function of the FIXED layout above
+    // and of nothing else - not of time, not of state - but it was being raised
+    // to a power inside the draw loop, so Math.pow ran once per rock per frame:
+    // 420 calls a frame, about 50,000 a second at 120fps. Precomputed here for
+    // the same reason rockA and rockPhase themselves are: decided once, then
+    // only read. Costs 1.6KB for the life of the process.
+    private val rockOmega = FloatArray(N)
 
     init {
         val rnd = kotlin.random.Random(20260913)
@@ -789,6 +810,7 @@ object Kirkwood : Face {
             rockPhase[i] = rnd.nextFloat() * PI2
             rockDepthSeed[i] = (rnd.nextFloat() - 0.5f) * 0.10f
             rockSize[i] = rnd.nextFloat()
+            rockOmega[i] = rockA[i].pow(-1.5f)
         }
     }
 
@@ -812,8 +834,8 @@ object Kirkwood : Face {
             }
             if (clear < 0.06f) continue
 
-            // Kepler: inner orbits move faster.
-            val om = a.pow(-1.5f)
+            // Kepler: inner orbits move faster. Precomputed at init - see rockOmega.
+            val om = rockOmega[i]
             val ang = rockPhase[i] + f.angle * om + f.yaw
             val rr = a * (1f - rockE[i] * cos(ang * 2f))
             val x = cos(ang) * rr
@@ -836,7 +858,7 @@ object Kirkwood : Face {
             radius = r * 0.09f,
             center = Offset(cx, cy),
         )
-        val ja = f.angle * JUPITER_A.pow(-1.5f) + f.yaw
+        val ja = f.angle * jupiterOmega + f.yaw
         val jx = cos(ja) * JUPITER_A
         val jy = sin(ja) * JUPITER_A * 0.32f
         drawCircle(
@@ -956,17 +978,27 @@ object Coreplate : Face {
             val y = (-0.2f + u * 0.42f) * sep * r * 4f
             return Offset(cx + cos(ang) * rr, cy + y + sin(ang) * rr * 0.12f)
         }
+        // Every interior vertex of the winding is shared by two segments, and
+        // `point` was called for both ends of every one of them: 180 calls where
+        // 91 do, each costing three trig calls plus an Offset allocation. Carrying
+        // the previous segment's end forward halves both. The two calls were
+        // computing the same u from the same expression - `(k + 1) / segs`, then
+        // `k / segs` one iteration later - so the line ends are bit-identical and
+        // nothing on screen moves.
+        var p0 = point(0f)
         for (k in 0 until segs) {
             val u0 = k / segs.toFloat()
             val u1 = (k + 1) / segs.toFloat()
+            val p1 = point(u1)
             val s = sin(u0 * PI2 * 2f - f.t * 2.2f)
             val flow = s * s * s * s
             drawLine(
                 color = mix(hot, Color.White, flow.coerceIn(0f, 1f)),
-                start = point(u0),
-                end = point(u1),
+                start = p0,
+                end = p1,
                 strokeWidth = (r * 0.008f * (1f + flow * 2f)).coerceAtLeast(0.6f),
             )
+            p0 = p1
         }
         drawCircle(
             color = hot.copy(alpha = 0.5f + 0.4f * f.amp),
@@ -1002,6 +1034,13 @@ object Workbench : Face {
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
+        // A zero-size layout (r == 0) makes the scan-plane falloff below divide
+        // by zero, and the NaN that comes out does NOT merely draw nothing: it
+        // flows through mix() in Resolve.kt into Color(red, green, blue, alpha),
+        // whose `require` on the three colour channels rejects NaN and throws
+        // IllegalArgumentException. So the failure mode is a crashed draw, not a
+        // blank face. There is nothing to draw at zero radius anyway, so stop.
+        if (r <= 0f) return@with
         val sep = 0.10f + f.amp * 0.35f
         val scanY = sin(f.t * 0.6f) * r * 0.7f
         for (si in shells.indices) {
@@ -1072,6 +1111,13 @@ object Swarm : Face {
     ) = with(scope) {
         val cp = cos(f.pitch)
         val sp = sin(f.pitch)
+        // Hoisted, exactly the way Orbit already hoists its inclination above.
+        // The yaw is one number for the whole draw, but these were evaluated
+        // inside the 160-agent loop: 320 redundant trig calls a frame, roughly
+        // 38,000 a second at 120fps, for two values that cannot differ between
+        // agents. Same numbers out, a great deal less arithmetic in.
+        val cyw = cos(f.yaw)
+        val syw = sin(f.yaw)
         val pull = (1f - f.amp * 0.6f).coerceIn(0.35f, 1f)
         for (i in 0 until N) {
             val orbit = f.t * (0.3f + seedR[i] * 0.2f) + seedA[i]
@@ -1080,8 +1126,8 @@ object Swarm : Face {
             val x0 = cos(orbit) * rr
             val y0 = sin(wob) * rr * 0.7f
             val z0 = sin(orbit) * rr
-            val x = x0 * cos(f.yaw) - z0 * sin(f.yaw)
-            val z1 = x0 * sin(f.yaw) + z0 * cos(f.yaw)
+            val x = x0 * cyw - z0 * syw
+            val z1 = x0 * syw + z0 * cyw
             val y = y0 * cp - z1 * sp
             val z = y0 * sp + z1 * cp
             val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
@@ -1357,6 +1403,12 @@ object Nucleus : Face {
     // only the uniforms change per frame.
     private val shader = android.graphics.RuntimeShader(AGSL)
 
+    // The brush is only a wrapper that hands `shader` back, and `shader` is
+    // already a single reused instance - so building one per frame was a fresh
+    // object 120 times a second for nothing. Lazy rather than eager so it is
+    // still built on the same first-draw path the shader is.
+    private val shaderBrush by lazy { androidx.compose.ui.graphics.ShaderBrush(shader) }
+
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
@@ -1379,7 +1431,7 @@ object Nucleus : Face {
         shader.setFloatUniform("uHot", hot.red, hot.green, hot.blue)
 
         drawCircle(
-            brush = androidx.compose.ui.graphics.ShaderBrush(shader),
+            brush = shaderBrush,
             radius = r,
             center = Offset(cx, cy),
         )
