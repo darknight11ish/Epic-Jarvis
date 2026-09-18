@@ -337,7 +337,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -402,16 +402,26 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "stream_chat": {
             // A scenario that cares what the answer actually SAYS (rather
             // than only that a turn completed) queues real text here; each
-            // call consumes the next entry. Emitted as a single raw,
-            // non-JSON chunk - `consumeLine` appends anything that does not
-            // parse as JSON and is not an SSE control line verbatim, so this
-            // is the real append path, not a shortcut around it. Exhausted
-            // or unset, `stream_chat` resolves with nothing sent, which
-            // `finishStream` already turns into its own honest placeholder -
-            // still a real "done" turn, just with nothing scripted to say.
+            // call consumes the next entry. A plain string is sent as one
+            // chunk; an ARRAY of strings is sent as several, in order, one
+            // real event-loop tick apart - the shape a scenario needs to
+            // prove something reacts mid-stream (sentence-streaming TTS)
+            // rather than only once the whole reply is in. Emitted as raw,
+            // non-JSON chunks - `consumeLine` appends anything that does
+            // not parse as JSON and is not an SSE control line verbatim, so
+            // this is the real append path, not a shortcut around it.
+            // Exhausted or unset, `stream_chat` resolves with nothing sent,
+            // which `finishStream` already turns into its own honest
+            // placeholder - still a real "done" turn, just with nothing
+            // scripted to say.
             const reply = (window.__chatReplies || []).shift();
-            if (reply && args && args.onEvent && typeof args.onEvent.onmessage === "function") {
-              args.onEvent.onmessage(reply);
+            const onmessage = args && args.onEvent && args.onEvent.onmessage;
+            if (reply && typeof onmessage === "function") {
+              const chunks = Array.isArray(reply) ? reply : [reply];
+              for (const chunk of chunks) {
+                onmessage(chunk);
+                await new Promise((r) => setTimeout(r, 0));
+              }
             }
             return null;
           }
@@ -452,6 +462,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return null;
           case "speak_reply":
             window.__voiceCalls.push(["speak", args.text]);
+            if (window.__speakDelayMs) {
+              await new Promise((r) => setTimeout(r, window.__speakDelayMs));
+            }
             if (window.__speakFails) throw new Error(window.__speakFails);
             // A tiny, real, silent WAV - short enough to inline, valid
             // enough that `new Audio(dataUri).play()` does not reject on
@@ -614,6 +627,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__captureFails = captureFails || null;
   window.__speakFails = speakFails || null;
   window.__autoListenFails = autoListenFails || null;
+  window.__speakDelayMs = speakDelayMs || 0;
   window.__memoryWrites = [];
   window.__memoryRefuses = memoryRefuses || null;
   window.__chatReplies = [...(chatReplies || [])];
@@ -656,7 +670,7 @@ export async function open(browser, base, file, data, viewport) {
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
-    heard: null, captureFails: null, speakFails: null, autoListenFails: null,
+    heard: null, captureFails: null, speakFails: null, autoListenFails: null, speakDelayMs: 0,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },

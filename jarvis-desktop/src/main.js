@@ -798,6 +798,8 @@ function closeCard() {
   state.lastPrompt = "";
   state.previousAnswer = null;
   paintedBlocks = 0;
+  spokenUpTo = 0;
+  stopSpeaking();
   setPhase("idle");
   renderPreviousAnswer();
   paint({ immediate: true });
@@ -1706,6 +1708,7 @@ function appendDelta(text) {
   state.chunks += 1;
   updateStat();
   paint();
+  checkForSpeakableSentence();
 }
 
 function updateStat() {
@@ -1891,6 +1894,7 @@ async function send(promptText) {
 
   state.buffer = "";
   state.chunks = 0;
+  spokenUpTo = 0;
   // A new answer starts from no blocks, or the first paragraph of the second
   // reply never gets its entrance.
   paintedBlocks = 0;
@@ -1987,10 +1991,19 @@ function finishStream(phase, statusText) {
   // silent, the same way a phone call and a text message get different
   // replies. Read and cleared here, once, so a follow-up typed while this
   // window is still open does not keep talking back uninvited.
+  //
+  // Most of the reply was already queued sentence by sentence as it
+  // streamed in (`checkForSpeakableSentence`, called from `appendDelta`) -
+  // this is only the tail end: whatever came after the last sentence
+  // boundary the stream happened to produce trailing whitespace for, which
+  // a reply ending mid-sentence-looking punctuation (no space after the
+  // final period, because there is nothing left to follow it) always
+  // leaves behind.
   const wasVoiceTurn = state.voiceTurn;
   state.voiceTurn = false;
-  if (wasVoiceTurn && phase !== "error" && state.buffer.trim()) {
-    speakReply(state.buffer);
+  if (wasVoiceTurn && phase !== "error") {
+    const remainder = state.buffer.slice(spokenUpTo).trim();
+    if (remainder) enqueueSpeech(remainder);
   }
 
   // Release the pin so clicking away dismisses the bar again.
@@ -2009,6 +2022,9 @@ let micRecording = false;
 
 async function startPushToTalk() {
   if (micRecording || state.autoListening) return;
+  // Barge-in: holding the mic to talk again is as clear a signal as this
+  // app gets that whatever Jarvis was saying is done mattering right now.
+  stopSpeaking();
   micRecording = true;
   dom.mic.setAttribute("aria-pressed", "true");
   try {
@@ -2060,18 +2076,106 @@ function abandonPushToTalk() {
   invoke("cancel_voice_capture");
 }
 
-/** Speaks `text` through the backend's TTS and plays it back locally. Best
- *  effort: a failure here is a missing voice, not a failed chat turn, so it
- *  is logged rather than shown as an error banner over a perfectly good
- *  answer already on screen. */
-async function speakReply(text) {
-  try {
-    const dataUri = await invokeStrict("speak_reply", { text });
-    await new Audio(dataUri).play();
-  } catch (error) {
-    console.info("[quickbar] spoken reply unavailable:", error);
+/* ==========================================================================
+   Voice: speaking a reply, one sentence at a time, and barge-in
+   ========================================================================== */
+
+/** Text already turned into speech (or queued to be), as an index into
+ *  `state.buffer` - reset to 0 at the start of every turn in `send()`. Lets
+ *  a voice-initiated reply start being SPOKEN well before the model has
+ *  finished streaming it, rather than waiting for the last token like the
+ *  original one-shot version of this did. */
+let spokenUpTo = 0;
+let speechQueue = [];
+let speaking = false;
+let currentAudio = null;
+
+/** A rough pass at making streamed markdown speakable. Not a renderer - just
+ *  enough that "**bold**" is not read aloud as "asterisk asterisk bold
+ *  asterisk asterisk", and a code block (rarely useful spoken at all) is
+ *  skipped rather than read character by character. */
+function stripMarkdownForSpeech(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .trim();
+}
+
+/** Looks for one or more complete sentences that have arrived since
+ *  `spokenUpTo` and queues each to be spoken. A "complete" sentence needs
+ *  end punctuation FOLLOWED BY whitespace - punctuation alone is not
+ *  enough, because the stream may simply not have produced the next
+ *  character yet, and speaking a sentence the model was about to keep
+ *  extending would need it un-said a moment later. Not fooled-proof
+ *  against "Dr." or "3.14" - a real sentence splitter is more machinery
+ *  than a queue that is, worst case, a little choppier warrants. */
+function checkForSpeakableSentence() {
+  if (!state.voiceTurn) return;
+  for (;;) {
+    const unspoken = state.buffer.slice(spokenUpTo);
+    const match = unspoken.match(/^([\s\S]*?[.!?])\s+/);
+    if (!match) return;
+    spokenUpTo += match[0].length;
+    enqueueSpeech(match[1]);
   }
 }
+
+function enqueueSpeech(text) {
+  const clean = stripMarkdownForSpeech(text);
+  if (!clean) return;
+  speechQueue.push(clean);
+  drainSpeechQueue();
+}
+
+/** Speaks whatever is queued, one clip at a time, through the backend's
+ *  TTS. Best effort throughout: a missing voice is logged, not shown as an
+ *  error banner over a perfectly good answer already on screen. */
+async function drainSpeechQueue() {
+  if (speaking) return;
+  const next = speechQueue.shift();
+  if (next === undefined) return;
+  speaking = true;
+  try {
+    const dataUri = await invokeStrict("speak_reply", { text: next });
+    currentAudio = new Audio(dataUri);
+    await currentAudio.play();
+    await new Promise((resolve) => {
+      if (!currentAudio) return resolve();
+      currentAudio.onended = resolve;
+      currentAudio.onerror = resolve;
+    });
+  } catch (error) {
+    console.info("[quickbar] spoken reply unavailable:", error);
+  } finally {
+    currentAudio = null;
+    speaking = false;
+    drainSpeechQueue();
+  }
+}
+
+/** Barge-in: discards anything still queued and stops whatever is playing
+ *  right now, immediately - called the moment the owner starts talking
+ *  again, on either listening mode. */
+function stopSpeaking() {
+  speechQueue = [];
+  if (currentAudio) {
+    currentAudio.onended = null;
+    currentAudio.onerror = null;
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  speaking = false;
+}
+
+/** Automatic listening's own barge-in hook: the VAD just heard speech
+ *  start, well before the utterance it belongs to is anywhere close to
+ *  finished. Push-to-talk gets the same treatment directly in
+ *  `startPushToTalk`, since holding the button is itself the signal there. */
+listen("voice-speech-started", stopSpeaking);
 
 /** Turns automatic (voice-activity-detected) listening on or off.
  *  Mutually exclusive with push-to-talk - `start_automatic_listening`

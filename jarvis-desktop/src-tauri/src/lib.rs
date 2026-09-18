@@ -111,6 +111,11 @@ pub mod events {
     /// directly. Sent only for a genuinely finished utterance; a failed
     /// send (server unreachable, no engine) is logged, not emitted here.
     pub const VOICE_HEARD: &str = "voice-heard";
+    /// Payload: none. Automatic listening's VAD just crossed from silence
+    /// into speech - the frontend's barge-in hook: if a spoken reply is
+    /// still playing, this is the moment to stop it, before the finished
+    /// utterance (`VOICE_HEARD`, above) is anywhere close to ready.
+    pub const VOICE_SPEECH_STARTED: &str = "voice-speech-started";
 
     // ---- the fanned-out event stream -----------------------------------
     //

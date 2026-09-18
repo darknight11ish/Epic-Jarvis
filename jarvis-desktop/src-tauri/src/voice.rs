@@ -84,7 +84,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::{jarvis_base, jarvis_client, jarvis_headers};
-use crate::events::VOICE_HEARD;
+use crate::events::{VOICE_HEARD, VOICE_SPEECH_STARTED};
 
 /// Total round-trip budget for one utterance: speaker verification plus a
 /// whole-clip transcription is not instant, but it is also not a chat
@@ -612,6 +612,10 @@ fn run_vad_loop(
                         started_at: now,
                         last_voiced_at: now,
                     };
+                    // Barge-in's hook: the frontend stops any spoken reply
+                    // still playing right now, well before this utterance
+                    // is anywhere close to finished and sent.
+                    let _ = app.emit(VOICE_SPEECH_STARTED, ());
                 } else if buf.len() > idle_keep {
                     // Nothing has been said in a while - do not let the
                     // buffer grow for the entire time the mic is open. The
