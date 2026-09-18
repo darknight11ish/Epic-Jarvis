@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 import com.jarvis.client.FaceState
 import com.jarvis.client.face.FaceFrame
 import com.jarvis.client.face.Spec
+import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.cos
@@ -159,6 +160,27 @@ class TokamakRenderer : MeshRenderer {
     private var surfaceW = 1
     private var surfaceH = 1
 
+    // The mesh, built on the CPU every frame (the wobble is a function of
+    // time, so it has to be) but allocated exactly once.
+    //
+    // These three used to be `FloatArray(...)` locals inside `onDrawFrame` -
+    // ~26 KB of Java heap churn per frame at up to 120 fps, which is pure GC
+    // pressure on the one code path in the app that must never stutter.
+    // `MembraneRenderer` already held its equivalents as fields; this one was
+    // simply missed.
+    private val vertCount = (NU + 1) * (NV + 1)
+    private val pos = FloatArray(vertCount * 3)
+    private val nrm = FloatArray(vertCount * 3)
+    private val cur = FloatArray(vertCount)
+
+    // And one direct buffer per attribute, filled in place each frame instead
+    // of a fresh `ByteBuffer.allocateDirect` per attribute per frame - native
+    // memory that is only ever reclaimed by the Cleaner, so it accumulates
+    // faster than it is freed at frame rate.
+    private val posFb = GL.directFloatBuffer(pos.size)
+    private val nrmFb = GL.directFloatBuffer(nrm.size)
+    private val curFb = GL.directFloatBuffer(cur.size)
+
     // Written from the UI thread via queueEvent, read only on the GL thread -
     // GLSurfaceView's own contract for crossing that boundary safely.
     private var frame: FaceFrame? = null
@@ -174,6 +196,16 @@ class TokamakRenderer : MeshRenderer {
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        // The renderer INSTANCE outlives any one EGL context: GLSurfaceView
+        // calls this again after a context loss, on the same object. Nothing
+        // here ever deleted what it overwrote, which is harmless only while
+        // `setPreserveEGLContextOnPause` stays at its default false (the lost
+        // context takes the objects with it). Turn that on - or hit a driver
+        // that preserves anyway - and every background/foreground cycle leaks
+        // a program, a VAO and four buffers. Deleting first is correct either
+        // way: after a real context loss the stale ids name nothing in the new
+        // context, so the driver ignores them.
+        deleteGlObjects()
         program = GL.compileProgram(VS, FS)
         aPosLoc = GLES30.glGetAttribLocation(program, "aPos")
         aNrmLoc = GLES30.glGetAttribLocation(program, "aNrm")
@@ -224,8 +256,40 @@ class TokamakRenderer : MeshRenderer {
         )
         GLES30.glBindVertexArray(0)
 
+        // The three attribute stores are DYNAMIC but FIXED SIZE, so their GPU
+        // storage is allocated once here (`null` data = uninitialised store)
+        // and refilled with glBufferSubData each frame. Re-calling
+        // glBufferData every frame orphans and re-allocates the whole store on
+        // the driver side three times a frame for no gain.
+        allocAttr(posBuf, pos.size * 4)
+        allocAttr(nrmBuf, nrm.size * 4)
+        allocAttr(curBuf, cur.size * 4)
+
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
+    }
+
+    private fun deleteGlObjects() {
+        if (program != 0) {
+            GLES30.glDeleteProgram(program)
+            program = 0
+        }
+        if (vao != 0) {
+            GLES30.glDeleteVertexArrays(1, intArrayOf(vao), 0)
+            vao = 0
+        }
+        if (posBuf != 0 || nrmBuf != 0 || curBuf != 0 || idxBuf != 0) {
+            GLES30.glDeleteBuffers(4, intArrayOf(posBuf, nrmBuf, curBuf, idxBuf), 0)
+            posBuf = 0
+            nrmBuf = 0
+            curBuf = 0
+            idxBuf = 0
+        }
+    }
+
+    private fun allocAttr(buf: Int, bytes: Int) {
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buf)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, bytes, null, GLES30.GL_DYNAMIC_DRAW)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -242,10 +306,6 @@ class TokamakRenderer : MeshRenderer {
 
         val vu = NU + 1
         val vv = NV + 1
-        val nv = vu * vv
-        val pos = FloatArray(nv * 3)
-        val nrm = FloatArray(nv * 3)
-        val cur = FloatArray(nv)
         for (iu in 0 until vu) {
             val u = iu.toFloat() / NU * TAU
             val cu = cos(u)
@@ -274,9 +334,9 @@ class TokamakRenderer : MeshRenderer {
         }
 
         GLES30.glBindVertexArray(vao)
-        uploadAttr(posBuf, aPosLoc, pos, 3)
-        uploadAttr(nrmBuf, aNrmLoc, nrm, 3)
-        uploadAttr(curBuf, aCurLoc, cur, 1)
+        uploadAttr(posBuf, aPosLoc, pos, posFb, 3)
+        uploadAttr(nrmBuf, aNrmLoc, nrm, nrmFb, 3)
+        uploadAttr(curBuf, aCurLoc, cur, curFb, 1)
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, idxBuf)
 
         GLES30.glClearColor(Spec.BACKGROUND.red, Spec.BACKGROUND.green, Spec.BACKGROUND.blue, 1f)
@@ -306,15 +366,16 @@ class TokamakRenderer : MeshRenderer {
         GLES30.glBindVertexArray(0)
     }
 
-    private fun uploadAttr(buf: Int, loc: Int, data: FloatArray, size: Int) {
+    private fun uploadAttr(buf: Int, loc: Int, data: FloatArray, fb: FloatBuffer, size: Int) {
         if (loc < 0) return
+        // Refill the same native buffer and update the same GPU store. The
+        // position is put back to 0 on both sides of the fill so this is safe
+        // to call again next frame without reallocating anything.
+        fb.position(0)
+        fb.put(data)
+        fb.position(0)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buf)
-        GLES30.glBufferData(
-            GLES30.GL_ARRAY_BUFFER,
-            data.size * 4,
-            GL.floatBuffer(data),
-            GLES30.GL_DYNAMIC_DRAW,
-        )
+        GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, data.size * 4, fb)
         GLES30.glEnableVertexAttribArray(loc)
         GLES30.glVertexAttribPointer(loc, size, GLES30.GL_FLOAT, false, 0, 0)
     }

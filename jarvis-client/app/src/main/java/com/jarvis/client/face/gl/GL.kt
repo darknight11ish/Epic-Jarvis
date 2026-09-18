@@ -59,7 +59,27 @@ object GL {
         return shader
     }
 
-    /** A direct, native-order buffer - what `glBufferData`/`glBufferSubData` require. */
+    /**
+     * An EMPTY direct buffer of a fixed float capacity, kept by a renderer for
+     * the life of its surface and re-filled each frame.
+     *
+     * [floatBuffer] allocates fresh native memory on every call, and the mesh
+     * faces called it once per attribute per frame - three `allocateDirect`s a
+     * frame each, ~51 KB/frame in Membrane, so roughly 3 MB/s of native memory
+     * that only the Cleaner ever gives back. The sizes involved are fixed and
+     * known at surface-creation time, so there is no reason to allocate more
+     * than one of each, ever.
+     */
+    fun directFloatBuffer(floats: Int): FloatBuffer =
+        ByteBuffer.allocateDirect(floats * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+
+    /**
+     * A direct, native-order buffer - what `glBufferData`/`glBufferSubData`
+     * require. One-time setup use only (index data and the like); anything
+     * uploaded every frame wants [directFloatBuffer] instead.
+     */
     fun floatBuffer(data: FloatArray): FloatBuffer =
         ByteBuffer.allocateDirect(data.size * 4)
             .order(ByteOrder.nativeOrder())

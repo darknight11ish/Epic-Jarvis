@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,6 +35,7 @@ import androidx.compose.foundation.Canvas
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -115,40 +117,54 @@ fun FaceView(
 
     LaunchedEffect(state) { host.onStateChange(state) }
 
-    LaunchedEffect(face, bindings) {
-        var last = 0L
-        while (true) {
-            val fps = Spec.fpsFor(liveState)
-            if (fps in 1..15) {
-                // Below 15fps the frame clock was still waking at the display
-                // rate to decide to do nothing: a Choreographer callback and a
-                // coroutine resume 60-120 times a second, across what the spec
-                // itself calls nine tenths of screen-on time. Sleeping to the
-                // next due instant costs nothing in between.
-                val stepMs = 1000L / fps
-                delay(stepMs)
-                val now = System.nanoTime()
-                if (last == 0L) last = now
-                val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
-                last = now
-                if (host.advance(dt, liveState, mic(), speech(), bindings, face)) {
-                    frame = host.snapshot()
-                }
-            } else {
-                withFrameNanos { now ->
+    // The frame loop is suspended while the app is not at least STARTED.
+    //
+    // withFrameNanos stops on its own when the display stops producing frames,
+    // but the 1..15 fps branch below sleeps on `delay` instead - and `delay`
+    // keeps firing with the screen off. STANDBY (15 fps) and BANKED (2 fps) are
+    // precisely the states the phone sits in while pocketed, so that branch
+    // woke the CPU, advanced the host and wrote Compose state for as long as
+    // the composition lived, on the two states meant to be the cheap ones.
+    // repeatOnLifecycle cancels the whole loop at ON_STOP and starts it again
+    // at ON_START; `last` is re-declared inside, so the first frame back is
+    // treated as a fresh start rather than one enormous delta.
+    val frameLoopOwner = LocalLifecycleOwner.current
+    LaunchedEffect(face, bindings, frameLoopOwner) {
+        frameLoopOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var last = 0L
+            while (true) {
+                val fps = Spec.fpsFor(liveState)
+                if (fps in 1..15) {
+                    // Below 15fps the frame clock was still waking at the display
+                    // rate to decide to do nothing: a Choreographer callback and a
+                    // coroutine resume 60-120 times a second, across what the spec
+                    // itself calls nine tenths of screen-on time. Sleeping to the
+                    // next due instant costs nothing in between.
+                    val stepMs = 1000L / fps
+                    delay(stepMs)
+                    val now = System.nanoTime()
                     if (last == 0L) last = now
-                    // Measured on the surface that actually matters, rather
-                    // than assumed: the panel drops rate on its own for battery
-                    // saver, brightness and heat, and a face driven by an
-                    // assumed delta runs at the wrong speed the moment it does.
-                    com.jarvis.client.platform.DisplayRate.sample(now - last)
                     val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                     last = now
-                    // Resting states draw at 30 rather than the display rate.
-                    // The accumulated dt is handed to the draw, so motion covers
-                    // the same distance — frame skipping, not slow motion.
                     if (host.advance(dt, liveState, mic(), speech(), bindings, face)) {
                         frame = host.snapshot()
+                    }
+                } else {
+                    withFrameNanos { now ->
+                        if (last == 0L) last = now
+                        // Measured on the surface that actually matters, rather
+                        // than assumed: the panel drops rate on its own for battery
+                        // saver, brightness and heat, and a face driven by an
+                        // assumed delta runs at the wrong speed the moment it does.
+                        com.jarvis.client.platform.DisplayRate.sample(now - last)
+                        val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
+                        last = now
+                        // Resting states draw at 30 rather than the display rate.
+                        // The accumulated dt is handed to the draw, so motion covers
+                        // the same distance — frame skipping, not slow motion.
+                        if (host.advance(dt, liveState, mic(), speech(), bindings, face)) {
+                            frame = host.snapshot()
+                        }
                     }
                 }
             }
@@ -194,7 +210,20 @@ fun FaceView(
     ) {
         val mesh = remember(face.id) { MeshFaces.rendererFor(face.id) }
         if (mesh != null) {
-            GLFaceSurface(mesh, frame, face, notches)
+            // key(), because the new renderer above is useless without a new
+            // view to attach it to. GLFaceSurface is one call site, so
+            // AndroidView's factory runs exactly once for it: switching from
+            // tokamak to membrane built a fresh MembraneRenderer, kept feeding
+            // it frames through `update`, and went on showing the SAME
+            // GLSurfaceView still driving the old TokamakRenderer - whose
+            // onSurfaceCreated had run, while the membrane's never did. What
+            // the owner saw was a motionless torus. Re-calling setRenderer is
+            // not an alternative: GLSurfaceView throws if it is called twice on
+            // one view, so the view itself has to be new, and `key` is what
+            // makes the composition treat it as new.
+            key(face.id) {
+                GLFaceSurface(mesh, frame, face, notches)
+            }
         } else {
             Canvas(Modifier.matchParentSize()) {
                 drawFace(frame, face, notches, glow)

@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import com.jarvis.client.FaceState
 import com.jarvis.client.face.FaceFrame
 import com.jarvis.client.face.Spec
+import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.exp
@@ -45,9 +46,10 @@ import kotlin.math.sqrt
  *    playing the same role `p.rate` plays in the reference), which drains
  *    in fixed-size physics ticks - the numerically stable technique this
  *    kind of explicit stencil is normally built on anyway, and it needs no
- *    translation of a slider that was never there. The backlog is capped
- *    per frame rather than chased, so a stall drops ticks instead of
- *    bursting to catch up.
+ *    translation of a slider that was never there. The backlog IS chased,
+ *    up to [MAX_STEPS_PER_FRAME] - that bound is what stops a stall from
+ *    bursting, and it is set high enough that no real render rate in the
+ *    spec is throttled into slow motion by it.
  *  - The touch-driven strike point. The reference excites the skin at a
  *    location TOUCH.x/y sets directly. Touch already means something else
  *    for every 3D face in this app - camera orbit - and turning it into a
@@ -81,7 +83,38 @@ class MembraneRenderer : MeshRenderer {
         const val AMPL_H = 0.42f
         const val DIST = 4.2f
         const val FIXED_STEP = 1f / 60f
-        const val MAX_STEPS_PER_FRAME = 4
+
+        // How much simulated time one rendered frame may carry.
+        //
+        // The old ceiling of 4 ticks (0.067 s of sim) coupled the drum's speed
+        // to the panel and to the shell's frame-rate gate, because the surplus
+        // was thrown away: THINKING asks for rate 6.0, which is 0.1 s of sim
+        // per 60 Hz frame and could never fit in 4 ticks, so the same state ran
+        // at 4.0x on a 60 Hz phone and 6.0x on a 120 Hz one. Worse, the shell
+        // renders BANKED at 2 fps - 0.5 s of real time per frame, 0.7 s of sim
+        // at that state's rate 1.4 - so the membrane crawled at about an eighth
+        // of real speed, breaking the contract FaceView states for every other
+        // face: frame skipping, not slow motion.
+        //
+        // The bound is the worst LEGITIMATE case, so nothing real is discarded
+        // and a genuine stall still cannot burst without limit: the slowest
+        // render rate in the spec is BANKED's 2 fps (0.5 s), and the highest
+        // rate any state asks for is THINKING's 6.0 - but those never coincide,
+        // since BANKED's borrowed motion is a resting one. 0.8 s of sim, 48
+        // ticks, covers BANKED at 0.7 s with slack and is ~150 k cell updates
+        // in the worst frame, which that state only reaches twice a second.
+        const val MAX_STEPS_PER_FRAME = 48
+
+        /**
+         * A gap longer than this did not happen because the device was slow -
+         * it happened because rendering STOPPED (backgrounded, or the frame
+         * loop suspended). `lastFrameNanos` is never reset in that case, so the
+         * first frame back used to see the whole clamped delta and spend the
+         * entire step budget catching up on time nobody watched pass. Longer
+         * than any real frame interval the spec produces, BANKED's 0.5 s
+         * included.
+         */
+        const val RESUME_GAP_S = 1.0f
 
         val VS = """
             #version 300 es
@@ -187,9 +220,17 @@ class MembraneRenderer : MeshRenderer {
         val dj = j - mid
         i > 0 && j > 0 && i < N - 1 && j < N - 1 && sqrt(di * di + dj * dj) / mid <= 0.96f
     }
+    /** Cells the stencil actually integrates. Fixed by [mask], so counted once. */
+    private val liveCells = max(1, mask.count { it })
     private var physicsTime = 0f
     private var accumulator = 0f
     private var lastFrameNanos = 0L
+    /**
+     * RMS height of the live cells, carried between ticks. Accumulated inside
+     * the stencil sweep that produces it rather than by a second full pass over
+     * all 1600 cells per frame, which is what it used to cost.
+     */
+    private var rms = 0f
 
     // Written from the UI thread via queueEvent, read only on the GL thread.
     private var frame: FaceFrame? = null
@@ -205,6 +246,20 @@ class MembraneRenderer : MeshRenderer {
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        // The renderer INSTANCE outlives any one EGL context - GLSurfaceView
+        // calls this again on the same object after a context loss - and
+        // nothing here ever deleted what it was about to overwrite. That is
+        // harmless only while `setPreserveEGLContextOnPause` stays at its
+        // default false, because the lost context takes the objects with it;
+        // preserve the context and every background/foreground cycle leaks a
+        // program, a VAO and four buffers. Deleting first is right either way:
+        // after a real context loss the stale ids name nothing in the new
+        // context and the driver ignores them.
+        deleteGlObjects()
+        // Rendering stopped while the context was gone, so the clock this
+        // renderer measures its own timestep with is stale by however long that
+        // was. See RESUME_GAP_S.
+        lastFrameNanos = 0L
         program = GL.compileProgram(VS, FS)
         aPosLoc = GLES30.glGetAttribLocation(program, "aPos")
         aNrmLoc = GLES30.glGetAttribLocation(program, "aNrm")
@@ -256,8 +311,40 @@ class MembraneRenderer : MeshRenderer {
         )
         GLES30.glBindVertexArray(0)
 
+        // The three attribute stores are DYNAMIC but FIXED SIZE, so their GPU
+        // storage is allocated once here (`null` data = uninitialised store)
+        // and refilled with glBufferSubData every frame. Calling glBufferData
+        // per frame instead orphans and re-allocates the whole store on the
+        // driver side, three times a frame, for nothing.
+        allocAttr(posBuf, pos.size * 4)
+        allocAttr(nrmBuf, nrm.size * 4)
+        allocAttr(auxBuf, aux.size * 4)
+
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
+    }
+
+    private fun deleteGlObjects() {
+        if (program != 0) {
+            GLES30.glDeleteProgram(program)
+            program = 0
+        }
+        if (vao != 0) {
+            GLES30.glDeleteVertexArrays(1, intArrayOf(vao), 0)
+            vao = 0
+        }
+        if (posBuf != 0 || nrmBuf != 0 || auxBuf != 0 || idxBuf != 0) {
+            GLES30.glDeleteBuffers(4, intArrayOf(posBuf, nrmBuf, auxBuf, idxBuf), 0)
+            posBuf = 0
+            nrmBuf = 0
+            auxBuf = 0
+            idxBuf = 0
+        }
+    }
+
+    private fun allocAttr(buf: Int, bytes: Int) {
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buf)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, bytes, null, GLES30.GL_DYNAMIC_DRAW)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -277,28 +364,30 @@ class MembraneRenderer : MeshRenderer {
     private fun step(f: FaceFrame) {
         val st = stFor(f.motion)
         val now = System.nanoTime()
-        val dt = if (lastFrameNanos == 0L) {
+        val elapsed = if (lastFrameNanos == 0L) {
             0f
         } else {
-            ((now - lastFrameNanos) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
+            ((now - lastFrameNanos) / 1_000_000_000.0).toFloat()
         }
         lastFrameNanos = now
+        // A gap this long means rendering had STOPPED, not that the device was
+        // slow; the time did not pass for the drum, so it is dropped outright
+        // rather than clamped and then chased. Without this the first frame
+        // after any resume spends the whole step budget on catch-up.
+        val dt = if (elapsed > RESUME_GAP_S) 0f else elapsed
 
         accumulator += dt * st.rate
+        // The only place time is discarded. See MAX_STEPS_PER_FRAME: the cap is
+        // the worst legitimate frame, so this trims genuine stalls only, and
+        // the loop below drains the whole of what is left - the physics runs at
+        // the state's rate whatever the panel and the frame-rate gate are doing.
         val backlogCap = MAX_STEPS_PER_FRAME * FIXED_STEP
         if (accumulator > backlogCap) accumulator = backlogCap
 
-        // How much motion is already on the skin. A drum driven at a fixed
-        // rate with light damping pumps itself to infinity, which is a real
-        // failure mode of this stencil, not a hypothetical one - the drive
-        // backs off as the surface gets livelier, computed once per frame
-        // and held for every tick this frame takes.
-        var energy = 0f
-        var live = 0
-        for (q in 0 until N * N) if (mask[q]) { energy += z[q] * z[q]; live++ }
-        val rms = sqrt(energy / max(1, live))
-        val room = max(0f, 1f - rms / 0.27f)
-        val drive = st.drive * (if (f.motion == FaceState.LISTENING) 0.4f + f.amp * 2.2f else 1f) * room
+        // How hard the skin is struck, before the energy limiter. A drum driven
+        // at a fixed rate with light damping pumps itself to infinity, which is
+        // a real failure mode of this stencil, not a hypothetical one.
+        val driveBase = st.drive * (if (f.motion == FaceState.LISTENING) 0.4f + f.amp * 2.2f else 1f)
         // Tuned in CELLS on a small grid; scaling by the grid keeps the
         // strike the same FRACTION of the skin at any resolution.
         val gs = (26f / N) * (26f / N)
@@ -309,17 +398,26 @@ class MembraneRenderer : MeshRenderer {
             accumulator -= FIXED_STEP
             physicsTime += FIXED_STEP
 
+            var energy = 0f
             for (q in 0 until N * N) {
                 if (!mask[q]) { zn[q] = 0f; continue }
                 val acc = (z[q - 1] + z[q + 1] + z[q - N] + z[q + N] - 4f * z[q]) * k
                 var nv = z[q] + (z[q] - zp[q]) * st.damp + acc
                 if (nv > 1.2f) nv = 1.2f else if (nv < -1.2f) nv = -1.2f
                 zn[q] = nv
+                energy += nv * nv
             }
             val tmp = zp
             zp = z
             z = zn
             zn = tmp
+            // Free: the sweep above already touched every live cell. It used to
+            // be a separate 1600-cell pass per frame, and re-evaluating it per
+            // TICK rather than per frame matters now that a frame can carry
+            // dozens of ticks - a limiter held fixed across a long catch-up
+            // burst is a limiter that does not limit.
+            rms = sqrt(energy / liveCells)
+            val drive = driveBase * max(0f, 1f - rms / 0.27f)
 
             // Excitation applied after the step, so it reads as a real
             // impulse rather than a forced boundary condition.
@@ -341,6 +439,15 @@ class MembraneRenderer : MeshRenderer {
     private val pos = FloatArray(N * N * 3)
     private val nrm = FloatArray(N * N * 3)
     private val aux = FloatArray(N * N * 2)
+
+    // One direct buffer per attribute for the life of the renderer. These were
+    // a fresh `ByteBuffer.allocateDirect` each, three times a frame - ~51 KB a
+    // frame of native memory that only the Cleaner ever hands back, so at frame
+    // rate it accumulates faster than it is freed. The sizes are fixed, so one
+    // each is all that was ever needed.
+    private val posFb = GL.directFloatBuffer(pos.size)
+    private val nrmFb = GL.directFloatBuffer(nrm.size)
+    private val auxFb = GL.directFloatBuffer(aux.size)
 
     /** Hands the simulated grid to the GPU as a triangle mesh, rebuilt every frame since it IS the simulation. */
     private fun upload() {
@@ -387,9 +494,9 @@ class MembraneRenderer : MeshRenderer {
         }
 
         GLES30.glBindVertexArray(vao)
-        uploadAttr(posBuf, aPosLoc, pos, 3)
-        uploadAttr(nrmBuf, aNrmLoc, nrm, 3)
-        uploadAttr(auxBuf, aAuxLoc, aux, 2)
+        uploadAttr(posBuf, aPosLoc, pos, posFb, 3)
+        uploadAttr(nrmBuf, aNrmLoc, nrm, nrmFb, 3)
+        uploadAttr(auxBuf, aAuxLoc, aux, auxFb, 2)
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, idxBuf)
     }
 
@@ -419,15 +526,16 @@ class MembraneRenderer : MeshRenderer {
         GLES30.glBindVertexArray(0)
     }
 
-    private fun uploadAttr(buf: Int, loc: Int, data: FloatArray, size: Int) {
+    private fun uploadAttr(buf: Int, loc: Int, data: FloatArray, fb: FloatBuffer, size: Int) {
         if (loc < 0) return
+        // Refill the one persistent buffer and update the one persistent GPU
+        // store. Position is reset on both sides of the fill so the next frame
+        // finds it exactly as this one did.
+        fb.position(0)
+        fb.put(data)
+        fb.position(0)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buf)
-        GLES30.glBufferData(
-            GLES30.GL_ARRAY_BUFFER,
-            data.size * 4,
-            GL.floatBuffer(data),
-            GLES30.GL_DYNAMIC_DRAW,
-        )
+        GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, data.size * 4, fb)
         GLES30.glEnableVertexAttribArray(loc)
         GLES30.glVertexAttribPointer(loc, size, GLES30.GL_FLOAT, false, 0, 0)
     }
