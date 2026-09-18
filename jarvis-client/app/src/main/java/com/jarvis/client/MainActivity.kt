@@ -192,7 +192,17 @@ class MainActivity : FragmentActivity() {
         // able to bounce a paired device back to pairing, because this was the
         // one flag of the three that was not saved.
         var paired by rememberSaveable { mutableStateOf(JarvisRuntime.isPaired()) }
-        var busy by rememberSaveable { mutableStateOf(false) }
+        // Deliberately NOT saveable, unlike `paired` above.
+        //
+        // `busy` is cleared in exactly one place: the handshake coroutine
+        // below, which runs in `rememberCoroutineScope()` and so dies with the
+        // composition. A rotation mid-pair killed that coroutine while a saved
+        // `busy = true` came back with the new one, and Connect stayed
+        // disabled behind a spinner until a force-stop. The window is wide,
+        // because `setToken` generates a hardware-backed key - hundreds of
+        // milliseconds to seconds. The flag and the work that clears it now
+        // have the same lifetime: if the work is gone, so is the flag.
+        var busy by remember { mutableStateOf(false) }
         var draft by rememberSaveable { mutableStateOf("") }
         var memoryDecideBusyId by remember { mutableStateOf<Long?>(null) }
         // The daily "tidy memory overnight?" card, cached the first time it is
@@ -205,9 +215,18 @@ class MainActivity : FragmentActivity() {
         // reading the same still-cached server data cannot re-adopt an offer
         // just turned down.
         //
-        // `sleepOfferDismissed` is rememberSaveable, like `paired`/`busy`/
-        // `draft` above, so a rotation can't resurrect a card the owner just
-        // turned down. `cachedSleepOffer` stays plain `remember`: a raw
+        // `sleepOfferDismissed` is still rememberSaveable, like `paired`
+        // above, so a rotation can't resurrect a card the owner deliberately
+        // turned down - but it is now set ONLY on a durable answer: a local
+        // dismiss, or a write that actually came back. A write still in flight
+        // is held in `sleepOfferAnswering`, which is plain `remember` on
+        // purpose, because the rollback that clears it runs in `scope.launch`
+        // and dies with the composition. Rotating mid-write used to save
+        // `dismissed = true` while cancelling both the request and its
+        // rollback: the setting was never written and the card was gone until
+        // tomorrow. The suppressing flag and the work it belongs to now share
+        // a lifetime, so a rotation re-offers the card instead of eating it.
+        // `cachedSleepOffer` stays plain `remember`: a raw
         // JsonObject isn't Bundle-saveable, and it doesn't need to be - the
         // LaunchedEffect(brain.memory) block below re-populates it from the
         // still-cached server data on the next recomposition, and the
@@ -215,6 +234,8 @@ class MainActivity : FragmentActivity() {
         // offer just turned down.
         var cachedSleepOffer by remember { mutableStateOf<JsonObject?>(null) }
         var sleepOfferDismissed by rememberSaveable { mutableStateOf(false) }
+        /** A write is in flight - suppress re-adoption, but never across a rotation. */
+        var sleepOfferAnswering by remember { mutableStateOf(false) }
         var sleepOfferBusy by remember { mutableStateOf(false) }
 
         val tick = permissionTick.intValue
@@ -232,6 +253,22 @@ class MainActivity : FragmentActivity() {
         val status by JarvisRuntime.status.collectAsState()
         val version by JarvisRuntime.version.collectAsState()
         val pending by JarvisRuntime.pending.collectAsState()
+        // Collected here, and carried in HomeState below, for two reasons.
+        //
+        // The plain one: the approve and deny buttons must grey out while a
+        // decision is in flight, or a second tap sends the same decision twice
+        // and asks for a fingerprint twice.
+        //
+        // The load-bearing one: `blockerFor` calls decisionBlocker(), which
+        // reads `_deciding.value` / `_stale.value` / `_link.value` off the
+        // MutableStateFlows directly. Reading `.value` on a flow inside
+        // composition is NOT a snapshot read and subscribes to nothing, so on
+        // its own that answer would never be recomputed. It works only because
+        // `stale`, `link` and now `deciding` are collected here and live in
+        // HomeState: a change in any of them rebuilds the state and re-runs
+        // `blockerFor`. Do not delete these fields for looking unread - they
+        // ARE the subscription.
+        val deciding by JarvisRuntime.deciding.collectAsState()
         val attention by JarvisRuntime.attention.collectAsState()
         val notice by JarvisRuntime.notice.collectAsState()
         val digest by JarvisRuntime.digest.collectAsState()
@@ -277,7 +314,9 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(brain.memory) {
             val offer = (brain.memory?.get("setup") as? JsonObject)
                 ?.get("sleep_time_offer") as? JsonObject
-            if (offer != null && cachedSleepOffer == null && !sleepOfferDismissed) {
+            if (offer != null && cachedSleepOffer == null &&
+                !sleepOfferDismissed && !sleepOfferAnswering
+            ) {
                 cachedSleepOffer = offer
             }
         }
@@ -293,7 +332,16 @@ class MainActivity : FragmentActivity() {
         val resting = faceState == FaceState.IDLE ||
             faceState == FaceState.STANDBY ||
             faceState == FaceState.BANKED
-        LaunchedEffect(followSystem, systemDark, resting) {
+        // `chrome` is a key, not merely read inside. Without it, picking a
+        // light theme by hand while following a dark system changed `chrome`
+        // and nothing else, so this effect never re-ran: the app sat light
+        // under a switch still claiming it followed the system. Keying on it
+        // makes that divergence itself the trigger. It cannot spin: the
+        // effect's own write restarts it exactly once, and the restarted pass
+        // finds `want.id == chrome.id` and does nothing. The `while` below is
+        // untouched - a refused theme change does not alter `chrome`, so the
+        // dwell window is still waited out by the loop, not by a restart.
+        LaunchedEffect(followSystem, systemDark, resting, chrome) {
             if (!followSystem || !resting) return@LaunchedEffect
             val want = Themes.forSystem(systemDark, preferredDark = Themes.byId(lastDarkId(chrome.id)))
             // Retried, not dropped. `setTheme` refuses inside the dwell window
@@ -320,12 +368,20 @@ class MainActivity : FragmentActivity() {
         }
 
         // A notification tap goes straight home, so the card is where the
-        // finger already is.
+        // finger already is - and the id now travels into HomeState, so the
+        // list scrolls to that card and outlines it. It used to be cleared
+        // right here, one line after being set, which is why nothing ever read
+        // it: the tap navigated home and left you a list to hunt through.
         LaunchedEffect(focusApproval.value) {
-            if (focusApproval.value == null) return@LaunchedEffect
+            val id = focusApproval.value ?: return@LaunchedEffect
             nav.resetTo(Screen.HOME)
             JarvisRuntime.refreshPending()
-            focusApproval.value = null
+            // Held long enough to scroll to and be noticed, then dropped. A
+            // highlight that never cleared would also mean a second tap on the
+            // SAME notification changed no key here, ran nothing, and scrolled
+            // nowhere.
+            delay(FOCUS_HOLD_MS)
+            if (focusApproval.value == id) focusApproval.value = null
         }
 
         JarvisTheme(chrome = chrome, idleColor = idleColour) {
@@ -484,7 +540,7 @@ class MainActivity : FragmentActivity() {
                             if (!sleepOfferBusy) {
                                 val answered = cachedSleepOffer
                                 sleepOfferBusy = true
-                                // Dismissed BEFORE the write, not after: a
+                                // Suppressed BEFORE the write, not after: a
                                 // successful setSleepTime() calls
                                 // refreshBrain() internally before it returns,
                                 // and that recomposition has to see the flag
@@ -493,15 +549,24 @@ class MainActivity : FragmentActivity() {
                                 // answering, from whatever brain.memory still
                                 // holds. Rolled back below on failure, so a
                                 // network hiccup never costs the owner their
-                                // only way to act on this until tomorrow.
+                                // only way to act on this until tomorrow. It
+                                // is `answering` and not `dismissed` that is
+                                // set here, so a rotation that cancels this
+                                // coroutine cannot leave the offer suppressed
+                                // by a rollback that will never run.
                                 cachedSleepOffer = null
-                                sleepOfferDismissed = true
+                                sleepOfferAnswering = true
                                 scope.launch {
                                     val result = JarvisRuntime.setSleepTime(enabled, remind)
                                     sleepOfferBusy = false
-                                    if (result !is ApiResult.Ok) {
+                                    sleepOfferAnswering = false
+                                    if (result is ApiResult.Ok) {
+                                        // Durable: the answer reached the
+                                        // desktop, so now it is safe to let it
+                                        // survive a rotation.
+                                        sleepOfferDismissed = true
+                                    } else {
                                         cachedSleepOffer = answered
-                                        sleepOfferDismissed = false
                                     }
                                 }
                             }
@@ -527,7 +592,30 @@ class MainActivity : FragmentActivity() {
                     face = face,
                     bindings = bindings,
                     onPickTheme = {
-                        if (!appearance.setTheme(it)) {
+                        // Picking a theme by hand turns following OFF, and that
+                        // is half of one fix rather than a preference.
+                        //
+                        // The audit found that following silently stopped
+                        // working after a manual pick: the effect that applies
+                        // the system's choice did not re-run on a theme change,
+                        // so the app sat on the hand-picked theme while the
+                        // switch still claimed to follow a system set the other
+                        // way. Adding `chrome` to that effect's keys makes the
+                        // switch honest again — but on its own it makes the
+                        // manual pick futile instead, because the effect now
+                        // immediately snaps the theme back, which is a worse
+                        // answer than the bug was.
+                        //
+                        // Both halves together are the behaviour that is
+                        // actually coherent: a deliberate pick wins AND the
+                        // switch tells the truth about what it is doing.
+                        //
+                        // Only when the change was accepted. A pick refused by
+                        // the photosensitivity dwell governor did not change
+                        // the theme, so it must not change the switch either.
+                        if (appearance.setTheme(it)) {
+                            appearance.setFollowSystem(false)
+                        } else {
                             JarvisRuntime.setNotice("One theme change at a time — give it a moment.")
                         }
                     },
@@ -554,7 +642,6 @@ class MainActivity : FragmentActivity() {
                         attention = attention,
                         notice = notice,
                         streaming = streaming,
-                        draft = draft,
                         face = face,
                         bindings = bindings,
                         voicePhase = voicePhase,
@@ -562,12 +649,23 @@ class MainActivity : FragmentActivity() {
                         transcript = transcript,
                         voiceNotice = voiceNotice,
                         approvalsOff = "approvals" in absent,
+                        deciding = deciding,
+                        focusApproval = focusApproval.value,
                     ),
                     // A lambda, so a streamed token redraws the reply and
                     // nothing else. Passing the string rebuilt HomeState on
                     // every chunk and recomposed the bar, the list and the
                     // composer while the face drew at 60fps on the same thread.
                     reply = { replyState.value },
+                    // Same treatment as `reply`, for the same reason. `draft`
+                    // was read here while building HomeState, so one keystroke
+                    // invalidated App(), rebuilt the whole state and recomposed
+                    // the link bar, the face block, every visible approval card
+                    // and the reply - on the thread already drawing the reactor
+                    // at 120fps. As a lambda the snapshot read happens inside
+                    // the composer, and a keystroke recomposes the composer
+                    // alone.
+                    draft = { draft },
                     micLevel = micLevel,
                     speechLevel = speechLevel,
                     actions = remember {
@@ -600,7 +698,19 @@ class MainActivity : FragmentActivity() {
                                 scope.launch { JarvisRuntime.decide(item, approve = false) }
                             },
                             onReconnect = {
+                                // `force = true`, and only because a person
+                                // asked. startStream() returns early whenever
+                                // its job is still "active" - which a half-open
+                                // socket is, right up until OkHttp's 90 second
+                                // read timeout recycles it. So the one control
+                                // offered for a dead link did nothing at all
+                                // for up to a minute and a half, while every
+                                // approval stayed refused for being stale.
+                                // Automatic callers keep the unforced path, so
+                                // nothing else can storm the desktop with
+                                // reconnects.
                                 EventService.start(this@MainActivity)
+                                JarvisRuntime.startStream(force = true)
                                 scope.launch { JarvisRuntime.refreshAll() }
                             },
                             onDismissNotice = { JarvisRuntime.clearNotice() },
@@ -689,3 +799,11 @@ class MainActivity : FragmentActivity() {
 
 /** How long to wait before re-offering a theme the dwell window refused. */
 private const val THEME_RETRY_MS = 600L
+
+/**
+ * How long a notification-focused approval stays marked on the home list.
+ *
+ * Long enough to land on, short enough that tapping the same notification
+ * again re-runs the scroll rather than finding the id already set.
+ */
+private const val FOCUS_HOLD_MS = 8_000L

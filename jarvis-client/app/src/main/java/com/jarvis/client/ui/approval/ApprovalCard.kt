@@ -59,6 +59,14 @@ fun ApprovalCard(
     item: PendingItem,
     /** Null when a decision can be taken; the reason when it cannot. */
     blocker: String?,
+    /**
+     * This is the card a notification or digest row asked to open.
+     *
+     * Outlined only. Nothing about the decision itself changes - rule 4 says
+     * nothing is ever approved without a deliberate answer, and being pointed
+     * at is not an answer.
+     */
+    focused: Boolean = false,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
     modifier: Modifier = Modifier,
@@ -69,16 +77,23 @@ fun ApprovalCard(
     var showContext by rememberSaveable(item.id) { mutableStateOf(false) }
 
     val expiry = item.expiresAtMs
-    var now by remember(item.id) { mutableLongStateOf(System.currentTimeMillis()) }
+    // One state change, at the deadline - not one a second.
+    //
+    // `now` used to tick here in the card body and be read here, so the title,
+    // the summary, the risk line and both buttons re-ran every second, for
+    // every card on screen carrying a deadline, on the thread already drawing
+    // the reactor. Nothing in the body wants the clock; it wants the single
+    // fact of whether the deadline has passed, and that changes exactly once.
+    // The seconds counter now lives in ExpiryCountdown below and ticks alone.
+    var expired by remember(item.id, expiry) {
+        mutableStateOf(expiry != null && System.currentTimeMillis() >= expiry)
+    }
     LaunchedEffect(item.id, expiry) {
         if (expiry == null) return@LaunchedEffect
-        while (System.currentTimeMillis() < expiry) {
-            now = System.currentTimeMillis()
-            delay(1_000)
-        }
-        now = System.currentTimeMillis()
+        val wait = expiry - System.currentTimeMillis()
+        if (wait > 0) delay(wait)
+        expired = true
     }
-    val expired = expiry != null && now >= expiry
     val canDecide = blocker == null && !expired
 
     // A decision on this screen is felt, not just seen - a swipe is answered
@@ -139,7 +154,11 @@ fun ApprovalCard(
             .offset { IntOffset(offset.value.roundToInt(), 0) }
             .then(swipeModifier)
             .background(T.Plate, RoundedCornerShape(14.dp))
-            .border(1.dp, T.Warn.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+            .border(
+                if (focused) 2.dp else 1.dp,
+                if (focused) T.Pick else T.Warn.copy(alpha = 0.35f),
+                RoundedCornerShape(14.dp),
+            )
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -226,12 +245,7 @@ fun ApprovalCard(
             Text(why, style = MaterialTheme.typography.labelMedium, color = T.Bad)
         } else if (expiry != null) {
             Spacer(Modifier.height(10.dp))
-            val left = ((expiry - now) / 1000).coerceAtLeast(0)
-            Text(
-                "Expires in ${left / 60}m ${left % 60}s",
-                style = MaterialTheme.typography.labelSmall,
-                color = T.Dim,
-            )
+            ExpiryCountdown(expiry)
         }
 
         Spacer(Modifier.height(12.dp))
@@ -255,6 +269,31 @@ fun ApprovalCard(
             color = T.Dim,
         )
     }
+}
+
+/**
+ * The seconds counter, and nothing else.
+ *
+ * Its own composable purely so the per-second tick invalidates one Text. Kept
+ * in the card body, the same tick re-ran the title, the summary, the risk line
+ * and both buttons once a second per card.
+ */
+@Composable
+private fun ExpiryCountdown(expiryMs: Long) {
+    var now by remember(expiryMs) { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(expiryMs) {
+        while (System.currentTimeMillis() < expiryMs) {
+            now = System.currentTimeMillis()
+            delay(1_000)
+        }
+        now = System.currentTimeMillis()
+    }
+    val left = ((expiryMs - now) / 1000).coerceAtLeast(0)
+    Text(
+        "Expires in ${left / 60}m ${left % 60}s",
+        style = MaterialTheme.typography.labelSmall,
+        color = T.Dim,
+    )
 }
 
 @Composable

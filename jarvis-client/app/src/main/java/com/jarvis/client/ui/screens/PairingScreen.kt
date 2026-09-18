@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -51,8 +52,28 @@ fun PairingScreen(
     onOpenReadiness: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var host by rememberSaveable { mutableStateOf(initialHost) }
-    var token by rememberSaveable { mutableStateOf("") }
+    // Keyed, so a host that changes underneath us (a fresh value read back from
+    // settings) replaces the field instead of being ignored for the life of the
+    // saved value.
+    var host by rememberSaveable(initialHost) { mutableStateOf(initialHost) }
+
+    // `remember`, NEVER `rememberSaveable`.
+    //
+    // rememberSaveable writes its value into the Activity's saved-instance
+    // Bundle, which is handed to system_server and kept across rotation and
+    // process death. That put the pairing token - the one secret this app holds,
+    // and per JARVIS-API.md §1 the only thing protecting the backend - in plain
+    // text outside the app's own storage and outside the Keystore that exists
+    // precisely to hold it. The cost of not saving it is that a rotation
+    // mid-typing clears the field, which is the right trade for a secret.
+    var token by remember { mutableStateOf("") }
+
+    // Set once the token has been handed over, so the field can be emptied
+    // without disabling Connect. `hasToken` is read once by the caller and does
+    // not update, and MainActivity stores the token BEFORE the handshake - so
+    // after a failed handshake a token IS stored, and the retry must stay
+    // available with the field blank.
+    var handedOver by remember { mutableStateOf(false) }
 
     Column(
         modifier
@@ -135,8 +156,17 @@ fun PairingScreen(
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(
-                onClick = { onPair(host, token) },
-                enabled = !busy && host.isNotBlank() && (hasToken || token.isNotBlank()),
+                onClick = {
+                    onPair(host, token)
+                    // Cleared the moment it is handed over. On success this
+                    // screen leaves composition anyway; on failure the secret
+                    // is already in the Keystore and does not need to sit in a
+                    // text field on an unlocked phone waiting for a retry.
+                    handedOver = handedOver || token.isNotBlank()
+                    token = ""
+                },
+                enabled = !busy && host.isNotBlank() &&
+                    (hasToken || handedOver || token.isNotBlank()),
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
@@ -29,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,7 +80,6 @@ data class HomeState(
     val attention: Attention,
     val notice: String?,
     val streaming: Boolean,
-    val draft: String,
     val face: Face,
     val bindings: Bindings,
     /** OFF unless a voice turn is in flight. */
@@ -101,6 +102,27 @@ data class HomeState(
      * opposite facts that look identical.
      */
     val approvalsOff: Boolean,
+    /**
+     * The approvals whose decision is already on its way to the desktop.
+     *
+     * Read by nothing in this file, and that is not an oversight - deleting it
+     * would break something that is not visible from here. `blockerFor` calls
+     * JarvisRuntime.decisionBlocker(), which reads `_deciding` / `_stale` /
+     * `_link` as plain `.value` on a MutableStateFlow. That is not a snapshot
+     * read, so composition subscribes to nothing and the blocker would never
+     * be recomputed. Carrying these values in the state is what forces the
+     * rebuild that re-runs it - so a decision in flight actually greys the
+     * buttons out instead of letting a second tap send it twice.
+     */
+    val deciding: Set<String>,
+    /**
+     * The approval a notification or digest row asked us to open, or null.
+     *
+     * The list scrolls to it and outlines it. An id that matches nothing in
+     * `pending` - already answered, expired, not refreshed yet - does nothing
+     * at all, which is what the screen did before this existed.
+     */
+    val focusApproval: String?,
 )
 
 @Immutable
@@ -137,6 +159,17 @@ fun HomeScreen(
      * streaming reply from touching anything else.
      */
     reply: () -> String,
+    /**
+     * What is typed in the composer, read as a lambda for the same reason as
+     * `reply` above.
+     *
+     * It used to be a field of HomeState, so every keystroke rebuilt the state
+     * and recomposed the link bar, the face block, every visible approval card
+     * and the reply while the reactor was animating on the same thread. Read
+     * here only inside `Composer`, a character now invalidates the composer and
+     * nothing else.
+     */
+    draft: () -> String,
     /** Read in the draw phase only — see VoiceButton. */
     micLevel: State<Float>,
     /**
@@ -161,7 +194,29 @@ fun HomeScreen(
     ) {
         LinkBar(state, actions)
 
+        val listState = rememberLazyListState()
+        // Where "Open the approval →" actually lands. The id used to be set and
+        // then dropped unread, so the tap navigated home and left the reader to
+        // find the right card themselves.
+        val focusIndex = state.focusApproval?.let { id ->
+            state.pending.indexOfFirst { it.id == id }.takeIf { it >= 0 }
+        }
+        LaunchedEffect(state.focusApproval, focusIndex) {
+            val index = focusIndex ?: return@LaunchedEffect
+            // Counted, not guessed. The face is always item 0; the notice and
+            // the approvals-off plate are conditional; the "waiting on you"
+            // label sits immediately above the cards and exists whenever any
+            // card does - which a found index guarantees. Adding an item to
+            // this list above the cards means adding it here too.
+            val leading = 1 +
+                (if (state.notice != null) 1 else 0) +
+                (if (state.approvalsOff) 1 else 0) +
+                1
+            listState.animateScrollToItem(leading + index)
+        }
+
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -200,6 +255,11 @@ fun HomeScreen(
                     ApprovalCard(
                         item = item,
                         blocker = actions.blockerFor(item),
+                        // Outlined, not auto-answered: scrolling to a card and
+                        // marking it is the whole of "open the approval". Rule
+                        // 4 - nothing is ever approved without a deliberate
+                        // decision - is untouched by it.
+                        focused = item.id == state.focusApproval,
                         onApprove = { actions.onApprove(item) },
                         onDeny = { actions.onDeny(item) },
                     )
@@ -209,7 +269,7 @@ fun HomeScreen(
             item(key = "reply") { Reply(reply, state.streaming) }
         }
 
-        Composer(state, actions, micLevel)
+        Composer(state, draft, actions, micLevel)
     }
 }
 
@@ -398,11 +458,19 @@ private fun Reply(reply: () -> String, streaming: Boolean) {
 }
 
 @Composable
-private fun Composer(state: HomeState, actions: HomeActions, micLevel: State<Float>) {
+private fun Composer(
+    state: HomeState,
+    draft: () -> String,
+    actions: HomeActions,
+    micLevel: State<Float>,
+) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
     val radii = LocalRadii.current
-    val canSend = state.draft.isNotBlank() && state.link == LinkState.CONNECTED
+    // The one snapshot read of the draft in the whole screen, so a keystroke
+    // recomposes this composable and nothing above it.
+    val text = draft()
+    val canSend = text.isNotBlank() && state.link == LinkState.CONNECTED
 
     Column(
         Modifier
@@ -443,7 +511,7 @@ private fun Composer(state: HomeState, actions: HomeActions, micLevel: State<Flo
                 .background(chrome.surface2)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
-            if (state.draft.isEmpty()) {
+            if (text.isEmpty()) {
                 Text(
                     "Ask Jarvis",
                     style = MaterialTheme.typography.bodyLarge,
@@ -451,7 +519,7 @@ private fun Composer(state: HomeState, actions: HomeActions, micLevel: State<Flo
                 )
             }
             BasicTextField(
-                value = state.draft,
+                value = text,
                 onValueChange = actions.onDraftChange,
                 textStyle = LocalTextStyle.current.merge(
                     MaterialTheme.typography.bodyLarge.copy(color = chrome.textHi),
