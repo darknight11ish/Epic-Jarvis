@@ -1,36 +1,33 @@
 package com.jarvis.client.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.WakeWord
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.ReadinessItem
-import com.jarvis.client.ui.T
+import com.jarvis.client.ui.parts.Dot
+import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.ui.parts.Plate
+import com.jarvis.client.ui.parts.Primary
+import com.jarvis.client.ui.theme.LocalChrome
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 
@@ -61,32 +58,14 @@ fun ReadinessScreen(
     wakeWordNotice: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(T.Void).padding(horizontal = 18.dp)) {
-        Spacer(Modifier.height(20.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Platform checks", style = MaterialTheme.typography.titleLarge, color = T.Pick)
-                Text(
-                    "What the device will and will not allow",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = T.Dim,
-                )
-            }
-            Text(
-                "Back",
-                style = MaterialTheme.typography.labelMedium,
-                color = T.Pick,
-                modifier = Modifier
-                    .clickable(role = Role.Button, onClick = onBack)
-                    .minimumInteractiveComponentSize()
-                    .padding(6.dp),
-            )
-        }
+    val chrome = LocalChrome.current
+    Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
+        TopBar("Platform checks", onBack, subtitle = "What the device will and will not allow")
 
-        Spacer(Modifier.height(16.dp))
         LazyColumn(
+            Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.weight(1f),
         ) {
             item(key = "wake-word") {
                 WakeWordCard(
@@ -101,34 +80,34 @@ fun ReadinessScreen(
             items(items, key = { it.title }) { ReadinessCard(it) }
         }
 
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             val notifications = items.firstOrNull { it.title == "Notifications" }
             if (notifications?.state == ReadinessItem.State.WARN) {
-                Button(
-                    onClick = onRequestNotifications,
+                Primary(
+                    text = "Allow notifications",
+                    color = chrome.warnInk,
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(T.Plate, T.Warn),
-                ) { Text("Allow notifications") }
+                    onClick = onRequestNotifications,
+                )
             }
             val battery = items.firstOrNull { it.title == "Background restart" }
             if (battery?.state == ReadinessItem.State.WARN) {
-                Button(
-                    onClick = onRequestBatteryExemption,
+                Primary(
+                    text = "Keep link alive",
+                    color = chrome.warnInk,
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(T.Plate, T.Warn),
-                ) { Text("Keep link alive") }
+                    onClick = onRequestBatteryExemption,
+                )
             }
-            Button(
-                onClick = onStartService,
+            Primary(
+                text = "Start link",
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(T.Plate, T.Pick),
-            ) { Text("Start link") }
+                onClick = onStartService,
+            )
         }
-        Spacer(Modifier.height(18.dp))
     }
 }
 
@@ -155,21 +134,17 @@ private fun WakeWordCard(
     onTurnOff: (() -> Unit)?,
     onRecheck: (() -> Unit)?,
 ) {
+    val chrome = LocalChrome.current
     val tint = when (state) {
-        WakeWord.ON -> T.Warn
-        WakeWord.OFF -> T.Ok
-        WakeWord.UNKNOWN -> T.Dim
+        WakeWord.ON -> chrome.warnInk
+        WakeWord.OFF -> chrome.okInk
+        WakeWord.UNKNOWN -> chrome.textMid
     }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(T.Plate, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-    ) {
+    Plate {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).background(tint, CircleShape))
+            Dot(tint)
             Spacer(Modifier.width(10.dp))
-            Text("Wake word", style = MaterialTheme.typography.titleSmall, color = T.Ink)
+            Text("Wake word", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
             Spacer(Modifier.weight(1f))
             Text(
                 when (state) {
@@ -181,7 +156,7 @@ private fun WakeWordCard(
                 color = tint,
             )
         }
-        Spacer(Modifier.height(6.dp))
+        Gap(6)
         Text(
             when (state) {
                 WakeWord.ON ->
@@ -195,10 +170,10 @@ private fun WakeWordCard(
                         "same thing and only one of them is safe to believe."
             },
             style = MaterialTheme.typography.bodySmall,
-            color = T.Dim,
+            color = chrome.textMid,
         )
 
-        Spacer(Modifier.height(8.dp))
+        Gap(8)
         Text(
             // True regardless of the state above, and the thing most worth
             // knowing: whatever the desktop is doing, this handset is not
@@ -206,43 +181,42 @@ private fun WakeWordCard(
             "This phone never listens for a wake phrase. No wake-word model is bundled in " +
                 "the app, so its microphone only opens while you hold the talk button down.",
             style = MaterialTheme.typography.bodySmall,
-            color = T.Dim,
+            color = chrome.textMid,
         )
 
         if (notice != null) {
-            Spacer(Modifier.height(8.dp))
-            Text(notice, style = MaterialTheme.typography.bodySmall, color = T.Warn)
+            Gap(8)
+            Text(notice, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
         }
 
         if (state == WakeWord.ON && onTurnOff != null) {
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = onTurnOff,
+            Gap(12)
+            Primary(
+                text = if (busy) "Turning it off…" else "Turn the wake word off",
+                color = chrome.warnInk,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(T.Void, T.Warn),
-            ) { Text(if (busy) "Turning it off…" else "Turn the wake word off") }
+                onClick = onTurnOff,
+            )
         }
 
         if (state == WakeWord.UNKNOWN && onRecheck != null) {
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = onRecheck,
+            Gap(12)
+            Primary(
+                text = if (busy) "Asking…" else "Ask the desktop again",
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(T.Void, T.Pick),
-            ) { Text(if (busy) "Asking…" else "Ask the desktop again") }
+                onClick = onRecheck,
+            )
         }
 
         if (state == WakeWord.OFF) {
-            Spacer(Modifier.height(8.dp))
+            Gap(8)
             Text(
                 "Turning it back on is a desktop-side change, deliberately. It is not " +
                     "offered here because this phone could not use it yet.",
                 style = MaterialTheme.typography.labelSmall,
-                color = T.Dim,
+                color = chrome.textMid,
             )
         }
     }
@@ -250,27 +224,22 @@ private fun WakeWordCard(
 
 @Composable
 private fun ReadinessCard(item: ReadinessItem) {
+    val chrome = LocalChrome.current
     val tint = when (item.state) {
-        ReadinessItem.State.OK -> T.Ok
-        ReadinessItem.State.WARN -> T.Warn
-        ReadinessItem.State.INFO -> T.Dim
+        ReadinessItem.State.OK -> chrome.okInk
+        ReadinessItem.State.WARN -> chrome.warnInk
+        ReadinessItem.State.INFO -> chrome.textMid
     }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(T.Plate, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-    ) {
+    Plate {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).background(tint, CircleShape))
+            Dot(tint)
             Spacer(Modifier.width(10.dp))
-            Text(item.title, style = MaterialTheme.typography.titleSmall, color = T.Ink)
+            Text(item.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
         }
-        Spacer(Modifier.height(6.dp))
-        Text(item.detail, style = MaterialTheme.typography.bodySmall, color = T.Dim)
+        Gap(6)
+        Text(item.detail, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
     }
 }
-
 
 /**
  * The frame-rate readout §11 asks for, on the screen that is already this
@@ -285,32 +254,28 @@ private fun ReadinessCard(item: ReadinessItem) {
  */
 @Composable
 private fun FrameRateCard() {
+    val chrome = LocalChrome.current
     val panel by DisplayRate.panelHz.collectAsState()
     val asked by DisplayRate.requestedHz.collectAsState()
     val achieved by DisplayRate.achievedHz.collectAsState()
     val modes by DisplayRate.modes.collectAsState()
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(T.Plate, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-    ) {
-        Text("Frame rate", style = MaterialTheme.typography.titleSmall, color = T.Ink)
-        Spacer(Modifier.height(8.dp))
+    Plate {
+        Text("Frame rate", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        Gap(8)
         RateRow("Panel", panel)
         RateRow("Asked for", asked)
         RateRow("Face", achieved)
         if (modes.size > 1) {
-            Spacer(Modifier.height(8.dp))
+            Gap(8)
             Text(
                 "This screen offers " + modes.joinToString(", ") { "%.0f".format(it) } + " Hz.",
                 style = MaterialTheme.typography.bodySmall,
-                color = T.Dim,
+                color = chrome.textMid,
             )
         }
         if (asked > 0f && panel > 0f && panel + 1f < asked) {
-            Spacer(Modifier.height(8.dp))
+            Gap(8)
             Text(
                 // Battery saver, an LTPO panel floating by content cadence, low
                 // brightness on many OEM builds, or heat. There is no API that
@@ -318,7 +283,7 @@ private fun FrameRateCard() {
                 "The display did not grant the rate that was asked for. Battery saver, " +
                     "screen brightness or heat can all cap it, and Android does not report which.",
                 style = MaterialTheme.typography.bodySmall,
-                color = T.Warn,
+                color = chrome.warnInk,
             )
         }
     }
@@ -326,17 +291,18 @@ private fun FrameRateCard() {
 
 @Composable
 private fun RateRow(label: String, hz: Float) {
+    val chrome = LocalChrome.current
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
-            color = T.Dim,
+            color = chrome.textMid,
             modifier = Modifier.weight(1f),
         )
         Text(
             if (hz <= 0f) "—" else "%.1f Hz".format(hz),
             style = MaterialTheme.typography.bodyMedium,
-            color = T.Ink,
+            color = chrome.textHi,
         )
     }
 }

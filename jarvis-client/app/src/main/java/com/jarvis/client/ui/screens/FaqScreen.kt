@@ -2,7 +2,6 @@ package com.jarvis.client.ui.screens
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,10 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,9 +21,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.jarvis.client.ui.T
+import com.jarvis.client.ui.parts.pressable
+import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.theme.LocalRadii
 
 /**
  * A question this app's own owner has actually been asked, or would be.
@@ -157,33 +156,19 @@ fun FaqScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(T.Void).padding(horizontal = 18.dp)) {
-        Spacer(Modifier.height(20.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Frequently asked questions", style = MaterialTheme.typography.titleLarge, color = T.Pick)
-                Text(
-                    "Answers specific to this phone. The desktop has its own.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = T.Dim,
-                )
-            }
-            Text(
-                "Back",
-                style = MaterialTheme.typography.labelMedium,
-                color = T.Pick,
-                modifier = Modifier
-                    .clickable(role = Role.Button, onClick = onBack)
-                    .minimumInteractiveComponentSize()
-                    .padding(6.dp),
-            )
-        }
+    val chrome = LocalChrome.current
+    Column(modifier.fillMaxSize().background(chrome.surface0)) {
+        TopBar(
+            "Frequently asked questions",
+            onBack,
+            subtitle = "Answers specific to this phone. The desktop has its own.",
+        )
 
-        Spacer(Modifier.height(16.dp))
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 18.dp),
         ) {
+            item(key = "top-space") { Spacer(Modifier.height(6.dp)) }
             items(FAQS, key = { it.q }) { FaqCard(it) }
             item(key = "bottom-space") { Spacer(Modifier.height(4.dp)) }
         }
@@ -193,31 +178,33 @@ fun FaqScreen(
 /** One question. Closed by default, so the list is scannable rather than a wall of text. */
 @Composable
 private fun FaqCard(faq: Faq) {
+    val chrome = LocalChrome.current
     var open by rememberSaveable { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxWidth()
             .animateContentSize()
-            .background(T.Plate, RoundedCornerShape(12.dp))
-            .clickable(role = Role.Button, onClick = { open = !open })
+            .clip(LocalRadii.current.cardShape)
+            .background(chrome.surface1)
+            .pressable(onClick = { open = !open })
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 faq.q,
                 style = MaterialTheme.typography.titleSmall,
-                color = T.Ink,
+                color = chrome.textHi,
                 modifier = Modifier.weight(1f),
             )
             Text(
                 if (open) "−" else "+",
                 style = MaterialTheme.typography.titleSmall,
-                color = T.Dim,
+                color = chrome.textMid,
             )
         }
         if (open) {
             Spacer(Modifier.height(8.dp))
-            Text(faq.a, style = MaterialTheme.typography.bodySmall, color = T.Dim)
+            Text(faq.a, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
     }
 }

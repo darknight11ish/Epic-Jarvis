@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -438,7 +439,11 @@ private fun FaceChip(face: Face, selected: Boolean, onClick: () -> Unit) {
             .clip(shape)
             .background(if (selected) accent else chrome.surface2)
             .pressable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+            .padding(horizontal = 14.dp, vertical = 9.dp)
+            // The visible pill stays this size; the touch target grows
+            // around it to the 48dp platform minimum. Measured at ~38dp
+            // without this - twenty of these sit in a grid on this screen.
+            .minimumInteractiveComponentSize(),
     )
 }
 
@@ -466,6 +471,7 @@ private fun CycleStatesChip(active: Boolean, previewing: FaceState, onClick: () 
             .clip(shape)
             .background(if (active) accent else chrome.surface2)
             .pressable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+            .padding(horizontal = 14.dp, vertical = 9.dp)
+            .minimumInteractiveComponentSize(),
     )
 }

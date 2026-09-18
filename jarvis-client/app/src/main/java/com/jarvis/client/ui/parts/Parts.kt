@@ -44,6 +44,14 @@ import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.LocalRadii
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 
 /**
  * A tap that presses.
@@ -103,12 +111,27 @@ fun Plate(
     val chrome = LocalChrome.current
     val radii = LocalRadii.current
     val s = shape ?: radii.cardShape
+    // A card colour equal to the background draws no visible edge from tone
+    // alone - true of Void and true of Contrast, whose own doc comment
+    // already promises "depth comes from borders rather than tone" without
+    // anything here ever supplying one. Every `Plate` on those two themes had
+    // no edge at all unless its call site happened to pass `outline`, which
+    // most do not. This activates only where tone genuinely cannot show a
+    // boundary; an explicit `outline` from the caller always wins.
+    val flat = chrome.surface1 == chrome.surface0
+    val effectiveOutline = outline ?: if (flat) chrome.hairlineStrong else null
     Column(
         modifier
             .fillMaxWidth()
             .clip(s)
             .background(tone ?: chrome.surface1)
-            .then(if (outline != null) Modifier.border(1.dp, outline, s) else Modifier)
+            .then(
+                if (effectiveOutline != null) {
+                    Modifier.border(1.dp, effectiveOutline, s)
+                } else {
+                    Modifier
+                },
+            )
             .padding(14.dp),
         content = content,
     )
@@ -345,8 +368,8 @@ fun Quiet(
     val chrome = LocalChrome.current
     Box(
         modifier
-            .heightIn(min = 44.dp)
-            .widthIn(min = 44.dp)
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
             .clip(LocalRadii.current.insetShape)
             .pressable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -357,6 +380,125 @@ fun Quiet(
             color = if (enabled) (color ?: LocalAccent.current) else chrome.textLo,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
         )
+    }
+}
+
+/**
+ * The boxed, full-width action: Connect, Start link, Allow notifications.
+ *
+ * Every button on Pairing and Checks used to be a stock Material `Button` -
+ * its own ripple, a 40dp default minimum, colours from `ButtonDefaults`
+ * reaching outside this file's tokens entirely. It was never actually
+ * "primary" in a fixed sense across those two screens: the original code
+ * painted six different buttons on the same plate background with six
+ * different text tints, so [color] says which one this is rather than the
+ * component insisting on the accent. Same flat-plate shape as [Plate], same
+ * spring-press as every other control here, sized to the 48dp touch minimum.
+ */
+@Composable
+fun Primary(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color? = null,
+    enabled: Boolean = true,
+    /** Shows a spinner instead of the label. The click target stays put. */
+    busy: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val shape = LocalRadii.current.controlShape
+    val tint = color ?: accent
+    Box(
+        modifier
+            .heightIn(min = 48.dp)
+            .clip(shape)
+            .background(chrome.surface1)
+            .pressable(enabled = enabled && !busy, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(
+                strokeWidth = 2.dp,
+                color = tint,
+                modifier = Modifier.size(18.dp),
+            )
+        } else {
+            Text(
+                text,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (enabled) tint else chrome.textLo,
+            )
+        }
+    }
+}
+
+/**
+ * A flat text field: `BasicTextField` in a `surface2` box, the same shape
+ * the composer already uses and the same reasoning that composer's own
+ * comment gives - the Material text field brings its own container, its own
+ * 56dp minimum, its own floating-label animation and its own notched
+ * outline, none of which belong in a design made of flat plates and
+ * hairlines. Pairing was the one screen still paying for all four.
+ */
+@Composable
+fun TextInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    placeholder: String? = null,
+    supportingText: String? = null,
+    supportingColor: Color? = null,
+    /** Masks the value and disables suggestions - for a token, never for prose. */
+    password: Boolean = false,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val radii = LocalRadii.current
+    Column(modifier.fillMaxWidth()) {
+        if (label != null) {
+            Kicker(label)
+            Gap(6)
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(radii.controlShape)
+                .background(chrome.surface2)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            if (value.isEmpty() && placeholder != null) {
+                Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = chrome.textLo)
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                textStyle = LocalTextStyle.current.merge(
+                    MaterialTheme.typography.bodyLarge.copy(color = chrome.textHi),
+                ),
+                cursorBrush = SolidColor(accent),
+                visualTransformation = if (password) {
+                    PasswordVisualTransformation()
+                } else {
+                    VisualTransformation.None
+                },
+                keyboardOptions = keyboardOptions,
+                keyboardActions = keyboardActions,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (supportingText != null) {
+            Gap(4)
+            Text(
+                supportingText,
+                style = MaterialTheme.typography.labelSmall,
+                color = supportingColor ?: chrome.textLo,
+            )
+        }
     }
 }
 

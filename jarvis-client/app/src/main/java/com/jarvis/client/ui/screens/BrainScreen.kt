@@ -784,6 +784,8 @@ private fun FlowChips(items: Collection<String>, muted: Boolean = false) {
 fun TopBar(
     title: String,
     onBack: () -> Unit,
+    /** A second line under the title. Optional and additive - every existing caller is unaffected. */
+    subtitle: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
@@ -796,12 +798,20 @@ fun TopBar(
     ) {
         Quiet("← Back", color = LocalAccent.current, onClick = onBack)
         Spacer(Modifier.width(4.dp))
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            color = chrome.textHi,
-            modifier = Modifier.weight(1f),
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = chrome.textHi,
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+            }
+        }
         trailing?.invoke()
     }
 }

@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -396,7 +397,11 @@ private fun LinkBar(state: HomeState, actions: HomeActions) {
                 .weight(1f)
                 .clip(LocalRadii.current.insetShape)
                 .pressable(onClick = actions.onOpenChecks)
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp)
+                // Measured at ~40dp before this - 10dp padding plus 13sp
+                // text, on the row that opens Checks from the busiest
+                // screen in the app.
+                .minimumInteractiveComponentSize(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Dot(dot)

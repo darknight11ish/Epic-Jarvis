@@ -6,19 +6,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,9 +23,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.jarvis.client.ui.T
+import com.jarvis.client.ui.theme.LocalAccent
+import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.parts.Primary
+import com.jarvis.client.ui.parts.TextInput
 
 /**
  * Host and token, and nothing else.
@@ -52,6 +48,9 @@ fun PairingScreen(
     onOpenReadiness: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+
     // Keyed, so a host that changes underneath us (a fresh value read back from
     // settings) replaces the field instead of being ignored for the life of the
     // saved value.
@@ -78,66 +77,48 @@ fun PairingScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(T.Void)
+            .background(chrome.surface0)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp),
     ) {
         Spacer(Modifier.height(28.dp))
-        Text("JARVIS", style = MaterialTheme.typography.titleLarge, color = T.Pick)
+        Text("JARVIS", style = MaterialTheme.typography.titleLarge, color = accent)
         Text(
             "Pair with your desktop",
             style = MaterialTheme.typography.labelSmall,
-            color = T.Dim,
+            color = chrome.textMid,
         )
 
         Spacer(Modifier.height(22.dp))
-        OutlinedTextField(
+        TextInput(
             value = host,
             onValueChange = { host = it },
-            singleLine = true,
-            label = { Text("Desktop host", color = T.Dim) },
-            placeholder = { Text("your-desktop.tailnet.ts.net:4719", color = T.Dim) },
-            supportingText = {
-                Text(
-                    "Use the MagicDNS name, not the 100.x address — the network " +
-                        "security config can permit a name but cannot express a CIDR range.",
-                    color = T.Dim,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            },
+            label = "Desktop host",
+            placeholder = "your-desktop.tailnet.ts.net:4719",
+            supportingText = "Use the MagicDNS name, not the 100.x address — the network " +
+                "security config can permit a name but cannot express a CIDR range.",
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Next,
             ),
-            colors = fieldColors(),
-            modifier = Modifier.fillMaxWidth(),
         )
 
         Spacer(Modifier.height(14.dp))
-        OutlinedTextField(
+        TextInput(
             value = token,
             onValueChange = { token = it },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            label = { Text(if (hasToken) "Replace token" else "Pairing token", color = T.Dim) },
-            placeholder = { Text("HUD_TOKEN from the desktop", color = T.Dim) },
-            supportingText = {
-                Text(
-                    if (hasToken) {
-                        "A token is stored. Leave this blank to keep it."
-                    } else {
-                        "Stored encrypted by the Android Keystore, never in plain preferences."
-                    },
-                    color = T.Dim,
-                    style = MaterialTheme.typography.labelSmall,
-                )
+            password = true,
+            label = if (hasToken) "Replace token" else "Pairing token",
+            placeholder = "HUD_TOKEN from the desktop",
+            supportingText = if (hasToken) {
+                "A token is stored. Leave this blank to keep it."
+            } else {
+                "Stored encrypted by the Android Keystore, never in plain preferences."
             },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done,
             ),
-            colors = fieldColors(),
-            modifier = Modifier.fillMaxWidth(),
         )
 
         if (notice != null) {
@@ -145,17 +126,21 @@ fun PairingScreen(
             Text(
                 notice,
                 style = MaterialTheme.typography.bodySmall,
-                color = T.Bad,
+                color = chrome.badInk,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(T.Bad.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
+                    .background(chrome.badInk.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
                     .padding(12.dp),
             )
         }
 
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(
+            Primary(
+                text = "Connect",
+                busy = busy,
+                enabled = !busy && host.isNotBlank() &&
+                    (hasToken || handedOver || token.isNotBlank()),
+                modifier = Modifier.weight(1f),
                 onClick = {
                     onPair(host, token)
                     // Cleared the moment it is handed over. On success this
@@ -165,48 +150,16 @@ fun PairingScreen(
                     handedOver = handedOver || token.isNotBlank()
                     token = ""
                 },
-                enabled = !busy && host.isNotBlank() &&
-                    (hasToken || handedOver || token.isNotBlank()),
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = T.Plate,
-                    contentColor = T.Pick,
-                ),
-            ) {
-                if (busy) {
-                    CircularProgressIndicator(
-                        strokeWidth = 2.dp,
-                        color = T.Pick,
-                        modifier = Modifier.height(16.dp),
-                    )
-                } else {
-                    Text("Connect")
-                }
-            }
+            )
 
-            Button(
-                onClick = onOpenReadiness,
+            Primary(
+                text = "Platform checks",
+                color = chrome.textMid,
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = T.Plate,
-                    contentColor = T.Dim,
-                ),
-            ) { Text("Platform checks") }
+                onClick = onOpenReadiness,
+            )
         }
 
         Spacer(Modifier.height(28.dp))
     }
 }
-
-@Composable
-internal fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = T.Ink,
-    unfocusedTextColor = T.Ink,
-    focusedBorderColor = T.Pick,
-    unfocusedBorderColor = T.Line,
-    focusedContainerColor = T.Plate,
-    unfocusedContainerColor = T.Plate,
-    cursorColor = T.Pick,
-)

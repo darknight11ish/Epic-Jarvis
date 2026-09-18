@@ -32,6 +32,11 @@
          open the app. BOOT_COMPLETED is itself an explicit FGS start exemption. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Android 14+'s back-swipe preview. NavBackHandler already goes
+         through Compose's own BackHandler, which supports predictive back
+         the moment the platform is told this app wants it; without this
+         flag the platform withholds the preview and back stays a hard cut
+         regardless of what the app itself does. -->
     <application
         android:name=".JarvisApp"
         android:allowBackup="false"
@@ -41,6 +46,7 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.Jarvis"
+        android:enableOnBackInvokedCallback="true"
         tools:targetApi="36">
 
         <activity
