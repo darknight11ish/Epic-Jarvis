@@ -57,6 +57,9 @@ from it by `tools/gen_palette.py`; do not edit it by hand.
 - [`docs/UI-AUDIT-2026-09-14.md`](docs/UI-AUDIT-2026-09-14.md) — what six
   reviewers found, what was fixed, what was priced and refused, the six
   backend gaps, and the six places the spec disagrees with itself.
+- [`docs/UI-AUDIT-2026-09-18.md`](docs/UI-AUDIT-2026-09-18.md) — the follow-up
+  interface audit: where the chrome has not caught up with the face, ranked
+  by what it costs the user, with the design decisions left to the owner.
 - [`docs/SHARED-LOOK.md`](docs/SHARED-LOOK.md) — what the phone and the desktop
   must agree on, written as a contract. For the desktop thread.
 
