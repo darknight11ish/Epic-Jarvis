@@ -63,18 +63,42 @@ android {
             // both without being asked. Checked by unzipping the artifacts, not
             // by reading about them.
             //
-            // This matters more than a smaller APK. The published artifact is
-            // the DEBUG one, and a debuggable build has ART's optimisations off
-            // and every class interpreted — app and libraries alike — which is
-            // the state the reactor's frame loop currently runs in. It also
-            // leaves `adb shell run-as` open on the app's data directory, and
-            // hardware Keystore binding stops a key being EXTRACTED, not used
-            // by anything running as the app. Sixty careful lines in TokenStore
-            // are undone by one build-type flag.
+            // This mattered more than a smaller APK, and it is now settled:
+            // the workflow publishes THIS build, not the debug one. It gates
+            // on an emulator actually installing and starting the shrunk APK
+            // before the release is cut, so a shrinker fault cannot ship
+            // green. A debuggable build would have ART's optimisations off and
+            // every class interpreted — app and libraries alike, including the
+            // reactor's frame loop — and would leave `adb shell run-as` open
+            // on the data directory, where hardware Keystore binding stops a
+            // key being EXTRACTED but not USED by anything running as the app.
+            //
+            // (This paragraph used to assert the published artifact WAS the
+            // debug one. That stopped being true when the release gate landed,
+            // and an audit caught the comment still arguing for a decision
+            // already made — which would leave a reader thinking the shipped
+            // APK is debuggable when it is not.)
             //
             // Signed with the same committed debug key, so `adb install -r`
             // over an existing install still works: the certificate is what
             // has to match, not the build type.
+            //
+            // THE TRIPWIRE ON THAT KEY, recorded here because this is where
+            // someone will be standing when it matters: `keystore/debug.keystore`
+            // is committed to this repository. Android decides whether an APK
+            // may replace an installed app by CERTIFICATE, and a same-signature
+            // update inherits the existing data directory and the Keystore
+            // alias — so anyone holding this key can build an app the phone
+            // accepts as an update to this one and simply ask the Keystore to
+            // decrypt the pairing token. No root, no `run-as`.
+            //
+            // That is survivable today only because the repository is PRIVATE.
+            // It is a one-way door: making the repo public exposes the key
+            // retroactively and for every commit in history, and no later
+            // rotation can un-publish it. So — rotate this key BEFORE the repo
+            // is ever made public or shared, never after. Rotating costs one
+            // uninstall/reinstall on the phone and re-pairing, because the new
+            // certificate will not match the installed one.
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("debug")
