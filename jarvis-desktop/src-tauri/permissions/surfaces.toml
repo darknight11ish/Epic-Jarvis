@@ -53,6 +53,8 @@ permissions = [
   "allow-start-voice-capture",
   "allow-stop-voice-capture",
   "allow-cancel-voice-capture",
+  "allow-start-automatic-listening",
+  "allow-stop-automatic-listening",
   "allow-speak-reply",
 ]
 

@@ -337,7 +337,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -442,6 +442,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return window.__heard;
           case "cancel_voice_capture":
             window.__voiceCalls.push("cancel");
+            return null;
+          case "start_automatic_listening":
+            window.__voiceCalls.push("auto-start");
+            if (window.__autoListenFails) throw new Error(window.__autoListenFails);
+            return null;
+          case "stop_automatic_listening":
+            window.__voiceCalls.push("auto-stop");
             return null;
           case "speak_reply":
             window.__voiceCalls.push(["speak", args.text]);
@@ -606,6 +613,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__heard = heard || null;
   window.__captureFails = captureFails || null;
   window.__speakFails = speakFails || null;
+  window.__autoListenFails = autoListenFails || null;
   window.__memoryWrites = [];
   window.__memoryRefuses = memoryRefuses || null;
   window.__chatReplies = [...(chatReplies || [])];
@@ -648,7 +656,7 @@ export async function open(browser, base, file, data, viewport) {
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
-    heard: null, captureFails: null, speakFails: null,
+    heard: null, captureFails: null, speakFails: null, autoListenFails: null,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },

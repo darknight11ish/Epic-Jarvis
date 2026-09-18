@@ -105,13 +105,16 @@
             <span class="route-model" id="route-model" hidden></span>
           </span>
 
-          <!-- Push-to-talk. Hold to record, release to send - there is no
-               automatic listening yet (no voice-activity-detection exists
-               anywhere in this codebase), so holding the control down is
-               the honest way to say "I am talking to you now." Recording
-               happens in Rust (src-tauri/src/voice.rs) and is posted only
-               to the local Jarvis server - never to a cloud vendor, unlike
-               the disabled Web Speech API path this replaces. -->
+          <!-- Two listening modes, one button. Push-to-talk (the default):
+               hold to record, release to send. Automatic: toggled on with
+               #voice-auto below, the microphone stays open and an
+               energy-based voice-activity detector (src-tauri/src/voice.rs)
+               decides for itself when an utterance starts and ends -
+               #mic then just shows that it is listening and stops
+               responding to being held, since there is nothing left to
+               hold it FOR. Recording always happens in Rust and is posted
+               only to the local Jarvis server - never to a cloud vendor,
+               unlike the disabled Web Speech API path this replaces. -->
           <button
             id="mic"
             class="icon-button"
@@ -128,6 +131,25 @@
               />
             </svg>
             <span class="sr-only">Hold to talk to Jarvis</span>
+          </button>
+
+          <!-- Switches #mic between push-to-talk and automatic listening.
+               Off by default: automatic listening has never run against a
+               real microphone, and push-to-talk is the control anyone
+               already understands the first time they see it. -->
+          <button
+            id="voice-auto"
+            class="icon-button"
+            type="button"
+            aria-pressed="false"
+            title="Listen automatically, without holding the mic button"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path
+                d="M2 8a6 6 0 1 1 12 0A6 6 0 0 1 2 8Zm6-4.25A4.25 4.25 0 1 0 8 12.25 4.25 4.25 0 0 0 8 3.75ZM8 6.5A1.5 1.5 0 1 1 8 9.5 1.5 1.5 0 0 1 8 6.5Z"
+              />
+            </svg>
+            <span class="sr-only">Toggle automatic listening</span>
           </button>
 
           <button

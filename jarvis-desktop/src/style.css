@@ -518,7 +518,8 @@ html[data-state="error"] .reactor-core {
 }
 
 #pin svg,
-#mic svg {
+#mic svg,
+#voice-auto svg {
   fill: currentColor;
   stroke: none;
 }
@@ -529,6 +530,14 @@ html[data-state="error"] .reactor-core {
    active" everywhere else in the bar. */
 #mic[aria-pressed="true"] {
   animation: mic-pulse 1.1s ease-in-out infinite;
+}
+
+/* Automatic listening is ON, steady - not the same as "recording right
+   now" (`[aria-pressed="true"]`, above): there is no live speech-detected
+   signal to animate against yet, only "the microphone is open". A steady
+   colour says that honestly; a pulse would claim more than is known. */
+#mic[data-auto="true"] {
+  color: var(--accent);
 }
 
 @keyframes mic-pulse {

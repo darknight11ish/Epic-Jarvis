@@ -105,6 +105,12 @@ pub mod events {
     /// Faces surface (the Widget's live face) can re-fetch and switch face
     /// or colours without waiting for its own next reload.
     pub const APPEARANCE_CHANGED: &str = "appearance-changed";
+    /// Payload: [`crate::voice::HeardReply`] - one utterance automatic
+    /// listening cut and sent on its own, with no command call waiting on
+    /// it the way `stop_voice_capture` returns push-to-talk's result
+    /// directly. Sent only for a genuinely finished utterance; a failed
+    /// send (server unreachable, no engine) is logged, not emitted here.
+    pub const VOICE_HEARD: &str = "voice-heard";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -513,6 +519,7 @@ pub fn run() {
         .manage(update::UpdateState::default())
         .manage(appearance::AppearanceState::default())
         .manage(voice::VoiceCaptureState::default())
+        .manage(voice::AutoListenState::default())
         .invoke_handler(tauri::generate_handler![
             // Eight commands used to be registered here with no caller in any
             // window: capture_screen, is_quickbar_pinned, notify_user,
@@ -588,6 +595,8 @@ pub fn run() {
             voice::start_voice_capture,
             voice::stop_voice_capture,
             voice::cancel_voice_capture,
+            voice::start_automatic_listening,
+            voice::stop_automatic_listening,
             voice::speak_reply,
         ]);
 

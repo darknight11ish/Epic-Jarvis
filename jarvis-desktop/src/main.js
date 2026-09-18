@@ -162,6 +162,7 @@ const dom = {
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
   mic: $("mic"),
+  voiceAuto: $("voice-auto"),
   pin: $("pin"),
   submitHint: $("submit-hint"),
   noteChip: $("note-chip"),
@@ -229,6 +230,10 @@ const state = {
    *  right before `send()` from the push-to-talk flow, read once in
    *  `finishStream` and cleared there so a later TYPED turn stays silent. */
   voiceTurn: false,
+  /** Automatic (VAD) listening is on. Mutually exclusive with push-to-talk
+   *  at the Rust level too - `start_voice_capture` refuses while this is
+   *  true, and vice versa. */
+  autoListening: false,
   /** Raw markdown accumulated from the stream. */
   buffer: "",
   /** Prompt currently in flight, kept for the retry path. */
@@ -2003,7 +2008,7 @@ function finishStream(phase, statusText) {
 let micRecording = false;
 
 async function startPushToTalk() {
-  if (micRecording) return;
+  if (micRecording || state.autoListening) return;
   micRecording = true;
   dom.mic.setAttribute("aria-pressed", "true");
   try {
@@ -2067,6 +2072,58 @@ async function speakReply(text) {
     console.info("[quickbar] spoken reply unavailable:", error);
   }
 }
+
+/** Turns automatic (voice-activity-detected) listening on or off.
+ *  Mutually exclusive with push-to-talk - `start_automatic_listening`
+ *  itself refuses if a push-to-talk recording is in progress, and
+ *  `startPushToTalk` above refuses while this is on. */
+async function setAutoListening(enabled) {
+  if (enabled === state.autoListening) return;
+  if (enabled) {
+    try {
+      await invokeStrict("start_automatic_listening");
+    } catch (error) {
+      announce(String((error && error.message) || error), "assertive");
+      return;
+    }
+    state.autoListening = true;
+    dom.voiceAuto.setAttribute("aria-pressed", "true");
+    dom.mic.dataset.auto = "true";
+    dom.mic.title = "Listening automatically";
+    announce("Listening automatically.");
+  } else {
+    state.autoListening = false;
+    dom.voiceAuto.setAttribute("aria-pressed", "false");
+    delete dom.mic.dataset.auto;
+    dom.mic.title = "Hold to talk to Jarvis";
+    await invoke("stop_automatic_listening");
+  }
+}
+
+/** One utterance the automatic listener cut and sent on its own - there is
+ *  no command call waiting on this the way `stop_voice_capture` returns
+ *  push-to-talk's result directly, so it arrives as an event instead. */
+listen("voice-heard", (event) => {
+  const heard = event && event.payload;
+  if (!heard) return;
+  if (!heard.available) {
+    // The whole feature is broken, not just this one utterance - repeating
+    // this every few seconds while automatic listening stays on would be
+    // its own kind of noise, so it is said once and the mode turns itself
+    // off rather than keep trying against an engine that is not there.
+    announce(
+      heard.reason || "Speech recognition is not available here. Automatic listening turned off.",
+      "assertive"
+    );
+    setAutoListening(false);
+    return;
+  }
+  if (!heard.isOwner) return; // ambient speech that is not the owner - ignored, not announced
+  const text = String(heard.text || "").trim();
+  if (!text) return;
+  state.voiceTurn = true;
+  send(text);
+});
 
 /* ==========================================================================
    Pin and dismiss
@@ -2312,6 +2369,7 @@ dom.mic.addEventListener("keyup", (event) => {
   event.preventDefault();
   stopPushToTalk();
 });
+dom.voiceAuto.addEventListener("click", () => setAutoListening(!state.autoListening));
 
 dom.approvalApprove.addEventListener("click", () => decideApproval(true));
 dom.approvalDeny.addEventListener("click", () => decideApproval(false));

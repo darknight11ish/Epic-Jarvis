@@ -102,6 +102,8 @@ fn main() {
             "start_voice_capture",
             "stop_voice_capture",
             "cancel_voice_capture",
+            "start_automatic_listening",
+            "stop_automatic_listening",
             "speak_reply",
         ]));
 
