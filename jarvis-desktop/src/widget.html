@@ -112,6 +112,55 @@
              face. Empty and hidden whenever there is nothing to say. -->
         <p class="widget-progress" id="widget-progress" hidden></p>
 
+        <!-- Pause/stop/inject a task already running - docs/AUTONOMY-
+             PROPOSALS.md §3d. Shown while `activity` is "working" or
+             "paused", next to the progress line it belongs to. DRAFT: the
+             backend routes these calls hit are not confirmed to exist
+             (jarvis_gate.py/jarvis_hud.py are not in this repo) - a failure
+             surfaces honestly rather than claiming the task actually paused
+             or stopped when nothing answered. Pause/Resume swap ONLY on the
+             server's own next `activity` report, never on the click itself
+             - see widget.js's syncTaskControls(). -->
+        <div class="task-controls" id="task-controls" hidden>
+          <div class="task-buttons">
+            <button
+              type="button"
+              class="btn btn-quiet"
+              id="btn-task-pause"
+              title="Pause the task Jarvis is currently running"
+            >Pause</button>
+            <button
+              type="button"
+              class="btn btn-quiet"
+              id="btn-task-resume"
+              hidden
+              title="Resume the paused task"
+            >Resume</button>
+            <button
+              type="button"
+              class="btn btn-deny"
+              id="btn-task-stop"
+              title="Stop the task Jarvis is currently running"
+            >Stop</button>
+          </div>
+          <div class="task-note-row">
+            <input
+              id="task-note"
+              class="appr-note-input"
+              type="text"
+              spellcheck="true"
+              autocomplete="off"
+              placeholder="Add something before it continues…"
+            />
+            <button
+              class="icon-btn"
+              id="btn-task-note-send"
+              title="Send this note - it applies to what Jarvis does next, not what is already running"
+              aria-label="Send note"
+            >↵</button>
+          </div>
+        </div>
+
         <section class="telemetry-grid">
           <div class="meter" id="meter-vram">
             <div class="meter-head">

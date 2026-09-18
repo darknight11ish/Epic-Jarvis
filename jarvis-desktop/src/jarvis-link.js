@@ -429,6 +429,49 @@ export async function amend(id, note) {
   return TAURI.core.invoke("amend_approval", { id: String(id), note: String(note || "") });
 }
 
+/**
+ * Pause, resume, stop, or add a note to whatever Jarvis is currently
+ * doing - docs/AUTONOMY-PROPOSALS.md §3d.
+ *
+ * Distinct from a window's own `cancel_chat`/abort: that closes THIS
+ * window's HTTP connection to a turn it started. `activity`/`activityDetail`
+ * on `link` are server-wide - visible to every window regardless of which
+ * one, if any, is still open on the request that started the work - so
+ * stopping "whatever Jarvis is doing right now" needs its own signal to the
+ * server, not a local abort that only this window can see the effect of.
+ *
+ * DRAFT, same standing as `amend()` above: `jarvis_gate.py`/`jarvis_hud.py`
+ * are not in this repository, so `pause_task`/`resume_task`/`stop_task`/
+ * `inject_task_note` are not routes confirmed to exist yet. Calling any of
+ * these against a backend that has not added them fails honestly (the
+ * command errors, same as any other Tauri call to an unimplemented route)
+ * rather than silently doing nothing.
+ *
+ * None of the four takes a task id: this project's own chat state already
+ * treats "the current turn" as singular (`cancel_chat` takes none either),
+ * and the design doc's own Section 1 - one action, one decision - means
+ * there is never more than one thing running that a human approved to run.
+ */
+export async function pauseTask() {
+  if (!IS_TAURI) throw new Error("no desktop backend to send that to");
+  return TAURI.core.invoke("pause_task");
+}
+
+export async function resumeTask() {
+  if (!IS_TAURI) throw new Error("no desktop backend to send that to");
+  return TAURI.core.invoke("resume_task");
+}
+
+export async function stopTask() {
+  if (!IS_TAURI) throw new Error("no desktop backend to send that to");
+  return TAURI.core.invoke("stop_task");
+}
+
+export async function injectTaskNote(note) {
+  if (!IS_TAURI) throw new Error("no desktop backend to send that to");
+  return TAURI.core.invoke("inject_task_note", { note: String(note || "") });
+}
+
 /** Asks the backend to reconnect its stream now rather than serve out a backoff. */
 export function reconnect() {
   if (!IS_TAURI) return;

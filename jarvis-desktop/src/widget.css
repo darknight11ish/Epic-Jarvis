@@ -571,6 +571,34 @@ body {
   opacity: 0.68;
 }
 
+/* Pause/stop/inject a running task - §3d. Sits right under the progress
+   line it belongs to, same quiet register - a running task is not an
+   approval card, so this deliberately does not borrow that card's warning
+   colours. */
+.task-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.task-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.task-buttons .btn {
+  flex: 1;
+  padding: 4px;
+  font-size: 10.5px;
+}
+
+.task-note-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Live progress while a bounded task runs - §3c. Quiet on purpose: this is
    an ambient status, not something demanding attention the way the
    approval card does. */

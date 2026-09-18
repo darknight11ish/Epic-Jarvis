@@ -337,7 +337,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -489,6 +489,22 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__amends.push({ id: args.id, note: args.note });
             if (window.__amendFails) throw new Error(window.__amendFails);
             return { ok: true };
+          // docs/AUTONOMY-PROPOSALS.md §3d - DRAFT routes, unconfirmed
+          // against the real backend. Each just records that it was asked
+          // for; there is no server-side "task" model here to actually
+          // pause, resume, stop, or note.
+          case "pause_task":
+          case "resume_task":
+          case "stop_task":
+            window.__taskActions = window.__taskActions || [];
+            window.__taskActions.push(cmd);
+            if (window.__taskActionFails) throw new Error(window.__taskActionFails);
+            return { ok: true };
+          case "inject_task_note":
+            window.__taskNotes = window.__taskNotes || [];
+            window.__taskNotes.push(args.note);
+            if (window.__taskNoteFails) throw new Error(window.__taskNoteFails);
+            return { ok: true };
           case "get_appearance":
             if (window.__appearanceFails) throw new Error(window.__appearanceFails);
             return window.__appearance;
@@ -619,6 +635,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__noRoute = Boolean(noRoute);
   window.__decideFails = decideFails || null;
   window.__amendFails = amendFails || null;
+  window.__taskActionFails = taskActionFails || null;
+  window.__taskNoteFails = taskNoteFails || null;
+  window.__taskActions = [];
+  window.__taskNotes = [];
   window.__appearanceFails = appearanceFails || null;
   window.__decides = [];
   window.__amends = [];
@@ -670,6 +690,7 @@ export async function open(browser, base, file, data, viewport) {
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
+    taskActionFails: null, taskNoteFails: null,
     heard: null, captureFails: null, speakFails: null, autoListenFails: null, speakDelayMs: 0,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,

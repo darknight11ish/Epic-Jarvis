@@ -188,6 +188,20 @@ point that already exists in all three loops.
   visible on the desktop widget within one event-stream frame, and vice
   versa. No new transport, the existing fan-out `GET /api/events` already
   does this for approvals.
+- **A client must never show "paused" on its own say-so.** Sending the
+  pause request and having the request succeed are two different facts;
+  only the second is true the instant `invoke()`/the HTTP call resolves.
+  The desktop widget's draft UI (`jarvis-desktop/src/widget.js`) learned
+  this the hard way while being built: its first pass flipped the button
+  from Pause to Resume the moment the click handler's own call did not
+  throw, which is a guess dressed as a confirmation. The fix needs no new
+  route to be correct today - `link.activity` already carries whatever
+  string the server reports, unvalidated, so the button now swaps only
+  when a real event reports `activity: "paused"`, exactly the same
+  `approval-resolved`-style trust boundary Stop and Pause/Resume above are
+  specified to use. Until `jarvis_gate.py` actually emits that value,
+  Resume simply never appears - which is the honest state of a feature
+  whose backend half does not exist yet, not a bug to work around.
 
 ---
 

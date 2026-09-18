@@ -21,9 +21,13 @@ import {
   amend as amendOnBackend,
   currentLink,
   decide as decideOnBackend,
+  injectTaskNote,
   onLink,
   onQueue,
+  pauseTask,
+  resumeTask,
   riskLine,
+  stopTask,
   followTheme,
   followZoom,
   start as startLink,
@@ -112,6 +116,12 @@ const dom = {
   btnApprNo: $("btn-appr-no"),
 
   widgetProgress: $("widget-progress"),
+  taskControls: $("task-controls"),
+  btnTaskPause: $("btn-task-pause"),
+  btnTaskResume: $("btn-task-resume"),
+  btnTaskStop: $("btn-task-stop"),
+  taskNoteInput: $("task-note"),
+  btnTaskNoteSend: $("btn-task-note-send"),
 
   captureTarget: $("capture-target"),
   captureInput: $("capture-input"),
@@ -143,6 +153,18 @@ const state = {
    *  learned this lesson once: one shared flag makes two unrelated actions
    *  silently no-op each other. */
   noteBusy: false,
+  /** A pause/resume/stop request for the running task is in flight - its
+   *  own flag for the same reason as `noteBusy` above. */
+  taskActionBusy: false,
+  /** A note for the running task is being sent. */
+  taskNoteBusy: false,
+  /** `link.activity` as last reported by the server - "working", "paused",
+   *  or "idle". This, and ONLY this, decides whether Resume or Pause is
+   *  shown: clicking Pause does not flip it, because a click only proves a
+   *  request was SENT, never that the task actually paused. Read the
+   *  comment on `sendTaskAction` before changing that - it is the one
+   *  honesty rule this whole feature exists to hold. */
+  taskActivity: "idle",
 };
 
 /**
@@ -676,6 +698,105 @@ async function sendNote() {
 }
 
 /* ==========================================================================
+   Task controls - pause, stop, and inject-while-running
+   docs/AUTONOMY-PROPOSALS.md §3d
+   ========================================================================== */
+
+/**
+ * Enables/disables the buttons and picks Pause vs. Resume.
+ *
+ * The swap answers only to `state.taskActivity`, which is set in exactly one
+ * place — the `onLink` handler below, reading the server's own broadcast —
+ * never by a click here. A click can fail silently, reach a backend that
+ * has not implemented pausing at all, or race a resolution that already
+ * happened; the one thing this window can trust is what the server itself
+ * last said it was doing, the same rule `approval-resolved` already uses to
+ * decide when a gate is actually closed rather than just answered.
+ */
+function syncTaskControls() {
+  const paused = state.taskActivity === "paused";
+  dom.btnTaskPause.hidden = paused;
+  dom.btnTaskResume.hidden = !paused;
+  dom.btnTaskPause.disabled = state.taskActionBusy;
+  dom.btnTaskResume.disabled = state.taskActionBusy;
+  dom.btnTaskStop.disabled = state.taskActionBusy;
+  dom.taskNoteInput.disabled = state.taskNoteBusy;
+  dom.btnTaskNoteSend.disabled = state.taskNoteBusy;
+}
+
+/**
+ * Sends a pause, resume, or stop request for whatever Jarvis is running
+ * right now. DRAFT: `pause_task`/`resume_task`/`stop_task` may not exist as
+ * Rust commands yet - same situation `amend_approval` was in before it got
+ * one - so a rejected invoke surfaces its real error rather than pretending
+ * the task's state changed.
+ *
+ * Deliberately does not touch `state.taskActivity` on success. An invoke
+ * that resolves only means the IPC round trip completed, not that Jarvis
+ * paused, resumed, or stopped anything - the button swap has to wait for
+ * the server's own next `activity` report, or it is a guess wearing the
+ * shape of a fact.
+ */
+async function sendTaskAction(kind) {
+  if (state.taskActionBusy) return;
+  state.taskActionBusy = true;
+  syncTaskControls();
+
+  try {
+    if (kind === "pause") {
+      await pauseTask();
+      flash("Pause requested — sent.", "ok",
+        "Jarvis was asked to pause. This button will only say Resume once " +
+          "Jarvis itself reports it has actually paused.");
+    } else if (kind === "resume") {
+      await resumeTask();
+      flash("Resume requested — sent.", "ok",
+        "Jarvis was asked to resume. This button will only say Pause again " +
+          "once Jarvis itself reports it has actually resumed.");
+    } else {
+      await stopTask();
+      flash("Stop requested — sent.", "ok",
+        "Jarvis was asked to stop. The desktop has no way to confirm it actually did.");
+    }
+  } catch (error) {
+    flash(String((error && error.message) || error), "bad");
+  } finally {
+    state.taskActionBusy = false;
+    syncTaskControls();
+  }
+}
+
+/**
+ * Sends a note that applies to what the running task does next - it never
+ * touches whatever step is already in flight, same rule as `sendNote()`
+ * above for an approval that has not been decided yet.
+ */
+async function sendTaskNote() {
+  const note = dom.taskNoteInput.value.trim();
+  if (!note || state.taskNoteBusy) return;
+
+  state.taskNoteBusy = true;
+  syncTaskControls();
+  flash("Sending your note…");
+
+  try {
+    await injectTaskNote(note);
+    dom.taskNoteInput.value = "";
+    flash(
+      "Sent — applies to what Jarvis does next.",
+      "ok",
+      "This does not change the step already running, and the desktop has " +
+        "no way to confirm Jarvis read it."
+    );
+  } catch (error) {
+    flash(String((error && error.message) || error), "bad");
+  } finally {
+    state.taskNoteBusy = false;
+    syncTaskControls();
+  }
+}
+
+/* ==========================================================================
    Events
    ========================================================================== */
 
@@ -692,6 +813,17 @@ dom.apprNoteInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     sendNote();
+  }
+});
+
+dom.btnTaskPause.addEventListener("click", () => sendTaskAction("pause"));
+dom.btnTaskResume.addEventListener("click", () => sendTaskAction("resume"));
+dom.btnTaskStop.addEventListener("click", () => sendTaskAction("stop"));
+dom.btnTaskNoteSend.addEventListener("click", sendTaskNote);
+dom.taskNoteInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    sendTaskNote();
   }
 });
 
@@ -773,6 +905,7 @@ listen("approval-resolved", (event) => {
 
 (async () => {
   setCaptureTarget("logseq");
+  syncTaskControls();
 
   // Restore the mode the user left the widget in.
   const prefs = await invoke("get_widget_prefs");
@@ -804,9 +937,22 @@ startLink();
     // Live progress — docs/AUTONOMY-PROPOSALS.md §3c. Only shown while
     // something is actually reported in progress; offline already has its
     // own row above, and an idle Jarvis has nothing to narrate.
-    const detail = link.connected && link.activity === "working" ? link.activityDetail : "";
+    const working = link.connected && link.activity === "working";
+    const detail = working ? link.activityDetail : "";
     dom.widgetProgress.hidden = !detail;
     if (detail) dom.widgetProgress.textContent = detail;
+
+    // Pause/stop/inject — docs/AUTONOMY-PROPOSALS.md §3d. `activity` is the
+    // one field this window trusts for whether a task is live at all, and
+    // "paused" counts as live: a paused task still has a card worth showing
+    // controls on, per §3d ("`not_run` steps stay live rather than closed
+    // out"). Anything else - idle, disconnected, or a value neither client
+    // nor server has defined - means there is nothing to pause, stop, or
+    // note, and a stale Resume from a task that already ended cannot carry
+    // over into whatever runs next.
+    state.taskActivity = link.connected ? link.activity : "idle";
+    dom.taskControls.hidden = state.taskActivity !== "working" && state.taskActivity !== "paused";
+    syncTaskControls();
 
     syncApprovalButtons();
     syncSize();
