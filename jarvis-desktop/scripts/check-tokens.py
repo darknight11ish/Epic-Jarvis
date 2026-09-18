@@ -14,7 +14,11 @@ SRC = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else
                    "/home/user/Epic-Jarvis/jarvis-desktop/src")
 # Where defining a literal is legitimate.
 DEFINING = re.compile(r'(?::root\b|\[data-theme[^\]]*\])[^{]*\{')
-HEX = re.compile(r'#[0-9a-fA-F]{3,8}\b')
+# `\b` alone treats `-` as a boundary, so an ID selector like `#face-frame`
+# reads as the hex colour `#face` followed by `-frame` - a false positive
+# this script itself was raising. CSS identifiers (and so ID selectors) can
+# continue past a hyphen, so the colour must not.
+HEX = re.compile(r'#[0-9a-fA-F]{3,8}\b(?![-\w])')
 FUNC = re.compile(r'\b(?:rgba?|hsla?)\(')
 
 

@@ -389,6 +389,16 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "get_theme": return theme || "deep-space";
           case "get_hotkeys": return window.__hotkeys;
+          // Matches commands.rs's get_autostart/set_autostart shape - falling
+          // through to the bare `default: return null` below made
+          // settings.js's `Boolean(info.enabled)` throw on `null.enabled`,
+          // which the real command can never return (it has no error case).
+          case "get_autostart":
+            return { enabled: Boolean(window.__autostart), supported: true,
+                     launchedAtLogin: false, note: "" };
+          case "set_autostart":
+            window.__autostart = Boolean(args.enabled);
+            return { enabled: window.__autostart, supported: true };
           case "decide_approval":
             window.__decides = window.__decides || [];
             window.__decides.push({ id: args.id, approved: args.approved });

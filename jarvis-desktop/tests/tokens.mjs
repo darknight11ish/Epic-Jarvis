@@ -154,7 +154,11 @@ await check("CONTROL: no literal colour is left outside a defining block", async
       }
       spans.push([m.index, j + 1]);
     }
-    for (const m of src.matchAll(/#[0-9a-fA-F]{3,8}\b/g)) {
+    // `\b` alone treats `-` as a boundary, so an ID selector like
+    // `#face-frame` reads as the hex colour `#face` followed by `-frame` -
+    // the same false positive scripts/check-tokens.py had. CSS identifiers
+    // continue past a hyphen; the colour match must not.
+    for (const m of src.matchAll(/#[0-9a-fA-F]{3,8}\b(?![-\w])/g)) {
       const inside = spans.some(([a, b]) => a <= m.index && m.index < b);
       assert.ok(inside, `${name}: ${m[0]} at ${m.index} is outside every defining block`);
     }

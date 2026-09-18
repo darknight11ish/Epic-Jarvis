@@ -117,6 +117,11 @@ await check("selecting a graph node is announced and keeps focus", async () => {
   const page = await K.open(browser, base, "brain.html", { pending: [] },
     { width: 1100, height: 700 });
   await page.waitForTimeout(2600);
+  // Galaxy is Memory's default now (the rail trim) and sits behind
+  // "Advanced" - open it and switch views before the graph exists at all.
+  await page.locator("#rail-advanced-toggle").click();
+  await page.locator("#tab-galaxy").click();
+  await page.waitForTimeout(200);
   await page.evaluate(WATCH);
   await page.fill("#graph-search", "Reasoning");
   await page.waitForTimeout(500);
@@ -175,7 +180,19 @@ await check("the rail is one tab stop, and the arrows move inside it", async () 
   assert.equal(roving.filter((t) => t === 0).length, 1,
     `${roving.filter((t) => t === 0).length} tabs are in the tab order; a tablist has exactly one`);
 
-  await page.locator("#tab-galaxy").focus();
+  // Galaxy/Live/Trust/Watch sit behind "Advanced" now (the rail trim) and
+  // are `hidden` - and therefore unfocusable - until it is opened. Arrowing
+  // among only the three everyday tabs is covered by visibleTabOrder()'s own
+  // "cycles only what's on the rail" contract; this test is about the roving
+  // tabindex itself, so open Advanced first to reach the tab it needs.
+  await page.locator("#rail-advanced-toggle").click();
+  await page.waitForTimeout(100);
+  // A bare .focus() moves the DOM focus but not `state.view` - the keydown
+  // handler computes its "here" index from state.view, which only a real
+  // selection (a click, matching what the click listener's showView() does)
+  // updates. Click, not focus, so ArrowDown starts counting from galaxy.
+  await page.locator("#tab-galaxy").click();
+  await page.waitForTimeout(100);
   await page.keyboard.press("ArrowDown");
   await page.waitForTimeout(200);
   const after = await page.evaluate(() => ({
