@@ -191,3 +191,36 @@ first. Runs 65-67 (before this commit) and this commit's own run (68) were
 checked directly against GitHub's API afterward: all green. §1 above is now
 corrected to match. This change's own build did pass, including both debug
 and release APK assembly.
+
+## 9. Added since this handoff was written: reactor-kit v10, partially ported
+
+The Jarvis Reactor Kit artifact (the shared 20-face spec/preview page) shipped
+a v10 with three changes: Iris's drifting catchlight removed, `Membrane`'s
+outer rim stroke removed, and a "cycle states" toggle added to its solo view.
+
+- **Iris** — ported, in `bf4df72`. This app's Iris is a from-scratch Compose
+  reinterpretation, not a translation of the kit's JS, and only ever had one
+  drifting highlight to remove (not the kit's two); done, the aperture centre
+  is untouched.
+- **Cycle states** — ported, adapted rather than copied: a chip on the
+  Appearance screen's face preview steps through all eight `FaceState`s every
+  four seconds, using the same crossfade a real state change already uses.
+  The kit's version lives next to a speed slider this screen doesn't have.
+- **Membrane** — **does not apply, checked rather than assumed.** This app has
+  ported only 8 of the kit's 20 faces (`Arc`, `Orbit`, `Comb`, `Spiral`,
+  `Iris`, `Fullerene`, `Rime`, `Orbital` — counted directly in `Faces.kt`,
+  not estimated), and draws every one of them through plain Compose Canvas.
+  There is no GPU/shader surface anywhere in this app — no `RuntimeShader`,
+  no AGSL, no GLES — confirmed by grepping the whole module. `Membrane` is
+  one of the three faces the kit renders through a GPU shader specifically
+  because a flat-quad mesh looks faceted at any grid a CPU can afford; there
+  is no `rim()` here to remove because there is no `Membrane` here at all.
+
+**Do not start the remaining 12 faces or a GPU rendering path as a side
+effect of some other task.** The owner has filed it as its own follow-up
+card, on purpose, so it gets picked up deliberately rather than half-started
+inside an unrelated commit. If you are a session reading this cold and
+tempted to "finish the port" — it isn't a small addition on top of what's
+here; it's a second rendering pipeline (Compose Canvas has no shader path at
+all) plus twelve more face geometries, and the owner's own framing of the
+work stands: ask before starting it, don't infer it from this note.
