@@ -263,11 +263,13 @@ fun AppearanceScreen(
                             // (time, amp, a fixed seed) instead of the desktop's
                             // running simulation, which is exactly what
                             // SpecDriftTest's `iris`-is-the-only-exception test
-                            // checks stays true. What's left after that — nucleus,
-                            // membrane, tokamak — all three genuinely need a GPU
-                            // shader this app doesn't have yet.
-                            "${Faces.all.size} of the desktop's twenty. The rest need a GPU " +
-                                "shader this app doesn't have yet, which is a bigger, separate " +
+                            // checks stays true. Nucleus needed an actual GPU
+                            // fragment shader and got one (AGSL). What's left after
+                            // that - membrane, tokamak - need more than a shader: a
+                            // real OpenGL mesh with its own vertex and index
+                            // buffers, which this app has never built.
+                            "${Faces.all.size} of the desktop's twenty. The rest need an OpenGL " +
+                                "mesh this app doesn't have yet, which is a bigger, separate " +
                                 "piece of work.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,

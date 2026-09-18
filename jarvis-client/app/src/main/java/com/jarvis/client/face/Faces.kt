@@ -42,17 +42,21 @@ interface Face {
 }
 
 /**
- * Seventeen faces, not twenty.
+ * Eighteen faces, not twenty.
  *
  * The brief is explicit that porting all twenty is the real cost of going fully
- * native. These are all from the spec's `stays_on_canvas` list — line, stroke,
- * point and glow art that Compose draws correctly and cheaply. The three that
- * need a shader (nucleus via AGSL, membrane and tokamak via GLES) are
- * deliberately absent: a rasterised version of those is the faceted, upscaled
- * thing the first audit was about, and shipping it would be worse than not
- * offering them. That GPU rendering path, and those three faces, are tracked
- * as their own follow-up, not something to finish here as a side effect of
- * another task.
+ * native. Seventeen of these are from the spec's `stays_on_canvas` list — line,
+ * stroke, point and glow art that Compose draws correctly and cheaply. The
+ * eighteenth, nucleus, needs a real fragment shader and gets one (AGSL, via
+ * `android.graphics.RuntimeShader`) rather than a rasterised approximation —
+ * see its own doc comment. Membrane and tokamak are still absent: both need a
+ * real OpenGL mesh (GLES 3.0, vertex and index buffers, per-vertex normals),
+ * not a shader over the existing Canvas, which is a materially larger piece of
+ * infrastructure this app has never had. A rasterised version of either is the
+ * faceted, upscaled thing the first audit was about, and shipping it would be
+ * worse than not offering them. That mesh pipeline, and those two faces, are
+ * tracked as their own follow-up, not something to finish here as a side
+ * effect of another task.
  *
  * The picker shows only what is actually rendered — not all twenty with most of
  * them missing.
@@ -82,7 +86,7 @@ interface Face {
 object Faces {
     val all: List<Face> = listOf(
         Arc, Orbit, Comb, Spiral, Iris, Fullerene, Rime, Orbital, Geodesic, Kirkwood,
-        Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion, Cascade,
+        Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion, Cascade, Nucleus,
     )
     val default: Face = Arc
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default
@@ -1265,4 +1269,224 @@ object Cascade : Face {
             center = Offset(cx, botY),
         )
     }
+}
+
+/**
+ * A sphere-traced signed distance field: a core, an equatorial ring and three
+ * orbiting beads, blended together as maths (`smin`, a polynomial smooth
+ * minimum) before anything is drawn, so they melt into each other rather
+ * than intersect. There is no mesh - every pixel fires a ray, walks it
+ * forward by the distance to the nearest surface until it lands, and shades
+ * from the field's own gradient at that point. That is genuinely too much
+ * work per pixel for the CPU path every other face in this file uses, which
+ * is why this is the one face rendered through a real fragment shader (AGSL,
+ * via `android.graphics.RuntimeShader`) instead of `DrawScope` draw calls.
+ * `RuntimeShader` needs API 33, which is already this app's `minSdk` - there
+ * is no older device to fall back from.
+ *
+ * The march, the field and the lighting are a close port of the reference's
+ * own GPU shader (`NUCLEUS_FS` in the desktop's `faces.html`). Unlike the
+ * object-rotation faces elsewhere in this file, a ray-based camera needs its
+ * origin and its ray directions built from the exact same rotation, so this
+ * keeps the reference's own pitch-then-yaw camera formula rather than
+ * reordering it to match Geodesic's yaw-then-pitch convention - getting that
+ * order right by inspection, with no way to render this and look at it
+ * before it ships, mattered more here than file-wide consistency. `uYaw` and
+ * `uPit` still feed from `f.angle`, `f.yaw` and `f.pitch` the same way every
+ * other 3D face here does, and the screen-to-object-space mapping is redone
+ * for a circle (`(fragCoord - uCenter) / uR`) rather than ported from the
+ * reference's square canvas (`(fragCoord - 0.5*res) / min(res.x, res.y)`) -
+ * the two are the same normalisation for the shape this app actually draws.
+ *
+ * Three things ARE dropped, and none of them is the rotation question:
+ *  - `HUD.beat`, a global heartbeat pulse with nothing this app tracks to
+ *    drive it. It only ever scaled the field's blend radii; at a fixed 1 the
+ *    `M()` wrapper the reference uses to apply it becomes the identity, so
+ *    this calls `field()` directly and the wrapper is gone rather than kept
+ *    around multiplying by one.
+ *  - The reference's environment-reflection texture. There is no panorama to
+ *    sample on a phone, so this always takes the reference's own fallback
+ *    tone (`vec3(22,24,30)/255`) rather than adding a texture uniform that
+ *    would only ever return that one constant anyway.
+ *  - The reference's own hardcoded per-state glow/hot colours. Every other
+ *    face in this file shades with the `hot`/`cool` this call is handed -
+ *    the user's own chosen binding for the current state - and a face that
+ *    quietly used its own fixed palette instead would be the one face immune
+ *    to the colour picker. Geometry (the blend/ring/displacement numbers,
+ *    which have no user-facing control) keeps the reference's own per-state
+ *    table; colour does not.
+ */
+object Nucleus : Face {
+    override val id = "nucleus"
+    override val name = "Nucleus"
+
+    // faces[].render.fit for nucleus specifically - the shape reads slightly
+    // larger than its bounding sphere once the rim light is added.
+    override val fit: Float = 0.92f
+
+    private data class Geo(val blend: Float, val ring: Float, val disp: Float)
+
+    private fun geoFor(motion: FaceState): Geo = when (motion) {
+        FaceState.LISTENING -> Geo(blend = 0.20f, ring = 0.88f, disp = 0.11f)
+        FaceState.THINKING -> Geo(blend = 0.07f, ring = 1.05f, disp = 0.19f)
+        FaceState.SPEAKING -> Geo(blend = 0.17f, ring = 0.90f, disp = 0.08f)
+        else -> Geo(blend = 0.13f, ring = 0.95f, disp = 0.05f)
+    }
+
+    override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 1.1f
+        FaceState.THINKING -> 2.0f
+        FaceState.SPEAKING -> 0.8f
+        else -> 0.5f
+    }
+
+    // Compiled once, like every other fixed per-face resource in this file -
+    // only the uniforms change per frame.
+    private val shader = android.graphics.RuntimeShader(AGSL)
+
+    override fun draw(
+        scope: DrawScope, cx: Float, cy: Float, r: Float,
+        hot: Color, cool: Color, f: FaceFrame,
+    ) = with(scope) {
+        val geo = geoFor(f.motion)
+        val pump = if (f.motion == FaceState.LISTENING) 1f + f.amp * 0.35f else 1f
+        val yaw = f.angle * 0.35f + f.yaw
+        val pitch = -0.52f + f.pitch
+
+        shader.setFloatUniform("uCenter", cx, cy)
+        shader.setFloatUniform("uR", r)
+        shader.setFloatUniform("uT", f.angle)
+        shader.setFloatUniform("uBlend", geo.blend)
+        shader.setFloatUniform("uRing", geo.ring)
+        shader.setFloatUniform("uDisp", geo.disp)
+        shader.setFloatUniform("uPump", pump)
+        shader.setFloatUniform("uYaw", yaw)
+        shader.setFloatUniform("uPit", pitch)
+        shader.setFloatUniform("uGlow", cool.red, cool.green, cool.blue)
+        shader.setFloatUniform("uHot", hot.red, hot.green, hot.blue)
+
+        drawCircle(
+            brush = androidx.compose.ui.graphics.ShaderBrush(shader),
+            radius = r,
+            center = Offset(cx, cy),
+        )
+    }
+
+    private const val AGSL = """
+uniform float2 uCenter;
+uniform float uR;
+uniform float uT, uBlend, uRing, uDisp, uPump, uYaw, uPit;
+uniform float3 uGlow, uHot;
+
+const float TAU = 6.283185307179586;
+const float3 LIGHT = float3(-0.4510, -0.7517, -0.4812);
+const float DIST = 2.05;
+const int STEPS = 72;
+
+float fres3(float vdot) {
+    float m = 1.0 - clamp(vdot, 0.0, 1.0);
+    return m * m * m;
+}
+
+float3 tonemap(float3 c) {
+    return c / (1.0 + c);
+}
+
+float smin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return b + (a - b) * h - k * h * (1.0 - h);
+}
+
+// Distance to the nearest surface: core, equatorial ring and three orbiting
+// beads, folded together with a smooth minimum so they fuse rather than
+// intersect. Everything the march and the lighting know about the shape
+// comes from this one function.
+float field(float3 q) {
+    float disp = uDisp * sin(q.y * 6.0 + uT * 2.1) * sin(q.x * 5.0 - uT * 1.7) * sin(q.z * 5.5 + uT * 1.3);
+    float core = length(q) - (0.50 + disp);
+    float qx = length(q.xz) - uRing;
+    float ring = length(float2(qx, q.y)) - 0.105;
+    float d = smin(core, ring, uBlend);
+    for (int i = 0; i < 3; i++) {
+        float a = uT * 0.9 + float(i) * TAU / 3.0;
+        float3 b = float3(cos(a) * 0.74, sin(a * 2.0) * 0.34, sin(a) * 0.74);
+        d = smin(d, length(q - b) - 0.105, 0.22);
+    }
+    return d;
+}
+
+float3 normalAt(float3 h) {
+    float e = 0.0045;
+    float m1 = field(h + float3( e, -e, -e));
+    float m2 = field(h + float3(-e, -e,  e));
+    float m3 = field(h + float3(-e,  e, -e));
+    float m4 = field(h + float3( e,  e,  e));
+    return normalize(float3(m1 - m2 - m3 + m4, -m1 - m2 + m3 + m4, -m1 + m2 - m3 + m4));
+}
+
+half4 main(float2 fragCoord) {
+    float2 p = (fragCoord - uCenter) / uR;
+    float3 dir = normalize(float3(p, 1.55));
+
+    float cp = cos(uPit), sp = sin(uPit), cy = cos(uYaw), sy = sin(uYaw);
+    float ry1 = dir.y * cp - dir.z * sp;
+    float rz1 = dir.y * sp + dir.z * cp;
+    float3 rd = float3(dir.x * cy + rz1 * sy, ry1, -dir.x * sy + rz1 * cy);
+    float3 ro = float3(-DIST * cp * sy, DIST * sp, -DIST * cp * cy);
+
+    float BR = 1.28;
+    float b0 = dot(ro, rd);
+    float cc = dot(ro, ro) - BR * BR;
+    float disc = b0 * b0 - cc;
+    if (disc < 0.0) {
+        return half4(0.0, 0.0, 0.0, 0.0);
+    }
+    float sq = sqrt(disc);
+    float tt = max(0.0, -b0 - sq);
+    float tMax = -b0 + sq;
+
+    float hit = -1.0;
+    int steps = 0;
+    for (int i = 0; i < STEPS; i++) {
+        float ds = field(ro + rd * tt);
+        steps = i;
+        if (ds < 0.0015) { hit = tt; break; }
+        tt += ds;
+        if (tt > tMax) break;
+    }
+    if (hit < 0.0) {
+        return half4(0.0, 0.0, 0.0, 0.0);
+    }
+
+    float3 hp = ro + rd * hit;
+    float3 n = normalAt(hp);
+    float lam = max(0.0, -dot(n, LIGHT));
+    float3 env = float3(22.0, 24.0, 30.0) / 255.0;
+    float fres = fres3(abs(dot(n, rd)));
+    float ao = 1.0 - min(0.75, float(steps) / float(STEPS) * 1.5);
+
+    float sh = 1.0;
+    float ts = 0.035;
+    for (int i = 0; i < 20; i++) {
+        float3 sp2 = hp - LIGHT * ts;
+        float hd = field(sp2);
+        if (hd < 0.001) { sh = 0.0; break; }
+        sh = min(sh, 9.0 * hd / ts);
+        ts += max(0.02, hd);
+        if (ts > 2.2) break;
+    }
+    sh = 0.35 + 0.65 * clamp(sh, 0.0, 1.0);
+
+    float wrap = max(0.0, (-dot(n, LIGHT) + 0.35) / 1.35);
+    float spec = pow(lam, 26.0) * 1.5;
+    float rad = length(hp);
+    float inner = exp(-max(0.0, rad - 0.45) * 3.4);
+    float base = (0.20 + wrap * wrap * 1.35 * uPump) * sh + inner * 0.55;
+    float rimE = fres * (1.15 + inner * 0.8);
+
+    float3 col = uGlow * base + uHot * (rimE + spec) + env * 0.30;
+    col *= ao;
+    return half4(tonemap(col), 1.0);
+}
+"""
 }
