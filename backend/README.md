@@ -2172,6 +2172,104 @@ a dict-shaped `arguments` value doesn't crash the loop, and a multi-byte-
 heavy file is truncated by real byte count rather than reported whole
 because it has few characters.
 
+**A third pass - a review from a different model (Gemini), verified line by
+line against the real source before touching anything - found 9 more real
+findings and 3 that did not hold up. Said plainly, both directions:**
+
+Confirmed and fixed:
+
+- **Android shell injection, the serious one.** `adb shell <args...>` joins
+  every argument after `shell` with a space and runs the result as ONE
+  command line on the DEVICE's own `/system/bin/sh -c` - a `"text"` step's
+  `value` of `"hello; reboot"` became the literal remote command
+  `input text hello; reboot`, which the phone's shell splits on `;` and
+  runs both halves. `subprocess.run(argv)` on the host was never the
+  exposure (no `shell=True`, nothing here is interpreted locally) - the
+  remote shell was. Fixed by checking `value` (for `"text"`) and the
+  resolved keycode (for `"key"`) against a plain-text allowlist before
+  they're ever turned into a command, rejecting anything else as an
+  unmatched request rather than trying to escape it - getting a remote
+  shell's own quoting exactly right, on a device this code cannot inspect,
+  is a worse bet than just not sending the characters that matter.
+- **A screenshot crashed the whole turn.** `A.run()`'s `"screenshot"` step
+  put raw PNG bytes into the result dict, which `run_local_turn` then hands
+  to `json.dumps()` - which cannot serialize bytes at all, and this was
+  uncaught at that specific call site. Fixed by base64-encoding the
+  screenshot before it leaves `jarvis_android_control.py`.
+- **A null coordinate crashed `plan()` entirely.** `int(r["x"])` on
+  `{"x": null}` raises `TypeError`, not `ValueError` - `plan()`'s own
+  `except (KeyError, ValueError)` didn't catch it, so a malformed request
+  escaped `plan()` instead of landing in `rejected` like every other one.
+  Fixed by catching `TypeError` too.
+- **`ctrl.Select(step.value or "")` was calling a method that doesn't
+  exist.** Checked against the real `uiautomation` library source (fetched
+  and read directly, not guessed from memory): `.Control(...)` **does**
+  exist as an instance method - that specific claim in the review was
+  wrong - but the plain `Control` object it returns has no `.Select()`
+  method at all; that only exists on specific typed subclasses like
+  `ComboBoxControl`, none of which this module ever creates. Fixed to use
+  `ctrl.GetPattern(PatternId.SelectionItemPattern).Select()`, which works
+  on any control and matches what a "select" step already means here -
+  choose the named control itself, not a separate dropdown-plus-item-name.
+- **The `"read"` action was a no-op.** `elif step.action == "read": pass` -
+  offered to the model as a real action in the tool's own schema, it always
+  "succeeded" and reported nothing, because nothing here fetched a value
+  and there was nowhere to put one even if it had. Fixed on both ends: the
+  actor now returns `GetPattern(ValuePattern).Value` (or the control's
+  `Name` if it has no value pattern), and `run()` folds that into the
+  step's own `value` before it's reported done.
+- **`_default_read` only ever saw a window's direct children.** Real
+  Windows apps nest their actual controls several levels inside panes and
+  group boxes; every one of them was reported "not found" at `plan()` time,
+  not because it wasn't on screen but because this never looked past depth
+  1. Fixed with a bounded recursive walk (depth 8 - deep enough for a real
+  app, finite so a very large or virtualized tree can't run away).
+- **A JSON-literal scalar in `arguments` still crashed a tool.** The
+  previous audit's dict-vs-string fix didn't cover a third case: `"123"` is
+  valid JSON and parses to the int `123`, not a dict, and every tool calls
+  `args.get(...)`. Fixed with an explicit `isinstance(args, dict)` check
+  after parsing.
+- **`json.dumps(result)[:8000]` could hand the model broken JSON.**
+  Slicing a serialized string can cut off mid-quote or mid-brace - not
+  hypothetical, since `file_read` alone can return up to 200,000
+  characters. Fixed with `_tool_content()`: serialize once, and if it's
+  over budget, replace it with a small, always-valid JSON note saying so,
+  rather than a byte-slice of the real one.
+- **Windows reserved device names in `file_read` could hang a worker.**
+  Opening `"CON"` for reading opens the console and blocks waiting for a
+  keypress that will never come from a headless service. Not a sandbox
+  issue (this tool is a whole-filesystem read, gated like `shell_exec` is,
+  by design) - just a path that resolves to a device instead of a file.
+  Fixed by rejecting `CON`/`PRN`/`AUX`/`NUL`/`COM1-9`/`LPT1-9`, anywhere in
+  the path, with or without an extension.
+
+Checked and rejected, with the evidence, because the review didn't have
+`jarvis_gate.py` and reasoned from an incorrect model of how it works:
+
+- **"Heavy/irreversible tier stripped before the gate."** The claim was
+  that `run_local_turn` needed to pass `weight`/`heavy` inside `detail` so
+  `jarvis_gate.check()` could raise the tier for a dangerous plan. Read
+  directly against the real file: `notice_for()`'s own docstring says
+  outright it "does NOT read `detail`... every word it returns comes from
+  `_RISK` and from the action name," and `check()`'s tier lookup is
+  `tiers.get(action, UNKNOWN_TIER)` - keyed only by the action string,
+  never by the payload. This is deliberate, not an oversight: letting a
+  model-controlled payload declare its own risk tier is exactly the kind
+  of self-graded permission this project's gate exists to prevent. The
+  suggested fix would have added dead keys to `detail` with zero effect.
+- **"`github_search` downgrades to `unclassified_tool`."** The claim was
+  that passing `"jarvis_research_run_authenticated"` into
+  `action_for_tool()` misses the lookup. Read directly against the real
+  `_TOOL_ACTIONS` dict: that exact string **is** a registered key (mapping
+  to `"research_authenticated"`) - added for precisely this path in an
+  earlier patch, with its own regression test
+  (`t_every_tool_resolves_to_a_real_jarvis_gate_action`) that still passes
+  against the real file today.
+- **A syntax bug in `_safe_eval`'s unary-operator branch.** The claim
+  described `isinstance(node.UnaryOp)` - a one-argument call with no such
+  attribute. The actual line already reads
+  `isinstance(node, ast.UnaryOp)`, correctly, and always has.
+
 ### Test it
 
 ```powershell

@@ -47,6 +47,8 @@ that returns canned output and never spawns a process.
 
 from __future__ import annotations
 
+import base64
+import re
 import shlex
 import subprocess
 from dataclasses import dataclass, field, asdict
@@ -59,6 +61,20 @@ KEYCODES = {
     "power": "KEYCODE_POWER", "volume_up": "KEYCODE_VOLUME_UP",
     "volume_down": "KEYCODE_VOLUME_DOWN",
 }
+
+# `subprocess.run(argv)` with no `shell=True` keeps the HOST safe - each argv
+# element is one literal string, nothing here is interpreted by a shell on
+# THIS machine. But `adb shell <args...>` joins every argument after `shell`
+# with a space and sends the result as ONE command line to the DEVICE's own
+# `/system/bin/sh -c`, over the wire - a value of `"hello; reboot"` becomes
+# the literal remote command `input text hello; reboot`, which the phone's
+# shell splits on `;` and runs both halves. Restricting to a safe, plain-text
+# character set closes that off; escaping shell metacharacters instead would
+# mean getting `/system/bin/sh`'s own quoting rules exactly right on a
+# device this code cannot inspect, for a feature whose whole job is typing
+# plain text, not typing shell scripts.
+_SAFE_TEXT = re.compile(r"^[A-Za-z0-9 .,!?@_-]*$")
+_SAFE_KEYCODE = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 # --------------------------------------------------------------------------
@@ -115,13 +131,22 @@ def _build_step(device: str, r: dict) -> Step:
     if action == "key":
         name = str(r.get("key", "")).strip().lower()
         code = KEYCODES.get(name, name.upper())
+        if not _SAFE_KEYCODE.fullmatch(code):
+            raise ValueError(f"not a plain keycode: {code!r}")
         return Step(action, base + ["input", "keyevent", code], why, heavy)
     if action == "text":
         # adb's own quoting rules for `input text`: spaces must be escaped
         # with %s, and this is the ONE place a raw string is turned into
         # shell-visible tokens - so it is done with a fixed substitution, not
-        # by handing the value to a shell.
+        # by handing the value to a shell. Checked against _SAFE_TEXT BEFORE
+        # substitution - see that constant's own comment for why a remote
+        # shell, not this process, is what a semicolon or backtick here
+        # would reach.
         value = str(r.get("value", ""))
+        if not _SAFE_TEXT.fullmatch(value):
+            raise ValueError(
+                f"text contains a character this tool will not risk sending "
+                f"to the phone's own shell: {value!r}")
         return Step(action, base + ["input", "text", value.replace(" ", "%s")],
                     why, heavy)
     if action == "screenshot":
@@ -140,7 +165,12 @@ def plan(device: str, goal: str, requests: list) -> Plan:
     for r in requests:
         try:
             steps.append(_build_step(device, r))
-        except (KeyError, ValueError) as exc:
+        except (KeyError, ValueError, TypeError) as exc:
+            # TypeError alongside the other two: a request with `"x": null`
+            # (or any non-numeric x/y/x1/y1/x2/y2) hits `int(r["x"])`, and
+            # int(None) raises TypeError, not ValueError - uncaught here, it
+            # used to escape plan() entirely rather than being reported as
+            # one rejected request like every other malformed one.
             rejected.append({**r, "reason": str(exc)})
     return Plan(
         device=str(device), goal=str(goal), steps=steps, rejected=rejected,
@@ -239,7 +269,13 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
                     "not_run": [s.as_dict() for s in p.steps[i - 1:]]}
         done.append(step)
         if step.action == "screenshot":
-            results.append(getattr(result, "stdout", b""))
+            # base64, not raw bytes: this dict is handed straight to
+            # json.dumps() by the caller (run_local_turn, so the model can
+            # see the tool's result) - json.dumps() cannot serialize bytes
+            # at all and raises TypeError, which was uncaught at that call
+            # site and crashed the whole turn.
+            raw = getattr(result, "stdout", b"")
+            results.append(base64.b64encode(raw).decode("ascii"))
     tell("Done.")
     return {"ok": True, "done": [s.as_dict() for s in done], "not_run": [],
             "screenshots": results}

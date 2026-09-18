@@ -113,6 +113,18 @@ class Plan:
         return d
 
 
+# How many levels deep _default_read walks below the window itself. Direct
+# children only (the original shape here) sees almost nothing in a real
+# Windows app: WPF, WinUI and most Win32 dialogs nest their actual controls
+# inside panes, group boxes, toolbars and tab items several levels down, so
+# every one of them was reported "not found" at plan() time - not because
+# the control was not on screen, but because this never looked past the
+# window's immediate children. Unbounded recursion is the other failure
+# mode (a virtualised list or a deeply nested layout can be very large); an
+# explicit, generous-but-finite depth is the middle ground.
+_READ_DEPTH = 8
+
+
 def _default_read(window: str) -> list:
     """The real accessibility-tree read. Windows-only, imported lazily so
     this module loads fine on any platform and fails clearly, not with an
@@ -129,17 +141,27 @@ def _default_read(window: str) -> list:
     if not top.Exists(maxSearchSeconds=2):
         return []
     out = []
-    for c in top.GetChildren():
-        out.append({
-            "name": c.Name,
-            "automation_id": getattr(c, "AutomationId", "") or "",
-            "control_type": c.ControlTypeName,
-            "enabled": bool(c.IsEnabled),
-        })
+
+    def walk(parent, depth: int) -> None:
+        if depth <= 0:
+            return
+        for c in parent.GetChildren():
+            out.append({
+                "name": c.Name,
+                "automation_id": getattr(c, "AutomationId", "") or "",
+                "control_type": c.ControlTypeName,
+                "enabled": bool(c.IsEnabled),
+            })
+            walk(c, depth - 1)
+
+    walk(top, _READ_DEPTH)
     return out
 
 
-def _default_act(step: Step) -> None:
+def _default_act(step: Step) -> Optional[str]:
+    """Returns the read-back text for a "read" step, None for every other
+    action - `run()` folds a non-None return into that step's own `value`
+    before it is reported as done."""
     try:
         import uiautomation as auto  # type: ignore
     except ImportError as exc:
@@ -148,6 +170,11 @@ def _default_act(step: Step) -> None:
             "installed - see _default_read"
         ) from exc
     top = auto.WindowControl(searchDepth=1, Name=step.window)
+    # top.Control(...) is the real search API (an instance method that
+    # returns a plain Control, not a Name/AutomationId-specific subclass) -
+    # verified against the library's own source, since a wrong guess here
+    # fails silently on a real Windows machine, not in any test this
+    # project can run.
     ctrl = (top.Control(AutomationId=step.automation_id) if step.automation_id
             else top.Control(Name=step.control))
     if step.action == "click":
@@ -155,11 +182,24 @@ def _default_act(step: Step) -> None:
     elif step.action == "type":
         ctrl.SendKeys(step.value or "")
     elif step.action == "select":
-        ctrl.Select(step.value or "")
+        # A plain Control (what .Control() above returns) has no .Select()
+        # method at all - that only exists on specific typed subclasses
+        # (e.g. ComboBoxControl), none of which this module ever
+        # instantiates. GetPattern(SelectionItemPattern) is the one call
+        # that works on any Control - it selects THIS control as the chosen
+        # item in its container, which matches how a "select" step already
+        # names the specific item to select at plan() time, not a separate
+        # dropdown-plus-item-name pair.
+        pattern = ctrl.GetPattern(auto.PatternId.SelectionItemPattern)
+        if pattern is None:
+            raise RuntimeError(f'"{step.control}" does not support being selected')
+        pattern.Select()
     elif step.action == "read":
-        pass
+        pattern = ctrl.GetPattern(auto.PatternId.ValuePattern)
+        return pattern.Value if pattern is not None else ctrl.Name
     else:
         raise ValueError(f"unknown action {step.action!r}")
+    return None
 
 
 def _find(tree: list, name: str) -> Optional[dict]:
@@ -287,13 +327,18 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
                     "done": [s.as_dict() for s in done],
                     "not_run": [s.as_dict() for s in remaining]}
         try:
-            actor(step)
+            read_back = actor(step)
         except Exception as exc:
             remaining = p.steps[i - 1:]
             return {"ok": False,
                     "reason": f"step {i} failed: {type(exc).__name__}: {exc}",
                     "done": [s.as_dict() for s in done],
                     "not_run": [s.as_dict() for s in remaining]}
+        if step.action == "read" and read_back is not None:
+            # `value` already means "the text this step carries" for
+            # "type" - reusing it for "read"'s result needs no new field on
+            # Step, and describe()/as_dict() already render it.
+            step.value = read_back
         done.append(step)
     tell("Done.")
     return {"ok": True, "done": [s.as_dict() for s in done], "not_run": []}

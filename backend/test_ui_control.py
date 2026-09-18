@@ -168,6 +168,92 @@ def t_run_executes_the_approved_steps_in_order():
           len(out["done"]) == 2 and out["not_run"] == [], repr(out))
 
 
+class _FakeElement:
+    def __init__(self, name, children=None):
+        self.Name = name
+        self.AutomationId = name
+        self.ControlTypeName = "Button"
+        self.IsEnabled = True
+        self._children = children or []
+
+    def GetChildren(self):
+        return self._children
+
+    def Exists(self, maxSearchSeconds=2):
+        return True
+
+
+def t_default_read_walks_several_levels_deep_but_not_unbounded():
+    """The bug this guards against: the original _default_read only ever
+    called top.GetChildren() once - direct children of the window. Most
+    real Windows apps (WPF, WinUI, most Win32 dialogs) nest their actual
+    controls several levels inside panes and group boxes, so plan() would
+    report every one of them "not found" despite being on screen. Proven
+    here against a fake `uiautomation` module (this is _default_read
+    itself, the one thing in this file that is NOT reachable through the
+    injectable `read`/`act` parameters everything else in this suite
+    uses) rather than a real Windows session."""
+    # Nest a control 3 levels below the window, and one right at the depth
+    # boundary (_READ_DEPTH levels down) that must NOT show up.
+    deepest = _FakeElement("TooDeep")
+    chain = deepest
+    for i in range(U._READ_DEPTH):
+        chain = _FakeElement(f"level{i}", children=[chain])
+    nested = _FakeElement("NestedButton")
+    top_children = [_FakeElement("Pane", children=[_FakeElement("GroupBox", children=[nested])]),
+                    chain]
+
+    class FakeAuto:
+        @staticmethod
+        def WindowControl(searchDepth, Name):
+            return _FakeElement(Name, children=top_children)
+
+    real_module = sys.modules.get("uiautomation")
+    sys.modules["uiautomation"] = FakeAuto()
+    try:
+        out = U._default_read("SomeWindow")
+    finally:
+        if real_module is not None:
+            sys.modules["uiautomation"] = real_module
+        else:
+            del sys.modules["uiautomation"]
+    names = {c["name"] for c in out}
+    check("a control 3 levels below the window is found",
+          "NestedButton" in names, repr(names))
+    check("a control past the depth bound is not found (bounded, not unbounded, recursion)",
+          "TooDeep" not in names, repr(names))
+
+
+def t_a_read_steps_result_reaches_the_caller():
+    """The bug this guards against: `act`'s default implementation used to
+    do `elif step.action == "read": pass` - a step the model can genuinely
+    request (it is in the tool's own JSON schema) that always ran
+    "successfully" and reported nothing at all, because run() never had
+    anywhere to put a value even if `act` produced one. Fixed on both ends:
+    the actor now returns the read text, and run() folds a non-None return
+    into that step's own `value` before it goes into `done`."""
+    live = tree(("OutputBox", "txtOutput", True))
+    with NoRealAction():
+        p = U.plan("check the result", "W",
+                   [{"control": "OutputBox", "action": "read", "why": "x"}],
+                   read=lambda _w: live)
+        out = U.run(p, read=lambda _w: live, act=lambda s: "the value on screen",
+                     approved=True)
+    check("the run succeeded", out["ok"] is True, repr(out))
+    check("the read-back text reaches the done step, not silently dropped",
+          out["done"][0]["value"] == "the value on screen", repr(out))
+    # CONTROL: an actor that returns None for a non-read action must not
+    # accidentally overwrite that step's own value.
+    live2 = tree(("Subject", "txtSubject", True))
+    with NoRealAction():
+        p2 = U.plan("send", "W",
+                    [{"control": "Subject", "action": "type", "value": "hi", "why": "x"}],
+                    read=lambda _w: live2)
+        out2 = U.run(p2, read=lambda _w: live2, act=lambda s: None, approved=True)
+    check("CONTROL: a non-read step's own value survives untouched",
+          out2["done"][0]["value"] == "hi", repr(out2))
+
+
 def t_announce_is_called_once_per_step_and_is_optional():
     live = tree(("Send", "btnSend", True))
     heard = []
@@ -192,6 +278,8 @@ if __name__ == "__main__":
                t_the_card_prints_every_step_in_full, t_run_refuses_without_approval,
                t_run_re_verifies_before_every_step_and_stops_on_mismatch,
                t_run_executes_the_approved_steps_in_order,
+               t_default_read_walks_several_levels_deep_but_not_unbounded,
+               t_a_read_steps_result_reaches_the_caller,
                t_announce_is_called_once_per_step_and_is_optional):
         print(f"\n--- {fn.__name__} ---")
         try:

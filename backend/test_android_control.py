@@ -7,6 +7,7 @@ sending a tap toward whatever phone happens to be plugged in now.
 
     python3 test_android_control.py
 """
+import json
 import sys
 import traceback
 from pathlib import Path
@@ -86,6 +87,51 @@ def t_missing_fields_are_rejected_not_guessed():
     check("card explains why", "y" in A.describe(p) or "reason" in repr(p.rejected))
 
 
+def t_a_null_coordinate_is_rejected_not_a_crash():
+    """int(None) raises TypeError, not ValueError - plan()'s own except used
+    to only catch (KeyError, ValueError), so a request like
+    {"action": "tap", "x": null, "y": null} escaped plan() entirely instead
+    of landing in `rejected` like every other malformed request."""
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap nothing in particular",
+                   [{"action": "tap", "x": None, "y": None, "why": "x"}])
+    check("a null coordinate is rejected, not a crash", p.steps == [], repr(p.steps))
+    check("and is reported as rejected", len(p.rejected) == 1, repr(p.rejected))
+
+
+def t_shell_metacharacters_in_typed_text_are_rejected():
+    """`adb shell <args...>` joins every argument with a space and runs the
+    result as ONE command on the DEVICE's own shell - `input text "hello;
+    reboot"` becomes the remote command `input text hello; reboot`, which
+    the phone's shell splits on `;` and runs both halves. This is the one
+    thing standing between "type this text" and arbitrary code execution on
+    the paired phone."""
+    for bad in ("hello; reboot", "a && pm uninstall com.jarvis.client",
+                "$(reboot)", "`reboot`", "a | b", "a > /sdcard/x"):
+        with NoRealProcess():
+            p = A.plan("EMULATOR123", "type something",
+                       [{"action": "text", "value": bad, "why": "x"}])
+        check(f"rejected as unsafe for the remote shell: {bad!r}",
+              p.steps == [] and len(p.rejected) == 1, repr(p.rejected))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "type something",
+                   [{"action": "text", "value": "hello world, how are you?", "why": "x"}])
+    check("plain text with normal punctuation still works",
+          len(p.steps) == 1, repr(p.rejected))
+
+
+def t_shell_metacharacters_in_a_keycode_are_rejected():
+    for bad in ("x; reboot", "$(reboot)", "back`;`"):
+        with NoRealProcess():
+            p = A.plan("EMULATOR123", "press a key",
+                       [{"action": "key", "key": bad, "why": "x"}])
+        check(f"rejected as unsafe for the remote shell: {bad!r}",
+              p.steps == [] and len(p.rejected) == 1, repr(p.rejected))
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "press back", [{"action": "key", "key": "back", "why": "x"}])
+    check("a real, named keycode still works", len(p.steps) == 1, repr(p.rejected))
+
+
 def t_the_card_prints_every_command_in_full():
     with NoRealProcess():
         p = A.plan("EMULATOR123", "tap the button",
@@ -156,7 +202,15 @@ def t_run_executes_every_approved_step_and_reports_screenshots():
         out = A.run(p, run_adb=caller, approved=True)
     check("CONTROL: a fully valid plan runs to completion", out["ok"] is True, repr(out))
     check("both steps done, nothing left", len(out["done"]) == 2 and out["not_run"] == [], repr(out))
-    check("the screenshot bytes are returned", out["screenshots"] == [b"\x89PNGfakebytes"], repr(out))
+    # base64, not raw bytes: the caller (run_local_turn) feeds this whole
+    # dict to json.dumps(), which cannot serialize bytes at all.
+    import base64
+    check("the screenshot is returned base64-encoded, not as raw bytes "
+          "json.dumps() would crash on",
+          out["screenshots"] == [base64.b64encode(b"\x89PNGfakebytes").decode("ascii")],
+          repr(out))
+    check("it really is JSON-serializable now",
+          json.dumps(out) is not None)
 
 
 def t_announce_is_called_and_is_optional():
@@ -175,6 +229,9 @@ def t_announce_is_called_and_is_optional():
 if __name__ == "__main__":
     for fn in (t_planning_runs_nothing, t_unknown_action_is_rejected_not_guessed,
                t_missing_fields_are_rejected_not_guessed,
+               t_a_null_coordinate_is_rejected_not_a_crash,
+               t_shell_metacharacters_in_typed_text_are_rejected,
+               t_shell_metacharacters_in_a_keycode_are_rejected,
                t_the_card_prints_every_command_in_full, t_run_refuses_without_approval,
                t_run_refuses_if_the_device_disconnected,
                t_run_stops_at_the_first_failed_command,

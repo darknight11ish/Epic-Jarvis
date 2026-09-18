@@ -186,6 +186,32 @@ def t_arguments_already_a_dict_does_not_crash_the_loop():
         AG.TOOLS["calculator"].execute = real
 
 
+def t_arguments_as_a_json_scalar_does_not_crash_the_loop():
+    """A step further than the dict-shaped case above: `arguments` can be
+    valid JSON and still not be an object at all - the string "123" parses
+    to the int 123, not a dict. Every tool's prepare()/execute() calls
+    args.get(...), which a bare int has no method by that name for."""
+    real = AG.TOOLS["calculator"].execute
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True, "value": args}
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator", "arguments": "123"}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
+        ]
+        post, calls = scripted_post(responses)
+        with NoRealIO():
+            AG.run_local_turn(
+                [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
+                stream_out=lambda b: None, post=post, gate_check=allow,
+                open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
+        check("a bare JSON scalar is treated as empty args, not crashed on",
+              '"value": {}' in calls[1]["messages"][-1]["content"],
+              repr(calls[1]["messages"][-1]))
+    finally:
+        AG.TOOLS["calculator"].execute = real
+
+
 def t_an_unknown_tool_name_is_refused_not_guessed():
     responses = [
         {"choices": [{"message": {"role": "assistant", "tool_calls": [
@@ -239,6 +265,39 @@ def t_file_read_caps_by_bytes_not_characters():
               out["content"] != text, repr(out))
     finally:
         AG._MAX_FILE_READ_BYTES = real_cap
+
+
+def t_file_read_rejects_reserved_windows_device_names():
+    """Opening "CON" for reading, on Windows, opens the console and BLOCKS
+    waiting for a keypress that will never come from a headless service -
+    not a sandbox escape, just a path that resolves to a device instead of
+    a file. Checked with names in a directory and with an extension too,
+    since both are still the reserved device on real Windows."""
+    for bad in ("CON", "con", "NUL", "COM1", "LPT9",
+                "C:\\Users\\me\\CON", "C:\\Users\\me\\con.txt"):
+        out = AG._run_file_read({"path": bad})
+        check(f"rejected as a reserved device, not opened: {bad!r}",
+              out["ok"] is False and "reserved" in out["error"], repr(out))
+    check("CONTROL: a name that merely starts with a reserved word still works",
+          AG._is_reserved_windows_name("CONTACT.txt") is False)
+
+
+def t_tool_content_never_slices_a_json_string_mid_structure():
+    """json.dumps(result)[:8000] can cut off mid-string or mid-brace,
+    handing the model a hand-mangled JSON fragment instead of its actual
+    tool result - and a large result is not hypothetical: file_read alone
+    can return up to 200,000 characters."""
+    small = {"ok": True, "value": 4}
+    check("a result well under the cap is returned whole, unmodified",
+          json.loads(AG._tool_content(small)) == small, AG._tool_content(small))
+    big = {"ok": True, "content": "x" * 50_000}
+    out = AG._tool_content(big)
+    check("an oversized result is still valid JSON",
+          json.loads(out) is not None, out[:200])
+    check("it says it was truncated rather than silently cutting the string",
+          json.loads(out).get("truncated") is True, out[:200])
+    check("the safe fallback itself stays under the cap",
+          len(out) <= AG._MAX_TOOL_CONTENT_CHARS, len(out))
 
 
 def t_every_tool_resolves_to_a_real_jarvis_gate_action():
@@ -340,8 +399,11 @@ if __name__ == "__main__":
     for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
                t_arguments_already_a_dict_does_not_crash_the_loop,
+               t_arguments_as_a_json_scalar_does_not_crash_the_loop,
                t_an_unknown_tool_name_is_refused_not_guessed,
                t_file_read_caps_by_bytes_not_characters,
+               t_file_read_rejects_reserved_windows_device_names,
+               t_tool_content_never_slices_a_json_string_mid_structure,
                t_every_tool_resolves_to_a_real_jarvis_gate_action,
                t_calculator_cannot_reach_names_or_calls,
                t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call,

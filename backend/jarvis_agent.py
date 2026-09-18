@@ -111,9 +111,32 @@ def _run_memory_search(args: dict) -> dict:
 
 _MAX_FILE_READ_BYTES = 200_000
 
+# Windows reserves these names (with or without an extension, in any
+# directory) as legacy device files, not ordinary files - CON in particular
+# opens as the console, and *reading* it blocks waiting for a keypress that
+# will never come on a headless service. No sandbox is implied by this list
+# (this tool is a whole-filesystem read, tier-gated like shell_exec is, not
+# confined to a project folder) - it only stops a path from resolving to a
+# device instead of a file at all.
+_RESERVED_WINDOWS_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)})
+
+
+def _is_reserved_windows_name(path: str) -> bool:
+    import ntpath
+    for part in ntpath.normpath(path).split(ntpath.sep):
+        stem = part.rsplit(".", 1)[0]
+        if stem.upper() in _RESERVED_WINDOWS_NAMES:
+            return True
+    return False
+
 
 def _run_file_read(args: dict) -> dict:
     path = str(args.get("path", ""))
+    if _is_reserved_windows_name(path):
+        return {"ok": False, "error": f"{path!r} names a reserved device, not a file"}
     try:
         # Binary, capped by actual bytes read, then decoded - not text mode
         # capped by .read(N), which caps CHARACTERS. A file that is mostly
@@ -379,6 +402,28 @@ def _open_stream(url: str, payload: dict, timeout: float = 300.0):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+_MAX_TOOL_CONTENT_CHARS = 8000
+
+
+def _tool_content(result: dict) -> str:
+    """A tool's result, as the JSON string fed back to the model - always
+    valid JSON, never a byte-slice of one. `json.dumps(result)[:N]` can cut
+    off mid-string or mid-structure (an open quote, an unclosed brace), and
+    a large result is not a hypothetical here: file_read alone can return
+    up to 200,000 characters of content, far past any per-message budget.
+    A model reading a hand-mangled JSON fragment as "the tool's answer" is a
+    worse failure than an honest, valid, short note that it was too big."""
+    full = json.dumps(result, ensure_ascii=False)
+    if len(full) <= _MAX_TOOL_CONTENT_CHARS:
+        return full
+    return json.dumps({
+        "ok": result.get("ok"),
+        "truncated": True,
+        "note": f"the real result was {len(full)} characters - too large to "
+                 "show in full here",
+    }, ensure_ascii=False)
+
+
 def _gate_check(action: str, detail: dict, prompt: str):
     """Wraps jarvis_gate.check() so ANY failure here - the module missing,
     or `check()` itself raising for a reason this function cannot predict -
@@ -459,6 +504,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 args = raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
             except (json.JSONDecodeError, TypeError):
                 args = {}
+            if not isinstance(args, dict):
+                # `arguments` can be valid JSON and still not be an object -
+                # "123" parses to the int 123, '"x"' parses to a string.
+                # Every tool's prepare()/execute() calls args.get(...), so a
+                # non-dict here would crash there instead of just being
+                # treated as the empty arguments it effectively is.
+                args = {}
             tool = TOOLS.get(name) if name in names else None
             if tool is None:
                 result = {"ok": False, "error": f"no such tool: {name!r}"}
@@ -485,7 +537,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     except Exception as exc:
                         result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
-                          "content": json.dumps(result, ensure_ascii=False)[:8000]})
+                          "content": _tool_content(result)})
     else:
         convo.append({"role": "system",
                        "content": "Too many tool calls in a row; answer with "
