@@ -166,6 +166,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
     <span class="mono" id="solo-read">—</span>
     <span class="spacer"></span>
     <div class="sp" style="max-width:210px"><input type="range" id="solo-speed" min="0" max="100" value="50" aria-label="Speed"><span class="v" id="solo-speed-v">1.00×</span></div>
+    <button class="chip" id="solo-cycle" aria-pressed="false">cycle states</button>
     <button class="chip" id="solo-use">use this face</button>
     <button class="chip" id="solo-close">close</button>
   </div>
@@ -1798,7 +1799,6 @@ const THEMES = [
     const step = 1.9 / N, amplH = .42;
 
     if(this.gpu(g, w, h, N, z, mid, step, amplH, ry, rx, dist, scale, p)){
-      this.rim(g, w, h, mid, step, ry, rx, dist, scale, S, p);
       return;
     }
 
@@ -1850,26 +1850,6 @@ const THEMES = [
       g.strokeStyle = rgba(p.hot, .05 + Math.abs(q.curv) * 2.2);
       g.lineWidth = .5; g.stroke();
     }
-    this.rim(g, w, h, mid, step, ry, rx, dist, scale, S, p);
-  },
-
-  // The rim the skin is clamped to. Drawn on the 2D canvas either way: it is
-  // one stroked circle, and a stroked circle is the one thing canvas does
-  // better than a triangle mesh.
-  rim(g, w, h, mid, step, ry, rx, dist, scale, S, p){
-    const cx = w/2, cy = h/2;
-    // .96 is where the mask clamps the skin, so that is where the hoop is.
-    const R = mid * .96;
-    g.strokeStyle = rgba(p.hot, .5); g.lineWidth = Math.max(1, S*.006);
-    g.beginPath();
-    for(let i=0;i<=180;i++){
-      const a = i/180*TAU;
-      const v = rot3(Math.cos(a)*R*step, 0, Math.sin(a)*R*step, ry, rx);
-      const kk = scale/(dist+v[2]);
-      const X = cx+v[0]*kk, Y = cy+v[1]*kk;
-      i ? g.lineTo(X,Y) : g.moveTo(X,Y);
-    }
-    g.closePath(); g.stroke();
   },
 
   // Hand the simulated grid to the GPU as a triangle mesh. Positions and
@@ -2259,16 +2239,12 @@ const THEMES = [
     // Collarette: the raised ridge where the two muscle layers meet.
     g.strokeStyle=rgba(p.hot,.5); g.lineWidth=Math.max(1,SZ*.008);
     g.beginPath(); g.arc(cx,cy,pr*1.32,0,TAU); g.stroke();
-    // Pupil, and the specular catchlight that makes an eye read as wet.
+    // Pupil.
     g.fillStyle="#000"; g.beginPath(); g.arc(cx,cy,pr,0,TAU); g.fill();
     g.restore();
     const lg=g.createRadialGradient(cx,cy,R*.72,cx,cy,R);
     lg.addColorStop(0,"rgba(0,0,0,0)"); lg.addColorStop(1,"rgba(0,0,0,.85)");
     g.fillStyle=lg; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill();
-    g.fillStyle="rgba(255,255,255,.82)";
-    g.beginPath(); g.ellipse(cx-R*.30,cy-R*.34,R*.13,R*.09,-.5,0,TAU); g.fill();
-    g.fillStyle="rgba(255,255,255,.28)";
-    g.beginPath(); g.arc(cx+R*.26,cy+R*.30,R*.05,0,TAU); g.fill();
   }
 },
 
@@ -3816,6 +3792,15 @@ function buildGrid(){
    Jarvis will really look like, and it is the only place worth judging
    sharpness - twenty faces sharing a phone GPU is not the shipping case. */
 let SOLO = null;
+// How long each state gets before "cycle states" moves on - a few seconds
+// is long enough to actually watch a face settle into the new state rather
+// than catching it mid-transition every time.
+const SOLO_CYCLE_MS = 4000;
+let SOLO_CYCLE_TIMER = null;
+function stopSoloCycle(){
+  if(SOLO_CYCLE_TIMER){ clearInterval(SOLO_CYCLE_TIMER); SOLO_CYCLE_TIMER = null; }
+  const b = $("solo-cycle"); if(b) b.setAttribute("aria-pressed", "false");
+}
 function openSolo(theme){
   const box = $("solo"), cv = $("solo-canvas");
   GRID_ONLY = false; applyTarget();   // the one face being looked at
@@ -3840,6 +3825,20 @@ function openSolo(theme){
   const r = $("solo-speed"), v = $("solo-speed-v");
   r.value = 50; v.textContent = "1.00×";
   r.oninput = () => { SOLO.speed = sliderToSpeed(+r.value, f); v.textContent = SOLO.speed.toFixed(2) + "×"; };
+  stopSoloCycle();   // a fresh face starts with cycling off, never inherited
+  $("solo-cycle").onclick = () => {
+    const btn = $("solo-cycle");
+    const turningOn = btn.getAttribute("aria-pressed") !== "true";
+    stopSoloCycle();
+    if(!turningOn) return;
+    btn.setAttribute("aria-pressed", "true");
+    const ids = SPEC.states.map(s => s.id);
+    SOLO_CYCLE_TIMER = setInterval(() => {
+      const i = ids.indexOf(PREVIEW);
+      EDITING = PREVIEW = ids[(i + 1) % ids.length];
+      syncUI();
+    }, SOLO_CYCLE_MS);
+  };
   let drag = false, lx = 0, ly = 0;
   cv.onpointerdown = e => { drag = true; lx = e.clientX; ly = e.clientY; SOLO.touch.f = 1; };
   cv.onpointermove = e => {
@@ -3858,6 +3857,7 @@ function openSolo(theme){
 }
 function closeSolo(){
   if(SOLO && SOLO._fit) window.removeEventListener("resize", SOLO._fit);
+  stopSoloCycle();
   SOLO = null; $("solo").hidden = true;
   GRID_ONLY = true; applyTarget();
 }

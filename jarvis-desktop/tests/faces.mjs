@@ -394,6 +394,71 @@ await check("a loaded document renders, rather than falling back to defaults", a
     `round-tripped to ${JSON.stringify(saved.bindings.thinking)}`);
 });
 
+await check("Iris no longer draws its two specular highlight blobs", async () => {
+  // Iris drew a wet-eye catchlight as two opaque white shapes on top of
+  // everything else - a big ellipse at roughly 10-11 o'clock and a small
+  // dot at roughly 4-5 o'clock. Both were removed; check the pixels where
+  // they used to sit rather than just the source, since a live render is
+  // what actually proves nothing else still paints white there.
+  const page = await open();
+  await page.waitForTimeout(1500);
+  await page.locator('.card:has(.nm:text-is("Iris")) canvas').click();
+  await page.waitForTimeout(400);
+  const px = await page.evaluate(() => {
+    const cv = document.getElementById("solo-canvas");
+    const ctx = cv.getContext("2d");
+    const R = Math.min(cv.width, cv.height) * 0.44;
+    const cx = cv.width / 2, cy = cv.height / 2;
+    const at = (x, y) => Array.from(ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data);
+    return {
+      bigHighlight: at(cx - R * 0.30, cy - R * 0.34),
+      smallHighlight: at(cx + R * 0.26, cy + R * 0.30),
+    };
+  });
+  await page.close();
+  const nearWhite = ([r, g, b, a]) => r > 235 && g > 235 && b > 235 && a > 150;
+  assert.ok(!nearWhite(px.bigHighlight), `big highlight still there: ${px.bigHighlight}`);
+  assert.ok(!nearWhite(px.smallHighlight), `small highlight still there: ${px.smallHighlight}`);
+});
+
+await check("Membrane no longer draws the outer rim circle", async () => {
+  // The rim was one stroked circle drawn identically after either render
+  // path (GPU mesh or CPU quads) - a live pixel test would have to account
+  // for perspective, rotation and which path this environment falls back
+  // to, none of which the fix touches. What the fix actually changed is
+  // that `rim()` and both of its call sites are gone; check that directly.
+  for (const src of [read("src/faces.html"), read("../docs/reference/jarvis-reactor-kit.html")]) {
+    assert.ok(!src.includes("this.rim("), "a call to the removed rim() method is still present");
+    assert.ok(!/\brim\(g, w, h, mid,/.test(src), "the removed rim() method definition is still present");
+  }
+});
+
+await check("solo view can cycle through every state slowly, and stop", async () => {
+  const page = await open();
+  await page.waitForTimeout(1500);
+  await page.locator('.card:has(.nm:text-is("Iris")) canvas').click();
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator("#solo-cycle").count(), 1, "no cycle-states control in the solo toolbar");
+  const pressedState = () => page.evaluate(() =>
+    [...document.querySelectorAll("#states .chip")]
+      .find((b) => b.getAttribute("aria-pressed") === "true")?.dataset.s);
+  const first = await pressedState();
+  await page.locator("#solo-cycle").click();
+  assert.equal(await page.locator("#solo-cycle").getAttribute("aria-pressed"), "true",
+    "the button does not show itself as on");
+  await page.waitForTimeout(4300);
+  const second = await pressedState();
+  assert.notEqual(second, first, "cycling did not move to a different state");
+  await page.locator("#solo-cycle").click();
+  assert.equal(await page.locator("#solo-cycle").getAttribute("aria-pressed"), "false",
+    "the button does not show itself as off");
+  const atOff = await pressedState();
+  await page.waitForTimeout(4300);
+  const afterOff = await pressedState();
+  await page.close();
+  assert.equal(afterOff, atOff, "the state kept advancing after cycling was turned off");
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe faces window holds");
