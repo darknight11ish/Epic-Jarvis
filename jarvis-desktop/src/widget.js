@@ -73,6 +73,7 @@ const dom = {
   root: document.documentElement,
   shell: $("widget-shell"),
   tray: $("widget-tray"),
+  faceWrap: $("face-wrap"),
   faceFrame: $("face-frame"),
 
   netDot: $("net-dot"),
@@ -191,21 +192,44 @@ if (typeof ResizeObserver !== "undefined") {
    Expand / collapse / pin
    ========================================================================== */
 
+/**
+ * Shows or hides the live face preview and starts or stops its animation.
+ *
+ * The face is a live canvas animating every frame. `hidden` on its wrapper
+ * stops it being SEEN but not being DRAWN — an iframe's rAF loop keeps
+ * running under `display:none`, so clearing `src` is what actually stops
+ * the work rather than just hiding its output. Re-set on every show rather
+ * than only the first time, so a face or colour the owner changed while
+ * hidden shows up on the next open without this window needing its own
+ * copy of the appearance-changed listener.
+ *
+ * Hidden while collapsed (nothing to see), and ALSO hidden whenever an
+ * approval card is open — the single biggest, most purely decorative thing
+ * in the tray, freeing the height an urgent, long approval needs to keep
+ * Approve on screen rather than clipped past `WIDGET_MAX_HEIGHT`
+ * (`src-tauri/src/windows.rs`, 400px — a real, hard ceiling the window
+ * cannot grow past, not a soft target).
+ *
+ * Known, harmless race: prefs (expanded or not) and the pending-approval
+ * queue resolve independently at boot. A widget that starts already
+ * expanded WITH an approval already waiting briefly starts loading the
+ * face before the queue read lands, then cancels that load here a moment
+ * later — a real aborted request a strict test harness can flag, with no
+ * user-visible effect (nothing was ever painted). Not worth serialising
+ * boot on the queue read to close a gap nobody can see.
+ */
+function applyFaceVisibility() {
+  const show = state.expanded && !state.approval;
+  if (dom.faceWrap) dom.faceWrap.hidden = !show;
+  if (dom.faceFrame) dom.faceFrame.src = show ? "faces.html?mode=display" : "";
+}
+
 function applyExpanded(expanded) {
   state.expanded = expanded;
   dom.root.dataset.state = expanded ? "expanded" : "collapsed";
   dom.tray.hidden = !expanded;
   dom.btnToggle.title = expanded ? "Collapse (E)" : "Expand (E)";
-  // The face is a live canvas animating every frame. `hidden` on the tray
-  // stops it being SEEN but not being DRAWN — an iframe's rAF loop keeps
-  // running under `display:none`, so clearing `src` on collapse is what
-  // actually stops the work rather than just hiding its output. Re-set on
-  // every expand rather than only the first time, so a face or colour the
-  // owner changed while collapsed shows up on the next open without this
-  // window needing its own copy of the appearance-changed listener.
-  if (dom.faceFrame) {
-    dom.faceFrame.src = expanded ? "faces.html?mode=display" : "";
-  }
+  applyFaceVisibility();
   syncSize();
 }
 
@@ -409,6 +433,7 @@ function openApproval(approval) {
   // nothing typed yet either way, so this is safe unconditionally.
   dom.apprNoteInput.value = "";
   dom.apprCard.hidden = false;
+  applyFaceVisibility();
   syncApprovalButtons();
   // A gate is the one thing worth opening the widget for on its own — but only
   // when it is a new one, or re-reading the queue would keep re-expanding a
@@ -461,6 +486,7 @@ function closeApproval() {
   dom.apprOptions.hidden = true;
   dom.btnApprYes.hidden = false;
   dom.apprNoteInput.value = "";
+  applyFaceVisibility();
   syncSize();
 }
 

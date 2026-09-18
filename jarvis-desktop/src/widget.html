@@ -80,7 +80,14 @@
              reacting to whatever Jarvis is actually doing). widget.js sets
              `src` only while expanded, so the animation loop isn't spending
              GPU on a face nobody can see. -->
-        <div class="face-wrap">
+        <!-- Hidden, not just covered, while an approval card is open - see
+             widget.js's applyFaceVisibility(). src-tauri/src/windows.rs's
+             WIDGET_MAX_HEIGHT (400px) is calibrated for "the tallest
+             legitimate layout", and this is the single biggest, most
+             purely decorative thing on screen: freeing its height is what
+             keeps Approve reachable rather than clipped past the window's
+             real, hard ceiling. -->
+        <div class="face-wrap" id="face-wrap">
           <iframe
             id="face-frame"
             title="Jarvis"
