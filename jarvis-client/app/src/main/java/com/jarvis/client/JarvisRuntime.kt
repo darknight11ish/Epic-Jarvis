@@ -1101,7 +1101,19 @@ object JarvisRuntime {
             // retrying, so branching on the enum would put the error face up
             // about a second after the first failure.
             val down = linkDownSince
-            if (down != 0L && nowMs - down > RECONNECT_GRACE_MS) return FaceState.ERROR
+            if (down != 0L) {
+                val silentFor = nowMs - down
+                // Long enough that this is almost certainly not a blip - the
+                // laptop lid is closed, or the machine actually went to sleep.
+                // The spec's error face is a deliberately alarming reversed
+                // motion, and a sleeping machine is not a broken one. BANKED
+                // already exists for exactly "nothing is wrong, nothing needs
+                // you right now" - reused rather than inventing a state the
+                // desktop would also need to agree on, since this is a purely
+                // local, phone-side judgement call about how long is "a while".
+                if (silentFor > LONG_SILENCE_MS) return FaceState.BANKED
+                if (silentFor > RECONNECT_GRACE_MS) return FaceState.ERROR
+            }
         }
         // This device's own microphone is a fact only this device knows: the
         // server has no idea the mic is open until the utterance arrives, so
@@ -1171,6 +1183,14 @@ object JarvisRuntime {
      * keep pretending to think.
      */
     private const val RECONNECT_GRACE_MS = 12_000L
+
+    /**
+     * Past this, "reconnecting" stops being the honest word for it. Short
+     * enough that checking the phone a few minutes after the desktop actually
+     * went to sleep shows calm rather than alarm; long enough that no real
+     * network blip - a train, a lift, a bad patch of wifi - ever reaches it.
+     */
+    private const val LONG_SILENCE_MS = 180_000L
 
     /** When the link was last lost, or 0 while it is up. */
     @Volatile private var linkDownSince = 0L
