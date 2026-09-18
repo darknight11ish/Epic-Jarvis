@@ -1,11 +1,15 @@
 package com.jarvis.client.net
 
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 
@@ -62,6 +66,33 @@ class ChatSession(private val api: JarvisApi) {
 
         var mine: String? = null
         withContext(Dispatchers.IO) {
+            // Cancelling this coroutine has to cancel the HTTP call, and only a
+            // coroutine that is NOT parked on the socket can do it.
+            //
+            // The read loop below is blocking okio/IO with no suspension point,
+            // so cancellation alone reached nothing: leaving the screen
+            // cancelled the coroutine while the socket kept streaming and
+            // `_reply` kept being written for a screen that no longer existed,
+            // with the desktop generating into it. This is the same failure
+            // [EventStream] fixes with the same shape (see the note on `live`
+            // there): `Call.cancel()` is the one OkHttp operation documented as
+            // safe from any thread, and it fails an in-flight read at once,
+            // where closing the body promises nothing to a read already blocked
+            // on it. A child coroutine is cancelled the instant its parent is,
+            // whatever the parent's thread is doing, so this one is always free
+            // to run that cancel. It is cancelled again in the `finally` below
+            // on the normal path, where cancelling a finished call is a no-op.
+            val closer = launch {
+                try {
+                    awaitCancellation()
+                } finally {
+                    runCatching { c.cancel() }
+                }
+            }
+            // The scope is captured rather than used implicitly, so the
+            // `ensureActive()` inside the read loop cannot bind to anything but
+            // this coroutine.
+            val io = this
             try {
                 c.execute().use { resp ->
                     if (!resp.isSuccessful) {
@@ -72,20 +103,64 @@ class ChatSession(private val api: JarvisApi) {
                         }
                         return@use
                     }
-                    val source = resp.body?.source() ?: return@use
-                    val buf = okio.Buffer()
-                    while (!source.exhausted()) {
-                        val n = source.read(buf, CHUNK)
-                        if (n <= 0) break
-                        // Appended as it arrives rather than accumulated and
-                        // shown at the end - the whole reason the body is
-                        // chunked is so the reply appears as it is written.
-                        _reply.value += buf.readUtf8()
+                    // Decoded as CHARACTERS, not as whatever bytes happened
+                    // to be buffered.
+                    //
+                    // The old loop read bytes into an okio.Buffer and called
+                    // `readUtf8()` on whatever was in it. A UTF-8 character
+                    // split across two TCP segments - and every emoji, curly
+                    // quote and accented letter is multi-byte - was decoded
+                    // half at a time: the first half became U+FFFD and the
+                    // continuation bytes were eaten, so the owner saw "?" in
+                    // place of the character at every chunk boundary.
+                    //
+                    // `charStream()` is an InputStreamReader, which keeps the
+                    // trailing incomplete byte sequence and finishes decoding
+                    // it when the rest of it arrives. It still streams: its
+                    // `read` returns as soon as it has at least one character
+                    // rather than waiting for the array to fill.
+                    val reader = resp.body?.charStream() ?: return@use
+                    val chunk = CharArray(CHUNK)
+                    // Accumulated in a StringBuilder rather than with
+                    // `_reply.value += ...`. That `+=` copied the entire reply
+                    // so far for every token that arrived - quadratic in the
+                    // length of the answer - and woke a Compose recomposition
+                    // on each one. A long reply spent most of its time copying
+                    // itself.
+                    val acc = StringBuilder()
+                    var shownAt = 0L
+                    while (true) {
+                        // Blocking reads never suspend, so nothing here would
+                        // otherwise notice that the coroutine is gone. `closer`
+                        // above makes the read itself fail on cancellation;
+                        // this catches the case where cancellation lands
+                        // between two reads, before another byte is written
+                        // into a reply nobody is waiting for.
+                        io.ensureActive()
+                        val n = reader.read(chunk)
+                        if (n < 0) break
+                        if (n == 0) continue
+                        acc.appendRange(chunk, 0, n)
+                        // Published as it arrives - the whole reason the body
+                        // is chunked is so the reply appears as it is written -
+                        // but at most every PUBLISH_MS. Token-by-token that is
+                        // still ~20 updates a second, which reads as smooth
+                        // typing, while a burst of tiny chunks no longer costs
+                        // one full string copy and one recomposition each.
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - shownAt >= PUBLISH_MS) {
+                            shownAt = now
+                            _reply.value = acc.toString()
+                        }
                     }
+                    // The last chunk is almost always inside the throttle
+                    // window, so without this the tail of every reply would be
+                    // missing from the screen until the next message.
+                    _reply.value = acc.toString()
                     // Captured before anything else can replace the shared
                     // flow, so the caller gets its own answer rather than
                     // whatever is in there when it happens to look.
-                    mine = _reply.value
+                    mine = acc.toString()
                 }
             } catch (ce: CancellationException) {
                 throw ce
@@ -99,6 +174,8 @@ class ChatSession(private val api: JarvisApi) {
                     _error.value = t.message ?: "The reply stopped unexpectedly."
                 }
             } finally {
+                // Nothing left to cancel on; the read is over either way.
+                closer.cancel()
                 // Only when this call is still the current one.
                 //
                 // `send` begins by cancelling the previous call, and the loser
@@ -126,6 +203,16 @@ class ChatSession(private val api: JarvisApi) {
 
     private companion object {
         const val TAG = "JarvisChat"
-        const val CHUNK = 8L * 1024L
+
+        /** Characters per read now, not bytes - see the decode note in [send]. */
+        const val CHUNK = 8 * 1024
+
+        /**
+         * Slowest the reply is allowed to visibly grow, in milliseconds. Small
+         * enough that generation still looks like typing; large enough that a
+         * fast local model cannot make the UI publish a fresh copy of the whole
+         * reply for every token.
+         */
+        const val PUBLISH_MS = 50L
     }
 }

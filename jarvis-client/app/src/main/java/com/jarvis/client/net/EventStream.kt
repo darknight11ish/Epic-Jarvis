@@ -179,7 +179,17 @@ class EventStream(private val api: JarvisApi) {
                 trySend(Signal.Open(null))
 
                 body.charStream().buffered().use { reader ->
-                    SseParser.parse(reader, onAlive = { trySend(Signal.Alive) }) { event ->
+                    SseParser.parse(
+                        reader,
+                        onAlive = { trySend(Signal.Alive) },
+                        // A `retry:` no longer has to ride on a frame that also
+                        // carried data. The parser used to dispatch a synthetic
+                        // event for a lone `retry:` line purely so the value
+                        // arrived here; now it reports it directly, and the
+                        // clamp is the same one applied below and for the same
+                        // reasons.
+                        onRetry = { retryMs = it.coerceIn(MIN_RETRY_MS, MAX_BACKOFF_MS) },
+                    ) { event ->
                         // Clamped. `retry` comes straight off the wire and was
                         // used unchecked: 0 removed the backoff entirely, a
                         // negative walked `delay` backwards, and a huge value
@@ -194,6 +204,20 @@ class EventStream(private val api: JarvisApi) {
                                         HelloPayload.serializer(), it,
                                     )
                                 }.getOrNull()
+                            }
+                            // `hello.retryMs` is honoured, not just parsed.
+                            //
+                            // It was read off the wire and dropped: only the
+                            // SSE `retry:` field fed the backoff, so a desktop
+                            // that announces its pacing once, in its hello
+                            // frame — which is where this server puts it — was
+                            // reconnected against at this client's own guess
+                            // instead. Clamped exactly like `retry:`, because
+                            // it is the same untrusted number: 0 would remove
+                            // the backoff and a huge value would overflow the
+                            // shift in [backoff] into a negative delay.
+                            hello?.retryMs?.let {
+                                retryMs = it.coerceIn(MIN_RETRY_MS, MAX_BACKOFF_MS)
                             }
                             trySend(Signal.Open(hello))
                         }

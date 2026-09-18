@@ -188,10 +188,31 @@ class JarvisApi(
     val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
-        // No global read timeout: /api/events is held open for up to an hour and
-        // /api/chat streams for as long as the reply takes. The per-call
-        // timeouts below cover the ordinary endpoints.
-        .readTimeout(0, TimeUnit.MILLISECONDS)
+        // A READ timeout, not a call timeout, and never zero again.
+        //
+        // Zero meant "wait for ever between bytes", and this client serves the
+        // three slow POSTs — /api/chat, /api/voice/utterance, /api/voice/say.
+        // A desktop that accepts the POST and then wedges (Whisper stuck, TTS
+        // hung, Wi-Fi gone half-open so no FIN ever arrives) left the call
+        // parked for the life of the process: an IO thread and a socket pinned,
+        // and `ChatSession._streaming` stuck true, so the composer showed
+        // "Stop" for ever with nothing to stop.
+        //
+        // It must be a read timeout because a read timeout measures SILENCE,
+        // not duration. A chat reply that takes four minutes to write is
+        // perfectly normal and a `callTimeout` — which bounds the whole call,
+        // body included — would cut it off mid-sentence. This clock instead
+        // restarts on every byte delivered, so a stream that is still producing
+        // text is never killed and one that has gone quiet fails and unwinds.
+        //
+        // 120s is deliberately generous: a local model loading weights from
+        // disk, or CPU Whisper chewing on a long utterance, can genuinely say
+        // nothing for a minute before the first byte. Two full minutes of
+        // silence is a wedge, not slowness.
+        //
+        // /api/events is NOT covered by this: [streamClient] overrides it with
+        // the tighter keepalive-based 90s, and [shortCall] overrides it too.
+        .readTimeout(120, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -211,8 +232,9 @@ class JarvisApi(
      * 90s is four missed keepalives at the server's ~20s cadence, so a desktop
      * with nothing to say is never mistaken for a dead one, while a genuinely
      * dead socket now fails its read, reconnects through the normal backoff,
-     * and clears itself. Deliberately not applied to [client]: `/api/chat`
-     * streams for as long as a reply takes and has no keepalive to pace it.
+     * and clears itself. This 90s is deliberately not applied to [client]:
+     * `/api/chat` streams for as long as a reply takes and has no keepalive to
+     * pace it, so it gets the looser 120s silence limit set above instead.
      */
     val streamClient: OkHttpClient = client.newBuilder()
         .readTimeout(90, TimeUnit.SECONDS)
@@ -422,9 +444,11 @@ class JarvisApi(
      * resampler in the most exposed code it has: these are bytes from the
      * network arriving *before* the gate.
      *
-     * Uses the long-timeout client. Verification and transcription happen
-     * before the response, and a few seconds of audio through a CPU Whisper is
-     * not a short call.
+     * Uses the general [client], whose read timeout is the generous one rather
+     * than [shortCall]'s 15s. Verification and transcription happen before the
+     * response, and a few seconds of audio through a CPU Whisper is not a short
+     * call. (This comment used to say "long-timeout client" while that client
+     * had NO timeout at all — a stuck Whisper hung the call for ever.)
      */
     suspend fun utterance(
         wav: ByteArray,

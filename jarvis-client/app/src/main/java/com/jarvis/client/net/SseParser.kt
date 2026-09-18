@@ -34,6 +34,16 @@ object SseParser {
          * dead after 70 seconds.
          */
         onAlive: () -> Unit = {},
+        /**
+         * Called with a `retry:` value the moment the field is read, rather
+         * than when a frame is dispatched.
+         *
+         * Per the spec `retry` re-times reconnection immediately and is not
+         * itself a reason to dispatch anything, and a server is free to send it
+         * on its own before any data. Reporting it here is what lets the
+         * dispatch below insist on real data without losing the value.
+         */
+        onRetry: (Long) -> Unit = {},
         onEvent: (SseEvent) -> Unit,
     ) {
         var id: String? = null
@@ -57,7 +67,15 @@ object SseParser {
                 // budget", and it was dropped whole: no refresh, no `id`
                 // advance, and the keepalive watchdog counted a live frame as
                 // silence.
-                if (sawData || retry != null) {
+                // `sawData` alone. A lone `retry:` frame is NOT a dispatch
+                // trigger in the spec, and treating it as one invented an
+                // event: no data, so `kind` stayed at its default "message",
+                // and `id` is sticky, so the synthetic frame carried the
+                // PREVIOUS frame's id — which downstream logged as an
+                // unhandled event kind and could re-persist an old resume
+                // point. The value itself is not lost: [onRetry] has already
+                // reported it.
+                if (sawData) {
                     val parsed = runCatching {
                         JarvisJson.parseToJsonElement(data.toString())
                     }.getOrNull()
@@ -82,7 +100,12 @@ object SseParser {
             when (field) {
                 "id" -> id = value
                 "event" -> kind = value
-                "retry" -> retry = value.toLongOrNull()
+                // Reported as soon as it is read, because a `retry:` that
+                // shares a frame with no data still has to reach the backoff.
+                "retry" -> {
+                    retry = value.toLongOrNull()
+                    retry?.let(onRetry)
+                }
                 "data" -> {
                     if (sawData) data.append('\n')
                     sawData = true
