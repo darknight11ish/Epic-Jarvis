@@ -75,8 +75,10 @@ sources: Gradle reports `NO-SOURCE` and exits 0 for a module with no tests, so a
 green check is otherwise compatible with nothing having run. On a compile
 failure the workflow reprints the Kotlin diagnostics at the end of the log.
 
-**Debug builds only, and deliberately.** The app is sideloaded over adb and is
-never listed on Play, so there is no channel a release build would serve.
+**Sideloaded over adb, never listed on Play.** The published APK is the shrunk
+release build, signed with the committed debug key so it installs over any
+earlier build in place. It is published only after an emulator has installed
+and started that exact build, so a shrinker fault cannot ship green.
 
 ## Documents
 
