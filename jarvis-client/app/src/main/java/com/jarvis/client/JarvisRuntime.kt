@@ -662,7 +662,7 @@ object JarvisRuntime {
             // for a later change that reloads the appearance store - not a
             // reason to redraw anything now.
             "appearance" -> Unit
-            else -> Log.d(TAG, "unhandled event kind '$kind'")
+            else -> Log.d(TAG, "unhandled event kind '${event.kind}'")
         }
     }
 
