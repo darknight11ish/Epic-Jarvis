@@ -273,31 +273,42 @@ class SpecDriftTest {
      * The faces the spec calls `heavy` stay out, unless they now render on a
      * real shader or a real GPU mesh.
      *
-     * `tokamak`, `membrane` and `nucleus` need more than `DrawScope` to look
-     * like anything; a rasterised version is the faceted, upscaled thing the
-     * first visual audit was about. `heavy` is the spec's way of saying "a
-     * Canvas version of this would be worse than not offering it", which is
-     * a claim about `DrawScope` specifically - it says nothing about a face
-     * genuinely rendered through `android.graphics.RuntimeShader` (`nucleus`)
-     * or a real GLES 3.0 mesh via `GLSurfaceView` (`tokamak`), which is what
-     * both now do (see their own doc comments in Faces.kt, and
-     * `com.jarvis.client.face.gl`). So each is carved out by name as it
-     * earns it, not exempted as a class: `membrane` still needs the same
-     * mesh pipeline tokamak now proves out, plus its own live physics step,
-     * and stays pinned as heavy until it gets both.
+     * `heavy` and "needs more than `DrawScope`" are not the same set, which
+     * is worth being exact about since it is easy to conflate them. The spec
+     * marks exactly two faces `heavy` - `tokamak` and `nucleus` - meaning "a
+     * Canvas version of this would be worse than not offering it". `membrane`
+     * needs just as much work to offer honestly, but the spec marks it
+     * `heavy: false`; it is excluded by the OTHER guard below, `iris is the
+     * only offered face that cannot be pinned`, because what stops it is its
+     * live Verlet simulation, not its render cost.
+     *
+     * `heavy` said nothing about `DrawScope` being the only way to earn an
+     * exemption - it says a *Canvas* version is worse than not offering one,
+     * which is no longer a true statement about `nucleus`
+     * (`android.graphics.RuntimeShader`) or `tokamak` (a real GLES 3.0 mesh
+     * via `GLSurfaceView`; see their own doc comments in Faces.kt and
+     * `com.jarvis.client.face.gl`). So both are carved out by name as they
+     * earn it. That happens to exhaust the spec's entire `heavy` set, which
+     * is why this test's own "the spec should still mark something heavy"
+     * canary is checked against the RAW spec data below, not against what is
+     * left after the carve-out - the carve-out emptying out is the point of
+     * doing the work, not a sign the check has gone slack.
      */
     @Test
     fun `no face the spec marks heavy is offered, unless it now renders on a real shader`() {
-        // See the comment above: each id here is out of the heavy set it
-        // belongs to in the spec because it earned it, not because the
-        // check got looser.
-        val rendersOnARealShaderDespiteSpecFlag = setOf("nucleus", "tokamak")
-        val heavy = spec["faces"]!!.jsonArray
+        val specHeavy = spec["faces"]!!.jsonArray
             .map { it.jsonObject }
             .filter { it["heavy"]?.jsonPrimitive?.content == "true" }
             .map { it["id"]!!.jsonPrimitive.content }
-            .toSet() - rendersOnARealShaderDespiteSpecFlag
-        assertTrue("the spec should still mark some faces heavy", heavy.isNotEmpty())
+            .toSet()
+        assertTrue("the spec should still mark some faces heavy", specHeavy.isNotEmpty())
+
+        // See the comment above: each id here is out of the heavy set it
+        // belongs to in the spec because it earned it, not because the
+        // check got looser. Emptying this out entirely is the expected,
+        // fully-earned end state, not a bug in the guard.
+        val rendersOnARealShaderDespiteSpecFlag = setOf("nucleus", "tokamak")
+        val heavy = specHeavy - rendersOnARealShaderDespiteSpecFlag
         for (face in Faces.all) {
             assertTrue(
                 "face '${face.id}' is marked heavy in the spec and needs a shader; a canvas " +
