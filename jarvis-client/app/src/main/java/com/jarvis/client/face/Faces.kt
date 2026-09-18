@@ -288,16 +288,13 @@ object Iris : Face {
                 strokeWidth = r * 0.05f,
             )
         }
-        // The catchlight drifts, and follows the touch when there is one.
-        val look = f.ringAt
-        val lx = if (look != null) (look.x - cx) * 0.06f else sin(f.t * 0.4f) * r * 0.08f
-        val ly = if (look != null) (look.y - cy) * 0.06f else cos(f.t * 0.31f) * r * 0.06f
+        // The pupil, unchanged. It was followed by a drifting catchlight - a
+        // highlight here plus a second small offset one that tracked touch -
+        // removed to match the reactor kit's v10, which dropped the same two
+        // elements from its own Iris. No reason was given upstream for the
+        // removal; ported as a straight parity change, not because a defect
+        // was found in this port on its own.
         drawCircle(hot, r * open * 0.55f, Offset(cx, cy))
-        drawCircle(
-            lift(hot, 0.5f).copy(alpha = 0.7f),
-            r * 0.08f,
-            Offset(cx + lx - r * 0.1f, cy + ly - r * 0.1f),
-        )
     }
 }
 

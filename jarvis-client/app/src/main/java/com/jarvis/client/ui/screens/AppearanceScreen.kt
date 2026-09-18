@@ -23,6 +23,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +50,7 @@ import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalRadii
 import com.jarvis.client.ui.theme.Themes
+import kotlinx.coroutines.delay
 
 /**
  * Look — the theme, the face and the state colours.
@@ -74,6 +80,34 @@ fun AppearanceScreen(
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
+
+    // Cycle states: steps the one live preview through all eight states every
+    // four seconds, so picking colours doesn't mean tapping through them by
+    // hand. Ported from the reactor kit's solo view, where the same toggle
+    // sits next to its speed slider - this screen has no speed slider, so it
+    // sits with the preview itself instead.
+    //
+    // Reset on picking a different face, matching the kit's "resets to off
+    // whenever you open a new face": done at the pick site below, not via a
+    // LaunchedEffect keyed on face.id, so it is one direct write rather than
+    // two effects racing to agree on whose reset wins.
+    var cyclingStates by remember { mutableStateOf(false) }
+    var previewState by remember { mutableStateOf(FaceState.IDLE) }
+    LaunchedEffect(cyclingStates) {
+        if (!cyclingStates) return@LaunchedEffect
+        val states = FaceState.entries
+        while (true) {
+            delay(4_000)
+            val next = (states.indexOf(previewState) + 1) % states.size
+            previewState = states[next]
+        }
+    }
+    val pickFace: (Face) -> Unit = { picked ->
+        cyclingStates = false
+        previewState = FaceState.IDLE
+        onPickFace(picked)
+    }
+
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         TopBar("Look", onBack)
 
@@ -185,11 +219,19 @@ fun AppearanceScreen(
                             // own governor — and a phone can afford one animated
                             // surface, so it gets one.
                             FaceView(
-                                state = FaceState.IDLE,
+                                state = previewState,
                                 face = face,
                                 bindings = bindings,
                                 notches = 0,
                                 modifier = Modifier.size(160.dp),
+                            )
+                        }
+                        Gap(8)
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CycleStatesChip(
+                                active = cyclingStates,
+                                previewing = previewState,
+                                onClick = { cyclingStates = !cyclingStates },
                             )
                         }
                         Gap(12)
@@ -197,7 +239,7 @@ fun AppearanceScreen(
                             Faces.all.chunked(3).forEach { row ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     row.forEach { f ->
-                                        FaceChip(f, f.id == face.id) { onPickFace(f) }
+                                        FaceChip(f, f.id == face.id) { pickFace(f) }
                                     }
                                 }
                             }
@@ -374,6 +416,34 @@ private fun FaceChip(face: Face, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .clip(shape)
             .background(if (selected) accent else chrome.surface2)
+            .pressable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+    )
+}
+
+/**
+ * Steps the preview above through all eight states on its own, four seconds
+ * apart, so trying out colours doesn't mean tapping through them by hand. The
+ * label names whichever state is currently showing once running, since that
+ * is the one piece of information a glance at the chip cannot otherwise give.
+ */
+@Composable
+private fun CycleStatesChip(active: Boolean, previewing: FaceState, onClick: () -> Unit) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val shape = LocalRadii.current.chipShape
+    val label = if (active) {
+        "Cycling · " + previewing.name.lowercase().replaceFirstChar { it.uppercase() }
+    } else {
+        "Cycle states"
+    }
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (active) chrome.surface0 else chrome.textMid,
+        modifier = Modifier
+            .clip(shape)
+            .background(if (active) accent else chrome.surface2)
             .pressable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 9.dp),
     )
