@@ -98,6 +98,63 @@ def t_the_tool_branch_calls_run_local_turn_with_the_enabled_tools_whitelist():
           "announce=" in src and "_activity(" in src)
 
 
+def t_a_run_local_turn_failure_after_headers_are_sent_still_reaches_the_client():
+    """The bug this guards against: once the tool branch sends its 200 and
+    sets `_headers_sent = True`, the generic `except Exception` far below
+    that would normally explain an unreachable Ollama can never fire usefully
+    - `_send()` sees `_headers_sent` and just cuts the connection instead of
+    writing the 503 body. Before this test existed, only the socket-drop
+    exceptions were caught around `run_local_turn(...)`; anything else (a
+    connection refused, a bug in the tool loop) left the client with a dead
+    stream and no explanation. The fix is a broader `except Exception` in
+    that same try that writes a `{"error": ...}` line - the exact shape
+    main.js's `consumeLine`/`routeFromPayload` handling already renders via
+    `showError()` - before giving up."""
+    if missing("jarvis_hud.py"):
+        return check("SKIP - " + explain(), True)
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    do_post = [n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == "do_POST"][0]
+    run_calls = [n for n in ast.walk(do_post) if isinstance(n, ast.Call)
+                 and ast.unparse(n.func) == "jarvis_agent.run_local_turn"]
+    check("found exactly one run_local_turn call", len(run_calls) == 1, repr(len(run_calls)))
+    if not run_calls:
+        return
+    call = run_calls[0]
+    # Walk up from the call to the nearest enclosing Try node, then confirm
+    # it has a handler broader than just the socket-drop tuple.
+    parents = {}
+    for node in ast.walk(do_post):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+    node = call
+    enclosing_try = None
+    while node in parents:
+        node = parents[node]
+        if isinstance(node, ast.Try):
+            enclosing_try = node
+            break
+    check("the run_local_turn call sits inside a try block", enclosing_try is not None)
+    if enclosing_try is None:
+        return
+    handler_types = []
+    broad_handler = None
+    for h in enclosing_try.handlers:
+        t = "bare except" if h.type is None else ast.unparse(h.type)
+        handler_types.append(t)
+        if t in ("Exception", "BaseException", "bare except"):
+            broad_handler = h
+    check("there is a handler broader than the socket-drop tuple "
+          "(a bare Exception, not just BrokenPipeError/ConnectionResetError/...)",
+          broad_handler is not None, repr(handler_types))
+    if broad_handler is None:
+        return
+    handler_src = ast.unparse(broad_handler)
+    check("that broad handler writes something back to the client rather than "
+          "just returning silently",
+          "self.wfile.write" in handler_src, handler_src)
+
+
 def t_tools_are_never_offered_on_a_non_local_lane():
     """Re-derive use_tools by hand from the two conditions it is built from,
     for a lane that is NOT local_model, and confirm the real assignment's
@@ -124,6 +181,7 @@ if __name__ == "__main__":
                t_the_degrade_loop_is_skipped_when_tools_are_in_play,
                t_the_plain_relay_path_still_exists_unconditionally_reachable,
                t_the_tool_branch_calls_run_local_turn_with_the_enabled_tools_whitelist,
+               t_a_run_local_turn_failure_after_headers_are_sent_still_reaches_the_client,
                t_tools_are_never_offered_on_a_non_local_lane):
         print(f"\n--- {fn.__name__} ---")
         try:

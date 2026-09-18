@@ -267,7 +267,7 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
     actor = act or _default_act
     tell = announce or (lambda _text: None)
 
-    done, remaining = [], list(p.steps)
+    done = []
     for i, step in enumerate(p.steps, 1):
         tell(f"Step {i}/{len(p.steps)}: {step.action} \"{step.control}\" "
              f"in {step.window}")

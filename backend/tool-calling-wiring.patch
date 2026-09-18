@@ -1,5 +1,5 @@
 --- a/jarvis_hud.py	2026-09-18 00:15:30.859049983 +0000
-+++ b/jarvis_hud.py	2026-09-18 00:19:55.474257710 +0000
++++ b/jarvis_hud.py	2026-09-18 00:47:30.839620098 +0000
 @@ -2724,10 +2724,31 @@
          lane = decision.lane
          upstream = None
@@ -36,7 +36,7 @@
              try:
                  upstream = _open(lane)
                  break
-@@ -2812,38 +2833,72 @@
+@@ -2812,38 +2833,93 @@
          try:
              if first_error is not None:
                  raise first_error
@@ -94,6 +94,27 @@
 +                    # nobody reading the result. Accepted for this first
 +                    # pass; the plain-relay branch's cancellation trick does
 +                    # not translate directly to a multi-request loop.
++                    return
++                except Exception as exc:
++                    # Anything else - Ollama refusing the connection, a bug
++                    # in the tool loop itself - used to reach the generic
++                    # `except Exception` far below and try to send a 503.
++                    # That message never arrived: headers here are already
++                    # committed (line above), and `_send()` sees
++                    # `_headers_sent` and just cuts the connection, so the
++                    # client learned nothing happened. main.js already
++                    # understands a mid-stream `{"error": ...}` line
++                    # (`if (chunk.error) showError(...)`) - the same shape
++                    # jarvis_router.py's own degrade path relies on - so
++                    # write one instead of leaving the client to guess.
++                    message = (
++                        f"Ollama is not answering on {OLLAMA_URL}. "
++                        f"Start it with `ollama serve`. ({exc})")
++                    try:
++                        self.wfile.write(json.dumps({"error": message}).encode("utf-8") + b"\n")
++                        self.wfile.flush()
++                    except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
++                        pass
                      return
 +            else:
 +                with upstream:

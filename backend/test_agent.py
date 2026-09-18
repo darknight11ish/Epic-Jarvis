@@ -98,7 +98,7 @@ def t_no_tool_call_streams_straight_through():
 def t_a_denied_tool_never_executes():
     executed = []
     real = AG.TOOLS["shell_exec"].execute
-    AG.TOOLS["shell_exec"].execute = lambda args, **kw: executed.append(args) or {"ok": True}
+    AG.TOOLS["shell_exec"].execute = lambda args, state, **kw: executed.append(args) or {"ok": True}
     try:
         responses = [
             {"choices": [{"message": {"role": "assistant", "tool_calls": [
@@ -122,7 +122,7 @@ def t_a_denied_tool_never_executes():
 
 def t_an_approved_tool_actually_runs_and_feeds_back_the_result():
     real = AG.TOOLS["calculator"].execute
-    AG.TOOLS["calculator"].execute = lambda args, **kw: {"ok": True, "value": 4}
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True, "value": 4}
     try:
         responses = [
             {"choices": [{"message": {"role": "assistant", "tool_calls": [
@@ -192,7 +192,7 @@ def t_calculator_cannot_reach_names_or_calls():
 def t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call():
     executed = []
     real = AG.TOOLS["shell_exec"].execute
-    AG.TOOLS["shell_exec"].execute = lambda args, **kw: executed.append(args) or {"ok": True}
+    AG.TOOLS["shell_exec"].execute = lambda args, state, **kw: executed.append(args) or {"ok": True}
     try:
         seen_bodies = []
         # The model tries shell_exec even though it was never offered - a
@@ -246,7 +246,7 @@ def t_max_rounds_stops_an_infinite_tool_loop():
             {"id": "1", "function": {"name": "calculator",
              "arguments": json.dumps({"expression": "1"})}}]}}]}
     real = AG.TOOLS["calculator"].execute
-    AG.TOOLS["calculator"].execute = lambda args, **kw: {"ok": True, "value": 1}
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True, "value": 1}
     try:
         with NoRealIO():
             AG.run_local_turn(

@@ -1995,12 +1995,20 @@ What's actually in `jarvis_agent.py` now, because each one reuses
 configure: `calculator` (auto), `memory_search` (auto, read-only, over the
 real `jarvis_memory.py`), `file_read` (`read_files_readonly`), `shell_exec`
 (`run_shell_on_host`, tier `ask`), and one tool each for the three modules
-built earlier this session - `control_computer` (native UI control, reuses
-the existing `control_computer` action), `control_phone` (adb, the new
-`control_phone` action from `ui-control-wiring.patch`), and `github_search`
-(wraps `jarvis_research.py`, resolving to `web_research` or
-`research_authenticated` depending on whether a token is configured *at the
-moment the call actually runs* - not decided by the model). Deliberately
+built earlier this session - `control_computer` (native UI control, resolves
+to the `jarvis_ui_control_run` action added by `ui-control-wiring.patch`),
+`control_phone` (adb, resolves to `jarvis_android_control_run`, added by the
+same patch), and `github_search` (wraps `jarvis_research.py`, resolving to
+`jarvis_research_run` or `jarvis_research_run_authenticated` depending on
+whether a token is configured *at the moment the call actually runs* - not
+decided by the model). These three model-facing names deliberately differ
+from the actual `jarvis_gate` action keys - see `Tool.gate_lookup_name` in
+`jarvis_agent.py`'s own docstring for why a static match on `name` was not
+enough, and `test_agent.py`'s
+`t_every_tool_resolves_to_a_real_jarvis_gate_action` for the regression test
+that guards it: `action_for_tool()` does not raise on a name it does not
+recognise, it silently falls through to `"unclassified_tool"`, so a mismatch
+here would not have failed loudly on its own. Deliberately
 **not** included: a `memory_store`/`memory_manage`-style tool that would let
 the model write directly to `facts`. This project's memory system exists
 specifically so nothing reaches `facts` without a human accepting it through
@@ -2064,6 +2072,58 @@ not retry or step down the way the plain-relay path does, since
 is a correctness bug; both are the kind of thing worth knowing about before
 relying on this for anything time-sensitive.
 
+**A failure after headers are sent still reaches the client.** The tool
+branch sends its `200` and sets `_headers_sent = True` *before*
+`jarvis_agent.run_local_turn(...)` makes its own request(s) to Ollama - unlike
+the plain-relay branch, where a downed Ollama is caught by the degrade loop
+before any header goes out. The first version of this patch only caught the
+socket-drop exceptions (`BrokenPipeError`, `ConnectionResetError`, etc.)
+around that call; anything else - Ollama refusing the connection, a bug in
+the tool loop itself - fell through to the generic `except Exception` far
+below, which tries to `_send(503, ...)` a friendly message that never
+arrives, because `_send()` sees `_headers_sent` and just cuts the connection
+instead. The client learned nothing happened. Fixed by adding a second,
+broader `except Exception` around the `run_local_turn` call that writes one
+`{"error": "..."}` line straight to `self.wfile` - the exact shape
+`main.js`'s own `consumeLine`/`routeFromPayload` handling already renders via
+`showError()` (`if (chunk.error) showError(...)`), so no client change was
+needed to make use of it.
+
+**Four more findings from a self-run audit of this whole session's work,**
+fixed in `jarvis_agent.py` itself rather than in this patch:
+
+- A tool call is now built once, at the moment the approval card is shown,
+  not re-derived at execution time. `control_computer`/`control_phone`/
+  `github_search` each read live, mutable state to build their `Plan` (a
+  window's current controls, a phone's current screen, whether a token is
+  configured) - re-reading that state a second time at execute() could let
+  the steps that actually run differ from the ones a human approved, which
+  is exactly what `docs/ARCHITECTURE.md`'s "run() executes an approved plan"
+  contract exists to prevent. Fixed by splitting each `Tool` into
+  `prepare(args) -> (state, description_text)`, run once before the gate
+  decision, and `execute(args, state, **kwargs)`, which receives that same
+  `state` back rather than recomputing it.
+- `github_search`'s approval card used to show a generic
+  `"Search GitHub about: {...}"` line instead of `jarvis_research.describe()`
+  - the same disclosure every other capability's card gets (auth state,
+    licence risk, what will actually run). Fixed as part of the same
+  restructure above.
+- `_gate_check` only wrapped the `import jarvis_gate` line in try/except; a
+  raise from `jarvis_gate.check()` itself would have propagated instead of
+  failing closed. Fixed by wrapping the whole call.
+- `_safe_eval` (the calculator's expression walker) had no bound on `Pow` -
+  `9**9**9**9**9` is a valid AST with no name and no call, so "no names, no
+  calls" alone did not make it safe, and `calculator` is tier `auto`: no
+  human ever sees a card for it before it runs. Fixed with
+  `_MAX_POW_EXPONENT`/`_MAX_POW_BASE` bounds that reject anything past them
+  before the exponentiation runs.
+
+All of `test_agent.py`, `test_research.py`, `test_ui_control.py`,
+`test_android_control.py`, `test_ollama_direct.py`, and
+`test_tool_calling_wiring.py` pass after these fixes (145 checks across the
+six files, run both standalone and, where a `JARVIS_BACKEND` copy of the real
+files was available, against the real patched source).
+
 ### Test it
 
 ```powershell
@@ -2083,9 +2143,11 @@ looping. `test_tool_calling_wiring.py` is the structural half, over the real
 patched source: `use_tools` genuinely requires both the local lane and a
 non-empty `[tools].enabled` (an `and`, checked as an `and` in the AST, not
 just as a string that happens to appear), the plain-relay `else` branch is
-still there and reachable, and the tool branch actually passes
-`enabled_tools` and wires `announce` to the same `_activity()` doorbell
-everything else in this project already uses.
+still there and reachable, the tool branch actually passes `enabled_tools`
+and wires `announce` to the same `_activity()` doorbell everything else in
+this project already uses, and the `run_local_turn` call sits inside a `try`
+whose broad handler actually writes to the client rather than just
+returning - the specific regression described just above.
 
 ---
 

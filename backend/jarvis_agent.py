@@ -60,6 +60,16 @@ _ARITH_OPS = {
 }
 
 
+# calculator is tier `auto` - no human ever sees a card for it, so nothing
+# in the permission model stands between a wild exponent and this process's
+# own CPU/memory. `9**9**9**9**9` is a valid AST with no name and no call,
+# so "no names, no calls" alone does not make this tool safe - Python's
+# integers have no size limit of their own, and right-associative Pow
+# reaches an exponent in the hundreds of millions by its second step.
+_MAX_POW_EXPONENT = 1_000
+_MAX_POW_BASE = 10 ** 6
+
+
 def _safe_eval(node):
     """Arithmetic only. No names, no calls, no attribute access - the model
     cannot smuggle a call to anything through the calculator, because there
@@ -67,7 +77,13 @@ def _safe_eval(node):
     if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
         return node.value
     if isinstance(node, ast.BinOp) and type(node.op) in _ARITH_OPS:
-        return _ARITH_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+        left, right = _safe_eval(node.left), _safe_eval(node.right)
+        if isinstance(node.op, ast.Pow) and (
+                abs(right) > _MAX_POW_EXPONENT or abs(left) > _MAX_POW_BASE):
+            raise ValueError(
+                f"{left}**{right} is too large for this calculator "
+                f"(exponent over {_MAX_POW_EXPONENT} or base over {_MAX_POW_BASE})")
+        return _ARITH_OPS[type(node.op)](left, right)
     if isinstance(node, ast.UnaryOp) and type(node.op) in _ARITH_OPS:
         return _ARITH_OPS[type(node.op)](_safe_eval(node.operand))
     raise ValueError(f"not a plain arithmetic expression (got {type(node).__name__})")
@@ -122,33 +138,61 @@ def _run_shell_exec(args: dict) -> dict:
             "stdout": result.stdout[-8000:], "stderr": result.stderr[-4000:]}
 
 
-def _run_control_computer(args: dict, *, announce=None) -> dict:
+def _run_shell_exec_tool(args: dict, state, **_) -> dict:
+    return _run_shell_exec(args)
+
+
+def _prepare_control_computer(args: dict):
     try:
         import jarvis_ui_control as U
     except Exception as exc:
-        return {"ok": False, "error": f"UI control is not available here: {exc}"}
+        return None, f"Control the computer: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
     p = U.plan(str(args.get("goal", "")), str(args.get("window", "")),
                args.get("requests") or [])
-    return U.run(p, announce=announce, approved=True)
+    return p, U.describe(p)
 
 
-def _run_control_phone(args: dict, *, announce=None) -> dict:
+def _run_control_computer(args: dict, plan_obj, *, announce=None) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "UI control is not available here"}
+    import jarvis_ui_control as U
+    return U.run(plan_obj, announce=announce, approved=True)
+
+
+def _prepare_control_phone(args: dict):
     try:
         import jarvis_android_control as A
     except Exception as exc:
-        return {"ok": False, "error": f"phone control is not available here: {exc}"}
+        return None, f"Control the phone: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
     p = A.plan(str(args.get("device", "")), str(args.get("goal", "")),
                args.get("requests") or [])
-    return A.run(p, announce=announce, approved=True)
+    return p, A.describe(p)
 
 
-def _run_github_search(args: dict) -> dict:
+def _run_control_phone(args: dict, plan_obj, *, announce=None) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "phone control is not available here"}
+    import jarvis_android_control as A
+    return A.run(plan_obj, announce=announce, approved=True)
+
+
+def _prepare_github_search(args: dict):
     try:
         import jarvis_research as R
     except Exception as exc:
-        return {"ok": False, "error": f"research is not available here: {exc}"}
+        return None, f"Search GitHub about: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
     p = R.plan(str(args.get("idea", "")), args.get("capabilities") or [])
-    out = R.run(p, approved=True)
+    return p, R.describe(p)
+
+
+def _run_github_search(args: dict, plan_obj, **_) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "research is not available here"}
+    import jarvis_research as R
+    out = R.run(plan_obj, approved=True)
     if not out.get("ok"):
         return out
     return R.matrix(out)
@@ -158,6 +202,22 @@ class Tool:
     """One tool. The gate action is looked up against jarvis_gate's own
     tables (`action_for_tool`) rather than duplicated here, so the tier the
     owner sees in jarvis-framework.toml is the one true source.
+
+    `prepare(args) -> (state, description_text)` runs ONCE, before the gate
+    decision, and `execute(args, state, **kwargs)` runs ONLY if approved,
+    receiving that SAME `state` back - never a value recomputed from `args`
+    a second time. This matters for control_computer/control_phone/
+    github_search specifically: their `state` is a Plan built by reading
+    live, mutable state (a window's current controls, a phone's current
+    screen, whether a token happens to be configured right now). Recomputing
+    it at execute() time - the original shape of this module, before this
+    was found and fixed - would mean the steps that actually run can differ
+    from the ones the approval card showed and a human approved, which is
+    exactly the gap docs/ARCHITECTURE.md's "run() executes an approved plan"
+    contract, and jarvis_ui_control.run()'s own re-verify-every-step logic,
+    both exist to close. `state` is `None` for tools with nothing to plan
+    (calculator, memory_search, file_read, shell_exec) - they just re-read
+    `args`.
 
     `gate_lookup_name`, when given, is the name PASSED to
     `jarvis_gate.action_for_tool()` - which may differ from `name` (the one
@@ -172,13 +232,13 @@ class Tool:
     """
 
     def __init__(self, name: str, description: str, parameters: dict,
-                 build_plan_text: Callable[[dict], str],
+                 prepare: Callable[[dict], tuple],
                  execute: Callable[..., dict], needs_announce: bool = False,
                  gate_lookup_name: Optional[Callable[[dict], str]] = None):
         self.name = name
         self.description = description
         self.parameters = parameters
-        self.build_plan_text = build_plan_text
+        self.prepare = prepare
         self.execute = execute
         self.needs_announce = needs_announce
         self.gate_lookup_name = gate_lookup_name
@@ -189,8 +249,8 @@ class Tool:
             "parameters": self.parameters}}
 
 
-def _plain_text(label: str) -> Callable[[dict], str]:
-    return lambda args: f"{label}: {json.dumps(args, ensure_ascii=False)}"
+def _plain_prepare(label: str) -> Callable[[dict], tuple]:
+    return lambda args: (None, f"{label}: {json.dumps(args, ensure_ascii=False)}")
 
 
 TOOLS: dict = {
@@ -198,27 +258,28 @@ TOOLS: dict = {
         "calculator", "Evaluate a plain arithmetic expression.",
         {"type": "object", "properties": {
             "expression": {"type": "string"}}, "required": ["expression"]},
-        _plain_text("Evaluate"), lambda args, **_: _run_calculator(args)),
+        _plain_prepare("Evaluate"), lambda args, state, **_: _run_calculator(args)),
     "memory_search": Tool(
         "memory_search", "Search what Jarvis has been told and remembers.",
         {"type": "object", "properties": {
             "query": {"type": "string"},
             "k": {"type": "integer", "description": "how many facts, default 5"}},
          "required": ["query"]},
-        _plain_text("Search memory for"), lambda args, **_: _run_memory_search(args)),
+        _plain_prepare("Search memory for"),
+        lambda args, state, **_: _run_memory_search(args)),
     "file_read": Tool(
         "file_read", "Read a local text file.",
         {"type": "object", "properties": {
             "path": {"type": "string"}}, "required": ["path"]},
-        lambda args: f"Read the file: {args.get('path', '')}",
-        lambda args, **_: _run_file_read(args)),
+        lambda args: (None, f"Read the file: {args.get('path', '')}"),
+        lambda args, state, **_: _run_file_read(args)),
     "shell_exec": Tool(
         "shell_exec", "Run one shell command on this machine and return its output.",
         {"type": "object", "properties": {
             "command": {"type": "string"},
             "timeout_seconds": {"type": "number"}}, "required": ["command"]},
-        lambda args: f"Run this command:\n\n    {args.get('command', '')}",
-        lambda args, **_: _run_shell_exec(args)),
+        lambda args: (None, f"Run this command:\n\n    {args.get('command', '')}"),
+        _run_shell_exec_tool),
     "control_computer": Tool(
         "control_computer",
         "Click or type inside another Windows program, by naming its "
@@ -234,8 +295,8 @@ TOOLS: dict = {
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean"}}}}},
          "required": ["goal", "window", "requests"]},
-        lambda args: _describe_control_computer(args),
-        lambda args, **kw: _run_control_computer(args, announce=kw.get("announce")),
+        _prepare_control_computer,
+        lambda args, state, **kw: _run_control_computer(args, state, announce=kw.get("announce")),
         needs_announce=True,
         # "control_computer" is a friendlier name for the model than the
         # actual jarvis_gate key ("jarvis_ui_control_run") this maps to -
@@ -259,8 +320,8 @@ TOOLS: dict = {
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean"}}}}},
          "required": ["device", "goal", "requests"]},
-        lambda args: _describe_control_phone(args),
-        lambda args, **kw: _run_control_phone(args, announce=kw.get("announce")),
+        _prepare_control_phone,
+        lambda args, state, **kw: _run_control_phone(args, state, announce=kw.get("announce")),
         needs_announce=True,
         gate_lookup_name=lambda args: "jarvis_android_control_run"),
     "github_search": Tool(
@@ -272,7 +333,7 @@ TOOLS: dict = {
             "idea": {"type": "string"},
             "capabilities": {"type": "array", "items": {"type": "string"}}},
          "required": ["idea"]},
-        _plain_text("Search GitHub about"), lambda args, **_: _run_github_search(args),
+        _prepare_github_search, _run_github_search,
         # Resolved at call time, not import time: whether a token is
         # configured can change between two calls in the same conversation,
         # and jarvis_research.py's own run() already refuses if the token
@@ -290,26 +351,6 @@ def _github_search_action_name() -> str:
     except Exception:
         pass
     return "jarvis_research_run"
-
-
-def _describe_control_computer(args: dict) -> str:
-    try:
-        import jarvis_ui_control as U
-        p = U.plan(str(args.get("goal", "")), str(args.get("window", "")),
-                   args.get("requests") or [])
-        return U.describe(p)
-    except Exception:
-        return _plain_text("Control the computer")(args)
-
-
-def _describe_control_phone(args: dict) -> str:
-    try:
-        import jarvis_android_control as A
-        p = A.plan(str(args.get("device", "")), str(args.get("goal", "")),
-                   args.get("requests") or [])
-        return A.describe(p)
-    except Exception:
-        return _plain_text("Control the phone")(args)
 
 
 # --------------------------------------------------------------------------
@@ -332,17 +373,25 @@ def _open_stream(url: str, payload: dict, timeout: float = 300.0):
 
 
 def _gate_check(action: str, detail: dict, prompt: str):
-    """Wraps jarvis_gate.check() so a machine with no gate installed fails
-    CLOSED - refused, not silently allowed - matching every other capability
-    in this project rather than inventing a softer default for this one."""
+    """Wraps jarvis_gate.check() so ANY failure here - the module missing,
+    or `check()` itself raising for a reason this function cannot predict -
+    fails CLOSED, refused, never silently allowed. The try/except covers the
+    whole call, not only the import: a module that can act must not turn an
+    internal error into an unguarded pass, which is the same standard
+    jarvis_gate.py's own docstring holds itself to ("if this module cannot
+    do its job it refuses rather than waving things through")."""
+    class _Refused:
+        def __init__(self, reason):
+            self.allowed = False
+            self.reason = reason
     try:
         import jarvis_gate
     except Exception as exc:
-        class _Refused:
-            allowed = False
-            reason = f"the approval gate is not available here ({exc}); refusing"
-        return _Refused()
-    return jarvis_gate.check(action, detail, prompt=prompt)
+        return _Refused(f"the approval gate is not available here ({exc}); refusing")
+    try:
+        return jarvis_gate.check(action, detail, prompt=prompt)
+    except Exception as exc:
+        return _Refused(f"the approval gate raised {type(exc).__name__}: {exc}; refusing")
 
 
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
@@ -407,7 +456,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
                 except Exception:
                     pass
-                plan_text = tool.build_plan_text(args)
+                state, plan_text = tool.prepare(args)
                 verdict = checker(action_name, {"text": plan_text},
                                    f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
                 if not getattr(verdict, "allowed", False):
@@ -418,7 +467,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                         announce(f"Using {name}...")
                     kwargs = {"announce": announce} if tool.needs_announce else {}
                     try:
-                        result = tool.execute(args, **kwargs)
+                        result = tool.execute(args, state, **kwargs)
                     except Exception as exc:
                         result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
