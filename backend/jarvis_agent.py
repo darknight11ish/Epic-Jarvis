@@ -1,0 +1,437 @@
+"""jarvis_agent.py - the tool-using chat loop, local lane only, straight to Ollama.
+
+WHAT THIS IS FOR
+`/api/chat`'s local lane could only ever produce plain text - the model had
+no way to check a fact, read a file, or use any of the three capabilities
+built this session (jarvis_ui_control.py, jarvis_android_control.py,
+jarvis_research.py). This module is the missing loop: it hands Ollama a set
+of tools, and when the model asks to use one, gates it through
+jarvis_gate.check() - the exact same module and the exact same four-step
+shape (plan/describe/gate/run) as everything else in this project - before
+ever running it.
+
+LOCAL ONLY, ON PURPOSE
+This is never called for a cloud lane. Every tool here either reads this
+machine (files, memory) or acts on it (a shell, this computer's UI, the
+paired phone) - rule 1 of this project's own invariants is that anything
+private stays on the local model, and a tool result handed to a cloud
+provider is exactly the kind of leak that rule exists to prevent. Wiring
+this in is the caller's job (see ollama-direct.patch's own docstring
+section); this module refuses nothing about being called from elsewhere, but
+nothing here decides that on its own either.
+
+WHAT WAS DELIBERATELY LEFT OUT, AND WHY
+See backend/README.md's own section on this - browser automation, Docker-
+based execution, connectors and general web search were all excluded from
+this pass with specific reasons; a memory_store tool that writes directly
+to `facts` was excluded on purpose because this project's memory system
+exists specifically so nothing reaches `facts` without a human accepting it
+through the review queue, and a chat-time tool would reopen that hole.
+
+TESTING WITHOUT A REAL BACKEND
+Every tool's actual execution and every call to jarvis_gate are behind
+try/except ImportError fallbacks and an injectable `post` (the Ollama HTTP
+call) - the loop's own control flow (call model, see tool_calls, gate each
+one, feed results back, stop when the model stops asking) is provable with
+a scripted fake model and a fake gate, same shape as jarvis_research.py's
+`fetch` injection.
+"""
+
+from __future__ import annotations
+
+import ast
+import json
+import operator
+import urllib.request
+from typing import Callable, Optional
+
+
+# --------------------------------------------------------------------------
+#   Tools - each one's ACTION NAME matches an entry jarvis_gate.py already
+#   knows a tier for. Adding a tool here never requires a gate change unless
+#   the action genuinely does not exist yet.
+# --------------------------------------------------------------------------
+
+_ARITH_OPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv,
+    ast.Pow: operator.pow, ast.Mod: operator.mod,
+    ast.USub: operator.neg, ast.UAdd: operator.pos,
+}
+
+
+def _safe_eval(node):
+    """Arithmetic only. No names, no calls, no attribute access - the model
+    cannot smuggle a call to anything through the calculator, because there
+    is nothing here that resolves a name to a function at all."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _ARITH_OPS:
+        return _ARITH_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _ARITH_OPS:
+        return _ARITH_OPS[type(node.op)](_safe_eval(node.operand))
+    raise ValueError(f"not a plain arithmetic expression (got {type(node).__name__})")
+
+
+def _run_calculator(args: dict) -> dict:
+    expr = str(args.get("expression", ""))
+    try:
+        value = _safe_eval(ast.parse(expr, mode="eval").body)
+    except Exception as exc:
+        return {"ok": False, "error": f"could not evaluate {expr!r}: {exc}"}
+    return {"ok": True, "value": value}
+
+
+def _run_memory_search(args: dict) -> dict:
+    try:
+        import jarvis_memory
+    except Exception as exc:
+        return {"ok": False, "error": f"memory is not available here: {exc}"}
+    query = str(args.get("query", ""))
+    k = max(1, min(20, int(args.get("k", 5) or 5)))
+    hits = jarvis_memory.store().search(query, k=k)
+    return {"ok": True, "facts": [{"id": h.get("id"), "text": h.get("text")} for h in hits]}
+
+
+_MAX_FILE_READ_BYTES = 200_000
+
+
+def _run_file_read(args: dict) -> dict:
+    path = str(args.get("path", ""))
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            data = f.read(_MAX_FILE_READ_BYTES + 1)
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+    truncated = len(data) > _MAX_FILE_READ_BYTES
+    return {"ok": True, "content": data[:_MAX_FILE_READ_BYTES], "truncated": truncated}
+
+
+def _run_shell_exec(args: dict) -> dict:
+    import subprocess
+    command = str(args.get("command", ""))
+    if not command.strip():
+        return {"ok": False, "error": "empty command"}
+    try:
+        result = subprocess.run(
+            command, shell=True, capture_output=True, text=True,
+            timeout=max(1.0, min(120.0, float(args.get("timeout_seconds", 30) or 30))))
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": result.returncode == 0, "returncode": result.returncode,
+            "stdout": result.stdout[-8000:], "stderr": result.stderr[-4000:]}
+
+
+def _run_control_computer(args: dict, *, announce=None) -> dict:
+    try:
+        import jarvis_ui_control as U
+    except Exception as exc:
+        return {"ok": False, "error": f"UI control is not available here: {exc}"}
+    p = U.plan(str(args.get("goal", "")), str(args.get("window", "")),
+               args.get("requests") or [])
+    return U.run(p, announce=announce, approved=True)
+
+
+def _run_control_phone(args: dict, *, announce=None) -> dict:
+    try:
+        import jarvis_android_control as A
+    except Exception as exc:
+        return {"ok": False, "error": f"phone control is not available here: {exc}"}
+    p = A.plan(str(args.get("device", "")), str(args.get("goal", "")),
+               args.get("requests") or [])
+    return A.run(p, announce=announce, approved=True)
+
+
+def _run_github_search(args: dict) -> dict:
+    try:
+        import jarvis_research as R
+    except Exception as exc:
+        return {"ok": False, "error": f"research is not available here: {exc}"}
+    p = R.plan(str(args.get("idea", "")), args.get("capabilities") or [])
+    out = R.run(p, approved=True)
+    if not out.get("ok"):
+        return out
+    return R.matrix(out)
+
+
+class Tool:
+    """One tool. The gate action is looked up against jarvis_gate's own
+    tables (`action_for_tool`) rather than duplicated here, so the tier the
+    owner sees in jarvis-framework.toml is the one true source.
+
+    `gate_lookup_name`, when given, is the name PASSED to
+    `jarvis_gate.action_for_tool()` - which may differ from `name` (the one
+    the model sees) for two reasons: `action_for_tool` needs the EXACT key
+    registered in jarvis_gate's own `_TOOL_ACTIONS` (getting this wrong does
+    not raise - it silently falls through to "unclassified_tool", which
+    still asks by default but loses the specific risk text the real action
+    carries), and some tools resolve to a DIFFERENT action depending on
+    runtime state (github_search: authenticated or not), which a static
+    name cannot express. Omitted, `name` itself is used - correct for every
+    tool here whose model-facing name already IS its jarvis_gate key.
+    """
+
+    def __init__(self, name: str, description: str, parameters: dict,
+                 build_plan_text: Callable[[dict], str],
+                 execute: Callable[..., dict], needs_announce: bool = False,
+                 gate_lookup_name: Optional[Callable[[dict], str]] = None):
+        self.name = name
+        self.description = description
+        self.parameters = parameters
+        self.build_plan_text = build_plan_text
+        self.execute = execute
+        self.needs_announce = needs_announce
+        self.gate_lookup_name = gate_lookup_name
+
+    def schema(self) -> dict:
+        return {"type": "function", "function": {
+            "name": self.name, "description": self.description,
+            "parameters": self.parameters}}
+
+
+def _plain_text(label: str) -> Callable[[dict], str]:
+    return lambda args: f"{label}: {json.dumps(args, ensure_ascii=False)}"
+
+
+TOOLS: dict = {
+    "calculator": Tool(
+        "calculator", "Evaluate a plain arithmetic expression.",
+        {"type": "object", "properties": {
+            "expression": {"type": "string"}}, "required": ["expression"]},
+        _plain_text("Evaluate"), lambda args, **_: _run_calculator(args)),
+    "memory_search": Tool(
+        "memory_search", "Search what Jarvis has been told and remembers.",
+        {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "k": {"type": "integer", "description": "how many facts, default 5"}},
+         "required": ["query"]},
+        _plain_text("Search memory for"), lambda args, **_: _run_memory_search(args)),
+    "file_read": Tool(
+        "file_read", "Read a local text file.",
+        {"type": "object", "properties": {
+            "path": {"type": "string"}}, "required": ["path"]},
+        lambda args: f"Read the file: {args.get('path', '')}",
+        lambda args, **_: _run_file_read(args)),
+    "shell_exec": Tool(
+        "shell_exec", "Run one shell command on this machine and return its output.",
+        {"type": "object", "properties": {
+            "command": {"type": "string"},
+            "timeout_seconds": {"type": "number"}}, "required": ["command"]},
+        lambda args: f"Run this command:\n\n    {args.get('command', '')}",
+        lambda args, **_: _run_shell_exec(args)),
+    "control_computer": Tool(
+        "control_computer",
+        "Click or type inside another Windows program, by naming its "
+        "on-screen controls. Reads the target window first; a control that "
+        "cannot be found is reported, not guessed at.",
+        {"type": "object", "properties": {
+            "goal": {"type": "string"},
+            "window": {"type": "string", "description": "the exact window title"},
+            "requests": {"type": "array", "items": {"type": "object", "properties": {
+                "control": {"type": "string"}, "action": {"type": "string",
+                    "enum": ["click", "type", "select", "read"]},
+                "value": {"type": "string"}, "why": {"type": "string"},
+                "irreversible": {"type": "boolean"},
+                "leaves_machine": {"type": "boolean"}}}}},
+         "required": ["goal", "window", "requests"]},
+        lambda args: _describe_control_computer(args),
+        lambda args, **kw: _run_control_computer(args, announce=kw.get("announce")),
+        needs_announce=True,
+        # "control_computer" is a friendlier name for the model than the
+        # actual jarvis_gate key ("jarvis_ui_control_run") this maps to -
+        # see ui-control-wiring.patch's own _TOOL_ACTIONS entry.
+        gate_lookup_name=lambda args: "jarvis_ui_control_run"),
+    "control_phone": Tool(
+        "control_phone",
+        "Tap, swipe, type, press a key, or take a screenshot on the "
+        "owner's own paired Android phone over adb.",
+        {"type": "object", "properties": {
+            "device": {"type": "string"},
+            "goal": {"type": "string"},
+            "requests": {"type": "array", "items": {"type": "object", "properties": {
+                "action": {"type": "string",
+                    "enum": ["tap", "swipe", "key", "text", "screenshot"]},
+                "x": {"type": "integer"}, "y": {"type": "integer"},
+                "x1": {"type": "integer"}, "y1": {"type": "integer"},
+                "x2": {"type": "integer"}, "y2": {"type": "integer"},
+                "key": {"type": "string"}, "value": {"type": "string"},
+                "why": {"type": "string"},
+                "irreversible": {"type": "boolean"},
+                "leaves_machine": {"type": "boolean"}}}}},
+         "required": ["device", "goal", "requests"]},
+        lambda args: _describe_control_phone(args),
+        lambda args, **kw: _run_control_phone(args, announce=kw.get("announce")),
+        needs_announce=True,
+        gate_lookup_name=lambda args: "jarvis_android_control_run"),
+    "github_search": Tool(
+        "github_search",
+        "Check whether a library or approach for a coding idea already "
+        "exists on GitHub, graded by maintenance and licence, before "
+        "building it from scratch.",
+        {"type": "object", "properties": {
+            "idea": {"type": "string"},
+            "capabilities": {"type": "array", "items": {"type": "string"}}},
+         "required": ["idea"]},
+        _plain_text("Search GitHub about"), lambda args, **_: _run_github_search(args),
+        # Resolved at call time, not import time: whether a token is
+        # configured can change between two calls in the same conversation,
+        # and jarvis_research.py's own run() already refuses if the token
+        # state changes between its plan() and run() - this only decides
+        # which action name (and therefore which tier) governs THIS call.
+        gate_lookup_name=lambda args: _github_search_action_name()),
+}
+
+
+def _github_search_action_name() -> str:
+    try:
+        import jarvis_research
+        if jarvis_research.authenticated():
+            return "jarvis_research_run_authenticated"
+    except Exception:
+        pass
+    return "jarvis_research_run"
+
+
+def _describe_control_computer(args: dict) -> str:
+    try:
+        import jarvis_ui_control as U
+        p = U.plan(str(args.get("goal", "")), str(args.get("window", "")),
+                   args.get("requests") or [])
+        return U.describe(p)
+    except Exception:
+        return _plain_text("Control the computer")(args)
+
+
+def _describe_control_phone(args: dict) -> str:
+    try:
+        import jarvis_android_control as A
+        p = A.plan(str(args.get("device", "")), str(args.get("goal", "")),
+                   args.get("requests") or [])
+        return A.describe(p)
+    except Exception:
+        return _plain_text("Control the phone")(args)
+
+
+# --------------------------------------------------------------------------
+#   The loop
+# --------------------------------------------------------------------------
+
+def _post(url: str, payload: dict, timeout: float = 300.0) -> dict:
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def _open_stream(url: str, payload: dict, timeout: float = 300.0):
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"}, method="POST")
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
+def _gate_check(action: str, detail: dict, prompt: str):
+    """Wraps jarvis_gate.check() so a machine with no gate installed fails
+    CLOSED - refused, not silently allowed - matching every other capability
+    in this project rather than inventing a softer default for this one."""
+    try:
+        import jarvis_gate
+    except Exception as exc:
+        class _Refused:
+            allowed = False
+            reason = f"the approval gate is not available here ({exc}); refusing"
+        return _Refused()
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def run_local_turn(messages: list, model: str, *, ollama_url: str,
+                    stream_out: Callable[[bytes], None],
+                    enabled_tools: Optional[set] = None,
+                    announce: Optional[Callable[[str], None]] = None,
+                    post: Optional[Callable[[str, dict], dict]] = None,
+                    gate_check: Optional[Callable[[str, dict, str], object]] = None,
+                    open_stream: Optional[Callable[[str, dict], object]] = None,
+                    max_rounds: int = 6) -> None:
+    """Drives the tool loop, then streams the final answer to `stream_out`
+    exactly as raw bytes - the same shape a plain relay would have produced,
+    so the desktop app needs no changes to render it.
+
+    `enabled_tools` is the exact set of tool names to offer the model -
+    normally `set(cfg["tools"]["enabled"])`, the same whitelist
+    collect_tools() and /api/status already read. `None` means every tool
+    in `TOOLS` (used by callers, and tests, that are not reading that
+    config); an empty set means none - the model gets no `tools` field at
+    all and can only ever answer in prose.
+
+    Each round is ONE non-streaming call to Ollama's OpenAI-compatible
+    endpoint with `tools` attached. If the model asks for a tool, every
+    call is gated through jarvis_gate.check() BEFORE it runs - approved,
+    denied or timed out all become one message fed back to the model, never
+    a bare exception. Once a round comes back with no tool call, THAT
+    response is re-requested with stream=True and relayed live - so a plain
+    question that needs no tool still ends up streamed, at the cost of one
+    extra non-streamed round trip to find that out.
+    """
+    caller = post or (lambda url, payload: _post(url, payload))
+    checker = gate_check or _gate_check
+    streamer = open_stream or (lambda url, payload: _open_stream(url, payload))
+    convo = list(messages)
+    names = TOOLS.keys() if enabled_tools is None else (TOOLS.keys() & enabled_tools)
+    tool_schemas = [TOOLS[n].schema() for n in names]
+
+    for _round in range(max_rounds):
+        body = {"model": model, "messages": convo, "tools": tool_schemas, "stream": False}
+        resp = caller(f"{ollama_url}/v1/chat/completions", body)
+        choice = (resp.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        tool_calls = message.get("tool_calls") or []
+        if not tool_calls:
+            break
+        convo.append(message)
+        for call in tool_calls:
+            fn = (call.get("function") or {})
+            name = fn.get("name", "")
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            tool = TOOLS.get(name) if name in names else None
+            if tool is None:
+                result = {"ok": False, "error": f"no such tool: {name!r}"}
+            else:
+                lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
+                action_name = lookup_name
+                try:
+                    import jarvis_gate
+                    action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
+                except Exception:
+                    pass
+                plan_text = tool.build_plan_text(args)
+                verdict = checker(action_name, {"text": plan_text},
+                                   f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+                if not getattr(verdict, "allowed", False):
+                    result = {"ok": False,
+                              "error": f"refused: {getattr(verdict, 'reason', 'not approved')}"}
+                else:
+                    if announce:
+                        announce(f"Using {name}...")
+                    kwargs = {"announce": announce} if tool.needs_announce else {}
+                    try:
+                        result = tool.execute(args, **kwargs)
+                    except Exception as exc:
+                        result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": json.dumps(result, ensure_ascii=False)[:8000]})
+    else:
+        convo.append({"role": "system",
+                       "content": "Too many tool calls in a row; answer with "
+                                  "what you have rather than trying again."})
+
+    stream_body = {"model": model, "messages": convo, "tools": tool_schemas, "stream": True}
+    with streamer(f"{ollama_url}/v1/chat/completions", stream_body) as upstream:
+        while True:
+            chunk = upstream.read(1024)
+            if not chunk:
+                break
+            stream_out(chunk)

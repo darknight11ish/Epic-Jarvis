@@ -5,11 +5,12 @@
 > is the detail.
 
 
-Twenty-four patches against the Jarvis backend, each with an executable test.
-The last two, `ui-control-wiring.patch` and `ollama-direct.patch`, sit outside
-the ordered stack below - each only touches its own few lines, shared with no
-other patch here, and can be applied before, after, or interleaved with the
-rest. See their own sections, after the table.
+Twenty-five patches against the Jarvis backend, each with an executable test.
+The last three - `ui-control-wiring.patch`, `ollama-direct.patch` and
+`tool-calling-wiring.patch` - sit outside the ordered stack below: each only
+touches its own few lines, shared with no other patch here, and the one real
+ordering constraint among them (tool-calling needs ollama-direct) is a
+logical one, not a textual one - see their own sections, after the table.
 
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
@@ -53,6 +54,7 @@ on a throwaway copy instead.
 | `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Needs `event-allowlist`. |
 | `ui-control-wiring.patch` | `jarvis_gate.py` | Registers the three new capabilities below with the gate's own `_RISK`/`_TOOL_ACTIONS` tables. Textually independent of everything above it — see its own section. |
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
+| `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -1988,11 +1990,17 @@ dependency, or need a setup decision only the owner can make:
   either a file this session does not have (`jarvis_models.py`'s real API)
   or a scope decision bigger than "add a tool." Not ported.
 
-What's already safe to add, because it reuses `jarvis_gate.py`'s existing,
-already-tiered action names with nothing new to configure: `calculator`
-(auto), `memory_search` (auto, read-only, over the real `jarvis_memory.py`),
-`file_read` (`read_files_readonly`), `shell_exec` (`run_shell_on_host`, tier
-`ask`), and the three modules already built this session. Deliberately
+What's actually in `jarvis_agent.py` now, because each one reuses
+`jarvis_gate.py`'s existing, already-tiered action names with nothing new to
+configure: `calculator` (auto), `memory_search` (auto, read-only, over the
+real `jarvis_memory.py`), `file_read` (`read_files_readonly`), `shell_exec`
+(`run_shell_on_host`, tier `ask`), and one tool each for the three modules
+built earlier this session - `control_computer` (native UI control, reuses
+the existing `control_computer` action), `control_phone` (adb, the new
+`control_phone` action from `ui-control-wiring.patch`), and `github_search`
+(wraps `jarvis_research.py`, resolving to `web_research` or
+`research_authenticated` depending on whether a token is configured *at the
+moment the call actually runs* - not decided by the model). Deliberately
 **not** included: a `memory_store`/`memory_manage`-style tool that would let
 the model write directly to `facts`. This project's memory system exists
 specifically so nothing reaches `facts` without a human accepting it through
@@ -2014,6 +2022,70 @@ the right service for each case, and the surrounding routing/privacy/degrade
 code - `is_cloud`, the recalled-facts block, `jarvis_router.degrade` - is
 byte-for-byte unchanged by this patch. Cannot start a real HTTP server here to
 prove Ollama actually answers; that part is the owner's own machine to try.
+
+---
+
+# `tool-calling-wiring.patch` — the model can finally use a tool, on the local lane only
+
+`jarvis_agent.py` (new file, ships whole like `jarvis_research.py`) is the
+actual tool-using loop: it hands Ollama a `tools` list, and when the model
+asks for one, gates it through `jarvis_gate.check()` - the same module, the
+same four-step shape, as everything else - before it ever runs. Without this
+patch that module has no caller at all; `/api/chat` never sent a `tools`
+field to anything.
+
+**Where it plugs in, precisely.** Right after `lane = decision.lane`, one new
+line: `use_tools = lane == local_model and bool((cfg.get("tools") or
+{}).get("enabled"))` - the exact `[tools].enabled` list `collect_tools()` and
+`/api/status` already read, so there is no new switch to learn, only the one
+that already existed actually doing something. When `use_tools` is true, the
+degrade loop is skipped entirely (`jarvis_agent.run_local_turn` makes its own
+request to Ollama; running the loop too would mean two live completions for
+one turn) and the response-streaming section gets an `if use_tools: ... else:
+<the original with-upstream relay, unedited>` - so a cloud lane, or a local
+lane with no tools enabled, takes the exact path it always did.
+
+**Local only, enforced twice, not once.** `use_tools` requires
+`lane == local_model` before tools are even considered - a cloud lane never
+reaches `jarvis_agent` at all. Separately, `run_local_turn`'s own
+`enabled_tools` parameter is the *specific* whitelist from `[tools].enabled`,
+not "on or off": a tool call for something not in that list is refused with
+"no such tool", the same as a name the model invented outright, and never
+reaches the real tool's code. Two independent checks, so a bug in either one
+does not silently become "every tool, everywhere."
+
+**What's genuinely rough about this first pass, said plainly rather than
+smoothed over:** a tool-enabled turn is one extra non-streamed round trip
+slower than a plain one (the model is asked once, without streaming, purely
+to find out if it wants a tool; only the final answer streams) - and it does
+not retry or step down the way the plain-relay path does, since
+`jarvis_router.degrade()`'s whole reason for existing is negotiating between
+*lanes*, and a tool-enabled turn never leaves the local one. Neither of these
+is a correctness bug; both are the kind of thing worth knowing about before
+relying on this for anything time-sensitive.
+
+### Test it
+
+```powershell
+python test_agent.py
+python test_tool_calling_wiring.py
+```
+
+`test_agent.py` runs the real loop end to end against a scripted fake model
+and a fake gate - no real Ollama, no real jarvis_gate, no real tool ever
+executes. It proves: a denied tool call never runs the real function, an
+approved one does and its actual result (not a guess) is what the model sees
+next, an unregistered or *disabled* tool name is refused rather than
+silently allowed through, the calculator cannot reach a name or a call
+(`__import__`, `open(...)`, bare `os.system` all rejected), and a model that
+keeps asking for tools forever is cut off at `max_rounds` rather than
+looping. `test_tool_calling_wiring.py` is the structural half, over the real
+patched source: `use_tools` genuinely requires both the local lane and a
+non-empty `[tools].enabled` (an `and`, checked as an `and` in the AST, not
+just as a string that happens to appear), the plain-relay `else` branch is
+still there and reachable, and the tool branch actually passes
+`enabled_tools` and wires `announce` to the same `_activity()` doorbell
+everything else in this project already uses.
 
 ---
 

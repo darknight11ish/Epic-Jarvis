@@ -95,6 +95,10 @@ $PATCHES = @(
     # Also independent - touches jarvis_hud.py's /api/chat, but a different
     # few lines than degrade-filter or any other patch that lands there.
     'ollama-direct.patch'
+    # Textually independent of ollama-direct too, but listed right after it:
+    # a tool-enabled local turn only makes sense once the local lane is
+    # actually reaching Ollama.
+    'tool-calling-wiring.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
