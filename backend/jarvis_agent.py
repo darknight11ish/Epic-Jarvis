@@ -379,11 +379,15 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "jarvis_android_control_run"),
     "browser_control": Tool(
         "browser_control",
-        "Drive one browser tab (navigate, click, type, select, or read) by "
-        "naming its on-screen elements. Reads the current page first; an "
-        "element that cannot be found is reported, not guessed at. Only "
-        "offered when the owner has explicitly enabled it - see "
-        "jarvis_browser_control.py's own docstring for why it ships off.",
+        "Drive one browser tab (navigate, click, type, select, read, or "
+        "read_new) by naming its on-screen elements. Reads the current page "
+        "first; an element that cannot be found is reported, not guessed "
+        "at. read_new follows a chat conversation of any length - it takes "
+        "the transcript CONTAINER and a cursor, and returns only messages "
+        "since that cursor, so a long-running conversation never costs more "
+        "per turn than the newest messages in it. Only offered when the "
+        "owner has explicitly enabled it - see jarvis_browser_control.py's "
+        "own docstring for why it ships off.",
         {"type": "object", "properties": {
             "goal": {"type": "string"},
             "session": {"type": "string", "description": "a label for which browser tab"},
@@ -391,10 +395,14 @@ TOOLS: dict = {
                 "description": "optional hostname allowlist for navigate steps"},
             "requests": {"type": "array", "items": {"type": "object", "properties": {
                 "action": {"type": "string",
-                    "enum": ["navigate", "click", "type", "select", "read"]},
-                "role": {"type": "string", "description": "accessibility role, e.g. button, textbox"},
-                "name": {"type": "string", "description": "the element's accessible name"},
-                "value": {"type": "string", "description": "URL for navigate, text for type/select"},
+                    "enum": ["navigate", "click", "type", "select", "read", "read_new"]},
+                "role": {"type": "string", "description": "accessibility role, e.g. button, "
+                    "textbox - for read_new, the role of the message-list CONTAINER"},
+                "name": {"type": "string", "description": "the element's accessible name - "
+                    "for read_new, the container's accessible name"},
+                "value": {"type": "string", "description": "URL for navigate, text for "
+                    "type/select, or for read_new the highest message index already seen "
+                    "(omit or \"0\" to read from the start)"},
                 "why": {"type": "string"},
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean",

@@ -244,6 +244,77 @@ def t_a_read_steps_value_is_capped_not_handed_back_whole():
           out2["done"][0]["value"] == "short", repr(out2))
 
 
+def t_format_new_messages_returns_only_what_is_after_the_cursor():
+    """_format_new_messages is the actual fix for "continue a conversation
+    extremely long": pure, so the property is provable directly rather than
+    only through a real Playwright container."""
+    history = [f"message {i}" for i in range(5)]
+    out = B._format_new_messages(history, since=3)
+    check("only messages at or after the cursor are returned",
+          out == "[3] message 3\n[4] message 4", repr(out))
+    # CONTROL: a cursor of 0 (or omitted) returns everything, up to the cap.
+    out0 = B._format_new_messages(history, since=0)
+    check("CONTROL: cursor 0 returns from the start",
+          out0 == "\n".join(f"[{i}] message {i}" for i in range(5)), repr(out0))
+
+
+def t_format_new_messages_caps_and_says_so_rather_than_dropping_silently():
+    history = [f"message {i}" for i in range(B._MAX_NEW_MESSAGES + 5)]
+    out = B._format_new_messages(history, since=0)
+    lines = out.split("\n")
+    check("exactly the cap's worth of messages plus one trailer line",
+          len(lines) == B._MAX_NEW_MESSAGES + 1, repr(len(lines)))
+    check("the trailer names how many were left out",
+          "5 more not shown" in lines[-1], out)
+    check("the trailer gives a cursor to continue from",
+          f"value={B._MAX_NEW_MESSAGES!r}" in lines[-1], out)
+    # CONTROL: exactly at the cap, no trailer is added - nothing was left out.
+    exact = B._format_new_messages([f"m{i}" for i in range(B._MAX_NEW_MESSAGES)], since=0)
+    check("CONTROL: no trailer when nothing was actually dropped",
+          "not shown" not in exact, exact)
+
+
+def t_format_new_messages_caps_each_message_and_reports_no_new_ones():
+    huge = ["x" * (B._MAX_MESSAGE_CHARS * 3)]
+    out = B._format_new_messages(huge, since=0)
+    check("a single oversized message is capped, not truncated by the caller",
+          out == f"[0] {'x' * B._MAX_MESSAGE_CHARS}", len(out))
+    empty_case = B._format_new_messages(["a", "b"], since=2)
+    check("nothing new says so plainly, with the counts",
+          empty_case == "(no new messages; 2 total, cursor was 2)", empty_case)
+
+
+def t_read_new_step_is_planned_against_the_container_not_a_message():
+    def read(session):
+        return page(elements=[("log", "Conversation", True)])
+    with NoRealAction():
+        p = B.plan("check for a reply", "support-chat",
+                   [{"role": "log", "name": "Conversation", "action": "read_new",
+                     "value": "3", "why": "check for a reply"}],
+                   read=read)
+    check("the container becomes a step", len(p.steps) == 1, repr(p.steps))
+    check("the cursor is carried as the step's value", p.steps[0].value == "3", repr(p.steps))
+    card = B.describe(p)
+    check("the card names the container and the cursor",
+          "Conversation" in card and "since #3" in card, card)
+
+
+def t_read_new_result_reaches_the_caller_unmodified_by_runs_own_cap():
+    """run()'s own _MAX_READ_VALUE_CHARS slicing must NOT re-cut a read_new
+    result - that could sever the "N more not shown" trailer silently,
+    exactly the failure this whole action exists to avoid."""
+    live = page(elements=[("log", "Conversation", True)])
+    already_formatted = "[0] hi\n...(40 more not shown; call again with value=1 to continue from there)"
+    with NoRealAction():
+        p = B.plan("check for a reply", "s",
+                   [{"role": "log", "name": "Conversation", "action": "read_new",
+                     "value": "0", "why": "x"}],
+                   read=lambda _s: live)
+        out = B.run(p, read=lambda _s: live, act=lambda s: already_formatted, approved=True)
+    check("the formatted result, trailer included, reaches the caller whole",
+          out["done"][0]["value"] == already_formatted, repr(out))
+
+
 def t_announce_is_called_once_per_step_and_is_optional():
     live = page(elements=[("button", "Send", True)])
     heard = []
@@ -270,6 +341,11 @@ if __name__ == "__main__":
                t_navigate_is_not_re_verified_against_a_prior_page,
                t_run_executes_the_approved_steps_in_order,
                t_a_read_steps_value_is_capped_not_handed_back_whole,
+               t_format_new_messages_returns_only_what_is_after_the_cursor,
+               t_format_new_messages_caps_and_says_so_rather_than_dropping_silently,
+               t_format_new_messages_caps_each_message_and_reports_no_new_ones,
+               t_read_new_step_is_planned_against_the_container_not_a_message,
+               t_read_new_result_reaches_the_caller_unmodified_by_runs_own_cap,
                t_announce_is_called_once_per_step_and_is_optional):
         print(f"\n--- {fn.__name__} ---")
         try:

@@ -55,6 +55,18 @@ result away once it is too big; this keeps each step small enough that it
 never gets there, so a five-step conversation with a support widget does not
 cost noticeably more context than one step did.
 
+THE SAME RULE, APPLIED TO A CONVERSATION THAT NEVER STOPS
+"Continue a conversation extremely long" is the same context-economy problem
+at a different timescale: read the WHOLE transcript again on message 40 and
+cost has grown with the conversation's length, no matter how tight any one
+step's cap is. `read_new` is the fix - it takes a container (a chat log, a
+message list) and a cursor (the index already seen) and returns only the
+messages after that cursor, capped at `_MAX_NEW_MESSAGES` and
+`_MAX_MESSAGE_CHARS` per call, with the cap saying so plainly (a "N more not
+shown, call again with value=..." trailer) rather than silently dropping
+anything. Turn 40 of a long-running chat costs the same as turn 2: the size
+of what changed, not the size of the whole conversation so far.
+
 SHIPS DISABLED, ON PURPOSE
 Feature-complete, not switched on. See `backend/README.md`'s own section on
 this. Two real reasons, not caution for its own sake: it needs Playwright
@@ -126,7 +138,7 @@ class Step:
     url: str                 # the page this step was planned against
     role: str                # accessibility role: "button", "textbox", "link", ... ("" for navigate)
     name: str                # accessible name, as read from the page ("" for navigate)
-    action: str               # "navigate" | "click" | "type" | "select" | "read"
+    action: str               # "navigate" | "click" | "type" | "select" | "read" | "read_new"
     value: Optional[str] = None
     why: str = ""
     heavy: bool = False
@@ -172,6 +184,43 @@ _READ_DEPTH = 12
 # here, in run(), so it stays small on every single step rather than only
 # being caught once the *whole* tool result is already too big to send.
 _MAX_READ_VALUE_CHARS = 700
+
+# `read_new`'s own caps - see _format_new_messages. Deliberately smaller and
+# separate from _MAX_READ_VALUE_CHARS: this is the piece built for "continue
+# a conversation extremely long" - a chat that has been going for an hour
+# must cost the same, small amount per turn as one that just started,
+# because only the messages since the last cursor are ever read, never the
+# whole transcript again.
+_MAX_NEW_MESSAGES = 15
+_MAX_MESSAGE_CHARS = 300
+
+
+def _format_new_messages(children_text: list, since: int) -> str:
+    """Pure formatting/capping for a `read_new` step - independent of
+    Playwright on purpose, so the property that matters (only what's new is
+    ever returned, and a cap that bites SAYS SO rather than silently
+    dropping the rest) is provable directly, the same "no silent
+    truncation" rule `jarvis_agent._tool_content()` already holds itself to.
+
+    `children_text` is the container's children, in DOM order, as plain
+    text - the whole transcript, not yet trimmed to what's new. `since` is
+    the index the caller already saw up to; everything at or after it is
+    "new". Returns a capped, indexed block, and - only when the cap
+    actually bit - one more line naming how many are left out and the
+    cursor value to ask for them with.
+    """
+    since = max(int(since), 0)
+    new = list(enumerate(children_text))[since:]
+    if not new:
+        return f"(no new messages; {len(children_text)} total, cursor was {since})"
+    shown = new[:_MAX_NEW_MESSAGES]
+    lines = [f"[{i}] {text[:_MAX_MESSAGE_CHARS]}" for i, text in shown]
+    remaining = len(new) - len(shown)
+    if remaining > 0:
+        next_cursor = shown[-1][0] + 1
+        lines.append(f"...({remaining} more not shown; call again with "
+                      f"value={next_cursor!r} to continue from there)")
+    return "\n".join(lines)
 
 
 def _host_matches(url: str, allowed_domains: Optional[list]) -> bool:
@@ -250,6 +299,17 @@ def _default_act(step: Step) -> Optional[str]:
             return locator.input_value()
         except Exception:
             return locator.inner_text()
+    elif step.action == "read_new":
+        # step.role/step.name name the CONTAINER (a chat log, a message
+        # list) - its direct children are the individual messages, in the
+        # order the page renders them. Reading text off children rather
+        # than matching by (role, name) is deliberate: a message bubble
+        # rarely has a distinct accessible name of its own, so the
+        # (role, name) matching every other action uses would not find it.
+        count = locator.locator(":scope > *").count()
+        texts = [locator.locator(":scope > *").nth(i).inner_text()
+                 for i in range(min(count, _MAX_ELEMENTS))]
+        return _format_new_messages(texts, int(step.value or 0))
     else:
         raise ValueError(f"unknown action {step.action!r}")
     return None
@@ -326,6 +386,14 @@ def plan(goal: str, session: str, requests: list, *,
          "leaves_machine": True}
         {"role": "button", "name": "Send", "action": "click", "why": "...",
          "leaves_machine": True}
+        {"role": "log", "name": "Conversation", "action": "read_new",
+         "value": "12", "why": "check for a reply"}
+
+    `read_new`'s `role`/`name` name a CONTAINER (a chat log, a message
+    list), not one message - see `_format_new_messages` for why a message
+    bubble is read by position, not by (role, name) matching. `value` is the
+    index already seen; omitted or `"0"` reads from the start, bounded the
+    same as everything else by `_MAX_NEW_MESSAGES`.
 
     A `navigate` request is checked against `_ALLOWED_SCHEMES` and
     `allowed_domains`, never against the current page - there may not be one
@@ -379,6 +447,10 @@ def describe(p: Plan) -> str:
         heavy_note = "  [sends something to the other end]" if s.heavy else ""
         if s.action == "navigate":
             lines += [f"  {i}. navigate to {s.value!r}{heavy_note}", f"     why: {s.why}", ""]
+        elif s.action == "read_new":
+            lines += [f'  {i}. read new messages in {s.role} "{s.name}" '
+                      f'since #{s.value or 0}{heavy_note}',
+                      f"     why: {s.why}", ""]
         else:
             detail = f" = {s.value!r}" if s.value is not None else ""
             lines += [f'  {i}. {s.action} {s.role} "{s.name}"{detail}{heavy_note}',
@@ -449,6 +521,13 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
                     "not_run": [s.as_dict() for s in remaining]}
         if step.action == "read" and read_back is not None:
             step.value = str(read_back)[:_MAX_READ_VALUE_CHARS]
+        elif step.action == "read_new" and read_back is not None:
+            # Already capped and, if truncated, already says so - by
+            # _format_new_messages itself (real path) or by the injected
+            # `act` in a test. Re-slicing here with _MAX_READ_VALUE_CHARS
+            # would risk cutting the "N more not shown" trailer off silently,
+            # which is the exact failure this action exists to avoid.
+            step.value = str(read_back)
         done.append(step)
     tell("Done.")
     return {"ok": True, "done": [s.as_dict() for s in done], "not_run": []}

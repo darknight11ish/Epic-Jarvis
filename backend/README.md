@@ -2375,21 +2375,50 @@ itself - `enabled_tools` is the same opt-in-only whitelist
 list is simply never offered to the model, the same way `control_phone`
 shipped inert until it was added deliberately.
 
+### `read_new` — following a conversation that never stops
+
+The follow-up ask this answers, in the owner's words: "I want Jarvis to be
+able to say anything and continue a conversation extremely long once I set
+up my GTX 2060 12GB." The "say anything" half needed nothing new - `type`
+and `click` never inspected or filtered message content; the human deciding
+per message already IS the only constraint, by design. "Extremely long" was
+a real gap: re-reading a whole transcript to find out if there's anything
+new is the same failure shape as "dies at 8k context by step 2-3," just
+spread across many turns of one conversation instead of many steps of one
+task.
+
+`read_new` reads a **container** (a chat log, a message list - named by
+`role`/`name` same as any other step) rather than one element, because a
+message bubble rarely has its own accessible name for `(role, name)`
+matching to find. `value` carries the cursor: the highest message index
+already seen. Only messages after it come back, capped at
+`_MAX_NEW_MESSAGES` (15) and `_MAX_MESSAGE_CHARS` (300) each - and when the
+cap actually bites, the result says so in a trailing line naming how many
+were left out and the cursor to ask for them with, rather than silently
+dropping anything. `_format_new_messages` is the pure function this all
+runs through, independent of Playwright, specifically so the "capped, and
+says so" property is checked directly rather than trusted.
+
+The result: turn 40 of an hour-long conversation costs the same as turn 2 -
+the size of what's new, never the size of everything said so far.
+
 ### Test it
 
 ```powershell
 python test_browser_control.py
 ```
 
-Twelve scenarios, forty individual checks, no real browser, no network - the same technique
-`test_ui_control.py` uses (`read`/`act` injected, the real Playwright-backed
-defaults proven unreachable via `NoRealAction`). The ones that matter most:
-`plan()` performs no real action; a `navigate` request is rejected outright
-for a non-`http(s)` scheme or a domain outside `allowed_domains`, never
-attempted; `run()` refuses without `approved=True`; `run()` re-verifies every
-non-`navigate` step and stops rather than guessing when the page has
-changed; and a `read` step's value is capped at `_MAX_READ_VALUE_CHARS`
-regardless of how much text the real page actually has.
+Seventeen scenarios, fifty-two individual checks, no real browser, no
+network - the same technique `test_ui_control.py` uses (`read`/`act`
+injected, the real Playwright-backed defaults proven unreachable via
+`NoRealAction`). The ones that matter most: `plan()` performs no real
+action; a `navigate` request is rejected outright for a non-`http(s)` scheme
+or a domain outside `allowed_domains`, never attempted; `run()` refuses
+without `approved=True`; `run()` re-verifies every non-`navigate` step and
+stops rather than guessing when the page has changed; a `read` step's value
+is capped at `_MAX_READ_VALUE_CHARS` regardless of how much text the real
+page actually has; and `_format_new_messages` only ever returns what's after
+the cursor, capped, with a truthful count of anything left out.
 
 **Not run against a real page, a real customer-service widget, or a real
 Playwright install.** Same caveat `ui-control-wiring.patch`'s own section
