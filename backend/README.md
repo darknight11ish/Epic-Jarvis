@@ -2297,6 +2297,111 @@ returning - the specific regression described just above.
 
 ---
 
+# `browser-control-wiring` — Jarvis can drive a browser, but the switch stays off
+
+The request behind this one, in plain words: "control a chat for me on
+customer service or something." `docs/ARCHITECTURE.md`'s "Decisions already
+taken" table had already rejected `browser-use` by name for exactly that job
+- "dies at 8k context by step 2-3" - and this project's own `jarvis_ui_control.py`
+had already worked out the right shape for "click inside something else" that
+doesn't have that problem: read once, freeze concrete steps, re-verify
+before each one, never a live loop. `jarvis_browser_control.py` (new file,
+ships whole like `jarvis_ui_control.py` and `jarvis_android_control.py`) is
+that same shape, aimed at a browser tab instead of a native window.
+
+**What it is.** `plan(goal, session, requests)` reads the current page's
+accessibility tree (Playwright's `page.accessibility.snapshot()`, capped at
+300 elements and 12 levels deep) and binds each requested step to a concrete
+`(role, name)` pair actually on that page - a `navigate` request is checked
+against an `http`/`https`-only scheme filter and an optional
+`allowed_domains` list instead, since there is no page yet to search.
+`run(plan, approved=True)` executes only the enumerated steps, re-reading
+the page and re-checking the target before each one (`navigate` excepted -
+it has nothing to re-check). Any mismatch stops the run at that step and
+reports it; that is a new `plan()` and a new decision, never a retry.
+
+**Why this is not the same mistake twice.** The actual fix for "dies at 8k
+context by step 2-3" is `_MAX_READ_VALUE_CHARS` (700 characters): a `read`
+step's value - a chat transcript, an input's current text - is capped in
+`run()` itself, on every single step, not left to `jarvis_agent._tool_content()`'s
+existing 8000-character whole-result cutoff, which only fires once the total
+is already too big and then throws the whole thing away. Capping per step
+instead of per turn is what lets a five-step conversation with a support
+widget cost roughly five times one step, not blow the budget by step three.
+
+**Wired into `jarvis_agent.py` as `"browser_control"`,** the same pattern as
+`control_computer`/`control_phone`: a `_prepare_browser_control`/
+`_run_browser_control` pair, `needs_announce=True`, and
+`gate_lookup_name=lambda args: "jarvis_browser_control_run"` - a new action
+name, because no existing `jarvis_gate` tier fits a browser step. It needs:
+
+- A new `_RISK["control_browser"]` entry in `jarvis_gate.py`, same shape as
+  the `control_phone` entry `ui-control-wiring.patch` already added.
+- `_TOOL_ACTIONS["jarvis_browser_control_run"] = "control_browser"`.
+- `jarvis-framework.toml`'s `[autonomy.tiers]`:
+  ```toml
+  control_browser = "ask"
+  ```
+  Absent from the TOML this already fails closed to `"ask"` via
+  `unknown_action_tier` (the same safety net `control_phone` relied on before
+  its own line existed) - add the explicit line anyway, for the same reason
+  every other real action has one rather than leaning on the fallback
+  silently. **Never `"auto"`** - every step here either sends a message to a
+  real person on the other end or navigates to a page nobody has looked at
+  yet; those are exactly what `jarvis_ui_control.py`'s own `heavy` flag and
+  this project's `no-auto-approve.patch` exist to keep out of the automatic
+  bucket.
+
+**Ships disabled, and stays that way until you decide otherwise.** Two
+reasons, both real, neither a formality:
+
+1. **A new dependency this project has never taken before.** Nothing here
+   imports Playwright at module load time (same lazy-import discipline as
+   `jarvis_ui_control.py`'s `uiautomation`), but the real `read`/`act` do need
+   it actually installed and a Chromium build present:
+   ```powershell
+   pip install playwright; playwright install chromium
+   ```
+2. **Context budget.** `docs/MODEL-TOPOLOGY.md`'s primary lane is an 8B model
+   at 16K context, arithmetic'd out in `jarvis-primary.Modelfile` to
+   6.48 of 6.90 GiB - sized tight on purpose, with nothing to spare for
+   several rounds of page-plus-history. This tool belongs on the second,
+   larger-context lane once it exists, not the primary one.
+
+**Do not add `"browser_control"` to `[tools].enabled` until both of those are
+actually true on your machine.** Nothing else in this patch turns it on by
+itself - `enabled_tools` is the same opt-in-only whitelist
+`tool-calling-wiring.patch` already established, so a tool absent from that
+list is simply never offered to the model, the same way `control_phone`
+shipped inert until it was added deliberately.
+
+### Test it
+
+```powershell
+python test_browser_control.py
+```
+
+Twelve scenarios, forty individual checks, no real browser, no network - the same technique
+`test_ui_control.py` uses (`read`/`act` injected, the real Playwright-backed
+defaults proven unreachable via `NoRealAction`). The ones that matter most:
+`plan()` performs no real action; a `navigate` request is rejected outright
+for a non-`http(s)` scheme or a domain outside `allowed_domains`, never
+attempted; `run()` refuses without `approved=True`; `run()` re-verifies every
+non-`navigate` step and stops rather than guessing when the page has
+changed; and a `read` step's value is capped at `_MAX_READ_VALUE_CHARS`
+regardless of how much text the real page actually has.
+
+**Not run against a real page, a real customer-service widget, or a real
+Playwright install.** Same caveat `ui-control-wiring.patch`'s own section
+gives for its three modules: the injectable seam (`read`/`act`) is the only
+place real I/O happens, specifically so the logic above it is provable
+without any of that - but proof without it is not a real run. The first
+real session - on a page you control, with `allowed_domains` set, watching
+the actual (non-headless) browser window it opens - is worth doing once
+deliberately before this is ever added to `[tools].enabled`.
+
+---
+
 # Standalone tools
 
 Not patches - scripts you run once, on demand, that call the patched backend

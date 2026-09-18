@@ -2,13 +2,13 @@
 
 WHAT THIS IS FOR
 `/api/chat`'s local lane could only ever produce plain text - the model had
-no way to check a fact, read a file, or use any of the three capabilities
-built this session (jarvis_ui_control.py, jarvis_android_control.py,
-jarvis_research.py). This module is the missing loop: it hands Ollama a set
-of tools, and when the model asks to use one, gates it through
-jarvis_gate.check() - the exact same module and the exact same four-step
-shape (plan/describe/gate/run) as everything else in this project - before
-ever running it.
+no way to check a fact, read a file, or use any of the four capabilities
+built across this project's sessions (jarvis_ui_control.py,
+jarvis_android_control.py, jarvis_research.py, jarvis_browser_control.py).
+This module is the missing loop: it hands Ollama a set of tools, and when
+the model asks to use one, gates it through jarvis_gate.check() - the exact
+same module and the exact same four-step shape (plan/describe/gate/run) as
+everything else in this project - before ever running it.
 
 LOCAL ONLY, ON PURPOSE
 This is never called for a cloud lane. Every tool here either reads this
@@ -21,12 +21,17 @@ section); this module refuses nothing about being called from elsewhere, but
 nothing here decides that on its own either.
 
 WHAT WAS DELIBERATELY LEFT OUT, AND WHY
-See backend/README.md's own section on this - browser automation, Docker-
-based execution, connectors and general web search were all excluded from
-this pass with specific reasons; a memory_store tool that writes directly
-to `facts` was excluded on purpose because this project's memory system
-exists specifically so nothing reaches `facts` without a human accepting it
-through the review queue, and a chat-time tool would reopen that hole.
+See backend/README.md's own section on this. Browser automation exists now
+(jarvis_browser_control.py, wired below as "browser_control") but SHIPS
+DISABLED - it is not in any `[tools].enabled` list this project ships, the
+same opt-in-only mechanism control_computer and control_phone already use,
+and its own module docstring says exactly why it should stay off until a
+second, larger-context lane is running. Docker-based execution, connectors
+and general web search remain excluded with the reasons README.md gives; a
+memory_store tool that writes directly to `facts` was excluded on purpose
+because this project's memory system exists specifically so nothing reaches
+`facts` without a human accepting it through the review queue, and a
+chat-time tool would reopen that hole.
 
 TESTING WITHOUT A REAL BACKEND
 Every tool's actual execution and every call to jarvis_gate are behind
@@ -208,6 +213,24 @@ def _run_control_phone(args: dict, plan_obj, *, announce=None) -> dict:
     return A.run(plan_obj, announce=announce, approved=True)
 
 
+def _prepare_browser_control(args: dict):
+    try:
+        import jarvis_browser_control as B
+    except Exception as exc:
+        return None, f"Control a browser tab: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
+    p = B.plan(str(args.get("goal", "")), str(args.get("session", "")),
+               args.get("requests") or [], allowed_domains=args.get("allowed_domains"))
+    return p, B.describe(p)
+
+
+def _run_browser_control(args: dict, plan_obj, *, announce=None) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "browser control is not available here"}
+    import jarvis_browser_control as B
+    return B.run(plan_obj, announce=announce, approved=True)
+
+
 def _prepare_github_search(args: dict):
     try:
         import jarvis_research as R
@@ -354,6 +377,38 @@ TOOLS: dict = {
         lambda args, state, **kw: _run_control_phone(args, state, announce=kw.get("announce")),
         needs_announce=True,
         gate_lookup_name=lambda args: "jarvis_android_control_run"),
+    "browser_control": Tool(
+        "browser_control",
+        "Drive one browser tab (navigate, click, type, select, or read) by "
+        "naming its on-screen elements. Reads the current page first; an "
+        "element that cannot be found is reported, not guessed at. Only "
+        "offered when the owner has explicitly enabled it - see "
+        "jarvis_browser_control.py's own docstring for why it ships off.",
+        {"type": "object", "properties": {
+            "goal": {"type": "string"},
+            "session": {"type": "string", "description": "a label for which browser tab"},
+            "allowed_domains": {"type": "array", "items": {"type": "string"},
+                "description": "optional hostname allowlist for navigate steps"},
+            "requests": {"type": "array", "items": {"type": "object", "properties": {
+                "action": {"type": "string",
+                    "enum": ["navigate", "click", "type", "select", "read"]},
+                "role": {"type": "string", "description": "accessibility role, e.g. button, textbox"},
+                "name": {"type": "string", "description": "the element's accessible name"},
+                "value": {"type": "string", "description": "URL for navigate, text for type/select"},
+                "why": {"type": "string"},
+                "irreversible": {"type": "boolean"},
+                "leaves_machine": {"type": "boolean",
+                    "description": "true for nearly every step here - a browser step almost "
+                                    "always sends something to whoever is on the other end"},
+            }}}},
+         "required": ["goal", "session", "requests"]},
+        _prepare_browser_control,
+        lambda args, state, **kw: _run_browser_control(args, state, announce=kw.get("announce")),
+        needs_announce=True,
+        # New action name, same reason control_phone is: no existing
+        # jarvis_gate tier fits a browser step - see browser-control-wiring
+        # in backend/README.md for the [autonomy.tiers] line this needs.
+        gate_lookup_name=lambda args: "jarvis_browser_control_run"),
     "github_search": Tool(
         "github_search",
         "Check whether a library or approach for a coding idea already "
