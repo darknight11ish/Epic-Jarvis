@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
+import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -164,10 +165,27 @@ object PlatformReadiness {
         ReadinessItem(
             title = "Notifications",
             detail = if (notificationsGranted(context)) {
-                "Granted. The ongoing service notification will be visible."
+                "Granted. Approvals are announced in the drawer, and the ongoing " +
+                    "service notification is visible."
             } else {
-                "Denied. The service will still run, but its notification is hidden " +
-                    "from the drawer and only appears in the Task Manager."
+                // The old wording here was "its notification is hidden from the
+                // drawer and only appears in the Task Manager". True of the
+                // ongoing service notification, and it buried the part that
+                // matters: with this denied, NOT ONE approval is announced. The
+                // service keeps running, the link stays up, nothing looks
+                // broken - and requests waiting on an answer sit unseen.
+                // ApprovalNotifier counts them; this is where that count shows.
+                val silenced = ApprovalNotifier.silenced
+                val waiting = when (silenced) {
+                    0 -> ""
+                    1 -> " - one is waiting unannounced right now"
+                    else -> " - $silenced are waiting unannounced right now"
+                }
+                "Denied, and that is worse than it sounds: no approval is " +
+                    "announced at all" + waiting +
+                    ". The service still runs and nothing else looks broken, so " +
+                    "this screen is the only place it shows. The ongoing service " +
+                    "notification is hidden too, and appears only in the Task Manager."
             },
             state = if (notificationsGranted(context)) {
                 ReadinessItem.State.OK

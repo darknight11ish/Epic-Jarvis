@@ -32,6 +32,7 @@ import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
+import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
@@ -85,6 +86,19 @@ class MainActivity : FragmentActivity() {
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { permissionTick.intValue += 1 }
+
+    /**
+     * Set once this process has asked for the notification permission, so the
+     * prompt does not reappear on every recomposition or rotation.
+     *
+     * This exists because the ask used to live in one place only: a button on
+     * the Checks screen. Anyone who never opened that screen was never asked,
+     * and with the permission denied NOT ONE approval is announced — while the
+     * service keeps running and nothing on the phone looks broken. That is the
+     * worst shape a failure can take for rule 4, and `ApprovalNotifier.silenced`
+     * was counting the casualties with nothing displaying the count.
+     */
+    private var askedForNotifications = false
 
     /**
      * Asked the first time the microphone button is held, never at launch.
@@ -367,6 +381,29 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+        // Asked once per process, the first time there is somewhere to talk
+        // to — not at launch.
+        //
+        // On the pairing screen there is nothing to announce yet, and a
+        // permission dialog before an app has shown what it is for is the one
+        // people refuse out of hand. Once pairing succeeds the app has
+        // approvals to announce, which is the entire reason it wants this.
+        //
+        // Re-asking on the next cold launch is deliberate and self-limiting:
+        // Android stops showing the dialog after the second refusal and just
+        // returns "denied" instantly, so this is at most two real prompts ever.
+        // The Checks screen still has its own button for anyone who got that
+        // far and wants to change their mind.
+        //
+        // minSdk is 33, so POST_NOTIFICATIONS exists on every device that can
+        // install this app — no version guard needed here.
+        LaunchedEffect(paired) {
+            if (!paired || askedForNotifications) return@LaunchedEffect
+            if (PlatformReadiness.notificationsGranted(this@MainActivity)) return@LaunchedEffect
+            askedForNotifications = true
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         // A notification tap goes straight home, so the card is where the
         // finger already is - and the id now travels into HomeState, so the
         // list scrolls to that card and outlines it. It used to be cleared
@@ -434,8 +471,13 @@ class MainActivity : FragmentActivity() {
             when (nav.current) {
                 Screen.CHECKS -> {
                     val host by JarvisRuntime.settings.host.collectAsState()
-                    val items = remember(tick, host) {
-                        com.jarvis.client.platform.PlatformReadiness.report(
+                    // `pending` is a key because the Notifications item reports
+                    // how many approvals are currently going unannounced, and
+                    // that number moves with the pending list. Without it the
+                    // report would be cached from whenever the permission last
+                    // changed and quietly go stale.
+                    val items = remember(tick, host, pending) {
+                        PlatformReadiness.report(
                             this@MainActivity,
                             host,
                         )

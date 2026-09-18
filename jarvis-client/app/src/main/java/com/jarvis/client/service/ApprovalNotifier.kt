@@ -56,9 +56,14 @@ object ApprovalNotifier {
      * This exists because the failure is invisible from the outside. The
      * foreground service keeps running, the link keeps reading CONNECTED, the
      * ongoing status notification is hidden too - so nothing on the phone looks
-     * broken while the one thing this file exists to do is not happening. A
-     * user who has never opened the Checks screen has never been asked for the
-     * permission at all, so this counter is the only trace there is.
+     * broken while the one thing this file exists to do is not happening.
+     *
+     * Read by the Checks screen's "Notifications" item, which reports the
+     * number back. MainActivity now also asks for the permission the moment
+     * the app is paired, so the old hole - never opening Checks meant never
+     * being asked, and never being asked meant every approval went unheard -
+     * is closed at the source. This counter stays because the permission can
+     * still be refused, or revoked later in Android Settings.
      */
     @Volatile
     var silenced = 0
