@@ -101,7 +101,32 @@ class VoiceSession(
     val notice: StateFlow<String?> = _notice.asStateFlow()
 
     private var job: Job? = null
-    @Volatile private var releaseRequested = false
+
+    /**
+     * One turn's identity and its own stop flag.
+     *
+     * Both used to be shared across turns, and both went wrong on a
+     * slip-and-re-press - release the button, press again ~150 ms later:
+     *
+     * - The stop flag was one instance-wide `releaseRequested`, and [begin]
+     *   reset it to false for the new turn. `Recorder.record`'s read loop has no
+     *   suspension point, so cancelling the old turn's job cannot interrupt it;
+     *   that flag was the only thing that could stop it, and the new turn had
+     *   just un-set it. The old microphone stayed open to its 30-second cap.
+     * - The phase was written by whichever turn happened to finish last. When
+     *   the old loop finally unwound, its `finally` stamped OFF over the NEW
+     *   turn's CAPTURING: the face went idle and the button un-armed while the
+     *   microphone was still live, and nothing on screen said so.
+     *
+     * A turn now only ever writes the shared phase while it IS [current] - the
+     * same guard `cancel`'s `invokeOnCompletion` already had - and reads its own
+     * flag, which nobody else can clear.
+     */
+    private class Turn {
+        @Volatile var releaseRequested = false
+    }
+
+    private var current: Turn? = null
 
     /** Call before offering the button. Never assumes; a failure leaves it hidden. */
     suspend fun refreshStatus() {
@@ -165,11 +190,14 @@ class VoiceSession(
             _notice.value = "Still finishing the last one."
             return
         }
-        // Only now, once the previous turn is genuinely finished. Resetting it
-        // while the old recorder was still running took away the one flag that
-        // could stop it — `Recorder.record`'s read loop has no suspension
-        // point, so cancelling its job cannot interrupt it.
-        releaseRequested = false
+        // A fresh flag for this turn rather than resetting a shared one. The old
+        // code cleared the instance-wide flag here, and after `cancel()` - which
+        // sets `job = null`, so the guard above lets a new turn straight through
+        // - the previous loop was often still running and reading that very
+        // flag. Clearing it told a recorder that had already been asked to stop
+        // to carry on. See [Turn].
+        val turn = Turn()
+        current = turn
         _notice.value = null
         _transcript.value = null
 
@@ -184,7 +212,7 @@ class VoiceSession(
             val captured = recorder.record(
                 maxSeconds = maxSeconds,
                 onLevel = { _micLevel.value = it },
-                stopWhen = { releaseRequested },
+                stopWhen = { turn.releaseRequested },
             )
             _micLevel.value = null
 
@@ -196,14 +224,23 @@ class VoiceSession(
                 is Recorder.Result.Captured -> deliver(captured.wav, source)
             }
             } finally {
-                _micLevel.value = null
-                if (_phase.value != Phase.OFF) _phase.value = Phase.OFF
+                // Only if this turn is still the current one - the same guard
+                // `cancel()`'s invokeOnCompletion carries, and for the same
+                // reason. Unguarded, a turn unwinding late wrote OFF and a null
+                // level over a turn that had already started, un-arming the
+                // button and idling the face with the microphone open. Checking
+                // the phase was not a substitute: the phase it found was the NEW
+                // turn's CAPTURING, which is exactly the value it then destroyed.
+                if (current === turn) {
+                    _micLevel.value = null
+                    if (_phase.value != Phase.OFF) _phase.value = Phase.OFF
+                }
             }
         }
     }
 
     /** Release of the button. The capture ends and the utterance goes. */
-    fun release() { releaseRequested = true }
+    fun release() { current?.releaseRequested = true }
 
     /**
      * Slide-away, or a second thought. Nothing is sent and nothing is kept.
@@ -217,9 +254,16 @@ class VoiceSession(
      * nothing on the way back.
      */
     fun cancel() {
-        releaseRequested = true
+        // Its OWN flag, and it stays set. Nothing resets it afterwards, so the
+        // recorder this turn is holding still stops even though a new turn may
+        // begin before this one has unwound.
+        current?.releaseRequested = true
         val running = job
         job = null
+        // Also cleared, so the turn being cancelled can no longer write the
+        // phase from its `finally` - it is not the current turn any more, and
+        // between here and the handler below there is nothing it should say.
+        current = null
         speaker.stop()
         _micLevel.value = null
         _phase.value = Phase.OFF

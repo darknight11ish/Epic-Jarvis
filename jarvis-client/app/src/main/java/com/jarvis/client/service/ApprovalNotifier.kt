@@ -2,10 +2,12 @@ package com.jarvis.client.service
 
 import android.Manifest
 import android.app.Notification
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -38,6 +40,77 @@ object ApprovalNotifier {
     private var nextId = FIRST_ID
 
     /**
+     * Whether [restore] has already read the drawer back in this process.
+     *
+     * Once per process, not once per sync: `getActiveNotifications` is a binder
+     * call to SystemUI and this object is synced on every state emission, which
+     * is often. After the first pass [assigned] is authoritative again.
+     */
+    private var restored = false
+
+    /**
+     * How many pending approvals could not be announced because
+     * POST_NOTIFICATIONS is not granted, and a one-shot latch so the log says
+     * so once rather than on every emission.
+     *
+     * This exists because the failure is invisible from the outside. The
+     * foreground service keeps running, the link keeps reading CONNECTED, the
+     * ongoing status notification is hidden too - so nothing on the phone looks
+     * broken while the one thing this file exists to do is not happening. A
+     * user who has never opened the Checks screen has never been asked for the
+     * permission at all, so this counter is the only trace there is.
+     */
+    @Volatile
+    var silenced = 0
+        private set
+
+    private var warnedSilenced = false
+
+    /**
+     * Reads the drawer back after the process was killed and restarted.
+     *
+     * [assigned] is in memory only. Android reclaims the process overnight, the
+     * service restarts sticky, and `sync` then runs with an empty map: its
+     * cancel loop has nothing to cancel, so approvals the desktop resolved
+     * hours ago sit in the drawer for ever and their Deny buttons point at
+     * approvals this process has never heard of.
+     *
+     * The approval id is stamped into the notification's own extras by [build],
+     * so the map can be rebuilt from what is actually on screen rather than
+     * guessed at. Anything in this object's id range that cannot be matched -
+     * posted by an older build, or corrupted - is cancelled, because a
+     * notification nothing can ever map back to an approval is one the user can
+     * never get an answer out of.
+     */
+    private fun restore(context: Context) {
+        if (restored) return
+        restored = true
+        val manager = ContextCompat.getSystemService(context, NotificationManager::class.java)
+            ?: return
+        val active = runCatching { manager.activeNotifications }
+            .onFailure { Log.w(TAG, "could not read the drawer back", it) }
+            .getOrNull() ?: return
+        for (posted in active) {
+            // Ours only, and only the per-approval range. The link's own ongoing
+            // notification and the group summary both sit below FIRST_ID, and
+            // cancelling either of those here would kill the foreground
+            // service's own notification.
+            if (posted == null || posted.id < FIRST_ID) continue
+            val approvalId = runCatching { posted.notification?.extras?.getString(EXTRA_APPROVAL_ID) }
+                .getOrNull()
+            if (approvalId.isNullOrEmpty()) {
+                runCatching { manager.cancel(posted.id) }
+                continue
+            }
+            assigned[approvalId] = posted.id
+            // Past anything already on screen, or the next approval would
+            // overwrite a live one - the collision this whole map exists to
+            // prevent, reintroduced by the restart.
+            if (posted.id >= nextId) nextId = posted.id + 1
+        }
+    }
+
+    /**
      * Brings the drawer in line with [pending]: posts what is new, refreshes
      * what changed, and cancels what has been decided elsewhere.
      *
@@ -47,13 +120,32 @@ object ApprovalNotifier {
      */
     fun sync(context: Context, pending: List<PendingItem>) {
         val manager = NotificationManagerCompat.from(context)
+        // Before anything is posted or cancelled: after a sticky restart the map
+        // is empty and the drawer is not, and a cancel loop over an empty map
+        // cancels nothing.
+        restore(context)
         if (!allowed(context)) {
             // Denied POST_NOTIFICATIONS. Nothing to do but keep the bookkeeping
             // straight, so that granting it later posts a correct set rather
             // than a backlog.
             assigned.keys.retainAll(pending.map { it.id }.toSet())
+            silenced = pending.size
+            if (pending.isNotEmpty() && !warnedSilenced) {
+                // Once per denied run, not once per emission: this is called on
+                // every state change and a log line per frame is its own bug.
+                warnedSilenced = true
+                Log.w(
+                    TAG,
+                    "POST_NOTIFICATIONS is not granted, so ${pending.size} approval(s) " +
+                        "will not be announced. Nothing else looks broken - the service is " +
+                        "still running - so this is the only sign. Grant notifications for " +
+                        "Jarvis in Android Settings, or open the Checks screen.",
+                )
+            }
             return
         }
+        silenced = 0
+        warnedSilenced = false
 
         val live = pending.associateBy { it.id }
 
@@ -86,9 +178,30 @@ object ApprovalNotifier {
     /** Clears everything this object posted. Used when the link goes down. */
     fun clear(context: Context) {
         val manager = NotificationManagerCompat.from(context)
+        // Including anything a previous process posted: without this, "clear"
+        // cleared only what this process happened to remember, and the drawer
+        // kept approvals from before the restart that nothing would ever remove.
+        restore(context)
         assigned.values.forEach { manager.cancel(it) }
         assigned.clear()
         manager.cancel(SUMMARY_ID)
+    }
+
+    /**
+     * Removes the notification for one approval that is no longer live.
+     *
+     * Used by the Deny action when the approval it names is not in `pending`
+     * any more - the stale-notification case a restarted process produces. The
+     * normal path does not need this: `decide` refreshes `pending` and the
+     * watcher resyncs the drawer.
+     */
+    fun cancelFor(context: Context, approvalId: String) {
+        val manager = NotificationManagerCompat.from(context)
+        restore(context)
+        assigned.remove(approvalId)?.let { manager.cancel(it) }
+        // Same rule sync() uses: a summary over fewer than two children is just
+        // a duplicate of the child.
+        if (assigned.size < 2) manager.cancel(SUMMARY_ID)
     }
 
     private fun allowed(context: Context): Boolean =
@@ -158,6 +271,11 @@ object ApprovalNotifier {
             .setPublicVersion(redacted(context))
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
+            // The approval id rides inside the notification so that a process
+            // which has been killed and restarted can read [assigned] back off
+            // the drawer in [restore]. Without it a restart loses every mapping
+            // and the notifications it posted become uncancellable.
+            .addExtras(Bundle().apply { putString(EXTRA_APPROVAL_ID, item.id) })
             .setGroup(GROUP)
             .setContentIntent(openCard(context, item.id))
             // Deny only, never Approve - and Deny only when the desktop's own

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Asking the panel for its real refresh rate, and measuring what we got.
@@ -116,15 +117,57 @@ object DisplayRate {
         if (deltaNanos <= 0) return
         val hz = 1_000_000_000f / deltaNanos
         if (hz < 5f || hz > 400f) return
-        val prev = _achievedHz.value
-        _achievedHz.value = when {
+        val prev = estimate
+        estimate = when {
             prev <= 0f -> hz
             hz > prev * 2f || hz < prev * 0.5f -> prev
             else -> prev + (hz - prev) * 0.05f
         }
+        publish()
     }
 
-    fun reset() { _achievedHz.value = 0f }
+    /**
+     * Moves the measurement onto the StateFlow, rarely.
+     *
+     * The measurement above is a few floating-point operations on a value
+     * nobody is watching, which is cheap enough to do every frame. Writing
+     * [_achievedHz] is not: it is a StateFlow the Checks screen collects, so
+     * every write recomposes that screen. [sample] runs from the face's frame
+     * loop at the panel rate, so with the Checks screen open a completely idle
+     * face produced ~120 emissions and ~120 recompositions a second - on a
+     * screen whose whole purpose is to say the app is not working the device
+     * hard.
+     *
+     * Two gates, both about what a person can actually see: nothing is
+     * published unless the value a human reads (whole Hz) has changed, and
+     * never more often than [MIN_PUBLISH_NANOS]. The number is published
+     * rounded so the comparison and the value agree - a float that keeps
+     * drifting in the third decimal would pass StateFlow's own equality check
+     * every time and republish for ever.
+     */
+    private fun publish() {
+        val rounded = estimate.roundToInt()
+        if (rounded == _achievedHz.value.roundToInt()) return
+        val now = System.nanoTime()
+        if (now - lastPublishNanos < MIN_PUBLISH_NANOS) return
+        lastPublishNanos = now
+        _achievedHz.value = rounded.toFloat()
+    }
+
+    /**
+     * The running estimate, kept off the StateFlow. See [publish].
+     *
+     * Not @Volatile and not synchronised: [sample] is only ever called from the
+     * face's frame callback, which is the main thread.
+     */
+    private var estimate = 0f
+    private var lastPublishNanos = 0L
+
+    fun reset() {
+        estimate = 0f
+        lastPublishNanos = 0L
+        _achievedHz.value = 0f
+    }
 
     /** The nearest rate the panel actually offers, for display. */
     fun snap(hz: Float): Float {
@@ -133,5 +176,8 @@ object DisplayRate {
     }
 
     private val KNOWN = listOf(60f, 75f, 90f, 100f, 120f, 144f, 165f, 240f)
+
+    /** Four publishes a second at most. Faster than a person can read anyway. */
+    private const val MIN_PUBLISH_NANOS = 250_000_000L
     private const val TAG = "JarvisDisplayRate"
 }

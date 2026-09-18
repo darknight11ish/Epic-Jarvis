@@ -68,10 +68,15 @@
             </intent-filter>
         </service>
 
+        <!-- exported="false" and it still receives BOOT_COMPLETED: that broadcast
+             and MY_PACKAGE_REPLACED are both protected system broadcasts, which the
+             system delivers to an app's own receivers regardless. Exporting it only
+             ever let OTHER apps address this receiver directly, and all they could
+             make it do is start the link - low impact, but free to close. -->
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
