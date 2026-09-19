@@ -395,6 +395,80 @@ def t_max_rounds_stops_an_infinite_tool_loop():
         AG.TOOLS["calculator"].execute = real
 
 
+def t_a_prepare_time_failure_is_a_tool_result_not_a_dead_turn():
+    """`tool.prepare()` sat outside every try in run_local_turn, so a tool
+    that validated its own arguments - `{"days_ahead": "seven"}` reaching an
+    int() - raised straight out of the whole turn. This function's own
+    docstring promises a tool failure comes back as a tool RESULT the model
+    can read and retry from; that promise covered execute() and not
+    prepare(). Reproduced before the fix."""
+    real = AG.TOOLS["calculator"].prepare
+
+    def explodes(args):
+        raise ValueError("days_ahead must be a number, got 'seven'")
+
+    AG.TOOLS["calculator"].prepare = explodes
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator",
+                 "arguments": json.dumps({"expression": "2+2"})}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "Sorry."}}]},
+        ]
+        post, calls = scripted_post(responses)
+        with NoRealIO():
+            AG.run_local_turn(
+                [{"role": "user", "content": "what is 2+2"}], "qwen3:8b",
+                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                gate_check=allow,
+                open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
+        check("the turn survived a prepare-time raise", len(calls) == 2, repr(len(calls)))
+        tool_msg = calls[1]["messages"][-1]
+        check("the failure came back as a tool message the model can read",
+              tool_msg["role"] == "tool", repr(tool_msg))
+        check("and it says what was wrong with the arguments",
+              "days_ahead" in tool_msg["content"] and "ValueError" in tool_msg["content"],
+              repr(tool_msg["content"]))
+    finally:
+        AG.TOOLS["calculator"].prepare = real
+
+
+def t_a_prepare_time_failure_never_executes_the_tool():
+    """CONTROL: the tool must not run when its own prepare refused the
+    arguments - and the gate must not be asked to approve a plan that was
+    never built."""
+    real_prepare = AG.TOOLS["calculator"].prepare
+    real_execute = AG.TOOLS["calculator"].execute
+    ran, asked = [], []
+    AG.TOOLS["calculator"].prepare = lambda args: (_ for _ in ()).throw(ValueError("no"))
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: ran.append(1) or {"ok": True}
+
+    def watching_gate(action, detail, why):
+        asked.append(action)
+        return allow(action, detail, why)
+
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator",
+                 "arguments": json.dumps({"expression": "2+2"})}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "Sorry."}}]},
+        ]
+        post, _calls = scripted_post(responses)
+        with NoRealIO():
+            AG.run_local_turn(
+                [{"role": "user", "content": "x"}], "qwen3:8b",
+                ollama_url="http://x", stream_out=lambda b: None, post=post,
+                gate_check=watching_gate,
+                open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
+        check("CONTROL: the tool never executed", ran == [], repr(ran))
+        check("CONTROL: the gate was never asked about a plan that does not exist",
+              asked == [], repr(asked))
+    finally:
+        AG.TOOLS["calculator"].prepare = real_prepare
+        AG.TOOLS["calculator"].execute = real_execute
+
+
 if __name__ == "__main__":
     for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
@@ -408,7 +482,9 @@ if __name__ == "__main__":
                t_calculator_cannot_reach_names_or_calls,
                t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call,
                t_empty_enabled_tools_offers_nothing,
-               t_max_rounds_stops_an_infinite_tool_loop):
+               t_max_rounds_stops_an_infinite_tool_loop,
+               t_a_prepare_time_failure_is_a_tool_result_not_a_dead_turn,
+               t_a_prepare_time_failure_never_executes_the_tool):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

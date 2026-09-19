@@ -70,12 +70,49 @@ def request(task_id: str, action: str) -> None:
 
 
 def checkpoint(task_id: Optional[str]) -> Optional[str]:
-    """The pending signal for a task, or None.
+    """Take the pending signal for a task, or None.
+
+    **This CONSUMES the signal.** Reading it is what acting on it looks
+    like, and a signal that has been acted on is spent. That is not a
+    convenience; it is the only thing standing between this module and a
+    permanently stuck task, and it was missing:
+
+        Pause a task. The run loop reads "pause" and stops. Press
+        continue, which starts a FRESH run() against the same id. Its
+        very first checkpoint reads the same "pause" still sitting here
+        and stops again. And again. Forever - and so does any later task
+        that happens to reuse the id.
+
+    `clear()` was written for exactly this and had no caller anywhere
+    outside its own tests; none of the three run() loops could call it if
+    it wanted to, because they are handed a zero-argument callback and
+    have no idea what a task id is (see the module doc on why that is the
+    right shape). Taking the signal on read is the fix that needs no new
+    plumbing in any of them.
+
+    A `stop` is consumed the same way a `pause` is. The run loop returns
+    immediately on either, so neither is read twice inside one run, and a
+    stop that outlived its run must not stop the next one.
 
     `None` in, `None` out - a caller with no task_id yet (nothing to pause
     or stop against) gets exactly the "no signal" answer, never a
     KeyError, so `checkpoint=lambda: jarvis_task_control.checkpoint(tid)`
     is safe to wire even when `tid` might be `None`.
+    """
+    if task_id is None:
+        return None
+    with _lock:
+        return _signals.pop(task_id, None)
+
+
+def peek(task_id: Optional[str]) -> Optional[str]:
+    """The pending signal for a task WITHOUT consuming it.
+
+    For a caller that wants to show whether a pause is still waiting to be
+    picked up - a status route, a test - rather than act on it. Never wire
+    a run() loop's `checkpoint` to this: the loop reading a signal is what
+    spends it, and a loop that peeked would stop on the same pause every
+    time it ran. See `checkpoint()`.
     """
     if task_id is None:
         return None
@@ -86,10 +123,17 @@ def checkpoint(task_id: Optional[str]) -> Optional[str]:
 def clear(task_id: str) -> None:
     """Drop a task's signal and any queued note.
 
-    Call this once a task reaches a state a client has been told about -
-    finished, stopped, or explicitly resumed - so a stale pause from a
-    task that already ended can never leak onto a different task that
-    happens to reuse the same id.
+    Two real uses, now that `checkpoint()` consumes the signal itself:
+
+    - the owner cancels a Pause they asked for BEFORE the run loop has
+      reached its next checkpoint, so there is a signal sitting here that
+      nothing will ever take; and
+    - a task ends, and its queued note should not be handed to whatever
+      next reuses the id.
+
+    Notes are not consumed on read - `pending_note()` is a read, by
+    design, because the note is meant to survive until whatever builds the
+    next proposal picks it up - so this is the only thing that drops one.
     """
     with _lock:
         _signals.pop(task_id, None)

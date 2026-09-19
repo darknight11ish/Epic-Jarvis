@@ -7,6 +7,7 @@ sending a tap toward whatever phone happens to be plugged in now.
 
     python3 test_android_control.py
 """
+import base64
 import json
 import sys
 import traceback
@@ -204,7 +205,6 @@ def t_run_executes_every_approved_step_and_reports_screenshots():
     check("both steps done, nothing left", len(out["done"]) == 2 and out["not_run"] == [], repr(out))
     # base64, not raw bytes: the caller (run_local_turn) feeds this whole
     # dict to json.dumps(), which cannot serialize bytes at all.
-    import base64
     check("the screenshot is returned base64-encoded, not as raw bytes "
           "json.dumps() would crash on",
           out["screenshots"] == [base64.b64encode(b"\x89PNGfakebytes").decode("ascii")],
@@ -272,6 +272,59 @@ def t_no_checkpoint_given_behaves_exactly_as_before():
           out["ok"] is True and out["not_run"] == [], repr(out))
 
 
+def t_a_pause_still_returns_the_screenshots_already_taken():
+    # A screenshot already captured is work already done. Three of the four
+    # ways this run can end early used to drop `screenshots` entirely, so a
+    # run that shot the screen and then hit a pause reported that step as
+    # `done` and handed back no image at all - the one thing the step exists
+    # to produce.
+    signals = iter([None, "pause"])
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "look then tap",
+                   [{"action": "screenshot", "why": "see what's on screen"},
+                    {"action": "tap", "x": 2, "y": 2, "why": "y"}])
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, DEVICES_OUT)
+            return Result(0, b"\x89PNGfakebytes")
+        out = A.run(p, run_adb=caller, checkpoint=lambda: next(signals), approved=True)
+    check("the run paused", out.get("paused") is True, repr(out))
+    check("the screenshot step is reported done", len(out["done"]) == 1, repr(out))
+    check("and its image came back with it",
+          out.get("screenshots") == [base64.b64encode(b"\x89PNGfakebytes").decode("ascii")],
+          repr(out.get("screenshots")))
+
+
+def t_a_failed_step_still_returns_earlier_screenshots():
+    # Same rule on the adb-failure path, which had the same hole.
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "look then tap",
+                   [{"action": "screenshot", "why": "see what's on screen"},
+                    {"action": "tap", "x": 2, "y": 2, "why": "y"}])
+        calls = []
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, DEVICES_OUT)
+            calls.append(argv)
+            if len(calls) == 1:
+                return Result(0, b"\x89PNGfakebytes")
+            return Result(1, b"", b"device offline")
+        out = A.run(p, run_adb=caller, approved=True)
+    check("the run reports not-ok", out["ok"] is False, repr(out))
+    check("the earlier screenshot survived the failure",
+          out.get("screenshots") == [base64.b64encode(b"\x89PNGfakebytes").decode("ascii")],
+          repr(out.get("screenshots")))
+
+
+def t_a_stop_during_the_final_step_is_reported_not_swallowed():
+    signals = iter([None, "stop"])
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
+        out = A.run(p, run_adb=adb_ok(), checkpoint=lambda: next(signals), approved=True)
+    check("the plan really did finish", out["ok"] is True, repr(out))
+    check("the late stop is acknowledged", out.get("late_signal") == "stop", repr(out))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_runs_nothing, t_unknown_action_is_rejected_not_guessed,
                t_missing_fields_are_rejected_not_guessed,
@@ -285,7 +338,10 @@ if __name__ == "__main__":
                t_announce_is_called_and_is_optional,
                t_checkpoint_stop_ends_the_run_before_the_next_step,
                t_checkpoint_pause_ends_the_run_and_says_so,
-               t_no_checkpoint_given_behaves_exactly_as_before):
+               t_no_checkpoint_given_behaves_exactly_as_before,
+               t_a_pause_still_returns_the_screenshots_already_taken,
+               t_a_failed_step_still_returns_earlier_screenshots,
+               t_a_stop_during_the_final_step_is_reported_not_swallowed):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

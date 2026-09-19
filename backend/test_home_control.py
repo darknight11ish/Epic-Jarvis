@@ -197,6 +197,71 @@ with with_env(url="http://ha.local:8123", token="tok123"):
     check("a failed service call is reported, not raised", failed["ok"] is False)
     check("the failure reason is legible", "401" in failed["reason"])
 
+# ── heavy is decided by the ENTITY too, not only the service domain ───────
+
+with with_env(url="http://ha.local:8123", token="tok123"):
+    # `homeassistant.turn_on/turn_off/toggle` are real services that FORWARD
+    # to the entity's own domain. Classifying on the service domain alone
+    # left the approval card for an unlock without its "this is marked
+    # HEAVY" line - the one line that says the front door is involved.
+    forwarded = H.plan_service("homeassistant", "turn_off", "lock.front_door")
+    check("homeassistant.turn_off on a lock is heavy", forwarded.heavy is True)
+    check("and the card says so", "HEAVY" in H.describe(forwarded).upper(),
+          H.describe(forwarded))
+
+    for dom in ("alarm_control_panel", "cover"):
+        fwd = H.plan_service("homeassistant", "turn_on", f"{dom}.garage")
+        check(f"homeassistant.turn_on on a {dom} entity is heavy", fwd.heavy is True)
+
+    # CONTROL: the same forwarding service on an ordinary entity must NOT
+    # become heavy, or the marking stops meaning anything.
+    light = H.plan_service("homeassistant", "turn_on", "light.kitchen")
+    check("CONTROL: homeassistant.turn_on on a light is not heavy", light.heavy is False)
+    check("CONTROL: a direct lock.unlock is still heavy",
+          H.plan_service("lock", "unlock", "lock.front_door").heavy is True)
+
+# ── an entity id is not free text, and never reaches a URL raw ────────────
+
+with with_env(url="http://ha.local:8123", token="tok123"):
+    # plan_states ships at tier `auto` - no card, so nobody sees the URL
+    # before it is sent. A traversal in an id would have reached the wire as
+    # a request to a completely different route, under a standing grant
+    # given to a read.
+    traversal = H.plan_states(["../../api/services/lock/unlock"])
+    check("a path traversal in an entity id is refused outright",
+          traversal.queries == [], repr(traversal.queries))
+    check("and the plan says why", "entity id" in traversal.reason_empty,
+          traversal.reason_empty)
+
+    for hostile in ("light.kitchen?x=1", "light.kitchen#frag", "light kitchen",
+                    "light.kitchen/../../x", "LIGHT.KITCHEN"):
+        p_bad = H.plan_states([hostile])
+        check(f"refused: {hostile!r}", p_bad.queries == [], repr(p_bad.queries))
+
+    # A good id still works, and is percent-encoded on the way in - belt and
+    # braces, so even a shape check that is one day loosened cannot let a
+    # path separator through.
+    good = H.plan_states(["light.kitchen"])
+    check("a real entity id still plans a read", len(good.queries) == 1)
+    check("and lands on the states route",
+          good.queries[0].url == "http://ha.local:8123/api/states/light.kitchen",
+          good.queries[0].url)
+
+    # A mixed list keeps the good ones and drops the rest, rather than
+    # failing the whole read.
+    mixed = H.plan_states(["light.kitchen", "../evil"])
+    check("a mixed list keeps only the real ids", len(mixed.queries) == 1, repr(mixed.queries))
+    check("and the one it kept is the real one",
+          mixed.queries[0].entity_id == "light.kitchen")
+
+    bad_service = H.plan_service("lock", "unlock", "../../states")
+    check("plan_service refuses a bad entity id too", bad_service.queries == [],
+          repr(bad_service.queries))
+    bad_domain = H.plan_service("../services", "unlock", "lock.front_door")
+    check("plan_service refuses a domain that is not one segment",
+          bad_domain.queries == [], repr(bad_domain.queries))
+
+
 print()
 if FAILED:
     print(f"{len(FAILED)} failed: {', '.join(FAILED)}")

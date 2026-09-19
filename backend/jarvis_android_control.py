@@ -254,36 +254,47 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
     check = checkpoint or (lambda: None)
 
     done, results = [], []
+
+    def stopped_at(i: int, reason: str) -> dict:
+        """Every early return from this loop, in one shape.
+
+        `screenshots` is in here for a reason: three of the four ways this
+        run can end early used to leave it out entirely, so a run that took
+        two screenshots and then hit a pause reported both steps as `done`
+        and handed back no images at all. A screenshot already taken is
+        work already done, and the result says so on every path.
+        """
+        return {"ok": False,
+                "reason": reason,
+                "done": [s.as_dict() for s in done],
+                "not_run": [s.as_dict() for s in p.steps[i - 1:]],
+                "screenshots": results}
+
     for i, step in enumerate(p.steps, 1):
         if p.device not in _current_serials(caller):
-            return {"ok": False,
-                    "reason": (f"step {i} ({step.action}): device "
-                               f"{p.device!r} is no longer connected - "
-                               "stopping rather than sending it to whatever "
-                               "phone is plugged in now"),
-                    "done": [s.as_dict() for s in done],
-                    "not_run": [s.as_dict() for s in p.steps[i - 1:]]}
-        tell(f"Step {i}/{len(p.steps)}: {step.action} on {p.device}")
+            return stopped_at(i, f"step {i} ({step.action}): device "
+                                 f"{p.device!r} is no longer connected - "
+                                 "stopping rather than sending it to whatever "
+                                 "phone is plugged in now")
+        # The checkpoint comes FIRST, before the announcement - `announce`
+        # is wired to a sticky `set_activity`, so announcing a step and then
+        # pausing left the Brain window claiming a step that never ran.
         signal = check()
         if signal in ("stop", "pause"):
-            remaining = p.steps[i - 1:]
-            result = {"ok": False,
-                      "reason": ("stopped by request" if signal == "stop"
-                                 else "paused by request - resuming needs a new decision"),
-                      "done": [s.as_dict() for s in done],
-                      "not_run": [s.as_dict() for s in remaining]}
+            result = stopped_at(
+                i, "stopped by request" if signal == "stop"
+                   else "paused by request - resuming needs a new decision")
             if signal == "pause":
                 result["paused"] = True
             return result
+        tell(f"Step {i}/{len(p.steps)}: {step.action} on {p.device}")
         result = caller(step.argv)
         rc = getattr(result, "returncode", 0)
         if rc != 0:
             stderr = getattr(result, "stderr", b"")
             msg = stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else str(stderr)
-            return {"ok": False,
-                    "reason": f"step {i} ({step.action}) failed (exit {rc}): {msg.strip()}",
-                    "done": [s.as_dict() for s in done],
-                    "not_run": [s.as_dict() for s in p.steps[i - 1:]]}
+            return stopped_at(
+                i, f"step {i} ({step.action}) failed (exit {rc}): {msg.strip()}")
         done.append(step)
         if step.action == "screenshot":
             # base64, not raw bytes: this dict is handed straight to
@@ -293,6 +304,19 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
             # site and crashed the whole turn.
             raw = getattr(result, "stdout", b"")
             results.append(base64.b64encode(raw).decode("ascii"))
-    tell("Done.")
-    return {"ok": True, "done": [s.as_dict() for s in done], "not_run": [],
-            "screenshots": results}
+    # One last read, so a Stop that arrived while the final step was running
+    # is not thrown away. Every step ran, so `ok` stays True - but the owner
+    # pressed Stop and is told it was seen and was too late. The read also
+    # SPENDS the signal (jarvis_task_control.checkpoint), which is what keeps
+    # a stop that missed its run from stopping the next one instead.
+    late = check()
+    out = {"ok": True, "done": [s.as_dict() for s in done], "not_run": [],
+           "screenshots": results}
+    if late in ("stop", "pause"):
+        out["late_signal"] = late
+        out["note"] = (f"a {late} arrived after the last step had already run - "
+                       "the plan finished, and nothing was left undone")
+        tell(f"Done. (A {late} arrived too late to change anything.)")
+    else:
+        tell("Done.")
+    return out

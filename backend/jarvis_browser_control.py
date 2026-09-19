@@ -504,8 +504,11 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
 
     done = []
     for i, step in enumerate(p.steps, 1):
-        label = step.value if step.action == "navigate" else f'{step.action} "{step.name}"'
-        tell(f"Step {i}/{len(p.steps)}: {label} in session {step.session}")
+        # The checkpoint comes FIRST, before the announcement. It used to
+        # come second, and `announce` is wired to a sticky
+        # `jarvis_events.set_activity("working", text)` - so a pause left
+        # the Brain window claiming a step that never ran, and kept saying
+        # it.
         signal = check()
         if signal in ("stop", "pause"):
             remaining = p.steps[i - 1:]
@@ -517,6 +520,8 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
             if signal == "pause":
                 result["paused"] = True
             return result
+        label = step.value if step.action == "navigate" else f'{step.action} "{step.name}"'
+        tell(f"Step {i}/{len(p.steps)}: {label} in session {step.session}")
         if step.action != "navigate":
             current = getter(step.session) or {"elements": []}
             found = _find(current.get("elements") or [], step.role, step.name)
@@ -546,5 +551,18 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
             # which is the exact failure this action exists to avoid.
             step.value = str(read_back)
         done.append(step)
-    tell("Done.")
-    return {"ok": True, "done": [s.as_dict() for s in done], "not_run": []}
+    # One last read, so a Stop that arrived while the final step was running
+    # is not thrown away. Every step ran, so `ok` stays True - but the owner
+    # pressed Stop and is told it was seen and was too late. The read also
+    # SPENDS the signal (jarvis_task_control.checkpoint), which is what keeps
+    # a stop that missed its run from stopping the next one instead.
+    late = check()
+    out = {"ok": True, "done": [s.as_dict() for s in done], "not_run": []}
+    if late in ("stop", "pause"):
+        out["late_signal"] = late
+        out["note"] = (f"a {late} arrived after the last step had already run - "
+                       "the plan finished, and nothing was left undone")
+        tell(f"Done. (A {late} arrived too late to change anything.)")
+    else:
+        tell("Done.")
+    return out

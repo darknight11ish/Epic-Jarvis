@@ -323,8 +323,11 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
 
     done = []
     for i, step in enumerate(p.steps, 1):
-        tell(f"Step {i}/{len(p.steps)}: {step.action} \"{step.control}\" "
-             f"in {step.window}")
+        # The checkpoint comes FIRST, before the announcement. It used to
+        # come second, and `announce` is wired to
+        # `jarvis_events.set_activity("working", text)`, which is sticky -
+        # so a pause left the Brain window saying "Step 4/6: click Send"
+        # about a step that never ran, and went on saying it.
         signal = check()
         if signal in ("stop", "pause"):
             remaining = p.steps[i - 1:]
@@ -336,6 +339,8 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
             if signal == "pause":
                 result["paused"] = True
             return result
+        tell(f"Step {i}/{len(p.steps)}: {step.action} \"{step.control}\" "
+             f"in {step.window}")
         tree = getter(step.window) or []
         current = _find(tree, step.control)
         same_control = (
@@ -365,5 +370,20 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
             # Step, and describe()/as_dict() already render it.
             step.value = read_back
         done.append(step)
-    tell("Done.")
-    return {"ok": True, "done": [s.as_dict() for s in done], "not_run": []}
+    # One last read, so a Stop that arrived while the final step was
+    # running is not simply thrown away. The plan really did finish - every
+    # step ran, so `ok` stays True and nothing pretends otherwise - but the
+    # owner pressed Stop and deserves to be told it was seen and was too
+    # late, rather than watching it vanish. This read also SPENDS the
+    # signal (see jarvis_task_control.checkpoint), which is what stops a
+    # stop that missed its run from stopping the next one instead.
+    late = check()
+    result = {"ok": True, "done": [s.as_dict() for s in done], "not_run": []}
+    if late in ("stop", "pause"):
+        result["late_signal"] = late
+        result["note"] = (f"a {late} arrived after the last step had already "
+                          "run - the plan finished, and nothing was left undone")
+        tell(f"Done. (A {late} arrived too late to change anything.)")
+    else:
+        tell("Done.")
+    return result

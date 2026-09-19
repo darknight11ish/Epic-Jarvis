@@ -170,6 +170,48 @@ with with_env(host="mail.example.com"):
     check("an HTML-only message gets no preview rather than raw markup",
           out2["messages"][0]["preview"] == "")
 
+# ── one bad charset must not break the whole mailbox ──────────────────────
+
+# `errors="replace"` covers bytes that are not valid IN a codec. It does
+# nothing at all when the CODEC ITSELF does not exist: a header naming a
+# charset Python has never heard of raises LookupError from inside
+# .decode(). That escaped _decode, escaped the message loop, and failed the
+# entire read - so one malformed header from one sender broke every
+# email_check until that message was deleted by hand.
+
+with with_env(host="imap.example.com", user="me@example.com", password="pw"):
+    p = E.plan(limit=5)
+    hostile = (
+        "From: =?unicode?q?Bob?= <bob@example.com>\r\n"
+        "Subject: =?definitely-not-a-charset?q?Quarterly_report?=\r\n"
+        "Content-Type: text/plain; charset=utf-8\r\n"
+        "\r\n"
+        "Body text.\r\n"
+    ).encode("utf-8")
+    ordinary = (
+        "From: Alice <alice@example.com>\r\n"
+        "Subject: Lunch\r\n"
+        "Content-Type: text/plain; charset=utf-8\r\n"
+        "\r\n"
+        "One o'clock?\r\n"
+    ).encode("utf-8")
+
+    out = E.run(p, fetch_messages=lambda _p: [hostile, ordinary], approved=True)
+    check("an unknown charset does not fail the whole read", out["ok"] is True, repr(out))
+    check("both messages still came back", len(out.get("messages", [])) == 2,
+          repr(out.get("messages")))
+    subjects = [m["subject"] for m in out.get("messages", [])]
+    check("the readable part of the bad header survived",
+          any("Quarterly" in s for s in subjects), repr(subjects))
+    check("CONTROL: the ordinary message beside it is untouched",
+          any(s == "Lunch" for s in subjects), repr(subjects))
+
+    # And the decoder itself, directly.
+    check("_decode falls back rather than raising LookupError",
+          "Bob" in E._decode("=?no-such-charset?q?Bob?="),
+          repr(E._decode("=?no-such-charset?q?Bob?=")))
+
+
 print()
 if FAILED:
     print(f"{len(FAILED)} failed: {', '.join(FAILED)}")

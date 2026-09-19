@@ -49,6 +49,7 @@ already handles the pairing token with the same care - not duplicated here.
 
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import re
@@ -296,7 +297,12 @@ def _age_days(pushed_at: str, now: Optional[float] = None) -> Optional[float]:
         t = time.strptime(str(pushed_at)[:19], "%Y-%m-%dT%H:%M:%S")
     except (ValueError, TypeError):
         return None
-    return ((now or time.time()) - time.mktime(t)) / 86400.0
+    # calendar.timegm, not time.mktime. GitHub's `pushed_at` is UTC and says
+    # so with its trailing Z; mktime reads a struct_time as LOCAL time, so
+    # the age of a repository came out shifted by the machine's own UTC
+    # offset - and for a repository pushed within that offset, NEGATIVE.
+    # The owner is in a timezone where that is hours, not minutes.
+    return ((now or time.time()) - calendar.timegm(t)) / 86400.0
 
 
 def grade_repo(repo: dict, now: Optional[float] = None) -> dict:

@@ -221,7 +221,20 @@ def _decode(value: Optional[str]) -> str:
     out = []
     for text, enc in parts:
         if isinstance(text, bytes):
-            out.append(text.decode(enc or "utf-8", errors="replace"))
+            # LookupError, separately from the decode errors `errors=
+            # "replace"` already covers. `errors="replace"` handles bytes
+            # that are not valid IN a codec; it does nothing at all when the
+            # CODEC ITSELF does not exist, and a header naming a charset
+            # Python has never heard of ("charset=unicode", a truncated
+            # name, a typo from some sender's mail client) raises LookupError
+            # from inside .decode(). That propagated out of _decode, out of
+            # the message loop, and failed the entire mailbox read - so one
+            # malformed header from one sender broke every email_check until
+            # that message was deleted by hand.
+            try:
+                out.append(text.decode(enc or "utf-8", errors="replace"))
+            except LookupError:
+                out.append(text.decode("utf-8", errors="replace"))
         else:
             out.append(text)
     return "".join(out)

@@ -89,6 +89,60 @@ def t_note_does_not_set_a_pause_or_stop_signal():
     TC.clear("appr_7")
 
 
+def t_checkpoint_consumes_the_signal():
+    # THE BUG THIS FIXES, end to end. checkpoint() used to only READ, and
+    # nothing anywhere called clear(), so the pause sat here forever:
+    # continuing a paused task started a fresh run whose very first
+    # checkpoint found the same pause and stopped again. Permanently - and
+    # so did any later task reusing the id.
+    TC.request("appr_consume", "pause")
+    first = TC.checkpoint("appr_consume")
+    second = TC.checkpoint("appr_consume")
+    check("the run loop sees the pause", first == "pause")
+    check("a second read sees nothing - the signal was spent", second is None,
+          repr(second))
+
+
+def t_a_continued_task_does_not_pause_again():
+    # The same thing said the way the owner experiences it.
+    TC.request("appr_continue", "pause")
+    check("the first run pauses", TC.checkpoint("appr_continue") == "pause")
+    # ... the owner presses Continue, which starts a fresh run against the
+    # same id. Its first checkpoint must be clean.
+    check("the continued run is not paused at step 1",
+          TC.checkpoint("appr_continue") is None)
+
+
+def t_a_spent_stop_does_not_stop_the_next_task():
+    TC.request("appr_reused", "stop")
+    check("the stop is delivered once", TC.checkpoint("appr_reused") == "stop")
+    check("an unrelated task reusing the id runs clean",
+          TC.checkpoint("appr_reused") is None)
+
+
+def t_peek_does_not_consume():
+    TC.request("appr_peek", "pause")
+    check("peek reports the pending pause", TC.peek("appr_peek") == "pause")
+    check("peeking twice still reports it", TC.peek("appr_peek") == "pause")
+    check("and the run loop can still take it", TC.checkpoint("appr_peek") == "pause")
+    check("which then spends it", TC.peek("appr_peek") is None)
+    TC.clear("appr_peek")
+
+
+def t_peek_of_none_never_raises():
+    check("peek(None) is None, not an error", TC.peek(None) is None)
+
+
+def t_clear_still_cancels_a_signal_nothing_took():
+    # clear()'s remaining job: the owner cancels a Pause BEFORE the run loop
+    # has reached its next checkpoint, so there is a signal here that
+    # nothing will ever pick up.
+    TC.request("appr_cancelled", "pause")
+    TC.clear("appr_cancelled")
+    check("a cancelled pause never reaches the run loop",
+          TC.checkpoint("appr_cancelled") is None)
+
+
 if __name__ == "__main__":
     for fn in (t_no_signal_by_default, t_none_task_id_never_raises,
                t_request_rejects_unknown_actions, t_stop_is_read_back,
@@ -96,7 +150,12 @@ if __name__ == "__main__":
                t_clear_is_safe_on_an_id_with_no_signal,
                t_a_later_request_replaces_an_earlier_one,
                t_signals_are_per_task, t_note_is_queued_and_read_back,
-               t_note_does_not_set_a_pause_or_stop_signal):
+               t_note_does_not_set_a_pause_or_stop_signal,
+               t_checkpoint_consumes_the_signal,
+               t_a_continued_task_does_not_pause_again,
+               t_a_spent_stop_does_not_stop_the_next_task,
+               t_peek_does_not_consume, t_peek_of_none_never_raises,
+               t_clear_still_cancels_a_signal_nothing_took):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

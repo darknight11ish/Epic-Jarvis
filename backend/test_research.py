@@ -249,12 +249,63 @@ def t_a_failed_request_is_not_a_clear_result():
           "unaudited, not clear" in text or "No capabilities" in text, text)
 
 
+def t_repo_age_is_measured_in_utc_not_the_machines_timezone():
+    # GitHub's `pushed_at` is UTC and says so with its trailing Z.
+    # time.mktime reads a struct_time as LOCAL time, so the age came out
+    # shifted by the machine's own UTC offset - and NEGATIVE for anything
+    # pushed within that offset. calendar.timegm reads it as what it is.
+    import calendar, os, time as _time
+    stamp = "2026-01-01T00:00:00Z"
+    now = calendar.timegm(_time.strptime("2026-01-11T00:00:00", "%Y-%m-%dT%H:%M:%S"))
+
+    def age_in(tz):
+        old = os.environ.get("TZ")
+        os.environ["TZ"] = tz
+        try:
+            _time.tzset()
+            return R._age_days(stamp, now=now)
+        finally:
+            if old is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old
+            _time.tzset()
+
+    ages = {tz: age_in(tz) for tz in
+            ("UTC", "America/Los_Angeles", "Asia/Tokyo", "Europe/London")}
+    check("the same timestamp is the same age everywhere",
+          len({round(a, 6) for a in ages.values()}) == 1, repr(ages))
+    check("and it is the right age", abs(ages["UTC"] - 10.0) < 1e-6, repr(ages))
+
+
+def t_a_repo_pushed_moments_ago_is_never_negative_years_old():
+    # The visible face of the same bug, in the timezone that shows it worst.
+    import calendar, os, time as _time
+    now = calendar.timegm(_time.strptime("2026-01-01T12:00:00", "%Y-%m-%dT%H:%M:%S"))
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Tokyo"      # UTC+9
+    try:
+        _time.tzset()
+        age = R._age_days("2026-01-01T09:00:00Z", now=now)
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        _time.tzset()
+    check("a repo pushed three hours ago is not in the future",
+          age is not None and age >= 0, repr(age))
+    check("and it is three hours old", abs(age - 0.125) < 1e-6, repr(age))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_touches_nothing, t_the_card_prints_the_whole_request,
                t_run_refuses_without_approval,
                t_authenticated_requests_are_opt_in_and_disclosed,
                t_grading, t_the_matrix,
-               t_a_failed_request_is_not_a_clear_result):
+               t_a_failed_request_is_not_a_clear_result,
+               t_repo_age_is_measured_in_utc_not_the_machines_timezone,
+               t_a_repo_pushed_moments_ago_is_never_negative_years_old):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

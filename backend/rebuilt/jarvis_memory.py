@@ -212,6 +212,38 @@ def _words(text: str) -> set:
     return out
 
 
+def _fts_terms(text: str) -> set:
+    """Content words for the FTS5 MATCH query. NOT possessive-folded.
+
+    Separate from `_words` above, and the difference is a real bug that was
+    shipped. `facts_fts` is `tokenize='porter unicode61'`, so the index
+    already holds Porter stems, and Porter deliberately keeps a double `s`
+    ("class" stems to "class", "address" to "address"). `_words` strips one
+    trailing `s` from everything - which turns "address" into "addres", a
+    string Porter then stems to something the index does not contain. The
+    result:
+
+        search("email address")  ->  ['My email address is bob@exam...']
+        search("address")        ->  []
+
+    Every word ending in `ss` was unfindable on its own: class, pass,
+    address, business, access, press, boss, glass. And `search` swallows
+    `sqlite3.OperationalError`, so it would have stayed silent even if it
+    had raised.
+
+    Feeding the RAW token and letting Porter do the stemming is both the fix
+    and the simpler rule: one stemmer, on both sides of the index. `_words`
+    keeps its folding because it is used for the OVERLAP test in
+    `find_one`, where both sides are folded the same way and the folding is
+    what stops "Mario's" contributing a bare "s".
+    """
+    out = set()
+    for w in re.findall(r"[\w\-]+", str(text).lower()):
+        if len(w) > 1 and w not in _STOP:
+            out.add(w)
+    return out
+
+
 def _content_words(text: str) -> list[str]:
     return sorted(_words(text))
 
@@ -802,8 +834,11 @@ class MemoryStore:
         at = time.time() if at is None else at
         with _LOCK, closing(self._connect()) as c:
             ranks: dict[int, float] = {}
-            # words
-            terms = sorted(_words(query))
+            # words. Content terms only, and RAW - see _fts_terms. An
+            # OR-query over every word in the question matched most of the
+            # store on "the" and "is", so a fact that shared nothing but
+            # function words still got a rank.
+            terms = sorted(_fts_terms(query))
             try:
                 if not terms:
                     raise sqlite3.OperationalError("no content terms")

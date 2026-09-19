@@ -75,6 +75,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Optional
@@ -103,8 +105,38 @@ def authenticated() -> bool:
     return bool(os.environ.get(TOKEN_ENV, "").strip())
 
 
-def _is_heavy_service(domain: str) -> bool:
-    return domain.strip().lower() in _HEAVY_DOMAINS
+# An entity id is `<domain>.<object_id>`, and Home Assistant's own rule is
+# that both halves are lowercase ASCII letters, digits and underscores. Used
+# to REFUSE anything else rather than to clean it up: an id is not free text,
+# and a value that does not look like one is a mistake or an attack, neither
+# of which is improved by guessing what was meant.
+_ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
+
+
+# One path segment of a Home Assistant domain or service name, same
+# character rule as an entity id's two halves.
+_SEGMENT_RE = re.compile(r"^[a-z0-9_]+$")
+
+
+def _is_valid_entity_id(eid: str) -> bool:
+    return bool(_ENTITY_ID_RE.match(eid))
+
+
+def _is_heavy_service(domain: str, entity_id: str = "") -> bool:
+    """Whether this call deserves the `heavy` marking.
+
+    BOTH halves are checked, and the entity's half is the one that was
+    missing. `homeassistant.turn_on` / `turn_off` / `toggle` are real
+    services in the `homeassistant` domain that FORWARD to the entity's own
+    domain - so `homeassistant.turn_off` on `lock.front_door` unlocks a
+    door, and classifying on the service domain alone ("homeassistant") left
+    the approval card without the "this is marked HEAVY" line for exactly
+    that. The entity id is what says what is actually being operated.
+    """
+    if domain.strip().lower() in _HEAVY_DOMAINS:
+        return True
+    entity_domain = str(entity_id).strip().lower().split(".", 1)[0]
+    return bool(entity_domain) and entity_domain in _HEAVY_DOMAINS
 
 
 # --------------------------------------------------------------------------
@@ -139,11 +171,28 @@ class Plan:
 
 def plan_states(entity_ids: list) -> Plan:
     """Work out one GET per named entity. Opens no socket."""
-    ids = [str(e).strip() for e in (entity_ids or []) if str(e).strip()]
-    ids = ids[:_MAX_ENTITIES]
+    raw = [str(e).strip() for e in (entity_ids or []) if str(e).strip()]
+    raw = raw[:_MAX_ENTITIES]
     if_refused = "nothing is read; these entities' state stays unknown to Jarvis"
 
+    # Refused, not sanitised. These ids come from the model, and this plan
+    # ships at tier `auto` - no card, so nobody sees the URL before it is
+    # sent. `../../api/services/lock/unlock` interpolated into the path
+    # reaches the wire as a REQUEST TO UNLOCK A DOOR under the standing
+    # grant a read was given, and a `?` or `#` re-splits the URL somewhere
+    # else entirely. Both are shut here, in two independent ways: a shape
+    # check that rejects anything that is not `<domain>.<object_id>`, and
+    # `quote(..., safe="")` below so that even a value that passed the shape
+    # check cannot change the path's structure.
+    bad = [e for e in raw if not _is_valid_entity_id(e)]
+    ids = [e for e in raw if _is_valid_entity_id(e)]
     if not ids:
+        if bad:
+            return Plan(kind="get_states", if_refused=if_refused,
+                         authenticated=authenticated(),
+                         reason_empty=("none of those look like Home Assistant "
+                                       "entity ids (domain.object_id), so nothing "
+                                       f"was read: {', '.join(repr(b) for b in bad)}"))
         return Plan(kind="get_states", if_refused=if_refused,
                      authenticated=authenticated(),
                      reason_empty="no entity ids were given to read")
@@ -154,7 +203,8 @@ def plan_states(entity_ids: list) -> Plan:
                      reason_empty=f"{URL_ENV} is not set - there is no Home Assistant to read")
 
     queries = [
-        Query(url=f"{base.rstrip('/')}/api/states/{eid}", method="GET",
+        Query(url=f"{base.rstrip('/')}/api/states/{urllib.parse.quote(eid, safe='')}",
+              method="GET",
               why=f"read the current state of {eid}", entity_id=eid)
         for eid in ids
     ]
@@ -174,6 +224,19 @@ def plan_service(domain: str, service: str, entity_id: str,
         return Plan(kind="call_service", if_refused=if_refused,
                      authenticated=authenticated(),
                      reason_empty="domain, service, and entity_id are all required")
+    # Same shape rule as plan_states, for the same reason - and here the
+    # domain and service go into the path too. A service name is one
+    # segment, not a path.
+    if not _is_valid_entity_id(entity_id):
+        return Plan(kind="call_service", if_refused=if_refused,
+                     authenticated=authenticated(),
+                     reason_empty=(f"{entity_id!r} does not look like a Home Assistant "
+                                   "entity id (domain.object_id), so nothing was sent"))
+    if not _SEGMENT_RE.match(domain) or not _SEGMENT_RE.match(service):
+        return Plan(kind="call_service", if_refused=if_refused,
+                     authenticated=authenticated(),
+                     reason_empty=(f"{domain!r}.{service!r} is not a Home Assistant "
+                                   "domain and service, so nothing was sent"))
     base = os.environ.get(URL_ENV, "").strip()
     if not base:
         return Plan(kind="call_service", if_refused=if_refused,
@@ -181,9 +244,12 @@ def plan_service(domain: str, service: str, entity_id: str,
                      reason_empty=f"{URL_ENV} is not set - there is no Home Assistant to control")
 
     body = {"entity_id": entity_id, **(data or {})}
-    heavy = _is_heavy_service(domain)
+    heavy = _is_heavy_service(domain, entity_id)
+    quoted = urllib.parse.quote
     query = Query(
-        url=f"{base.rstrip('/')}/api/services/{domain}/{service}", method="POST",
+        url=(f"{base.rstrip('/')}/api/services/"
+             f"{quoted(domain, safe='')}/{quoted(service, safe='')}"),
+        method="POST",
         why=f"call {domain}.{service} on {entity_id}", entity_id=entity_id, body=body)
     return Plan(kind="call_service", queries=[query], heavy=heavy,
                 if_refused=if_refused, authenticated=authenticated())

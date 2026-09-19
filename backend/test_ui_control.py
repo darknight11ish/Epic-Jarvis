@@ -321,6 +321,63 @@ def t_no_checkpoint_given_behaves_exactly_as_before():
           out["ok"] is True and out["not_run"] == [], repr(out))
 
 
+def t_the_checkpoint_is_read_before_the_step_is_announced():
+    # `announce` is wired to jarvis_events.set_activity("working", text),
+    # which is STICKY. Announcing a step and then discovering the pause left
+    # the Brain window saying "Step 2/2: click Send" about a step that never
+    # ran, and it went on saying it.
+    live = tree(("Subject", "txtSubject", True), ("Send", "btnSend", True))
+    heard, acted = [], []
+    signals = iter([None, "pause"])
+    with NoRealAction():
+        p = U.plan("send", "W",
+                   [{"control": "Subject", "action": "type", "value": "hi", "why": "x"},
+                    {"control": "Send", "action": "click", "why": "y"}],
+                   read=lambda _w: live)
+        out = U.run(p, read=lambda _w: live, act=lambda s: acted.append(s.control),
+                    announce=heard.append, checkpoint=lambda: next(signals),
+                    approved=True)
+    check("only step 1 ran", acted == ["Subject"], repr(acted))
+    check("the paused step was never announced",
+          not any("Send" in line for line in heard), repr(heard))
+    check("the step that DID run was announced",
+          any("Subject" in line for line in heard), repr(heard))
+    check("nothing claimed the run finished", "Done." not in heard, repr(heard))
+    check("CONTROL: the run really did pause", out.get("paused") is True, repr(out))
+
+
+def t_a_stop_during_the_final_step_is_reported_not_swallowed():
+    # The checkpoint is read before each step, so a stop that arrives while
+    # the LAST step is running is never seen by the loop. It used to vanish:
+    # run() returned a plain ok:True and the owner had no way to know their
+    # Stop had been noticed at all.
+    live = tree(("Send", "btnSend", True))
+    signals = iter([None, "stop"])   # clean before the only step, a stop after it
+    with NoRealAction():
+        p = U.plan("send", "W", [{"control": "Send", "action": "click", "why": "x"}],
+                   read=lambda _w: live)
+        out = U.run(p, read=lambda _w: live, act=lambda s: None,
+                    checkpoint=lambda: next(signals), approved=True)
+    check("the plan really did finish, and says so", out["ok"] is True, repr(out))
+    check("nothing is reported as not run", out["not_run"] == [], repr(out))
+    check("the late stop is acknowledged", out.get("late_signal") == "stop", repr(out))
+    check("and it says why it changed nothing",
+          "too late" in out.get("note", "") or "already run" in out.get("note", ""),
+          repr(out.get("note")))
+
+
+def t_an_ordinary_finish_carries_no_late_signal():
+    # CONTROL: the field above must not appear on a run nobody interrupted.
+    live = tree(("Send", "btnSend", True))
+    with NoRealAction():
+        p = U.plan("send", "W", [{"control": "Send", "action": "click", "why": "x"}],
+                   read=lambda _w: live)
+        out = U.run(p, read=lambda _w: live, act=lambda s: None,
+                    checkpoint=lambda: None, approved=True)
+    check("CONTROL: a clean run has no late_signal", "late_signal" not in out, repr(out))
+    check("CONTROL: and no note", "note" not in out, repr(out))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_control_is_treated_as_unmatched,
@@ -332,7 +389,10 @@ if __name__ == "__main__":
                t_announce_is_called_once_per_step_and_is_optional,
                t_checkpoint_stop_ends_the_run_before_the_next_step,
                t_checkpoint_pause_ends_the_run_and_says_so,
-               t_no_checkpoint_given_behaves_exactly_as_before):
+               t_no_checkpoint_given_behaves_exactly_as_before,
+               t_the_checkpoint_is_read_before_the_step_is_announced,
+               t_a_stop_during_the_final_step_is_reported_not_swallowed,
+               t_an_ordinary_finish_carries_no_late_signal):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

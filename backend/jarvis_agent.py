@@ -748,7 +748,24 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
                 except Exception:
                     pass
-                state, plan_text = tool.prepare(args)
+                # prepare() inside the try, like execute() below. It used
+                # to sit outside every handler in this function, so a
+                # prepare-time raise - a tool validating its own arguments,
+                # e.g. {"days_ahead": "seven"} reaching an int() - escaped
+                # run_local_turn entirely and took the whole turn down. This
+                # function's own docstring promises a tool failure comes
+                # back as a tool RESULT the model can read and retry from;
+                # that promise covered execute() and not prepare().
+                try:
+                    state, plan_text = tool.prepare(args)
+                except Exception as exc:
+                    convo.append({"role": "tool",
+                                   "tool_call_id": call.get("id", ""),
+                                   "content": _tool_content(
+                                       {"ok": False,
+                                        "error": f"{name} could not accept those "
+                                                 f"arguments: {type(exc).__name__}: {exc}"})})
+                    continue
                 verdict = checker(action_name, {"text": plan_text},
                                    f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
                 if not getattr(verdict, "allowed", False):

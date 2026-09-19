@@ -493,6 +493,47 @@ class Memory(unittest.TestCase):
         hit = self.s.find_one("Mario drives a 1998 Volvo")
         self.assertNotEqual((hit or {}).get("id"), go)
 
+    def test_a_word_ending_in_ss_is_findable_on_its_own(self):
+        """THE BUG, reproduced. `facts_fts` is `tokenize='porter unicode61'`
+        and Porter deliberately KEEPS a double s ("address" stems to
+        "address"). `_words` strips one trailing s from every token, turning
+        the query term into "addres", which Porter then stems to something
+        the index does not hold - so every word ending in ss was unfindable
+        on its own:
+
+            search("email address")  ->  ['My email address is bob@exam...']
+            search("address")        ->  []
+
+        `_fts_terms` feeds the RAW token and lets Porter stem both sides.
+        """
+        self.s.add("My email address is bob@example.com")
+        self.s.add("The class starts at nine")
+        self.s.add("My boss is called Dana")
+        for term, expect in (("address", "email address"),
+                             ("class", "class starts"),
+                             ("boss", "boss is called")):
+            hits = self.s.search(term, k=3)
+            self.assertTrue(any(expect in h["text"] for h in hits),
+                            f"search({term!r}) found {[h['text'] for h in hits]}")
+
+    def test_a_plural_still_matches_its_singular(self):
+        """CONTROL: dropping the hand-rolled s-stripping must not cost the
+        plural matching it was standing in for - Porter does that job, which
+        is the whole reason the index is built with it."""
+        self.s.add("The class starts at nine")
+        hits = self.s.search("classes", k=3)
+        self.assertTrue(any("class starts" in h["text"] for h in hits),
+                        f"search('classes') found {[h['text'] for h in hits]}")
+
+    def test_fts_terms_still_drops_stopwords(self):
+        """CONTROL: the other half of _words' job - keeping "the" and "is"
+        out of an OR-query that would otherwise match the whole store - is
+        unchanged."""
+        self.assertEqual(MEM._fts_terms("what is the address"), {"address"})
+        self.assertEqual(MEM._fts_terms("address"), {"address"})
+        # And the folding _words does for the OVERLAP test is still there.
+        self.assertEqual(MEM._words("Mario's"), {"mario"})
+
     def test_a_possessive_is_not_a_free_overlap_token(self):
         """`_words` folds "'?s$" and drops single characters. Without that,
         "Mario's" splits into {"mario", "s"} and the bare "s" is shared by
