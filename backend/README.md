@@ -2431,6 +2431,126 @@ deliberately before this is ever added to `[tools].enabled`.
 
 ---
 
+# `keyless-integrations-wiring` — calendar, email, notes, and home, no cloud key
+
+`docs/ANDROID-FEATURE-AUDIT.md` §2 named these four directly: "Calendar
+(CalDAV), notes (Obsidian/Joplin local REST), home (Home Assistant's MCP
+server) - read-only first, no cloud keys." This adds email (IMAP) to the
+same list, for the same reason - it is the other open, self-hosted protocol
+this project can speak with nothing but a username and password the owner
+already has. Four new files, one per integration
+(`jarvis_calendar.py`, `jarvis_email.py`, `jarvis_notes.py`,
+`jarvis_home.py`), each self-contained and each following the exact
+`plan()`/`describe()`/`run()` shape `jarvis_research.py` set out and
+`jarvis_browser_control.py` already reused - see each module's own
+docstring for what makes it different from the other three (the ICS
+line-folding parser in `jarvis_calendar.py`, the plain-text-only preview in
+`jarvis_email.py`, the token-free URL in `jarvis_notes.py`, the read/act
+split in `jarvis_home.py`).
+
+**Wired into `jarvis_agent.py` as five tools** (`calendar_read`,
+`email_check`, `notes_search`, `home_read`, `home_control` - `jarvis_home.py`
+gets two because reading state and calling a service are different
+consequences and different tiers), each a `_prepare_*`/`_run_*` pair
+following `control_computer`/`browser_control`'s own pattern. None of the
+five needs `needs_announce=True` - each is one request or one small batch of
+identically-shaped requests, not a multi-step plan like
+`control_computer`/`control_phone`/`browser_control`, so there is no
+step-by-step progress worth narrating.
+
+**What each one needs in `jarvis_gate.py` and `jarvis-framework.toml`,**
+the same ceremony `browser-control-wiring`'s own section above walked
+through:
+
+- Five new `_RISK` entries: `calendar_read`, `email_read`, `notes_search`,
+  `home_read`, `home_control`.
+- `_TOOL_ACTIONS` gains `jarvis_calendar_read_run -> calendar_read`,
+  `jarvis_email_read_run -> email_read`,
+  `jarvis_notes_search_run -> notes_search`,
+  `jarvis_home_read_run -> home_read`,
+  `jarvis_home_control_run -> home_control`.
+- `jarvis-framework.toml`'s `[autonomy.tiers]`:
+  ```toml
+  calendar_read  = "auto"
+  email_read     = "auto"
+  notes_search   = "auto"
+  home_read      = "auto"
+  home_control   = "ask"
+  ```
+  **The four reads are `"auto"` where `browser_control` is `"ask"` - a
+  judgment call, stated as one so it can be argued with.** Every step
+  `jarvis_browser_control.py` takes either sends something to a real person
+  or lands on an unread page, so it can never default to unattended; reading
+  the owner's own calendar, inbox, notes, or Home Assistant entity state
+  changes nothing and sends nothing to anyone, on infrastructure the owner
+  runs for themselves with no cloud account involved - the same "nothing is
+  sent, nothing acts" reasoning that already makes `jarvis_gate`'s `_plan`
+  actions (including `jarvis_research.plan()`'s own) `auto` rather than
+  `ask`. `home_control` is never `"auto"`: it is the one of the five that
+  acts on the real, physical world, same reasoning as `control_browser`'s
+  own "never auto" line above. If `"auto"` is wrong for a given owner's
+  threat model, one line per action overrides it - these tools do not
+  decide their own tier, `jarvis_gate.py` does, same as always. Absent from
+  the TOML, all five fail closed to `"ask"` via `unknown_action_tier`
+  regardless - add the explicit lines anyway, for the same reason every
+  other real action has one.
+
+**`home_control` marks a lock, alarm, or cover action `heavy`** inside
+`jarvis_home.py` itself (`_is_heavy_service`), the same signal
+`jarvis_ui_control.Step.heavy` already carries for the native-UI tool -
+"the front door is now unlocked" is a materially bigger consequence than
+"the kitchen light is now on", even though both are one API call to the
+same server.
+
+**Ship disabled, for a different, simpler reason than `browser_control`.**
+Nothing here needs a new dependency (`jarvis_calendar.py`'s ICS parsing and
+CalDAV REPORT, `jarvis_email.py`'s IMAP, and `jarvis_home.py`'s REST calls
+are all stdlib `urllib`/`imaplib`/`email`; `jarvis_notes.py` is the same
+`urllib`) and none needs a second, larger-context lane - the real reason is
+that each one needs the owner's own credentials configured in the
+environment before it can do anything at all:
+
+| integration | environment variables |
+|---|---|
+| calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` |
+| email | `JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` (default 993), `JARVIS_IMAP_USER`, `JARVIS_IMAP_PASSWORD`, `JARVIS_IMAP_MAILBOX` (default `INBOX`) |
+| notes | `JARVIS_NOTES_BACKEND` (`"joplin"` or `"obsidian"`, optional - inferred from which token is set), `JARVIS_JOPLIN_URL`/`JARVIS_JOPLIN_TOKEN`, `JARVIS_OBSIDIAN_URL`/`JARVIS_OBSIDIAN_API_KEY` |
+| home | `JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN` |
+
+Turning one on with nothing configured is safe - `plan()`/`plan_states()`/
+`plan_service()` all notice and return a plan that only ever explains why it
+has nothing to read or nowhere to send, proven in each module's own test
+(`"describe() says why, sends nothing"`) - but it is also useless, so add a
+tool to `[tools].enabled` only once its own row above is actually filled in
+on your machine.
+
+### Test it
+
+```powershell
+python test_calendar.py; python test_email.py; python test_notes.py; python test_home_control.py; python test_integrations_wiring.py
+```
+
+One hundred and seventy-three checks across five files, no real CalDAV
+server, IMAP account, Joplin/Obsidian instance, or Home Assistant, and no
+network - `fetch`/`fetch_messages` injected the same way
+`jarvis_research.py` and `jarvis_browser_control.py` inject their own I/O,
+with a `NoNetwork` guard proving `plan()`/`plan_states()`/`plan_service()`
+truly open no socket. `test_integrations_wiring.py` is the fifth file and
+checks the seam the other four cannot: that `jarvis_agent.py`'s
+`_prepare_*`/`_run_*` pairs actually call each module with the right
+arguments and the right `gate_lookup_name`, and fail honestly - never with
+a raised exception - when nothing is configured.
+
+**Not run against a real calendar, inbox, notes app, or smart home.** Same
+caveat every wiring section above gives for its own modules: the injectable
+seam is the only place real I/O happens, specifically so the logic above it
+is provable without any of that - but proof without it is not a real run.
+Point each one at a real account deliberately, read what `describe()` prints
+before approving anything, and watch the first real result before adding it
+to `[tools].enabled`.
+
+---
+
 # Standalone tools
 
 Not patches - scripts you run once, on demand, that call the patched backend

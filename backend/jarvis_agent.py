@@ -2,9 +2,10 @@
 
 WHAT THIS IS FOR
 `/api/chat`'s local lane could only ever produce plain text - the model had
-no way to check a fact, read a file, or use any of the four capabilities
+no way to check a fact, read a file, or use any of the eight capabilities
 built across this project's sessions (jarvis_ui_control.py,
-jarvis_android_control.py, jarvis_research.py, jarvis_browser_control.py).
+jarvis_android_control.py, jarvis_research.py, jarvis_browser_control.py,
+jarvis_calendar.py, jarvis_email.py, jarvis_notes.py, jarvis_home.py).
 This module is the missing loop: it hands Ollama a set of tools, and when
 the model asks to use one, gates it through jarvis_gate.check() - the exact
 same module and the exact same four-step shape (plan/describe/gate/run) as
@@ -32,6 +33,18 @@ memory_store tool that writes directly to `facts` was excluded on purpose
 because this project's memory system exists specifically so nothing reaches
 `facts` without a human accepting it through the review queue, and a
 chat-time tool would reopen that hole.
+
+The four keyless integrations (calendar_read, email_check, notes_search,
+home_read, home_control - five tools, four modules, home split in two
+because reading and acting are different tiers) SHIP DISABLED for a
+different, simpler reason than browser_control: each needs the owner's own
+credentials configured in the environment before it can do anything at
+all, so turning one on with nothing configured just means a plan that
+always explains why it has nothing to read or nowhere to send. See each
+module's own docstring (jarvis_calendar.py, jarvis_email.py,
+jarvis_notes.py, jarvis_home.py) and backend/README.md's `calendar-wiring`,
+`email-wiring`, `notes-wiring`, and `home-control-wiring` sections for the
+exact `jarvis_gate`/`jarvis-framework.toml` lines each one needs.
 
 TESTING WITHOUT A REAL BACKEND
 Every tool's actual execution and every call to jarvis_gate are behind
@@ -251,6 +264,93 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
     return R.matrix(out)
 
 
+def _prepare_calendar_read(args: dict):
+    try:
+        import jarvis_calendar as CAL
+    except Exception as exc:
+        return None, f"Read the calendar: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
+    p = CAL.plan(int(args.get("days_ahead", 7) or 7))
+    return p, CAL.describe(p)
+
+
+def _run_calendar_read(args: dict, plan_obj, **_) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "the calendar is not available here"}
+    import jarvis_calendar as CAL
+    return CAL.run(plan_obj, approved=True)
+
+
+def _prepare_email_check(args: dict):
+    try:
+        import jarvis_email as MAIL
+    except Exception as exc:
+        return None, f"Check email: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
+    p = MAIL.plan(int(args.get("limit", 10) or 10),
+                   unread_only=bool(args.get("unread_only", True)))
+    return p, MAIL.describe(p)
+
+
+def _run_email_check(args: dict, plan_obj, **_) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "email is not available here"}
+    import jarvis_email as MAIL
+    return MAIL.run(plan_obj, approved=True)
+
+
+def _prepare_notes_search(args: dict):
+    try:
+        import jarvis_notes as NOTES
+    except Exception as exc:
+        return None, f"Search notes: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
+    p = NOTES.plan(str(args.get("query", "")), int(args.get("limit", 10) or 10))
+    return p, NOTES.describe(p)
+
+
+def _run_notes_search(args: dict, plan_obj, **_) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "notes search is not available here"}
+    import jarvis_notes as NOTES
+    return NOTES.run(plan_obj, approved=True)
+
+
+def _prepare_home_read(args: dict):
+    try:
+        import jarvis_home as HOME
+    except Exception as exc:
+        return None, f"Read Home Assistant state: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
+    p = HOME.plan_states(args.get("entity_ids") or [])
+    return p, HOME.describe(p)
+
+
+def _run_home_read(args: dict, plan_obj, **_) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "Home Assistant is not available here"}
+    import jarvis_home as HOME
+    return HOME.run(plan_obj, approved=True)
+
+
+def _prepare_home_control(args: dict):
+    try:
+        import jarvis_home as HOME
+    except Exception as exc:
+        return None, f"Control Home Assistant: {json.dumps(args, ensure_ascii=False)} " \
+                      f"(unavailable: {exc})"
+    p = HOME.plan_service(str(args.get("domain", "")), str(args.get("service", "")),
+                           str(args.get("entity_id", "")), args.get("data") or {})
+    return p, HOME.describe(p)
+
+
+def _run_home_control(args: dict, plan_obj, **_) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "Home Assistant is not available here"}
+    import jarvis_home as HOME
+    return HOME.run(plan_obj, approved=True)
+
+
 class Tool:
     """One tool. The gate action is looked up against jarvis_gate's own
     tables (`action_for_tool`) rather than duplicated here, so the tier the
@@ -433,6 +533,69 @@ TOOLS: dict = {
         # state changes between its plan() and run() - this only decides
         # which action name (and therefore which tier) governs THIS call.
         gate_lookup_name=lambda args: _github_search_action_name()),
+    "calendar_read": Tool(
+        "calendar_read",
+        "Read the owner's own calendar (CalDAV) for the next N days - "
+        "event titles, times, and locations. Read-only; never creates or "
+        "changes an event.",
+        {"type": "object", "properties": {
+            "days_ahead": {"type": "integer",
+                "description": "how many days ahead to look, default 7, max 90"}}},
+        _prepare_calendar_read,
+        lambda args, state, **_: _run_calendar_read(args, state),
+        gate_lookup_name=lambda args: "jarvis_calendar_read_run"),
+    "email_check": Tool(
+        "email_check",
+        "Check the owner's own IMAP inbox for recent messages - sender, "
+        "subject, date, and a short plain-text preview of each. Read-only; "
+        "never sends, replies to, deletes, or marks anything.",
+        {"type": "object", "properties": {
+            "limit": {"type": "integer",
+                "description": "how many messages, default 10, max 25"},
+            "unread_only": {"type": "boolean",
+                "description": "true (default) for unread mail only, false for all"}}},
+        _prepare_email_check,
+        lambda args, state, **_: _run_email_check(args, state),
+        gate_lookup_name=lambda args: "jarvis_email_read_run"),
+    "notes_search": Tool(
+        "notes_search",
+        "Search the owner's own notes in Joplin or Obsidian, over each "
+        "app's local REST API. Read-only; never creates or edits a note.",
+        {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "limit": {"type": "integer",
+                "description": "how many results, default 10, max 20"}},
+         "required": ["query"]},
+        _prepare_notes_search,
+        lambda args, state, **_: _run_notes_search(args, state),
+        gate_lookup_name=lambda args: "jarvis_notes_search_run"),
+    "home_read": Tool(
+        "home_read",
+        "Read the current state of specific, named Home Assistant "
+        "entities - never the whole house at once. Read-only.",
+        {"type": "object", "properties": {
+            "entity_ids": {"type": "array", "items": {"type": "string"},
+                "description": "e.g. [\"light.kitchen\", \"lock.front_door\"], max 20"}},
+         "required": ["entity_ids"]},
+        _prepare_home_read,
+        lambda args, state, **_: _run_home_read(args, state),
+        gate_lookup_name=lambda args: "jarvis_home_read_run"),
+    "home_control": Tool(
+        "home_control",
+        "Call one Home Assistant service on one named entity - turn a "
+        "light on, unlock a door, and so on. This changes something real, "
+        "not just data; a lock, alarm, or cover action is treated as "
+        "especially consequential.",
+        {"type": "object", "properties": {
+            "domain": {"type": "string", "description": "e.g. \"light\", \"lock\""},
+            "service": {"type": "string", "description": "e.g. \"turn_on\", \"unlock\""},
+            "entity_id": {"type": "string"},
+            "data": {"type": "object",
+                "description": "extra service data, e.g. {\"brightness\": 200}"}},
+         "required": ["domain", "service", "entity_id"]},
+        _prepare_home_control,
+        lambda args, state, **_: _run_home_control(args, state),
+        gate_lookup_name=lambda args: "jarvis_home_control_run"),
 }
 
 
