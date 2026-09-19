@@ -2,6 +2,7 @@ package com.jarvis.client.platform
 
 import android.content.Context
 import android.util.Log
+import com.jarvis.client.BuildConfig
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -49,6 +50,11 @@ object CrashLog {
         val when_ = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         val body = buildString {
             appendLine("Jarvis client crashed at $when_")
+            // The one line this file existed to add and never had: which
+            // build produced this. Without it, a trace pasted back has no
+            // way to say whether it is still reproducible on what's
+            // installed now, or was already fixed two versions ago.
+            appendLine("version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("thread: ${thread.name}")
             appendLine()
             append(trace)

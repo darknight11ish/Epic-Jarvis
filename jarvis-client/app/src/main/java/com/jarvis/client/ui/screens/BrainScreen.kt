@@ -33,6 +33,7 @@ import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.ui.parts.Affirm
 import com.jarvis.client.ui.parts.Field
 import com.jarvis.client.ui.parts.Freshness
 import com.jarvis.client.ui.parts.Gap
@@ -42,6 +43,7 @@ import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Refuse
 import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
@@ -832,16 +834,20 @@ private fun MemoryProposalRow(
             Text("from $source", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
         Gap(6)
+        // Affirm/Refuse, not two Quiets tinted okInk/badInk - this app's own
+        // rule (SHARED-LOOK.md §9) is that ok and bad are never told apart by
+        // colour alone, because verdant-4/rose-4 simulate to nearly the same
+        // beige for a deuteranope. Every other approve/deny pair already uses
+        // this shape (ApprovalCard's Approve/Deny); this row was the one the
+        // Sept 18 UI audit found still hadn't been moved over.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Quiet(
+            Affirm(
                 if (busy) "Keeping…" else "Keep",
-                color = chrome.okInk,
                 enabled = !busy && onKeep != null,
                 onClick = { onKeep?.invoke() },
             )
-            Quiet(
+            Refuse(
                 if (busy) "Discarding…" else "Discard",
-                color = chrome.badInk,
                 enabled = !busy && onDiscard != null,
                 onClick = { onDiscard?.invoke() },
             )
