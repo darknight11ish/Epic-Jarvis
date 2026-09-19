@@ -308,13 +308,15 @@ object JarvisRuntime {
         val tokenStore = TokenStore(app)
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         val chatSession = ChatSession(jarvisApi)
-        val voiceSession = VoiceSession(app, jarvisApi, scope) { text ->
+        val voiceSession = VoiceSession(app, jarvisApi, scope) { text, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
             // cancel the spoken one and leave its own partial reply in there —
             // and Jarvis would say it aloud as the answer to the question that
-            // was spoken.
-            chatSession.send(text)?.takeIf { it.isNotBlank() }
+            // was spoken. `onDelta` is this same call's own local callback,
+            // not a subscription to that shared flow - see ChatSession.send's
+            // own doc for why that distinction is the whole point.
+            chatSession.send(text, onDelta)?.takeIf { it.isNotBlank() }
         }
 
         settings = clientSettings

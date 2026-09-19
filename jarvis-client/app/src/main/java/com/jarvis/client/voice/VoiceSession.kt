@@ -12,6 +12,7 @@ import com.jarvis.client.net.VoiceStatus
 import com.jarvis.client.net.WakeWord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,8 +35,13 @@ class VoiceSession(
     context: Context,
     private val api: JarvisApi,
     private val scope: CoroutineScope,
-    /** Sends a turn and returns the reply, or null if it could not be sent. */
-    private val chat: suspend (String) -> String?,
+    /**
+     * Sends a turn and returns the reply, or null if it could not be sent.
+     * `onDelta` is called, zero or more times, with the reply accumulated so
+     * far as it streams in - see [ChatSession.send]'s own doc for why this is
+     * a call-local callback and not a subscription to a shared flow.
+     */
+    private val chat: suspend (String, onDelta: (String) -> Unit) -> String?,
 ) {
 
     enum class Phase {
@@ -320,15 +326,68 @@ class VoiceSession(
 
         _transcript.value = text
         _phase.value = Phase.THINKING
-        val reply = chat(text)
-        if (reply.isNullOrBlank()) {
-            _phase.value = Phase.OFF
-            return
+        speakStreamed(text)
+        _phase.value = Phase.OFF
+    }
+
+    /**
+     * Sends the turn and speaks the reply sentence by sentence, as it
+     * arrives, rather than waiting for the whole answer - the same
+     * sentence-streaming shape the desktop app's quickbar already uses for
+     * its own voice turns, ported to this app's plain-text (not SSE/JSON)
+     * chunked body.
+     *
+     * `spokenUpTo`/the queue are turn-local (declared here, not on the
+     * instance) on purpose: a second voice turn cannot begin while this one's
+     * `job` has not completed (see [begin]'s own guard), so there is never a
+     * second call in flight to confuse this one's state with - but keeping
+     * them as locals rather than fields makes that true by construction
+     * rather than by remembering to reset them.
+     */
+    private suspend fun speakStreamed(text: String) {
+        var spokenUpTo = 0
+        var spokeAny = false
+        val queue = Channel<String>(Channel.UNLIMITED)
+
+        // Speaks whatever lands in the queue, one sentence at a time, in
+        // order - concurrently with `chat` below, so the first sentence can
+        // be playing while the model is still writing the third. Ends only
+        // when the queue is closed AND drained, never merely when it is
+        // momentarily empty (a fast model can easily outrun TTS).
+        val drainJob = scope.launch {
+            for (sentence in queue) speak(sentence)
         }
 
-        _phase.value = Phase.SPEAKING
-        speak(reply)
-        _phase.value = Phase.OFF
+        try {
+            val reply = chat(text) { soFar ->
+                for ((sentence, consumedTo) in SpeechText.findSentences(soFar, spokenUpTo)) {
+                    spokenUpTo = consumedTo
+                    if (!spokeAny) {
+                        spokeAny = true
+                        _phase.value = Phase.SPEAKING
+                    }
+                    SpeechText.stripMarkdownForSpeech(sentence).takeIf { it.isNotBlank() }
+                        ?.let { queue.trySend(it) }
+                }
+            }
+            val remainder = reply.orEmpty()
+                .let { if (spokenUpTo <= it.length) it.substring(spokenUpTo) else "" }
+                .let(SpeechText::stripMarkdownForSpeech)
+                .trim()
+            if (remainder.isNotEmpty()) {
+                if (!spokeAny) _phase.value = Phase.SPEAKING
+                queue.trySend(remainder)
+            }
+            queue.close()
+            drainJob.join()
+        } finally {
+            // A no-op if `join()` above already returned; the real job here is
+            // covering the path where `chat` itself threw (a cancellation,
+            // most likely) and the queue was never closed - without this the
+            // drain coroutine would sit forever waiting for a close that is
+            // not coming, alongside a turn that has already ended.
+            drainJob.cancel()
+        }
     }
 
     /**

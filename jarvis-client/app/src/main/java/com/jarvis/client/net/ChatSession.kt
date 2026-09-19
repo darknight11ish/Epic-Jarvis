@@ -50,8 +50,19 @@ class ChatSession(private val api: JarvisApi) {
      * cancels the voice call — so the read picked up the *typed* question's
      * half-streamed answer, and Jarvis spoke it aloud as the answer to
      * something else entirely.
+     *
+     * [onDelta], if given, is called with the reply text accumulated SO FAR
+     * every time this call publishes to [reply] - same throttling, same
+     * accumulator, just handed to a caller-local callback instead of only the
+     * shared flow. This is deliberately NOT "subscribe to `reply`": a second
+     * subscriber reading the shared flow is exactly the hazard the paragraph
+     * above describes, reopened one layer up. A callback scoped to THIS one
+     * call cannot observe a different call's text, whatever else is running
+     * concurrently - the voice loop's own sentence-streaming TTS uses this to
+     * start speaking before the answer has finished arriving, without ever
+     * touching [reply] itself.
      */
-    suspend fun send(message: String): String? {
+    suspend fun send(message: String, onDelta: ((String) -> Unit)? = null): String? {
         cancel()
         _reply.value = ""
         _error.value = null
@@ -150,17 +161,21 @@ class ChatSession(private val api: JarvisApi) {
                         val now = SystemClock.elapsedRealtime()
                         if (now - shownAt >= PUBLISH_MS) {
                             shownAt = now
-                            _reply.value = acc.toString()
+                            val text = acc.toString()
+                            _reply.value = text
+                            onDelta?.invoke(text)
                         }
                     }
                     // The last chunk is almost always inside the throttle
                     // window, so without this the tail of every reply would be
                     // missing from the screen until the next message.
-                    _reply.value = acc.toString()
+                    val text = acc.toString()
+                    _reply.value = text
+                    onDelta?.invoke(text)
                     // Captured before anything else can replace the shared
                     // flow, so the caller gets its own answer rather than
                     // whatever is in there when it happens to look.
-                    mine = acc.toString()
+                    mine = text
                 }
             } catch (ce: CancellationException) {
                 throw ce
