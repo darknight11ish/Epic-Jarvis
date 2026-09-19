@@ -82,6 +82,68 @@ repairing an observed failure.
 
 ---
 
+## Second pass: auditing the fixes
+
+The twenty-three fixes were then audited themselves, by **mutation
+testing** — revert each fix in a scratch copy, run its test, and require
+the test to fail. A fix whose test passes either way is not protected,
+and two of them were not.
+
+| | Found in the fixes | Outcome |
+|---|---|---|
+| A | A cold-start Deny still opened the window | fixed — `f2cf91d` |
+| B | Android checkpoint below the device check | fixed — `f2cf91d` |
+| C | Flash call site had no test at all | fixed — `f2cf91d` |
+| D | Announce ordering untested on two of three loops | fixed — `f2cf91d` |
+
+**A.** `decide_denied_at_startup` answered the approval and its doc said
+"The window is not raised" — but `build_hud_window` builds the HUD
+`.visible(true).focused(true)` for every launch that is not a login
+start. So the window went up regardless, and the fix written to honour
+rule 2 was paying Approve's price while claiming not to. The claim was
+three files away from the code that falsified it, which is exactly how
+the last one of these got through.
+
+**B.** The Android loop read the checkpoint *below* the device
+re-verification, and that path returns on its own. Because `checkpoint()`
+now consumes, a phone unplugged while a pause was pending stranded the
+pause forever — the one-way door, still reachable by another route.
+
+**C, and the most uncomfortable.** `tests/flashgov.mjs` never touched the
+`faces.html` call site. Reverting the two-clock fix there left all ten
+checks passing. The photosensitivity limit — the thing the spec calls a
+hard limit, not advice — was guarded by a test that could not see the
+code it guarded. The bug was never in `governedResolve`; it was in what
+the renderer handed it, and the test only ever drove the function.
+
+### Two of the new tests were themselves wrong
+
+Recorded because it is the same lesson twice:
+
+- The first mutation "proving" the swatch test worked failed with a
+  `ReferenceError` from how the mutation was written, not the real
+  symptom. It proved nothing until redone; done properly it reports
+  `approval bound #ffffff but showed #000000`.
+- The new call-site check matched `function governedResolve(gov, …)` —
+  the declaration — instead of the call, so it was red against correct
+  code. A check that fails on a healthy tree is worse than no check.
+
+Both were caught by running them, not by reading them.
+
+### Checked and found sound
+
+- The edited `memory-safety.patch` hunks apply cleanly under `git apply`
+  against a base rebuilt from the patch's own context; the edit touches
+  only the `jarvis_memory.py` section.
+- `governedResolve` has exactly two callers and no surface resolves
+  ungoverned; `_is_heavy_service` has exactly one caller.
+- `closeApproval` does clear `state.approval`, so the note-blanking
+  `fresh` check is correct when the same card is reopened.
+- The prepare-time `continue` still emits exactly one tool message per
+  `tool_call` id, which the API requires.
+
+---
+
 ## Critical
 
 ### 1. [MINE] The app publishes a phone-wide speech recognizer that always fails
