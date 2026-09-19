@@ -21,6 +21,8 @@ import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.widget.ApprovalWidget
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -258,6 +260,7 @@ object JarvisRuntime {
     private var streamJob: Job? = null
     private var watchdog: Job? = null
     private var faceJob: Job? = null
+    private var widgetJob: Job? = null
 
     /** The forced restart in flight, so two taps on Reconnect do not stack. */
     private var restartJob: Job? = null
@@ -342,6 +345,17 @@ object JarvisRuntime {
                         _face.value = resolveFace()
                     }
                 }
+        }
+
+        // The home-screen widget has no collector of its own — GlanceAppWidget
+        // draws once when asked and then goes back to being inert, so
+        // something on this side has to ask again every time the state it
+        // shows could have changed. `updateAll` re-runs provideGlance and
+        // pushes the new RemoteViews to every placed instance; combine, not
+        // two separate collectors, so a pending item arriving in the same
+        // tick as a link change still resolves to one redraw.
+        widgetJob = scope.launch {
+            combine(_pending, _link) { _, _ -> }.collect { ApprovalWidget().updateAll(app) }
         }
     }
 

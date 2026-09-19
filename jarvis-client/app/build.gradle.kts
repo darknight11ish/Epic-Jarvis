@@ -167,6 +167,16 @@ dependencies {
     // as a material3 transitive.
     implementation("androidx.compose.foundation:foundation")
 
+    // The home-screen approval widget. 1.1.1, not a newer release: it is the
+    // exact version the retired jarvis-android/ module already compiled
+    // successfully against (compileSdk 35, Compose BOM 2024.10.01) - the only
+    // real precedent for this dependency working anywhere in this monorepo,
+    // and this project has no local build to verify a different choice
+    // against. compileSdk 36 here is a ceiling raised from that module's 35,
+    // never lowered, so its own minCompileSdk requirement is still satisfied.
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.glance:glance:1.1.1")
+
     // The serialization compiler plugin is applied in build.gradle.kts but no
     // runtime was declared, so the first @Serializable anyone wrote would have
     // failed to resolve rather than working. Step 2's event models need it.

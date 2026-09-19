@@ -30,4 +30,8 @@
     <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
     <string name="approvals_waiting">%1$d approvals waiting</string>
     <string name="approval_deny_action">Deny</string>
+
+    <string name="widget_approval_name">Jarvis approvals</string>
+    <string name="widget_approval_desc">The oldest pending approval, at a glance.
+        Deny answers it directly; approving always opens the app.</string>
 </resources>

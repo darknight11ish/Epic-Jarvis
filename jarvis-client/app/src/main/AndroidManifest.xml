@@ -122,5 +122,22 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="@string/fgs_special_use_reason" />
         </service>
+
+        <!-- exported="true" is what every app-widget provider needs - the
+             launcher itself is what sends APPWIDGET_UPDATE, from outside this
+             app's own process, and cannot be addressed otherwise. Redrawn by
+             JarvisRuntime's own state changes, never by a polling clock -
+             updatePeriodMillis is 0 in widget_approval_info.xml. -->
+        <receiver
+            android:name=".widget.ApprovalWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_approval_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_approval_info" />
+        </receiver>
     </application>
 </manifest>
