@@ -451,9 +451,13 @@ function openApproval(approval) {
   dom.apprRaisedQuote.textContent = raised && raised.quote ? `“${raised.quote}”` : "";
   dom.apprRaisedQuote.hidden = !(raised && raised.quote);
   renderOptions(approval);
-  // A note about a still-open card is stale; a note about a fresh one has
-  // nothing typed yet either way, so this is safe unconditionally.
-  dom.apprNoteInput.value = "";
+  // ONLY on a different card - `fresh` is already computed above. The old
+  // comment here said this was "safe unconditionally" and it was not:
+  // openApproval() runs again for the SAME gate on every queue re-read, and
+  // each one deleted whatever was half-typed in the note, with no undo. A
+  // genuinely new card arrives with the field already empty - closeApproval()
+  // clears it.
+  if (fresh) dom.apprNoteInput.value = "";
   dom.apprCard.hidden = false;
   applyFaceVisibility();
   syncApprovalButtons();

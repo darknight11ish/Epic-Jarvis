@@ -3040,14 +3040,29 @@ function newFlashGovernor(){
   return {
     held: null,       // last { a, b } actually shown
     heldLuma: 0,
-    lastDirection: null,  // true = rising, false = falling, null = none yet
-    recent: [],           // clock times of opposing transitions let through
+    // true = rising, false = falling, null = none yet. `null` is treated as
+    // opposing, so the first visible change costs a budget slot - see the
+    // note at that line for why that is the correct reading of the limit.
+    lastDirection: null,
+    recent: [],           // REAL-time seconds of opposing transitions let through
   };
 }
 /** Resolves through `gov`, holding `gov.held` instead of `candidate` when
  *  doing otherwise would be a fourth opposing transition inside one second.
- *  Call once per surface per frame - see the module note above. */
-function governedResolve(gov, bind, t, amp, seed){
+ *  Call once per surface per frame - see the module note above.
+ *
+ *  TWO CLOCKS, and they are not interchangeable. `t` is the face's own clock,
+ *  which drives the pattern and which the speed slider scales. `now` is
+ *  REAL, unscaled seconds, and is the only thing the one-second window is
+ *  ever measured in. Passing the face clock for both was a real bug: the
+ *  spec's speed.max reaches 6, so at the top of the slider one governor
+ *  "second" was 1/6 of a real second, up to 18 opposing transitions per real
+ *  second got through against a hard limit of 3, and the same scaling pushed
+ *  the 1.3 Hz flicker clamp to 7.8 Hz. limits.flash calls those hard limits,
+ *  not advice - a limit that relaxes as the animation speeds up is exactly
+ *  backwards. `now` defaults to `t` for the callers whose clock already IS
+ *  wall time (the swatch strip). */
+function governedResolve(gov, bind, t, amp, seed, now = t){
   const candidate = resolve(bind, t, amp, seed);
   if(gov.held === null){
     gov.held = candidate;
@@ -3069,14 +3084,24 @@ function governedResolve(gov, bind, t, amp, seed){
   }
 
   const direction = delta > 0;
+  // `lastDirection === null` counts as opposing, and that is deliberate. It
+  // was changed once, on the reasoning that a first transition opposes
+  // nothing - and the change was measured and reverted, because the limit is
+  // on what REACHES THE SCREEN. The first transition is a visible luminance
+  // change like any other; exempting it let a fourth change land inside one
+  // second, which tests/flashgov.mjs and spec.rs's own strobe test both
+  // caught by counting output changes rather than internal bookkeeping.
+  // Three per second is the photosensitive-seizure threshold, so the port
+  // that counts one fewer is the wrong one.
   const opposing = gov.lastDirection !== direction;
-  gov.recent = gov.recent.filter(at => t - at < 1.0);
+  // `now`, never `t` - the window is real seconds. See the doc above.
+  gov.recent = gov.recent.filter(at => now - at < 1.0);
 
   if(opposing && gov.recent.length >= maxTransitionsPerS){
     return gov.held;
   }
   if(opposing){
-    gov.recent.push(t);
+    gov.recent.push(now);
     gov.lastDirection = direction;
   }
   gov.held = candidate;
@@ -3520,7 +3545,12 @@ function drawSurface(s, dt, state){
   // above and not from the face. Without this the three extra states simply
   // drew nothing, which was easy to miss until randomise started putting
   // something interesting in them.
-  let col = governedResolve(s.flashGov, BIND[state], s.clock, driveAmp(state, s), s.seed || 0);
+  // s.clock for the pattern, performance.now() for the governor's window -
+  // s.clock advances by `dt * speed` below, so using it for both let the
+  // photosensitivity limit relax as the speed slider went up. See
+  // governedResolve's own doc.
+  let col = governedResolve(s.flashGov, BIND[state], s.clock, driveAmp(state, s),
+                            s.seed || 0, performance.now() / 1000);
   if(fx && fx.dim < 1){
     // Dimming is a blend toward the background, not a multiply toward zero.
     // On an OLED panel a multiply lands banked's already-dark colour at a
@@ -4076,10 +4106,25 @@ SPEC.states.forEach(st => BIND[st.id] = Object.assign({}, st.default));
 let PREVIEW = "thinking", EDITING = "thinking";
 // limits.flash.scope_why is explicit: "one window per SURFACE (and one for
 // the UI swatches)" - the state chips' colour dots are a scope of their own,
-// not covered by any face's own governor. ONE shared instance for the whole
-// strip, not one per chip: they read together, at a glance, so a shared
-// window is what the note's own "one for the UI swatches" describes.
-const SWATCH_GOV = newFlashGovernor();
+// not covered by any face's own governor.
+//
+// ONE PER CHIP, keyed by state id. A single shared instance was shipped here
+// and was a real bug, reproduced: syncUI() loops all eight chips through
+// swatchFor() in one pass at one timestamp, so a shared governor saw eight
+// UNRELATED colours as one surface flashing between them, spent its three
+// opposing-transition budget on the first few, and handed the rest a
+// previous chip's held colour. It did not flicker; it lied, stably -
+// `approval` and `standby` rendered speaking's ice blue, `banked` rendered
+// error's pink. The picker's only job is to show which colour is bound to
+// which state, so the owner would bind amber to approval, see blue, and
+// conclude the binding had failed.
+//
+// That is verbatim the failure limits.flash.scope_why itself describes
+// ("spent its budget on those cross-surface transitions and then held one
+// face's colour on another") - the same sentence quoted in the commit that
+// introduced the shared instance. A chip IS a surface for this purpose: each
+// one shows one state's colour and nothing else, exactly like a face.
+const SWATCH_GOV = {};
 
 const $ = id => document.getElementById(id);
 
@@ -4100,7 +4145,9 @@ function swatchFor(sid){
   // (syncUI's own loop), each with a fresh performance.now() - exactly the
   // fast, repeated re-sampling of an oscillating pattern the governor exists
   // to catch, on a surface raw resolve() would otherwise let straight through.
-  const c = governedResolve(SWATCH_GOV, BIND[sid], performance.now()/1000, .3, 0);
+  // The governor is this chip's own, never shared with the other seven.
+  const gov = SWATCH_GOV[sid] || (SWATCH_GOV[sid] = newFlashGovernor());
+  const c = governedResolve(gov, BIND[sid], performance.now()/1000, .3, 0);
   return c.a;
 }
 function buildPatterns(){
@@ -4110,8 +4157,12 @@ function buildPatterns(){
     b.className = "chip"; b.dataset.p = p.id; b.textContent = p.name;
     b.title = p.desc;
     b.onclick = () => {
-      BIND[EDITING] = Object.assign({}, SPEC.patterns.find(x=>x.id===p.id).params ? {} : {},
-                                    { pattern: p.id, color: BIND[EDITING].color });
+      // No `params` on the binding, deliberately: resolve() already merges
+      // the pattern's own defaults underneath (`Object.assign({}, P.params,
+      // bind.params || {})`), so an empty binding gets exactly them. There
+      // used to be a `…params ? {} : {}` ternary here, both arms identical -
+      // dead code that read as if it seeded something and did not.
+      BIND[EDITING] = { pattern: p.id, color: BIND[EDITING].color };
       syncUI();
     };
     box.appendChild(b);
@@ -4368,6 +4419,20 @@ function stopSoloCycle(){
 }
 function openSolo(theme){
   const box = $("solo"), cv = $("solo-canvas");
+  // Drop any previous solo's resize listener before SOLO is overwritten
+  // below. closeSolo() is the only path that removed it, so a second
+  // openSolo() without a close in between would orphan the first listener -
+  // and an orphan is not harmless, because `fit` below used to call
+  // sizeSurface(SOLO), reading the global. Once closeSolo() set SOLO to null
+  // every window resize would throw a TypeError, once per orphan, for the
+  // rest of the session.
+  //
+  // To be exact about what this is: openSolo has one caller (the grid card's
+  // pointerup) and #solo is a `position:fixed; inset:0` overlay above the
+  // grid, so today there is no way to reach it twice without a close. This
+  // line and the captured-surface `fit` below close the hole rather than rely
+  // on that staying true.
+  if(SOLO && SOLO._fit) window.removeEventListener("resize", SOLO._fit);
   GRID_ONLY = false; applyTarget();   // the one face being looked at
   SOLO = makeSurface(theme, cv, null);
   SOLO.seed = 99;
@@ -4379,11 +4444,15 @@ function openSolo(theme){
   syncFaceChoice();
   const f = FACE[theme.id];
   $("solo-read").textContent = `${f.geometry} · ${f.integrates_per_frame ? "sub-stepped" : f.dim}`;
+  // `surf`, not the global SOLO: a listener should only ever resize the
+  // surface it was created for, and reading the global is what made a stray
+  // listener able to throw after SOLO went null.
+  const surf = SOLO;
   const fit = () => {
     const st = box.querySelector(".solo-stage").getBoundingClientRect();
     const side = Math.max(200, Math.min(st.width, st.height) - 16);
     cv.style.width = side + "px"; cv.style.height = side + "px";
-    sizeSurface(SOLO);
+    sizeSurface(surf);
   };
   fit(); SOLO._fit = fit;
   window.addEventListener("resize", fit);
@@ -5049,8 +5118,13 @@ function applyDocument(doc) {
   syncFaceChoice();
 }
 
-/** True until a load has succeeded. Saving before then would publish defaults. */
-let LOAD_FAILED = false;
+/** True until a load has succeeded. Saving before then would publish defaults.
+ *  It starts TRUE, and that one character is the whole point: loadAppearance()
+ *  is fired unawaited AFTER the save handler is wired, so there is a real
+ *  window between the window opening and the load resolving. Starting false
+ *  meant that pressing save inside that window published spec defaults over
+ *  the owner's real saved face, with no undo. */
+let LOAD_FAILED = true;
 
 async function loadAppearance() {
   if (!IS_TAURI) { saveState("browser preview — nothing is saved"); return; }
@@ -5075,7 +5149,7 @@ async function saveAppearance() {
   // showing the spec's defaults in that case, so saving would replace the
   // owner's real face — on the phone too — with whatever shipped.
   if (LOAD_FAILED) {
-    saveState("cannot save: the saved face never loaded, so this would overwrite it", "bad");
+    saveState("cannot save: the saved face has not loaded, so this would overwrite it", "bad");
     return;
   }
   // No concurrent writes. Repeated presses issued overlapping saves whose

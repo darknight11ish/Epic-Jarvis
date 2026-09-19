@@ -808,6 +808,16 @@ pub fn run() {
             // online pill — is fed from here and nowhere else.
             stream::spawn(handle.clone());
 
+            // A Deny clicked on a toast while Jarvis was CLOSED. The
+            // single-instance callback above only fires when a process is
+            // already running, so this launch is the only place a cold-start
+            // Deny can be seen at all - without it the app simply opened and
+            // answered nothing. Right after `stream::spawn` because the
+            // decision cannot go out until the stream is live; it waits for
+            // that itself. See winrt_toast.rs.
+            #[cfg(windows)]
+            winrt_toast::decide_denied_at_startup(&handle);
+
             // One outbound GET, if the owner left it on, and nothing is
             // installed by it. Spawned and forgotten: a slow endpoint must not
             // hold up the window, the tray or the event stream.

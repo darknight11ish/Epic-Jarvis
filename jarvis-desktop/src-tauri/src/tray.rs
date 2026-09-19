@@ -449,11 +449,16 @@ fn render_icon(app: &AppHandle, link: &LinkState) -> Option<Image<'static>> {
 /// `spec::resolve` directly.
 fn governed_resolve(app: &AppHandle, link: &LinkState) -> spec::Resolved {
     let binding = binding_for(app, link);
+    // The same value twice, on purpose: `clock()` here is real elapsed time
+    // and nothing scales it, so the tray's animation clock and the governor's
+    // one-second window are the same clock. See FlashGovernor::resolve's doc
+    // for why they are separate parameters at all.
+    let t = clock();
     app.state::<TrayFlashGovernor>()
         .0
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .resolve(&binding, clock(), 0.0, 0.0)
+        .resolve(&binding, t, 0.0, 0.0, t)
 }
 
 /// Draws the already-resolved colour, dim and notches included.

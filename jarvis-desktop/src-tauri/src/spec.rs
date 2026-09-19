@@ -616,11 +616,15 @@ pub struct FlashGovernor {
     held: Option<Resolved>,
     held_luma: f64,
     /// Direction of the last transition let through: `true` = luma rose.
-    /// `None` before the first transition, so the first one is never
-    /// "opposing" anything and always goes through.
+    /// `None` before the first transition — which is treated as opposing, so
+    /// the first visible change costs a budget slot. This doc used to claim
+    /// the opposite ("the first one is never opposing anything"); the code
+    /// was briefly changed to match it and the tests caught that the doc was
+    /// the wrong half. See the note at the `opposing` binding in `resolve`.
     last_direction: Option<bool>,
-    /// Clock times (the same `t` `resolve()` takes) of opposing transitions
-    /// let through in roughly the last second, oldest first.
+    /// REAL-time seconds (the `now` argument, never the face clock `t`) of
+    /// opposing transitions let through in roughly the last second, oldest
+    /// first.
     recent: Vec<f64>,
 }
 
@@ -640,7 +644,19 @@ impl FlashGovernor {
     /// per surface per frame in place of a bare `resolve()` call — this reads
     /// prior state and cannot be a drop-in for a caller that needs a pure
     /// function (a build-time replay, a golden-vector test).
-    pub fn resolve(&mut self, bind: &Binding, t: f64, amp: f64, seed: f64) -> Resolved {
+    ///
+    /// **Two clocks, and they are not interchangeable.** `t` is the surface's
+    /// own animation clock, which drives the pattern and which a speed
+    /// control may scale. `now` is real, unscaled seconds, and is the only
+    /// thing the one-second window is ever measured in. This tray's `clock()`
+    /// is already real time so it passes the same value for both; the
+    /// `faces.html` port does not, and passing its speed-scaled face clock
+    /// for both was a live bug there — at the top of a 6× speed slider one
+    /// governor "second" was 1/6 of a real one, so up to 18 opposing
+    /// transitions per real second got through against a hard limit of 3.
+    /// The parameter exists in this port so the two stay line-for-line the
+    /// same algorithm, which is the rule for this pair.
+    pub fn resolve(&mut self, bind: &Binding, t: f64, amp: f64, seed: f64, now: f64) -> Resolved {
         let candidate = resolve(bind, t, amp, seed);
 
         let Some(held) = self.held else {
@@ -664,11 +680,22 @@ impl FlashGovernor {
         }
 
         let direction = delta > 0.0;
+        // `None` counts as opposing, and that is deliberate. It was changed
+        // once, on the reasoning that a first transition opposes nothing —
+        // and the change was measured and reverted, because the limit is on
+        // what REACHES THE SCREEN. The first transition is a visible
+        // luminance change like any other; exempting it let a fourth change
+        // land inside one second, which the strobe test below and
+        // `tests/flashgov.mjs` both caught by counting output changes rather
+        // than internal bookkeeping. Three per second is the
+        // photosensitive-seizure threshold, so the port that counts one fewer
+        // is the wrong one.
         let opposing = self.last_direction != Some(direction);
 
         // Prune to the trailing one-second window before counting, so an old
         // transition cannot keep the budget spent long after it happened.
-        self.recent.retain(|&at| t - at < 1.0);
+        // `now`, never `t` — the window is real seconds. See the doc above.
+        self.recent.retain(|&at| now - at < 1.0);
 
         if opposing && self.recent.len() as u32 >= limits.max_transitions_per_s {
             // Letting this one through would be the (max + 1)th opposing
@@ -679,7 +706,7 @@ impl FlashGovernor {
         }
 
         if opposing {
-            self.recent.push(t);
+            self.recent.push(now);
             self.last_direction = Some(direction);
         }
         self.held = Some(candidate);
@@ -964,7 +991,7 @@ mod tests {
 
         let mut t = 0.0;
         while t < 2.0 {
-            let out = gov.resolve(&bind, t, 0.0, 0.0);
+            let out = gov.resolve(&bind, t, 0.0, 0.0, t);
             match last {
                 // The very first frame is an appearance, not a transition —
                 // there is nothing on screen yet for it to oppose, and the
@@ -1010,7 +1037,7 @@ mod tests {
         for i in 0..20 {
             let t = i as f64 * 0.3;
             assert_eq!(
-                gov.resolve(&bind, t, 0.0, 0.0),
+                gov.resolve(&bind, t, 0.0, 0.0, t),
                 resolve(&bind, t, 0.0, 0.0),
                 "a slow pattern should never be held at t={t}"
             );
@@ -1028,12 +1055,12 @@ mod tests {
         let mut b = FlashGovernor::new();
         // Drive `a` hard first, as if it had already spent its budget.
         for i in 0..40 {
-            a.resolve(&bind, i as f64 * 0.05, 0.0, 0.0);
+            a.resolve(&bind, i as f64 * 0.05, 0.0, 0.0, i as f64 * 0.05);
         }
         // `b` has seen nothing yet, so its very first call must go through
         // exactly as a fresh governor's would — unaffected by `a`'s history.
-        let fresh = FlashGovernor::new().resolve(&bind, 0.0, 0.0, 0.0);
-        assert_eq!(b.resolve(&bind, 0.0, 0.0, 0.0), fresh);
+        let fresh = FlashGovernor::new().resolve(&bind, 0.0, 0.0, 0.0, 0.0);
+        assert_eq!(b.resolve(&bind, 0.0, 0.0, 0.0, 0.0), fresh);
     }
 
     /// A pattern with no real colour change (here, two `solid` calls at
@@ -1046,7 +1073,7 @@ mod tests {
         for i in 0..10 {
             let t = i as f64 * 0.05;
             assert_eq!(
-                gov.resolve(&bind, t, 0.0, 0.0),
+                gov.resolve(&bind, t, 0.0, 0.0, t),
                 resolve(&bind, t, 0.0, 0.0),
                 "solid has no transition to hold against at t={t}"
             );

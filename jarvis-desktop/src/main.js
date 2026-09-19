@@ -1187,6 +1187,9 @@ function openApproval(approval) {
 
 /** Paints a gate's contents without touching focus, pinning or the phase. */
 function refreshApproval(approval) {
+  // Whether this is a DIFFERENT gate, worked out before `state.approval` is
+  // overwritten below - the note field depends on it.
+  const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
 
   dom.approvalAction.textContent = approval.action;
@@ -1201,9 +1204,16 @@ function refreshApproval(approval) {
   dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
   decorateDiff(dom.approvalPreview);
   renderOptions(approval);
-  // A note about a still-open card is stale; a note about a fresh one has
-  // nothing typed yet either way, so this is safe unconditionally.
-  dom.approvalNoteInput.value = "";
+  // ONLY on a different card. The old comment here said this was "safe
+  // unconditionally" and it was not: the queue subscription calls
+  // refreshApproval() for the SAME gate on every re-read - a resync, a
+  // `raised` count ticking up, a risk re-derivation - and each one deleted
+  // whatever was half-typed in the note, with no undo. The note is the
+  // documented way to amend an action before approving it, so it is the text
+  // in this window most worth not losing. A genuinely new card arrives with
+  // the field already empty: closeApproval() clears it on every path that
+  // ends a gate.
+  if (fresh) dom.approvalNoteInput.value = "";
 
   // The risk line is the whole reason the gate is worth showing rather than
   // merely enforcing: `switch_model` and `send_email` are both tier `ask` and

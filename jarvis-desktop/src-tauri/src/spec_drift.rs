@@ -12,11 +12,15 @@
 //!
 //! ## What this does and does not do
 //!
-//! It **checks**, once, at startup, and tells - a system notification and a
-//! console line if the two disagree, nothing at all if they agree or if the
-//! server has no spec to compare against. It changes nothing: a disagreement
-//! is a prompt to look, the same as `update.rs` only ever names a version and
+//! It **checks**, once, at startup, and tells. Every outcome - agreement,
+//! disagreement, an unreachable backend, a backend with no spec - is written
+//! to the log file with its reason; a disagreement, and only a disagreement,
+//! also raises a system notification. It changes nothing: a disagreement is a
+//! prompt to look, the same as `update.rs` only ever names a version and
 //! points at Settings rather than installing anything.
+//!
+//! The `VISUAL_SPEC_DRIFT` event carries the same report to the webview. No
+//! window subscribes to it today; the log line is the real output.
 //!
 //! ## Why structural comparison, not the server's own sha256
 //!
@@ -53,8 +57,13 @@ const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
 /// What a check found. Carries no action - see the module doc.
 #[derive(Debug, Clone, Serialize)]
 pub struct DriftReport {
-    /// True once a check actually ran a comparison. False for a network or
-    /// client-build failure, which is not itself evidence of drift.
+    /// One of `match`, `drift`, `no-server-spec` or `check-failed`. The whole
+    /// outcome in one field, so a reader does not have to reconstruct it from
+    /// three booleans and an `Option`.
+    pub outcome: &'static str,
+    /// True only when a structural comparison actually RAN - which is exactly
+    /// when `matches` is `Some`. It used to be set true on the
+    /// nothing-to-compare paths as well, directly contradicting this line.
     pub checked: bool,
     /// True when the server answered with a spec to compare against.
     pub server_available: bool,
@@ -71,8 +80,11 @@ pub struct DriftReport {
 }
 
 impl DriftReport {
+    /// The check could not be run at all - no network, no token, a bad
+    /// response. Not evidence of drift, and not evidence of agreement either.
     fn failed(note: impl Into<String>) -> Self {
         Self {
+            outcome: "check-failed",
             checked: false,
             server_available: false,
             matches: None,
@@ -82,14 +94,35 @@ impl DriftReport {
         }
     }
 
+    /// The server answered, and has no spec to compare against. `checked` is
+    /// FALSE here: nothing was compared. It used to be true, which made a
+    /// report that had compared nothing indistinguishable from one that had.
     fn unavailable(note: impl Into<String>) -> Self {
         Self {
-            checked: true,
+            outcome: "no-server-spec",
+            checked: false,
             server_available: false,
             matches: None,
             server_version: None,
             server_sha256: None,
             note: Some(note.into()),
+        }
+    }
+
+    /// One line, for the log. Every outcome says something; only one of them
+    /// used to be said out loud.
+    fn summary(&self) -> String {
+        match (self.outcome, self.note.as_deref()) {
+            ("match", _) => "the look spec agrees with the server's copy".to_string(),
+            ("drift", _) => format!(
+                "the look spec DISAGREES with the server's copy (server sha256: {}, version: {})",
+                self.server_sha256.as_deref().unwrap_or("unknown"),
+                self.server_version
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "unknown".to_string()),
+            ),
+            (_, Some(note)) => format!("look spec not compared - {note}"),
+            (other, None) => format!("look spec not compared - {other}"),
         }
     }
 }
@@ -143,7 +176,16 @@ async fn check(app: &AppHandle) -> DriftReport {
             .unwrap_or("no jarvis-visual-spec.json on that machine");
         return DriftReport::unavailable(reason.to_string());
     }
-    let server_spec = body.get("spec").cloned().unwrap_or(serde_json::Value::Null);
+    // A 200 that says `available: true` and then carries no usable `spec` is
+    // NOT drift. This used to be `unwrap_or(Value::Null)`, and `Null` never
+    // equals an object, so a malformed or truncated answer fired the exact
+    // false alarm the module doc says this design exists to avoid. There is
+    // nothing to compare, so say that instead of accusing the build.
+    let Some(server_spec) = body.get("spec").filter(|v| v.is_object()) else {
+        return DriftReport::unavailable(format!(
+            "{ROUTE} said it had a spec but did not send one"
+        ));
+    };
     let vendored: serde_json::Value = match serde_json::from_str(VENDORED_SPEC_JSON) {
         Ok(v) => v,
         Err(e) => {
@@ -152,10 +194,12 @@ async fn check(app: &AppHandle) -> DriftReport {
             ))
         }
     };
+    let matches = *server_spec == vendored;
     DriftReport {
+        outcome: if matches { "match" } else { "drift" },
         checked: true,
         server_available: true,
-        matches: Some(server_spec == vendored),
+        matches: Some(matches),
         server_version: body.get("version").and_then(|v| v.as_i64()),
         server_sha256: body
             .get("sha256")
@@ -172,15 +216,20 @@ pub fn spawn_startup_check(app: &AppHandle) {
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let report = check(&handle).await;
+        // EVERY outcome is written down, not only drift. Before this, an
+        // agreement, an unreachable backend, a missing token and a backend
+        // with no spec were all indistinguishable from the outside: the
+        // `note` field explaining each one was built and then never read by
+        // anything, and the only visible output in the whole module was the
+        // drift notification. "Nothing happened" and "the check never ran"
+        // looked identical, which is the failure mode a checker can least
+        // afford.
+        crate::logfile::log(&format!("[jarvis] visual spec: {}", report.summary()));
         if report.matches == Some(false) {
-            println!(
-                "[jarvis] visual spec drift: this build's spec disagrees with the server's \
-                 (server sha256: {})",
-                report.server_sha256.as_deref().unwrap_or("unknown")
-            );
             // Told, not acted upon - the same shape update.rs uses for a
             // newer version: name the finding, point at where to look.
-            // Nothing here edits either spec.
+            // Nothing here edits either spec. Drift is the one outcome that
+            // interrupts; the rest stay in the log.
             commands::notify(
                 &handle,
                 "Jarvis look spec disagrees with the server",
@@ -188,6 +237,10 @@ pub fn spawn_startup_check(app: &AppHandle) {
                  See docs/CROSS-CLIENT-CONTRACT-REPLY-2.md.",
             );
         }
+        // Emitted for any window that wants to show this. Nothing subscribes
+        // today - said plainly rather than left to be discovered - so the log
+        // line above is the real output, and this is the hook for a Settings
+        // row if one is ever wanted.
         let _ = handle.emit(crate::events::VISUAL_SPEC_DRIFT, report);
     });
 }
@@ -224,5 +277,33 @@ mod tests {
             a, b,
             "CONTROL: a genuine difference must not read as a match"
         );
+    }
+
+    /// `checked` means a comparison ran, and the two no-comparison paths must
+    /// both say so. `unavailable` used to claim `checked: true`.
+    #[test]
+    fn a_report_that_compared_nothing_does_not_claim_it_checked() {
+        for report in [
+            DriftReport::failed("no network"),
+            DriftReport::unavailable("that backend has no spec"),
+        ] {
+            assert!(
+                !report.checked,
+                "{}: compared nothing, so `checked` must be false",
+                report.outcome
+            );
+            assert_eq!(report.matches, None);
+            assert!(report.note.is_some(), "every non-comparison says why");
+        }
+    }
+
+    /// Every outcome produces a line worth logging - the `note` explaining a
+    /// failed or skipped check used to be built and then read by nothing.
+    #[test]
+    fn every_outcome_says_something() {
+        let failed = DriftReport::failed("Jarvis is not answering at http://x");
+        assert!(failed.summary().contains("not answering"));
+        let none = DriftReport::unavailable("this backend has no /api/visual-spec yet");
+        assert!(none.summary().contains("no /api/visual-spec"));
     }
 }

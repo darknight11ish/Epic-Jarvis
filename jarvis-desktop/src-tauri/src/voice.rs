@@ -138,13 +138,25 @@ fn open_input_stream(
     }
     let stream_config: cpal::StreamConfig = config.config();
     let err_fn = |err: cpal::StreamError| eprintln!("[voice] input stream error: {err}");
+    // The three capture callbacks below all recover from a poisoned sample
+    // mutex with `unwrap_or_else(|p| p.into_inner())` - the convention the
+    // rest of this codebase uses, and a deliberate change from the
+    // `if let Ok(...)` they started with. A poisoned lock here is not a
+    // transient condition: once any thread panics while holding it, EVERY
+    // later `lock()` returns `Err` for the life of the process, so
+    // `if let Ok` quietly dropped every sample from then on. Recording would
+    // go permanently silent with nothing logged anywhere, and
+    // `stop_voice_capture` would POST an empty WAV as if the owner had said
+    // nothing. The buffer holds PCM samples, not an invariant a panic can
+    // corrupt into something unsafe to read, so carrying on with it is right.
     let stream_result = match sample_format {
         cpal::SampleFormat::I16 => device.build_input_stream(
             &stream_config,
             move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                if let Ok(mut buf) = samples.lock() {
-                    buf.extend_from_slice(data);
-                }
+                let mut buf = samples
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                buf.extend_from_slice(data);
             },
             err_fn,
             None,
@@ -152,12 +164,13 @@ fn open_input_stream(
         cpal::SampleFormat::U16 => device.build_input_stream(
             &stream_config,
             move |data: &[u16], _: &cpal::InputCallbackInfo| {
-                if let Ok(mut buf) = samples.lock() {
-                    // u16 PCM is centred on 32768, not 0 - shift before
-                    // narrowing, the same conversion `cpal::Sample`'s own
-                    // i16 impl documents.
-                    buf.extend(data.iter().map(|&s| (s as i32 - 32_768) as i16));
-                }
+                let mut buf = samples
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                // u16 PCM is centred on 32768, not 0 - shift before
+                // narrowing, the same conversion `cpal::Sample`'s own
+                // i16 impl documents.
+                buf.extend(data.iter().map(|&s| (s as i32 - 32_768) as i16));
             },
             err_fn,
             None,
@@ -165,12 +178,13 @@ fn open_input_stream(
         cpal::SampleFormat::F32 => device.build_input_stream(
             &stream_config,
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                if let Ok(mut buf) = samples.lock() {
-                    buf.extend(
-                        data.iter()
-                            .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16),
-                    );
-                }
+                let mut buf = samples
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                buf.extend(
+                    data.iter()
+                        .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16),
+                );
             },
             err_fn,
             None,
