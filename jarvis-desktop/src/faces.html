@@ -4074,6 +4074,12 @@ function applyQuality(){
 const BIND = {};
 SPEC.states.forEach(st => BIND[st.id] = Object.assign({}, st.default));
 let PREVIEW = "thinking", EDITING = "thinking";
+// limits.flash.scope_why is explicit: "one window per SURFACE (and one for
+// the UI swatches)" - the state chips' colour dots are a scope of their own,
+// not covered by any face's own governor. ONE shared instance for the whole
+// strip, not one per chip: they read together, at a glance, so a shared
+// window is what the note's own "one for the UI swatches" describes.
+const SWATCH_GOV = newFlashGovernor();
 
 const $ = id => document.getElementById(id);
 
@@ -4089,7 +4095,12 @@ function buildStates(){
   });
 }
 function swatchFor(sid){
-  const c = resolve(BIND[sid], performance.now()/1000, .3, 0);
+  // governedResolve, not resolve() directly - see SWATCH_GOV above. Rapidly
+  // clicking through patterns calls this for all eight chips on every click
+  // (syncUI's own loop), each with a fresh performance.now() - exactly the
+  // fast, repeated re-sampling of an oscillating pattern the governor exists
+  // to catch, on a surface raw resolve() would otherwise let straight through.
+  const c = governedResolve(SWATCH_GOV, BIND[sid], performance.now()/1000, .3, 0);
   return c.a;
 }
 function buildPatterns(){

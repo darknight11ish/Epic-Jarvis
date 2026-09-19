@@ -65,15 +65,39 @@ clamps the same field the same way now too — the earlier reply's promise to
 "clamp numeric animation params server-side" had only ever checked *shape*
 (`params` is an object), never a *value*.
 
-**Not done, and worth naming rather than quietly leaving out:** the fuller
-governor the spec's note describes — "holds the colour when a fourth
-opposing transition would land inside one second," tracked per surface,
-across *every* pattern, not just flicker's own rate — does not exist
-anywhere yet, on either side. What's fixed closes the one concretely
-measured failure (an unsafe flicker rate); the general cross-pattern
-transition-rate budget is still open. If your side has anything to check
-against `max_transitions_per_s` / `min_luma_delta` beyond `Resolve.kt`'s own
-per-surface window, it's ahead of what exists here.
+**Update: the general governor exists here now, and was already more built
+than this reply first said.** Re-checked directly against the live files
+rather than trusting the summary above: `newFlashGovernor`/`governedResolve`
+in `faces.html` and `FlashGovernor` in `spec.rs` already implement the
+general cross-pattern budget this section called entirely missing —
+`max_transitions_per_s`/`min_luma_delta`, one window per surface, exactly as
+`limits.flash.scope_why` specifies. The main face grid, the Faces window's
+"solo" view, the Widget's live face, and the system tray icon all resolve
+through it.
+
+What was genuinely missing, and is now fixed: the state-chip colour
+swatches (`swatchFor()` in `faces.html`) called `resolve()` directly,
+bypassing every governor on the page - the exact scope `scope_why` names in
+its own parenthetical, "one window per SURFACE (**and one for the UI
+swatches**)". Rapidly clicking through patterns rebuilds all eight swatches
+on every click (`syncUI()`), each a fresh `resolve()` call at a fresh
+timestamp - for an oscillating pattern, that is repeated fast re-sampling of
+a colour that changes over time, with nothing to hold it. One shared
+`SWATCH_GOV` now covers the whole strip, since the swatches read together at
+a glance rather than as independent surfaces.
+
+Real test coverage added too - there was none for this before, on either
+side of it: `tests/flashgov.mjs` lifts the actual `governedResolve`/
+`newFlashGovernor`/`relativeLuma` source out of `faces.html` (not a
+retyped copy) and drives it with a synthetic colour sequence, checking the
+budget is enforced, the one-second window actually expires, a swing under
+`min_luma_delta` is never counted, and a lone well-spaced transition is
+never held. No browser needed - same class as `voicecheck.mjs`.
+
+If your side has anything to check against `max_transitions_per_s` /
+`min_luma_delta` beyond `Resolve.kt`'s own per-surface window, worth
+comparing notes - but the earlier claim that nothing existed here was
+wrong, and is corrected above rather than left standing.
 
 ## Golden vectors: the desktop's own consumer was still missing
 
