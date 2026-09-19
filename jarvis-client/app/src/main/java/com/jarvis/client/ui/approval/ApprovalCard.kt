@@ -41,7 +41,9 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.ui.T
 import com.jarvis.client.ui.parts.Affirm
+import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Refuse
+import com.jarvis.client.ui.parts.TextInput
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -69,12 +71,28 @@ fun ApprovalCard(
     focused: Boolean = false,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
+    /**
+     * A note typed before the first decision - AUTONOMY-PROPOSALS.md §3b.
+     * NOT a decision and approves nothing; the expected result is the
+     * desktop replacing this card with a fresh set of options that accounts
+     * for it, delivered the normal way through the next `/api/pending`
+     * refresh. DRAFT: the route this calls has no confirmed backend yet
+     * (`jarvis_gate.py`/`jarvis_hud.py` are not in this repo) - a failure
+     * here is expected until it exists, and is shown through the same
+     * shared notice every other read on this screen uses, never hidden.
+     * Suspend, so this card can hold its own "sending" state without a new
+     * field threaded through from outside.
+     */
+    onAmend: suspend (note: String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val offset = remember(item.id) { Animatable(0f) }
     var showDetail by rememberSaveable(item.id) { mutableStateOf(false) }
     var showContext by rememberSaveable(item.id) { mutableStateOf(false) }
+    var showAmend by rememberSaveable(item.id) { mutableStateOf(false) }
+    var amendText by rememberSaveable(item.id) { mutableStateOf("") }
+    var amendSending by remember(item.id) { mutableStateOf(false) }
 
     val expiry = item.expiresAtMs
     // One state change, at the deadline - not one a second.
@@ -276,6 +294,55 @@ fun ApprovalCard(
         } else if (expiry != null) {
             Spacer(Modifier.height(10.dp))
             ExpiryCountdown(expiry)
+        }
+
+        // A note before the first decision - AUTONOMY-PROPOSALS.md §3b.
+        // Hidden entirely once the card cannot be decided at all: typing a
+        // note about a request that has already expired or gone stale has
+        // nothing to attach itself to.
+        if (canDecide) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = if (showAmend) "Hide note" else "Add a note before deciding",
+                style = MaterialTheme.typography.labelMedium,
+                color = T.Pick,
+                modifier = Modifier
+                    .clickable(role = Role.Button) { showAmend = !showAmend }
+                    .minimumInteractiveComponentSize(),
+            )
+            AnimatedVisibility(showAmend) {
+                Column(Modifier.padding(top = 6.dp)) {
+                    TextInput(
+                        value = amendText,
+                        onValueChange = { amendText = it },
+                        placeholder = "Wait, only do X — or add Y too…",
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Quiet(
+                            if (amendSending) "Sending…" else "Send note",
+                            enabled = !amendSending && amendText.isNotBlank(),
+                            onClick = {
+                                val note = amendText
+                                amendSending = true
+                                scope.launch {
+                                    onAmend(note)
+                                    amendSending = false
+                                    amendText = ""
+                                    showAmend = false
+                                }
+                            },
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Sends the note only - approves nothing. The desktop should " +
+                                "come back with a new plan that accounts for it.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = T.Dim,
+                        )
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))

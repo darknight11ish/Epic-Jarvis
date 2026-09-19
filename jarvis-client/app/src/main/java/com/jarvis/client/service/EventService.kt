@@ -233,6 +233,7 @@ class EventService : Service() {
             activity == Activity.THINKING -> "Thinking"
             activity == Activity.SPEAKING -> "Speaking"
             activity == Activity.WORKING -> "Working"
+            activity == Activity.PAUSED -> "Paused"
             activity == Activity.ERROR -> "Something went wrong"
             else -> "Linked"
         }

@@ -71,7 +71,19 @@ enum class LinkState { OFFLINE, RECONNECTING, CONNECTED }
  * What Jarvis is *doing*, which is a different question from whether it is
  * available. The visual spec binds a colour to this one, never to power mode.
  */
-enum class Activity { IDLE, LISTENING, THINKING, SPEAKING, WORKING, ERROR;
+enum class Activity {
+    IDLE, LISTENING, THINKING, SPEAKING, WORKING,
+
+    /**
+     * A running task, paused - AUTONOMY-PROPOSALS.md §3d. DRAFT: no backend
+     * anywhere is confirmed to send this value yet (the design doc's own
+     * §3d says plainly that `jarvis_gate.py` does not emit it today), so
+     * this maps from the wire the moment it might, the same speculative
+     * stance the desktop's own widget already takes reading `link.activity`.
+     * Until then this arm is simply never reached.
+     */
+    PAUSED,
+    ERROR;
 
     companion object {
         fun from(wire: String?): Activity = when (wire?.lowercase()) {
@@ -79,6 +91,7 @@ enum class Activity { IDLE, LISTENING, THINKING, SPEAKING, WORKING, ERROR;
             "thinking" -> THINKING
             "speaking" -> SPEAKING
             "working" -> WORKING
+            "paused" -> PAUSED
             "error" -> ERROR
             else -> IDLE
         }
@@ -1089,6 +1102,67 @@ object JarvisRuntime {
     }
 
     /**
+     * A route this desktop may not have yet is reported as such, not as the
+     * generic "wrong address" wording [describe] gives every other 404 -
+     * see [JarvisApi.amend] and [JarvisApi.pauseTask]'s own doc comments for
+     * why a 404 means something more specific here.
+     */
+    private fun describeDraft(e: ApiError): String = when (e) {
+        ApiError.NotFound -> "This desktop does not support that yet."
+        else -> describe(e)
+    }
+
+    /**
+     * A note sent before the first decision on a proposal -
+     * AUTONOMY-PROPOSALS.md §3b, matching the desktop's own `amend()`.
+     *
+     * Deliberately not gated on [decisionBlocker] the way [decide] is: a
+     * note is never itself a verdict on anything Jarvis is holding, only a
+     * message attached to one - the same reasoning that already excuses
+     * `markDigestSeen`/`setMuted`/`setWakeWord` from that gate. On success
+     * the queue is refreshed, since the expected result is this same id
+     * coming back with a different set of options.
+     */
+    suspend fun amendPending(id: String, note: String): ApiResult<Unit> {
+        val result = api.amend(id, note)
+        when (result) {
+            is ApiResult.Ok -> refreshPending()
+            is ApiResult.Failed -> _notice.value = describeDraft(result.error)
+        }
+        return result
+    }
+
+    /**
+     * Pause, resume, stop, or add a note to whatever Jarvis is running -
+     * AUTONOMY-PROPOSALS.md §3d. All four are one-shot requests against a
+     * single implied task, never gated on [decisionBlocker]: sending "please
+     * pause" is safe to attempt regardless of the event stream's own
+     * staleness, the same reasoning [amendPending] gives, and none of the
+     * four is itself a verdict on anything pending.
+     *
+     * **This function must never set `_activity` to PAUSED itself.** A
+     * request succeeding only means the desktop accepted the HTTP call, not
+     * that it actually paused - the honesty rule the desktop's own widget
+     * learned the hard way (see `AUTONOMY-PROPOSALS.md` §3d's own account of
+     * it). The UI shows Paused only once a real event reports
+     * `activity: "paused"`, through the ordinary [Activity.from] path.
+     */
+    suspend fun pauseTask(): ApiResult<Unit> = runTaskAction { api.pauseTask() }
+
+    suspend fun resumeTask(): ApiResult<Unit> = runTaskAction { api.resumeTask() }
+
+    suspend fun stopTask(): ApiResult<Unit> = runTaskAction { api.stopTask() }
+
+    suspend fun injectTaskNote(note: String): ApiResult<Unit> =
+        runTaskAction { api.injectTaskNote(note) }
+
+    private suspend fun runTaskAction(call: suspend () -> ApiResult<Unit>): ApiResult<Unit> {
+        val result = call()
+        if (result is ApiResult.Failed) _notice.value = describeDraft(result.error)
+        return result
+    }
+
+    /**
      * Keeps or discards one fact Jarvis proposed to remember. Mirrors
      * [decide]'s own shape - the same "not connected" refusal, since the
      * desktop's `brain_memory_decide` requires a live link before it will
@@ -1204,7 +1278,8 @@ object JarvisRuntime {
             act == Activity.ERROR -> FaceState.ERROR
             _pending.value.isNotEmpty() -> FaceState.APPROVAL
             act == Activity.LISTENING -> FaceState.LISTENING
-            act == Activity.THINKING || act == Activity.WORKING -> FaceState.THINKING
+            act == Activity.THINKING || act == Activity.WORKING || act == Activity.PAUSED ->
+                FaceState.THINKING
             act == Activity.SPEAKING -> FaceState.SPEAKING
             resting && _attention.value.banked -> FaceState.BANKED
             // Quiet is a power mode that suppresses speech, which is what

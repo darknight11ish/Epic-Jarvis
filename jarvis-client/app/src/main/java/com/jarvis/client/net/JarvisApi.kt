@@ -317,6 +317,57 @@ class JarvisApi(
     /** `POST /api/models/rollback {}` - tier `auto`, never waits. */
     suspend fun rollbackModel(): ApiResult<Unit> = postJson("/api/models/rollback", "{}")
 
+    // ------------------------------------------------- autonomy proposals --
+
+    /**
+     * A note sent before the first decision on a proposal -
+     * `docs/AUTONOMY-PROPOSALS.md` §3b on the desktop branch. This is NOT a
+     * decision and approves nothing; the expected result is a fresh set of
+     * options for the same id, which arrives the normal way through the next
+     * `/api/pending` read - this call does not wait for or apply it.
+     *
+     * **DRAFT.** `jarvis_gate.py`/`jarvis_hud.py` are not in either repo, so
+     * neither this route nor its exact shape is confirmed - `POST
+     * /api/pending/<id>/amend` is the design doc's own proposed name, the
+     * same one the desktop's `amend_approval` Tauri command targets. A 404
+     * here means this desktop build does not have the route yet, not a
+     * wrong address, and [JarvisRuntime] reports it that way rather than
+     * through the generic [ApiError.NotFound] wording.
+     */
+    suspend fun amend(id: String, note: String): ApiResult<Unit> {
+        val encodedId = java.net.URLEncoder.encode(id, "UTF-8")
+        return postJson("/api/pending/$encodedId/amend", """{"note":${quote(note)}}""")
+    }
+
+    /**
+     * Pause, resume, stop, or add a note to whatever Jarvis is currently
+     * running - `docs/AUTONOMY-PROPOSALS.md` §3d. None of the four names a
+     * task id: the project's own rule (one human decision, one bounded
+     * plan) means there is never more than one thing running that could
+     * need one, the same reasoning the desktop's own client code gives for
+     * its matching, argument-free calls.
+     *
+     * **DRAFT, same standing as [amend].** No route name for this is given
+     * anywhere in the shared design doc - only the mechanism is specified
+     * ("just another action against the running task's id, broadcast the
+     * same way `approval-resolved` already is"). `/api/task/pause` and its
+     * three siblings below follow this contract's own existing
+     * domain/verb shape (`/api/models/switch`, `/api/attention/mute`,
+     * `/api/voice/wake`) rather than inventing a new one, but are not
+     * confirmed against `jarvis_hud.py` and may need renaming once they
+     * are. Calling any of these against a backend that has not added them
+     * fails honestly - a 404, surfaced as an error - rather than silently
+     * doing nothing.
+     */
+    suspend fun pauseTask(): ApiResult<Unit> = postJson("/api/task/pause", "{}")
+
+    suspend fun resumeTask(): ApiResult<Unit> = postJson("/api/task/resume", "{}")
+
+    suspend fun stopTask(): ApiResult<Unit> = postJson("/api/task/stop", "{}")
+
+    suspend fun injectTaskNote(note: String): ApiResult<Unit> =
+        postJson("/api/task/note", """{"note":${quote(note)}}""")
+
     // ------------------------------------------------------- appearance ----
 
     /**

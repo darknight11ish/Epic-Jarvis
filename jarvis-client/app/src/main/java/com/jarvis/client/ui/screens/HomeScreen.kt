@@ -33,6 +33,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,9 +66,11 @@ import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.VoiceButton
 import com.jarvis.client.ui.parts.VoiceStrip
 import com.jarvis.client.voice.VoiceSession
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.State
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalAccent
@@ -141,6 +149,8 @@ data class HomeActions(
     val onInterrupt: () -> Unit,
     val onApprove: (PendingItem) -> Unit,
     val onDeny: (PendingItem) -> Unit,
+    /** A note before the first decision - AUTONOMY-PROPOSALS.md §3b. DRAFT; see ApprovalCard. */
+    val onAmend: suspend (id: String, note: String) -> Unit,
     val onReconnect: () -> Unit,
     val onDismissNotice: () -> Unit,
     val onOpenChecks: () -> Unit,
@@ -153,6 +163,14 @@ data class HomeActions(
     val onVoiceRelease: () -> Unit,
     val onVoiceCancel: () -> Unit,
     val onDismissVoiceNotice: () -> Unit,
+    /**
+     * Pause, resume, stop, or add a note to whatever Jarvis is running -
+     * AUTONOMY-PROPOSALS.md §3d. DRAFT; see [com.jarvis.client.JarvisRuntime.pauseTask].
+     */
+    val onPauseTask: suspend () -> Unit = {},
+    val onResumeTask: suspend () -> Unit = {},
+    val onStopTask: suspend () -> Unit = {},
+    val onInjectTaskNote: suspend (note: String) -> Unit = {},
 )
 
 @Composable
@@ -218,6 +236,7 @@ fun HomeScreen(
             // card does - which a found index guarantees. Adding an item to
             // this list above the cards means adding it here too.
             val leading = 1 +
+                (if (state.activity == Activity.WORKING || state.activity == Activity.PAUSED) 1 else 0) +
                 (if (state.notice != null) 1 else 0) +
                 (if (state.approvalsOff) 1 else 0) +
                 1
@@ -232,6 +251,19 @@ fun HomeScreen(
         ) {
             item(key = "face") {
                 FaceBlock(state, actions, micLevel, speechLevel)
+            }
+
+            // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
+            // reports a task running or paused - never while merely thinking
+            // about a chat reply, which WORKING is also used for elsewhere;
+            // that overlap is accepted here the same way LinkBar's own
+            // THINKING/WORKING merge already is, since a stray control on a
+            // short chat turn costs nothing and hiding it during a real task
+            // would cost the one thing this section exists for.
+            if (state.activity == Activity.WORKING || state.activity == Activity.PAUSED) {
+                item(key = "task-controls") {
+                    TaskControlsPlate(paused = state.activity == Activity.PAUSED, actions = actions)
+                }
             }
 
             if (state.notice != null) {
@@ -271,6 +303,7 @@ fun HomeScreen(
                         focused = item.id == state.focusApproval,
                         onApprove = { actions.onApprove(item) },
                         onDeny = { actions.onDeny(item) },
+                        onAmend = { note -> actions.onAmend(item.id, note) },
                     )
                 }
             }
@@ -358,6 +391,89 @@ private fun LaneChip(status: StatusInfo?) {
     }
 }
 
+/**
+ * Pause, resume, stop, or add a note to whatever Jarvis is running -
+ * AUTONOMY-PROPOSALS.md §3d. DRAFT throughout: no backend anywhere is
+ * confirmed to answer any of the four calls this wires to, so every button
+ * here can fail, and does so honestly rather than pretending to work - see
+ * [com.jarvis.client.JarvisRuntime.pauseTask]'s own doc comment.
+ *
+ * `paused` answers only to the server's own reported [Activity], never to
+ * whether a click's own suspend call resolved - clicking Pause does not
+ * flip this composable's own idea of the state, because a click only
+ * proves a request was sent. Exactly the honesty rule the desktop's own
+ * widget (`jarvis-desktop/src/widget.js`) already learned building the
+ * matching feature, and its own comment documents having gotten wrong on
+ * the first pass.
+ */
+@Composable
+private fun TaskControlsPlate(paused: Boolean, actions: HomeActions) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var noteText by rememberSaveable { mutableStateOf("") }
+    var noteSending by remember { mutableStateOf(false) }
+
+    fun act(call: suspend () -> Unit) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            call()
+            busy = false
+        }
+    }
+
+    Plate {
+        Text(
+            if (paused) "A task is paused" else "A task is running",
+            style = MaterialTheme.typography.titleSmall,
+            color = chrome.textHi,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "This section is a draft: the desktop does not yet confirm pausing, " +
+                "resuming or stopping, so these buttons may simply do nothing today.",
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (paused) {
+                Quiet("Resume", enabled = !busy, onClick = { act(actions.onResumeTask) })
+            } else {
+                Quiet("Pause", enabled = !busy, onClick = { act(actions.onPauseTask) })
+            }
+            Quiet("Stop", color = chrome.badInk, enabled = !busy, onClick = { act(actions.onStopTask) })
+        }
+        Spacer(Modifier.height(10.dp))
+        // A note here never touches the steps already approved and running -
+        // AUTONOMY-PROPOSALS.md §3d. It is queued for the NEXT proposal, the
+        // same amend flow the approval card's own note field uses.
+        Row(verticalAlignment = Alignment.Bottom) {
+            TextInput(
+                value = noteText,
+                onValueChange = { noteText = it },
+                placeholder = "Add something for what runs next…",
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Quiet(
+                if (noteSending) "…" else "Send",
+                enabled = !noteSending && noteText.isNotBlank(),
+                onClick = {
+                    val note = noteText
+                    noteSending = true
+                    scope.launch {
+                        actions.onInjectTaskNote(note)
+                        noteSending = false
+                        noteText = ""
+                    }
+                },
+            )
+        }
+    }
+}
+
 @Composable
 private fun LinkBar(state: HomeState, actions: HomeActions) {
     val chrome = LocalChrome.current
@@ -372,6 +488,7 @@ private fun LinkBar(state: HomeState, actions: HomeActions) {
         else -> when (state.activity) {
             Activity.LISTENING -> chrome.warnMark to "Listening"
             Activity.THINKING, Activity.WORKING -> accent to "Thinking"
+            Activity.PAUSED -> chrome.warnMark to "Paused"
             Activity.SPEAKING -> accent to "Speaking"
             Activity.ERROR -> chrome.badMark to "Error on the desktop"
             else -> chrome.okMark to when (state.power) {

@@ -121,6 +121,7 @@ class LinkTileService : TileService() {
                 activity == Activity.THINKING -> "Thinking"
                 activity == Activity.SPEAKING -> "Speaking"
                 activity == Activity.LISTENING -> "Listening"
+                activity == Activity.PAUSED -> "Paused"
                 else -> "Linked"
             }
         }
