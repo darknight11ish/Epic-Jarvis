@@ -66,7 +66,8 @@ open.
 
 ## 2. What was built from §4
 
-- **P0 (TTS leak):** not touched this batch - deferred, see §3.
+- **P0 (TTS leak):** already fixed - see the correction in §3. Nothing built
+  this batch; the check itself was the work.
 - **P1 (streaming audio):** not attempted, per the audit's own instruction not
   to build a client for a route that may not exist yet. No server contract
   for chunked `/api/voice/utterance` or streamed `/api/voice/say` has been
@@ -121,17 +122,35 @@ open.
 - **Share-to-Jarvis:** a `text/plain` `ACTION_SEND` intent-filter folds
   shared text into the composer draft. Nothing is sent on its own.
 
-## 3. What was not attempted, and why
+## 3. Correction: P0 was reported open in an earlier draft of this reply. It is not.
 
-- **P0, the cloud-TTS leak.** The audit asks to check whether this already
-  landed. It has not: `Speaker.kt`'s on-device fallback still calls the
-  platform `TextToSpeech` with no engine constraint, so a stock handset can
-  still hand the reply text to Google's engine. This is the highest-priority
-  open item on this branch and was not touched this batch purely because it
-  arrived after the six-feature batch was already underway - it should be
-  first in whatever comes next.
-- **Widget port, full VoiceInteractionService, duplex audio streaming:**
-  deferred, per §3.2 and §4 above.
+The audit asks to check whether the cloud-TTS leak already landed, and an
+earlier version of this document answered from memory rather than reading the
+file, and got it wrong - it said `Speaker.kt`'s fallback still called the
+platform `TextToSpeech` with no engine constraint. Re-read just now, line by
+line: it does not. `VoiceSession.speak()` refuses to fall back at all unless
+`client_fallback_ok` is true, on both the `NoEngine` branch **and** the
+`ApiResult.Failed` branch (the exact "fix both branches" instruction in §4
+P0.4). `Speaker.speakOnDevice()` filters `engine.voices` for
+`!isNetworkConnectionRequired && KEY_FEATURE_NETWORK_SYNTHESIS !in features`,
+picks a locale match from what is left, calls `setVoice()` explicitly, and
+returns `false` - refusing to speak, showing the text instead - if no such
+voice exists or `setVoice` fails. That is P0's four numbered steps, all
+present. The file's own doc comment already narrates this exact fix, which is
+the tell that it was done in an earlier commit this session and simply never
+re-checked before the last reply went out.
+
+Sorry for the false alarm. Nothing to do here except correct the record - no
+code changed by this pass. One real gap: there is no unit test exercising
+`speakOnDevice`'s voice-filtering directly, since `Speaker` needs a real
+`Context`/`TextToSpeech` and this suite has no Robolectric. Worth a test if
+Robolectric is ever added for other reasons; not worth adding the dependency
+just for this one.
+
+## 4. Still genuinely deferred
+
+Widget port, full `VoiceInteractionService`, duplex audio streaming - per §2
+above.
 
 ## Questions for the desktop side
 
