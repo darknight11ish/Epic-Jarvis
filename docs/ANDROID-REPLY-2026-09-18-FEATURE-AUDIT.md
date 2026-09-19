@@ -72,17 +72,29 @@ open.
   to build a client for a route that may not exist yet. No server contract
   for chunked `/api/voice/utterance` or streamed `/api/voice/say` has been
   read from the desktop branch.
-- **P2, default assistant:** built the **minimal** form only - an
-  `ACTION_ASSIST`/`DEFAULT` intent-filter on `MainActivity`, no
-  `VoiceInteractionService`. The audit specifically asks for
-  `RoleManager.ROLE_ASSISTANT` via a real `VoiceInteractionService`, which is
-  materially more code (a session service with its own lifecycle) and was
-  judged out of scope for this batch, on top of an already-red CI. Flagging
-  this gap rather than quietly calling it done: **what exists today may not
-  actually appear in every OEM's assistant picker**, since some Android
-  builds gate that list on the presence of a `VoiceInteractionService` rather
-  than accepting a bare `ACTION_ASSIST` handler. Worth a real device check
-  before calling P2 finished.
+- **P2, default assistant:** update - the `VoiceInteractionService` this
+  section called out of scope is now built:
+  `JarvisVoiceInteractionService`/`JarvisVoiceInteractionSessionService`/
+  `JarvisVoiceInteractionSession` register for `RoleManager.ROLE_ASSISTANT`
+  and do nothing but hand off to `MainActivity` the instant a session opens
+  - no session UI of its own, no listening, so "rule: no client-side
+  speech-to-text" holds exactly as it did with the bare intent-filter alone.
+  A `JarvisRecognitionServiceStub` exists only because the
+  `<voice-interaction-service>` manifest schema names a `recognitionService`
+  alongside the session service; it recognises nothing and errors
+  immediately if anything ever calls it, which nothing in this app does.
+  The old `ACTION_ASSIST` intent-filter is kept alongside it for OEMs that
+  still gate on the plain form. A "Set Jarvis as the assistant app" button
+  on the Checks screen opens `RoleManager.createRequestRoleIntent` - there
+  is no direct grant, by design; that dialog is the system's own.
+  **Still not done, and this time said plainly rather than assumed away:**
+  CI is out of minutes and this app has no local build, so none of this has
+  compiled, let alone run on a device. `startAssistantActivity` in
+  particular is the one call in `JarvisVoiceInteractionSession` I'm least
+  certain of by name; if it does not exist on this SDK the whole module
+  fails to compile, not just that line. Worth the same real-device check
+  this section already asked for, now with actual code to check rather than
+  a bare intent-filter.
 - **P2, approval card check:** confirmed rather than newly built -
   `ApprovalCard.kt` renders `PendingItem.title`/`summary`/`risk.why` and the
   server's own `notice` object, never a client-side summary, and nothing
@@ -149,8 +161,9 @@ just for this one.
 
 ## 4. Still genuinely deferred
 
-Widget port, full `VoiceInteractionService`, duplex audio streaming - per §2
-above.
+Duplex audio streaming - per §2 - is the one still open; the widget port and
+the full `VoiceInteractionService` are both built now, see §2's own updates
+above for what shipped and what remains unverified in each.
 
 ## Questions for the desktop side
 

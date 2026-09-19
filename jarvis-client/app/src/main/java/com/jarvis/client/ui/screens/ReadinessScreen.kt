@@ -47,6 +47,9 @@ fun ReadinessScreen(
     onRequestBatteryExemption: () -> Unit,
     onStartService: () -> Unit,
     onBack: () -> Unit,
+    /** Null hides the button entirely - this phone has no assistant role to
+     *  request at all, or Jarvis already holds it. */
+    onRequestAssistantRole: (() -> Unit)? = null,
     /** The desktop's wake word, as three states — never as a boolean. */
     wakeWord: WakeWord = WakeWord.UNKNOWN,
     /** Turns the desktop's wake word off. Null hides the control entirely. */
@@ -107,6 +110,16 @@ fun ReadinessScreen(
                 modifier = Modifier.weight(1f),
                 onClick = onStartService,
             )
+        }
+        if (onRequestAssistantRole != null) {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Primary(
+                    text = "Set Jarvis as the assistant app",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onRequestAssistantRole,
+                )
+            }
+            Gap(12)
         }
     }
 }

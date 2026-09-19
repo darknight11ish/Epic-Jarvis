@@ -70,19 +70,62 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
-            <!-- Makes this app a candidate for Settings -> Apps -> Default
-                 apps -> Digital assistant app. Deliberately the plain,
-                 minimal form: this app has no VoiceInteractionService and
-                 does no listening of its own (rule: no client-side
-                 speech-to-text) - picking Jarvis here just means a long-press
-                 of the home button, or the assist gesture, opens this
-                 activity like any other launch. Nothing about what happens
-                 once it opens changes. -->
+            <!-- Makes this app a candidate for the older, plain-intent style
+                 of Settings -> Apps -> Default apps -> Digital assistant app
+                 some OEMs still use. Picking Jarvis here just means a
+                 long-press of the home button, or the assist gesture, opens
+                 this activity like any other launch. Nothing about what
+                 happens once it opens changes - that is true of this
+                 intent-filter and of the RoleManager path below alike; see
+                 JarvisVoiceInteractionSession's own doc for why. -->
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- The newer path: RoleManager.ROLE_ASSISTANT, which some launchers
+             offer the assist gesture to exclusively rather than to anything
+             with a plain ACTION_ASSIST intent-filter. This app still has no
+             listening of its own - JarvisRecognitionServiceStub recognises
+             nothing and JarvisVoiceInteractionSession does nothing but open
+             MainActivity - so "rule: no client-side speech-to-text" still
+             holds exactly as it did with the plain intent-filter alone.
+             android:exported must be true: RoleManager and the assist
+             gesture both bind to this from outside this app's own process,
+             the BIND_VOICE_INTERACTION permission is what keeps that bind
+             restricted to the system. -->
+        <service
+            android:name=".assistant.JarvisVoiceInteractionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/voice_interaction_service" />
+        </service>
+
+        <service
+            android:name=".assistant.JarvisVoiceInteractionSessionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+
+        <!-- The recognitionService voice_interaction_service.xml names -
+             required by that schema, never actually invoked by anything in
+             this app. See JarvisRecognitionServiceStub's own doc. -->
+        <service
+            android:name=".assistant.JarvisRecognitionServiceStub"
+            android:exported="true"
+            android:permission="android.permission.BIND_RECOGNITION_SERVICE">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech"
+                android:resource="@xml/recognition_service" />
+        </service>
 
         <!-- Not a power tile: the API has no endpoint that sets power mode, and a
              tile that appeared to switch Jarvis to Quiet and silently did nothing

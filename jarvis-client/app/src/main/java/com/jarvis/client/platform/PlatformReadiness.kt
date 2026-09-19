@@ -1,6 +1,7 @@
 package com.jarvis.client.platform
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -121,6 +122,30 @@ object PlatformReadiness {
             true
         }
 
+    /**
+     * Whether this app is the system's held `RoleManager.ROLE_ASSISTANT`.
+     *
+     * Not whether the role EXISTS on this device (`isRoleAvailable` - every
+     * phone this app's minSdk reaches has it) but whether the OWNER actually
+     * picked Jarvis for it, which is the thing worth reporting: the plain
+     * `ACTION_ASSIST` intent-filter alone made this app a candidate in the
+     * old-style "Assist app" picker some OEMs still show, but said nothing
+     * about the newer role-based one, and nothing in the app could tell
+     * which state the phone was actually in.
+     */
+    fun assistantRoleHeld(context: Context): Boolean {
+        val rm = ContextCompat.getSystemService(context, RoleManager::class.java) ?: return false
+        return runCatching { rm.isRoleHeld(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
+    }
+
+    /** False only where the API predates the role entirely - this app's own
+     *  minSdk (33) is well past that, but a defensive check costs nothing
+     *  and a stray `RoleManager` failure must not crash this screen. */
+    fun assistantRoleAvailable(context: Context): Boolean {
+        val rm = ContextCompat.getSystemService(context, RoleManager::class.java) ?: return false
+        return runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
+    }
+
     fun report(context: Context, host: String): List<ReadinessItem> = listOf(
         ReadinessItem(
             title = "Cleartext HTTP",
@@ -219,6 +244,31 @@ object PlatformReadiness {
                 ReadinessItem.State.INFO
             } else {
                 ReadinessItem.State.WARN
+            },
+        ),
+        ReadinessItem(
+            title = "Digital assistant",
+            detail = if (!assistantRoleAvailable(context)) {
+                "This phone has no assistant role to hold. The plain assist " +
+                    "gesture (long-press home, or the assist swipe) may still " +
+                    "open Jarvis on some launchers."
+            } else if (assistantRoleHeld(context)) {
+                "Jarvis is the held assistant app. Long-press home, or the " +
+                    "assist gesture, opens this app - nothing about what " +
+                    "happens once it opens is different from a normal launch."
+            } else {
+                "Not set. Some launchers only offer the assist gesture to " +
+                    "whichever app holds this role, rather than to anything " +
+                    "with a plain assist intent-filter."
+            },
+            state = when {
+                !assistantRoleAvailable(context) -> ReadinessItem.State.INFO
+                assistantRoleHeld(context) -> ReadinessItem.State.OK
+                // Not a warning: nothing is broken or missing by not holding
+                // this - it is a convenience, and the plain intent-filter
+                // already covers the launchers that use it. Same tier as
+                // Microphone above, for the same reason.
+                else -> ReadinessItem.State.INFO
             },
         ),
         ReadinessItem(

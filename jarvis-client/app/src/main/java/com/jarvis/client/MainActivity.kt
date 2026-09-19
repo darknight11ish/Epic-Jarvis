@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -125,6 +126,16 @@ class MainActivity : FragmentActivity() {
         if (granted) micGrantedCallback?.invoke()
         micGrantedCallback = null
     }
+
+    /** The system's own role-request dialog. Its result is a plain "did the
+     *  owner pick us" - the readiness screen re-reads RoleManager itself on
+     *  the next tick rather than trusting this callback's own resultCode,
+     *  the same reasoning battery exemption and notifications already use:
+     *  what actually happened is whatever the platform now reports, not
+     *  whatever this Activity assumes a dialog dismissal meant. */
+    private val assistantRolePermission = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { permissionTick.intValue += 1 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -555,6 +566,14 @@ class MainActivity : FragmentActivity() {
                         onRequestBatteryExemption = ::requestBatteryExemption,
                         onStartService = { EventService.start(this@MainActivity) },
                         onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
+                        onRequestAssistantRole = if (
+                            PlatformReadiness.assistantRoleAvailable(this@MainActivity) &&
+                            !PlatformReadiness.assistantRoleHeld(this@MainActivity)
+                        ) {
+                            ::requestAssistantRole
+                        } else {
+                            null
+                        },
                         wakeWord = wakeWord,
                         wakeWordBusy = wakeBusy,
                         wakeWordNotice = wakeNotice,
@@ -952,6 +971,21 @@ class MainActivity : FragmentActivity() {
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             }
         }
+    }
+
+    /**
+     * Opens the system's own "make Jarvis the assistant app" dialog.
+     *
+     * `RoleManager.createRequestRoleIntent` is the only way onto this dialog -
+     * there is no direct grant, and there should not be one: choosing the
+     * assistant app is the owner's decision, made in the system's own UI,
+     * the same as every other role request on the platform.
+     */
+    private fun requestAssistantRole() {
+        val rm = getSystemService(RoleManager::class.java) ?: return
+        if (!runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)) return
+        val intent = rm.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
+        runCatching { assistantRolePermission.launch(intent) }
     }
 }
 

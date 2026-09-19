@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No settingsActivity: there is nothing to configure on a service that
+     never recognises anything - see JarvisRecognitionServiceStub's own doc. -->
+<recognition-service xmlns:android="http://schemas.android.com/apk/res/android" />
