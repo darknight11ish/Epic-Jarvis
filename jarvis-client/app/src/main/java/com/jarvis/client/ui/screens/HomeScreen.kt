@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -59,13 +61,18 @@ import com.jarvis.client.net.Attention
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.ui.approval.ApprovalCard
+import com.jarvis.client.ui.parts.AppearanceIcon
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.ui.parts.HelpIcon
+import com.jarvis.client.ui.parts.InboxIcon
 import com.jarvis.client.ui.parts.Kicker
+import com.jarvis.client.ui.parts.MindIcon
 import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.VoiceButton
 import com.jarvis.client.ui.parts.VoiceStrip
@@ -499,64 +506,124 @@ private fun LinkBar(state: HomeState, actions: HomeActions) {
         }
     }
 
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(chrome.surface1)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // The status is itself the way to the checks. You tap the thing that is
-        // wrong to find out why, and it is present whether or not the link is
-        // up — which the old Checks link was not.
+    Column(Modifier.fillMaxWidth().background(chrome.surface1)) {
         Row(
-            Modifier
-                .weight(1f)
-                .clip(LocalRadii.current.insetShape)
-                .pressable(onClick = actions.onOpenChecks)
-                .padding(horizontal = 8.dp, vertical = 10.dp)
-                // Measured at ~40dp before this - 10dp padding plus 13sp
-                // text, on the row that opens Checks from the busiest
-                // screen in the app.
-                .minimumInteractiveComponentSize(),
+            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Dot(dot)
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = chrome.textHi,
-                )
-                // The progress line, AUTONOMY-PROPOSALS §3c: the backend's
-                // own per-step sentence, under the state it belongs to. One
-                // line, clipped - it is a status, not a log. Only on a live
-                // link, because "Step 2/3" under "Stale" would be a claim
-                // about work the phone cannot see.
-                val detail = state.activityDetail
-                if (detail != null && state.link == LinkState.CONNECTED && !state.stale) {
+            // The status is itself the way to the checks. You tap the thing that
+            // is wrong to find out why, and it is present whether or not the
+            // link is up — which the old Checks link was not.
+            Row(
+                Modifier
+                    .weight(1f)
+                    .clip(LocalRadii.current.insetShape)
+                    .pressable(onClick = actions.onOpenChecks)
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+                    // Measured at ~40dp before this - 10dp padding plus 13sp
+                    // text, on the row that opens Checks from the busiest
+                    // screen in the app.
+                    .minimumInteractiveComponentSize(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Dot(dot)
+                Spacer(Modifier.width(10.dp))
+                Column {
                     Text(
-                        detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = chrome.textMid,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = chrome.textHi,
                     )
+                    // The progress line, AUTONOMY-PROPOSALS §3c: the backend's
+                    // own per-step sentence, under the state it belongs to. One
+                    // line, clipped - it is a status, not a log. Only on a live
+                    // link, because "Step 2/3" under "Stale" would be a claim
+                    // about work the phone cannot see.
+                    val detail = state.activityDetail
+                    if (detail != null && state.link == LinkState.CONNECTED && !state.stale) {
+                        Text(
+                            detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
+            }
+
+            // A status, not a destination - shown only while there is
+            // something to retry, so it stays out of the evenly-spaced
+            // navigation row below rather than crowding a fifth icon in.
+            if (state.link != LinkState.CONNECTED) {
+                Quiet("Retry", onClick = actions.onReconnect)
             }
         }
 
-        if (state.link != LinkState.CONNECTED) {
-            Quiet("Retry", onClick = actions.onReconnect)
+        // UI-AUDIT-2026-09-18 choice A1: icons + words, status separated
+        // from navigation by a rule, Brain gets a real button, "Look"
+        // becomes "Appearance". Four destinations, evenly weighted so the
+        // row balances regardless of phone width.
+        Rule()
+        Row(Modifier.fillMaxWidth()) {
+            NavItem(
+                icon = { MindIcon(chrome.textMid) },
+                label = "Mind",
+                onClick = actions.onOpenBrain,
+                modifier = Modifier.weight(1f),
+            )
+            NavItem(
+                icon = { InboxIcon(if (state.attention.pending > 0) chrome.warnInk else chrome.textMid) },
+                label = if (state.attention.pending > 0) "Inbox · ${state.attention.pending}" else "Inbox",
+                color = if (state.attention.pending > 0) chrome.warnInk else chrome.textMid,
+                onClick = actions.onOpenInbox,
+                modifier = Modifier.weight(1f),
+            )
+            NavItem(
+                icon = { AppearanceIcon(chrome.textMid) },
+                label = "Appearance",
+                onClick = actions.onOpenAppearance,
+                modifier = Modifier.weight(1f),
+            )
+            NavItem(
+                icon = { HelpIcon(chrome.textMid) },
+                label = "Help",
+                onClick = actions.onOpenFaq,
+                modifier = Modifier.weight(1f),
+            )
         }
-        Quiet(
-            if (state.attention.pending > 0) "Inbox · ${state.attention.pending}" else "Inbox",
-            color = if (state.attention.pending > 0) chrome.warnInk else chrome.textMid,
-            onClick = actions.onOpenInbox,
+    }
+}
+
+/** One icon-over-word destination in the nav row. 48dp tall regardless of
+ *  how small the icon and label look, so this is also the fix for 1.4's
+ *  under-48dp touch targets in the same bar. */
+@Composable
+private fun NavItem(
+    icon: @Composable () -> Unit,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    color: Color = LocalChrome.current.textMid,
+) {
+    Column(
+        modifier
+            .clip(LocalRadii.current.insetShape)
+            .pressable(onClick = onClick)
+            .padding(vertical = 4.dp)
+            .heightIn(min = 48.dp)
+            .minimumInteractiveComponentSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        icon()
+        Gap(2)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        Quiet("Look", color = chrome.textMid, onClick = actions.onOpenAppearance)
-        Quiet("Help", color = chrome.textMid, onClick = actions.onOpenFaq)
     }
 }
 

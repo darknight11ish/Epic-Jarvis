@@ -54,7 +54,12 @@ import com.jarvis.client.ui.theme.Themes
 import kotlinx.coroutines.delay
 
 /**
- * Look — the theme, the face and the state colours.
+ * Appearance — the theme, the face and the state colours.
+ *
+ * Named "Look" until docs/UI-AUDIT-2026-09-18.md choice A1: a word from
+ * outside the app's own vocabulary is exactly the "'Look' is not a word
+ * anyone would guess means 'appearance settings'" finding that section
+ * names. The screen and its nav entry are renamed together.
  *
  * Per device, and it says so. There is no route in the contract that syncs a UI
  * preference (`POST /api/config` is 501 by design, and none of the 38 endpoints
@@ -110,7 +115,7 @@ fun AppearanceScreen(
     }
 
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
-        TopBar("Look", onBack)
+        TopBar("Appearance", onBack)
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
