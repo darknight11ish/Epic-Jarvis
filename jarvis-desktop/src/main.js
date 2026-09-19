@@ -88,14 +88,19 @@ import {
   currentLink,
   announce,
   currentQueue,
+  amend as amendOnBackend,
   decide as decideOnBackend,
   faceState,
   fetchDigest,
+  injectTaskNote,
   markDigestSeen,
   onLink,
   onQueue,
+  pauseTask,
+  resumeTask,
   riskLine,
   setMuted,
+  stopTask,
   followTheme,
   followZoom,
   start as startLink,
@@ -172,6 +177,9 @@ const dom = {
   approvalAction: $("approval-action"),
   approvalTarget: $("approval-target"),
   approvalPreview: $("approval-preview"),
+  approvalOptions: $("approval-options"),
+  approvalNoteInput: $("approval-note"),
+  approvalNoteSend: $("approval-note-send"),
   approvalHint: $("approval-hint"),
   approvalApprove: $("approval-approve"),
   approvalDeny: $("approval-deny"),
@@ -185,6 +193,14 @@ const dom = {
   raisedQuote: $("raised-quote"),
   raisedContextWrap: $("raised-context-wrap"),
   raisedContext: $("raised-context"),
+
+  progressLine: $("progress-line"),
+  taskControls: $("task-controls"),
+  btnTaskPause: $("btn-task-pause"),
+  btnTaskResume: $("btn-task-resume"),
+  btnTaskStop: $("btn-task-stop"),
+  taskNoteInput: $("task-note"),
+  btnTaskNoteSend: $("btn-task-note-send"),
 
   attention: $("attention"),
   attentionCount: $("attention-count"),
@@ -255,6 +271,22 @@ const state = {
   deciding: false,
   /** The id of the gate a decision was sent for, so it cannot be sent twice. */
   decided: null,
+  /** A note is being sent for the current approval - §3b. Its own flag: the
+   *  Logseq/Joplin capture path and `deciding` already learned this lesson
+   *  once, so a note (which runs a whole chat turn) does not silently
+   *  no-op Approve/Deny or vice versa. */
+  noteBusy: false,
+  /** A pause/resume/stop request for the running task is in flight - §3d.
+   *  Its own flag, for the same reason as `noteBusy` above. */
+  taskActionBusy: false,
+  /** A note for the running task is being sent - §3d. */
+  taskNoteBusy: false,
+  /** `link.activity` as last reported by the server - "working", "paused",
+   *  or "idle". This, and ONLY this, decides whether Resume or Pause is
+   *  shown on the task-controls card: a click only proves a request was
+   *  SENT, never that the task actually paused. See widget.js's identical
+   *  field and `syncTaskControls()` below for the reasoning in full. */
+  taskActivity: "idle",
   /** Gate ids the user put away with Esc. Still pending; just not on screen. */
   parked: new Set(),
   /** The digest as last read, in the server's order. Never re-sorted. */
@@ -1077,6 +1109,43 @@ function decorateDiff(container) {
 }
 
 /**
+ * Renders a plan's options — docs/AUTONOMY-PROPOSALS.md §3a.
+ *
+ * Zero or one option: `#approval-options` stays empty and hidden, and the
+ * static Approve button is the only way to approve — the exact behaviour
+ * this card had before options existed at all. Two or more: the static
+ * Approve button is hidden (Deny is not — denying never needs to say which
+ * option) and one button per option appears instead, each a full plan of
+ * its own to approve, never a modifier on a shared one.
+ */
+function renderOptions(approval) {
+  const options = Array.isArray(approval.options) ? approval.options : [];
+  dom.approvalOptions.replaceChildren();
+  const multiple = options.length > 1;
+  dom.approvalOptions.hidden = !multiple;
+  dom.approvalApprove.hidden = multiple;
+  if (!multiple) return;
+  for (const option of options) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "approval-option";
+    btn.dataset.optionId = option.id;
+    const label = document.createElement("span");
+    label.className = "opt-label";
+    label.textContent = option.label; // textContent: model-authored text.
+    btn.append(label);
+    if (option.summary) {
+      const summary = document.createElement("span");
+      summary.className = "opt-summary";
+      summary.textContent = option.summary;
+      btn.append(summary);
+    }
+    btn.addEventListener("click", () => decideApproval(true, option.id));
+    dom.approvalOptions.append(btn);
+  }
+}
+
+/**
  * Renders the gate and hands the keyboard to it.
  *
  * Called only from the queue subscription — never from the chat stream.
@@ -1131,6 +1200,10 @@ function refreshApproval(approval) {
 
   dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
   decorateDiff(dom.approvalPreview);
+  renderOptions(approval);
+  // A note about a still-open card is stale; a note about a fresh one has
+  // nothing typed yet either way, so this is safe unconditionally.
+  dom.approvalNoteInput.value = "";
 
   // The risk line is the whole reason the gate is worth showing rather than
   // merely enforcing: `switch_model` and `send_email` are both tier `ask` and
@@ -1517,6 +1590,10 @@ function closeApproval() {
   // DIFFERENT id arrives, which is the only time it should go.
   dom.approval.hidden = true;
   dom.approvalPreview.innerHTML = "";
+  dom.approvalOptions.replaceChildren();
+  dom.approvalOptions.hidden = true;
+  dom.approvalApprove.hidden = false;
+  dom.approvalNoteInput.value = "";
   renderRaised(null);
   // The pin was taken to hold the window open for the gate. Every path that
   // ends a gate has to give it back, not only the one where the user answered
@@ -1537,10 +1614,20 @@ function syncApprovalButtons() {
   const blocked = link.stale || state.deciding;
   dom.approvalApprove.disabled = blocked;
   dom.approvalDeny.disabled = blocked;
+  for (const opt of dom.approvalOptions.children) opt.disabled = blocked;
   if (link.stale && state.approval) {
     dom.approvalHint.textContent =
       "Offline — the approval queue cannot be confirmed, so nothing can be answered from here.";
   }
+  // The note is a separate action from deciding (see `state.noteBusy`'s own
+  // comment) but it still needs the stream live to mean anything, and it
+  // still needs to stop once a decision on THIS card is in flight or has
+  // already landed — sending a note for a plan already being decided would
+  // arrive after the fact.
+  const noteBlocked = blocked || state.noteBusy || state.deciding
+    || (state.approval && state.decided === state.approval.id);
+  dom.approvalNoteInput.disabled = noteBlocked;
+  dom.approvalNoteSend.disabled = noteBlocked;
 }
 
 /**
@@ -1552,7 +1639,7 @@ function syncApprovalButtons() {
  * closes when the backend broadcasts the resolution, not when this returns,
  * so a decision taken in the widget closes the quickbar's copy the same way.
  */
-async function decideApproval(approved) {
+async function decideApproval(approved, optionId = null) {
   const approval = state.approval;
   if (!approval || state.deciding) return;
   // `deciding` is released in `finally`, but the card only closes when the
@@ -1567,7 +1654,7 @@ async function decideApproval(approved) {
   dom.approvalHint.textContent = approved ? "Approving…" : "Denying…";
 
   try {
-    await decideOnBackend(approval.id, approved);
+    await decideOnBackend(approval.id, approved, optionId);
     state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${
       approved ? "Approved" : "Denied"
     } \`${approval.action}\` from the desktop spotlight.`;
@@ -1600,6 +1687,151 @@ async function decideApproval(approved) {
     // mid-answer unpinned the window under the running stream, so clicking
     // away hid the spotlight and the answer with it.
     if (!state.abort && !state.inFlight) await setPinned(false, { silent: true });
+  }
+}
+
+/**
+ * Appends a line to the answer feed and makes sure the card is visible to
+ * show it — this window's only status surface, the same one
+ * `decideApproval` above already writes its own outcome into (there is no
+ * separate flash strip here the way the widget has `#widget-flash`). Never
+ * overwrites `card-status-text` while a gate or an active stream already
+ * owns it; only opens the card when it was otherwise idle.
+ */
+function noteToFeed(line) {
+  state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${line}`;
+  if (dom.card.hidden) {
+    openCard(state.phase === "approval" ? "Paused for approval" : "Noted");
+  }
+  paint({ immediate: true });
+}
+
+/**
+ * Sends a note before the first decision on the open card —
+ * docs/AUTONOMY-PROPOSALS.md §3b. Approves nothing: the expected result is
+ * a NEW proposal for the same id, arriving the normal way through the
+ * queue, which `onQueue` already repaints from — this function only sends
+ * the text and reports whether it landed, mirroring the widget's own
+ * `sendNote`.
+ */
+async function sendNote() {
+  const note = dom.approvalNoteInput.value.trim();
+  if (!note || !state.approval || state.noteBusy) return;
+  const id = state.approval.id;
+
+  state.noteBusy = true;
+  syncApprovalButtons();
+
+  try {
+    await amendOnBackend(id, note);
+    dom.approvalNoteInput.value = "";
+    noteToFeed(
+      "Sent — waiting for a new proposal. Jarvis will read this note and " +
+        "propose again for the same request; nothing has been approved or denied."
+    );
+  } catch (error) {
+    noteToFeed(String((error && error.message) || error));
+  } finally {
+    state.noteBusy = false;
+    syncApprovalButtons();
+  }
+}
+
+/* ==========================================================================
+   Task controls - pause, stop, and inject-while-running
+   docs/AUTONOMY-PROPOSALS.md §3d. Mirrors widget.js's identical section —
+   same honesty rule, same draft backend, same "activity is the only source
+   of truth" design. See widget.js for the fuller reasoning.
+   ========================================================================== */
+
+/**
+ * Enables/disables the task-control buttons and picks Pause vs. Resume.
+ *
+ * The swap answers only to `state.taskActivity`, set in exactly one place —
+ * the `onLink` handler below, reading the server's own broadcast — never by
+ * a click here. A click can fail silently, reach a backend that has not
+ * implemented pausing at all, or race a resolution that already happened;
+ * the one thing this window can trust is what the server itself last said
+ * it was doing.
+ */
+function syncTaskControls() {
+  const paused = state.taskActivity === "paused";
+  dom.btnTaskPause.hidden = paused;
+  dom.btnTaskResume.hidden = !paused;
+  dom.btnTaskPause.disabled = state.taskActionBusy;
+  dom.btnTaskResume.disabled = state.taskActionBusy;
+  dom.btnTaskStop.disabled = state.taskActionBusy;
+  dom.taskNoteInput.disabled = state.taskNoteBusy;
+  dom.btnTaskNoteSend.disabled = state.taskNoteBusy;
+}
+
+/**
+ * Sends a pause, resume, or stop request for whatever Jarvis is running
+ * right now. DRAFT: `pause_task`/`resume_task`/`stop_task` may not exist as
+ * Rust commands yet — same situation `amend_approval` was in before it got
+ * one — so a rejected invoke surfaces its real error rather than pretending
+ * the task's state changed.
+ *
+ * Deliberately does not touch `state.taskActivity` on success. An invoke
+ * that resolves only means the IPC round trip completed, not that Jarvis
+ * paused, resumed, or stopped anything — the button swap has to wait for
+ * the server's own next `activity` report, or it is a guess wearing the
+ * shape of a fact.
+ */
+async function sendTaskAction(kind) {
+  if (state.taskActionBusy) return;
+  state.taskActionBusy = true;
+  syncTaskControls();
+
+  try {
+    if (kind === "pause") {
+      await pauseTask();
+      noteToFeed(
+        "Pause requested — sent. This button will only say Resume once " +
+          "Jarvis itself reports it has actually paused."
+      );
+    } else if (kind === "resume") {
+      await resumeTask();
+      noteToFeed(
+        "Resume requested — sent. This button will only say Pause again " +
+          "once Jarvis itself reports it has actually resumed."
+      );
+    } else {
+      await stopTask();
+      noteToFeed("Stop requested — sent. The desktop has no way to confirm it actually did.");
+    }
+  } catch (error) {
+    noteToFeed(String((error && error.message) || error));
+  } finally {
+    state.taskActionBusy = false;
+    syncTaskControls();
+  }
+}
+
+/**
+ * Sends a note that applies to what the running task does next — it never
+ * touches whatever step is already in flight, same rule as `sendNote()`
+ * above for an approval that has not been decided yet.
+ */
+async function sendTaskNote() {
+  const note = dom.taskNoteInput.value.trim();
+  if (!note || state.taskNoteBusy) return;
+
+  state.taskNoteBusy = true;
+  syncTaskControls();
+
+  try {
+    await injectTaskNote(note);
+    dom.taskNoteInput.value = "";
+    noteToFeed(
+      "Sent — applies to what Jarvis does next. This does not change the " +
+        "step already running, and the desktop has no way to confirm Jarvis read it."
+    );
+  } catch (error) {
+    noteToFeed(String((error && error.message) || error));
+  } finally {
+    state.taskNoteBusy = false;
+    syncTaskControls();
   }
 }
 
@@ -2477,6 +2709,24 @@ dom.voiceAuto.addEventListener("click", () => setAutoListening(!state.autoListen
 
 dom.approvalApprove.addEventListener("click", () => decideApproval(true));
 dom.approvalDeny.addEventListener("click", () => decideApproval(false));
+dom.approvalNoteSend.addEventListener("click", sendNote);
+dom.approvalNoteInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    sendNote();
+  }
+});
+
+dom.btnTaskPause.addEventListener("click", () => sendTaskAction("pause"));
+dom.btnTaskResume.addEventListener("click", () => sendTaskAction("resume"));
+dom.btnTaskStop.addEventListener("click", () => sendTaskAction("stop"));
+dom.btnTaskNoteSend.addEventListener("click", sendTaskNote);
+dom.taskNoteInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    sendTaskNote();
+  }
+});
 
 dom.captureRemove.addEventListener("click", () => {
   state.capture = null;
@@ -2602,6 +2852,7 @@ followTheme();
 // bigger anywhere in the app. The window re-measures after each step.
 followZoom(() => syncWindowHeight());
 syncPrimerKeys();
+syncTaskControls();
 startVoice(dom.root);
 startLink();
 
@@ -2662,6 +2913,22 @@ onLink((link) => {
   // machine (idle / streaming / done / error / approval) and says nothing
   // about audio. A gate can be open while Jarvis is mid-sentence.
   setVoiceMode(faceState(link));
+
+  // Live progress — docs/AUTONOMY-PROPOSALS.md §3c — and pause/stop/inject
+  // for whatever it describes — §3d. Mirrors widget.js's onLink handling
+  // exactly: progress only while `activity === "working"`; the task
+  // controls stay up through "paused" too, since a paused task still has a
+  // live card worth acting on, and both go away the moment activity drops
+  // to anything else, so a stale Resume can never carry into a new task.
+  const workingNow = link.connected && link.activity === "working";
+  const progressDetail = workingNow ? link.activityDetail : "";
+  dom.progressLine.hidden = !progressDetail;
+  if (progressDetail) dom.progressLine.textContent = progressDetail;
+
+  state.taskActivity = link.connected ? link.activity : "idle";
+  dom.taskControls.hidden = state.taskActivity !== "working" && state.taskActivity !== "paused";
+  syncTaskControls();
+  syncWindowHeight();
 
   syncApprovalButtons();
   syncAttention();

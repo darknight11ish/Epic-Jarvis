@@ -327,6 +327,61 @@
           <button class="text-button" type="button" id="parked-show">Show it</button>
         </div>
 
+        <!-- What Jarvis is doing right now, one bounded step at a time -
+             docs/AUTONOMY-PROPOSALS.md §3c. Mirrors the widget's own
+             #widget-progress: same source (`link.activity`/
+             `activityDetail`), same rule that it is empty and hidden
+             whenever there is nothing to say. -->
+        <p class="progress-line" id="progress-line" hidden></p>
+
+        <!-- Pause/stop/inject a task already running - docs/AUTONOMY-
+             PROPOSALS.md §3d. Mirrors the widget's #task-controls exactly,
+             including its honesty rule: Pause/Resume swap only on the
+             server's own next `activity` report, never on the click
+             itself - see main.js's syncTaskControls(). DRAFT: the backend
+             routes these calls hit are not confirmed to exist
+             (jarvis_gate.py/jarvis_hud.py are not in this repo). -->
+        <div class="task-controls" id="task-controls" hidden>
+          <div class="task-buttons">
+            <button
+              type="button"
+              class="text-button"
+              id="btn-task-pause"
+              title="Pause the task Jarvis is currently running"
+            >Pause</button>
+            <button
+              type="button"
+              class="text-button"
+              id="btn-task-resume"
+              hidden
+              title="Resume the paused task"
+            >Resume</button>
+            <button
+              type="button"
+              class="text-button"
+              id="btn-task-stop"
+              title="Stop the task Jarvis is currently running"
+            >Stop</button>
+          </div>
+          <div class="task-note-row">
+            <input
+              id="task-note"
+              class="approval-note-input"
+              type="text"
+              spellcheck="true"
+              autocomplete="off"
+              placeholder="Add something before it continues…"
+            />
+            <button
+              class="icon-button"
+              type="button"
+              id="btn-task-note-send"
+              title="Send this note - it applies to what Jarvis does next, not what is already running"
+              aria-label="Send note"
+            >↵</button>
+          </div>
+        </div>
+
         <!-- ── Approval gate ─────────────────────────────────────────────── -->
         <section
           class="approval"
@@ -392,6 +447,39 @@
           </div>
 
           <div class="approval-preview markdown" id="approval-preview"></div>
+
+          <!-- Multiple concrete options - docs/AUTONOMY-PROPOSALS.md §3a.
+               Empty and hidden when the plan carries zero or one option; the
+               card then behaves exactly as it always has (the static
+               Approve button below). Each option here IS a full, bounded
+               plan of its own, never a checkbox on one shared plan. -->
+          <div
+            class="approval-options"
+            id="approval-options"
+            hidden
+            role="group"
+            aria-label="Choose which version to approve"
+          ></div>
+
+          <!-- A note before the first decision - §3b. Submitting sends it
+               back for a NEW proposal; it never edits the one on screen. -->
+          <div class="approval-note-row">
+            <input
+              id="approval-note"
+              class="approval-note-input"
+              type="text"
+              spellcheck="true"
+              autocomplete="off"
+              placeholder="Add something before deciding…"
+            />
+            <button
+              class="icon-button"
+              type="button"
+              id="approval-note-send"
+              title="Send this note - Jarvis will propose again"
+              aria-label="Send note"
+            >↵</button>
+          </div>
 
           <footer class="approval-actions">
             <!-- No key hints on either button, and that is the fix rather than

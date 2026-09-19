@@ -1289,6 +1289,137 @@ html[data-state="error"] .pulse {
   color: var(--text-faint);
 }
 
+/* Multiple concrete options - docs/AUTONOMY-PROPOSALS.md §3a. */
+.approval-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 14px 10px 16px;
+}
+
+.approval-option {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid rgb(var(--accent-rgb) / 0.3);
+  border-radius: var(--radius-chip);
+  background: rgb(var(--accent-rgb) / 0.08);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.approval-option:hover:not(:disabled) {
+  background: rgb(var(--accent-rgb) / 0.16);
+}
+
+.approval-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.35);
+}
+
+.approval-option .opt-label {
+  display: block;
+  font-weight: 650;
+}
+
+.approval-option .opt-summary {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.approval-option:disabled {
+  opacity: 1;
+  background: var(--surface-sunken);
+  border-color: var(--hairline);
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* A note before the first decision - §3b. Same input as `.task-note-row`
+   below - §3d - which sets its own inset instead, since it lives outside
+   the approval card's own padding. Same rule for both: sending it never
+   decides or alters anything already in flight. */
+.approval-note-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 14px 10px 16px;
+}
+
+.task-note-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.approval-note-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.approval-note-input::placeholder {
+  color: var(--text-muted);
+}
+
+.approval-note-input:focus {
+  outline: none;
+  border-color: rgb(var(--accent-rgb) / 0.45);
+  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.12);
+}
+
+.approval-note-input:disabled {
+  opacity: 0.68;
+}
+
+/* Live progress while a bounded task runs - §3c. Quiet on purpose: this is
+   narration, not a status the user needs to act on. Insets match `.parked`/
+   `.offline` above - the other rows that sit directly in `#stack` and set
+   their own left/right padding rather than relying on a parent's. */
+.progress-line {
+  margin: 0;
+  padding: 6px 14px 0 16px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Pause/stop/inject a running task - §3d. Sits right under the progress line
+   it belongs to; deliberately not styled like the approval card, since a
+   running task is not itself a decision waiting on the user. */
+.task-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 14px 8px 16px;
+}
+
+.task-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.task-buttons .text-button {
+  flex: 1;
+  text-align: center;
+}
+
 .approval-button {
   display: inline-flex;
   align-items: center;
