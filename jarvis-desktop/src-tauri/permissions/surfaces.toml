@@ -76,6 +76,21 @@ permissions = [
 ]
 
 # ---------------------------------------------------------------------------
+# One command, on its own: opening a link in the real OS browser rather than
+# inside the WebView. Narrow on purpose, same reasoning `allow-get-hotkeys`
+# already gets by living in both quickbar-surface and settings-surface below
+# - a window that only needs to open a link should not have to take on the
+# rest of quickbar-surface's grants (streaming, clipboard, its own geometry)
+# just to get it.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "external-links"
+description = "Open a link in the real OS browser, never inside the WebView."
+permissions = [
+  "allow-open-external-url",
+]
+
+# ---------------------------------------------------------------------------
 # The spotlight. Streaming, its own geometry, the clipboard, and the shell-free
 # external link opener.
 # ---------------------------------------------------------------------------

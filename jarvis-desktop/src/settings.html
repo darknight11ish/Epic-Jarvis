@@ -374,6 +374,45 @@
         </div>
       </section>
 
+      <!-- ── About ─────────────────────────────────────────────────────────
+           Identity, not instructions - the FAQ above already answers "how
+           does this behave"; this answers "what is this, and where did it
+           come from." The version comes from the same `update_status` read
+           the Updates section above already makes, in `paintUpdate()` -
+           never a second, separately-maintained copy of the number that
+           could drift from the one actually running. -->
+      <section class="card">
+        <h2>About Jarvis</h2>
+        <p class="note">
+          A local-first personal assistant. A Python backend on this
+          computer, this Tauri shell around it, and a language model that
+          runs here rather than in a data centre somewhere else. Nothing
+          private leaves this machine on its own, there is no public tunnel
+          into this program, there are no API keys built into it, and there
+          is no "approve everything" control anywhere in it — every action
+          Jarvis wants to take stops and asks first, one action at a time.
+        </p>
+        <dl class="about-facts">
+          <div class="about-fact">
+            <dt>Version</dt>
+            <dd id="about-version">—</dd>
+          </div>
+          <div class="about-fact">
+            <dt>License</dt>
+            <dd>MIT — see LICENSE in the source</dd>
+          </div>
+          <div class="about-fact">
+            <dt>Source</dt>
+            <dd>
+              <a
+                href="https://github.com/darknight111/Epic-Jarvis"
+                data-external="true"
+              >github.com/darknight111/Epic-Jarvis</a>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
       <footer class="page-foot">
         <span id="store-path"></span>
       </footer>

@@ -78,6 +78,8 @@ const dom = {
   resetHotkeys: $("reset-hotkeys"),
   hotkeyStatus: $("hotkey-status"),
 
+  aboutVersion: $("about-version"),
+
   storePath: $("store-path"),
 };
 
@@ -642,6 +644,10 @@ loadHotkeys();
 
 function paintUpdate(status) {
   if (!status) return;
+  // About's version, from the same read as everything else here - never a
+  // second, separately-maintained copy of the number that could drift from
+  // the one actually running.
+  dom.aboutVersion.textContent = status.current || "—";
   dom.updateAuto.checked = Boolean(status.check_on_start);
   dom.updateAuto.disabled = !status.supported;
 
@@ -787,5 +793,19 @@ dom.updateAuto.addEventListener("change", async () => {
 if (IS_TAURI) TAURI.event.listen("update-status", (event) => paintUpdate(event.payload));
 // Emitted only while `install_update` is downloading — see `paintProgress`.
 if (IS_TAURI) TAURI.event.listen("update-progress", (event) => paintProgress(event.payload));
+
+// About's source link opens in the real OS browser, never inside the
+// WebView - same reasoning and the same `data-external`/`open_external_url`
+// pattern main.js already uses for the quickbar's own linkified text.
+document.addEventListener("click", (event) => {
+  const anchor = event.target.closest("a[data-external]");
+  if (!anchor) return;
+  event.preventDefault();
+  if (IS_TAURI) {
+    invoke("open_external_url", { url: anchor.href }).catch(() => {});
+  } else {
+    window.open(anchor.href, "_blank", "noopener");
+  }
+});
 
 loadUpdate();
