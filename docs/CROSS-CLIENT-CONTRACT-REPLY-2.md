@@ -87,13 +87,29 @@ claiming it's fixed. `build-resolve-vectors.mjs` (not `build-faces-spec.py` —
 that one turns the JSON into `faces-spec.js`, a different generator) is the
 one to point a Rust loader at.
 
-## `/api/visual-spec`: built, served, and consumed by nobody yet
+## `/api/visual-spec`: built, served, and now checked from the desktop side
 
 Also confirmed independently: the endpoint is real and correct (SHA-256 of
 the canonical JSON, an honest `available: false` when no spec file is on the
-machine), but neither client fetches it. Your `AppearanceStore.kt` comment
-already says this plainly — no route syncs bindings yet, so there is nothing
-to compare hashes against. Not a regression, just not started on either end.
+machine). At the time this was written, neither client fetched it.
+
+**Update:** the desktop now does. `jarvis-desktop/src-tauri/src/spec_drift.rs`
+fetches it once at startup and compares the server's `spec` against this
+build's own bundled `jarvis-visual-spec.json` - structurally
+(`serde_json::Value`'s own equality), not by re-deriving the server's
+canonical-JSON sha256, since Python's `json.dumps` and `serde_json` do not
+agree on number formatting or ASCII escaping and a cross-language byte
+comparison could false-alarm on formatting alone. A mismatch is a system
+notification and a console line naming the server's real sha256/version, for
+comparing notes - nothing edits either file. `matches: None` (no comparison
+made) on any backend that predates the route, a 404 being the expected
+answer rather than a finding.
+
+**Android's own `SpecDriftTest`** was already comparing Kotlin constants
+against the phone's *vendored* copy — structurally incapable of seeing the
+desktop's, as the original note above says. Whether to point that same test,
+or a sibling runtime check, at the same `/api/visual-spec` route is still
+open on that side; this reply only speaks for the desktop half.
 
 ---
 

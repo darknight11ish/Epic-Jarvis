@@ -26,6 +26,7 @@ pub mod logfile;
 pub mod proctree;
 pub mod sidecar;
 pub mod spec;
+pub mod spec_drift;
 pub mod sse;
 pub mod stream;
 pub mod tray;
@@ -105,6 +106,11 @@ pub mod events {
     /// Faces surface (the Widget's live face) can re-fetch and switch face
     /// or colours without waiting for its own next reload.
     pub const APPEARANCE_CHANGED: &str = "appearance-changed";
+    /// Payload: [`crate::spec_drift::DriftReport`] — the result of the
+    /// one startup comparison between this build's bundled
+    /// `jarvis-visual-spec.json` and the server's own copy. Carries no
+    /// action, same as `UPDATE_STATUS`: nothing here edits either spec.
+    pub const VISUAL_SPEC_DRIFT: &str = "visual-spec-drift";
     /// Payload: [`crate::voice::HeardReply`] - one utterance automatic
     /// listening cut and sent on its own, with no command call waiting on
     /// it the way `stop_voice_capture` returns push-to-talk's result
@@ -783,6 +789,12 @@ pub fn run() {
             // installed by it. Spawned and forgotten: a slow endpoint must not
             // hold up the window, the tray or the event stream.
             update::spawn_startup_check(&handle);
+
+            // Same shape, a different question: does this build's bundled
+            // look spec still agree with the server's copy? Answers nothing
+            // by itself - see spec_drift.rs's own doc for why this exists
+            // and what it does and does not do.
+            spec_drift::spawn_startup_check(&handle);
 
             // The owner's face, before the tray's first paint. Local read only:
             // a network fetch here would hold the icon behind a socket timeout.
