@@ -15,6 +15,73 @@ Legend: **[MINE]** = introduced 19 Sep. **[PRE]** = pre-existing.
 
 ---
 
+## Status, as of the end of 19 Sep
+
+All twenty-four were worked. Twenty-three are fixed; one was examined,
+attempted, measured, and deliberately left alone.
+
+| | Finding | Outcome |
+|---|---|---|
+| 1 | Phone-wide speech recognizer | fixed — `a5ad1d0` |
+| 2 | Swatch governor lies | fixed — `5218b28` |
+| 3 | Flash limit fails open at speed | fixed — `5218b28` |
+| 4 | Pause is a one-way door | fixed — `8703dd1` |
+| 5 | Windows Deny toast, three defects | fixed — `5218b28` |
+| 6 | Widget says "Nothing waiting" | fixed — `a5ad1d0` |
+| 7 | Widget Deny on a stale link | fixed — `a5ad1d0` |
+| 8 | `LOAD_FAILED` starts false | fixed — `5218b28` |
+| 9 | HA lock without the HEAVY marking | fixed — `8703dd1` |
+| 10 | HA entity ids raw in the URL | fixed — `8703dd1` |
+| 11 | Memory misses every `ss` word | fixed — `8703dd1` |
+| 12 | `announce()` before the checkpoint | fixed — `8703dd1` |
+| 13 | Stop on the final step | fixed — `8703dd1` |
+| 14 | Android pause drops `screenshots` | fixed — `8703dd1` |
+| 15 | `spec_drift`: null spec, `checked`, silence | fixed — `5218b28` |
+| 16 | Empty assistant window flash | fixed — `a5ad1d0` |
+| 17 | Bare `initialize()` in the widget | fixed — `a5ad1d0` |
+| 18 | A typed note blanked by a refresh | fixed — `5218b28` |
+| 19 | `voice.rs` mutex convention | fixed — `5218b28` |
+| 20 | Solo view resize listener | fixed — `5218b28` |
+| 21 | `prepare()` outside the try | fixed — `8703dd1` |
+| 22 | One bad charset fails a mailbox | fixed — `8703dd1` |
+| 23 | Repo age depends on the timezone | fixed — `8703dd1` |
+| 24 | Governor counts the first transition | **not taken — see below** |
+
+### Why 24 was not taken
+
+The finding is accurate about the contradiction and wrong about which
+half to change, and that was established by measuring rather than by
+arguing. The code was changed to match the doc — the first transition
+after a reset exempted from the opposing count — and both test suites
+immediately reported four luminance changes reaching the screen inside
+one second against a hard limit of three.
+
+That is the right answer, and the reasoning behind the finding is the
+subtle error: the limit is on what a viewer SEES, not on the governor's
+internal bookkeeping. The first transition is a visible change like any
+other. Calling it "not opposing" is true about direction and irrelevant
+to photosensitivity.
+
+So the change was reverted and the comment corrected in both ports. The
+code was right; the sentence describing it was not. Both now say the
+same thing, and both say why.
+
+Two other items were widened once their real shape was clear, and the
+extra work is in the same commits: **14** was flagged for the pause path
+and three of the four early exits had it, so all four were fixed; **10**
+was flagged for `plan_states` and the service domain and name reach a
+URL path too, so those are checked as well.
+
+One finding that survived was also found to be narrower than reported:
+**20**'s orphaned resize listener needs `openSolo` to run twice without
+a close, and `#solo` is a full-screen overlay above the grid, so there
+is no way to reach that today. It is closed anyway, at the root — the
+listener now captures its own surface instead of reading a global — but
+the note in the code says plainly that this shuts a hole rather than
+repairing an observed failure.
+
+---
+
 ## Critical
 
 ### 1. [MINE] The app publishes a phone-wide speech recognizer that always fails
