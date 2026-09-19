@@ -114,14 +114,26 @@
 
         <!-- The recognitionService voice_interaction_service.xml names -
              required by that schema, never actually invoked by anything in
-             this app. See JarvisRecognitionServiceStub's own doc. -->
+             this app. See JarvisRecognitionServiceStub's own doc.
+
+             DELIBERATELY NO intent-filter. It had one, and that was a bug
+             with the blast radius of the whole phone: the filter is what put
+             this always-failing stub into the system's list of candidate
+             speech recognisers, where picking it (or the system falling back
+             to it) breaks SpeechRecognizer for every app on the device. It
+             was never needed - VoiceInteractionServiceInfo resolves this
+             component from the `recognitionService` attribute string in
+             voice_interaction_service.xml and never queries by action. The
+             matching selectableAsDefault="false" is in that file; both
+             halves are required, since either alone still leaves a route in.
+
+             exported stays true: the system binds this by explicit component
+             from outside this app's process, and BIND_RECOGNITION_SERVICE is
+             what keeps that bind restricted to the system. -->
         <service
             android:name=".assistant.JarvisRecognitionServiceStub"
             android:exported="true"
             android:permission="android.permission.BIND_RECOGNITION_SERVICE">
-            <intent-filter>
-                <action android:name="android.speech.RecognitionService" />
-            </intent-filter>
             <meta-data
                 android:name="android.speech"
                 android:resource="@xml/recognition_service" />

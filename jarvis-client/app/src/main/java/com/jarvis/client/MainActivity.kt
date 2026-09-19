@@ -566,13 +566,22 @@ class MainActivity : FragmentActivity() {
                         onRequestBatteryExemption = ::requestBatteryExemption,
                         onStartService = { EventService.start(this@MainActivity) },
                         onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
-                        onRequestAssistantRole = if (
-                            PlatformReadiness.assistantRoleAvailable(this@MainActivity) &&
-                            !PlatformReadiness.assistantRoleHeld(this@MainActivity)
-                        ) {
-                            ::requestAssistantRole
-                        } else {
-                            null
+                        // remember(tick), like `items` above: both of these
+                        // are RoleManager binder calls, and unkeyed they ran
+                        // on every recomposition of this branch - which
+                        // recomposes on link, activity and pending changes.
+                        // `tick` is what already drives the permission
+                        // re-read, so keying on it keeps the answer as fresh
+                        // as every other check on this screen.
+                        onRequestAssistantRole = remember(tick) {
+                            if (
+                                PlatformReadiness.assistantRoleAvailable(this@MainActivity) &&
+                                !PlatformReadiness.assistantRoleHeld(this@MainActivity)
+                            ) {
+                                { requestAssistantRole() }
+                            } else {
+                                null
+                            }
                         },
                         wakeWord = wakeWord,
                         wakeWordBusy = wakeBusy,

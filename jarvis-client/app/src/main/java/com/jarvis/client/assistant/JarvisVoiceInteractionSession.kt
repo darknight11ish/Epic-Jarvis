@@ -31,6 +31,25 @@ class JarvisVoiceInteractionSession(
     private val appContext: Context,
 ) : VoiceInteractionSession(appContext) {
 
+    /**
+     * Turns the session's own window off before it can ever be created.
+     *
+     * Without this there is a visible blank flash on every assist
+     * invocation. `doShow()` runs `ensureWindowAdded()` -> `onShow()` ->
+     * `showWindow()`, and `finish()` is an async IPC to the system service -
+     * so the session's scrim window (with an empty content frame, since this
+     * class draws no UI of its own) is added and shown AFTER `onShow`
+     * returns, and is only torn down when the finish round-trips. The user
+     * sees a dim empty overlay on top of MainActivity launching.
+     *
+     * `setUiEnabled` only takes effect while the window is not yet visible,
+     * which is exactly why this belongs in `onCreate` and not in `onShow`.
+     */
+    override fun onCreate() {
+        super.onCreate()
+        setUiEnabled(false)
+    }
+
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
         val intent = Intent(appContext, MainActivity::class.java)

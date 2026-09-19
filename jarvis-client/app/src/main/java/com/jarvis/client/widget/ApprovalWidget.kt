@@ -18,7 +18,6 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.unit.ColorProvider
 import androidx.glance.layout.Alignment
@@ -68,10 +67,34 @@ class ApprovalWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        JarvisRuntime.initialize(context)
-        val pending = if (JarvisRuntime.isInitialized) JarvisRuntime.pending.value else emptyList()
-        val paired = JarvisRuntime.isInitialized && JarvisRuntime.isPaired()
-        val connected = JarvisRuntime.isInitialized && JarvisRuntime.link.value == LinkState.CONNECTED
+        // runCatching, because MainActivity.kt wraps this identical call for
+        // a stated reason: the Keystore, the preferences and the HTTP client
+        // "can fail on a device in a way it cannot here". Called bare from a
+        // Glance worker, that same failure is an uncaught exception in the
+        // update coroutine and the launcher replaces the widget with
+        // "Problem loading widget".
+        val ready = runCatching { JarvisRuntime.initialize(context) }.isSuccess &&
+            JarvisRuntime.isInitialized
+        val pending = if (ready) JarvisRuntime.pending.value else emptyList()
+        val paired = ready && JarvisRuntime.isPaired()
+        // "Do we actually KNOW what is waiting?" - a different question from
+        // "is the link up", and the one this widget has to answer honestly.
+        //
+        // `initialize()` constructs objects and starts collectors; it never
+        // fetches. `_stale` starts true and returns to true on every
+        // disconnect. So a process the launcher woke only to draw this widget
+        // - EventService not running, nothing ever fetched - has an empty
+        // `_pending` that means "not looked", not "nothing there". Rendering
+        // "Nothing waiting" from that state is an approvals widget claiming
+        // there are no approvals, which is the single failure it exists to
+        // prevent.
+        //
+        // It also gates Deny. `decisionBlocker` refuses on `_stale` as well
+        // as on a dropped link, so a Deny button shown on a stale-but-
+        // connected link is swallowed, and the explanation lands in an in-app
+        // notice nobody is looking at. Same condition, both problems.
+        val live = ready && !JarvisRuntime.stale.value &&
+            JarvisRuntime.link.value == LinkState.CONNECTED
         val extra = (pending.size - 1).coerceAtLeast(0)
 
         provideContent {
@@ -83,9 +106,16 @@ class ApprovalWidget : GlanceAppWidget() {
                     .padding(12.dp),
             ) {
                 when {
-                    pending.isEmpty() -> EmptyState(connected)
+                    !ready -> MessageState("Jarvis could not start", "Tap to open and see why")
                     !paired -> MessageState("Approvals need a pairing token", "Tap to open Jarvis and pair")
-                    !connected -> MessageState(
+                    // Before the empty check, not after: an empty list here
+                    // is an unanswered question, not an answer.
+                    !live && pending.isEmpty() -> MessageState(
+                        "Not checked yet",
+                        "Tap to open Jarvis and connect",
+                    )
+                    pending.isEmpty() -> EmptyState()
+                    !live -> MessageState(
                         "Approvals pending — desktop unreachable",
                         "Tap to open Jarvis and reconnect",
                     )
@@ -95,17 +125,20 @@ class ApprovalWidget : GlanceAppWidget() {
         }
     }
 
+    /** Only ever reached on a live link - see `live` in provideGlance. That
+     *  is what makes "Nothing waiting" a statement this widget is entitled to
+     *  make rather than a guess; every not-live case has its own wording. */
     @Composable
-    private fun EmptyState(connected: Boolean) {
+    private fun EmptyState() {
         Row(
             modifier = GlanceModifier.fillMaxSize().clickable(actionStartActivity<MainActivity>()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = if (connected) "Nothing waiting" else "Nothing waiting — desktop unreachable",
+                text = "Nothing waiting",
                 style = TextStyle(
-                    color = if (connected) Palette.TextMuted else Palette.StatusBad,
+                    color = Palette.TextMuted,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                 ),
@@ -268,15 +301,20 @@ class DenyActionCallback : ActionCallback {
         parameters: ActionParameters,
     ) {
         val id = parameters[PARAM_ID] ?: return
-        JarvisRuntime.initialize(context)
+        // Guarded for the same reason provideGlance guards it - a Keystore
+        // failure here would be an uncaught exception in a Glance worker.
+        if (runCatching { JarvisRuntime.initialize(context) }.isFailure) return
         if (!JarvisRuntime.isInitialized) return
         val item = JarvisRuntime.pending.value.firstOrNull { it.id == id } ?: return
         JarvisRuntime.decideDetached(item, approve = false)
-        // decide() calls refreshPending() itself, but that lands on the
-        // runtime's own scope on its own schedule - redrawing here as well
-        // means the widget does not sit showing an already-denied item until
-        // that unrelated timing happens to catch up.
-        ApprovalWidget().updateAll(context)
+        // No updateAll() here, and that is the correction rather than an
+        // omission. This used to redraw immediately under a comment claiming
+        // it stopped the widget "showing an already-denied item" - which the
+        // code could not do: decideDetached is `scope.launch { decide(...) }`
+        // and returns before the POST is even sent, so an immediate redraw
+        // reads the identical unchanged _pending. The redraw that actually
+        // lands is JarvisRuntime's own widgetJob, which fires when _pending
+        // really changes.
     }
 
     companion object {
