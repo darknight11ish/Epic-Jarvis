@@ -378,6 +378,57 @@ def t_no_checkpoint_given_behaves_exactly_as_before():
           out["ok"] is True and out["not_run"] == [], repr(out))
 
 
+def t_the_checkpoint_is_read_before_the_step_is_announced():
+    # `announce` is wired to a sticky set_activity, so announcing a step and
+    # then pausing left the Brain window naming a step that never ran. Added
+    # after a mutation run showed a straight revert of this ordering passing
+    # the whole suite - the ui_control twin had a test, this one did not.
+    live = page(elements=[("textbox", "Message", True), ("button", "Send", True)])
+    heard, acted = [], []
+    signals = iter([None, "pause"])
+    with NoRealAction():
+        p = B.plan("message and send", "s",
+                   [{"role": "textbox", "name": "Message", "action": "type",
+                     "value": "hi", "why": "x"},
+                    {"role": "button", "name": "Send", "action": "click", "why": "y"}],
+                   read=lambda _s: live)
+        out = B.run(p, read=lambda _s: live, act=lambda s: acted.append(s.name),
+                    announce=heard.append, checkpoint=lambda: next(signals),
+                    approved=True)
+    check("only the first step ran", acted == ["Message"], repr(acted))
+    check("the paused step was never announced",
+          not any("Send" in line for line in heard), repr(heard))
+    check("the step that DID run was announced",
+          any("Message" in line for line in heard), repr(heard))
+    check("nothing claimed the run finished",
+          not any("Done" in line for line in heard), repr(heard))
+
+
+def t_a_stop_during_the_final_step_is_reported_not_swallowed():
+    # The loop checks before each step, so a stop arriving while the last one
+    # runs is never seen by it. It used to vanish entirely.
+    live = page(elements=[("button", "Send", True)])
+    signals = iter([None, "stop"])
+    with NoRealAction():
+        p = B.plan("send", "s", [{"role": "button", "name": "Send", "action": "click", "why": "x"}],
+                   read=lambda _s: live)
+        out = B.run(p, read=lambda _s: live, act=lambda s: None,
+                    checkpoint=lambda: next(signals), approved=True)
+    check("the plan really did finish", out["ok"] is True, repr(out))
+    check("nothing is reported as not run", out["not_run"] == [], repr(out))
+    check("the late stop is acknowledged", out.get("late_signal") == "stop", repr(out))
+
+
+def t_an_ordinary_finish_carries_no_late_signal():
+    live = page(elements=[("button", "Send", True)])
+    with NoRealAction():
+        p = B.plan("send", "s", [{"role": "button", "name": "Send", "action": "click", "why": "x"}],
+                   read=lambda _s: live)
+        out = B.run(p, read=lambda _s: live, act=lambda s: None,
+                    checkpoint=lambda: None, approved=True)
+    check("CONTROL: a clean run has no late_signal", "late_signal" not in out, repr(out))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_element_is_treated_as_unmatched,
@@ -395,7 +446,10 @@ if __name__ == "__main__":
                t_announce_is_called_once_per_step_and_is_optional,
                t_checkpoint_stop_ends_the_run_before_the_next_step,
                t_checkpoint_pause_ends_the_run_and_says_so,
-               t_no_checkpoint_given_behaves_exactly_as_before):
+               t_no_checkpoint_given_behaves_exactly_as_before,
+               t_the_checkpoint_is_read_before_the_step_is_announced,
+               t_a_stop_during_the_final_step_is_reported_not_swallowed,
+               t_an_ordinary_finish_carries_no_late_signal):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -401,6 +401,26 @@ const HUD_BOOTSTRAP: &str = include_str!("hud_bootstrap.js");
 /// Everything here mirrors what `tauri.conf.json` used to declare for the `hud`
 /// label; the window moved into Rust only so it could carry the script, and the
 /// capability file still addresses it by the same label.
+/// Whether THIS process was started by a Deny click on a Windows toast.
+///
+/// Read from this process's own argv, the same string
+/// `winrt_toast::deny_id_from_argv` looks for. Used only to decide whether a
+/// window belongs on screen; the decision itself is sent by
+/// `winrt_toast::decide_denied_at_startup`, which reads the same argv again
+/// rather than sharing state with this - two cheap reads of a fixed string
+/// are simpler than threading a flag through `setup`.
+#[cfg(windows)]
+fn launched_by_deny() -> bool {
+    let argv: Vec<String> = std::env::args().collect();
+    winrt_toast::deny_id_from_argv(&argv).is_some()
+}
+
+/// Always false off Windows: no toast, no Deny action, no such launch.
+#[cfg(not(windows))]
+fn launched_by_deny() -> bool {
+    false
+}
+
 fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     // A window with this label already exists. `setup` runs once, so in normal
     // operation this cannot happen — but Tauri creates every window declared in
@@ -446,6 +466,17 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     // actually opened. Hidden, not skipped - it is fully built and warm, and
     // the tray's "Show the HUD window" or the hotkey brings it up instantly.
     let at_login = autostart::launched_at_login();
+    // A Deny clicked on a toast while Jarvis was closed is the OTHER launch
+    // that must not put a window on screen. `docs/ARCHITECTURE.md` rule 2 is
+    // "Deny may be a notification action. Approve may not... Approving means
+    // opening the app" - so a Deny that opens the app has paid Approve's
+    // price. Answering it at startup (winrt_toast::decide_denied_at_startup)
+    // fixed the half where nothing happened at all; without this line the
+    // other half stood, and the doc over there said otherwise.
+    //
+    // Hidden, exactly as for a login start: fully built and warm, reachable
+    // from the tray or the hotkey the moment the owner does want it.
+    let hidden = at_login || launched_by_deny();
 
     tauri::WebviewWindowBuilder::new(
         app,
@@ -461,8 +492,8 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .always_on_top(false)
     .skip_taskbar(false)
     .resizable(true)
-    .visible(!at_login)
-    .focused(!at_login)
+    .visible(!hidden)
+    .focused(!hidden)
     .shadow(true)
     .theme(Some(tauri::Theme::Dark))
     .initialization_script(&script)
@@ -473,6 +504,8 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
         "[jarvis] HUD window created for {base}{}",
         if at_login {
             " (hidden: started at login)"
+        } else if hidden {
+            " (hidden: launched by a notification Deny, which must not open the app)"
         } else {
             ""
         }

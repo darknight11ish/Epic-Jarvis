@@ -325,6 +325,56 @@ def t_a_stop_during_the_final_step_is_reported_not_swallowed():
     check("the late stop is acknowledged", out.get("late_signal") == "stop", repr(out))
 
 
+def t_the_checkpoint_is_read_before_the_step_is_announced():
+    # `announce` is wired to a sticky set_activity, so announcing a step and
+    # then pausing left the Brain window naming a step that never ran. This
+    # ordering had no test until a mutation run showed a straight revert of
+    # it passing the whole suite.
+    heard, acted = [], []
+    signals = iter([None, "pause"])
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap twice",
+                   [{"action": "tap", "x": 1, "y": 1, "why": "x"},
+                    {"action": "tap", "x": 2, "y": 2, "why": "y"}])
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, DEVICES_OUT)
+            acted.append(argv)
+            return Result(0, b"")
+        out = A.run(p, run_adb=caller, announce=heard.append,
+                    checkpoint=lambda: next(signals), approved=True)
+    check("only the first tap ran", len(acted) == 1, repr(acted))
+    check("exactly one step was announced", len(heard) == 1, repr(heard))
+    check("and it is the step that actually ran",
+          heard and heard[0].startswith("Step 1/2"), repr(heard))
+    check("nothing claimed the run finished",
+          not any("Done" in line for line in heard), repr(heard))
+
+
+def t_a_pause_is_read_even_when_the_device_has_gone():
+    # The checkpoint sat BELOW the device re-verification, which returns on
+    # its own - so a phone unplugged while a pause was pending stranded the
+    # pause in the store, and since checkpoint() consumes, nothing would ever
+    # take it. The next run of that task id stopped at step 1, permanently:
+    # the one-way door the consuming change exists to prevent.
+    taken = []
+
+    def checkpoint():
+        # A real store hands the signal over once and then has nothing.
+        return taken.append("pause") or "pause" if not taken else None
+
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
+        def gone(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, b"List of devices attached\n")   # nothing attached
+            return Result(0, b"")
+        out = A.run(p, run_adb=gone, checkpoint=checkpoint, approved=True)
+    check("the pending pause was read, not stranded", taken == ["pause"], repr(taken))
+    check("and the run reports the pause it actually saw",
+          out.get("paused") is True, repr(out))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_runs_nothing, t_unknown_action_is_rejected_not_guessed,
                t_missing_fields_are_rejected_not_guessed,
@@ -341,7 +391,9 @@ if __name__ == "__main__":
                t_no_checkpoint_given_behaves_exactly_as_before,
                t_a_pause_still_returns_the_screenshots_already_taken,
                t_a_failed_step_still_returns_earlier_screenshots,
-               t_a_stop_during_the_final_step_is_reported_not_swallowed):
+               t_a_stop_during_the_final_step_is_reported_not_swallowed,
+               t_the_checkpoint_is_read_before_the_step_is_announced,
+               t_a_pause_is_read_even_when_the_device_has_gone):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

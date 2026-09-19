@@ -271,14 +271,23 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
                 "screenshots": results}
 
     for i, step in enumerate(p.steps, 1):
-        if p.device not in _current_serials(caller):
-            return stopped_at(i, f"step {i} ({step.action}): device "
-                                 f"{p.device!r} is no longer connected - "
-                                 "stopping rather than sending it to whatever "
-                                 "phone is plugged in now")
-        # The checkpoint comes FIRST, before the announcement - `announce`
-        # is wired to a sticky `set_activity`, so announcing a step and then
-        # pausing left the Brain window claiming a step that never ran.
+        # The checkpoint is FIRST - before the device re-verification as well
+        # as before the announcement, and both orderings matter.
+        #
+        # Before the announcement, because `announce` is wired to a sticky
+        # `set_activity`: announcing a step and then pausing left the Brain
+        # window claiming a step that never ran.
+        #
+        # Before the device check, because `jarvis_task_control.checkpoint()`
+        # CONSUMES the signal, and a path that returns without reading it
+        # leaves that signal in the store forever - which is exactly the
+        # one-way-door bug consuming was introduced to end. The device check
+        # sat above this and returned on its own, so a phone unplugged while
+        # a pause was pending stranded the pause, and the next run of that
+        # task id stopped at step 1 with nothing the owner could do about it.
+        # Nothing is sent by reading a signal, so there is no safety cost to
+        # asking first; if both are true the run stops either way, and the
+        # next one reports the disconnection immediately.
         signal = check()
         if signal in ("stop", "pause"):
             result = stopped_at(
@@ -287,6 +296,11 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
             if signal == "pause":
                 result["paused"] = True
             return result
+        if p.device not in _current_serials(caller):
+            return stopped_at(i, f"step {i} ({step.action}): device "
+                                 f"{p.device!r} is no longer connected - "
+                                 "stopping rather than sending it to whatever "
+                                 "phone is plugged in now")
         tell(f"Step {i}/{len(p.steps)}: {step.action} on {p.device}")
         result = caller(step.argv)
         rc = getattr(result, "returncode", 0)

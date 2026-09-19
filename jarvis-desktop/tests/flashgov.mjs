@@ -259,6 +259,67 @@ check("CONTROL: one scaled clock for both is what the bug looked like", () => {
 });
 
 // --------------------------------------------------------------------------
+// THE CALL SITE, not just the function
+//
+// Everything above drives `governedResolve` directly, and that is not enough.
+// The photosensitivity bug was never IN the function - it was in what
+// `drawSurface` handed it: `s.clock`, which advances by `dt * speed`, for
+// both the pattern clock and the window clock. Reverting only that call site
+// left every check above passing, which was measured, not assumed. A
+// safety-critical fix guarded by a test that cannot see the code it guards
+// is not guarded.
+//
+// So this reads the real call out of `faces.html` and asserts its shape. A
+// source assertion is weaker than a behavioural one and is the right tool
+// here: the alternative is standing up the whole render loop, and the thing
+// that can silently regress is one argument.
+// --------------------------------------------------------------------------
+
+// Anchored on each CALL, never on the declaration. A looser pattern
+// (`governedResolve\(gov,`) matched `function governedResolve(gov, bind, …)`
+// first and then asserted things about the function body - a check that was
+// red on correct code, which is worse than no check at all.
+function callSite(pattern) {
+  const m = html.match(pattern);
+  assert.ok(m, `call site not found in faces.html: ${pattern}`);
+  const text = m[0].replace(/\s+/g, " ");
+  assert.doesNotMatch(text, /^function /,
+    `matched the declaration instead of a call: ${text}`);
+  return text;
+}
+
+check("the face renderer hands the governor a REAL-TIME clock, not s.clock", () => {
+  const call = callSite(/governedResolve\(s\.flashGov,[^;]*\);/);
+  // Six arguments: the sixth is the window clock.
+  const args = call.slice(call.indexOf("(") + 1, call.lastIndexOf(")"));
+  const depth = [];
+  const top = [];
+  let cur = "";
+  for (const ch of args) {
+    if (ch === "(") depth.push(ch);
+    if (ch === ")") depth.pop();
+    if (ch === "," && depth.length === 0) { top.push(cur.trim()); cur = ""; continue; }
+    cur += ch;
+  }
+  top.push(cur.trim());
+  assert.equal(top.length, 6,
+    `expected 6 arguments so the window clock is passed explicitly, got ${top.length}: ${call}`);
+  assert.match(top[5], /performance\.now\(\)/,
+    `the 6th argument is the one-second window's clock and must be real time, got ${top[5]}`);
+  assert.doesNotMatch(top[5], /s\.clock/,
+    "the window clock must not be the speed-scaled face clock");
+  // CONTROL: the pattern clock really is still the face's own, or the
+  // animation would stop following the speed slider.
+  assert.match(top[2], /s\.clock/,
+    `the 3rd argument is the pattern clock and should stay s.clock, got ${top[2]}`);
+});
+
+check("the swatch strip's clock is real time too", () => {
+  const call = callSite(/governedResolve\(gov, BIND\[sid\][^;]*\);/);
+  assert.match(call, /performance\.now\(\)/, call);
+});
+
+// --------------------------------------------------------------------------
 // The UI swatch strip - one governor per chip
 //
 // The regression this covers was shipped: a single `SWATCH_GOV` instance

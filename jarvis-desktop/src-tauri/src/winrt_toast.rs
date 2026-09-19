@@ -250,7 +250,17 @@ const STARTUP_DENY_WAIT: std::time::Duration = std::time::Duration::from_secs(45
 /// stale - which it is on every cold start until the stream connects. Firing
 /// straight away would have swapped a silent no-op for a logged one.
 ///
-/// The window is not raised. Answering is the whole job.
+/// Answering is the whole job, and the window stays down while it happens -
+/// but NOT because of anything in this function. `lib.rs`'s
+/// `build_hud_window` is what decides that, and it needed a change to do it:
+/// it built the HUD `.visible(true).focused(true)` for every launch that was
+/// not a login start, so this one opened the full window and rule 2's "Deny
+/// may be a notification action. Approve may not" was broken by the fix
+/// meant to honour it. `launched_by_deny()` over there now reads the same
+/// argv this does and hides the window exactly as a login start does.
+///
+/// Said explicitly because the first version of this comment claimed the
+/// window was not raised while the code three files away was raising it.
 pub fn decide_denied_at_startup(app: &AppHandle) {
     let argv: Vec<String> = std::env::args().collect();
     let Some(id) = deny_id_from_argv(&argv) else {
