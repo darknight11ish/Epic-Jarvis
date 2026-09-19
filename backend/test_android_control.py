@@ -226,6 +226,52 @@ def t_announce_is_called_and_is_optional():
     check("CONTROL: omitting announce still runs to completion", out2["ok"] is True, repr(out2))
 
 
+def t_checkpoint_stop_ends_the_run_before_the_next_step():
+    acted = []
+    signals = iter([None, "stop"])
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap twice",
+                   [{"action": "tap", "x": 1, "y": 1, "why": "x"},
+                    {"action": "tap", "x": 2, "y": 2, "why": "y"}])
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, DEVICES_OUT)
+            acted.append(argv)
+            return Result(0, b"")
+        out = A.run(p, run_adb=caller, checkpoint=lambda: next(signals), approved=True)
+    check("only the first tap ran", len(acted) == 1, repr(acted))
+    check("run() reports not-ok", out["ok"] is False, repr(out))
+    check("the reason names a stop", "stopped" in out["reason"], out["reason"])
+    check("the second step is reported not-run", len(out["not_run"]) == 1, repr(out))
+
+
+def t_checkpoint_pause_ends_the_run_and_says_so():
+    acted = []
+    signals = iter([None, "pause"])
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap twice",
+                   [{"action": "tap", "x": 1, "y": 1, "why": "x"},
+                    {"action": "tap", "x": 2, "y": 2, "why": "y"}])
+        def caller(argv):
+            if argv[:2] == ["adb", "devices"]:
+                return Result(0, DEVICES_OUT)
+            acted.append(argv)
+            return Result(0, b"")
+        out = A.run(p, run_adb=caller, checkpoint=lambda: next(signals), approved=True)
+    check("only the first tap ran", len(acted) == 1, repr(acted))
+    check("the result says paused", out.get("paused") is True, repr(out))
+    check("the second step is still reported, ready to resume",
+          len(out["not_run"]) == 1, repr(out))
+
+
+def t_no_checkpoint_given_behaves_exactly_as_before():
+    with NoRealProcess():
+        p = A.plan("EMULATOR123", "tap", [{"action": "tap", "x": 1, "y": 1, "why": "x"}])
+        out = A.run(p, run_adb=adb_ok(), approved=True)
+    check("CONTROL: runs to completion with no checkpoint hook at all",
+          out["ok"] is True and out["not_run"] == [], repr(out))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_runs_nothing, t_unknown_action_is_rejected_not_guessed,
                t_missing_fields_are_rejected_not_guessed,
@@ -236,7 +282,10 @@ if __name__ == "__main__":
                t_run_refuses_if_the_device_disconnected,
                t_run_stops_at_the_first_failed_command,
                t_run_executes_every_approved_step_and_reports_screenshots,
-               t_announce_is_called_and_is_optional):
+               t_announce_is_called_and_is_optional,
+               t_checkpoint_stop_ends_the_run_before_the_next_step,
+               t_checkpoint_pause_ends_the_run_and_says_so,
+               t_no_checkpoint_given_behaves_exactly_as_before):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

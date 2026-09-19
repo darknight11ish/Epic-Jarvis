@@ -2615,3 +2615,100 @@ no network, no model. The ones that matter most: importing only ever adds a
 anything silently; and resuming after a pause calls the local model exactly
 once more, for the one conversation that had not been offered yet, not once
 for every conversation from the start again.
+
+---
+
+# `jarvis_task_control.py` — the pause/stop/inject checkpoint, half of it
+
+Ships as a whole file, not a patch, the same reason `jarvis_speech.py` and
+`jarvis_research.py` do: there is nothing to patch against for the half of
+this that lives in `jarvis_gate.py`/`jarvis_hud.py`.
+
+`docs/AUTONOMY-PROPOSALS.md` section 3d designed this: a pause/stop/inject
+control on a running plan, checked at the re-verification point that
+`jarvis_ui_control.run()`, `jarvis_android_control.run()` and
+`jarvis_browser_control.run()` already have, "no new architecture, one
+more read at a point that already exists in all three loops." That
+section also recorded, honestly, that the desktop widget's Pause button
+had shipped ahead of any backend to answer it - clicking it would send a
+request into an empty room, and `link.activity` would never actually say
+`"paused"` because nothing was there yet to say it.
+
+## What this closes, verified
+
+- **`jarvis_task_control.py`** - a small, thread-safe, in-memory signal
+  store: `request(task_id, "pause"|"stop")`, `checkpoint(task_id)`,
+  `clear(task_id)`, and `inject_note(task_id, note)` /
+  `pending_note(task_id)` for the free-text half of section 3d. Tested
+  directly, no mocks needed - it is a plain dict behind a lock.
+- **All three `run()` functions gain a `checkpoint` parameter**, injected
+  exactly the way `announce` already is - a plain callback, never an
+  import. None of `jarvis_ui_control.py`, `jarvis_android_control.py` or
+  `jarvis_browser_control.py` has ever imported a sibling `jarvis_*`
+  module, and this does not start now: a caller wires
+  `checkpoint=lambda: jarvis_task_control.checkpoint(task_id)` itself.
+  Read right where `announce` already fires, once per step, before the
+  existing re-verification. `"stop"` ends the run exactly like a failed
+  re-verification does, reason `"stopped by request"`. `"pause"` ends it
+  the same way but adds `"paused": True` to the result, and the steps
+  not yet run stay listed - ready for one explicit "continue" decision to
+  become a fresh, approved `run()`, never resumed on their own. Omitting
+  `checkpoint` (every existing caller, `jarvis_agent.py` included) is
+  unchanged - a control with no injected checkpoint behaves exactly as it
+  did before this patch, which every affected test suite's own control
+  case now proves.
+
+## What this does NOT close, and why
+
+Nothing here gives a client a way to actually call `request()` or
+`inject_note()`, and nothing here broadcasts `activity: "paused"` back
+out over `GET /api/events`. Both live entirely inside
+`jarvis_gate.py`/`jarvis_hud.py`, neither of which is visible anywhere in
+this repository - the same category of gap `degrade-filter.patch`'s
+`looks_like_a_secret()` section and `jarvis_speech.py`'s wake-word gate
+both already recorded rather than guessed past. Writing a new Flask route
+against a file this session has never read and cannot run a test against
+is precisely the "guessing blind" mistake `ui-control-wiring.patch`'s own
+section made once and had to rewrite.
+
+**What to add, once `jarvis_gate.py`/`jarvis_hud.py` are open on the real
+machine** - the exact shape section 3d already specifies:
+
+- A route - `POST /api/pending/<id>/control` fits the existing
+  `/api/pending/<id>/...` family best, but confirm the real name against
+  the file rather than assuming this one - taking `{"action": "pause" |
+  "stop"}`, calling `jarvis_task_control.request(id, action)`.
+- Wherever `run()` is actually invoked for a plan, pass
+  `checkpoint=lambda: jarvis_task_control.checkpoint(id)` - this is the
+  one line that turns the signal store into a live control.
+- After a `run()` call returns, if the result carries `"paused": True`,
+  publish it the same way `approval-resolved` already is - the doc's own
+  words: "broadcast the same way `approval-resolved` already is today...
+  no new transport, the existing fan-out `GET /api/events` already does
+  this." `link.activity` becomes `"paused"` only from that real event,
+  never optimistically from the click handler succeeding - section 3d's
+  own point, made while this was still entirely unbuilt.
+- `POST /api/pending/<id>/amend` with `{"note": "..."}` →
+  `jarvis_task_control.inject_note(id, note)`; whatever builds the next
+  proposal reads it back with `pending_note(id)`.
+- Call `jarvis_task_control.clear(id)` once a task's id stops meaning
+  anything - finished, stopped, or superseded by a fresh plan - so a
+  stale signal can never attach itself to an unrelated later task that
+  happens to reuse the id space.
+
+## Test it
+
+```powershell
+python test_task_control.py
+python test_ui_control.py
+python test_android_control.py
+python test_browser_control.py
+```
+
+Fourteen checks for the new module, plus three new cases in each of the
+three control-module suites (stop, pause, and a control proving that
+omitting `checkpoint` entirely still runs exactly as it did before this
+was written). Against the pre-patch `run()` in any of the three, the new
+`checkpoint`-passing cases fail with a `TypeError` for an unexpected
+keyword - which is the correct failure for a parameter that does not
+exist yet, not a false pass.

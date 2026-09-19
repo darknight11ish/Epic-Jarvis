@@ -280,6 +280,7 @@ def describe(p: Plan) -> str:
 def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
         act: Optional[Callable[[Step], None]] = None,
         announce: Optional[Callable[[str], None]] = None,
+        checkpoint: Optional[Callable[[], Optional[str]]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan, one step at a time.
 
@@ -299,6 +300,18 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
     `jarvis_events.set_activity("working", text)` so the owner can see, live,
     that Jarvis is in the middle of doing this. Not wiring it up does not
     disable the safety checks; it only means nobody is told while it runs.
+
+    `checkpoint()`, if given, is read at that same point, before the live
+    tree re-read - see docs/AUTONOMY-PROPOSALS.md section 3d, "no new
+    architecture, one more read at a point that already exists." A caller
+    wires it to `lambda: jarvis_task_control.checkpoint(task_id)`; this
+    module has no idea what a task id is and imports nothing to find out,
+    the same way it has no idea what `jarvis_events.set_activity` is for
+    `announce`. A "stop" ends the run exactly like a failed re-verification
+    does. A "pause" ends it the same way but with `paused: True` in the
+    result - the steps not yet run stay reported, ready for one explicit
+    "continue" decision to become a fresh, approved run() rather than
+    resuming on their own.
     """
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was done",
@@ -306,11 +319,23 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
     getter = read or _default_read
     actor = act or _default_act
     tell = announce or (lambda _text: None)
+    check = checkpoint or (lambda: None)
 
     done = []
     for i, step in enumerate(p.steps, 1):
         tell(f"Step {i}/{len(p.steps)}: {step.action} \"{step.control}\" "
              f"in {step.window}")
+        signal = check()
+        if signal in ("stop", "pause"):
+            remaining = p.steps[i - 1:]
+            result = {"ok": False,
+                      "reason": ("stopped by request" if signal == "stop"
+                                 else "paused by request - resuming needs a new decision"),
+                      "done": [s.as_dict() for s in done],
+                      "not_run": [s.as_dict() for s in remaining]}
+            if signal == "pause":
+                result["paused"] = True
+            return result
         tree = getter(step.window) or []
         current = _find(tree, step.control)
         same_control = (

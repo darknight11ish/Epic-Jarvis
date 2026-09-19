@@ -223,6 +223,7 @@ def _current_serials(run_adb: Callable) -> set:
 
 def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
         announce: Optional[Callable[[str], None]] = None,
+        checkpoint: Optional[Callable[[], Optional[str]]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan's commands, in order, against `p.device`.
 
@@ -240,12 +241,17 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
     `announce(text)` is the same live-status hook as jarvis_ui_control.run -
     wire it to `jarvis_events.set_activity("working", text)` so the owner
     can see, while it is happening, that Jarvis is controlling the phone.
+
+    `checkpoint()` is the same pause/stop hook as jarvis_ui_control.run -
+    see that module's own docstring for the exact contract and why this one
+    imports nothing to use it.
     """
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was sent",
                 "plan": p.as_dict()}
     caller = run_adb or _real_adb
     tell = announce or (lambda _text: None)
+    check = checkpoint or (lambda: None)
 
     done, results = [], []
     for i, step in enumerate(p.steps, 1):
@@ -258,6 +264,17 @@ def run(p: Plan, *, run_adb: Optional[Callable[[list], object]] = None,
                     "done": [s.as_dict() for s in done],
                     "not_run": [s.as_dict() for s in p.steps[i - 1:]]}
         tell(f"Step {i}/{len(p.steps)}: {step.action} on {p.device}")
+        signal = check()
+        if signal in ("stop", "pause"):
+            remaining = p.steps[i - 1:]
+            result = {"ok": False,
+                      "reason": ("stopped by request" if signal == "stop"
+                                 else "paused by request - resuming needs a new decision"),
+                      "done": [s.as_dict() for s in done],
+                      "not_run": [s.as_dict() for s in remaining]}
+            if signal == "pause":
+                result["paused"] = True
+            return result
         result = caller(step.argv)
         rc = getattr(result, "returncode", 0)
         if rc != 0:

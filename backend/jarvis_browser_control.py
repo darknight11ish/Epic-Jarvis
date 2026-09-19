@@ -473,6 +473,7 @@ def describe(p: Plan) -> str:
 def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
         act: Optional[Callable[[Step], Optional[str]]] = None,
         announce: Optional[Callable[[str], None]] = None,
+        checkpoint: Optional[Callable[[], Optional[str]]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan, one step at a time.
 
@@ -488,6 +489,10 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
 
     `announce(text)`, if given, is called just before each step - the same
     hook jarvis_ui_control.run() offers for jarvis_events.set_activity.
+
+    `checkpoint()` is the same pause/stop hook as jarvis_ui_control.run -
+    see that module's own docstring for the exact contract and why this one
+    imports nothing to use it.
     """
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was done",
@@ -495,11 +500,23 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
     getter = read or _default_read
     actor = act or _default_act
     tell = announce or (lambda _text: None)
+    check = checkpoint or (lambda: None)
 
     done = []
     for i, step in enumerate(p.steps, 1):
         label = step.value if step.action == "navigate" else f'{step.action} "{step.name}"'
         tell(f"Step {i}/{len(p.steps)}: {label} in session {step.session}")
+        signal = check()
+        if signal in ("stop", "pause"):
+            remaining = p.steps[i - 1:]
+            result = {"ok": False,
+                      "reason": ("stopped by request" if signal == "stop"
+                                 else "paused by request - resuming needs a new decision"),
+                      "done": [s.as_dict() for s in done],
+                      "not_run": [s.as_dict() for s in remaining]}
+            if signal == "pause":
+                result["paused"] = True
+            return result
         if step.action != "navigate":
             current = getter(step.session) or {"elements": []}
             found = _find(current.get("elements") or [], step.role, step.name)

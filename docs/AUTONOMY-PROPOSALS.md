@@ -221,8 +221,22 @@ already made once and rewrote.
 the desktop UI additions (options list, note field, live progress line,
 pause/stop controls) can be written and tested against a mocked event
 stream today, the same way `jarvis_ui_control.py` is tested against an
-injected `read`/`act` with no real Windows desktop. That is the concrete
-next step on this branch.
+injected `read`/`act` with no real Windows desktop. That was the concrete
+next step on this branch, and it has since landed.
+
+**Update: the Python half of section 3d that does not need those files
+has landed too.** `backend/jarvis_task_control.py` is the signal store 3d
+describes, and `jarvis_ui_control.run()`, `jarvis_android_control.run()`
+and `jarvis_browser_control.run()` all now take a `checkpoint` callback,
+read at the same point `announce` already fires, that ends the run on a
+`"stop"` or `"pause"` signal exactly as this section specifies - see
+`backend/README.md`'s own section on it for what is proven and what is
+still missing. What is **still** missing is exactly what this section
+said would need the real files: the HTTP route that lets a client call
+`request()`, and the event that reports `activity: "paused"` back out.
+Until those exist, the desktop widget's Pause button still sends a
+request that goes nowhere - the honest state this section already
+described, one layer closer to done rather than fully closed.
 
 **What needs the Android session:** the same UI additions, on their branch.
 This document is the thing to hand them, the same way

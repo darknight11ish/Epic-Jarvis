@@ -332,6 +332,52 @@ def t_announce_is_called_once_per_step_and_is_optional():
     check("CONTROL: no announce given still runs to completion", out2["ok"] is True, repr(out2))
 
 
+def t_checkpoint_stop_ends_the_run_before_the_next_step():
+    live = page(elements=[("textbox", "Message", True), ("button", "Send", True)])
+    acted = []
+    signals = iter([None, "stop"])
+    with NoRealAction():
+        p = B.plan("message and send", "s",
+                   [{"role": "textbox", "name": "Message", "action": "type",
+                     "value": "hi", "why": "x"},
+                    {"role": "button", "name": "Send", "action": "click", "why": "y"}],
+                   read=lambda _s: live)
+        out = B.run(p, read=lambda _s: live, act=lambda s: acted.append(s.name),
+                    checkpoint=lambda: next(signals), approved=True)
+    check("only the first step ran", acted == ["Message"], repr(acted))
+    check("run() reports not-ok", out["ok"] is False, repr(out))
+    check("the reason names a stop", "stopped" in out["reason"], out["reason"])
+    check("the send step is reported not-run", len(out["not_run"]) == 1, repr(out))
+
+
+def t_checkpoint_pause_ends_the_run_and_says_so():
+    live = page(elements=[("textbox", "Message", True), ("button", "Send", True)])
+    acted = []
+    signals = iter([None, "pause"])
+    with NoRealAction():
+        p = B.plan("message and send", "s",
+                   [{"role": "textbox", "name": "Message", "action": "type",
+                     "value": "hi", "why": "x"},
+                    {"role": "button", "name": "Send", "action": "click", "why": "y"}],
+                   read=lambda _s: live)
+        out = B.run(p, read=lambda _s: live, act=lambda s: acted.append(s.name),
+                    checkpoint=lambda: next(signals), approved=True)
+    check("only the first step ran", acted == ["Message"], repr(acted))
+    check("the result says paused", out.get("paused") is True, repr(out))
+    check("the send step is still reported, ready to resume",
+          len(out["not_run"]) == 1, repr(out))
+
+
+def t_no_checkpoint_given_behaves_exactly_as_before():
+    live = page(elements=[("button", "Send", True)])
+    with NoRealAction():
+        p = B.plan("send", "s", [{"role": "button", "name": "Send", "action": "click", "why": "x"}],
+                   read=lambda _s: live)
+        out = B.run(p, read=lambda _s: live, act=lambda s: None, approved=True)
+    check("CONTROL: runs to completion with no checkpoint hook at all",
+          out["ok"] is True and out["not_run"] == [], repr(out))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_element_is_treated_as_unmatched,
@@ -346,7 +392,10 @@ if __name__ == "__main__":
                t_format_new_messages_caps_each_message_and_reports_no_new_ones,
                t_read_new_step_is_planned_against_the_container_not_a_message,
                t_read_new_result_reaches_the_caller_unmodified_by_runs_own_cap,
-               t_announce_is_called_once_per_step_and_is_optional):
+               t_announce_is_called_once_per_step_and_is_optional,
+               t_checkpoint_stop_ends_the_run_before_the_next_step,
+               t_checkpoint_pause_ends_the_run_and_says_so,
+               t_no_checkpoint_given_behaves_exactly_as_before):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

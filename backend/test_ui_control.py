@@ -272,6 +272,55 @@ def t_announce_is_called_once_per_step_and_is_optional():
     check("CONTROL: no announce given still runs to completion", out2["ok"] is True, repr(out2))
 
 
+def t_checkpoint_stop_ends_the_run_before_the_next_step():
+    live = tree(("Subject", "txtSubject", True), ("Send", "btnSend", True))
+    acted = []
+    signals = iter([None, "stop"])   # clean at step 1, a stop lands before step 2
+    with NoRealAction():
+        p = U.plan("send", "W",
+                   [{"control": "Subject", "action": "type", "value": "hi", "why": "x"},
+                    {"control": "Send", "action": "click", "why": "y"}],
+                   read=lambda _w: live)
+        out = U.run(p, read=lambda _w: live, act=lambda s: acted.append(s.control),
+                    checkpoint=lambda: next(signals), approved=True)
+    check("only step 1 ran", acted == ["Subject"], repr(acted))
+    check("run() reports not-ok", out["ok"] is False, repr(out))
+    check("the reason names a stop, not a re-verification mismatch",
+          "stopped" in out["reason"], out["reason"])
+    check("step 2 is reported not-run", len(out["not_run"]) == 1 and
+          out["not_run"][0]["control"] == "Send", repr(out))
+    check("CONTROL: a stop is not reported as a pause", "paused" not in out, repr(out))
+
+
+def t_checkpoint_pause_ends_the_run_and_says_so():
+    live = tree(("Subject", "txtSubject", True), ("Send", "btnSend", True))
+    acted = []
+    signals = iter([None, "pause"])
+    with NoRealAction():
+        p = U.plan("send", "W",
+                   [{"control": "Subject", "action": "type", "value": "hi", "why": "x"},
+                    {"control": "Send", "action": "click", "why": "y"}],
+                   read=lambda _w: live)
+        out = U.run(p, read=lambda _w: live, act=lambda s: acted.append(s.control),
+                    checkpoint=lambda: next(signals), approved=True)
+    check("only step 1 ran", acted == ["Subject"], repr(acted))
+    check("run() reports not-ok", out["ok"] is False, repr(out))
+    check("the result says paused", out.get("paused") is True, repr(out))
+    check("step 2 is still reported, ready to resume", len(out["not_run"]) == 1, repr(out))
+
+
+def t_no_checkpoint_given_behaves_exactly_as_before():
+    # CONTROL: omitting checkpoint (every existing caller) must not change
+    # anything - this is the regression the whole feature must not cause.
+    live = tree(("Send", "btnSend", True))
+    with NoRealAction():
+        p = U.plan("send", "W", [{"control": "Send", "action": "click", "why": "x"}],
+                   read=lambda _w: live)
+        out = U.run(p, read=lambda _w: live, act=lambda s: None, approved=True)
+    check("CONTROL: runs to completion with no checkpoint hook at all",
+          out["ok"] is True and out["not_run"] == [], repr(out))
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_control_is_treated_as_unmatched,
@@ -280,7 +329,10 @@ if __name__ == "__main__":
                t_run_executes_the_approved_steps_in_order,
                t_default_read_walks_several_levels_deep_but_not_unbounded,
                t_a_read_steps_result_reaches_the_caller,
-               t_announce_is_called_once_per_step_and_is_optional):
+               t_announce_is_called_once_per_step_and_is_optional,
+               t_checkpoint_stop_ends_the_run_before_the_next_step,
+               t_checkpoint_pause_ends_the_run_and_says_so,
+               t_no_checkpoint_given_behaves_exactly_as_before):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
