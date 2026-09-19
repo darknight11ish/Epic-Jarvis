@@ -33,6 +33,8 @@ pub mod tray;
 pub mod update;
 pub mod voice;
 pub mod windows;
+#[cfg(windows)]
+pub mod winrt_toast;
 
 use std::sync::{Arc, Mutex};
 
@@ -494,6 +496,20 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // A Deny click's own relaunch, not an ordinary second launch -
+            // see winrt_toast.rs's own doc for why this is the argv shape a
+            // toast action produces. Answered and left alone: raising the
+            // window here would turn a notification-only Deny into exactly
+            // the "opening the app" cost docs/ARCHITECTURE.md's rule 2
+            // reserves for Approve.
+            #[cfg(windows)]
+            if let Some(id) = winrt_toast::deny_id_from_argv(&_argv) {
+                logfile::log(&format!(
+                    "[jarvis] Deny reached from a notification relaunch: {id}"
+                ));
+                winrt_toast::decide_denied_detached(app, id);
+                return;
+            }
             logfile::log("[jarvis] second launch folded into the running instance");
             if let Some(hud) = app.get_webview_window(HUD_LABEL) {
                 let _ = hud.show();
@@ -724,6 +740,13 @@ pub fn run() {
             if autostart::launched_at_login() {
                 logfile::log("[jarvis] started by Windows at login");
             }
+
+            // Claims this process's AUMID before the first approval toast can
+            // possibly fire - see winrt_toast.rs's own doc for why an
+            // actionable Deny button depends on it matching the installer's
+            // own shortcut.
+            #[cfg(windows)]
+            winrt_toast::set_explicit_aumid();
 
             // The HUD is built here rather than declared in `tauri.conf.json`
             // because a config-declared window cannot carry an initialisation

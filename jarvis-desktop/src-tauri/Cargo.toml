@@ -85,6 +85,18 @@ windows-sys = { version = "0.59", features = [
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_Registry",
 ] }
+# The higher-level `windows` crate, not another windows-sys binding - not a
+# new dependency either: Tauri's own graph already resolves 0.61.3 for other
+# crates (webview2-com among them), confirmed in Cargo.lock, so this adds no
+# second copy. Needed for the WinRT toast APIs (COM activation, HSTRING,
+# IInspectable) that tauri-plugin-notification's desktop backend does not
+# reach at all - see winrt_toast.rs's own doc for why that plugin cannot
+# offer a Deny button on Windows and this bypasses it on purpose.
+windows = { version = "0.61", features = [
+  "UI_Notifications",
+  "Data_Xml_Dom",
+  "Win32_UI_Shell",
+] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

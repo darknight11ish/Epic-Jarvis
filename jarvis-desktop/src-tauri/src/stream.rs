@@ -760,18 +760,26 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
             }
         };
 
-        // No buttons on this toast, and not by choice: `action_type_id` is
-        // accepted by tauri-plugin-notification's builder but the DESKTOP
-        // implementation (notify_rust, win7_notifications) never reads it —
-        // actions are a mobile-only feature of that plugin. Checked in
-        // tauri-plugin-notification-2.4.0/src/desktop.rs rather than assumed.
-        // So the phone can offer Deny and Windows cannot, and pretending
-        // otherwise here would mean a button that silently does nothing.
+        // `action_type_id` is accepted by tauri-plugin-notification's builder
+        // but the DESKTOP implementation (notify_rust, win7_notifications)
+        // never reads it — actions are a mobile-only feature of that plugin.
+        // Checked in tauri-plugin-notification-2.4.0/src/desktop.rs rather
+        // than assumed. winrt_toast.rs goes around it with a real WinRT
+        // toast on Windows; see that module's own doc for exactly what is
+        // and is not verified about it. `deny_ok` is "always true" per
+        // docs/ARCHITECTURE.md's own contract table, so no per-item check is
+        // needed before offering the button.
         //
         // The tray's attention state is unconditional on any pending item,
         // heavy or not - that is the "waits to be found" half of the same
         // rule, a passive, glanceable signal rather than an interruption,
         // and it is correct for it to stay unconditional.
+        #[cfg(windows)]
+        {
+            let id = item["id"].as_str().unwrap_or_default();
+            crate::winrt_toast::notify_approval(app, &title, &body, id);
+        }
+        #[cfg(not(windows))]
         crate::commands::notify(app, &title, &body);
     }
 

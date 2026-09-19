@@ -2341,6 +2341,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "window-vibrancy",
+ "windows 0.61.3",
  "windows-sys 0.59.0",
  "xcap",
 ]

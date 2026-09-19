@@ -158,11 +158,23 @@ quotation marks, next to its source, where the point is to slow the reader
 down. The notice *says* something tried to rush you and never quotes it — that
 it tried is the fact that changes the decision, its words are not.
 
-*Known limitation, not a design choice:* `tauri-plugin-notification` accepts
+*Known limitation, half-closed:* `tauri-plugin-notification` accepts
 `action_type_id` on the desktop builder but never reads it — notification
-actions are mobile-only in that plugin. So the permitted Deny button is
-buildable on Android and is not, today, on the Windows toast, which is a
-prompt to open the app.
+actions are mobile-only in that plugin, so a Deny button could not go
+through it. `jarvis-desktop/src-tauri/src/winrt_toast.rs` goes around the
+plugin instead: a real WinRT toast, built and shown through
+`windows::UI::Notifications` directly, with a Deny button whose click
+relaunches the app (`activationType="foreground"`, not a background COM
+activator — see that module's own doc for why) carrying the approval id,
+answered through the same `decide_approval` the in-app card uses. Compiles
+and passes `cargo clippy -D warnings` against the Windows target; **not
+watched fire on a real Windows machine**, since this depends on an AUMID
+association with the installer's own Start Menu shortcut that only a real
+run can confirm. Until that is watched work, treat it as believed-correct,
+not confirmed — and note the one real gap even once it does: unlike
+Android's `decideDetached`, this still briefly activates the process on
+click rather than never touching it, because a true background action
+needs registry/COM plumbing this session could not add with confidence.
 
 ---
 
