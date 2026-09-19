@@ -1,5 +1,7 @@
 package com.jarvis.client.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
@@ -22,8 +25,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.BuildConfig
 import com.jarvis.client.ui.parts.pressable
+import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalRadii
 
@@ -170,6 +176,13 @@ fun FaqScreen(
         ) {
             item(key = "top-space") { Spacer(Modifier.height(6.dp)) }
             items(FAQS, key = { it.q }) { FaqCard(it) }
+            // Identity, not behaviour - the FAQ above already answers "how does
+            // this behave"; this answers "what is this, and where did it come
+            // from." Sits at the end of this list rather than its own screen or
+            // status-bar chip, mirroring the desktop's own About Jarvis section,
+            // which lives at the end of its Settings/FAQ page for the same
+            // reason.
+            item(key = "about") { AboutCard() }
             item(key = "bottom-space") { Spacer(Modifier.height(4.dp)) }
         }
     }
@@ -206,5 +219,84 @@ private fun FaqCard(faq: Faq) {
             Spacer(Modifier.height(8.dp))
             Text(faq.a, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
+    }
+}
+
+/**
+ * What this app IS, not how it behaves - the identity card, same job the
+ * desktop's own About Jarvis section does at the end of its Settings page.
+ *
+ * The version comes from `BuildConfig.VERSION_NAME` - the real value Gradle
+ * stamped into this exact build, never a hand-typed string that could go
+ * stale the next time `versionName` changes in build.gradle.kts and nobody
+ * remembers to update a second copy of it here.
+ */
+@Composable
+private fun AboutCard() {
+    val chrome = LocalChrome.current
+    val context = LocalContext.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(LocalRadii.current.cardShape)
+            .background(chrome.surface1)
+            .padding(14.dp),
+    ) {
+        Text(
+            "About Jarvis",
+            style = MaterialTheme.typography.titleSmall,
+            color = chrome.textHi,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "A thin client to the Jarvis brain running on your own desktop, " +
+                "reached only over Tailscale - a private network between only " +
+                "the devices you own, never the open internet. No AI runs on " +
+                "this phone; there is no approve-all anywhere in this app, and " +
+                "every action still stops and asks first, one at a time.",
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+        Spacer(Modifier.height(12.dp))
+        AboutFact("Version", BuildConfig.VERSION_NAME)
+        AboutFact("License", "MIT — see LICENSE in the source")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Source",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+                modifier = Modifier.width(64.dp),
+            )
+            Text(
+                "github.com/darknight111/Epic-Jarvis",
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalAccent.current,
+                modifier = Modifier.pressable(onClick = {
+                    // The real OS browser, same as any other outbound link -
+                    // this app has no WebView to accidentally navigate away
+                    // inside of, but it is still not this screen's job to
+                    // render a web page.
+                    val intent = Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://github.com/darknight111/Epic-Jarvis"),
+                    )
+                    context.startActivity(intent)
+                }),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutFact(label: String, value: String) {
+    val chrome = LocalChrome.current
+    Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+            modifier = Modifier.width(64.dp),
+        )
+        Text(value, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
     }
 }
