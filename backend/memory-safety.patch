@@ -1,0 +1,434 @@
+--- a/jarvis_memory.py
++++ b/jarvis_memory.py
+@@ -136,6 +136,70 @@
+     return struct.pack(f"{len(v)}f", *v)
+ 
+ 
++# Words that match nearly every fact and so tell you nothing about which one.
++# FTS5 has no stoplist of its own, so an OR-query built from every word in the
++# question matched almost the whole store on "the" and "is", and bm25 then
++# ranked that noise. Only content words get a vote.
++_STOP = {
++    "a", "an", "and", "any", "are", "as", "at", "be", "been", "but", "by",
++    "can", "could", "did", "do", "does", "for", "from", "had", "has", "have",
++    "how", "i", "if", "in", "is", "it", "its", "just", "me", "my", "no",
++    "not", "of", "on", "or", "our", "out", "should", "so", "that", "the",
++    "their", "them", "then", "there", "these", "they", "this", "to", "up",
++    "am", "he", "her", "hers", "him", "his", "she", "us",
++    "was", "we", "were", "what", "when", "where", "which", "who", "why",
++    "will", "with", "would", "you", "your",
++}
++
++# L2 distance between unit vectors: sqrt(2 - 2cos). 1.0 is cosine 0.5 - the
++# point below which a bge-small neighbour is not about the same thing. Without
++# a cutoff the k-NN scan returns its nearest rows for ANY query, which is what
++# made the store return five facts for "why is the sky blue".
++_MAX_VEC_DISTANCE = float(os.environ.get("JARVIS_MEMORY_MAX_DISTANCE", "1.0"))
++
++
++def _words(text: str) -> set:
++    """Content words, lowercased, possessives folded. For overlap tests."""
++    out = set()
++    for w in re.findall(r"[\w\-]+", str(text).lower()):
++        w = re.sub(r"'?s$", "", w) or w
++        if len(w) > 1 and w not in _STOP:
++            out.add(w)
++    return out
++
++
++def _fts_terms(text: str) -> set:
++    """Content words for the FTS5 MATCH query. NOT possessive-folded.
++
++    Separate from `_words` above, and the difference is a real bug that was
++    shipped. `facts_fts` is `tokenize='porter unicode61'`, so the index
++    already holds Porter stems, and Porter deliberately keeps a double `s`
++    ("class" stems to "class", "address" to "address"). `_words` strips one
++    trailing `s` from everything - which turns "address" into "addres", a
++    string Porter then stems to something the index does not contain. The
++    result:
++
++        search("email address")  ->  ['My email address is bob@exam...']
++        search("address")        ->  []
++
++    Every word ending in `ss` was unfindable on its own: class, pass,
++    address, business, access, press, boss, glass. And `search` swallows
++    `sqlite3.OperationalError`, so it would have stayed silent even if it
++    had raised.
++
++    Feeding the RAW token and letting Porter do the stemming is both the fix
++    and the simpler rule: one stemmer, on both sides of the index. `_words`
++    keeps its folding because it is used for the OVERLAP test in
++    `find_one`, where both sides are folded the same way and the folding is
++    what stops "Mario's" contributing a bare "s".
++    """
++    out = set()
++    for w in re.findall(r"[\w\-]+", str(text).lower()):
++        if len(w) > 1 and w not in _STOP:
++            out.add(w)
++    return out
++
++
+ # --------------------------------------------------------------------------
+ #   The store
+ # --------------------------------------------------------------------------
+@@ -193,19 +257,26 @@
+                   INSERT INTO facts_fts(facts_fts, rowid, text) VALUES('delete', old.id, old.text);
+                   INSERT INTO facts_fts(rowid, text) VALUES (new.id, new.text);
+                 END;""")
++            c.execute("""
++                CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)""")
++            row = c.execute("SELECT v FROM meta WHERE k='embedder'").fetchone()
++            if row and row["v"] != self.embedder.name and self._vec_ok:
++                # A different model: the vectors are not comparable, and they
++                # are not even the same width. DELETE emptied the table but
++                # left it declared float[256] from the stand-in, so the first
++                # write after the real model finished downloading raised
++                # "Expected 256 dimensions but received 384" - and kept
++                # raising, for good, on a store that had been working. Drop
++                # it, so the CREATE below rebuilds it at the new width.
++                c.execute("DROP TABLE IF EXISTS facts_vec")
++                c.execute("UPDATE facts SET embedded=0")
++            elif row and row["v"] != self.embedder.name:
++                c.execute("UPDATE facts SET embedded=0")
+             if self._vec_ok:
+                 c.execute(f"""
+                     CREATE VIRTUAL TABLE IF NOT EXISTS facts_vec USING vec0(
+                         fact_id INTEGER PRIMARY KEY,
+                         embedding float[{self.embedder.dim}])""")
+-            c.execute("""
+-                CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)""")
+-            row = c.execute("SELECT v FROM meta WHERE k='embedder'").fetchone()
+-            if row and row["v"] != self.embedder.name:
+-                # A different model: the vectors are not comparable. Rebuild.
+-                if self._vec_ok:
+-                    c.execute("DELETE FROM facts_vec")
+-                c.execute("UPDATE facts SET embedded=0")
+             c.execute("INSERT OR REPLACE INTO meta VALUES ('embedder', ?)", (self.embedder.name,))
+ 
+     # ---- writing ----------------------------------------------------------
+@@ -237,17 +308,31 @@
+                             (time.time(), replaced_by, fact_id))
+             return cur.rowcount > 0
+ 
+-    def _embed_rows(self, c, rows: list[tuple[int, str]]) -> None:
++    def _embed_rows(self, c, rows: list[tuple[int, str]]) -> int:
++        """Embed and index. Returns how many rows were actually written.
++
++        Every failure is swallowed and counted as zero rather than raised.
++        add_fact's INSERT has already committed by the time this runs
++        (isolation_level=None), so an exception escaping here reported failure
++        for a fact that was in fact stored - and each retry of the "failed"
++        accept wrote another copy of it.
++        """
+         if not rows or not self._vec_ok:
+-            return
++            return 0
+         try:
+             vecs = self.embedder.embed([t for _, t in rows])
+         except Exception:
+-            return
++            return 0
++        done = 0
+         for (fid, _), v in zip(rows, vecs):
+-            c.execute("INSERT OR REPLACE INTO facts_vec (fact_id, embedding) VALUES (?, ?)",
+-                      (fid, _pack(v)))
++            try:
++                c.execute("INSERT OR REPLACE INTO facts_vec (fact_id, embedding) VALUES (?, ?)",
++                          (fid, _pack(v)))
++            except Exception:
++                continue
+             c.execute("UPDATE facts SET embedded=1 WHERE id=?", (fid,))
++            done += 1
++        return done
+ 
+     def backfill_embeddings(self, batch: int = 64) -> int:
+         """Embed anything that was stored while no model was available."""
+@@ -258,10 +343,13 @@
+                                  (batch,)).fetchall()
+                 if not rows:
+                     break
+-                self._embed_rows(c, [(r["id"], r["text"]) for r in rows])
+-                if not self._vec_ok:
++                wrote = self._embed_rows(c, [(r["id"], r["text"]) for r in rows])
++                if not wrote:
++                    # No vector table, no embedder, or every row was refused.
++                    # The next SELECT would return these same rows, so
++                    # continuing spins on them forever.
+                     break
+-                done += len(rows)
++                done += wrote
+         return done
+ 
+     def import_legacy(self, path: Optional[Path] = None) -> int:
+@@ -292,12 +380,25 @@
+         query = " ".join(str(query).split())
+         if not query:
+             return []
++        if k <= 0:
++            # The truncation below appends and THEN checks `len(out) >= k`, so
++            # k=0 returned exactly one fact. That reads as an off-by-one and is
++            # worse than one, because this is the function that decides what
++            # private text goes into a prompt: someone setting the recall width
++            # to zero to turn recall OFF still got a fact in every request.
++            return []
+         at = time.time() if at is None else at
+         with _LOCK, closing(self._connect()) as c:
+             ranks: dict[int, float] = {}
+-            # words
++            # words. Content terms only, and RAW - see _fts_terms. An
++            # OR-query over every word in the question matched most of the
++            # store on "the" and "is", so a fact that shared nothing but
++            # function words still got a rank.
++            terms = sorted(_fts_terms(query))
+             try:
+-                q = " OR ".join(f'"{w}"' for w in re.findall(r"[\w\-]+", query))
++                if not terms:
++                    raise sqlite3.OperationalError("no content terms")
++                q = " OR ".join(f'"{w}"' for w in terms)
+                 rows = c.execute(
+                     "SELECT rowid, bm25(facts_fts) AS s FROM facts_fts WHERE facts_fts MATCH ?"
+                     " ORDER BY s LIMIT ?", (q, candidates)).fetchall()
+@@ -305,14 +406,22 @@
+                     ranks[row["rowid"]] = ranks.get(row["rowid"], 0) + 1.0 / (60 + r)
+             except sqlite3.OperationalError:
+                 pass
+-            # meaning
+-            if self._vec_ok:
++            # meaning - only from an embedder that has any. The hash
++            # stand-in is character trigrams: measured AUC 0.73 where chance
++            # is 0.50 and a real bi-encoder is above 0.95. Worse, a k-NN scan
++            # returns its nearest rows for ANY query, so giving it a vote is
++            # what guaranteed a full five facts came back for "why is the sky
++            # blue" - and put the owner's medication in that prompt.
++            if self._vec_ok and self.embedder.semantic:
+                 try:
+                     qv = self.embedder.embed([query])[0]
+                     rows = c.execute(
+                         "SELECT fact_id, distance FROM facts_vec WHERE embedding MATCH ?"
+                         " ORDER BY distance LIMIT ?", (_pack(qv), candidates)).fetchall()
+                     for r, row in enumerate(rows, 1):
++                        # Sorted, so the first one that is too far ends it.
++                        if row["distance"] is not None and row["distance"] > _MAX_VEC_DISTANCE:
++                            break
+                         ranks[row["fact_id"]] = ranks.get(row["fact_id"], 0) + 1.0 / (60 + r)
+                 except Exception:
+                     pass
+@@ -336,6 +445,45 @@
+                 break
+         return out
+ 
++    def get(self, fact_id: int) -> Optional[dict]:
++        """One fact by id, retired or not. None if it is not there."""
++        with _LOCK, closing(self._connect()) as c:
++            row = c.execute("SELECT * FROM facts WHERE id=?", (int(fact_id),)).fetchone()
++        return dict(row) if row else None
++
++    def find_one(self, text: str, *, min_overlap: float = 0.5) -> Optional[dict]:
++        """The one current fact a correction is about, or None.
++
++        search() is the wrong tool for this and using it cost data: it is a
++        ranker, it returns its top-k whatever the query, and the top-1 for a
++        string that matches nothing is an arbitrary fact - which then got
++        retired. Accepting "Mario drives a 1998 Volvo" retired "Mario prefers
++        tabs over spaces"; a replaces string reading "Mario's allergy" retired
++        the note about Vim. Require the candidate to actually overlap the
++        wording, and return None rather than a guess.
++
++        Containment, not Jaccard: a correction names the old fact in fewer
++        words than the fact itself, so the shorter side is the denominator.
++        Two content words minimum, whatever the ratio - "where Mario is"
++        reduces to the single word "mario", which is in half the store, and
++        one common word is not an identification. When it is ambiguous the
++        answer is None: two facts that disagree can be sorted out later, a
++        fact retired in error cannot be got back.
++        """
++        want = _words(text)
++        if not want:
++            return None
++        best, best_score = None, 0.0
++        for cand in self.search(text, k=5):
++            have = _words(cand["text"])
++            shared = want & have
++            if len(shared) < 2:
++                continue
++            score = len(shared) / min(len(want), len(have))
++            if score > best_score:
++                best, best_score = cand, score
++        return best if best_score >= min_overlap else None
++
+     def timeline(self, query: str, k: int = 20) -> list[dict]:
+         """Every version of the matching facts, retired ones included, oldest
+         first - the 'where did I live last year' view."""
+--- a/jarvis_extract.py
++++ b/jarvis_extract.py
+@@ -4,7 +4,8 @@
+ After a local turn, the transcript is handed to the LOCAL model with one
+ job: list anything in it that would still be true and useful next month.
+ Each proposal goes into a review queue. Nothing reaches memory until a
+-human accepts it - or until auto_accept is switched on, which it is not.
++human accepts it. There is no path that writes one without a decision:
++the auto_accept branch that used to sit in propose() has been removed.
+ 
+ WHY THE QUEUE
+ A system deciding on its own what to remember about you is exactly the
+@@ -18,7 +19,7 @@
+ and the dedupe against what is already known all need tuning against REAL
+ conversations. The owner asked for a proper set-up pass once Jarvis is
+ running; until [memory.extraction].setup_complete is true the boot banner
+-says so and auto_accept cannot be turned on.
++says so.
+ 
+ NEVER CLOUD
+ The extractor talks to Ollama on localhost and nothing else. If the local
+@@ -75,6 +76,15 @@
+             decided    REAL,
+             fact_id    INTEGER
+         )""")
++    # Added later: the fact a correction resolves to, settled when the
++    # proposal is queued rather than when it is accepted. Accepting used to
++    # re-run the lookup and retire whatever came back, so the human approved
++    # a destructive edit without being told what it destroyed.
++    for col, decl in (("replaces_id", "INTEGER"), ("replaces_text", "TEXT")):
++        try:
++            c.execute(f"ALTER TABLE proposals ADD COLUMN {col} {decl}")
++        except Exception:
++            pass                      # already there
+ 
+ 
+ def _local_llm(prompt: str, model: Optional[str] = None, timeout: float = 60) -> Optional[str]:
+@@ -138,32 +148,78 @@
+             if not isinstance(f, dict):
+                 continue
+             text = " ".join(str(f.get("text", "")).split())
+-            conf = float(f.get("confidence") or 0.5)
++            # A model that writes "confidence": "high" raised ValueError out
++            # of propose(), keeping the facts queued before it and losing
++            # every one after it. An unparseable confidence is a missing
++            # confidence, not a reason to abandon the batch.
++            try:
++                conf = float(f.get("confidence") or 0.5)
++            except (TypeError, ValueError):
++                conf = 0.5
+             # Cheap filters before anything reaches the queue: a question is
+             # not a fact, a fragment is not a fact, and the model's own low
+             # confidence is a signal worth honouring.
+-            if (not text or text.endswith("?") or len(text.split()) < 3 or conf < 0.3
+-                    or re.match(r"^(what|when|where|who|how|why|can|could|would|should|is|are|do|does)\b", text, re.I)):
++            if not text or text.endswith("?") or conf < 0.3:
++                continue
++            # The old guard dropped anything under three words and anything
++            # opening with an auxiliary. Measured against realistic output it
++            # discarded "Can't eat gluten", "Does not drink alcohol", "Is
++            # vegetarian", "Wife: Dana", "Do not suggest Docker, ever" and
++            # "Should always use metric units" - a coeliac diagnosis and four
++            # standing instructions - while keeping "Whose birthday is 3
++            # March". It was matching the shape of a question word, not a
++            # question. An auxiliary is only interrogative when a subject
++            # follows it, and a wh-word almost never opens a durable fact.
++            if len(text.split()) < 2:
++                continue
++            if re.match(r"^(what|when|where|which|who|whose|why|how)\b", text, re.I):
++                continue
++            if re.match(r"^(is|are|was|were|do|does|did|can|could|would|should|will|have|has)\s+"
++                        r"(i|you|we|they|he|she|it|there|that|this)\b", text, re.I):
+                 continue
+             if text.lower() in known or text.lower() in have or pending_n >= cap:
+                 continue
+-            cur = c.execute("INSERT INTO proposals (text, replaces, confidence, source, created) VALUES (?,?,?,?,?)",
+-                            (text, f.get("replaces"), conf, source, time.time()))
+-            row = {"id": cur.lastrowid, "text": text, "replaces": f.get("replaces"),
++            replaces = f.get("replaces")
++            # Settle the target now, so the approval card can name the fact
++            # this will retire. find_one returns None rather than a guess, and
++            # None means "add it, retire nothing" - two facts that disagree is
++            # a recoverable state, a silently deleted allergy is not.
++            target = store.find_one(replaces) if replaces else None
++            cur = c.execute(
++                "INSERT INTO proposals (text, replaces, confidence, source, created,"
++                " replaces_id, replaces_text) VALUES (?,?,?,?,?,?,?)",
++                (text, replaces, conf, source, time.time(),
++                 target["id"] if target else None,
++                 target["text"] if target else None))
++            row = {"id": cur.lastrowid, "text": text, "replaces": replaces,
++                   "replaces_id": target["id"] if target else None,
++                   "replaces_text": target["text"] if target else None,
+                    "confidence": conf, "state": "pending"}
+             out.append(row); have.add(text.lower()); pending_n += 1
+-            if _cfg("auto_accept", False) and _cfg("setup_complete", False) and conf >= 0.8:
+-                _accept(c, store, row)
++            # There is deliberately no auto-accept branch here. There used to
++            # be one, behind two config keys: a fact scoring 0.8 was written
++            # with no human decision. Nothing in Jarvis approves on the
++            # owner's behalf, and a queue whose contents can retire existing
++            # facts is the last place to make an exception.
+     return out
+ 
+ 
+ def _accept(c, store, row) -> int:
+-    supersedes = None
+-    if row.get("replaces"):
+-        old = store.search(row["replaces"], k=1)
+-        if old:
+-            supersedes = old[0]["id"]
+-    fid = store.add_fact(row["text"], source="extracted", supersedes=supersedes)
++    # Only the target recorded when the proposal was queued, which is the one
++    # the approval card showed. The old code re-ran `store.search(replaces,
++    # k=1)` here and retired the top hit - and search has no floor, so it
++    # always returned something. Accepting a fact about a car retired the
++    # owner's editor preference; a replaces string of "Mario's allergy"
++    # retired a note about Vim. Both permanent: retire() has no route back.
++    supersedes = row.get("replaces_id")
++    if supersedes:
++        # It may have been retired by something else since it was queued.
++        still = store.get(int(supersedes))
++        if not still or still.get("valid_to") is not None:
++            supersedes = None
++    fid = store.add_fact(row["text"], source="extracted", supersedes=supersedes,
++                         meta={"confidence": row.get("confidence"),
++                               "proposal_id": row.get("id")})
+     c.execute("UPDATE proposals SET state='accepted', decided=?, fact_id=? WHERE id=?",
+               (time.time(), fid, row["id"]))
+     return fid
+@@ -174,7 +230,8 @@
+     with closing(store._connect()) as c:
+         _init(c)
+         return [dict(r) for r in c.execute(
+-            "SELECT id,text,replaces,confidence,source,created FROM proposals WHERE state='pending' ORDER BY created")]
++            "SELECT id,text,replaces,replaces_id,replaces_text,confidence,source,created"
++            " FROM proposals WHERE state='pending' ORDER BY created")]
+ 
+ 
+ def decide(proposal_id: int, accept: bool) -> Optional[int]:
+@@ -194,8 +251,29 @@
+ def setup_status() -> dict:
+     return {"enabled": bool(_cfg("enabled", True)),
+             "setup_complete": bool(_cfg("setup_complete", False)),
+-            "auto_accept": bool(_cfg("auto_accept", False)) and bool(_cfg("setup_complete", False)),
+-            "pending": len(pending()),
++            # Always false, and reported so a client that warns about it
++            # keeps working. The config key is honoured nowhere: nothing in
++            # Jarvis writes a fact the owner has not decided on.
++            "auto_accept": False,
++            "pending": len(_pending_rows()),
++            "queue_full": _queue_full(),
+             "note": None if _cfg("setup_complete", False) else
+                     "extraction is a scaffold: review its proposals and tune the prompt "
+-                    "against real conversations before trusting auto_accept"}
++                    "against real conversations"}
++
++
++def _pending_rows() -> list[dict]:
++    return pending()
++
++
++def _queue_full() -> bool:
++    """Is the review queue at its cap, and therefore silently dropping?
++
++    propose() folds `pending_n >= cap` into the same `continue` as the dedupe
++    check, so once the queue fills, every further proposal goes on the floor
++    with no record. A client that can see this can say so.
++    """
++    try:
++        return len(pending()) >= int(_cfg("review_queue_max", 200))
++    except Exception:
++        return False

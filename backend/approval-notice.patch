@@ -1,0 +1,134 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -319,6 +319,75 @@
+     }
+ 
+ 
++def notice_for(item: dict) -> dict:
++    """What a notification is allowed to say about a waiting approval.
++
++    THE WHOLE POINT: this reads `action` and whether `raised` is set. It does
++    NOT read `detail`, `prompt`, or anything inside `raised`. Every word it
++    returns comes from _RISK and from the action name - tables in this file,
++    written by us. **It is therefore safe by construction on a lock screen**,
++    not safe by a reviewer having remembered to redact something.
++
++    That distinction is the reason this function exists rather than a caller
++    assembling a string. Three separate leaks have been found in this project
++    where the rule was stated in one place and not enforced at the next: the
++    audit log honoured _redact while the ntfy push sent the same dict verbatim;
++    the SSE event carried the whole approval row; the doorbell's denylist
++    shipped `raised` - the field that quotes hostile text - once it was added.
++    A function that never touches the payload cannot join that list.
++
++    The owner asked for the summary on the phone as well as the desktop,
++    having been told the phone shows it on a lock screen. That is their call
++    and it is answered here - but `raised.quote` is not "the summary". It is
++    text an attacker wrote to make a reader hurry, and putting it on a lock
++    screen defeats the feature it belongs to, whose entire purpose is to slow
++    the reader down inside the app where it appears in quotation marks next to
++    its source. `raised` travels as a BOOLEAN. See docs/ARCHITECTURE.md.
++
++    Returns:
++        title    one line: what Jarvis wants to do
++        body     why it matters, and that nothing has happened yet
++        weight   "heavy" | "normal" - whether to interrupt or wait to be found
++        deny_ok  whether refusing WITHOUT reading the detail is safe (it is)
++    """
++    action = str(item.get("action") or "an action")
++    r = risk_for(action)
++    raised = bool(item.get("raised"))
++
++    # Humanised from the identifier rather than from a second table of phrases.
++    # The action names were written to be read - "send_email", "run_shell_on_
++    # host" - and a parallel table of prose would be one more thing to fall out
++    # of step with the first.
++    phrase = action.replace("_", " ").strip() or "an action"
++
++    # Heavy means "interrupt them". Any one of three things earns it: it cannot
++    # be undone, it leaves the machine, or outside text pushed the tier up.
++    # Deliberately not a score - three named reasons a person can argue with
++    # beat a number nobody can.
++    heavy = (r["reversible"] == "no") or (r["reach"] != "local") or raised
++
++    bits = [r["why"]]
++    if raised:
++        # Said, never quoted. That something tried to rush you is the fact that
++        # changes your decision; its actual words are not needed to convey it,
++        # and are the one thing that must not travel.
++        bits.append("something in the text it read tried to hurry you, so this "
++                    "was raised for a closer look")
++    bits.append("nothing has happened yet")
++
++    return {
++        "title": f"Jarvis wants to {phrase}",
++        "body": ". ".join(b.strip(". ") for b in bits if b).strip() + ".",
++        "weight": "heavy" if heavy else "normal",
++        # Refusing something you have not read costs you a retry. Approving
++        # something you have not read is the failure this whole module exists
++        # to prevent. The two are not symmetric and the clients are told so
++        # here rather than each deciding for itself.
++        "deny_ok": True,
++        "approve_ok": False,
++    }
++
++
+ # Strictness order. A prompt that matches several patterns is judged by the
+ # strongest one, never the weakest.
+ _RANK = {"auto": 0, "notify": 1, "ask": 2, "never": 3}
+@@ -750,7 +819,7 @@
+         # broker. An ntfy.sh topic is a URL with no authentication: anyone who
+         # knows or guesses the string reads every message. On this tier there
+         # is no human in the loop at all, so nothing else was going to catch it.
+-        _push(f"Jarvis did: {action}", _safe_detail(detail, 400))
++        _push(f"Jarvis did: {action}", risk_for(action)["why"])
+         return Verdict(True, tier, action, "tier is notify; you were told after",
+                        outcome="notify")
+ 
+@@ -788,8 +857,14 @@
+     # approval event follows. `prompt` is the human-readable request text and
+     # can quote an email body or a file path; the fallback to it was the wider
+     # of the two leaks, because it is prose rather than a dict of keys.
+-    _push(f"Jarvis wants to: {action}",
+-          _safe_detail(detail, 300) + f"\n(id {rid}) - open Jarvis to read it")
++    # _safe_detail printed the field NAMES and nothing else - "fields: args,
++    # tool" - which is safe and tells a person nothing they can act on. The
++    # notice says what and why in a sentence, and is safe for the stronger
++    # reason: it is built from this module's own tables and never reads the
++    # payload at all. _safe_detail stays for callers that have no action name.
++    _note = notice_for({"action": action, "raised": bool(raised)})
++    _push(_note["title"],
++          _note["body"] + f"\n(id {rid}) - open Jarvis to decide")
+ 
+     deadline = time.time() + (APPROVAL_TIMEOUT if timeout is None else timeout)
+     # One connection for the whole wait rather than one per poll.
+@@ -1075,6 +1150,10 @@
+     for r in rows:
+         d = dict(r)
+         d["risk"] = risk_for(d.get("action", ""))
++        # Computed here rather than in each client, so the phone and the
++        # desktop cannot word the same warning two different ways - and so
++        # there is one place to audit what a notification may contain.
++        d["notice"] = notice_for(d)
+         # Why this is being asked about at all, when the table said otherwise.
+         # A card shows this instead of a coloured dot: the reason is the thing
+         # that changes the decision.
+--- a/jarvis_events.py
++++ b/jarvis_events.py
+@@ -223,6 +223,16 @@
+     to sort and de-duplicate.
+     """
+     out = {k: item.get(k) for k in _DOORBELL_KEYS}
++    # The notice IS allowed through, and it is the one piece of prose that is.
++    # jarvis_gate.notice_for builds it from the action name and the risk table
++    # and never reads detail, prompt or the contents of raised - so unlike
++    # everything else on the row it cannot carry text somebody else wrote.
++    # The owner asked for a readable summary on the phone; this is how it gets
++    # there without reopening the hole this allowlist closed.
++    notice = item.get("notice")
++    if isinstance(notice, dict):
++        out["notice"] = {k: notice.get(k) for k in
++                         ("title", "body", "weight", "deny_ok", "approve_ok")}
+     # A BOOLEAN, never the object. The rule in docs/ARCHITECTURE.md - "an item
+     # carrying `raised` never belongs in a group that can be actioned
+     # quickly" - needs to survive out here, and a client cannot apply it

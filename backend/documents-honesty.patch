@@ -1,0 +1,92 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -647,7 +647,7 @@
+ 
+ def collect_documents() -> tuple[list, list]:
+     """Indexed documents from the searchable SQLite store."""
+-    if not DOCS_DB.exists():
++    if not _has_table(DOCS_DB, "documents"):
+         return [], []
+     nodes, links = [], []
+     try:
+@@ -658,7 +658,12 @@
+             (MAX_DOCS,),
+         ).fetchall()
+         con.close()
+-    except sqlite3.Error:
++    except sqlite3.Error as exc:
++        # Reached only when the table IS there and the read still failed, now
++        # that the missing table is ruled out above. That is a real fault and
++        # build_graph's per-source handler already prints; this one was the
++        # only silent return of the three.
++        print(f"  ! documents read failed: {exc}", file=sys.stderr)
+         return [], []
+ 
+     groups = {}
+@@ -835,7 +840,9 @@
+         "counts": counts,
+         "sources": {
+             "facts": FACTS_FILE.exists(),
+-            "documents": DOCS_DB.exists(),
++            # The table, not the file. This line read DOCS_DB.exists() and so
++            # was true on every boot, for a table that has never existed.
++            "documents": _has_table(DOCS_DB, "documents"),
+             "knowledge": KG_DB.exists(),
+             "skills": SKILLS_DIR.exists(),
+             "config": CONFIG_FILE.exists(),
+@@ -923,7 +930,7 @@
+         if text:
+             corpus.append({"id": f"fact:{i}", "text": text, "kind": "fact"})
+ 
+-    if DOCS_DB.exists():
++    if _has_table(DOCS_DB, "documents"):
+         try:
+             con = _ro_sqlite(DOCS_DB)
+             for doc_id, content in con.execute(
+@@ -935,8 +942,8 @@
+                         {"id": f"doc:{doc_id}", "text": content[:2000], "kind": "document"}
+                     )
+             con.close()
+-        except sqlite3.Error:
+-            pass
++        except sqlite3.Error as exc:
++            print(f"  ! documents corpus read failed: {exc}", file=sys.stderr)
+ 
+     # Logseq goes into the corpus; Joplin deliberately does not.
+     #
+@@ -2096,6 +2103,35 @@
+                            uri=True, timeout=5.0)
+ 
+ 
++def _has_table(db_path, name: str) -> bool:
++    """Is that table actually in there?
++
++    The file existing is not the question. DOCS_DB is memory.db, which the
++    memory store creates on first boot for its own tables, so DOCS_DB.exists()
++    has been true since the first run and says nothing whatever about a
++    `documents` table. Nothing in this tree creates one: grep the backend for
++    CREATE TABLE documents and there is no hit. Two readers and no writer.
++
++    That mattered because both readers caught sqlite3.Error and returned
++    empty, so "no such table: documents" and "there are no documents" were the
++    same silence - and the brain map's source list then reported
++    documents: true off the file check, so the one surface that could have
++    shown the gap asserted the opposite.
++    """
++    try:
++        con = _ro_sqlite(db_path)
++    except (sqlite3.Error, OSError, ValueError):
++        return False
++    try:
++        return con.execute(
++            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
++        ).fetchone() is not None
++    except sqlite3.Error:
++        return False
++    finally:
++        con.close()
++
++
+ def _lane_names() -> list:
+     if not PROXY_FILE.exists():
+         return []

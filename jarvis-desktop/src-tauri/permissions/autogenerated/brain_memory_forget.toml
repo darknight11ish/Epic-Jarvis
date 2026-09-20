@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-memory-forget"
+description = "Enables the brain_memory_forget command without any pre-configured scope."
+commands.allow = ["brain_memory_forget"]
+
+[[permission]]
+identifier = "deny-brain-memory-forget"
+description = "Denies the brain_memory_forget command without any pre-configured scope."
+commands.deny = ["brain_memory_forget"]

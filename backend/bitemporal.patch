@@ -1,0 +1,233 @@
+--- a/jarvis_memory.py
++++ b/jarvis_memory.py
+@@ -11,14 +11,33 @@
+      result lists fused with reciprocal rank fusion so a fact that does well
+      on either is found.
+ 
+-  2. Know WHEN a fact was true. "Mario lives at X" with no dates means that
+-     when he moves, both addresses sit there as equals. Every fact now carries
+-     valid_from and valid_to. A fact that is contradicted is RETIRED - its
+-     valid_to is set and it records what replaced it - not deleted, so "where
+-     do I live" returns the current answer and "where did I live last year"
+-     also works. This is the Graphiti idea (bi-temporal facts) done natively
+-     in the one SQLite file the project already uses, because Graphiti wants a
+-     graph database server and the whole point here is one file, no daemons.
++  2. Know WHEN a fact was true, AND when we found out. Two different
++     questions, two different axes, and conflating them loses the one case
++     this store exists for.
++
++     VALID TIME - valid_from, valid_to - is when the fact was true in the
++     world. "Mario lives at X" with no dates means that when he moves, both
++     addresses sit there as equals.
++
++     TRANSACTION TIME - created, retired_at - is when this machine believed
++     it. created is stamped on insert; retired_at is stamped when the fact
++     stops being recalled.
++
++     Retiring sets BOTH: retired_at is always now, because that is when we
++     learned, and valid_to defaults to now but can be set earlier. That is
++     what makes "I moved in January, I am telling you in March" storable. One
++     axis cannot hold it: with valid_to alone you either lie about when the
++     move happened or lie about when you were told, and a fact accepted late
++     out of the review queue has the same problem.
++
++     A fact is never deleted, so "where do I live" returns the current answer,
++     "where did I live last year" works, and "what did you think you knew in
++     June" is answerable from the same rows.
++
++     This is the Graphiti idea (bi-temporal facts) done natively in the one
++     SQLite file the project already uses, because Graphiti requires a graph
++     database server - neo4j>=5.26 is not optional there - and the whole point
++     here is one file, no daemons. See docs/PEERS.md.
+ 
+ DEGRADES, NEVER FAILS
+ If the embedding model is not installed or cannot download (first run,
+@@ -205,11 +224,29 @@
+                     created    REAL NOT NULL,
+                     valid_from REAL NOT NULL,
+                     valid_to   REAL,            -- NULL = still true
++                    retired_at REAL,            -- when WE stopped believing it
+                     retired_by INTEGER,         -- the fact that replaced this one
+                     embedded   INTEGER NOT NULL DEFAULT 0,
+                     meta       TEXT
+                 )""")
++            # Stores written before retired_at existed. ALTER TABLE ADD COLUMN
++            # is the one schema change SQLite does cheaply and without
++            # rewriting the file, and it cannot be made conditional in SQL, so
++            # the column list is read first. Doing it inside a try/except
++            # instead would swallow a real failure as "already there".
++            cols = {r["name"] for r in c.execute("PRAGMA table_info(facts)")}
++            if "retired_at" not in cols:
++                c.execute("ALTER TABLE facts ADD COLUMN retired_at REAL")
++                # The best available guess for rows retired before the column
++                # existed, and it is only a guess: back then the two axes were
++                # the same number, so every historical retirement reads as
++                # "we learned the moment it stopped being true". That is often
++                # false and there is no way to recover the truth. New
++                # retirements record both separately.
++                c.execute("UPDATE facts SET retired_at=valid_to "
++                          "WHERE valid_to IS NOT NULL AND retired_at IS NULL")
+             c.execute("CREATE INDEX IF NOT EXISTS ix_facts_valid ON facts(valid_to, valid_from)")
++            c.execute("CREATE INDEX IF NOT EXISTS ix_facts_known ON facts(created, retired_at)")
+             c.execute("""
+                 CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
+                     text, content='facts', content_rowid='id', tokenize='porter unicode61')""")
+@@ -265,15 +302,36 @@
+                 (text, source, now, valid_from or now, json.dumps(meta or {})))
+             fid = cur.lastrowid
+             if supersedes:
+-                c.execute("UPDATE facts SET valid_to=?, retired_by=? WHERE id=? AND valid_to IS NULL",
+-                          (now, fid, supersedes))
++                # Both axes. A correction arriving now means we learned now
++                # (retired_at), and - absent anything better - that the old
++                # fact stopped being true now too (valid_to). Callers that
++                # know the real date call retire() with it before adding.
++                c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
++                          " WHERE id=? AND valid_to IS NULL",
++                          (now, now, fid, supersedes))
+             self._embed_rows(c, [(fid, text)])
+         return fid
+ 
+-    def retire(self, fact_id: int, replaced_by: Optional[int] = None) -> bool:
++    def retire(self, fact_id: int, replaced_by: Optional[int] = None,
++               valid_to: Optional[float] = None) -> bool:
++        """Stop recalling a fact. Never deletes it.
++
++        retired_at is always now - that is when this machine learned. valid_to
++        is when the fact stopped being TRUE, which defaults to now but is the
++        parameter to pass when you know better: "I moved in January" told in
++        March is retire(id, valid_to=<january>), and the row then says both
++        things at once.
++
++        A valid_to in the future is allowed and means exactly what it says -
++        a lease that ends in December is not retired today - so nothing that
++        reads these rows may treat "valid_to is not NULL" as "not current".
++        """
+         with _LOCK, closing(self._connect()) as c:
+-            cur = c.execute("UPDATE facts SET valid_to=?, retired_by=? WHERE id=? AND valid_to IS NULL",
+-                            (time.time(), replaced_by, fact_id))
++            now = time.time()
++            cur = c.execute("UPDATE facts SET valid_to=?, retired_at=?, retired_by=?"
++                            " WHERE id=? AND valid_to IS NULL",
++                            (now if valid_to is None else float(valid_to),
++                             now, replaced_by, fact_id))
+             return cur.rowcount > 0
+ 
+     def _embed_rows(self, c, rows: list[tuple[int, str]]) -> int:
+@@ -406,7 +464,13 @@
+             valid = f["valid_from"] <= at and (f["valid_to"] is None or f["valid_to"] > at)
+             if not valid and not include_retired:
+                 continue
+-            f["score"] = round(score, 5); f["current"] = f["valid_to"] is None
++            f["score"] = round(score, 5)
++            # Was `f["valid_to"] is None`, which disagreed with the line above
++            # it for a valid_to in the future: the fact counted as valid and
++            # was returned, then arrived flagged not-current. Unreachable
++            # while retire() could only stamp now; reachable the moment it
++            # takes a date. Same rule in both places.
++            f["current"] = f["valid_to"] is None or f["valid_to"] > at
+             out.append(f)
+             if len(out) >= k:
+                 break
+@@ -466,14 +530,32 @@
+         return hist
+ 
+     def current_facts(self, limit: int = 400) -> list[dict]:
++        """What is true NOW. A valid_to in the future has not happened yet."""
++        with _LOCK, closing(self._connect()) as c:
++            return [dict(r) for r in c.execute(
++                "SELECT * FROM facts WHERE valid_to IS NULL OR valid_to > ?"
++                " ORDER BY id DESC LIMIT ?", (time.time(), limit))]
++
++    def known_at(self, when: float, limit: int = 400) -> list[dict]:
++        """What this machine BELIEVED at a past moment, right or wrong.
++
++        The transaction-time query, and the reason retired_at exists. A fact
++        entered on Tuesday and retired on Friday is in Wednesday's answer even
++        though it is not in today's, and a fact learned yesterday about last
++        year is not in last year's answer at all.
++        """
+         with _LOCK, closing(self._connect()) as c:
+             return [dict(r) for r in c.execute(
+-                "SELECT * FROM facts WHERE valid_to IS NULL ORDER BY id DESC LIMIT ?", (limit,))]
++                "SELECT * FROM facts WHERE created <= ?"
++                " AND (retired_at IS NULL OR retired_at > ?)"
++                " ORDER BY id DESC LIMIT ?", (when, when, limit))]
+ 
+     def status(self) -> dict:
+         with _LOCK, closing(self._connect()) as c:
+             total = c.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+-            current = c.execute("SELECT COUNT(*) FROM facts WHERE valid_to IS NULL").fetchone()[0]
++            current = c.execute(
++                "SELECT COUNT(*) FROM facts WHERE valid_to IS NULL OR valid_to > ?",
++                (time.time(),)).fetchone()[0]
+             pending = c.execute("SELECT COUNT(*) FROM facts WHERE embedded=0").fetchone()[0]
+         return {"db": str(self.path), "facts": total, "current": current, "retired": total - current,
+                 "embedder": self.embedder.name, "semantic": self.embedder.semantic,
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1057,6 +1057,29 @@
+         return ""
+ 
+ 
++def _qs_float(handler, key: str):
++    """One epoch-seconds float out of the query string, or None.
++
++    Separate from _qs_int because a timestamp has no sensible clamp and no
++    sensible default: absent means "now", and a garbage value must also mean
++    "now" rather than 1970, which is what int() of a bad string would have
++    given after the except.
++    """
++    try:
++        from urllib.parse import parse_qs
++        raw = (parse_qs(handler.path.split("?", 1)[1]).get(key) or [""])[0] \
++            if "?" in handler.path else ""
++        if not raw:
++            return None
++        v = float(raw)
++        # Rejects a value that cannot be a date this store knows about: before
++        # 2001, or more than a day ahead. Both are almost always a client
++        # sending milliseconds, or seconds where it meant milliseconds.
++        return v if 1.0e9 < v < time.time() + 86400 else None
++    except Exception:
++        return None
++
++
+ def _qs_int(handler, key: str, default: int) -> int:
+     """One integer out of the query string, clamped and never raising.
+ 
+@@ -2026,11 +2049,33 @@
+                     # facts would make a superseded fact look deleted when it
+                     # is not.
+                     st = jarvis_memory.store()
++                    limit = int(_qs_int(self, "limit", 500))
++                    # ?known_at=<epoch seconds> answers a different question:
++                    # not "what is true" but "what did this machine believe
++                    # then". A fact entered on Tuesday and retired on Friday
++                    # is in Wednesday's answer. This is the whole reason
++                    # retired_at exists, and without a caller it would be a
++                    # column nobody reads.
++                    known = _qs_float(self, "known_at")
++                    if known is not None:
++                        rows = st.known_at(known, limit=limit)
++                        for r in rows:
++                            # "Current" AS OF THAT MOMENT, not as of now.
++                            vt = r.get("valid_to")
++                            r["current"] = vt is None or vt > known
++                        return self._send(200, {
++                            "available": True, "facts": rows,
++                            "known_at": known,
++                            "note": "what Jarvis believed at that moment, "
++                                    "right or wrong. Read-only: you cannot "
++                                    "edit the past.",
++                            "learning": learning_enabled(),
++                            "pending": len(jarvis_extract.pending())})
+                     c = st._connect()
+                     try:
+                         rows = [dict(r) for r in c.execute(
+                             "SELECT * FROM facts ORDER BY valid_from DESC LIMIT ?",
+-                            (int(_qs_int(self, "limit", 500)),))]
++                            (limit,))]
+                     finally:
+                         c.close()
+                     now = time.time()

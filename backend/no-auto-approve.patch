@@ -1,0 +1,98 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -992,41 +992,67 @@
+ 
+ 
+ def confirm_auto(prompt: str) -> bool:
+-    """For a call site the USER explicitly opted out of confirming.
++    """THIS NO LONGER BYPASSES ANYTHING. It is `confirm` with a warning.
+ 
+-    OpenJarvis has sites like
++    What it used to be, and why that was wrong
++    ------------------------------------------
++    It existed for OpenJarvis call sites like
+ 
+         if auto_approve:
+             executor._confirm_callback = lambda _prompt: True
+ 
+-    behind a deliberate CLI flag. Routing those through full enforcement would
+-    silently redefine a documented flag: you pass --auto-approve and still get
+-    asked, which is not what it says and not what you wanted.
+-
+-    But "yes to everything" should still not include the two things the
+-    framework says can only change by editing the file. So this honours the
+-    flag for auto/notify/ask and refuses "never" regardless - opening a public
+-    tunnel or posting to an external service stays impossible from a flag.
++    behind a `--auto-approve` CLI flag, and its own docstring argued that
++    routing those through the gate "would silently redefine a documented
++    flag". So it returned True for tiers auto, notify AND **ask**, refusing
++    only `never`.
++
++    That is an approve-all. Not by analogy - by definition. `ask` means a
++    human decides one action at a time, and this granted every future,
++    unnamed `ask` action for the life of the process on the strength of one
++    flag typed once. docs/ARCHITECTURE.md invariant 3 is "No auto-approve
++    anywhere, and no approve-all control anywhere. One action, one decision.
++    Do not build one." This was one, and it shipped inside the module that
++    enforces the rule.
++
++    It had zero callers, which is the only reason it never granted anything.
++    A blanket grant with no caller is still a blanket grant: the next person
++    to wire up `--auto-approve` would have found it sitting here looking
++    intended, with a docstring explaining why it was fine.
++
++    Found by `test_gate_outcome.t_there_is_still_no_approve_all`, on that
++    test's first run. docs/PEERS.md is the reason that test exists: every
++    comparable project ships a blanket grant, and cline's docs still describe
++    auto-approve toggles their UI removed months earlier. A prose claim about
++    code goes stale, or is wrong from the start. This one was wrong from the
++    start.
++
++    What it is now
++    --------------
++    A delegation to `confirm`, so the symbol still resolves - anything on the
++    owner's machine that wired it up keeps working, it just asks. The flag
++    becomes a no-op rather than a bypass, and says so on stderr once, because
++    a flag that silently stopped working is its own kind of lie.
++
++    The old docstring's objection stands and is answered rather than ignored:
++    yes, this redefines a documented flag. The flag's documentation is not the
++    authority here; the invariant is. A tool that asks when you told it not to
++    is a nuisance. A tool that acts when you would have said no is the thing
++    the gate exists to prevent.
+     """
+-    action, _, _ = _classify_prompt(prompt)
+-    tiers = _tiers()
+-    if not tiers:
+-        _audit("gate.refused_despite_auto", {"action": action, "tier": "unknown",
+-                                             "why": "policy unreadable"})
+-        print("  [gate] refused: autonomy policy is empty or unreadable, and "
+-              "--auto-approve does not override that", file=sys.stderr, flush=True)
+-        return False
+-    tier = tiers.get(action, UNKNOWN_TIER)
+-    if _touches_protected(prompt):
+-        tier = "never"
+-    if tier == "never":
+-        _audit("gate.refused_despite_auto", {"action": action, "tier": tier})
+-        print(f"  [gate] refused {action}: tier 'never' is not waivable by "
+-              f"--auto-approve; edit jarvis-framework.toml if you mean it",
++    global _AUTO_FLAG_WARNED
++    if not _AUTO_FLAG_WARNED:
++        _AUTO_FLAG_WARNED = True
++        print("  [gate] --auto-approve does not skip approvals in Jarvis. "
++              "Every 'ask' action still waits for you, one at a time. "
++              "See docs/ARCHITECTURE.md invariant 3.",
+               file=sys.stderr, flush=True)
+-        return False
+-    _audit("gate.auto_approved_by_flag", {"action": action, "tier": tier})
+-    return True
++    _audit("gate.auto_flag_ignored", {"prompt_len": len(prompt or "")})
++    return confirm(prompt)
++
++
++# Printed once per process, not once per call: a flag that is set stays set,
++# and a warning on every tool call would train the reader to ignore it.
++_AUTO_FLAG_WARNED = False
+ 
+ 
+ # --------------------------------------------------------------------------

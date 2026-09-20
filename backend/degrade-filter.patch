@@ -1,0 +1,45 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1861,6 +1861,42 @@
+                     messages = body.get("messages") or []
+                     decision.inject_memory = True
+                     route_header["inject_memory"] = True
++                elif lane != local_model:
++                    # ... and back out again. This branch did not exist, and
++                    # its absence was a privacy hole with two mouths.
++                    #
++                    # `is_cloud` is computed ONCE, above the loop, and the
++                    # filter it guards runs once. The rebuild branch directly
++                    # above restores the raw client transcript - assistant
++                    # turns, client system messages, everything - for the
++                    # local hop, and nothing ever put the filter back. This
++                    # loop is sized len(lanes)+2 precisely because it expects
++                    # hops after the local one, so cloud -> local -> cloud is
++                    # a path the code contemplates, and on that path the
++                    # assistant turns that carry restated memory went
++                    # upstream. The other mouth needs no rebuild at all: a
++                    # LOCAL turn carrying the recalled-facts block had no
++                    # guard whatsoever against degrade() handing back a cloud
++                    # lane, and the facts would have gone with it.
++                    #
++                    # The comment above says "downward only, never back into
++                    # the lane that just said no". That is a contract with
++                    # jarvis_router, and the loop never checked it. Re-deriving
++                    # the filter from the lane we are actually about to call
++                    # does not need the contract to hold.
++                    #
++                    # Same cut as the one above the loop, for the same reason,
++                    # and it strips the recalled-facts block for free because
++                    # that block is a system message.
++                    messages = [m for m in messages
++                                if isinstance(m, dict) and m.get("role") == "user"]
++                    if decision.inject_memory:
++                        decision.inject_memory = False
++                        route_header["inject_memory"] = False
++                        route_header["injected_facts"] = 0
++                        route_header["injected_ids"] = []
++                        route_header["memory_side"] = "none"
++                        route_header["reason"] += "; memory dropped, lane is not local"
+                 payload = _build_payload(lane)
+ 
+         # Spend and audit AFTER the loop, against the lane that actually

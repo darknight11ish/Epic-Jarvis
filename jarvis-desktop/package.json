@@ -1,0 +1,36 @@
+{
+  "name": "jarvis-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Jarvis Desktop \u2014 native Windows 11 spotlight client for the Jarvis stack (Tauri v2 + WebView2).",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:debug": "tauri build --debug",
+    "bundle:msi": "tauri build --bundles msi",
+    "bundle:nsis": "tauri build --bundles nsis",
+    "icons": "python3 scripts/make-icons.py",
+    "info": "tauri info",
+    "fmt": "cd src-tauri && cargo fmt",
+    "lint": "cd src-tauri && cargo clippy --all-targets -- -D warnings",
+    "check": "cd src-tauri && cargo check",
+    "tauri": "tauri",
+    "test": "cd src-tauri && cargo test",
+    "notices": "cd src-tauri && cargo-license --avoid-dev-deps --filter-platform x86_64-pc-windows-msvc -d",
+    "test:tokens": "python3 scripts/check-tokens.py && node tests/tokens.mjs",
+    "test:ui": "node tests/blockers.mjs && node tests/decide.mjs && node tests/ia.mjs && node tests/hotkeys.mjs && node tests/updates.mjs && node tests/faces.mjs && node tests/memory.mjs",
+    "test:themes": "node tests/themecheck.mjs && node tests/themes-all.mjs && node tests/distinct.mjs && node tests/contrast.mjs",
+    "shots": "node tests/shots.mjs",
+    "test:a11y": "node tests/a11y.mjs && node tests/disabled.mjs",
+    "test:voice": "node tests/voicecheck.mjs",
+    "test:all": "npm run test:tokens && npm run test:ui && npm run test:a11y && npm run test:themes && npm run test:voice",
+    "faces:spec": "python3 scripts/build-faces-spec.py"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

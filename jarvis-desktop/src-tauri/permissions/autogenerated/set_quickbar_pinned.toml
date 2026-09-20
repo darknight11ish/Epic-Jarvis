@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-quickbar-pinned"
+description = "Enables the set_quickbar_pinned command without any pre-configured scope."
+commands.allow = ["set_quickbar_pinned"]
+
+[[permission]]
+identifier = "deny-set-quickbar-pinned"
+description = "Denies the set_quickbar_pinned command without any pre-configured scope."
+commands.deny = ["set_quickbar_pinned"]

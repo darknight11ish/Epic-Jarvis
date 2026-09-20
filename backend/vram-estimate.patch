@@ -1,0 +1,109 @@
+--- a/jarvis_models.py
++++ b/jarvis_models.py
+@@ -161,11 +161,62 @@
+ #   VRAM, computed - because nobody publishes it
+ # --------------------------------------------------------------------------
+ 
+-RUNTIME_OVERHEAD_MB = 1500     # CUDA context + runtime; the term naive maths omits
++RUNTIME_OVERHEAD_MB = int(os.environ.get("JARVIS_RUNTIME_OVERHEAD_MB", "1500"))
++# CUDA context + compute buffer; the term naive maths omits. The measured
++# parts of it on a Windows/WDDM llama-server are the CUDA context (~330 MiB)
++# and the compute buffer (~250-350 MiB at num_batch 512), so ~650 MiB - which
++# makes 1500 conservative by roughly 850 MiB. That is not a mistake to
++# "correct" blindly: this estimate is deliberately a FLOOR, and the cost of
++# being wrong downward is a model that spills into system RAM and runs at a
++# fifth of the speed. It is now overridable, and named, so the headroom is a
++# decision rather than a constant nobody can see.
++
++
++def _cache_bits_from_env() -> float:
++    """What the KV cache ACTUALLY costs per element, right now, on this box.
++
++    The old default was a bare `cache_bits: int = 8` - a q8_0 cache - while
++    nothing in this tree sets OLLAMA_KV_CACHE_TYPE, so Ollama was running f16
++    and every estimate was ~47% light on the KV term. Sizing a configuration
++    the runtime is not running is worse than sizing none: it is wrong in a
++    direction that says "this fits".
++
++    And q8_0 is not 8 bits. llama.cpp stores 32 values in 34 bytes - a fp16
++    scale per block - so it is 8.5 bits per element. Ollama's own pre-flight
++    estimator rounds this to 8 and therefore under-counts a quantised cache by
++    about 6%; on a ~7 GiB ceiling at 16K that is ~70 MiB of optimism this
++    function does not need to inherit.
++
++    Note the environment variable is read on every call rather than cached.
++    It is set outside the process and the boot banner should report what is
++    true when it prints, not what was true when the module first imported.
++    """
++    kind = os.environ.get("OLLAMA_KV_CACHE_TYPE", "").strip().lower()
++    return {"q4_0": 4.5, "q8_0": 8.5, "f16": 16.0, "": 16.0}.get(kind, 16.0)
++
++
++# server/sched.go generationBatchSurcharge: Ollama adds a FLAT allocation for
++# large generation batches, and its auto-batch reaches for these sizes when it
++# believes there is headroom.
++#
++#     case batch >= 2048: return 2 * GibiByte
++#     case batch >= 1024: return 768 * MebiByte
++#     default:            return 0
++#
++# Nothing here modelled it, so an estimate could say a model fits and Ollama
++# could then add 768 MiB or 2 GiB on top and spill. Pin num_batch 512 (see
++# backend/jarvis-primary.Modelfile) and this term is zero, which is the point
++# of pinning it.
++def batch_surcharge_mb(num_batch: int) -> int:
++    if num_batch >= 2048:
++        return 2048
++    if num_batch >= 1024:
++        return 768
++    return 0
+ 
+ 
+ def kv_cache_mb(ctx: int, layers: int, embed_dim: int, heads: int, kv_heads: int,
+-                cache_bits: int = 8) -> float:
++                cache_bits: Optional[float] = None) -> float:
+     """The standard formula. head_dim x n_kv_heads x 2 (K and V) x ctx x layers.
+ 
+     The kv_heads/heads ratio is what makes grouped-query models cheap - an
+@@ -174,12 +225,16 @@
+     """
+     if not all((ctx, layers, embed_dim, heads, kv_heads)):
+         return 0.0
++    if cache_bits is None:
++        cache_bits = _cache_bits_from_env()
+     per_token = (embed_dim * kv_heads / heads) * 2 * (cache_bits / 8)
+     return ctx * layers * per_token / 2**20
+ 
+ 
+ def estimate_vram_mb(m: "Model", ctx: Optional[int] = None,
+-                     geometry: Optional[dict] = None, cache_bits: int = 8) -> int:
++                     geometry: Optional[dict] = None,
++                     cache_bits: Optional[float] = None,
++                     num_batch: int = 512) -> int:
+     """Weights + KV cache + runtime overhead, in MB.
+ 
+     Deliberately a FLOOR, not a promise. Model geometry (layers, heads) is
+@@ -191,7 +246,13 @@
+     weights_mb = (m.bytes_ or 0) / 2**20
+     if not weights_mb and m.params:
+         weights_mb = m.params * 0.6 / 2**20 * 1024      # ~Q4_K_M bytes/param
+-    ctx = ctx or min(m.context or 8192, int(_cfg("assume_context", 8192)))
++    if cache_bits is None:
++        cache_bits = _cache_bits_from_env()
++    # 16384, not 8192. The old ceiling meant a model you intend to deploy at
++    # 16K was judged as if it were at 8K - so fits_with_margin waved through a
++    # configuration that spills the moment it is actually used. A cap that
++    # flatters the answer is worse than no cap.
++    ctx = ctx or min(m.context or 16384, int(_cfg("assume_context", 16384)))
+     if geometry:
+         kv = kv_cache_mb(ctx, geometry.get("layers", 0), geometry.get("embed", 0),
+                          geometry.get("heads", 1), geometry.get("kv_heads", 1), cache_bits)
+@@ -200,7 +261,7 @@
+         # cache. Wrong in the third digit, right enough to rank by.
+         b = (m.params or 0) / 1e9
+         kv = 0.13 * (ctx / 1000.0) * max(b, 0.5) * (cache_bits / 8) * 8
+-    return int(weights_mb + kv + RUNTIME_OVERHEAD_MB)
++    return int(weights_mb + kv + RUNTIME_OVERHEAD_MB + batch_surcharge_mb(num_batch))
+ 
+ 
+ def fits_with_margin(vram_mb: int, budget_mb: int, margin: float = 0.10) -> bool:

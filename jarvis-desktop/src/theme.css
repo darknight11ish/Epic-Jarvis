@@ -1,0 +1,419 @@
+/* ==========================================================================
+   The token contract
+   --------------------------------------------------------------------------
+   One file that every surface imports, and the only place a colour is allowed
+   to be written down.
+
+   WHY THIS EXISTS. Before it, the quickbar defined `--accent: #38f0ff` and the
+   widget defined `--cyan: #6fe3ff` for the same job, settings had a third set,
+   and 94 colours were welded directly into component rules where no theme
+   could reach them. "Switch the theme" could only ever have moved part of the
+   UI. Adding a theme is now filling in a table, not editing components.
+
+   THE RULE. A literal colour belongs in `:root` or in a `[data-theme]` block
+   in this file. Anywhere else it is a bug, and `scripts/check-tokens.mjs`
+   fails the build for it.
+
+   HOW A THEME IS APPLIED. `data-theme` on `<html>`, set before first paint by
+   the inline bootstrap in each page so there is no flash of the wrong palette.
+   A theme block only needs to redefine the tokens it changes; everything else
+   inherits from `:root`.
+
+   CONTRAST. Every text-on-surface pair below is checked by
+   `scripts/check-contrast.mjs` against BOTH a black and a white backdrop,
+   because these windows are transparent and the desktop behind them is not
+   ours to choose. A pair that passes over black and fails over white is a pair
+   that fails on somebody's wallpaper.
+   ========================================================================== */
+
+:root {
+  /* ---- Surfaces ---------------------------------------------------------
+     `--bg-window` is what the frameless native window actually paints. The
+     rest layer on top of it. Translucency is deliberate and is why the
+     contrast check runs twice. */
+  --bg-window: rgba(8, 9, 12, 0.86);
+  --surface-1: rgba(18, 20, 26, 0.9);
+  --surface-2: rgba(26, 30, 38, 0.92);
+  /* Opaque, not translucent black. A sunken well at rgba(0,0,0,0.55) composites
+     to light grey over a white desktop, and muted text on it measured 2.21:1 —
+     the original CSS had exactly this bug. Making it solid means its contrast
+     no longer depends on how many translucent parents it happens to sit
+     inside, which is a property worth having when a component gets moved. */
+  --surface-sunken: #05070a;
+  --surface-hover: rgba(255, 255, 255, 0.045);
+  --surface-active: rgba(255, 255, 255, 0.08);
+
+  /* ---- Edges ------------------------------------------------------------ */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-accent: rgba(56, 240, 255, 0.32);
+  /* The one edge that carries meaning rather than decoration, so it is the one
+     held to the 3:1 non-text floor. `--border` and `--border-strong` are
+     separators; they are allowed to be quiet. */
+  --focus-ring: #7df3ff;
+
+  /* ---- Text -------------------------------------------------------------
+     `--text-faint` measured 2.37:1 over white in the old quickbar palette,
+     which is unreadable on a light desktop. It is lifted here and the check
+     holds it above 4.5:1 on both backdrops. */
+  --text: #f2f5f8;
+  --text-muted: #a8b2c1;
+  --text-faint: #8e99a9;
+  --text-on-accent: #04222a;
+
+  /* ---- Raw channels ------------------------------------------------------
+     The same colours as above, as bare `R G B` triples for `rgb(... / a)`.
+
+     A component that needs a hue at 7% alpha had no token to reach for and
+     wrote `rgba(56, 240, 255, 0.07)` — seventy-five such literals, each one a
+     colour no theme could move. Adding seventy-five alpha-specific tokens
+     would have been worse; this way the hue is the contract and the alpha
+     stays where it is used, next to the thing it is tinting.
+
+     `--sheen` and `--shade` are the two neutrals: the wash that LIFTS a
+     surface and the one that SINKS it. On a dark theme the lift is white; on
+     `paper` it is ink, which is the whole reason a component may not write
+     `rgba(255, 255, 255, 0.05)` for a hover state. `--shade` stays dark
+     everywhere — a drop shadow is a shadow on any theme. */
+  --accent-rgb: 56 240 255;
+  --ok-rgb: 61 220 151;
+  --warn-rgb: 255 200 96;
+  --bad-rgb: 255 107 122;
+  --info-rgb: 185 139 255;
+  --muted-rgb: 139 148 163;
+  --sheen-rgb: 255 255 255;
+  --shade-rgb: 0 0 0;
+
+  /* ---- Prose -------------------------------------------------------------
+     A rendered answer is read for minutes at a time, so its body sits a shade
+     below `--text` and its emphasis a shade above. Both were hex literals in
+     `style.css`, which made a light theme render a model's answer in near-white
+     on white. */
+  --prose: #dfe5ec;
+  --prose-strong: #ffffff;
+  --prose-em: #e8eef5;
+
+  /* ---- Accent ----------------------------------------------------------- */
+  --accent: #38f0ff;
+  --accent-bright: #b8fbff;
+  --accent-dim: rgba(56, 240, 255, 0.32);
+  --accent-faint: rgba(56, 240, 255, 0.12);
+
+  /* ---- Semantic ---------------------------------------------------------
+     These four carry meaning, so a theme may retune them but must not swap
+     what they mean. Every one of them is paired with a non-colour channel
+     somewhere in the UI — a shape, a word or a position — because one man in
+     twelve cannot tell `--ok` from `--warn`. */
+  --ok: #3ddc97;
+  --warn: #ffc860;
+  --bad: #ff6b7a;
+  --info: #b98bff;
+  --ok-faint: rgba(61, 220, 151, 0.12);
+  --warn-faint: rgba(255, 200, 96, 0.12);
+  --bad-faint: rgba(255, 107, 122, 0.12);
+  --info-faint: rgba(185, 139, 255, 0.12);
+
+  /* ---- Semantic surfaces -------------------------------------------------
+     A tinted fill and a legible text colour for each semantic state. These
+     exist because components were reaching for `rgba(61,220,151,0.14)` and
+     `#9ff0cc` directly — a green wash and a green text that a light theme
+     could not touch, which is why Approve came out pale-on-pale on paper. */
+  --ok-fill: rgba(61, 220, 151, 0.14);
+  --ok-edge: rgba(61, 220, 151, 0.45);
+  --ok-text: #9ff0cc;
+  --bad-fill: rgba(255, 107, 122, 0.12);
+  --bad-text: #ffb3bb;
+  --accent-text: var(--accent-bright);
+
+  /* Code and diffs. A pure-black block is correct on a near-black theme and
+     absurd on paper, so the ink and the ground are both tokens. */
+  --code-bg: #000000;
+  --code-text: #cfe9ee;
+  --diff-add: #9ff0cc;
+  --diff-remove: #ffc4ca;
+
+  /* ---- Face states -------------------------------------------------------
+     The eight states the backend resolves, bound to the colours
+     `jarvis-visual-spec.json` binds them to. These exist as tokens because
+     without them a surface improvises: brain.css painted `listening` in
+     `--warn`, which is amber — the colour the spec binds to APPROVAL — and had
+     no rule for `approval` or `standby` at all, so both fell through to the
+     base accent, which is what `speaking` uses. A missing state is now a
+     missing token, and the token check can see it.
+
+     `--state-standby` is the one declared divergence. The spec binds
+     neutral-3 #46566a, which measures 2.03:1 on this window: fine for a face
+     that fills a quarter of the screen and has its own rules, unreadable as a
+     7px chrome dot against a 3:1 floor. #6b7d94 measures 3.61:1. */
+  --state-idle: #2ea8cc;
+  --state-listening: #ff9b52;
+  --state-thinking: #ae7bff;
+  --state-speaking: #6fe3ff;
+  --state-approval: #ffb648;
+  --state-standby: #6b7d94;
+  --state-error: #ff7b86;
+  --state-banked: #8fa3b8;
+
+  /* ---- The graph --------------------------------------------------------
+     One colour per node group in `/api/graph`. Kept in the contract rather
+     than in brain.css so a theme owns the galaxy too — it is the largest
+     coloured surface in the product. */
+  /* FIVE hues, not ten, and a group is (hue x form) — see `drawNode` in
+     brain.js. Ten hues cannot encode ten categories: the previous set measured
+     CIEDE2000 6.0 between `core` and `cluster` in NORMAL vision and 1.0 under
+     deuteranopia, and high-contrast gave those two the same value outright. A
+     search over the whole HSL space found no ten that work, so the tenth
+     channel is shape: five colours, each drawn as a filled disc or a hollow
+     ring. Form survives greyscale, colour blindness and a 6px dot.
+
+     These are search results, not picks. Every pair clears CIEDE2000 20 as the
+     worst of normal, deuteranopia and protanopia, against a target of 15.
+     Hand-tuning toward the spec's own families was tried and measured 1.7,
+     because ice/indigo and amber/ember collide under CVD. */
+  --node-h1: #66ccaa; /* structure */
+  --node-h2: #3b7af7; /* provenance */
+  --node-h3: #f7f73b; /* knowledge */
+  --node-h4: #6cd3f9; /* capability */
+  --node-h5: #f73b3b; /* agents */
+  --edge: rgba(140, 165, 190, 0.22);
+  --edge-active: rgba(56, 240, 255, 0.65);
+
+  /* ---- Shape ------------------------------------------------------------
+     A theme may change these. They are here so "cutting edge" can mean
+     something structural — a sharper radius reads as a different product than
+     a rounder one — rather than only meaning a different hue. */
+  --radius-window: 18px;
+  --radius-card: 14px;
+  --radius-control: 9px;
+  --radius-chip: 999px;
+  /* A WIDTH, and named so. It used to be `--hairline`, which is also the name
+     `style.css` uses for a hairline COLOUR in 21 `border: 1px solid
+     var(--hairline)` rules. The day style.css imports this file, every one of
+     those would have become `border: 1px solid 1px` and silently vanished.
+     `scripts/check-tokens.py` now fails on a name declared in two files. */
+  --stroke-hair: 1px;
+
+  /* ---- Type -------------------------------------------------------------- */
+  --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
+    sans-serif;
+  --font-display: "Chakra Petch", "Segoe UI Variable Display", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "IBM Plex Mono", "JetBrains Mono", Consolas,
+    "SF Mono", monospace;
+
+  /* ---- Motion -----------------------------------------------------------
+     Durations and easings are tokens so a theme can be calmer or sharper, and
+     so `prefers-reduced-motion` has one place to collapse them. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-instant: 90ms;
+  --dur-quick: 160ms;
+  --dur-settle: 260ms;
+
+  /* ---- Depth -------------------------------------------------------------
+     Self-drawn, because the OS cannot help: `window-vibrancy`'s acrylic
+     discards the tint above Windows build 22523, so an acrylic backdrop is
+     not available on a current machine. These shadows are the whole depth
+     model. */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.45);
+  --shadow-pane: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --glow-accent: 0 0 0 1px var(--accent-dim), 0 0 22px rgba(56, 240, 255, 0.18);
+}
+
+/* ==========================================================================
+   Themes
+   --------------------------------------------------------------------------
+   Provisional set. The art-direction pass will replace the palettes; the
+   token NAMES above are the contract and are meant to outlive them.
+   ========================================================================== */
+
+/* Deep space — the default, unchanged in intent from the original AMOLED look:
+   near-black so an OLED panel draws no power for the background, one cyan
+   accent, everything else grey. */
+:root,
+[data-theme="deep-space"] {
+  color-scheme: dark;
+}
+
+/* Ember — the same structure on a warm axis. Proves the contract works for a
+   hue rotation without touching a component rule. */
+[data-theme="ember"] {
+  color-scheme: dark;
+  --accent-rgb: 255 150 74;
+  --prose: #efe3d9;
+  --prose-strong: #fffaf5;
+  --prose-em: #f8ede3;
+  --bg-window: rgba(14, 10, 8, 0.88);
+  --surface-1: rgba(28, 21, 17, 0.92);
+  --surface-2: rgba(38, 28, 22, 0.93);
+  --border-accent: rgba(255, 150, 74, 0.34);
+  --surface-sunken: #0d0906;
+  --text: #f8f2ec;
+  --text-muted: #c2b0a2;
+  --text-faint: #a69382;
+  --text-on-accent: #2a1405;
+  --accent: #ff964a;
+  --accent-bright: #ffd0a8;
+  --accent-dim: rgba(255, 150, 74, 0.32);
+  --accent-faint: rgba(255, 150, 74, 0.12);
+  --focus-ring: #ffb877;
+  --accent-text: #ffd0a8;
+  --edge-active: rgba(255, 150, 74, 0.65);
+  --glow-accent: 0 0 0 1px var(--accent-dim), 0 0 22px rgba(255, 150, 74, 0.18);
+  --node-h1: #66ccaa; /* structure */
+  --node-h2: #3b7af7; /* provenance */
+  --node-h3: #f7f73b; /* knowledge */
+  --node-h4: #6cd3f9; /* capability */
+  --node-h5: #f73b3b; /* agents */
+
+}
+
+/* Paper — genuinely light, not an inversion. The surfaces are opaque here on
+   purpose: a translucent light pane over a dark wallpaper is unreadable, and
+   the contrast check over black is what catches that. */
+[data-theme="paper"] {
+  color-scheme: light;
+  --accent-rgb: 0 105 127;
+  --ok-rgb: 23 105 74;
+  --warn-rgb: 99 35 3;
+  --bad-rgb: 179 32 47;
+  --info-rgb: 91 52 168;
+  --muted-rgb: 72 86 107;
+  /* Ink, not white. A white wash on a white surface is not a hover state. */
+  --sheen-rgb: 10 30 60;
+  --shade-rgb: 16 34 60;
+  --prose: #1b2532;
+  --prose-strong: #050a12;
+  --prose-em: #263243;
+  --bg-window: rgb(244, 246, 249);
+  --surface-1: rgb(255, 255, 255);
+  --surface-2: rgb(237, 241, 246);
+  --surface-sunken: rgb(228, 233, 240);
+  --surface-hover: rgba(10, 30, 60, 0.05);
+  --surface-active: rgba(10, 30, 60, 0.09);
+  --border: rgba(16, 34, 60, 0.14);
+  --border-strong: rgba(16, 34, 60, 0.24);
+  --border-accent: rgba(0, 110, 140, 0.4);
+  --text: #10161f;
+  --text-muted: #48566b;
+  --text-faint: #59687d;
+  --text-on-accent: #ffffff;
+  --accent: #00697f;
+  --accent-bright: #005263;
+  --accent-dim: rgba(0, 105, 127, 0.32);
+  --accent-faint: rgba(0, 105, 127, 0.1);
+  --focus-ring: #005263;
+  --ok: #17694a;
+  /* Deep burnt orange, not amber. #8a5800 separated from --bad by only 4.7
+     CIEDE2000 under deuteranopia — on a light background a warning and an
+     error were the same colour to one reader in twelve. This measures 10.0. */
+  --warn: #632303;
+  --bad: #b3202f;
+  --info: #5b34a8;
+  --ok-faint: rgba(23, 105, 74, 0.12);
+  --warn-faint: rgba(138, 88, 0, 0.13);
+  --bad-faint: rgba(179, 32, 47, 0.1);
+  --info-faint: rgba(91, 52, 168, 0.1);
+  --edge: rgba(30, 55, 85, 0.28);
+  --edge-active: rgba(0, 105, 127, 0.7);
+  --ok-fill: rgba(23, 105, 74, 0.12);
+  --ok-edge: rgba(23, 105, 74, 0.5);
+  --ok-text: #0d4a32;
+  --bad-fill: rgba(179, 32, 47, 0.1);
+  --bad-text: #8c1622;
+  --accent-text: #00505f;
+  --code-bg: #10151c;
+  --code-text: #dbe6ee;
+  --diff-add: #7ee0b0;
+  --diff-remove: #ffb3bb;
+  --shadow-card: 0 1px 2px rgba(16, 34, 60, 0.1), 0 6px 20px rgba(16, 34, 60, 0.1);
+  --shadow-pane: 0 20px 56px rgba(16, 34, 60, 0.18);
+  --glow-accent: 0 0 0 1px var(--accent-dim), 0 0 0 4px var(--accent-faint);
+  --node-h1: #257e6d; /* structure */
+  --node-h2: #056cc7; /* provenance */
+  --node-h3: #c74605; /* knowledge */
+  --node-h4: #030377; /* capability */
+  --node-h5: #6b0f22; /* agents */
+
+}
+
+/* High contrast — for reading across a room, and for anyone the other themes
+   do not serve. Pure black, pure white text, saturated semantics, and a focus
+   ring that cannot be missed. Not a "dark theme with more punch": every pair
+   here clears 7:1, which is the AAA floor. */
+[data-theme="high-contrast"] {
+  color-scheme: dark;
+  --accent-rgb: 99 247 255;
+  --ok-rgb: 92 255 157;
+  --warn-rgb: 255 210 87;
+  --bad-rgb: 255 138 149;
+  --info-rgb: 208 169 255;
+  --muted-rgb: 195 204 217;
+  --prose: #ffffff;
+  --prose-strong: #ffffff;
+  --prose-em: #ffffff;
+  --bg-window: rgb(0, 0, 0);
+  --surface-1: rgb(10, 10, 12);
+  --surface-2: rgb(20, 20, 24);
+  --surface-sunken: rgb(0, 0, 0);
+  --surface-hover: rgba(255, 255, 255, 0.12);
+  --surface-active: rgba(255, 255, 255, 0.2);
+  --border: rgba(255, 255, 255, 0.34);
+  --border-strong: rgba(255, 255, 255, 0.6);
+  --border-accent: #63f7ff;
+  --text: #ffffff;
+  --text-muted: #e2e8f0;
+  --text-faint: #c3ccd9;
+  --text-on-accent: #000000;
+  --accent: #63f7ff;
+  --accent-bright: #ffffff;
+  --accent-dim: rgba(99, 247, 255, 0.6);
+  --accent-faint: rgba(99, 247, 255, 0.2);
+  --focus-ring: #ffffff;
+  --ok: #5cff9d;
+  --warn: #ffd257;
+  --bad: #ff8a95;
+  --info: #d0a9ff;
+  --ok-faint: rgba(92, 255, 157, 0.16);
+  --warn-faint: rgba(255, 210, 87, 0.16);
+  --bad-faint: rgba(255, 138, 149, 0.16);
+  --info-faint: rgba(208, 169, 255, 0.16);
+  --edge: rgba(220, 230, 245, 0.45);
+  --edge-active: #63f7ff;
+  --ok-fill: rgba(92, 255, 157, 0.18);
+  --ok-edge: #5cff9d;
+  --ok-text: #d6ffe8;
+  --bad-fill: rgba(255, 138, 149, 0.18);
+  --bad-text: #ffd6da;
+  --accent-text: #ffffff;
+  --code-bg: #000000;
+  --code-text: #ffffff;
+  --diff-add: #5cff9d;
+  --diff-remove: #ff8a95;
+  --radius-window: 10px;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --stroke-hair: 2px;
+  --node-h1: #affdd4; /* structure */
+  --node-h2: #b8dcf5; /* provenance */
+  --node-h3: #fafa4c; /* knowledge */
+  --node-h4: #a87efc; /* capability */
+  --node-h5: #d67e71; /* agents */
+
+}
+
+/* ==========================================================================
+   Reduced motion
+   --------------------------------------------------------------------------
+   Collapsed at the token level so it reaches every surface at once, including
+   any component that has not thought about it. Individual pages still need
+   their own `@media` block for keyframe animations, which a duration token
+   cannot switch off.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 1ms;
+    --dur-quick: 1ms;
+    --dur-settle: 1ms;
+  }
+}

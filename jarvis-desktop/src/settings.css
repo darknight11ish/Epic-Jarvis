@@ -1,0 +1,436 @@
+/* Settings. Same palette as the widget, laid out for a window with room. */
+
+/* --------------------------------------------------------------------------
+   Local names, aliased to the contract.
+
+   Every value here now comes from theme.css. The names stay because the
+   components below use them and renaming 200 call sites would be churn with no
+   behavioural change; what matters is that a theme can reach them, which it
+   could not before — this file used to declare its own palette and the theme
+   picker changed one window out of four.
+
+   Aliasing also silently fixed the worst contrast defect in the product:
+   `--text-faint` was #5b6474, which measures 2.37:1 over a white desktop and
+   1.82:1 on the `raised` block — the block whose entire job is to tell you that
+   outside text tried to rush a decision. theme.css already carries the lifted
+   value, so pointing at it is the fix.
+   -------------------------------------------------------------------------- */
+
+:root {
+  --bg: var(--bg-window);
+  --bg-raised: var(--surface-1);
+  --bg-sunken: var(--surface-sunken);
+  --line: var(--border-accent);
+  --line-soft: var(--border);
+
+  --cyan: var(--accent);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 20px 32px;
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.sub {
+  margin: 2px 0 20px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.note {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field { display: block; margin-bottom: 12px; }
+
+.label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-style: italic;
+}
+
+input[type="text"],
+input[type="password"],
+textarea {
+  width: 100%;
+  padding: 7px 9px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  resize: vertical;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  cursor: pointer;
+}
+
+.toggle input { accent-color: var(--cyan); width: 15px; height: 15px; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.btn {
+  padding: 6px 12px;
+  background: rgb(var(--accent-rgb) / 0.12);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) { background: rgb(var(--accent-rgb) / 0.2); }
+.btn:disabled {
+  opacity: 1;
+  background: var(--surface-raised);
+  border-color: var(--hairline);
+  color: var(--text-faint);
+  box-shadow: none;
+  cursor: default;
+}
+.btn.ghost { background: transparent; }
+.btn.small { padding: 3px 9px; font-size: 11px; margin-left: auto; }
+
+.status { font-size: 11px; color: var(--text-muted); }
+.status[data-tone="ok"] { color: var(--ok); }
+.status[data-tone="bad"] { color: var(--bad); }
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.link .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bad);
+  flex: none;
+}
+
+.link[data-connected="true"] .dot { background: var(--ok); }
+
+.state {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.page-foot {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* The theme picker. Styled like the text inputs beside it so the Appearance
+   card does not read as a different kind of control from Connection. */
+select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  min-width: 260px;
+}
+
+select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.note {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* The shared live region in jarvis-link.js is an off-screen element with this
+   class. It has to exist in every window that calls `announce()`, or the
+   announcement is visible text in the corner of the page. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Shortcuts
+   --------------------------------------------------------------------------
+   One row per bindable action: what it does, the combination, and whether the
+   OS actually took it. That last column is the reason this section exists —
+   the old build could only report a refusal in a startup toast, with nothing
+   to do about it.
+   -------------------------------------------------------------------------- */
+
+.hotkey {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: 6px 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.hotkey:first-child {
+  border-top: none;
+}
+
+.hotkey-name {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.hotkey-hint {
+  grid-column: 1;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* The recorder. A button rather than a text field: typing "Alt+Space" by hand
+   invites a spelling nothing accepts, and the combination people want is the
+   one their fingers already know. */
+.hotkey-key {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  min-width: 190px;
+  padding: 7px 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control, 6px);
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+}
+
+.hotkey-key:hover {
+  border-color: var(--accent);
+}
+
+.hotkey-key[data-recording="true"] {
+  border-color: var(--accent);
+  background: var(--accent-faint);
+  color: var(--accent-text);
+}
+
+/* Refused by the OS. Not an error the user caused, so it is stated rather than
+   alarmed — and it keeps a shape of its own, because a red border alone is
+   invisible to a reader who cannot see red. */
+.hotkey[data-bound="false"] .hotkey-key {
+  border-style: dashed;
+  border-color: var(--bad);
+}
+
+.hotkey-state {
+  grid-column: 2;
+  font-size: 10.5px;
+  text-align: center;
+  color: var(--text-faint);
+}
+
+.hotkey[data-bound="true"] .hotkey-state {
+  color: var(--ok);
+}
+
+.hotkey[data-bound="false"] .hotkey-state {
+  color: var(--bad-text);
+}
+
+/* Shown only while a download is actually in flight — hidden the rest of the
+   time, so it never reads as a stalled bar sitting at 0%. */
+.progress-track {
+  height: 6px;
+  margin: 4px 0 10px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--cyan);
+  transition: width 160ms var(--ease, linear);
+}
+
+/* No total was reported (a proxy stripped Content-Length) — a fixed-width
+   sweep says "still moving" without claiming a percentage that isn't real. */
+.progress-track[data-indeterminate="true"] .progress-fill {
+  width: 30%;
+  animation: progress-sweep 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(333%); }
+}
+
+/* The release notes are published text: arbitrary length, and not ours. A
+   disclosure keeps them out of the way of the button. */
+.update-notes {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.update-notes summary {
+  cursor: pointer;
+  color: var(--accent-text);
+}
+
+.update-notes .note {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.faq-list { display: flex; flex-direction: column; gap: 2px; }
+
+.faq-item {
+  border-top: 1px solid var(--line-soft);
+  padding: 10px 0;
+}
+
+.faq-item:first-child { border-top: none; padding-top: 0; }
+.faq-item:last-child { padding-bottom: 0; }
+
+.faq-q {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.faq-q:hover { color: var(--cyan); }
+
+.faq-a {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.about-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.about-fact {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.about-fact dt {
+  flex: 0 0 64px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.about-fact dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.about-fact a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.about-fact a:hover { text-decoration: underline; }

@@ -1,0 +1,47 @@
+--- a/jarvis_gate.py	2026-09-17 22:31:35.103243161 +0000
++++ b/jarvis_gate.py	2026-09-17 22:32:22.651901025 +0000
+@@ -295,6 +295,19 @@
+     # are classified by their worst case, not their usual one.
+     "run_shell_on_host": ("no", "outbound", "a shell can do anything, including reach the network"),
+     "control_computer":  ("no", "outbound", "driving the desktop can click send"),
++    # Same worst-case reasoning as control_computer, for the paired phone
++    # instead of this machine: tapping around in an arbitrary app can send a
++    # message or complete a purchase just as easily as driving the desktop
++    # can. "outbound" even though the commands stay on the local network to
++    # your own device - the PHONE'S apps can still reach the outside world,
++    # which is the thing being classified by its worst case.
++    "control_phone":     ("no", "outbound", "tapping the phone can send a message or complete a purchase"),
++    # A GitHub search that carries your token is not "nothing changes" the
++    # way an anonymous one is - it identifies you to GitHub, even though it
++    # writes nothing there. Kept separate from web_research (which defaults
++    # to auto in jarvis-framework.toml) so authenticating is its own
++    # decision rather than inheriting a tier set for anonymous search.
++    "research_authenticated": ("yes", "outbound", "identifies you to GitHub via your token; nothing is written"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+@@ -434,6 +447,24 @@
+     "memory_manage": "ask", "user_profile_manage": "ask", "skill_manage": "modify_own_code",
+     "execute_pending_actions": "ask", "agent_spawn": "ask", "agent_kill": "ask",
+     "browser_click": "control_computer", "browser_type": "control_computer",
++    # jarvis_ui_control.py: reads the OWN accessibility tree, sends no input.
++    # control_computer already covers native UI actions same as it covers a
++    # browser's, so run() needs no new action name - only plan() needs one,
++    # and it is auto for the same reason browser_axtree etc. are read-only
++    # and harmless. See backend/jarvis_ui_control.py's own docstring.
++    "jarvis_ui_control_plan": "auto", "jarvis_ui_control_run": "control_computer",
++    # jarvis_android_control.py: literal, individual adb commands against
++    # the owner's own paired phone - never a live scrcpy mirror session (see
++    # that module's docstring for why). plan() only builds command lines and
++    # optionally checks which device is connected; run() is what actually
++    # taps, so only run() carries the real risk.
++    "jarvis_android_control_plan": "auto", "jarvis_android_control_run": "control_phone",
++    # jarvis_research.py: unauthenticated search is unchanged web_research.
++    # An authenticated run is its own action so it gets its own tier rather
++    # than inheriting whatever the owner set web_research to for anonymous
++    # search - see JARVIS_GITHUB_TOKEN in that module's own docstring.
++    "jarvis_research_plan": "auto", "jarvis_research_run": "web_research",
++    "jarvis_research_run_authenticated": "research_authenticated",
+     # model steward: looking is free, downloading and switching are not, and
+     # they are separate decisions. Reverting is the one that must never wait.
+     "model_list": "auto", "model_recommend": "auto",

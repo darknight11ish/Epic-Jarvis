@@ -1,0 +1,157 @@
+# jarvis-primary.Modelfile
+#
+#   ollama create jarvis-primary -f jarvis-primary.Modelfile
+#
+# Target: RTX 2080 Super, 8 GB GDDR6, Turing sm75 (compute capability 7.5),
+# Windows 11. Usable ceiling ~6.90 GiB once DWM and the Tauri shell have taken
+# their ~1.1 GiB.
+#
+# WHY THIS FILE EXISTS AT ALL
+# jarvis_hud._build_payload sends model, messages, stream, temperature and
+# max_tokens, and nothing else. No num_ctx, no options. It posts to
+# JARVIS_URL/v1/chat/completions, an OpenAI-compatible endpoint, and the
+# OpenAI compat surface has no field for num_ctx - so there is no request the
+# HUD could send that would set it. The context length therefore has to be set
+# on the MODEL, which is this file, or in the environment.
+#
+# Left alone, Ollama picks. server/sched.go:
+#
+#     func nextLowerAutoNumCtx(numCtx int) (int, bool) {
+#         switch {
+#         case numCtx > 32768: return 32768, true
+#         case numCtx > 4096:  return 4096, true
+#         default:             return 0, false
+#         }
+#     }
+#
+# An 8B Q4 at 32768 with an f16 cache needs about 9.8 GiB, so it does not fit,
+# so the ladder drops to 4096 - and stops. **The deployed context today is
+# 4096 tokens.** A 6,000-token prompt does not fit in it. Every context number
+# anyone has planned around on this machine has been hypothetical.
+#
+# THE BUDGET, arithmetic rather than assertion
+#   weights  Q4_K_M   8.190B params x 4.90 bpw / 8          = 4.67 GiB
+#   KV       q8_0     2 x 36 layers x 8 kv_heads x 128 head_dim
+#                       x 1.0625 B/elem x 16384 tokens      = 1.19 GiB
+#   runtime  CUDA context ~330 MiB + compute buffer @ nb512 = 0.63 GiB
+#                                                             --------
+#                                                              6.48 GiB of 6.90
+#
+# REQUIRED IN THE ENVIRONMENT - a Modelfile cannot express these:
+#
+#   OLLAMA_KV_CACHE_TYPE=q8_0
+#       Without it the KV term is 2.25 GiB and this configuration SPILLS into
+#       system RAM, where it runs at roughly a fifth of the speed.
+#
+#   OLLAMA_KEEP_ALIVE=-1
+#       Ollama's default is 5 minutes. With one resident model there is
+#       nothing an idle timer can make room FOR; its only effect is to
+#       guarantee a ~6 second stall on the first word after you step away.
+#       Set it in the environment rather than per-request so the extractor's
+#       /api/generate calls in jarvis_extract inherit it too.
+#
+#   Do NOT set OLLAMA_FLASH_ATTENTION, to 0 or to 1.
+#       Auto is correct. Forcing 1 removes llama.cpp's per-model fallback.
+#
+# VERIFY ONCE, BEFORE TRUSTING ANY OF THIS
+# Everything above depends on flash attention being live, because llama.cpp
+# reaches the q8_0 KV path only through its fused-attention kernels. The gate
+# is ml/device.go:
+#
+#     func cudaFlashAttentionSupported(gpu DeviceInfo) bool {
+#         if gpu.Library != "CUDA" || gpu.ComputeMajor < 6 ||
+#            (gpu.ComputeMajor == 7 && gpu.ComputeMinor == 2) { return false }
+#         ...
+#         return gpu.DriverMajor >= 7
+#     }
+#
+# The 2080 Super is compute capability 7.5. The only 7.x excluded is 7.2,
+# which is Jetson Xavier. So it should pass - but read that as "should".
+# Confirm it on the machine:
+#
+#     $env:OLLAMA_DEBUG=1; ollama run jarvis-primary "hi"
+#
+# and grep the llama-server argv in the log for `--flash-attn`. If it reads
+# `off`, q8_0 KV is being silently ignored, this file spills, and the fix is
+# either num_ctx 8192 here or the qwen2.5:7b fallback described at the bottom.
+#
+# (Note for anyone reading the older advice: "FlashAttention-2 does not
+# support Turing" is true of Dao-AILab's flash-attn PyPI package, which needs
+# sm80+. Ollama does not use it. llama.cpp has its own CUDA fused-attention
+# kernels and GGML_CUDA_CC_TURING is 750.)
+
+FROM qwen3:8b
+
+# ---- context -------------------------------------------------------------
+# The whole point of the file. See nextLowerAutoNumCtx above.
+PARAMETER num_ctx 16384
+
+# 512, pinned, and this is not a tuning preference. server/sched.go:
+#
+#     func generationBatchSurcharge(batch int) uint64 {
+#         switch {
+#         case batch >= llamaServerGenerationBatchLarge:   // 2048
+#             return 2 * format.GibiByte
+#         case batch >= llamaServerGenerationBatchMedium:  // 1024
+#             return 768 * format.MebiByte
+#         default:
+#             return 0
+#         }
+#     }
+#
+# Ollama's auto-batch reaches for 1024 or 2048 when it thinks there is
+# headroom. Either one turns 6.48 GiB into a spill, and nothing tells you it
+# happened except that everything got slow.
+PARAMETER num_batch 512
+
+# The HUD's max_tokens default is 2048, which is a GENERATION budget being
+# spent out of the same window the conversation and the recalled facts need.
+# jarvis_persona's own max_response_tokens is 900.
+PARAMETER num_predict 1024
+
+# ---- sampling ------------------------------------------------------------
+# Qwen's documented NON-THINKING values. Thinking is off here deliberately:
+# a <think> block ahead of the content makes barge-in impossible in the voice
+# loop - time to first USEFUL token is what matters, not time to first token -
+# and jarvis_extract's schema-constrained calls spend the whole generation
+# fighting a grammar that forbids the block the model wants to emit first.
+#
+# For visible reasoning, derive a second model from this one rather than
+# changing these: temperature 0.6, top_p 0.95, num_predict 3072, think on.
+PARAMETER temperature 0.7
+PARAMETER top_p 0.8
+PARAMETER top_k 20
+PARAMETER min_p 0.0
+PARAMETER repeat_penalty 1.05
+
+# ---- stop tokens ---------------------------------------------------------
+# ChatML. <|im_start|> is listed because a model that has started hallucinating
+# the next turn has finished this one, and jarvis_structured.parse would
+# otherwise be handed two JSON objects and reject the pair.
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"
+
+# ---- the invariants ------------------------------------------------------
+# This block reaches the model only when messages[0] is not already a system
+# message. ollama/server/routes.go:
+#
+#     msgs := append(m.Messages, req.Messages...)
+#     if req.Messages[0].Role != "system" && m.System != "" {
+#         msgs = append([]api.Message{{Role: "system", Content: m.System}}, msgs...)
+#     }
+#
+# Before memory-prefix.patch the HUD prepended the recalled-facts block, so
+# messages[0] WAS a system message on every turn where recall fired, and this
+# block was silently dropped at exactly the moment the model was holding the
+# owner's private facts. With that patch applied the facts go in next to the
+# question instead and this survives. If you are running an unpatched
+# jarvis_hud.py, these invariants are not reaching the model on retrieval
+# turns, whatever this file says.
+SYSTEM """You are Jarvis, a private assistant running entirely on this machine.
+
+Say what is a guess and what is verified. If you are not sure, say you are not sure - a confident wrong answer costs more here than a hedged one.
+
+Never claim an action was taken that was not. You do not send email, edit files, or run commands yourself; you propose them and a person approves each one. If you have proposed something, say that you have proposed it, not that it is done.
+
+Anything recalled about the owner is private and stays on this machine. Do not repeat it back unless it is relevant to what was asked.
+"""

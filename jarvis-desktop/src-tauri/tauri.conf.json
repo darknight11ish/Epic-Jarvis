@@ -1,0 +1,123 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Jarvis Desktop",
+  "version": "0.1.0",
+  "identifier": "com.jarvis.desktop",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": false,
+    "windows": [
+      {
+        "label": "quickbar",
+        "title": "Jarvis",
+        "url": "index.html",
+        "width": 750,
+        "height": 80,
+        "minWidth": 750,
+        "maxWidth": 750,
+        "minHeight": 80,
+        "maxHeight": 720,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "closable": true,
+        "shadow": false,
+        "focus": true,
+        "acceptFirstMouse": true,
+        "dragDropEnabled": false,
+        "theme": "Dark"
+      },
+      {
+        "label": "widget",
+        "title": "Jarvis Desktop Widget",
+        "url": "widget.html",
+        "width": 320,
+        "height": 44,
+        "minWidth": 320,
+        "maxWidth": 320,
+        "minHeight": 44,
+        "maxHeight": 400,
+        "x": 40,
+        "y": 40,
+        "center": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "shadow": false,
+        "focus": false,
+        "dragDropEnabled": false,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:11434 http://127.0.0.1:4000; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'",
+      "freezePrototype": true,
+      "assetProtocol": {
+        "enable": false,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "msi",
+      "nsis"
+    ],
+    "publisher": "Jarvis Labs",
+    "copyright": "Copyright (c) 2026 Jarvis Labs",
+    "category": "Productivity",
+    "shortDescription": "Native Windows 11 spotlight client for the Jarvis stack.",
+    "longDescription": "Jarvis Desktop is a native Windows 11 client built with Tauri v2. It pairs a Rust backend with a WebView2 frontend to deliver an Alt+Space glassmorphic quickbar, a full HUD window, desktop capture, clipboard ingestion and live health checks against the local Jarvis, Ollama and LiteLLM services.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": false,
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "allowDowngrades": false,
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English"
+        ],
+        "compression": "lzma"
+      }
+    },
+    "licenseFile": "../../LICENSE",
+    "resources": [
+      "../../THIRD-PARTY-NOTICES.txt"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/darknight111/Epic-Jarvis/releases/latest/download/latest.json"
+      ],
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

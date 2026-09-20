@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jarvis — Welcome</title>
+<!-- Same anti-flash bootstrap as every other window: paint the right theme
+     immediately from localStorage, then let get_theme correct it if it's
+     stale. See widget.html for the fuller version of this comment. -->
+<script>
+  try {
+    var t = localStorage.getItem("jarvis.theme");
+    if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+      document.documentElement.setAttribute("data-theme", t);
+    }
+  } catch (e) { /* private mode, cleared site data — the default theme is correct */ }
+</script>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="theme.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg-window);
+    color: var(--text);
+    font-family: var(--font-ui);
+    user-select: none;
+  }
+  .shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 28px 30px 20px;
+  }
+  .glyph {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 18px rgb(var(--accent-rgb) / 0.55);
+    margin-bottom: 18px;
+    flex: none;
+  }
+  .screens { position: relative; flex: 1; min-height: 0; }
+  .screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  .screen[hidden] { display: none; }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-size: 21px;
+    line-height: 1.3;
+    margin: 0 0 14px;
+  }
+  p {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+  }
+  p strong { color: var(--text); font-weight: 600; }
+  .demo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 0 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  .demo .dot {
+    width: 10px; height: 10px; border-radius: 50%; flex: none;
+  }
+  .demo .dot.thinking { background: #ffb648; box-shadow: 0 0 8px #ffb648; }
+  .demo .dot.waiting { background: #ff6a6a; box-shadow: 0 0 8px #ff6a6a; }
+  .demo .dot.resting { background: var(--accent); box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.6); }
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-top: 16px;
+  }
+  .dots { display: flex; gap: 6px; flex: 1; }
+  .dots span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--border);
+  }
+  .dots span.on { background: var(--accent); }
+  button {
+    font: inherit;
+    font-weight: 650;
+    font-size: 13px;
+    border: none;
+    border-radius: var(--radius-control);
+    padding: 9px 18px;
+    cursor: pointer;
+  }
+  .btn-back {
+    background: transparent;
+    color: var(--text-muted);
+    padding: 9px 8px;
+  }
+  .btn-back:hover { color: var(--text); }
+  .btn-next {
+    background: var(--accent);
+    color: var(--text-on-accent);
+  }
+  .btn-next:hover { filter: brightness(1.08); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="glyph" aria-hidden="true"></div>
+
+  <div class="screens">
+
+    <section class="screen" id="screen-1" data-n="1">
+      <p class="eyebrow">1 of 3 — the tray icon</p>
+      <h1>Jarvis lives in your tray</h1>
+      <p>
+        Look in the row of small icons at the bottom-right of your screen,
+        next to the clock. <strong>That dot is Jarvis</strong> — it changes
+        colour and shape depending on what Jarvis is doing right now.
+      </p>
+      <div class="demo"><span class="dot resting"></span> Resting — nothing to do right now</div>
+      <div class="demo"><span class="dot thinking"></span> Thinking, or in the middle of answering you</div>
+      <div class="demo"><span class="dot waiting"></span> Waiting on you for something below</div>
+      <p>
+        Click it any time to open Jarvis's other windows, or to quit.
+      </p>
+    </section>
+
+    <section class="screen" id="screen-2" data-n="2" hidden>
+      <p class="eyebrow">2 of 3 — approvals</p>
+      <h1>Jarvis asks before anything risky</h1>
+      <p>
+        If Jarvis wants to do something it isn't sure is safe — like sending
+        a message, or changing a file — it <strong>stops and shows you a
+        card first</strong>. Nothing like that happens without you saying yes.
+      </p>
+      <p>
+        You can always say no, and nothing bad happens if you do. There is
+        no setting anywhere that makes Jarvis stop asking and start
+        approving things on its own.
+      </p>
+    </section>
+
+    <section class="screen" id="screen-3" data-n="3" hidden>
+      <p class="eyebrow">3 of 3 — memory</p>
+      <h1>Jarvis only remembers what you approve</h1>
+      <p>
+        When Jarvis notices something worth remembering — a fact about you,
+        something you asked it to keep in mind — it doesn't save it right
+        away. It puts it on a short list <strong>for you to look at first</strong>,
+        and only remembers it once you say it's okay.
+      </p>
+      <p>
+        You can see everything Jarvis has learned, and remove any of it,
+        whenever you want — in the Brain window, under Memory.
+      </p>
+    </section>
+
+  </div>
+
+  <div class="foot">
+    <button class="btn-back" id="btn-back" type="button" hidden>Back</button>
+    <div class="dots" aria-hidden="true">
+      <span class="on" data-n="1"></span>
+      <span data-n="2"></span>
+      <span data-n="3"></span>
+    </div>
+    <button class="btn-next" id="btn-next" type="button">Next</button>
+  </div>
+</div>
+
+<script>
+  const TAURI = globalThis.__TAURI__;
+  const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
+  const STEPS = 3;
+  let step = 1;
+
+  const screens = [...document.querySelectorAll(".screen")];
+  const dots = [...document.querySelectorAll(".dots span")];
+  const btnBack = document.getElementById("btn-back");
+  const btnNext = document.getElementById("btn-next");
+
+  function render() {
+    for (const el of screens) el.hidden = Number(el.dataset.n) !== step;
+    for (const el of dots) el.classList.toggle("on", Number(el.dataset.n) === step);
+    btnBack.hidden = step === 1;
+    btnNext.textContent = step === STEPS ? "Got it — let's go" : "Next";
+  }
+
+  async function finish() {
+    if (!IS_TAURI) return;
+    try { await TAURI.core.invoke("finish_onboarding"); }
+    catch (error) { console.error("[onboarding] could not finish the walkthrough:", error); }
+  }
+
+  btnNext.addEventListener("click", () => {
+    if (step === STEPS) { finish(); return; }
+    step += 1;
+    render();
+  });
+  btnBack.addEventListener("click", () => {
+    if (step === 1) return;
+    step -= 1;
+    render();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") finish();
+  });
+
+  render();
+
+  // Applied on top of the anti-flash guess in <head>, same as every other
+  // window: the store is the source of truth, this only corrects a stale or
+  // absent localStorage copy.
+  if (IS_TAURI) {
+    TAURI.core.invoke("get_theme")
+      .then((theme) => { if (theme) document.documentElement.setAttribute("data-theme", theme); })
+      .catch(() => {});
+  }
+</script>
+</body>
+</html>

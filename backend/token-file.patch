@@ -1,0 +1,92 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -135,7 +135,69 @@
+ 
+ 
+ MAX_BODY = 4 * 1024 * 1024          # a chat turn is never four megabytes
+-HUD_TOKEN = os.environ.get("HUD_TOKEN", "").strip()
++
++TOKEN_FILE = CONFIG_DIR / "token"
++
++
++def _resolve_token() -> str:
++    """The shared secret, made on first run if nobody has made one.
++
++    Two problems, one answer.
++
++    The first is that with no token every process on this machine can open
++    /api/events and read the doorbell - what is waiting, how much of it - by
++    sending a bare GET to loopback. Not catastrophic on a single-owner
++    workstation, since anything that could subscribe could also read
++    ~/.openjarvis directly, but it is a door that costs nothing to close.
++
++    The second is worse and is the reason this exists: THE PHONE HAS NEVER
++    BEEN PAIRABLE. The Android client authenticates by token alone - it has no
++    Origin, so the origin check cannot help it - and nothing in this project
++    has ever generated one. docs/INSTALL.md lists that as an unbuilt piece.
++    A secret nobody creates is not a default, it is a missing feature.
++
++    HUD_TOKEN in the environment still wins, unchanged, because someone who
++    set it meant it. Otherwise this reads the file, and writes one if it is
++    not there.
++
++    Deliberately NOT a fatal error if the file cannot be written. A read-only
++    config directory should cost the phone its pairing, not cost the owner
++    their assistant - so it degrades to the old tokenless loopback behaviour
++    and says so at boot.
++    """
++    env = os.environ.get("HUD_TOKEN", "").strip()
++    if env:
++        return env
++    try:
++        if TOKEN_FILE.is_file():
++            existing = TOKEN_FILE.read_text(encoding="utf-8").strip()
++            if existing:
++                return existing
++    except OSError:
++        return ""
++    try:
++        import secrets
++        made = secrets.token_urlsafe(32)
++        TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
++        # Written beside and renamed, then narrowed: a half-written token is a
++        # token that does not match, which looks exactly like an attacker to
++        # every client at once.
++        tmp = TOKEN_FILE.with_suffix(".tmp")
++        tmp.write_text(made + "\n", encoding="utf-8")
++        tmp.replace(TOKEN_FILE)
++        try:
++            # Best effort. On Windows this is close to decorative - the file is
++            # already under the user profile - but it costs nothing and it is
++            # correct everywhere else.
++            os.chmod(TOKEN_FILE, 0o600)
++        except OSError:
++            pass
++        return made
++    except Exception:
++        return ""
++
++
++HUD_TOKEN = _resolve_token()
+ 
+ 
+ def _read_body(handler) -> bytes:
+@@ -2267,9 +2329,18 @@
+         print()
+         print("  Either set HUD_TOKEN, or set bind_address = \"127.0.0.1\".")
+         print()
++        print(f"  (A token is normally made for you at {TOKEN_FILE}. Reaching")
++        print("   this message means that file could not be written OR read -")
++        print("   check the permissions on the folder.)")
++        print()
+         raise SystemExit(2)
+     if bind not in ("127.0.0.1", "::1", "localhost"):
+         print(f"  bind       {bind}  - REACHABLE OFF THIS MACHINE (token required)")
++    # Where the phone's half of the pairing lives. Printed rather than shown,
++    # because a token echoed to a terminal is a token in a scrollback buffer.
++    if not os.environ.get("HUD_TOKEN", "").strip() and HUD_TOKEN:
++        print(f"  token      {TOKEN_FILE}")
++        print("             (pair the phone with this; it was made on first run)")
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+     httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)
+     _install_shutdown(httpd)

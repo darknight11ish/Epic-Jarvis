@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "faces",
+  "description": "The face gallery and the state bindings. It draws; it reads the spec that is bundled beside it. It cannot reach the event stream, the approval queue, the connection settings or backend supervision — nothing in this window needs them, and it is the largest body of third-party-shaped drawing code in the app.",
+  "windows": [
+    "faces"
+  ],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-set-webview-zoom",
+    "core:webview:allow-internal-toggle-devtools",
+    "appearance"
+  ]
+}
