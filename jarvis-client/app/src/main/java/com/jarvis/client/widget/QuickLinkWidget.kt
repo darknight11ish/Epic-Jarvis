@@ -67,7 +67,7 @@ class QuickLinkWidget : GlanceAppWidget() {
             Row(
                 modifier = GlanceModifier
                     .fillMaxSize()
-                    .background(Palette.Background)
+                    .background(QuickLinkPalette.Background)
                     .cornerRadius(24.dp)
                     .padding(horizontal = 14.dp, vertical = 6.dp)
                     .clickable(actionStartActivity<MainActivity>()),
@@ -82,7 +82,7 @@ class QuickLinkWidget : GlanceAppWidget() {
                         LinkState.OFFLINE -> "Offline"
                     },
                     style = TextStyle(
-                        color = Palette.TextMuted,
+                        color = QuickLinkPalette.TextMuted,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                     ),
@@ -93,7 +93,7 @@ class QuickLinkWidget : GlanceAppWidget() {
                 // Reachable even off the link: opening the app to a dropped
                 // connection is still useful (Checks screen explains why),
                 // where a Deny-style direct action would just fail silently.
-                PillButton(label = "Mic", tint = Palette.Accent, onClick = startVoice(context))
+                PillButton(label = "Mic", tint = QuickLinkPalette.Accent, onClick = startVoice(context))
             }
         }
     }
@@ -104,9 +104,9 @@ class QuickLinkWidget : GlanceAppWidget() {
             modifier = GlanceModifier
                 .background(
                     when (link) {
-                        LinkState.CONNECTED -> Palette.StatusOk
-                        LinkState.RECONNECTING -> Palette.StatusWarn
-                        LinkState.OFFLINE -> Palette.StatusBad
+                        LinkState.CONNECTED -> QuickLinkPalette.StatusOk
+                        LinkState.RECONNECTING -> QuickLinkPalette.StatusWarn
+                        LinkState.OFFLINE -> QuickLinkPalette.StatusBad
                     },
                 )
                 .cornerRadius(4.dp)
@@ -118,7 +118,7 @@ class QuickLinkWidget : GlanceAppWidget() {
     private fun PillButton(label: String, tint: ColorProvider, onClick: Action) {
         Box(
             modifier = GlanceModifier
-                .background(Palette.Surface1)
+                .background(QuickLinkPalette.Surface1)
                 .cornerRadius(10.dp)
                 .clickable(onClick)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -139,9 +139,18 @@ class QuickLinkWidget : GlanceAppWidget() {
         )
 }
 
-/** Same fixed set [ApprovalWidget] uses, and for the same reason: a Glance
- *  RemoteViews host cannot reach this app's dynamic per-face `Chrome`. */
-private object Palette {
+/**
+ * Same fixed set [ApprovalWidget] uses, and for the same reason: a Glance
+ * RemoteViews host cannot reach this app's dynamic per-face `Chrome`.
+ *
+ * Its own object, not `ApprovalWidget`'s `Palette` - a top-level `private`
+ * declaration is private to its *file*, but Kotlin still compiles it as an
+ * ordinary top-level class, so two files in the same package both naming
+ * one `Palette` is a real class-name collision (`Redeclaration`) at compile
+ * time, not two independently-scoped names the way the `private` keyword
+ * suggests.
+ */
+private object QuickLinkPalette {
     val Background = ColorProvider(Color(0xFF04070C))
     val Surface1 = ColorProvider(Color(0xFF0E1822))
     val TextMuted = ColorProvider(Color(0xFF93A6BA))
