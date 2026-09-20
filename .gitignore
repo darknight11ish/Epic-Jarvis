@@ -1,24 +1,48 @@
-# Signing keys. One was committed once, while this repository was public.
-# Never again: no key, of any kind, in git.
+# Gradle / Android
+.gradle/
+build/
+local.properties
+captures/
+*.apk
+*.aab
+.cxx/
+
+# Signing keys. NOTHING is excepted here any more.
+#
+# There used to be a !keystore/debug.keystore line in this block, which
+# deliberately un-ignored a shared debug key so every build signed with the
+# same certificate. This repository was public while that key was committed,
+# so the key must be treated as compromised. It has been removed from history
+# and the exception is gone with it. A shared debug key belongs outside the
+# repository.
 *.keystore
 *.jks
 *.p12
 *.pfx
 *.pem
 *.key
-keystore/
 
 # Secrets and local settings
 .env
 .env.*
 *.local
-local.properties
 
-# Build output
-jarvis-desktop/src-tauri/target/
-jarvis-client/build/
-jarvis-client/app/build/
-jarvis-client/.gradle/
-__pycache__/
-*.pyc
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Node
 node_modules/
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Rust / Tauri build output
+jarvis-desktop/src-tauri/target/
