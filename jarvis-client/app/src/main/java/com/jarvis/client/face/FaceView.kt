@@ -142,12 +142,22 @@ fun FaceView(
             var last = 0L
             while (true) {
                 val fps = Spec.fpsFor(liveState)
-                if (fps in 1..15) {
-                    // Below 15fps the frame clock was still waking at the display
-                    // rate to decide to do nothing: a Choreographer callback and a
-                    // coroutine resume 60-120 times a second, across what the spec
-                    // itself calls nine tenths of screen-on time. Sleeping to the
-                    // next due instant costs nothing in between.
+                if (fps in 1..30) {
+                    // Was `1..15`, which left IDLE and APPROVAL (both 30,
+                    // per fpsFor) waking the Choreographer at the display
+                    // rate to decide to do nothing 60-120 times a second,
+                    // across what the spec itself calls nine tenths of
+                    // screen-on time - the exact waste this branch exists to
+                    // avoid for STANDBY and BANKED, just below the line that
+                    // used to stop at them. The screen-off concern that
+                    // keeps STANDBY/BANKED on `delay` rather than
+                    // `withFrameNanos` (see the comment above this loop)
+                    // does not apply here: IDLE and APPROVAL are foreground,
+                    // screen-on states by definition - if the screen goes
+                    // off from either, `repeatOnLifecycle` below STARTED
+                    // suspends this whole loop regardless of which branch
+                    // it is in. Sleeping to the next due instant costs
+                    // nothing in between.
                     val stepMs = 1000L / fps
                     // Sleep to the next due instant - or until a tap arrives,
                     // whichever is first. The tap's own frame then draws now

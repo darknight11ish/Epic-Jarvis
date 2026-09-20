@@ -931,8 +931,8 @@ class MainActivity : FragmentActivity() {
                                 JarvisRuntime.decisionBlocker(item)
                             },
                             onVoiceBegin = ::beginVoice,
-                            onVoiceRelease = { JarvisRuntime.voice.release() },
-                            onVoiceCancel = { JarvisRuntime.voice.cancel() },
+                            onVoiceRelease = ::releaseVoice,
+                            onVoiceCancel = ::cancelVoice,
                             onDismissVoiceNotice = { JarvisRuntime.voice.clearNotice() },
                             // AUTONOMY-PROPOSALS.md §3b/§3d, all DRAFT: see
                             // JarvisRuntime's own doc comments on each of
@@ -964,6 +964,36 @@ class MainActivity : FragmentActivity() {
         }
         micGrantedCallback = { voice.begin() }
         micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    /**
+     * [VoiceButton]'s `onVoiceRelease`/`onVoiceCancel`, not
+     * `JarvisRuntime.voice.release()`/`.cancel()` directly.
+     *
+     * On a FIRST hold, `beginVoice()` above only launches the permission
+     * dialog and returns - `voice.begin()` runs later, from
+     * [micGrantedCallback], once the async result comes back. A finger that
+     * lifts (or slides to cancel) before that result arrives calls
+     * `voice.release()`/`.cancel()` while `VoiceSession.current` is still
+     * null, which is a no-op: there is no turn yet to stop. `micGrantedCallback`
+     * then fires anyway the moment permission lands, opening the microphone
+     * for a gesture that already ended, with nothing left able to close it
+     * before the recorder's own 30-second cap. Dropping the callback here -
+     * on the SAME main-thread event queue as the permission result, so
+     * whichever of the two actually happens first is what deterministically
+     * wins - is what closes that: either this runs first and the grant
+     * callback finds nothing to invoke, or the grant already ran and set
+     * `current`, in which case `release`/`cancel` below finds a real turn
+     * and stops it exactly as it always did.
+     */
+    private fun releaseVoice() {
+        micGrantedCallback = null
+        JarvisRuntime.voice.release()
+    }
+
+    private fun cancelVoice() {
+        micGrantedCallback = null
+        JarvisRuntime.voice.cancel()
     }
 
     /** The dark theme to come back to when the system leaves light mode. */
