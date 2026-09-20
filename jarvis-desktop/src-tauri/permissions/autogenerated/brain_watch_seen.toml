@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-watch-seen"
+description = "Enables the brain_watch_seen command without any pre-configured scope."
+commands.allow = ["brain_watch_seen"]
+
+[[permission]]
+identifier = "deny-brain-watch-seen"
+description = "Denies the brain_watch_seen command without any pre-configured scope."
+commands.deny = ["brain_watch_seen"]

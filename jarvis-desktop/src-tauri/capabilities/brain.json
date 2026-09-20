@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "brain",
+  "description": "The Brain: the memory graph, the live trace, and every faculty the backend exposes. It reads widely and can revert, cancel, watch, remove a skill, change the model, and decide one memory fact at a time \u2014 but it cannot answer an approval, and it has no path to the connection settings or backend supervision.",
+  "windows": [
+    "brain"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-set-webview-zoom",
+    "core:webview:allow-internal-toggle-devtools",
+    "jarvis-link",
+    "theme-write",
+    "brain-read",
+    "brain-act",
+    "brain-faculties",
+    "brain-memory"
+  ]
+}

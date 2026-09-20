@@ -1,0 +1,98 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -693,7 +693,16 @@
+ 
+     if tier == "notify":
+         _audit("gate.notify", {"action": action, "detail": detail})
+-        _push(f"Jarvis did: {action}", json.dumps(detail)[:400])
++        # _redact, not the raw detail. This module's own _redact docstring says
++        # the gate "is handed exactly the sensitive part - the recipient of the
++        # email, the path of the file, the body of the shell command - so
++        # writing `detail` verbatim would turn the audit trail into the leak it
++        # exists to detect". That was true of the local audit log and the code
++        # honoured it; the push sent the identical dict, verbatim, to a public
++        # broker. An ntfy.sh topic is a URL with no authentication: anyone who
++        # knows or guesses the string reads every message. On this tier there
++        # is no human in the loop at all, so nothing else was going to catch it.
++        _push(f"Jarvis did: {action}", _safe_detail(detail, 400))
+         return Verdict(True, tier, action, "tier is notify; you were told after")
+ 
+     # ---- "ask", and anything unrecognised, waits for a human ----
+@@ -725,8 +734,12 @@
+                              {"id": rid, "action": action, "prompt": prompt[:500]})
+         except Exception:
+             pass
++    # The notification is a doorbell, not the content - the same rule the SSE
++    # approval event follows. `prompt` is the human-readable request text and
++    # can quote an email body or a file path; the fallback to it was the wider
++    # of the two leaks, because it is prose rather than a dict of keys.
+     _push(f"Jarvis wants to: {action}",
+-          (json.dumps(detail)[:300] or prompt[:300]) + f"\n(id {rid})")
++          _safe_detail(detail, 300) + f"\n(id {rid}) - open Jarvis to read it")
+ 
+     deadline = time.time() + (APPROVAL_TIMEOUT if timeout is None else timeout)
+     # One connection for the whole wait rather than one per poll.
+@@ -1016,11 +1029,62 @@
+ NTFY_SERVER = os.environ.get("JARVIS_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+ 
+ 
++def _safe_detail(detail: dict, limit: int) -> str:
++    """What may be written into a push body. Never the values.
++
++    This is NOT `json.dumps(_redact(detail))`, and the difference is the whole
++    point. `_redact` opens with
++
++        if not fw.load_framework().get("logging", {}).get(
++                "redact_private_content_in_logs", True):
++            return detail
++
++    so a key named for LOGS - which someone might plausibly switch off while
++    debugging something on their own machine - would also switch off redaction
++    on a path that posts to a public, unauthenticated broker. Those are not the
++    same decision and must not share a switch: an on-disk log is behind the
++    file system, an ntfy.sh topic is behind a guess.
++
++    So this redacts unconditionally, and it keeps only the KEYS. _redact keeps
++    the shape, which is right for an audit trail you can read later; a push
++    body needs less than that. It also avoids json.dumps, so a value that will
++    not serialise cannot raise on a path whose whole promise is that it cannot
++    break the gate.
++    """
++    try:
++        keys = sorted(str(k) for k in (detail or {}))
++    except Exception:
++        return "(details withheld)"
++    if not keys:
++        return "(no details)"
++    return ("fields: " + ", ".join(keys))[:limit]
++
++
+ def _push(title: str, body: str) -> None:
+     """Best effort, and deliberately not on the critical path: a phone that
+-    cannot be reached must not stop the desktop HUD from asking."""
++    cannot be reached must not stop the desktop HUD from asking.
++
++    Callers must pass an ALREADY REDACTED body - use _safe_detail above. This
++    function cannot redact for itself: it takes a string, by which point the
++    shape is gone. The rule lives at the two call sites and this docstring
++    exists to keep it there.
++
++    The destination is a public broker. ntfy.sh topics are unauthenticated by
++    design: the topic name is the only secret, it travels in a URL, and anyone
++    who guesses it subscribes. That is fine for "something is waiting" and
++    wrong for anything else.
++    """
+     if not NTFY_TOPIC:
+         return
++    # Never while the conversation is latched local. The latch exists because
++    # private content is in play; a push is egress to a third party, which is
++    # the exact thing the latch is refusing. Fails closed: taint_active()
++    # returns True when it cannot read its own database.
++    try:
++        if taint_active():
++            return
++    except Exception:
++        return
+ 
+     def send():
+         try:

@@ -1,0 +1,279 @@
+# Which window may call what.
+#
+# Each set below is granted by exactly one capability file, so a command is
+# reachable only from the surface that has a reason to call it. The grouping is
+# derived from what each page actually invokes, not from what seemed plausible.
+
+# ---------------------------------------------------------------------------
+# Every Jarvis-authored window reads the one event stream. Answering a gate is
+# split out below: the whole point of the fan-out is that the surfaces that do
+# render approvals answer through the same command rather than each holding
+# their own logic — but a window with no approval UI has no business holding it.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "jarvis-link"
+description = "Read the fanned-out event stream and the local service health. Read-only."
+permissions = [
+  "allow-get-link-state",
+  "allow-get-pending-approvals",
+  "allow-refresh-link",
+  "allow-check-server-health",
+  # Reading the theme is not privileged and every window needs it on load, or
+  # it paints the wrong palette until something tells it otherwise.
+  "allow-get-theme",
+]
+
+# Choosing the theme. Two windows offer a picker — settings and the Brain — and
+# `set_theme` fans the choice out to all four surfaces, so a third window
+# holding this grant would gain nothing and widen the surface for no reason.
+[[set]]
+identifier = "theme-write"
+description = "Change the theme for every window."
+permissions = ["allow-set-theme"]
+
+# Answering a gate is a decision with consequences, so it is separate from
+# reading the stream. The quickbar and the widget both render approvals and
+# both get it; the settings window reads the link state to show a connection
+# dot and has no approval UI, so it does not.
+[[set]]
+identifier = "approvals"
+description = "Answer a pending approval gate."
+permissions = ["allow-decide-approval"]
+
+# Real microphone capture and the spoken reply - see src-tauri/src/voice.rs's
+# own module docstring for why this is granted to the quickbar and NOT to the
+# hud window, which loads a vendored page with no app commands at all.
+# Push-to-talk only: nothing here can start listening on its own, and
+# `cancel_voice_capture` exists specifically so releasing the control early
+# can throw the clip away rather than only ever being able to send it.
+[[set]]
+identifier = "voice"
+description = "Record the microphone on push-to-talk, and play back a spoken reply."
+permissions = [
+  "allow-start-voice-capture",
+  "allow-stop-voice-capture",
+  "allow-cancel-voice-capture",
+  "allow-start-automatic-listening",
+  "allow-stop-automatic-listening",
+  "allow-speak-reply",
+]
+
+# The daily brief and the interruption budget. Granted to the quickbar alone,
+# because that is the only window that renders the panel — the HUD loads the
+# backend's own page and the widget is 320px wide.
+#
+# `mark_digest_seen` and `set_attention_muted` are writes, but neither can
+# approve anything: marking read stamps a delivery time, and muting has a fixed
+# end at midnight. There is deliberately no bulk-decide route in the API to
+# grant even if a window asked for one.
+[[set]]
+identifier = "attention-surface"
+description = "Read the daily brief, mark it read, and mute spoken interruptions until tomorrow. Approves nothing."
+permissions = [
+  "allow-get-digest",
+  "allow-mark-digest-seen",
+  "allow-set-attention-muted",
+]
+
+# ---------------------------------------------------------------------------
+# One command, on its own: opening a link in the real OS browser rather than
+# inside the WebView. Narrow on purpose, same reasoning `allow-get-hotkeys`
+# already gets by living in both quickbar-surface and settings-surface below
+# - a window that only needs to open a link should not have to take on the
+# rest of quickbar-surface's grants (streaming, clipboard, its own geometry)
+# just to get it.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "external-links"
+description = "Open a link in the real OS browser, never inside the WebView."
+permissions = [
+  "allow-open-external-url",
+]
+
+# ---------------------------------------------------------------------------
+# The spotlight. Streaming, its own geometry, the clipboard, and the shell-free
+# external link opener.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "quickbar-surface"
+description = "Everything the spotlight quickbar calls: streaming, its own window geometry, clipboard and external links."
+permissions = [
+  # READ-ONLY. The spotlight's primer prints the global combinations, and they
+  # are configurable now — so it has to read them rather than hardcode them, or
+  # it goes back to naming keys that do not do what it says. `set_hotkeys` and
+  # `reset_hotkeys` stay with the settings window.
+  "allow-get-hotkeys",
+  "allow-stream-chat",
+  "allow-cancel-chat",
+  "allow-set-route-lane",
+  "allow-hide-quickbar",
+  "allow-resize-quickbar",
+  "allow-set-quickbar-pinned",
+  "allow-write-clipboard",
+  "allow-open-external-url",
+]
+
+# ---------------------------------------------------------------------------
+# The desktop widget: its own geometry, its preferences, and quick capture.
+# `prefill_quickbar` is here because the widget's capture row hands a note to
+# the spotlight; the quickbar itself never calls it.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "widget-surface"
+description = "Widget geometry, pinning, saved position and quick capture."
+permissions = [
+  # Hiding its own window. The keyboard's only way out of a `skipTaskbar`,
+  # undecorated window once `toggle_widget` has focused it.
+  "allow-hide-widget",
+  "allow-resize-desktop-widget",
+  "allow-set-widget-always-on-top",
+  "allow-save-widget-position",
+  "allow-get-widget-prefs",
+  "allow-prefill-quickbar",
+  "allow-capture-note",
+]
+
+# ---------------------------------------------------------------------------
+# The settings window, and ONLY the settings window.
+#
+# This set is the reason the whole file exists. `set_supervision` persists an
+# arbitrary program path and `start_backend` runs it, so together they are
+# code execution as the user that survives a restart — and `set_api_settings`
+# redirects the base URL that every token-bearing request is built from, by
+# reqwest rather than the webview, so neither the CSP nor a proxy sees where it
+# goes. Reachable from one window that exists only when the user opened it,
+# rather than from all four.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "settings-surface"
+description = "Read and write the connection settings, backend supervision, the log location and whether Jarvis starts with Windows. Privileged: keep this to the settings window."
+permissions = [
+  # The global accelerators. A write, and a privileged-feeling one — it binds
+  # keys machine-wide — so it sits with the other settings-only powers rather
+  # than with the read-only sets. `hotkeys.rs` refuses a binding with no
+  # modifier, which is the only shape that could not be undone from inside the
+  # app afterwards.
+  "allow-get-hotkeys",
+  "allow-set-hotkeys",
+  "allow-reset-hotkeys",
+  # Updates. `install_update` replaces the running executable, which is the
+  # largest single thing this app can do to the machine — so it lives here,
+  # behind the window a person has to open deliberately, and it is a separate
+  # command from the check rather than a flag on it. Nothing else in the build
+  # can reach it, and no timer calls it.
+  "allow-update-status",
+  "allow-check-for-update",
+  "allow-set-update-check-on-start",
+  "allow-install-update",
+  "allow-get-api-settings",
+  "allow-set-api-settings",
+  "allow-supervisor-status",
+  "allow-set-supervision",
+  "allow-start-backend",
+  "allow-stop-backend",
+  # Diagnostics. `get_log_info` returns paths and sizes, never contents - the
+  # log is plain text with no redaction pass and must not become readable by a
+  # page just because the page can ask where it is. `open_log_folder` hands a
+  # directory to Explorer and takes no argument at all, so there is nothing a
+  # caller can point it at.
+  "allow-get-log-info",
+  "allow-open-log-folder",
+  # Starting with Windows. A registry write under HKEY_CURRENT_USER\...\Run,
+  # which is a thing that survives uninstalling carelessly, so it belongs with
+  # the other settings-only powers rather than anywhere a chat page can reach.
+  "allow-get-autostart",
+  "allow-set-autostart",
+]
+
+# ---------------------------------------------------------------------------
+# The Brain window, and only the Brain window.
+#
+# Split into three sets rather than one, because reading what Jarvis knows,
+# putting a file back, and replacing the model that answers every question are
+# three different powers. A capability file can grant the first without the
+# third, which is the whole reason the ACL exists.
+# ---------------------------------------------------------------------------
+
+# One fan-out read over a fixed allowlist in brain.rs. The window names
+# sections, never URLs, so this grant cannot reach an endpoint that file did
+# not decide it may reach — and a unit test asserts every entry in that list is
+# a GET that changes nothing.
+[[set]]
+identifier = "brain-read"
+description = "Read the memory graph, models, compute, skills, jobs, the undo shelf, the ledger, content risk and the watchlist. Read-only."
+permissions = ["allow-brain-read"]
+
+# Reverting and cancelling. Every one of these moves toward a state the owner
+# already had, or stops something that has not finished — which is why they sit
+# together and apart from the set below.
+[[set]]
+identifier = "brain-act"
+description = "Revert an undo entry, cancel a Long Fuse job, stop a message inside its send window, and manage the GitHub watchlist."
+permissions = [
+  "allow-brain-revert-undo",
+  "allow-brain-cancel-job",
+  "allow-brain-cancel-hold",
+  "allow-brain-watch-add",
+  "allow-brain-watch-remove",
+  "allow-brain-watch-seen",
+]
+
+# Changing what Jarvis is made of. Removing a skill takes an ability away for
+# good, and switching a model replaces the weights that answer every question
+# the owner asks. Neither is undoable from the same screen that did it —
+# rollback exists for models, but nothing reinstalls a removed skill, because
+# installing runs the scanner and the gate and there is deliberately no route
+# that skips them.
+[[set]]
+identifier = "brain-faculties"
+description = "Remove a skill; install, switch or roll back a model. Privileged: keep this to the Brain window."
+permissions = ["allow-brain-remove-skill", "allow-brain-model"]
+
+# Changing what Jarvis remembers about the owner.
+#
+# Its own set rather than part of `brain-act`, because that set is explicitly
+# the things that "move toward a state the owner already had" and forgetting is
+# the exact opposite: the server retires rather than deletes, so the row
+# survives, but nothing in the product brings a retired fact back. Editing is
+# gentler - it supersedes, and can be corrected again - but it lives here too,
+# since both decide what the model is told about a person.
+#
+# The learning switch is in the same set on purpose. Turning the extractor on
+# is the power to have facts proposed about you at all, which is upstream of
+# every other item here.
+[[set]]
+identifier = "brain-memory"
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, export the store, read what Jarvis believed at a past moment, and turn the background learner on or off. One fact per decision; there is no bulk form."
+permissions = [
+  "allow-brain-memory-decide",
+  "allow-brain-memory-forget",
+  "allow-brain-memory-edit",
+  "allow-brain-memory-learning",
+  "allow-brain-memory-export",
+  "allow-brain-memory-as-of",
+]
+
+# ---------------------------------------------------------------------------
+# The faces window: read and write the appearance document.
+#
+# This is the one thing that window persists, and it is shared rather than
+# local — the server holds it so the phone sees the same choice. It changes how
+# Jarvis LOOKS and nothing else: it cannot approve anything, start anything, or
+# reach the connection settings.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "appearance"
+description = "Read and write which face Jarvis wears and how each state looks. Cosmetic; approves nothing."
+permissions = ["allow-get-appearance", "allow-set-appearance"]
+
+# ---------------------------------------------------------------------------
+# The first-run walkthrough: closes itself, and nothing else.
+#
+# It does not read `onboarding_seen` — `lib.rs` decides whether to build this
+# window at all from that flag, before the page exists. The one thing the page
+# itself can do is say "seen" and close, once, so it never reopens.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "onboarding-surface"
+description = "Mark the first-run walkthrough as seen and close it. Opens at most once."
+permissions = ["allow-finish-onboarding"]

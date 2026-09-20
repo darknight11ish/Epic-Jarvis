@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-remove-skill"
+description = "Enables the brain_remove_skill command without any pre-configured scope."
+commands.allow = ["brain_remove_skill"]
+
+[[permission]]
+identifier = "deny-brain-remove-skill"
+description = "Denies the brain_remove_skill command without any pre-configured scope."
+commands.deny = ["brain_remove_skill"]

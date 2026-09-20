@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en" data-state="idle">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jarvis</title>
+    <!--
+      Theme before first paint. Synchronous from localStorage rather than
+      waiting for the IPC round trip, because a window that paints deep-space
+      and flips to paper 80ms later is worse than one that paints the right
+      thing immediately. The store stays the source of truth and the script
+      below reconciles against it.
+
+      The allowlist is here and not only in applyTheme: a stale or hand-edited
+      value would otherwise paint an unmatched [data-theme] and then flip,
+      which is exactly the flash this exists to prevent.
+    -->
+    <script>
+      try {
+        var t = localStorage.getItem("jarvis.theme");
+        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {
+        /* private mode, cleared site data - the default theme is correct */
+      }
+    </script>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!--
+      The whole UI lives inside `#shell`. The window itself is 750x80 and
+      transparent; the shell is what you actually see, and main.js measures it
+      to drive the native window resize as the answer card grows.
+    -->
+    <!-- aria-live belongs on the region that changes, not on the whole UI.
+         It used to be here, so a screen reader re-announced the textarea, the
+         chips and the entire answer on every streamed repaint. -->
+    <main id="shell" class="shell">
+      <!-- The page had no heading of any level. A screen reader's heading list
+           — one of the two ways people navigate a page without reading it —
+           was empty, and "Ask Jarvis" existed only as a label on the textarea.
+           It is `sr-only` because the window is a 44px bar: the heading is
+           structure, not decoration, and the visible equivalent is the reactor
+           and the input beside it. -->
+      <h1 class="sr-only">Jarvis</h1>
+      <!-- ── Input row ─────────────────────────────────────────────────── -->
+      <div class="bar" id="bar" data-tauri-drag-region>
+        <div class="reactor" id="reactor" aria-hidden="true">
+          <svg viewBox="0 0 48 48" role="presentation" focusable="false">
+            <defs>
+              <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="var(--accent-bright)" stop-opacity="1" />
+                <stop offset="55%" stop-color="var(--accent)" stop-opacity="0.55" />
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+              </radialGradient>
+            </defs>
+            <circle class="reactor-halo" cx="24" cy="24" r="17" fill="url(#core-glow)" />
+            <circle class="reactor-ring reactor-ring-outer" cx="24" cy="24" r="16" />
+            <circle class="reactor-ring reactor-ring-mid" cx="24" cy="24" r="11" />
+            <g class="reactor-vanes">
+              <line x1="24" y1="8" x2="24" y2="14" />
+              <line x1="40" y1="24" x2="34" y2="24" />
+              <line x1="24" y1="40" x2="24" y2="34" />
+              <line x1="8" y1="24" x2="14" y2="24" />
+              <line x1="35.3" y1="12.7" x2="31.1" y2="16.9" />
+              <line x1="35.3" y1="35.3" x2="31.1" y2="31.1" />
+              <line x1="12.7" y1="35.3" x2="16.9" y2="31.1" />
+              <line x1="12.7" y1="12.7" x2="16.9" y2="16.9" />
+            </g>
+            <circle class="reactor-core" cx="24" cy="24" r="5" />
+          </svg>
+        </div>
+
+        <span class="note-chip" id="note-chip" data-target="" hidden>
+          <span class="note-chip-dot" aria-hidden="true"></span>
+          <span id="note-chip-label">Logseq Journal</span>
+        </span>
+
+        <div class="field">
+          <label class="sr-only" for="prompt">Ask Jarvis</label>
+          <textarea
+            id="prompt"
+            class="prompt"
+            rows="1"
+            spellcheck="false"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            placeholder="Ask Jarvis anything…"
+          ></textarea>
+        </div>
+
+        <div class="bar-meta">
+          <!-- The model name starts EMPTY. It used to start at "qwen3:8b",
+               which is a guess about someone else's machine: the badge asserted
+               a specific model before the server had ever named one, and stayed
+               wrong for anyone whose Ollama serves something else until their
+               first answer came back. -->
+          <span class="route" id="route" data-route="local">
+            <span class="route-dot" aria-hidden="true"></span>
+            <span class="route-tier" id="route-tier">Local</span>
+            <span class="route-sep" id="route-sep" aria-hidden="true" hidden>/</span>
+            <span class="route-model" id="route-model" hidden></span>
+          </span>
+
+          <!-- Two listening modes, one button. Push-to-talk (the default):
+               hold to record, release to send. Automatic: toggled on with
+               #voice-auto below, the microphone stays open and an
+               energy-based voice-activity detector (src-tauri/src/voice.rs)
+               decides for itself when an utterance starts and ends -
+               #mic then just shows that it is listening and stops
+               responding to being held, since there is nothing left to
+               hold it FOR. Recording always happens in Rust and is posted
+               only to the local Jarvis server - never to a cloud vendor,
+               unlike the disabled Web Speech API path this replaces. -->
+          <button
+            id="mic"
+            class="icon-button"
+            type="button"
+            aria-pressed="false"
+            title="Hold to talk to Jarvis"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path
+                d="M8 1.5a2.25 2.25 0 0 0-2.25 2.25v4a2.25 2.25 0 0 0 4.5 0v-4A2.25 2.25 0 0 0 8 1.5Z"
+              />
+              <path
+                d="M4 7.25a.75.75 0 0 0-1.5 0 5.5 5.5 0 0 0 4.75 5.451V14.5H6a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5H8.75v-1.799A5.5 5.5 0 0 0 13.5 7.25a.75.75 0 0 0-1.5 0 4 4 0 0 1-8 0Z"
+              />
+            </svg>
+            <span class="sr-only">Hold to talk to Jarvis</span>
+          </button>
+
+          <!-- Switches #mic between push-to-talk and automatic listening.
+               Off by default: automatic listening has never run against a
+               real microphone, and push-to-talk is the control anyone
+               already understands the first time they see it. -->
+          <button
+            id="voice-auto"
+            class="icon-button"
+            type="button"
+            aria-pressed="false"
+            title="Listen automatically, without holding the mic button"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path
+                d="M2 8a6 6 0 1 1 12 0A6 6 0 0 1 2 8Zm6-4.25A4.25 4.25 0 1 0 8 12.25 4.25 4.25 0 0 0 8 3.75ZM8 6.5A1.5 1.5 0 1 1 8 9.5 1.5 1.5 0 0 1 8 6.5Z"
+              />
+            </svg>
+            <span class="sr-only">Toggle automatic listening</span>
+          </button>
+
+          <button
+            id="pin"
+            class="icon-button"
+            type="button"
+            aria-pressed="false"
+            title="Keep Jarvis open when it loses focus"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M6 1.5h4l-.6 3.2 2.1 2.1v1.4H8.7V14L8 15l-.7-1V8.2H4.5V6.8l2.1-2.1L6 1.5Z" />
+            </svg>
+            <span class="sr-only">Pin window</span>
+          </button>
+
+          <kbd class="hint" id="submit-hint">↵</kbd>
+        </div>
+      </div>
+
+      <!-- ── Attachment strip (screen capture / clipboard ingest) ───────── -->
+      <!-- Everything below the input row scrolls together, so the stack can
+           never grow past the window's 720px clamp and hide the Approve and
+           Deny buttons below the cut. -->
+      <div class="stack" id="stack">
+        <div class="attachments" id="attachments" hidden>
+          <div class="attachment" id="attachment-capture" hidden>
+            <img id="capture-thumb" alt="Desktop capture attached to the next prompt" />
+            <div class="attachment-body">
+              <span class="attachment-title">Screen capture</span>
+              <span class="attachment-meta" id="capture-meta">—</span>
+            </div>
+            <button class="icon-button" type="button" id="capture-remove" title="Remove capture">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+              <span class="sr-only">Remove capture</span>
+            </button>
+          </div>
+
+          <div class="attachment attachment-text" id="attachment-clipboard" hidden>
+            <div class="attachment-body">
+              <span class="attachment-title">Clipboard context</span>
+              <span class="attachment-meta" id="clipboard-meta">—</span>
+            </div>
+            <button class="icon-button" type="button" id="clipboard-remove" title="Remove clipboard context">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+              <span class="sr-only">Remove clipboard context</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── Attention: the interruption budget and the daily brief ─────
+             `pending` is what is waiting to be *told* to you, which is not the
+             same as the approval queue below — that is what is waiting for a
+             decision. The two counts are kept apart on purpose.
+
+             There is no approve-all control in here, and there must never be
+             one: approval rows carry `opens_card` and no detail, and clicking
+             one opens its own gate. ────────────────────────────────────────── -->
+        <section class="attention" id="attention" hidden aria-label="Waiting to be told">
+          <header class="attention-head">
+            <div class="attention-title">
+              <strong id="attention-count">Nothing waiting</strong>
+              <span class="attention-budget" id="attention-budget"></span>
+            </div>
+            <div class="attention-actions">
+              <button class="text-button" type="button" id="attention-mute"></button>
+              <button class="text-button" type="button" id="attention-close" title="Hide">
+                Close
+              </button>
+            </div>
+          </header>
+
+          <!-- Rendered in the order the server sent. `jarvis_arbiter._rank`
+               orders by consequence and never by urgency; re-sorting here would
+               hand the ranking back to whoever wrote the text. -->
+          <ol class="digest" id="digest"></ol>
+
+          <footer class="attention-foot">
+            <span class="attention-note" id="attention-note"></span>
+            <button class="text-button" type="button" id="digest-seen">
+              Mark the brief read
+            </button>
+          </footer>
+        </section>
+
+        <!-- What Jarvis can do, on the surface a first run actually shows.
+             Every one of these hints already existed — in the card footer,
+             which is `hidden` until an answer has streamed. So the only way to
+             learn the hotkeys was to already know one. This block is the
+             inverse: present when nothing else is, gone the moment the card,
+             a gate or the brief takes the space. -->
+        <!-- The four global combinations below are placeholders for first
+             paint. `main.js` replaces them with the LIVE bindings, because
+             they are configurable now and a hardcoded list goes stale the
+             moment someone rebinds one — which is the same class of bug this
+             block was added to fix. -->
+        <section class="primer" id="primer" aria-label="What you can do here">
+          <h2 class="sr-only">What you can do here</h2>
+          <ul class="primer-list">
+            <li>
+              <span class="primer-keys" data-hotkey="toggle_quickbar"><kbd>Alt</kbd>+<kbd>Space</kbd></span>
+              <span>Summon or dismiss this bar, from anywhere</span>
+            </li>
+            <li>
+              <span class="primer-keys" data-hotkey="capture_screen"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></span>
+              <span>Attach a screen capture to the next question</span>
+            </li>
+            <li>
+              <span class="primer-keys" data-hotkey="ingest_clipboard"><kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd></span>
+              <span>Attach whatever is on the clipboard</span>
+            </li>
+            <li>
+              <span class="primer-keys" data-hotkey="quick_note"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></span>
+              <span>Summon the bar ready to file a Logseq journal note</span>
+            </li>
+            <li>
+              <span class="primer-keys" data-hotkey="toggle_widget"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></span>
+              <span>Show or hide the desktop widget</span>
+            </li>
+            <li>
+              <span class="primer-keys"><code>#log</code></span>
+              <span>File the answer in the Logseq daily journal</span>
+            </li>
+            <li>
+              <span class="primer-keys"><code>#joplin</code></span>
+              <span>File it in the Joplin vault, or search it</span>
+            </li>
+            <li>
+              <span class="primer-keys"><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd></span>
+              <span>Bigger or smaller text, everywhere. <kbd>Ctrl</kbd>+<kbd>0</kbd> resets</span>
+            </li>
+          </ul>
+          <!-- This used to end "and nothing leaves this machine." It is the
+               first sentence a new owner reads, on the surface with nothing
+               else on it, and three parts of this same binary disprove it: the
+               route badge turns Cloud when a turn escalates, the updater checks
+               GitHub on startup by default, and the Brain labels a job
+               "tainted - stays local", which only means something if untainted
+               ones do not. A promise the product cannot keep is worse than no
+               promise, because the owner stops checking the badge.
+
+               "Anything private" is the claim the design actually enforces:
+               memory injection pins a turn local and latches it, and a cloud
+               turn drops every role but the user's own words. -->
+          <p class="primer-foot">
+            Nothing runs without you. Every action Jarvis wants to take stops
+            here first. Anything private stays on the local model — watch the
+            route badge, which says where each answer came from.
+          </p>
+        </section>
+
+        <!-- "Offline" used to be a dead end: the route badge said it, the Core
+             dot went out, and neither offered anything to do about it. This is
+             the way out, on the one surface that is visible before anything has
+             ever been typed — which also means a first run against a backend
+             that is not up says so, instead of showing an empty box. -->
+        <div class="offline" id="offline" hidden>
+          <span id="offline-text">Jarvis is not answering.</span>
+          <span class="offline-actions">
+            <button class="text-button" type="button" id="offline-retry">Reconnect</button>
+            <span class="offline-where">Settings live in the tray menu</span>
+          </span>
+        </div>
+
+        <!-- Something is still waiting after Esc put it away. Not a decision
+             surface — a way back to the card, so parking can never lose one. -->
+        <div class="parked" id="parked" hidden>
+        <!-- Announced through the shared region on transition, not by a live
+             attribute here: this element is hidden when the message is
+             written, which is exactly the pattern that stays silent. -->
+          <span id="parked-text"></span>
+          <button class="text-button" type="button" id="parked-show">Show it</button>
+        </div>
+
+        <!-- What Jarvis is doing right now, one bounded step at a time -
+             docs/AUTONOMY-PROPOSALS.md §3c. Mirrors the widget's own
+             #widget-progress: same source (`link.activity`/
+             `activityDetail`), same rule that it is empty and hidden
+             whenever there is nothing to say. -->
+        <p class="progress-line" id="progress-line" hidden></p>
+
+        <!-- Pause/stop/inject a task already running - docs/AUTONOMY-
+             PROPOSALS.md §3d. Mirrors the widget's #task-controls exactly,
+             including its honesty rule: Pause/Resume swap only on the
+             server's own next `activity` report, never on the click
+             itself - see main.js's syncTaskControls(). DRAFT: the backend
+             routes these calls hit are not confirmed to exist
+             (jarvis_gate.py/jarvis_hud.py are not in this repo). -->
+        <div class="task-controls" id="task-controls" hidden>
+          <div class="task-buttons">
+            <button
+              type="button"
+              class="text-button"
+              id="btn-task-pause"
+              title="Pause the task Jarvis is currently running"
+            >Pause</button>
+            <button
+              type="button"
+              class="text-button"
+              id="btn-task-resume"
+              hidden
+              title="Resume the paused task"
+            >Resume</button>
+            <button
+              type="button"
+              class="text-button"
+              id="btn-task-stop"
+              title="Stop the task Jarvis is currently running"
+            >Stop</button>
+          </div>
+          <div class="task-note-row">
+            <input
+              id="task-note"
+              class="approval-note-input"
+              type="text"
+              spellcheck="true"
+              autocomplete="off"
+              placeholder="Add something before it continues…"
+            />
+            <button
+              class="icon-button"
+              type="button"
+              id="btn-task-note-send"
+              title="Send this note - it applies to what Jarvis does next, not what is already running"
+              aria-label="Send note"
+            >↵</button>
+          </div>
+        </div>
+
+        <!-- ── Approval gate ─────────────────────────────────────────────── -->
+        <section
+          class="approval"
+          id="approval"
+          hidden
+          tabindex="-1"
+          role="group"
+          aria-labelledby="approval-kicker approval-action"
+        >
+          <!--
+            `role="group"`, not `alertdialog`, and this is the honest markup
+            rather than a downgrade.
+
+            `alertdialog` tells a screen reader "a modal dialog is demanding a
+            response", and readers are trained by that to expect Tab to be
+            bounded and Esc to close. None of it is true here: there is no
+            `aria-modal`, no focus trap, focus is deliberately NOT moved (a
+            stray Enter used to approve), the rest of the page stays reachable,
+            and Esc parks rather than dismisses. Claiming the role taught the
+            wrong model of the one surface where the user's model matters most.
+
+            The announcement it used to buy is now made explicitly through the
+            shared live region, which says what the action is AND what it
+            costs — more than the role ever conveyed. `aria-labelledby` also
+            puts the action into the accessible name, which the old
+            `aria-label="Approval required"` overrode.
+          -->
+          <header class="approval-head">
+            <span class="approval-badge" aria-hidden="true">
+              <svg viewBox="0 0 16 16" focusable="false">
+                <path d="M8 1.6l5.6 2.2v3.6c0 3.3-2.3 6.2-5.6 7-3.3-.8-5.6-3.7-5.6-7V3.8L8 1.6Z" />
+                <path d="M5.6 8.1l1.7 1.7 3.3-3.4" class="approval-tick" />
+              </svg>
+            </span>
+            <div class="approval-title">
+              <span class="approval-kicker" id="approval-kicker">Jarvis wants to</span>
+              <strong id="approval-action">run an action</strong>
+            </div>
+            <!-- Which of how many. Answering one and having the next appear
+                 instantly under the cursor, with no sense of how many are left,
+                 is how a click lands on a card nobody read. -->
+            <span class="approval-count" id="approval-count" hidden></span>
+            <span class="approval-target" id="approval-target" hidden></span>
+          </header>
+
+          <!-- ── Why this is being asked at all ─────────────────────────
+               Only rendered when the server sent `raised`: outside text tried
+               to rush the reader and the tier went up because of it. The quote
+               is the attacker's own words and showing them is the entire point;
+               the context is text from the page being judged, so it stays behind
+               a disclosure until asked for. There is deliberately no control
+               here that clears the latch. ───────────────────────────────── -->
+          <div class="raised" id="approval-raised" hidden>
+            <div class="raised-head">
+              <span class="raised-chip" id="raised-chip"></span>
+              <span class="raised-source" id="raised-source"></span>
+            </div>
+            <blockquote class="raised-quote" id="raised-quote"></blockquote>
+            <details class="raised-context" id="raised-context-wrap">
+              <summary>Show the surrounding text</summary>
+              <p class="raised-context-body" id="raised-context"></p>
+            </details>
+          </div>
+
+          <div class="approval-preview markdown" id="approval-preview"></div>
+
+          <!-- Multiple concrete options - docs/AUTONOMY-PROPOSALS.md §3a.
+               Empty and hidden when the plan carries zero or one option; the
+               card then behaves exactly as it always has (the static
+               Approve button below). Each option here IS a full, bounded
+               plan of its own, never a checkbox on one shared plan. -->
+          <div
+            class="approval-options"
+            id="approval-options"
+            hidden
+            role="group"
+            aria-label="Choose which version to approve"
+          ></div>
+
+          <!-- A note before the first decision - §3b. Submitting sends it
+               back for a NEW proposal; it never edits the one on screen. -->
+          <div class="approval-note-row">
+            <input
+              id="approval-note"
+              class="approval-note-input"
+              type="text"
+              spellcheck="true"
+              autocomplete="off"
+              placeholder="Add something before deciding…"
+            />
+            <button
+              class="icon-button"
+              type="button"
+              id="approval-note-send"
+              title="Send this note - Jarvis will propose again"
+              aria-label="Send note"
+            >↵</button>
+          </div>
+
+          <footer class="approval-actions">
+            <!-- No key hints on either button, and that is the fix rather than
+                 an omission. `Esc` used to deny and `↵` used to approve; both
+                 are gone, because the two most reflexive keys in a spotlight
+                 overlay must not be wired to a decision. Esc now puts the gate
+                 aside and the hint says so. Enter still works on whichever
+                 button has focus, which is simply what a button does. -->
+            <span class="approval-hint" id="approval-hint">Nothing runs until you decide.</span>
+            <button class="approval-button approval-deny" type="button" id="approval-deny"
+                  aria-describedby="approval-hint">
+              Deny
+            </button>
+            <button class="approval-button approval-approve" type="button" id="approval-approve"
+                  aria-describedby="approval-hint">
+              Approve
+            </button>
+          </footer>
+        </section>
+
+        <!-- ── Answer card ───────────────────────────────────────────────── -->
+        <section class="card" id="card" hidden>
+          <header class="card-head">
+            <span class="card-status" id="card-status">
+              <span class="pulse" aria-hidden="true"></span>
+              <span id="card-status-text">Thinking…</span>
+            </span>
+            <div class="card-actions">
+              <span class="card-stat" id="card-stat" title="Tokens received / elapsed"></span>
+              <button class="text-button" type="button" id="copy" title="Copy the answer">Copy</button>
+              <button class="text-button" type="button" id="stop" title="Stop generating" hidden>Stop</button>
+            </div>
+          </header>
+
+          <div class="card-body" id="card-body">
+            <!--
+              Closed by default: asking a quick follow-up should not push the
+              new answer below the old one. It only appears once there is a
+              completed answer to fold away, and it clears when the window is
+              dismissed rather than surviving into the next time it opens.
+            -->
+            <details class="previous-answer" id="previous-answer" hidden>
+              <summary id="previous-answer-summary"></summary>
+              <article class="markdown" id="previous-answer-body"></article>
+            </details>
+            <!--
+              No `aria-live` here, deliberately. `paint()` reassigns this
+              element's whole innerHTML, and `aria-relevant` defaults to
+              `additions text` — so every repaint re-added the ENTIRE answer so
+              far and queued it. A long reply left a screen reader minutes
+              behind the screen, with no way to interrupt it into a coherent
+              state. The stream is announced once when it starts and once when
+              it finishes, through the shared region in jarvis-link.js.
+            -->
+            <article class="markdown" id="answer"></article>
+            <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+          </div>
+
+          <footer class="card-foot">
+            <span class="services" id="services" title="Local service health">
+              <span class="service" data-service="jarvis"><i></i>Core</span>
+              <span class="service" data-service="ollama"><i></i>Ollama</span>
+              <span class="service" data-service="litellm"><i></i>LiteLLM</span>
+            </span>
+            <!-- The four-hotkey strip that used to sit here moved into
+                 `#primer`, which is visible BEFORE the first answer rather
+                 than only after it. `Esc` stays: it is the one key whose
+                 meaning changes with the card open (stop, then dismiss). -->
+            <span class="keys"><kbd>Esc</kbd> dismiss</span>
+          </footer>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

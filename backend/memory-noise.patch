@@ -1,0 +1,106 @@
+--- a/jarvis_extract.py
++++ b/jarvis_extract.py
+@@ -141,7 +141,25 @@
+     out = []
+     with closing(store._connect()) as c:
+         _init(c)
+-        have = {r[0].lower() for r in c.execute("SELECT text FROM proposals WHERE state='pending'")}
++        # 'pending' AND 'rejected'. Only pending was checked, and the effect
++        # was that discarding a proposal did not make it go away: the learner
++        # re-reads the WHOLE conversation on the next pass - the transcript
++        # grows every turn, so the guard against "nothing new was said" does
++        # not stop it - the model proposes the same fact from the same
++        # sentence again, and it is back in the queue within the minute.
++        #
++        # A review queue that re-asks what you just declined trains you to
++        # stop reading it, which costs more than the feature is worth. Open
++        # WebUI's #18603 is people asking to switch memory off per agent
++        # because it is "indiscriminately using information"; this is the
++        # shape of complaint that gets you there. See docs/PEERS.md.
++        #
++        # 'accepted' is deliberately NOT here: an accepted proposal became a
++        # fact, and `known` above already holds every current fact, so adding
++        # it would only double-cover - and would wrongly suppress a re-propose
++        # after the owner later retires that fact and genuinely wants it back.
++        have = {r[0].lower() for r in c.execute(
++            "SELECT text FROM proposals WHERE state IN ('pending','rejected')")}
+         cap = int(_cfg("review_queue_max", 200))
+         pending_n = c.execute("SELECT COUNT(*) FROM proposals WHERE state='pending'").fetchone()[0]
+         for f in facts:
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -289,6 +289,41 @@
+ #   phone and the desktop can be trusted to behave the same.
+ # --------------------------------------------------------------------------
+ 
++def _dated_fact(f: dict) -> str:
++    """One recalled fact, stamped with when it was learned.
++
++    Khoj injects memories as `- [{friendly_dt}]: {raw}`, and it is the one
++    small thing in that project worth copying outright. An undated fact is
++    asserted flatly: the model has no way to know that "Mario lives in Lisbon"
++    was true eighteen months ago and may not be now, so it says it as though
++    it were checked this morning.
++
++    It is worth more here than it is to Khoj, because this store retires
++    rather than deletes and carries two time axes. `created` is the one to
++    print - when THIS MACHINE was told - because that is what the owner can
++    check against their own memory of the conversation. valid_from would be
++    the date the fact became true in the world, which for most facts is a
++    guess the extractor made.
++
++    A fact with no usable date prints without one rather than with a wrong
++    one: `- text` is what the model saw before this function existed, so the
++    degraded case is exactly the old behaviour.
++    """
++    text = str(f.get("text", ""))
++    when = f.get("created") or f.get("valid_from")
++    try:
++        when = float(when)
++    except (TypeError, ValueError):
++        return f"- {text}"
++    if when <= 0:
++        return f"- {text}"
++    try:
++        stamp = time.strftime("%Y-%m-%d", time.localtime(when))
++    except (ValueError, OSError, OverflowError):
++        return f"- {text}"
++    return f"- [{stamp}] {text}"
++
++
+ def _models_view() -> dict:
+     import jarvis_models as MM
+     try:
+@@ -2538,7 +2573,15 @@
+                 try:
+                     hits = jarvis_memory.store().search(query, k=MEMORY_K)
+                     if hits:
+-                        chosen_facts = [{"text": h["text"], "id": h["id"]} for h in hits]
++                        # `created` comes along now: _dated_fact needs it, and
++                        # dropping it here was why the first version of that
++                        # helper printed no date on the path that supplies
++                        # almost every fact. The other columns are still left
++                        # behind - this dict is about to be turned into a
++                        # prompt, not returned to anyone.
++                        chosen_facts = [{"text": h["text"], "id": h["id"],
++                                         "created": h.get("created")}
++                                        for h in hits]
+                         facts = chosen_facts
+                 except Exception:
+                     chosen_facts = None
+@@ -2550,11 +2593,13 @@
+                 injected = len(chosen_facts)
+                 injected_ids = [f"mem:{f['id']}" if "id" in f else f"fact:{facts.index(f)}"
+                                 for f in chosen_facts if f in facts]
+-                block = "\n".join(f"- {f.get('text','')}" for f in chosen_facts)
++                block = "\n".join(_dated_fact(f) for f in chosen_facts)
+                 recalled = {
+                     "role": "system",
+                     "content": "Things you know about the user, recalled for this "
+-                               "question:\n" + block,
++                               "question. The date is when Jarvis was told, not "
++                               "necessarily when it became true; older ones may "
++                               "have changed.\n" + block,
+                 }
+                 # Late, not first. This block used to be prepended, and the
+                 # facts it holds are chosen per question, so token 0 of the

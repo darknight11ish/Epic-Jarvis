@@ -1,0 +1,265 @@
+# Jarvis Desktop — audit
+
+Six-reviewer audit of `jarvis-desktop/` at commit `df784df`.
+
+**Every finding below marked ✅ was re-verified against the source or by running
+it, not taken from a reviewer's word.** Three reviewer claims did not survive
+that check and are recorded at the bottom, because a false finding costs more
+than a missed one.
+
+**Method.** `cargo clippy --target x86_64-pc-windows-msvc --all-targets -D warnings`;
+21 unit tests run in a mirror crate that symlinks the real sources; headless
+Chromium via Playwright against the real pages; the Python backend's own
+`jarvis_events.stream()` used to generate wire bytes; the vendored crate sources
+in `~/.cargo/registry` read directly rather than from documentation.
+
+---
+
+## Status
+
+Fixed and verified in commits `46fd1ca`, `11bf501`, `eed30e5`, `137cef9` and
+`cc65ef9`. Every fix was checked by re-running the reviewer's own repro
+or by a new test, not by inspection.
+
+**All six ship blockers are closed.** So is every item in the correctness table,
+the whole frontend table except the markdown-quality bugs, and every item in
+build/dependencies/licensing.
+
+**Still open, and why:**
+
+* **Everything Windows-only** — the Acrylic tint being discarded, the mixed-DPI
+  widget position, `Alt+Space` and the `MOD_WIN` hotkey, transparent-window
+  hit-testing, `rundll32` → `ShellExecuteExW`, dropping the redundant
+  `window-vibrancy` direct dependency in favour of `WebviewWindow::set_effects`.
+  Several are a few lines, and all of them are cheap to get wrong and
+  impossible to confirm from here.
+* **An app ACL manifest** (`src-tauri/permissions/`). The eight unused commands
+  are unregistered and `set_api_settings` now validates its input, but
+  `set_supervision` still persists an arbitrary program that `start_backend`
+  runs. Writing a permissions manifest blind risks an app that will not start
+  and cannot be debugged from here.
+* **Markdown quality** — tables needing a preceding blank line, lazy list
+  continuations splitting a list, ordered lists restarting at 1, no `start`
+  attribute. Cosmetic; the parser no longer hangs and no longer corrupts hrefs.
+* **The quickbar can still measure past its 720 clamp** with a long answer and
+  an open gate. Needs a CSS height budget shared between the card body and the
+  approval preview.
+* **Signing, updater, MSI-vs-NSIS** — decisions, not defects.
+
+**The standing caveat is unchanged and is the reason half of this list exists:
+nothing has ever run on Windows.** No MSVC linker, no WebView2, no DWM, no
+`RegisterHotKey`, no Job Object, no `nvidia-smi`.
+
+---
+
+## Ship blockers
+
+### 1. A C# code block freezes the app ✅ *(reproduced)*
+
+`src/main.js:285` — the fence regex is `/^\s*```([\w+-]*)\s*$/`. The paragraph
+loop at `:441` refuses to consume any line beginning with ```` ``` ````. A line
+that is a fence to the eye but fails that regex therefore matches neither
+branch, `index` never advances, and the `while` spins forever appending to
+`html`.
+
+Reproduced with a hard timeout — these four hang, the rest return in under 1 ms:
+
+| input | result |
+|---|---|
+| ` ``` js ` (space before the language) | **hangs** |
+| ` ```c# ` (`#` is not in `[\w+-]`) | **hangs** |
+| ` ```` ` (four backticks) | **hangs** |
+| ` ```js // hi ` (trailing comment) | **hangs** |
+| ` ```js `, ` ```c++ `, ` ```json `, ` ``` ` | fine |
+
+`paint()` calls `renderMarkdown` on **every streamed token**, so the freeze
+lands mid-answer. The window it freezes is `alwaysOnTop`, `decorations: false`,
+`skipTaskbar: true` — there is no titlebar to close and no taskbar entry. The
+same path is reachable from a backend-supplied `detail.preview` through
+`approvalPreview` at `:783`.
+
+An assistant writing a C# snippet is not an edge case.
+
+### 2. Every completed stream leaves the quickbar wedged ✅ *(reproduced)*
+
+`src/main.js:1015` — when `consumeLine()` returns true on the stream terminator
+it sets `settled = true` and cancels, **but never calls `finishStream`**. Every
+`finishStream` call site is then guarded by `if (settled) return`.
+
+So the normal ending — the server proxies OpenAI-style `data: [DONE]` — leaves
+`data-state="streaming"` forever: status stuck on "Streaming", cursor blinking,
+Stop still showing, and `set_quickbar_pinned(true)` never released so the window
+stops auto-hiding. The `state.phase === "streaming"` re-entrancy guard at `:1120`
+then **silently discards every subsequent prompt**, and Escape runs `abortStream`
+instead of dismissing.
+
+Only two paths still work: a stream with no terminator, and the Stop button.
+`streamViaFetch` does it correctly, which is why browser preview hides it.
+
+This is not a rare state. It is what happens the first time anyone uses the app.
+
+### 3. `pid()` kills the backend as a side effect of painting the tray ✅
+
+`src-tauri/src/sidecar.rs:141` — when `try_wait()` reports the child gone it does
+`*slot = None`, dropping `Owned` → `ProcessTree::drop` → `CloseHandle` on a
+`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` job. **Everything still in the job dies.**
+
+`pid()` is called by `supervisor_status`, called by `tray::backend_row`, called by
+`on_link_changed` — on every link-state change, including every `activity` frame.
+
+So whenever the launched process exits but the real server is a grandchild —
+the Store `python.exe` alias, `py.exe`, a venv redirector, any daemonising
+wrapper — the next SSE event kills a working backend mid-turn. The tray then
+reports "Backend: not supervised". Nothing logs it.
+
+### 4. The resume point poisons itself permanently ✅
+
+`src-tauri/src/stream.rs:392` keeps `last_id` monotonic and never resets it;
+`:401` handles `hello.stale` by re-fetching but leaves `last_id` alone.
+
+`jarvis_events.py:88` — `Bus.__init__` sets `_next = 1`. The bus is in memory, so
+**every backend restart renumbers from 1**. `since(812)` against a fresh bus
+returns `([], False)` — not stale — so the client is told it is caught up, and
+the monotonic guard then discards every event because `id > 812` is false.
+
+Permanent silent failure after a routine restart. No code path ever lowers
+`RESUME_KEY`. `hello.latest` is the field that detects this and is ignored.
+
+### 5. Two config files; `cargo` reads the wrong one ✅
+
+`jarvis-desktop/tauri.conf.json` is tracked and correct.
+`jarvis-desktop/src-tauri/tauri.conf.json` is **gitignored, generated by
+`npm run sync:config`, and stale** — it still declares a `hud` window at
+`http://127.0.0.1:4719`.
+
+`tauri-build` resolves relative to `CARGO_MANIFEST_DIR`, so `cargo build`,
+`cargo check`, `cargo clippy`, `cargo tauri build`, CI and every IDE read the
+stale one. Only the npm scripts sync first.
+
+Tauri creates config windows *before* `setup` runs, so on that path
+`build_hud_window` hits its `is_some()` early-return, the initialisation script
+never injects, the HUD loads the remote origin with no IPC capability, and the
+page falls back to its own `EventSource` — which puts the token in the URL.
+
+**This also means every `cargo clippy` run in this project's history has
+type-checked against a config that is not the one it ships.**
+
+### 6. All 33 commands are reachable from every window ⚠️ *reported, mechanism verified*
+
+`src-tauri/permissions/` does not exist, so the app ships no ACL manifest and the
+capability file's `permissions` list gates nothing app-defined. With
+`withGlobalTauri: true`, any script in any window can call any command.
+
+The chain that matters: `set_supervision` persists an arbitrary
+`program`/`args`/`cwd` with no allowlist, and `start_backend` spawns it — arbitrary
+code execution as the user, persisted across launches, with `HUD_TOKEN` in the
+child's environment. `set_api_settings` accepts any `base`, and every Rust-side
+request attaches `X-Jarvis-Token` to it — so a script can redirect the token,
+the conversation and a 1920px desktop screenshot to an external host **via
+reqwest, bypassing the CSP entirely**. `decide_approval` + `get_pending_approvals`
+let a script approve the gate's queue and have it logged as a human decision.
+
+The capability file's description presents this as a design ("app-defined
+commands … are not permission-gated"). It is a hole, not a design.
+
+---
+
+## Correctness
+
+| ✅ | Finding | Where |
+|---|---|---|
+| ✅ | **Screenshots are silently discarded.** Server's `_build_payload` forwards only `model/messages/stream/temperature/max_tokens`; `images` has zero hits in the server. But `has_image` *is* read and routes to a vision lane — so a capture goes to a vision model with no image. | `commands.rs:500` |
+| ✅ | **Health check is always 403.** `check_server_health` builds a bare client with no `jarvis_headers()`. `/api/status` runs `_origin_ok`; reqwest sends no `Origin`, so it falls to the `X-Jarvis-Client` check, which is unset. | `commands.rs:375` |
+| ✅ | **A 401/403/500 wipes the approval queue.** `refresh_pending` never checks status; an error body parses as JSON, the `or_else` chain yields `[]`, and the UI shows "nothing pending" with buttons live and `stale: false`. | `stream.rs:527` |
+| ✅ | **`note_target` is invented** — zero hits in the server. The `#log`/`#joplin` prefixes rely on it. | `commands.rs:506` |
+| ✅ | **Both backoff resets are undone one line later.** `backoff = BASE_BACKOFF` then `* 1.8` unconditionally. An immediate-EOF body returns `Ok`, so a server that 200s then closes is reconnected every 3 s forever. | `stream.rs:267` |
+| ✅ | **`stop_owned` holds the state mutex across an unbounded `Child::wait()`**, and `supervisor_status` takes that lock from the main thread. A kill that does not take hard-locks the UI. | `sidecar.rs:441` |
+| ✅ | **`Painted` is registered inside fallible `create_tray`**, whose failure `lib.rs:590` treats as non-fatal — then the first event panics on `state::<Painted>()`. Release builds set `windows_subsystem = "windows"`, so there is no stderr and the failure is invisible. | `tray.rs:214` |
+| ✅ | **`kick()` uses `notify_waiters()`** — a no-op with no waiter registered, and the loop has up to 20 s windows with none. "Reconnect" can silently do nothing. | `stream.rs:219` |
+| ⚠️ | **Concurrent `start()` drops the running child's job handle**, killing the backend it was racing. No mutual exclusion between the setup task, the tray and the settings window. | `sidecar.rs:380` |
+| ⚠️ | **`stop_on_exit` blocks the message pump ~16 s worst case** (8 s request timeout + 8 s poll + `wait()`); Windows ghosts a window at 5 s. And `ExitRequested` with `code.is_none()` always calls `prevent_exit()`, so an OS logoff never reaches the graceful shutdown at all. | `sidecar.rs:514` |
+| ⚠️ | **`spawn_telemetry_loop` runs a blocking `CreateProcess` (`nvidia-smi`) and a blocking file write on a tokio worker every 3 s.** Belongs in `spawn_blocking`. | `lib.rs:301` |
+| ⚠️ | **Unbounded line buffers** in `stream.rs:350` and `commands.rs:569` — a body with no `\n` grows until OOM. | both |
+
+---
+
+## Frontend
+
+All twelve were reproduced in headless Chromium against the real pages.
+
+| | Finding | Where |
+|---|---|---|
+| ✅ | **Two concurrent streams write into one buffer.** `openApproval` sets phase `approval` and `approval-resolved` sets `done`, both while the first stream is still live — so the `streaming` re-entrancy guard is bypassed. Measured: 2 `stream_chat`, 0 `cancel_chat`, and a token from stream #1 rendered inside answer #2. `send()` also overwrites `state.abort`, so Stop can only ever cancel the newer one. | `main.js:1120` |
+| ✅ | **A link in an approval preview navigates the whole window away.** Previews are linkified but the external-link delegate is bound only to `#answer`, so the click is a real navigation off `index.html` and `open_external_url` is never called. Model-authored text reaches this element and there is no way back — the app is gone until relaunch. | `main.js:783`, `:1327` |
+| ✅ | **The same approval can be decided twice.** `state.deciding` is released in `finally` but `state.approval` is only cleared by `approval-resolved`, so a second Ctrl+Enter before the broadcast sends `decide_approval` again. If the decision hangs, both buttons stay disabled forever with no timeout and Escape is swallowed. | `main.js:866` |
+| ✅ | **`onQueue`'s two branches are the identical statement** — the `if` is dead code — so every queue re-read calls `openApproval`, stealing focus from the input mid-typing, re-pinning the window, and reopening a card the user just resolved if a stale read still carries it. Measured 4 focus steals and 4 `set_quickbar_pinned` calls from 4 re-reads. The widget has a `fresh` guard; the quickbar has none. | `main.js:1466` |
+| ✅ | **The widget hides its card when *any* approval resolves**, because its handler ignores the payload id while the quickbar's compares it. Two pending gates, resolve the other one, and the widget drops a card that is still live. | `widget.js:477` |
+| ✅ | **`__strong__` runs before linkification and rewrites URLs to a different valid URL.** `https://x.com/a__b__c` renders `href="https://x.com/a"` — and that href is what `open_external_url` hands to the OS shell. Also swallows a sentence-ending period into the href. | `main.js:252` |
+| ✅ | **The `@@JARVISCODE<n>@@` placeholder is neither namespaced nor escaped**, so model output containing that literal is substituted with unrelated content — duplicated spans, `<code>undefined</code>`, or a full index swap. Not XSS; the contents are escaped. Just not what the model wrote. | `main.js:242` |
+| ✅ | **Ordinary markdown is mangled.** Tables not preceded by a blank line render as prose; `---` becomes a paragraph; a lazy list continuation splits one list into three blocks; a fenced block inside an ordered list restarts the numbering at 1; no `start` attribute is ever emitted; `~~~` fences render as `<s>` garbage. | `main.js:441` |
+| ✅ | **The quickbar shell measured 820px against its 720 clamp** with a long answer plus an open gate — Rust clamps, CSS does not, so `.card-foot` and the end of the body are simply off-window with no scroller that reaches them. The widget measured 289/320, within bounds but with no `max-height` anywhere in `widget.css`. | `main.js:494` |
+| ✅ | **The settings page's 5s poll clobbers what you are typing** — no dirty check, no visibility guard, and the interval is never cleared. It also re-enables Start mid-operation while `act()`'s lock is held, so a second `start_backend` can be issued. | `settings.js:133`, `:219` |
+| ✅ | **Accessibility.** `aria-live="polite"` is on `#shell` — the entire UI — so a screen reader re-announces the whole answer on every repaint, with the approval card's `assertive` region nested inside it. The widget's Logseq/Joplin switch is a click-only `<div>` with no role, tabindex or key handler; its send button's accessible name is `"↵"`; its approval card has no live region. | `index.html:15`, `widget.html` |
+| ✅ | **Dead code:** `state.inFlight` written and never read; `dom.submitHint`/`dom.captureMeta` unused; `index.html` ids `bar`, `reactor`, `card-status` unreferenced; `jarvis-link.js` exports `onEvent`, `currentQueue`, `normaliseApproval` with no importer — so the `jarvis-event` fan-out feeds a permanently empty Set. | several |
+
+**Checked and clear:** the final chunk is never dropped (41 chunks, all three ending paths); no listener leak in practice (one handler per event per surface, each window its own realm); no focus trap in either approval card.
+
+
+## Windows platform
+
+| | Finding | Evidence |
+|---|---|---|
+| ✅ | **The Acrylic tint is discarded on every shipping Windows 11** — confirmed in the crate source: above build 22523 `apply_acrylic` takes the DWM path and never passes `color`. **But the reviewer's severity was wrong.** It rated this CRITICAL because "the text contrast the design relies on never exists". It does exist: `--surface` is `rgba(8,9,12,0.86)`, which composites to `rgb(43,43,46)` against a pure white desktop with no DWM tint at all — **10.7:1**, comfortably AAA, and the widget is 11.4:1. The tint was belt to the CSS braces. Downgraded to cosmetic; the code now says so, including that the HRESULT is unchecked so a success proves nothing. | `windows.rs:117` |
+| ⚠️ | **The HUD is built `transparent(false)`**, so the Mica backdrop is painted over; and `apply_mica` returns `Ok(())` on any Win11 build without checking the HRESULT, so the Acrylic fallback can never fire. | `lib.rs:379`, `windows.rs:133` |
+| ⚠️ | **`Alt+Space` is taken from the whole machine** while registered — it is the system window menu in every app, and PowerToys Run's default. Failures are `eprintln!` only, which release builds discard. `MOD_WIN` (Win+Shift+J) is documented as reserved for the OS. | MS `RegisterHotKey` docs |
+| ⚠️ | **Mixed-DPI widget position is wrong three ways** — `Moved` gives physical coords in one virtual space, divided by the *current* monitor's scale and stored as "logical", then fed back through `set_position(Logical)` on a possibly different monitor. There is no global logical space on Windows. | `windows.rs:509` |
+| ⚠️ | **Bare `Command::new("python")`** resolves through `CreateProcessW`'s search order, which includes the **current working directory before PATH** — a planted `python.exe` runs. Same for `nvidia-smi` and `rundll32.exe`. On stock Win11 `python.exe` is also an App Execution Alias that exits and opens the Store if Python is absent. | rust-lang/rust#37519 |
+| ✅ | **`screenshots 0.8.10` is abandoned** — its own crates.io description is "Move to [XCap]". Successor `xcap` 0.9, Apache-2.0, same author, near-identical API. | verified in registry |
+| ⚠️ | **Transparent windows swallow mouse input** across the full rect including the empty rounded corners; nothing calls `set_ignore_cursor_events`. The acrylic slab behind the CSS radius stays square. | window-vibrancy README |
+| ⚠️ | **`rundll32 url.dll,FileProtocolHandler` is a catalogued LOLBin** — Defender ASR and EDR alert on it, and a policy can block it with no error surfaced. `ShellExecuteExW` returns a real HRESULT and spawns no process. The URL validation itself resisted every attack the reviewer tried. | LOLBAS |
+
+---
+
+## Build, dependencies, licensing
+
+| | Finding |
+|---|---|
+| ✅ | **The declared MSRV is a false contract.** `rust-version = "1.77.2"`; `notify-rust 4.18.0` (via `tauri-plugin-notification`) declares `rust-version = "1.89.0"`. 1.77.2 cannot even parse the lockfile (`edition2024`). |
+| ✅ | **No `LICENSE` file anywhere**, despite `license = "MIT"` in both manifests. No `NOTICE`, no third-party notices. ~30 Apache-2.0 deps have an unmet §4(d) obligation. |
+| ✅ | **247 KB of dead weight ships in the binary.** `jarvis-reactor-kit.html` is referenced by exactly one thing in the repo: a doc comment in `spec.rs:15`. It is 53% of the embedded asset payload. |
+| ✅ | **No CI, no `.github/`, no test script.** 21 tests exist and nothing runs them. |
+| ✅ | **`cargo audit` fails on the committed lockfile — `error: 2 vulnerabilities found!`** Both are CVSS 7.5 in `quick-xml 0.28.2`, and both trace to `screenshots → libwayshot → wayland-scanner`. Confirmed **not** reachable in the Windows graph (`cargo tree --target x86_64-pc-windows-msvc -i quick-xml@0.28.2` → nothing), but they are in the lockfile, they fail any CI audit gate from day one, and they are live for a Linux build. `screenshots` accounts for 5 of the 12 audit findings on its own. Replacing it with `xcap` clears all five — the highest-leverage single change in this audit. |
+| ⚠️ | **No code signing configured** — every installer hits SmartScreen "Unknown publisher". `allowDowngrades: true` is a downgrade-attack surface. |
+| ⚠️ | **Google Fonts are fetched at runtime** by the packaged app — an IP leak to Google on every window open, and broken typography offline. Chakra Petch and IBM Plex are both SIL OFL 1.1: bundling is explicitly permitted. |
+| ⚠️ | **`window-vibrancy` is a redundant direct dependency.** Tauri 2.11.5 already depends on 0.6 and wraps all three calls we make via `WebviewWindow::set_effects()`. Ours is 0.5.3; both compile in. |
+| ✅ | **Good news, checked and clear:** no GPL/AGPL/LGPL anywhere; one MPL-2.0 crate actually links (`option-ext`, notice + upstream link required); zero CVEs in the Windows graph; `tauri = "2"` provably cannot resolve to a 3.x alpha; all plugins current; features correct; `panic = "abort"` does **not** break `cargo test`. |
+
+---
+
+## Reviewer claims that did not survive verification
+
+- **"`build_hud_window` is unreachable dead code because `tauri.conf.json` declares a remote `hud` window."** Half right, and I got the correction wrong first. The *tracked* config has no `hud` entry — it left in `a75806b`. But the *generated, gitignored* `src-tauri/tauri.conf.json` does, and that is the file `cargo` reads. Recorded as blocker #4.
+- **"The markdown renderer is XSS-vulnerable."** It is not. The reviewer fuzzed 400 000 cases and could not escape it; `escapeHtml` runs first on every path and no later stage reintroduces a raw `"`, which is the invariant that holds it. Its weakness is the parser loop (blocker #1), not the escaper.
+- **"`sync:config` copies the root over the *hardened* src-tauri config."** Backwards. The stale copy is stricter (`script-src 'self'`, no Google Fonts) but wrong — it would break the vendored HUD's inline scripts outright.
+
+---
+
+## Fix order
+
+1. The two bugs a user hits on first run: the markdown loop (one regex plus a
+   guaranteed `index += 1`) and the wedged stream (`finishStream` on the
+   terminator path). Neither is more than a few lines.
+2. Delete the config duplication. Move the real config to `src-tauri/`, drop `sync:config`. Removes the whole class.
+3. The approval flow: one decision per gate, `onQueue` must not reopen or
+   steal focus, the widget must check the id, and the link delegate must cover
+   the preview.
+4. `pid()` must not have side effects; separate "is it alive" from "forget it".
+5. Reset `last_id` from `hello.latest` when the server has renumbered.
+6. Auth headers on the health probe; status checks on `refresh_pending` and `prime_from_version`.
+7. Send images inside the message content, where the server actually forwards them; drop `note_target`.
+8. An app ACL manifest, or at minimum an allowlist on `set_supervision`/`set_api_settings` and removal of the 8 unused commands.
+9. `screenshots` → `xcap` (clears 5 audit findings), then MSRV, LICENSE + third-party notices, self-hosted fonts, drop the reactor kit from `frontendDist`, add CI.
+
+Windows-only items (Acrylic tint, DPI, hotkeys, `xcap`, `ShellExecuteExW`) need a
+real machine to confirm before changing — several are cheap to fix blind and
+expensive to get wrong.

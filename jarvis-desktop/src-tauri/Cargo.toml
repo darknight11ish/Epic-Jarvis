@@ -1,0 +1,116 @@
+[package]
+name = "jarvis-desktop"
+version = "0.1.0"
+description = "Jarvis Desktop — native Windows 11 spotlight client for the Jarvis stack"
+authors = ["Jarvis Labs"]
+license = "MIT"
+repository = "https://github.com/darknight111/Epic-Jarvis"
+edition = "2021"
+rust-version = "1.89"
+build = "build.rs"
+
+# `main.rs` is a two-line shim over this library so the same orchestration code
+# can be reused by integration tests and future mobile entry points.
+[lib]
+name = "jarvis_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-ico", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-notification = "2"
+# §3.1/§4: the API base URL and the pairing token persist here, not in the
+# page's localStorage. Read from Rust so the token reaches the webview only as
+# a JARVIS.set() call at page load.
+tauri-plugin-store = "2"
+# Build order step 3: starting the app twice focuses the running window.
+tauri-plugin-single-instance = "2"
+# 0.6, not 0.5 and not 0.8. Tauri 2.11.5 itself depends on 0.6.0, so 0.5.3
+# compiled a second copy of the crate; 0.8 would compile a second copy again in
+# the other direction. 0.5 -> 0.6 is an objc2 bump and an MSRV raise; the
+# Windows apply_acrylic/apply_mica surface this file uses is unchanged.
+window-vibrancy = "0.6"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+base64 = "0.22"
+# CPU/RAM sampling for the desktop widget's telemetry panel. GPU figures come
+# from `nvidia-smi`, which needs no crate.
+sysinfo = "0.32"
+# Replaces `screenshots`, whose own crates.io description reads "Move to
+# [XCap]" — same author, same Monitor::all() shape, actively released. It also
+# takes five `cargo audit` findings out of the lockfile with it, including two
+# CVSS 7.5 DoS advisories in quick-xml that arrived through its Wayland path.
+xcap = "0.9"
+# `native-tls`, not the default `rustls`. Two reasons and the second is the
+# one that decided it: reqwest in this crate already speaks native-tls, so
+# rustls would link a SECOND TLS stack into the binary for one JSON fetch — and
+# rustls pulls `ring`, which needs a C compiler for the target and so cannot be
+# cross-checked from the Linux container this is developed in. On Windows
+# native-tls is schannel, which is the OS's own verifier.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
+# Real microphone capture for the push-to-talk voice loop. WASAPI on Windows -
+# no system audio library needed there, unlike cpal's Linux (ALSA) backend,
+# which is why `cargo check --target x86_64-pc-windows-msvc` (this project's
+# own way of checking Rust without a GTK-shaped Linux dependency graph) is the
+# one that actually proves this compiles.
+cpal = "0.15"
+# Encodes the captured samples as the 16-bit PCM WAV `jarvis_speech._read_wav`
+# requires - confirmed against that function directly, not guessed.
+hound = "3.5"
+
+# Build order step 4: killing the process TREE, not the process. On Windows
+# that is a Job Object; on Unix a process group. Both are a handful of calls,
+# and both versions below are already in this crate's dependency graph via
+# Tauri, so neither adds a new package to the build.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  # CreateJobObjectW takes a SECURITY_ATTRIBUTES pointer, so the job-object
+  # bindings are gated on this even though the pointer we pass is null.
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+  "Win32_System_Diagnostics_ToolHelp",
+  # ShellExecuteExW, for opening a link in the user's browser. SHELLEXECUTEINFOW
+  # carries an HKEY, so the struct and the function are both gated on
+  # Win32_System_Registry as well as Win32_UI_Shell.
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Registry",
+] }
+# The higher-level `windows` crate, not another windows-sys binding - not a
+# new dependency either: Tauri's own graph already resolves 0.61.3 for other
+# crates (webview2-com among them), confirmed in Cargo.lock, so this adds no
+# second copy. Needed for the WinRT toast APIs (COM activation, HSTRING,
+# IInspectable) that tauri-plugin-notification's desktop backend does not
+# reach at all - see winrt_toast.rs's own doc for why that plugin cannot
+# offer a Deny button on Windows and this bypasses it on purpose.
+windows = { version = "0.61", features = [
+  "UI_Notifications",
+  "Data_Xml_Dom",
+  "Win32_UI_Shell",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+# WebView2 devtools in release builds. Devtools are always on in debug builds.
+devtools = ["tauri/devtools"]
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

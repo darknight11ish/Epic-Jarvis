@@ -1,0 +1,15 @@
+# Rust / Tauri build output
+src-tauri/target/
+src-tauri/gen/
+
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

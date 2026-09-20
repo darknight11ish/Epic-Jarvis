@@ -1,0 +1,111 @@
+--- a/jarvis_memory.py
++++ b/jarvis_memory.py
+@@ -155,6 +155,42 @@
+     return struct.pack(f"{len(v)}f", *v)
+ 
+ 
++def _usable_vector(v, dim: int) -> bool:
++    """Is this embedding safe to store or query with?
++
++    struct.pack takes NaN and infinity without complaint, so a broken embedder
++    writes rows that look fine and then behave strangely: with a NaN in the
++    table every distance comparison against it is false, so the row is not
++    "ranked badly", it is unreachable - and nothing anywhere says so. An
++    all-zero vector is the other shape of the same problem, and it is the one
++    Jan documents: cosine divides by the norm, so a zero vector makes every
++    score NaN rather than merely inaccurate.
++
++    The width check matters for a different reason. facts_vec is declared
++    float[dim] at creation and sqlite-vec raises on a mismatch; the store
++    already handles the model CHANGING width by dropping the table, but a
++    single short row from a partial read would raise per-insert forever.
++
++    Cheap: one pass over 384 floats, on a path that has just run a transformer.
++    """
++    if not isinstance(v, (list, tuple)) or len(v) != dim:
++        return False
++    total = 0.0
++    for x in v:
++        if not isinstance(x, (int, float)) or isinstance(x, bool):
++            return False
++        f = float(x)
++        # NaN is the only value not equal to itself; the infinities are caught
++        # by the range test. math.isfinite covers both and is clearer.
++        if not math.isfinite(f):
++            return False
++        total += f * f
++    # Not `total == 0`: an all-but-zero vector normalises to garbage just as
++    # badly, and float error means an exact zero is not the only way to get
++    # there. This threshold is far below any real unit vector, whose norm is 1.
++    return total > 1e-12
++
++
+ # Words that match nearly every fact and so tell you nothing about which one.
+ # FTS5 has no stoplist of its own, so an OR-query built from every word in the
+ # question matched almost the whole store on "the" and "is", and bm25 then
+@@ -334,6 +370,11 @@
+                              now, replaced_by, fact_id))
+             return cur.rowcount > 0
+ 
++    # Counted rather than logged: this module has no logger, and a print on a
++    # background thread in a windowed app goes to a closed handle. status()
++    # is where it becomes visible.
++    _bad_vectors = 0
++
+     def _embed_rows(self, c, rows: list[tuple[int, str]]) -> int:
+         """Embed and index. Returns how many rows were actually written.
+ 
+@@ -351,6 +392,14 @@
+             return 0
+         done = 0
+         for (fid, _), v in zip(rows, vecs):
++            if not _usable_vector(v, self.embedder.dim):
++                # Left at embedded=0 deliberately, exactly as a failed INSERT
++                # is: the fact is stored and findable by keyword, and the
++                # backfill will try it again when the embedder is working. The
++                # alternative - store it anyway - is a row that can never be
++                # returned and never be noticed.
++                self._bad_vectors += 1
++                continue
+             try:
+                 c.execute("INSERT OR REPLACE INTO facts_vec (fact_id, embedding) VALUES (?, ?)",
+                           (fid, _pack(v)))
+@@ -440,6 +489,14 @@
+             if self._vec_ok and self.embedder.semantic:
+                 try:
+                     qv = self.embedder.embed([query])[0]
++                    # A bad QUERY vector is worse than a bad stored one: it
++                    # does not fail, it silently ranks the whole table by
++                    # distance-from-nonsense and those rows then outrank the
++                    # keyword hits through RRF. Drop the vector vote and let
++                    # FTS5 answer alone, which is the same thing that happens
++                    # on a machine with no embedding model.
++                    if not _usable_vector(qv, self.embedder.dim):
++                        raise ValueError("unusable query vector")
+                     rows = c.execute(
+                         "SELECT fact_id, distance FROM facts_vec WHERE embedding MATCH ?"
+                         " ORDER BY distance LIMIT ?", (_pack(qv), candidates)).fetchall()
+@@ -557,9 +614,20 @@
+                 "SELECT COUNT(*) FROM facts WHERE valid_to IS NULL OR valid_to > ?",
+                 (time.time(),)).fetchone()[0]
+             pending = c.execute("SELECT COUNT(*) FROM facts WHERE embedded=0").fetchone()[0]
+-        return {"db": str(self.path), "facts": total, "current": current, "retired": total - current,
+-                "embedder": self.embedder.name, "semantic": self.embedder.semantic,
+-                "vector_search": self._vec_ok, "unembedded": pending}
++        out = {"db": str(self.path), "facts": total, "current": current,
++               "retired": total - current,
++               "embedder": self.embedder.name, "semantic": self.embedder.semantic,
++               "vector_search": self._vec_ok, "unembedded": pending}
++        if self._bad_vectors:
++            # Only when it has happened. A permanent "bad_vectors: 0" line is
++            # noise on every screen that renders status().
++            out["bad_vectors"] = self._bad_vectors
++            out["bad_vectors_note"] = (
++                f"{self._bad_vectors} embedding(s) came back unusable - not a "
++                "number, or all zeros - and were not stored. Those facts are "
++                "still found by keyword. If this keeps climbing the embedding "
++                "model is broken, not the store.")
++        return out
+ 
+ 
+ _store: Optional[MemoryStore] = None

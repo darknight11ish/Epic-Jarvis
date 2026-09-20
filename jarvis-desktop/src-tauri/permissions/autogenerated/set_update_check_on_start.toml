@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-update-check-on-start"
+description = "Enables the set_update_check_on_start command without any pre-configured scope."
+commands.allow = ["set_update_check_on_start"]
+
+[[permission]]
+identifier = "deny-set-update-check-on-start"
+description = "Denies the set_update_check_on_start command without any pre-configured scope."
+commands.deny = ["set_update_check_on_start"]

@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jarvis Desktop — Settings</title>
+    <!--
+      Theme before first paint. Synchronous from localStorage rather than
+      waiting for the IPC round trip, because a window that paints deep-space
+      and flips to paper 80ms later is worse than one that paints the right
+      thing immediately. The store stays the source of truth and the script
+      below reconciles against it.
+
+      The allowlist is here and not only in applyTheme: a stale or hand-edited
+      value would otherwise paint an unmatched [data-theme] and then flip,
+      which is exactly the flash this exists to prevent.
+    -->
+    <script>
+      try {
+        var t = localStorage.getItem("jarvis.theme");
+        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {
+        /* private mode, cleared site data - the default theme is correct */
+      }
+    </script>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body>
+    <!--
+      Jarvis Desktop — settings.
+
+      Deliberately the only place in this app that writes anything, and it writes
+      exactly two things: where the backend is, and whether Jarvis Desktop may
+      start one. Build order step 5 adds the read-only panes — models, memory,
+      config, skills — as sections alongside these.
+    -->
+    <main class="page">
+      <header class="page-head">
+        <h1>Jarvis Desktop</h1>
+        <p class="sub" id="version">settings</p>
+      </header>
+
+      <section class="card">
+        <h2>Connection</h2>
+        <p class="note">
+          Where the backend is. The token is held here and injected into the HUD at
+          load; it is never written to that page's storage and never shown again
+          once saved.
+        </p>
+
+        <label class="field">
+          <span class="label">Base URL</span>
+          <input id="base" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="http://127.0.0.1:4719" />
+        </label>
+
+        <label class="field">
+          <span class="label">Token <span class="hint" id="token-state">not set</span></span>
+          <input id="token" type="password" spellcheck="false" autocomplete="off"
+                 placeholder="leave blank to keep the current one" />
+        </label>
+
+        <label class="field">
+          <span class="label">Let my phone reach this over Tailscale</span>
+          <input id="bind-address" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="leave blank to keep this on this machine only" />
+        </label>
+        <p class="note">
+          Only fill this in if you use Tailscale and want your phone to talk to
+          Jarvis too. Type this computer's own Tailscale address here — it looks
+          like <code>100.x.x.x</code>, and you can find it in the Tailscale app.
+          Leave it blank and nothing changes: Jarvis stays reachable from this
+          computer alone, which is the default and the safe choice. This never
+          opens Jarvis to the whole internet, or even to your home Wi-Fi — only
+          to devices on your own Tailscale network.
+        </p>
+
+        <div class="row">
+          <button class="btn" id="save-connection" type="button">Save connection</button>
+          <button class="btn ghost" id="clear-token" type="button">Clear token</button>
+          <span class="status" id="connection-status" role="status"></span>
+        </div>
+
+        <div class="link" id="link-state" data-connected="false">
+          <span class="dot"></span>
+          <span id="link-text">checking the event stream…</span>
+          <button class="btn ghost small" id="reconnect" type="button">Reconnect</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Appearance</h2>
+        <p class="note">
+          The theme applies to every window at once — the spotlight, the
+          widget, the Brain and this one. High contrast is held to a stricter
+          standard than the others: every text pair in it clears 7:1 against
+          both a dark and a light desktop, which matters because these windows
+          are transparent and the wallpaper behind them is not ours to choose.
+        </p>
+        <label class="row">
+          <span class="label">Theme</span>
+          <select id="theme">
+            <option value="deep-space">Deep space — near-black, cool</option>
+            <option value="ember">Ember — near-black, warm</option>
+            <option value="paper">Paper — light, opaque</option>
+            <option value="high-contrast">High contrast — AAA</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Updates</h2>
+        <p class="note">
+          Jarvis Desktop can look at its GitHub releases and tell you when a
+          newer build exists. It will not install one. Checking sends a single
+          request carrying nothing but the request itself — no identifier, no
+          telemetry, no account — and installing is the button below, pressed
+          by you. An update replaces the program, which is the largest single
+          change anything here can make to this machine, and nothing in Jarvis
+          does that on a timer.
+        </p>
+
+        <label class="row">
+          <span class="label">Look for updates when Jarvis starts</span>
+          <input id="update-auto" type="checkbox" />
+        </label>
+
+        <p class="state" id="update-state">—</p>
+
+        <div class="progress-track" id="update-progress" hidden>
+          <div class="progress-fill" id="update-progress-fill"></div>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="update-check" type="button">Check now</button>
+          <button class="btn" id="update-install" type="button" hidden>Install</button>
+          <button class="btn" id="update-restart" type="button" hidden>Restart now</button>
+          <span class="status" id="update-status" role="status"></span>
+        </div>
+
+        <details class="update-notes" id="update-notes" hidden>
+          <summary>Release notes</summary>
+          <p class="note" id="update-notes-body"></p>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>Shortcuts</h2>
+        <p class="note">
+          Global accelerators: they work whatever window has focus, which also
+          means only one application on the machine can hold each combination.
+          If one shows as <em>in use</em>, something else claimed it first —
+          <code>Alt+Space</code> in particular is taken by PowerToys Run and,
+          on recent Windows 11 builds, by the Copilot app. Everything here is
+          also reachable from the tray icon, always.
+        </p>
+        <p class="note">
+          Every shortcut needs a modifier. A bare key bound globally would
+          swallow that key everywhere on the machine, including in the box you
+          would use to change it back.
+        </p>
+
+        <div id="hotkey-rows"></div>
+
+        <div class="row">
+          <button class="btn" id="save-hotkeys" type="button">Save shortcuts</button>
+          <button class="btn ghost" id="reset-hotkeys" type="button">Reset to defaults</button>
+          <span class="status" id="hotkey-status" role="status"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Backend</h2>
+        <p class="note">
+          Off by default, and it stays off unless you switch it on here. With it on,
+          Jarvis Desktop starts the backend when it launches — unless something is
+          already listening, in which case it attaches to that instead of running a
+          second one against the same approval queue. Quitting asks the backend to
+          stop, so the model comes off the GPU, and terminates the process tree only
+          if asking did not work. A backend you started yourself is never adopted
+          and never stopped.
+        </p>
+
+        <label class="toggle">
+          <input id="supervise" type="checkbox" />
+          <span>Let Jarvis Desktop start and stop the backend</span>
+        </label>
+
+        <label class="field">
+          <span class="label">Program</span>
+          <input id="program" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="python" />
+        </label>
+
+        <label class="field">
+          <span class="label">Arguments <span class="hint">one per line</span></span>
+          <textarea id="args" rows="2" spellcheck="false"
+                    placeholder="C:\jarvis\jarvis_hud.py"></textarea>
+        </label>
+
+        <label class="field">
+          <span class="label">Working directory <span class="hint">optional</span></span>
+          <input id="cwd" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="defaults to the folder holding the script" />
+        </label>
+
+        <div class="row">
+          <button class="btn" id="save-backend" type="button">Save backend</button>
+          <button class="btn ghost" id="start-backend" type="button">Start</button>
+          <button class="btn ghost" id="stop-backend" type="button">Stop</button>
+          <span class="status" id="backend-status" role="status"></span>
+        </div>
+
+        <p class="state" id="backend-state">—</p>
+      </section>
+
+      <section class="card">
+        <h2>Startup and logs</h2>
+        <p class="note">
+          Jarvis writes what it is doing to a file. If the backend refuses to start,
+          the reason is in <code>backend.log</code> — before this existed there was
+          nowhere for it to go, because a released Windows app has no console.
+          Both files are plain text and <strong>nothing in them is hidden or
+          scrambled</strong>, so read one before you send it to anybody.
+        </p>
+
+        <label class="toggle">
+          <input id="autostart" type="checkbox" />
+          <span>Start Jarvis when Windows starts</span>
+        </label>
+        <p class="note" id="autostart-note">
+          Jarvis will be running after a restart. It does not promise to be
+          <em>first</em> — other startup programs are racing it for the
+          <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and whoever asks first wins.
+        </p>
+
+        <div class="row">
+          <button class="btn ghost" id="open-logs" type="button">Open the log folder</button>
+          <span class="status" id="logs-status" role="status"></span>
+        </div>
+
+        <p class="state" id="logs-state">—</p>
+      </section>
+
+      <section class="card">
+        <h2>Frequently asked questions</h2>
+        <p class="note">
+          Answers specific to this program, the one running on this computer.
+          Jarvis on your phone is a different app with its own FAQ, because
+          the two run into different problems.
+        </p>
+
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary class="faq-q">Does anything I say to Jarvis leave this computer?</summary>
+            <p class="faq-a">
+              No, not on its own. Jarvis answers using a language model that
+              runs on this machine. It only reaches the internet for
+              something specific, and only after it explains what it needs
+              and you say yes — there is no standing permission to go
+              online, and this program never opens a public tunnel to
+              itself.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Why is there no "approve everything" button?</summary>
+            <p class="faq-a">
+              On purpose. Anything Jarvis wants to do that is not
+              completely safe stops and asks first, one action at a time.
+              A single button to wave all of those through would undo that
+              protection, so this program is built with no way to add one,
+              anywhere in it.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">My Alt+Space shortcut does not do anything.</summary>
+            <p class="faq-a">
+              Something else on this computer has already claimed that
+              combination — usually PowerToys Run, or on recent Windows 11
+              builds, the Copilot app. Open Shortcuts above: a binding that
+              is not working says <em>in use</em> there. Pick a different
+              combination and press Save shortcuts.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Can my phone talk to Jarvis?</summary>
+            <p class="faq-a">
+              Yes, over Tailscale — a private network between only the
+              devices you own, never the open internet. Turn it on above,
+              in Connection, under "Let my phone reach this over
+              Tailscale," by typing this computer's own Tailscale address.
+              Leave that box blank and nothing changes: Jarvis stays
+              reachable from this computer alone.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Why does the microphone button do nothing?</summary>
+            <p class="faq-a">
+              Windows dictation and browser speech recognition both send
+              your voice to a company's servers to turn it into text, which
+              breaks the rule that nothing private leaves this machine — so
+              this program switches that off rather than use it. An
+              offline replacement that never leaves the computer is being
+              built; until it is finished, dictation stays off rather than
+              quietly sending your voice somewhere you did not ask it to
+              go.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Jarvis suddenly got slow. What happened?</summary>
+            <p class="faq-a">
+              Open the Brain window → Models. If the language model has
+              fallen off the graphics card onto the processor instead,
+              there is a yellow line at the top of that list saying so,
+              with the percentage. That is almost always the cause — a
+              graphics card doing the work is fast, a processor doing the
+              same work is not.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">What is the difference between Quiet and Standby?</summary>
+            <p class="faq-a">
+              Both are ways for Jarvis to use less power while you are not
+              using it. Quiet stops the things Jarvis does on its own in
+              the background, but keeps the model loaded, so it still
+              answers you instantly. Standby also unloads the model from
+              the graphics card — the real drop in power use — at the cost
+              of a slower first answer (five to fifteen seconds) after you
+              wake it back up.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Will Jarvis update itself without asking?</summary>
+            <p class="faq-a">
+              No. It can check whether a newer version exists and tell you
+              about it, above under Updates, but it never installs one on
+              its own. Installing is always the Install button, pressed by
+              you.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">I closed the window, but Jarvis is still running. Is that a bug?</summary>
+            <p class="faq-a">
+              No — that is how this program is built. Closing any window,
+              including the main assistant window's own close button, just
+              hides it; Jarvis keeps running so it can still answer you
+              instantly. To actually quit, use "Quit" on the tray icon,
+              near your clock.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Is my pairing token safe?</summary>
+            <p class="faq-a">
+              It is stored on this computer only, it is never shown again
+              once you save it here, and this page never sends it anywhere
+              except the backend address you configured above. It is
+              stored as plain text on disk, not scrambled, so treat this
+              computer's own user account the way you would treat any
+              other place a password lives.
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <!-- ── About ─────────────────────────────────────────────────────────
+           Identity, not instructions - the FAQ above already answers "how
+           does this behave"; this answers "what is this, and where did it
+           come from." The version comes from the same `update_status` read
+           the Updates section above already makes, in `paintUpdate()` -
+           never a second, separately-maintained copy of the number that
+           could drift from the one actually running. -->
+      <section class="card">
+        <h2>About Jarvis</h2>
+        <p class="note">
+          A local-first personal assistant. A Python backend on this
+          computer, this Tauri shell around it, and a language model that
+          runs here rather than in a data centre somewhere else. Nothing
+          private leaves this machine on its own, there is no public tunnel
+          into this program, there are no API keys built into it, and there
+          is no "approve everything" control anywhere in it — every action
+          Jarvis wants to take stops and asks first, one action at a time.
+        </p>
+        <dl class="about-facts">
+          <div class="about-fact">
+            <dt>Version</dt>
+            <dd id="about-version">—</dd>
+          </div>
+          <div class="about-fact">
+            <dt>License</dt>
+            <dd>MIT — see LICENSE in the source</dd>
+          </div>
+          <div class="about-fact">
+            <dt>Source</dt>
+            <dd>
+              <a
+                href="https://github.com/darknight111/Epic-Jarvis"
+                data-external="true"
+              >github.com/darknight111/Epic-Jarvis</a>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <footer class="page-foot">
+        <span id="store-path"></span>
+      </footer>
+    </main>
+
+    <script type="module" src="settings.js"></script>
+  </body>
+</html>

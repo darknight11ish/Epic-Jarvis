@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-resize-quickbar"
+description = "Enables the resize_quickbar command without any pre-configured scope."
+commands.allow = ["resize_quickbar"]
+
+[[permission]]
+identifier = "deny-resize-quickbar"
+description = "Denies the resize_quickbar command without any pre-configured scope."
+commands.deny = ["resize_quickbar"]

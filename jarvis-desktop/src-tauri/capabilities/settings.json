@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "settings",
+  "description": "The settings window, and the only surface that can write anything. It holds the two privileged commands: set_supervision persists a program that start_backend runs, and set_api_settings redirects the base URL every token-bearing request is built from. It can also open a link in the real OS browser (About Jarvis's source link) - a single, narrow permission, not one of the two privileged ones above. This window is created on demand and does not exist until the user opens it.",
+  "windows": [
+    "settings"
+  ],
+  "permissions": [
+    "core:default",
+    "jarvis-link",
+    "theme-write",
+    "settings-surface",
+    "external-links",
+    "core:webview:allow-set-webview-zoom"
+  ]
+}

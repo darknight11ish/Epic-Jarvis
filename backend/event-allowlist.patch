@@ -1,0 +1,61 @@
+--- a/jarvis_events.py
++++ b/jarvis_events.py
+@@ -181,9 +181,55 @@
+         # session caught that in a reply and was right to refuse to switch
+         # a working route on someone else's say-so.)
+         ev.data.update({"count": len(pending),
+-                        "items": [{k: v for k, v in item.items()
+-                                   if k not in ("detail", "prompt")}
+-                                  for item in pending[:10]]})
++                        "items": [_doorbell_item(i) for i in pending[:10]]})
++
++
++# An ALLOWLIST, not a denylist, and the difference is not stylistic.
++#
++# This used to be `{k: v for k, v in item.items() if k not in ("detail",
++# "prompt")}`. That filter was written when those were the only two fields
++# carrying text. `raised` was added later - the explanation of why an item is
++# on the card when the tier table said otherwise - and it went out with
++# everything else, because a denylist ships anything nobody remembered to add
++# to it.
++#
++# What `raised` holds is not incidental. The desktop client's own field
++# comments in jarvis-link.js name it:
++#
++#     quote:   "The attacker's words."
++#     context: "Text from the page or the document being judged, so it is
++#               never shown until the user asks for it."
++#
++# So the one field whose whole purpose is quoting hostile outside text was
++# being pushed, unasked, to every subscriber - including a phone that renders
++# approvals on a lock screen, where "never shown until the user asks" is not
++# a thing the notification tray knows about.
++#
++# NOTE: jarvis_content_risk.chip_from() builds that dict and is not in this
++# repository, so the exact contents were confirmed from the CLIENT that reads
++# them rather than the code that writes them.
++#
++# A denylist fails silently - a new column ships itself. An allowlist fails
++# visibly - a new field is missing until someone adds it, and the person who
++# added the column is the person who notices.
++_DOORBELL_KEYS = ("id", "action", "tier", "created")
++
++
++def _doorbell_item(item: dict) -> dict:
++    """One queue entry, reduced to what a notification may say.
++
++    Everything needed to RENDER the queue comes from /api/pending, behind the
++    same token. This says only that something is waiting, and enough about it
++    to sort and de-duplicate.
++    """
++    out = {k: item.get(k) for k in _DOORBELL_KEYS}
++    # A BOOLEAN, never the object. The rule in docs/ARCHITECTURE.md - "an item
++    # carrying `raised` never belongs in a group that can be actioned
++    # quickly" - needs to survive out here, and a client cannot apply it
++    # without knowing the flag is set. It does not need the attacker's words
++    # to do that.
++    out["raised"] = bool(item.get("raised"))
++    return out
+ 
+ 
+ def _poll_proposals(bus: Bus) -> None:

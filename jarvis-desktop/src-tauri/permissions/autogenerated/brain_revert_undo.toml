@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-revert-undo"
+description = "Enables the brain_revert_undo command without any pre-configured scope."
+commands.allow = ["brain_revert_undo"]
+
+[[permission]]
+identifier = "deny-brain-revert-undo"
+description = "Denies the brain_revert_undo command without any pre-configured scope."
+commands.deny = ["brain_revert_undo"]
