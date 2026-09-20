@@ -34,4 +34,7 @@
     <string name="widget_approval_name">Jarvis approvals</string>
     <string name="widget_approval_desc">The oldest pending approval, at a glance.
         Deny answers it directly; approving always opens the app.</string>
+
+    <string name="widget_quicklink_name">Jarvis quick link</string>
+    <string name="widget_quicklink_desc">The link status, and a one-tap Mic to start talking.</string>
 </resources>
