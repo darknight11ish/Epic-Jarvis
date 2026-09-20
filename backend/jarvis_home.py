@@ -244,8 +244,40 @@ def plan_service(domain: str, service: str, entity_id: str,
                      authenticated=authenticated(),
                      reason_empty=f"{URL_ENV} is not set - there is no Home Assistant to control")
 
-    body = {"entity_id": entity_id, **(data or {})}
-    heavy = _is_heavy_service(domain, entity_id)
+    # `data` is model-supplied (jarvis_agent._prepare_home_control passes
+    # args["data"] straight through), and it used to be spread AFTER
+    # entity_id - so `data={"entity_id": "lock.front_door"}` won, and the
+    # call operated an entity that had passed no validation and appeared
+    # nowhere in the headline. Worse, `heavy` was classified from the
+    # argument that had just been overridden, so
+    # `turn_off light.kitchen data={"entity_id":"lock.front_door"}`
+    # unlocked a door on a card with no "this is marked HEAVY" line at all -
+    # and notice_for turns that weight into interrupt-the-owner rather than
+    # wait-to-be-found. _is_heavy_service's own docstring promises "the
+    # entity id is what says what is actually being operated"; this is what
+    # makes that true.
+    #
+    # area_id/device_id are refused rather than classified: both address
+    # things this module cannot resolve to an entity, so neither can be
+    # weighed, and "turn off the garage" must not arrive weightless.
+    extra = dict(data or {})
+    for fan_out in ("area_id", "device_id"):
+        if fan_out in extra:
+            return Plan(kind="call_service", if_refused=if_refused,
+                         authenticated=authenticated(),
+                         reason_empty=(f"{fan_out} cannot be checked against what it "
+                                       "would actually operate, so nothing was sent - "
+                                       "name the entity instead"))
+    target = str(extra.pop("entity_id", entity_id)).strip()
+    if not _is_valid_entity_id(target):
+        return Plan(kind="call_service", if_refused=if_refused,
+                     authenticated=authenticated(),
+                     reason_empty=(f"{target!r} does not look like a Home Assistant "
+                                   "entity id (domain.object_id), so nothing was sent"))
+    # entity_id written LAST, so nothing in `data` can displace it again.
+    body = {**extra, "entity_id": target}
+    heavy = _is_heavy_service(domain, target)
+    entity_id = target
     quoted = urllib.parse.quote
     query = Query(
         url=(f"{base.rstrip('/')}/api/services/"

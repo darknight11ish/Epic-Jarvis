@@ -607,10 +607,21 @@ fn run_vad_loop(
             Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
 
-        let mut buf = match samples.lock() {
-            Ok(b) => b,
-            Err(_) => return, // poisoned - the whole app is already unwinding
-        };
+        // Recovered, not bailed on. The old comment here said a poisoned lock
+        // meant "the whole app is already unwinding" - this module contradicts
+        // that 460 lines earlier, where the capture callbacks were converted to
+        // exactly this call because "once any thread panics while holding it,
+        // EVERY later `lock()` returns `Err` for the life of the process".
+        //
+        // Returning instead ended the VAD loop for good while
+        // `AutoListenState` still held its handle, so
+        // `start_automatic_listening` answered "already listening" ever after:
+        // the microphone open, nothing transcribed, nothing logged. The lock
+        // guards a sample buffer, and a partially-written buffer of audio is
+        // not a reason to stop listening.
+        let mut buf = samples
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if buf.len() <= read_to {
             continue; // nothing new since the last tick
         }

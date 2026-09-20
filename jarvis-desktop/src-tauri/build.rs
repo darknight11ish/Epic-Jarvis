@@ -60,6 +60,10 @@ fn main() {
             "brain_memory_learning",
             "brain_memory_export",
             "brain_memory_as_of",
+            // Same omission as `restart_app` below: in generate_handler! and
+            // called by brain.js, absent here, so unreachable from every
+            // window.
+            "brain_memory_sleep_time",
             // Backend supervision — settings window only
             "supervisor_status",
             "set_supervision",
@@ -81,6 +85,13 @@ fn main() {
             "check_for_update",
             "set_update_check_on_start",
             "install_update",
+            // The other half of installing an update. It was in lib.rs's
+            // generate_handler! and invoked by settings.js, but never here -
+            // which is precisely the failure the comment at the top of this
+            // file warns about: registered, reachable from nowhere. The
+            // owner installed an update, pressed Restart, and got "not
+            // allowed on window" while the new binary sat there unused.
+            "restart_app",
             "get_hotkeys",
             "set_hotkeys",
             "reset_hotkeys",

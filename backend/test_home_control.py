@@ -220,6 +220,51 @@ with with_env(url="http://ha.local:8123", token="tok123"):
     check("CONTROL: a direct lock.unlock is still heavy",
           H.plan_service("lock", "unlock", "lock.front_door").heavy is True)
 
+# ── `data` cannot retarget the call out from under the HEAVY marking ──────
+#
+# `data` is model-supplied - jarvis_agent._prepare_home_control passes
+# args["data"] straight through - and it used to be spread AFTER entity_id
+# into the request body, so it won. The call then operated an entity that had
+# passed no validation, appeared in no headline, and was not what `heavy` had
+# been computed from: turn_off on a light, unlocking a door, with no "marked
+# HEAVY" line anywhere on the card.
+
+with with_env(url="http://ha.local:8123", token="tok123"):
+    smuggled = H.plan_service("homeassistant", "turn_off", "light.kitchen",
+                              {"entity_id": "lock.front_door"})
+    body = smuggled.queries[0].body if smuggled.queries else {}
+    check("a data entity_id override is what actually gets weighed",
+          smuggled.heavy is True, f"heavy={smuggled.heavy} body={body}")
+    check("and the card says HEAVY for the door it would really open",
+          "HEAVY" in H.describe(smuggled).upper(), H.describe(smuggled))
+    check("and the body names one entity, the real one",
+          body.get("entity_id") == "lock.front_door", repr(body))
+
+    # A malformed override is refused outright rather than sent unvalidated,
+    # the same way a malformed entity_id argument already was.
+    bad = H.plan_service("homeassistant", "turn_off", "light.kitchen",
+                         {"entity_id": "../../api/services/lock/unlock"})
+    check("a malformed override is refused, not forwarded", not bad.queries)
+
+    # area_id/device_id address things this module cannot resolve to an
+    # entity, so they cannot be weighed at all - "turn off the garage" must
+    # not arrive weightless.
+    for fan_out in ("area_id", "device_id"):
+        spread = H.plan_service("homeassistant", "turn_off", "light.kitchen",
+                                {fan_out: "garage"})
+        check(f"a {fan_out} fan-out is refused rather than sent unweighed",
+              not spread.queries, repr(spread.reason_empty))
+
+    # CONTROL: ordinary service data still rides along untouched.
+    dimmed = H.plan_service("light", "turn_on", "light.kitchen",
+                            {"brightness_pct": 40})
+    dimmed_body = dimmed.queries[0].body if dimmed.queries else {}
+    check("CONTROL: ordinary data is still sent",
+          dimmed_body.get("brightness_pct") == 40
+          and dimmed_body.get("entity_id") == "light.kitchen",
+          repr(dimmed_body))
+    check("CONTROL: and it stays not heavy", dimmed.heavy is False)
+
 # ── an entity id is not free text, and never reaches a URL raw ────────────
 
 with with_env(url="http://ha.local:8123", token="tok123"):

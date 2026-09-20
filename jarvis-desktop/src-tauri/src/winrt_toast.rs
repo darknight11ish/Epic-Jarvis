@@ -219,7 +219,9 @@ pub fn decide_denied_detached(app: &AppHandle, id: &str) {
     let app = app.clone();
     let id = id.to_string();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = crate::commands::decide_approval(app, id.clone(), false).await {
+        // `option_id: None` - a toast Deny names no plan, and denying never
+        // needs to: refusing all of them is one answer however many there are.
+        if let Err(e) = crate::commands::decide_approval(app, id.clone(), false, None).await {
             crate::logfile::log(&format!(
                 "[jarvis] notification Deny for {id} did not go through: {e}"
             ));

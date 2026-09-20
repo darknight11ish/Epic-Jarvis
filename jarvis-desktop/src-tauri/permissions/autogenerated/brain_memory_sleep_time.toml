@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-memory-sleep-time"
+description = "Enables the brain_memory_sleep_time command without any pre-configured scope."
+commands.allow = ["brain_memory_sleep_time"]
+
+[[permission]]
+identifier = "deny-brain-memory-sleep-time"
+description = "Denies the brain_memory_sleep_time command without any pre-configured scope."
+commands.deny = ["brain_memory_sleep_time"]

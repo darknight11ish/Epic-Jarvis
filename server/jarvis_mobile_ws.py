@@ -63,6 +63,15 @@ MAX_FRAME_BYTES = 1 << 20
 # sends, small enough that refusing it costs nothing.
 MAX_MESSAGE_BYTES = 4 * MAX_FRAME_BYTES
 
+# And a cap on the NUMBER of fragments, because the byte cap above cannot
+# see an empty one. A zero-length continuation frame costs six bytes on the
+# wire, adds nothing to the byte total, and so could be repeated for ever -
+# the exact unbounded growth MAX_MESSAGE_BYTES was added to stop, arriving
+# through the one door it does not watch. Generous next to what this
+# protocol really sends: the phone's own audio never fragments at all, so
+# any real message is one frame and this is 64.
+MAX_MESSAGE_FRAGMENTS = 64
+
 # The client pings every 25s. Three missed intervals means the peer is gone.
 READ_TIMEOUT_SECONDS = 90.0
 
@@ -197,6 +206,12 @@ class MobileSocket:
         """Blocks for one complete data message. ``None`` once the peer goes."""
         fragments: list[bytes] = []
         message_op: int | None = None
+        # Tracked alongside `fragments` rather than recomputed from it. The
+        # byte total was `sum(len(f) for f in fragments)` on EVERY frame,
+        # which is O(n^2) in the fragment count, and the count itself was
+        # not bounded at all.
+        total_bytes = 0
+        frame_count = 0
 
         while True:
             frame = self._read_frame()
@@ -220,9 +235,13 @@ class MobileSocket:
                 if message_op is None:
                     raise WebSocketClosed("continuation without a start frame")
                 fragments.append(payload)
+                total_bytes += len(payload)
+                frame_count += 1
             elif opcode in (OP_TEXT, OP_BINARY):
                 message_op = opcode
                 fragments = [payload]
+                total_bytes = len(payload)
+                frame_count = 1
             else:
                 raise WebSocketClosed(f"reserved opcode {opcode:#x}")
 
@@ -232,10 +251,24 @@ class MobileSocket:
             # rather than truncating - a message this large is malformed on
             # this protocol, and a truncated one would be parsed as if it
             # were whole.
-            if sum(len(f) for f in fragments) > MAX_MESSAGE_BYTES:
+            if total_bytes > MAX_MESSAGE_BYTES:
                 raise WebSocketClosed(
                     f"message exceeded {MAX_MESSAGE_BYTES} bytes across "
-                    f"{len(fragments)} fragments"
+                    f"{frame_count} fragments"
+                )
+            # The byte cap alone did NOT deliver what the paragraph above
+            # promises, because a zero-length continuation frame adds
+            # nothing to it: `fragments` grew without limit while
+            # `total_bytes` stayed put, so the cap never tripped. Six bytes
+            # on the wire each, and the old per-frame `sum(...)` made
+            # assembly quadratic on top - measured at ~3s of CPU for 16k
+            # such frames (96 KB of uplink), on a thread-per-connection
+            # server. A handful of connections could hold the desktop down,
+            # and rule 4 counts a stalled event stream as a reason to refuse
+            # to act. Bounding the count is what actually closes it.
+            if frame_count > MAX_MESSAGE_FRAGMENTS:
+                raise WebSocketClosed(
+                    f"message exceeded {MAX_MESSAGE_FRAGMENTS} fragments"
                 )
 
             if fin:
@@ -570,6 +603,17 @@ class MobileEndpoint:
         key = (headers.get("Sec-WebSocket-Key") or "").strip()
         if not key:
             self._refuse(handler, 400, "missing Sec-WebSocket-Key")
+            return False
+        # Checked here, not left to `compute_accept`'s `key.encode("ascii")`.
+        # That raised UnicodeEncodeError straight out of `_handshake`, which
+        # runs OUTSIDE `serve`'s try block and so took the serving thread
+        # with it - the identical crash, from the identical cause, that the
+        # `Authorization` comparison below was already fixed for. One high
+        # byte survives as a real character because `http.client` decodes
+        # headers as latin-1, and this header is read before any token is,
+        # so an unauthenticated caller could reach it.
+        if not key.isascii():
+            self._refuse(handler, 400, "bad Sec-WebSocket-Key")
             return False
 
         # A browser cannot be talked into forging `Origin`, and it always

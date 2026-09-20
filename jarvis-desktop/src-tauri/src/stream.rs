@@ -385,7 +385,10 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
     // Same reasoning for the queue: `note()` only publishes on change, so a
     // client that connects while three approvals are already waiting hears
     // nothing at all until a fourth arrives.
-    refresh_pending(app, base).await;
+    // Result ignored deliberately: this is the initial prime, and
+    // `refresh_pending` has already set `stale` itself if it failed. There is
+    // no `stale = false` here to guard.
+    let _ = refresh_pending(app, base).await;
 
     let mut frame = Frame::default();
     // Lines are cut from raw bytes so a multi-byte character split across two
@@ -490,9 +493,24 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 // Everything local is suspect — re-read it, do not replay.
                 println!("[jarvis] resume point unusable; re-reading all state");
                 prime_from_version(app, base).await;
-                refresh_pending(app, base).await;
+                let reread = refresh_pending(app, base).await;
                 crate::attention::refresh(app, base).await;
-                publish_link(app, |link| link.stale = false);
+                // Only if the queue actually came back. This used to clear
+                // `stale` unconditionally, one line after a call whose every
+                // failure path sets `stale` and keeps the PREVIOUS queue -
+                // so a backend that restarted and answered /api/pending with
+                // a 503 while its gate module loaded left the windows
+                // rendering pre-restart cards with live buttons, and
+                // `decide_approval`'s own staleness gate passed. The owner
+                // could approve an id the restarted backend had reassigned.
+                //
+                // The comment above this branch promised exactly this
+                // behaviour ("cleared only once the re-read below has
+                // landed") while the code did not do it, which is why it went
+                // unnoticed.
+                if reread {
+                    publish_link(app, |link| link.stale = false);
+                }
                 crate::emit_all(app, crate::events::JARVIS_RESYNC, ());
             } else {
                 // A clean resume still needs one read. The `attention` event
@@ -515,7 +533,11 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
 
         // The doorbell. §3 rule 1: the event says something changed, so read
         // the thing that changed — once, here, not once per window.
-        "approval" => refresh_pending(app, base).await,
+        // Same here: nothing downstream clears `stale` on the strength of
+        // this call, and a failure has already set it.
+        "approval" => {
+            let _ = refresh_pending(app, base).await;
+        }
 
         "activity" => {
             if let Some(state) = event.data["state"].as_str() {
@@ -618,17 +640,25 @@ async fn prime_from_version(app: &AppHandle, base: &str) {
 /// fan-out the quickbar and the widget each fetched it on their own timers,
 /// which meant two lists, two moments, and two chances to offer a decision on
 /// something the other had already answered.
-async fn refresh_pending(app: &AppHandle, base: &str) {
+/// Re-reads `/api/pending`.
+///
+/// @return true only when the queue was actually re-read. The caller needs
+/// that: every failure path below leaves the PREVIOUS queue in place and sets
+/// `stale`, and a caller that then cleared `stale` unconditionally - which is
+/// what `dispatch`'s `hello` branch did - re-enabled Approve and Deny over a
+/// queue the code had just declared untrustworthy. Returning `()` is what made
+/// that mistake invisible.
+async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     let Ok(client) = reqwest::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(FETCH_TIMEOUT)
         .no_proxy()
         .build()
     else {
-        return;
+        return false;
     };
     let Ok(headers) = commands::jarvis_headers(app) else {
-        return;
+        return false;
     };
 
     // The status is checked before the body is trusted. It used to go straight
@@ -652,21 +682,21 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
                 );
                 // Not knowing is not the same as knowing there is nothing.
                 publish_link(app, |link| link.stale = true);
-                return;
+                return false;
             }
             match response.json().await {
                 Ok(body) => body,
                 Err(err) => {
                     eprintln!("[jarvis] /api/pending returned something unreadable: {err}");
                     publish_link(app, |link| link.stale = true);
-                    return;
+                    return false;
                 }
             }
         }
         Err(err) => {
             eprintln!("[jarvis] /api/pending unavailable: {err}");
             publish_link(app, |link| link.stale = true);
-            return;
+            return false;
         }
     };
 
@@ -788,6 +818,7 @@ async fn refresh_pending(app: &AppHandle, base: &str) {
         crate::events::APPROVALS_CHANGED,
         serde_json::json!({ "count": items.len(), "items": items, "available": available }),
     );
+    true
 }
 
 /// Applies a link change and, if anything moved, tells every window and repaints
