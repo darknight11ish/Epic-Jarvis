@@ -1115,8 +1115,22 @@ function decorateDiff(container) {
  * static Approve button is the only way to approve — the exact behaviour
  * this card had before options existed at all. Two or more: the static
  * Approve button is hidden (Deny is not — denying never needs to say which
- * option) and one button per option appears instead, each a full plan of
- * its own to approve, never a modifier on a shared one.
+ * option) and one button per option appears instead.
+ *
+ * Those per-option buttons are rendered **disabled**. docs/JARVIS-API.md §8
+ * found that `option_id` never reaches the server at all: `jarvis-link.js`'s
+ * `decide()` does attach it, but `decide_approval` in Rust takes only
+ * `(app, id, approved)`, so Tauri drops the extra argument on the way in —
+ * there is no confirmed backend route that reads it
+ * (docs/AUTONOMY-PROPOSALS.md §3b names one, unbuilt). Before this, clicking
+ * "option B" sent the exact same `/api/approve` request as any other option
+ * button would, with nothing telling the server which plan was meant — the
+ * choice the buttons appeared to offer was never real. jarvis-client hit the
+ * same gap first and took the same way out: see `needsChoice` in
+ * `ApiModels.kt`, which disables approval the same way and for the same
+ * reason. `title` explains this to whoever clicks; the option is still shown
+ * so the plans on offer are at least legible, and Deny is untouched — it
+ * never needed to say which option.
  */
 function renderOptions(approval) {
   const options = Array.isArray(approval.options) ? approval.options : [];
@@ -1130,6 +1144,8 @@ function renderOptions(approval) {
     btn.type = "button";
     btn.className = "approval-option";
     btn.dataset.optionId = option.id;
+    btn.disabled = true;
+    btn.title = "This desktop can't tell the server which option was picked yet — see docs/JARVIS-API.md §8. Deny still works.";
     const label = document.createElement("span");
     label.className = "opt-label";
     label.textContent = option.label; // textContent: model-authored text.
@@ -1140,7 +1156,6 @@ function renderOptions(approval) {
       summary.textContent = option.summary;
       btn.append(summary);
     }
-    btn.addEventListener("click", () => decideApproval(true, option.id));
     dom.approvalOptions.append(btn);
   }
 }
@@ -1624,7 +1639,11 @@ function syncApprovalButtons() {
   const blocked = link.stale || state.deciding;
   dom.approvalApprove.disabled = blocked;
   dom.approvalDeny.disabled = blocked;
-  for (const opt of dom.approvalOptions.children) opt.disabled = blocked;
+  // Not `= blocked`: the option buttons `renderOptions` builds are already
+  // permanently disabled (see its own comment on why), and setting this to
+  // `blocked` would re-enable them the moment the stream stopped being
+  // stale.
+  if (blocked) for (const opt of dom.approvalOptions.children) opt.disabled = true;
   if (link.stale && state.approval) {
     dom.approvalHint.textContent =
       "Offline — the approval queue cannot be confirmed, so nothing can be answered from here.";

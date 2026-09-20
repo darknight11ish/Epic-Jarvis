@@ -16,14 +16,19 @@ import okhttp3.Call
 /**
  * One turn of conversation.
  *
- * `POST /api/chat` streams its reply as a **chunked HTTP body**, not SSE - the
- * doc calls this out twice because the shape invites the wrong guess. So there
- * are no `data:` prefixes to strip and no frames to assemble: bytes arrive and
- * are appended.
+ * `POST /api/chat` streams its reply as a **chunked HTTP body** whose framing
+ * depends on the upstream model in use: the server copies the upstream
+ * `Content-Type` verbatim, so a plain-text upstream produces raw tokens but an
+ * OpenAI-style upstream produces `data:`-framed SSE lines on this same route
+ * (`docs/API-DISAGREEMENTS.md` §4). [ChatChunkParser] handles both shapes;
+ * bytes are decoded to characters, split into lines, and each line is routed
+ * through it rather than appended to the reply as-is.
  *
  * Interruption is the cancellation of the HTTP call itself. There is no
  * "stop" endpoint, and inventing one client-side by ignoring the rest of the
- * stream would leave the desktop generating into nothing.
+ * stream would leave the desktop generating into nothing. The same cancel
+ * also runs proactively once a line reports the stream is over, rather than
+ * waiting for the socket to close on its own - see [ChatChunkParser.Result.Terminal].
  */
 class ChatSession(private val api: JarvisApi) {
 
@@ -139,8 +144,23 @@ class ChatSession(private val api: JarvisApi) {
                     // on each one. A long reply spent most of its time copying
                     // itself.
                     val acc = StringBuilder()
+                    // A partial line carried over between reads - `chunk` is
+                    // filled at socket granularity, not line granularity, so a
+                    // line almost never ends exactly at its boundary.
+                    val lineBuf = StringBuilder()
                     var shownAt = 0L
-                    while (true) {
+
+                    fun publish(force: Boolean) {
+                        val now = SystemClock.elapsedRealtime()
+                        if (!force && now - shownAt < PUBLISH_MS) return
+                        shownAt = now
+                        val text = acc.toString()
+                        _reply.value = text
+                        onDelta?.invoke(text)
+                    }
+
+                    var failed = false
+                    readLoop@ while (true) {
                         // Blocking reads never suspend, so nothing here would
                         // otherwise notice that the coroutine is gone. `closer`
                         // above makes the read itself fail on cancellation;
@@ -151,31 +171,52 @@ class ChatSession(private val api: JarvisApi) {
                         val n = reader.read(chunk)
                         if (n < 0) break
                         if (n == 0) continue
-                        acc.appendRange(chunk, 0, n)
-                        // Published as it arrives - the whole reason the body
-                        // is chunked is so the reply appears as it is written -
-                        // but at most every PUBLISH_MS. Token-by-token that is
-                        // still ~20 updates a second, which reads as smooth
-                        // typing, while a burst of tiny chunks no longer costs
-                        // one full string copy and one recomposition each.
-                        val now = SystemClock.elapsedRealtime()
-                        if (now - shownAt >= PUBLISH_MS) {
-                            shownAt = now
-                            val text = acc.toString()
-                            _reply.value = text
-                            onDelta?.invoke(text)
+                        var start = 0
+                        for (i in 0 until n) {
+                            if (chunk[i] != '\n') continue
+                            lineBuf.append(chunk, start, i - start)
+                            start = i + 1
+                            val line = lineBuf.toString()
+                            lineBuf.setLength(0)
+                            when (val result = ChatChunkParser.consume(line)) {
+                                is ChatChunkParser.Result.Text -> {
+                                    acc.append(result.delta)
+                                    // Published as it arrives - the whole
+                                    // reason the body is chunked is so the
+                                    // reply appears as it is written - but at
+                                    // most every PUBLISH_MS. Token-by-token
+                                    // that is still ~20 updates a second,
+                                    // which reads as smooth typing, while a
+                                    // burst of tiny lines no longer costs one
+                                    // full string copy and one recomposition
+                                    // each.
+                                    publish(force = false)
+                                    if (result.terminal) break@readLoop
+                                }
+                                ChatChunkParser.Result.Terminal -> break@readLoop
+                                is ChatChunkParser.Result.Failed -> {
+                                    _error.value = result.message
+                                    failed = true
+                                    break@readLoop
+                                }
+                                ChatChunkParser.Result.Ignored -> {}
+                            }
                         }
+                        if (start < n) lineBuf.append(chunk, start, n - start)
                     }
-                    // The last chunk is almost always inside the throttle
+                    // The last line is almost always inside the throttle
                     // window, so without this the tail of every reply would be
                     // missing from the screen until the next message.
-                    val text = acc.toString()
-                    _reply.value = text
-                    onDelta?.invoke(text)
+                    publish(force = true)
                     // Captured before anything else can replace the shared
                     // flow, so the caller gets its own answer rather than
-                    // whatever is in there when it happens to look.
-                    mine = text
+                    // whatever is in there when it happens to look. Not set on
+                    // [ChatChunkParser.Result.Failed]: that is an in-band error
+                    // from the chunk itself, the same kind of failure the
+                    // 401/403/404 branch above reports by leaving `mine` null.
+                    if (!failed) {
+                        mine = acc.toString()
+                    }
                 }
             } catch (ce: CancellationException) {
                 throw ce

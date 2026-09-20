@@ -54,15 +54,21 @@ await check("Deny still works on a multi-option card, with no option id", async 
   assert.equal(sent[0].optionId, undefined, "denying should never carry an option id");
 });
 
-await check("clicking an option sends that option's id, approved", async () => {
+await check("option buttons are disabled - option_id never reaches decide_approval (docs/JARVIS-API.md §8)", async () => {
+  // Was "clicking an option sends that option's id, approved" - that
+  // exercised only the JS-side plumbing (`decide(true, option.id)` calling
+  // the mock bridge with an `optionId`), which was never the bug. The real
+  // bug is one layer down: `jarvis-link.js` does attach `option_id`, but
+  // the Rust `decide_approval` command takes only `(app, id, approved)`, so
+  // Tauri drops it before any request is built - the option a person clicked
+  // was never the option approved. This mock cannot see that layer at all,
+  // which is exactly how the bug went unnoticed here. The fix is on this
+  // side instead: don't offer a choice this build can't actually send.
   const page = await widget({ pending: [K.APPROVAL_WITH_OPTIONS] });
-  await page.locator('#appr-options .appr-option[data-option-id="opt_reply"]').click();
-  await page.waitForTimeout(200);
-  const sent = await decides(page);
+  const optionButtons = page.locator("#appr-options .appr-option");
+  const disabledFlags = await optionButtons.evaluateAll((els) => els.map((el) => el.disabled));
   await page.close();
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].approved, true);
-  assert.equal(sent[0].optionId, "opt_reply");
+  assert.deepEqual(disabledFlags, [true, true], "no option can be approved until a decide-with-option route exists");
 });
 
 await check("a new card resets the options rendered for the last one", async () => {

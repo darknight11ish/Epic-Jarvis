@@ -237,7 +237,11 @@ approve no longer names which plan — `ApiModels.kt:294-302`. The phone
 therefore disables approve (but keeps deny, "refusing is always the safe
 direction") until a route exists that takes the choice. The desktop's
 `jarvis-link.js:403-404` *does* pass an `option_id` argument, but see §8: the
-Rust command it calls does not accept one.
+Rust command it calls does not accept one — so as of this writing, **neither**
+client can actually send a choice, even though the desktop used to render
+one clickable button per option as if it could. `main.js`/`widget.js` now
+render those buttons disabled, with a tooltip pointing here, until a real
+decide-with-option route exists on the server (see §8's own note on this).
 
 ---
 
@@ -469,28 +473,41 @@ guess someone wrote down honestly.
 | A decide-with-option route | Needed for approvals carrying two or more options (`ApiModels.kt:294-302`). No name proposed. |
 | `POST /api/note` | Suggested, not proposed — it would let a client truthfully report that a note was filed (`API-DISAGREEMENTS.md` §10). |
 
-### The desktop task controls do not reach HTTP at all
+### The desktop task controls — fixed since this doc was first written
 
-Verified on 2026-09-20 by grepping `jarvis-desktop/src-tauri/src/` and the
-`invoke_handler` list in `lib.rs`:
+Originally verified on 2026-09-20 by grepping `jarvis-desktop/src-tauri/src/`
+and the `invoke_handler` list in `lib.rs`: at that point, `jarvis-link.js`
+called five Tauri commands — `amend_approval`, `pause_task`, `resume_task`,
+`stop_task`, `inject_task_note` — none of which existed in the Rust source or
+`lib.rs`'s `invoke_handler`, so every one of those buttons failed at the
+app's own internal boundary, before any HTTP request was made.
 
-- `jarvis-link.js` calls the Tauri commands `amend_approval` (`:429`),
-  `pause_task` (`:455`), `resume_task` (`:460`), `stop_task` (`:465`) and
-  `inject_task_note` (`:470`).
-- **None of those five commands exists in the Rust source, and none is
-  registered in `lib.rs`'s `invoke_handler`.**
+**Re-verified the same day, after a fix landed:** all five now exist in
+`commands.rs` (`pause_task`/`resume_task`/`stop_task`/`inject_task_note` at
+`:1054-1071`, `amend_approval` at `:1101-1109`), are registered in `lib.rs`'s
+`invoke_handler` (`:600-604`), and reach the same routes the phone already
+used (`/api/task/pause`, `/api/task/resume`, `/api/task/stop`,
+`/api/task/note`, `/api/pending/<id>/amend`) — still `docs/AUTONOMY-PROPOSALS.md`
+§3d/§3b names, still unconfirmed against the real backend, so a 404 from any
+of them means "this build has no such route" and is reported as that rather
+than as a generic failure (`commands.rs:1025-1034`). The Android side has
+called the same routes over plain HTTP the whole time, so the desktop was
+the odd one out; it no longer is.
 
-So on the desktop these buttons fail at the app's own internal boundary,
-before any HTTP request is made. The JS is aware of this and handles it
-correctly — `main.js:1778-1783` and `widget.js:731-736` both say the commands
-"may not exist as Rust commands yet" and surface the real error rather than
-pretending the task changed state. The Android side, by contrast, would send a
-real request and get a real 404.
-
-Same shape, one more: `jarvis-link.js:403-404` passes an `option_id` argument
-to `decide_approval`, but the Rust `decide_approval` signature is
-`(app, id, approved)` (`commands.rs:918-922`) — there is no `option_id`
-parameter. The extra argument is simply dropped by Tauri.
+Same shape, one still open: `jarvis-link.js:403-404` passes an `option_id`
+argument to `decide_approval`, but the Rust `decide_approval` signature is
+still `(app, id, approved)` (`commands.rs:918-922`) — there is no
+`option_id` parameter, and the extra argument is simply dropped by Tauri.
+Unlike the task controls, this one is **not** a matter of wiring an existing,
+named backend route — no decide-with-option route is confirmed to exist at
+all (see the table above), so adding an `option_id` field to the
+`/api/approve` request body would be guessing a server contract, the same
+mistake this document exists to avoid making. Fixed on the UI side instead,
+2026-09-20: `main.js`/`widget.js` now render the per-option approve buttons
+disabled rather than letting them send an approve indistinguishable from any
+other option's, matching `jarvis-client`'s `needsChoice` restraint
+(`ApiModels.kt:294-302`). The underlying gap — no client can actually convey
+which option was approved — stays open until a server route exists.
 
 ---
 

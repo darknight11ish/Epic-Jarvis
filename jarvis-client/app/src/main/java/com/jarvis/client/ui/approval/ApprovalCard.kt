@@ -283,9 +283,14 @@ fun ApprovalCard(
         val why = when {
             expired -> "Expired — ask the desktop to raise this again."
             blocker != null -> blocker
+            // Used to say "choose one on the desktop" - wrong, per
+            // docs/JARVIS-API.md §8: the desktop's own option buttons send
+            // the same request no matter which one is clicked, because
+            // `decide_approval` drops `option_id` before it reaches the
+            // server. Neither client can send a choice today.
             item.needsChoice ->
-                "This proposal offers ${item.options.size} options. Choose one on the " +
-                    "desktop - this phone cannot send a choice yet. Deny still works here."
+                "This proposal offers ${item.options.size} options, and no Jarvis client " +
+                    "can pick one yet. Deny still works here."
             else -> null
         }
         if (why != null) {
