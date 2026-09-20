@@ -10,7 +10,7 @@ on:
       - ".github/workflows/jarvis-client.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: jarvis-client-${{ github.ref }}
@@ -58,15 +58,68 @@ jobs:
           cache: gradle
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # Not the default `tools platform-tools`. Google removed the obsolete
+          # `tools` package from the SDK repository, so the action's own default
+          # makes it run `sdkmanager tools`, get "Failed to find package 'tools'",
+          # and fail the job before a line of this project is compiled. Nothing
+          # here ever used it; platform-tools is the half that is real.
+          packages: platform-tools
 
       # The client had no test step at all. It now has tests, and the same
       # results-directory assertion as the other workflow, so "no test sources"
       # cannot pass for green.
       - name: Run unit tests
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          set -o pipefail
           chmod +x ./gradlew
-          ./gradlew testDebugUnitTest --stacktrace
+          if ! ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee test.log; then
+            echo "::group::Kotlin errors"
+            grep -E "^e: |Unresolved reference|Argument type mismatch|None of the following candidates|Compilation error" test.log | head -80 \
+              || echo "(none - so this is a TEST failure, not a compile failure)"
+            echo "::endgroup::"
+            # Which tests failed, and why. Gradle prints the assertion above a
+            # hundred lines of its own stack trace, so a failing test used to
+            # read as "no compiler diagnostics found" and nothing else - the
+            # names were in the log and effectively unfindable.
+            echo "::group::Failing tests"
+            grep -E "FAILED$|^[A-Za-z].*> .* FAILED" test.log | head -40 || true
+            results=app/build/test-results/testDebugUnitTest
+            for f in "$results"/TEST-*.xml; do
+              [ -e "$f" ] || continue
+              python3 - "$f" <<'PYEOF' || true
+          import sys, xml.etree.ElementTree as ET
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except Exception:
+              sys.exit(0)
+          for case in root.iter("testcase"):
+              for bad in list(case.findall("failure")) + list(case.findall("error")):
+                  print(f'  {case.get("classname")}.{case.get("name")}')
+                  # Up to 25 lines, not one. An assertion that lists WHICH
+                  # cases disagreed puts the count on line one and the cases
+                  # underneath, so printing `msg[0]` reported "8 of 113
+                  # vectors" and threw away all eight. The smoke job has
+                  # printed 25 since it was written; this half never caught up.
+                  # `message` FIRST, not `text`. The attribute is the
+                  # assertion alone; the element body is the assertion plus
+                  # the whole stack trace. Preferring `text` meant an
+                  # assertion that lists eight cases printed one line of
+                  # message, eight lines of detail, and then sixteen frames of
+                  # JUnit reflection - and the log tail cut the top off, so
+                  # the eight were lost a second time by the fix meant to
+                  # surface them. Frames are the one thing never in doubt.
+                  body = (bad.get("message") or bad.text or "").strip()
+                  if not body:
+                      body = bad.get("type", "failed")
+                  for line in body.splitlines()[:25]:
+                      print(f'      {line[:300]}')
+          PYEOF
+            done
+            echo "::endgroup::"
+            exit 1
+          fi
           results=app/build/test-results/testDebugUnitTest
           if ! ls "$results"/TEST-*.xml >/dev/null 2>&1; then
             echo "::error::No test results in $results — the test task matched no sources."
@@ -91,9 +144,16 @@ jobs:
 
       - name: Assemble debug APK
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          set -o pipefail
           chmod +x ./gradlew
-          ./gradlew assembleDebug --stacktrace
+          if ! ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log; then
+            echo "::group::Kotlin errors"
+            grep -E "^e: |^w: .*error|Unresolved reference|Compilation error" build.log | head -80 \
+              || echo "(no compiler diagnostics found; see the full log above)"
+            echo "::endgroup::"
+            exit 1
+          fi
 
       - name: Collect APK
         run: |
@@ -108,3 +168,451 @@ jobs:
           path: jarvis-client/artifacts/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      # After the debug artifact is collected, so `find -name '*.apk'` above
+      # keeps picking up exactly one file.
+      #
+      # The release variant is now the one that gets published, but not from
+      # here. R8 breaks at RUNTIME, not at build time - a stripped serializer
+      # is a crash on first decode and a green `assembleRelease` - so the
+      # publish sits behind the smoke job, which installs and starts the
+      # shrunk APK on a real device first. This step earns its place anyway:
+      # it fails a broken shrink in about three minutes without waiting for an
+      # emulator to boot, and it prints the two sizes side by side.
+      - name: Assemble release APK
+        run: |
+          set -uo pipefail
+          set -o pipefail
+          chmod +x ./gradlew
+          if ! ./gradlew assembleRelease --stacktrace 2>&1 | tee release.log; then
+            echo "::group::Why R8 refused"
+            # R8's own complaints, which are not Kotlin diagnostics and do not
+            # look like them. A missing keep rule shows up here as a warning
+            # about a class it could not find a reference for.
+            grep -E "^e: |Missing class|R8: |Warning: |Error: |ProGuard" release.log | head -60               || echo "(nothing that looks like an R8 complaint; see the full log above)"
+            echo "::endgroup::"
+            exit 1
+          fi
+          echo "::group::Size"
+          debug=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          rel=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          for f in "$debug" "$rel"; do
+            [ -n "$f" ] && [ -e "$f" ] && printf '%10s  %s\n' "$(du -h "$f" | cut -f1)" "$f"
+          done
+          echo "::endgroup::"
+
+  # The gap that let a crash in onCreate ship with a green tick on every
+  # check: the job above compiles the APK and runs unit tests, and never once
+  # launches it. This one does, on a real Android image — and because an APK
+  # that cannot start is not a release, publishing moved here behind it.
+  #
+  # No third-party emulator action, deliberately. Every action in this file is
+  # pinned to a SHA so it cannot be swapped underneath us, and the one I
+  # reached for could not have its SHA verified from where this was written —
+  # so it is thirty lines of shell against the SDK that the already-pinned
+  # setup-android installs. Publishing from this job rather than a third
+  # avoids an artifact download, which would have meant another unverifiable
+  # pin for no gain.
+  smoke:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 35
+    env:
+      # Pinned explicitly because the default is not one path but three, tried
+      # in order — $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd, $HOME/.android/avd
+      # — and avdmanager and the emulator resolved it differently between
+      # steps, so a created AVD was simply not there a minute later.
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.avd
+    defaults:
+      run:
+        working-directory: jarvis-client
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # Not the default `tools platform-tools`. Google removed the obsolete
+          # `tools` package from the SDK repository, so the action's own default
+          # makes it run `sdkmanager tools`, get "Failed to find package 'tools'",
+          # and fail the job before a line of this project is compiled. Nothing
+          # here ever used it; platform-tools is the half that is real.
+          packages: platform-tools
+
+      # Without this the emulator drops to pure software emulation and takes
+      # long enough to boot that the wait below times out.
+      - name: Let the runner use KVM
+        working-directory: .
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install the system image
+        working-directory: .
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "system-images;android-34;default;x86_64" \
+                               "platforms;android-34" "platform-tools" "emulator"
+          # "minutes" versus "tens of minutes" is exactly the difference
+          # between having this and not, and it is worth seeing before a
+          # timeout rather than after one.
+          ls -l /dev/kvm 2>&1 || echo "::warning::/dev/kvm is absent - the emulator will be very slow"
+
+      # Compiled before the device is needed, so a Kotlin error still fails in
+      # about a minute rather than after a boot.
+      #
+      # `assembleRelease` is here too, because the RELEASE apk is the one this
+      # job now publishes, and it has to exist on disk before the emulator is
+      # up. R8 takes about three and a half minutes; failing that here costs a
+      # boot cycle less than failing it later.
+      - name: Compile the app and the test
+        run: |
+          set -uo pipefail
+          chmod +x ./gradlew
+          if ! ./gradlew assembleDebug assembleDebugAndroidTest assembleRelease --stacktrace 2>&1 | tee build.log; then
+            echo "::group::Kotlin errors, and R8's"
+            # R8's complaints are not Kotlin diagnostics and look nothing like
+            # them: a missing keep rule appears as a warning about a class it
+            # could not resolve a reference for.
+            grep -E "^e: |Unresolved reference|Argument type mismatch|Compilation error|Missing class|R8: " build.log | head -80 \
+              || echo "(no compiler diagnostics found; see the full log above)"
+            echo "::endgroup::"
+            exit 1
+          fi
+
+      # Create, start, wait and test in ONE step. Everything this job has got
+      # wrong so far has been state that did not survive a step boundary: the
+      # emulator died with the process group that launched it, and then the AVD
+      # itself was not where the next step looked for it. Nothing crosses a
+      # boundary now except the installed SDK, which is on disk.
+      - name: Start the emulator and launch the app
+        run: |
+          set -uo pipefail
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd -n smoke \
+            -k "system-images;android-34;default;x86_64" --force
+
+          # Assert it exists HERE, so a creation that silently went elsewhere
+          # fails on the line that created it rather than five minutes later
+          # inside the emulator's own error message.
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds | grep -qx smoke; then
+            echo "::error::The AVD was created but the emulator cannot see it."
+            echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"; ls -la "$ANDROID_AVD_HOME" || true
+            "$ANDROID_HOME/emulator/emulator" -list-avds || true
+            exit 1
+          fi
+
+          "$ANDROID_HOME/emulator/emulator" -avd smoke \
+            -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+            -camera-back none -camera-front none -memory 2048 \
+            -gpu swiftshader_indirect -accel auto > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          EMU=$!
+
+          finish() {
+            # Twelve lines, not a hundred and twenty. This runs on EXIT, so it
+            # prints AFTER the failing test names - and GitHub's log API serves
+            # a tail, so 120 lines of emulator boot properties pushed the one
+            # useful thing out of every window I could fetch. Four log pulls
+            # across two runs said only "a test failed" because of this trap.
+            #
+            # The emulator's own failures are at the end of its log anyway
+            # (boot completed, panics, driver errors); the boot-property dump
+            # that made up the bulk of it has never once been the answer.
+            echo "::group::Emulator log (tail)"
+            tail -12 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
+            echo "::endgroup::"
+            kill "$EMU" 2>/dev/null || true
+          }
+          trap finish EXIT
+
+          if ! timeout 300 adb wait-for-device; then
+            echo "::error::The emulator never registered with adb."
+            exit 1
+          fi
+          if ! timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'; then
+            echo "::error::The emulator registered but never finished booting."
+            exit 1
+          fi
+          adb shell input keyevent 82 || true
+          adb devices
+
+          if ! ./gradlew connectedDebugAndroidTest --stacktrace 2>&1 | tee smoke.log; then
+            # Ordered noisiest-first, so the thing worth reading is LAST.
+            # GitHub's log API serves a tail, and the emulator prints ~110
+            # lines of boot properties on its way out - enough to push the
+            # failing test names out of every window I could fetch. Three
+            # separate log pulls said only "a test failed" because of it.
+            echo "::group::Crash log, if the app got that far"
+            adb logcat -d -b crash | tail -80 || true
+            echo "::endgroup::"
+
+            echo "::group::What the device said"
+            # The assertion message carries the stack trace the app itself
+            # recorded, so this is usually already the answer.
+            grep -E "FAILED|something threw|AssertionError|Caused by" smoke.log | head -40 || true
+
+            # And the instrumentation report, because none of the above is in
+            # stdout. Gradle prints "There were failing tests. See the report
+            # at: file://..." and nothing else - a local path, on a runner that
+            # is about to be destroyed. The first time this job went red the
+            # whole failure read as one Gradle exception with no test name in
+            # it, and the HTML report was only reachable as a build artifact
+            # from a blob host. The names are in the XML sitting right here.
+            #
+            # Python walks the tree itself rather than `for f in $(find ...)`.
+            # The instrumentation report is named after the device - the file
+            # is `TEST-smoke(AVD) - 14.xml`, spaces and parentheses included -
+            # and word-splitting that is what broke the test-count check two
+            # commits below this one. Not repeating it here.
+            python3 - <<'PYEOF' || true
+          import os, xml.etree.ElementTree as ET
+          for root_dir, _, names in os.walk("app/build"):
+              if "ndroidTest" not in root_dir:
+                  continue
+              for name in names:
+                  if not (name.startswith("TEST-") and name.endswith(".xml")):
+                      continue
+                  try:
+                      tree = ET.parse(os.path.join(root_dir, name)).getroot()
+                  except Exception:
+                      continue
+                  for case in tree.iter("testcase"):
+                      for bad in list(case.findall("failure")) + list(case.findall("error")):
+                          print(f'  {case.get("classname")}.{case.get("name")}')
+                          body = (bad.text or bad.get("message") or "").strip()
+                          for line in body.splitlines()[:25]:
+                              print(f'      {line}')
+          PYEOF
+
+            echo "::endgroup::"
+            exit 1
+          fi
+
+          # The same assertion the unit-test job has, and for the same reason.
+          # `connectedDebugAndroidTest` prints "Running tests on devices" and
+          # exits 0 whether it ran three tests or none, so without this a test
+          # class that stopped being discovered — a renamed runner, a manifest
+          # merge that dropped it, a filter — would read as a passing smoke
+          # test. That is precisely the shape of the hole this whole job exists
+          # to close, and leaving it open here would have been the same mistake
+          # one level up.
+          #
+          # -print0/xargs -0 rather than an unquoted variable, because the
+          # instrumentation report is named after the DEVICE — the file here is
+          # `TEST-smoke(AVD) - 14.xml`, spaces and parentheses included. Passing
+          # that through word splitting is what broke the first version of this
+          # check: the tests had passed, and the assertion written to prove they
+          # ran is what failed the job.
+          #
+          # Counting `<testcase` rather than summing `tests="N"`, because that
+          # attribute appears TWICE in one instrumentation report — once on the
+          # `<testsuites>` wrapper and once on the `<testsuite>` inside it — so
+          # summing every match reported 16 for the 8 tests that ran. A
+          # `<testcase` element is one test, once, in either layout.
+          #
+          # I first blamed a duplicate file and deduplicated by filename. That
+          # was wrong, and the line below that prints what it counted is what
+          # showed it: one path, still 16. The dedupe is kept because it is
+          # harmless and correct for genuinely multiple devices, but it is not
+          # what fixed this.
+          #
+          # The paths are printed for exactly that reason. A number with
+          # nothing behind it cannot be checked, and this one was wrong twice
+          # before anything said so.
+          reports=$(find app/build -path '*ndroidTest*' -name 'TEST-*.xml' -printf '%f\t%p\n' 2>/dev/null \
+                    | sort -t"$(printf '\t')" -u -k1,1 | cut -f2- || true)
+          if [ -z "$reports" ]; then
+            echo "::error::No instrumentation results were written — nothing ran on the device."
+            find app/build -name 'TEST-*.xml' 2>/dev/null || true
+            exit 1
+          fi
+          echo "Counting:"; printf '%s\n' "$reports" | sed 's/^/  /'
+          # The `|| true` is inside the braces so it covers grep finding
+          # nothing — which is the case being guarded against — without letting
+          # the step die on grep's exit status under -e and pipefail, and
+          # without printing a second number after wc has already printed one.
+          total=$( { printf '%s\n' "$reports" | tr '\n' '\0' \
+                     | xargs -0 -r grep -oh '<testcase[ >]' || true; } | wc -l )
+          echo "Tests run on the device: ${total:-0}"
+          if [ "${total:-0}" -lt 1 ]; then
+            echo "::error::The instrumentation report contains zero tests."
+            exit 1
+          fi
+
+          # ---------------------------------------------------------------
+          # The release build, started on the device, before it is published.
+          #
+          # This is the gate that lets the published artifact BE the release
+          # APK. R8 removes code it cannot prove is reachable, and everything
+          # it gets wrong fails at RUNTIME rather than at build time: a
+          # stripped serializer is a crash on first decode and a perfectly
+          # green `assembleRelease`. Publishing an APK no machine has ever
+          # started is the same hole this whole job exists to close, one build
+          # type across.
+          #
+          # Be exact about what this proves, because it is less than the suite
+          # above proves. The instrumentation tests still run against DEBUG:
+          # testing a minified variant means threading the app's R8 mapping
+          # into the test APK, which is a change worth making deliberately and
+          # not folded into this one. So this establishes that the release APK
+          # installs, starts, stays up, and logs none of R8's failure
+          # signatures. It does not walk every screen. A keep rule missing for
+          # something only reachable three taps in would still get through.
+          echo "::group::The release build on the device"
+          rel=$(find app/build/outputs/apk/release -name 'app-release.apk' 2>/dev/null | head -1)
+          if [ -z "$rel" ] || [ ! -e "$rel" ]; then
+            echo "::error::No release APK was built, so there is nothing to smoke or publish."
+            find app/build/outputs/apk -name '*.apk' 2>/dev/null || true
+            exit 1
+          fi
+          echo "Installing $rel"
+
+          # Uninstalled first, so this is a FRESH install with no data behind
+          # it - which is the case a person sideloading hits, and the one where
+          # a missing keep rule shows up on the very first screen rather than
+          # never.
+          adb uninstall com.jarvis.client >/dev/null 2>&1 || true
+          out=$(adb install -r "$rel" 2>&1) || true
+          printf '%s\n' "$out"
+          case "$out" in
+            *Success*) ;;
+            *) echo "::error::The release APK would not install."; exit 1 ;;
+          esac
+
+          # `-b all`, not a bare `-c`. The crash-buffer check at the end of
+          # this gate is only meaningful if the buffer starts empty, and the
+          # instrumentation suite has been running on this same device for the
+          # last few minutes.
+          adb logcat -b all -c 2>/dev/null || adb logcat -c || true
+          out=$(adb shell am start -W -n com.jarvis.client/.MainActivity 2>&1) || true
+          printf '%s\n' "$out"
+          case "$out" in
+            *Error*|*Exception*) echo "::error::The release APK would not start."; exit 1 ;;
+          esac
+
+          # Long enough for Compose to lay out a first frame and for a
+          # first-decode crash to have already happened.
+          sleep 15
+
+          pid=$(adb shell pidof com.jarvis.client 2>/dev/null | tr -d '\r' | awk '{print $1}')
+          if [ -z "$pid" ]; then
+            echo "::error::The release APK started and then died."
+            adb logcat -d -b crash | tail -60 || true
+            exit 1
+          fi
+          echo "Still alive after 15s, pid $pid"
+
+          # R8 damage the app CAUGHT still counts. This app has a crash screen,
+          # so a stripped class can surface as a handled exception and a live
+          # process - which passes a "did it survive" check while being exactly
+          # the bug this gate is for. These are the shapes code removal takes at
+          # runtime; none of them has an innocent reading inside our own pid.
+          adb logcat -d --pid="$pid" > "$RUNNER_TEMP/app.log" 2>/dev/null || true
+          bad=$( { grep -nE "FATAL EXCEPTION|ClassNotFoundException|NoSuchMethodError|NoSuchFieldError|ExceptionInInitializerError|Serializer for class|SerializationException" \
+                   "$RUNNER_TEMP/app.log" || true; } | head -20 )
+          if [ -n "$bad" ]; then
+            echo "::error::The release build logged what code removal looks like at runtime."
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+
+          # And the crash buffer, for a process that died and restarted inside
+          # the window above - which the pid check alone would read as healthy.
+          crashed=$( { adb logcat -d -b crash 2>/dev/null | grep -c "com.jarvis.client" || true; } )
+          if [ "${crashed:-0}" -gt 0 ]; then
+            echo "::error::The release build wrote to the crash buffer."
+            adb logcat -d -b crash | tail -60 || true
+            exit 1
+          fi
+          echo "The release APK installs, starts and stays up."
+          echo "::endgroup::"
+
+      - name: Upload the report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: jarvis-client-smoke-report
+          path: jarvis-client/app/build/reports/androidTests/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # The RELEASE apk, which the step above has just started on a real
+      # device. `app-release.apk` and not `*.apk`: the debug build and the
+      # androidTest build are both sitting in the same tree, and picking the
+      # wrong one here would publish a debuggable APK under release notes
+      # saying otherwise - which is worse than publishing the debug one openly.
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          find . -name 'app-release.apk' -not -path './artifacts/*' -exec cp {} artifacts/ \;
+          if [ ! -e artifacts/app-release.apk ]; then
+            echo "::error::No release APK to publish."
+            exit 1
+          fi
+          ls -lh artifacts
+
+      # This is the app that actually talks to Jarvis, so it gets the same
+      # phone-reachable delivery as the other one: a plain .apk at a stable URL
+      # rather than a zip buried in a run the GitHub mobile app cannot download.
+      - name: Publish the APK to a rolling release
+        id: release
+        continue-on-error: true
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: client-latest
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          mv jarvis-client/artifacts/app-release.apk "jarvis-client/artifacts/jarvis-client-$short.apk"
+          size=$(du -h "jarvis-client/artifacts/jarvis-client-$short.apk" | cut -f1)
+
+          notes=$(printf '%s\n' \
+            "Release build of \`jarvis-client\` from commit \`$short\` on \`$GITHUB_REF_NAME\`. **$size.**" \
+            "" \
+            "The only app. It speaks the real Jarvis API - SSE on \`/api/events\` plus REST, authenticated with \`X-Jarvis-Token\`." \
+            "" \
+            '```' \
+            "adb install -r jarvis-client-$short.apk" \
+            '```' \
+            "" \
+            "Or open this page on the phone and tap the \`.apk\`." \
+            "" \
+            "### What changed about these builds" \
+            "" \
+            "This is the shrunk, optimised build, not the debug one. It is roughly a tenth the size, and Android is allowed to compile it ahead of time instead of interpreting every class - so the reactor face and the chat stream have a real frame budget for the first time. It also closes \`adb shell run-as\`, which on a debug build let anything with adb read the app's data directory, pairing token included." \
+            "" \
+            "### What was checked before this was published" \
+            "" \
+            "The unit tests and the instrumentation suite both passed, on an Android 34 emulator. Then THIS apk - the shrunk one, not a rebuild of it - was installed fresh on that emulator, started, and watched for fifteen seconds. It has to still be running, with nothing in its log that looks like the shrinker removed code it needed, or nothing is published." \
+            "" \
+            "Honest limit: that proves it starts and the first screen works. It does not walk every screen, so a shrinker fault on something only reachable several taps in would still get through. Report anything that crashes only on this build and not the previous debug one." \
+            "" \
+            "Signed with the committed debug key, the same one every previous build used, so it installs over an existing copy in place with no uninstall and no loss of pairing. This tag is rolling.")
+
+          gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$TAG" jarvis-client/artifacts/*.apk \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Jarvis client - latest release build" \
+            --notes "$notes"
+
+          echo "Published: $(gh release view "$TAG" --json url --jq .url)"
+
+      - name: Explain a failed release
+        if: steps.release.outcome == 'failure'
+        working-directory: .
+        run: |
+          echo "::warning::Could not publish the release. If this was a 403, set" \
+               "Settings -> Actions -> General -> Workflow permissions to" \
+               "'Read and write permissions'. The APK is still available as the" \
+               "jarvis-client-debug-apk run artifact."

@@ -1,9 +1,9 @@
 # Working with the owner of this repo
 
-The Android session has its own copy of this file on
-`claude/android-apk-build-q435fi`. If the branches ever merge, reconcile them
-rather than picking one — the guidance is the same, this half adds the
-question rule below.
+The desktop and Android sessions each kept their own copy of this file while
+they worked on separate branches. This is the reconciled version, now that
+both have merged into `main` — read this one, not an old copy on a deleted
+branch.
 
 ## Keep multiple-choice questions SHORT
 
@@ -34,6 +34,134 @@ Good:
 >
 > - **Do it, and check it worked** (recommended)
 > - **Leave it alone**
+
+## Explain things simply
+
+The owner is a **beginner developer**. Write for someone who is smart and is
+learning, not for someone who already knows the jargon.
+
+- Say what a thing *is* before using its name. "R8 (the tool that shrinks the
+  app)" beats "R8" on first mention.
+- Prefer short sentences and plain words. "The app was slow because it was
+  built in debug mode" beats "the debuggable variant disables ART AOT
+  compilation".
+- When something technical is unavoidable, explain it in one line and move on.
+- **Say what to actually do**, concretely: which button, which file, which
+  command, in order. Do not leave the next step implied.
+- Do not assume knowledge of Gradle, Android build variants, CI, git internals,
+  Rust, or Kotlin idioms.
+- Lead with the answer. Put the reasoning after it, for anyone who wants it.
+
+This is about clarity, not simplification of substance. Do not hide problems,
+soften bad news, or skip caveats - explain them in plain words instead. If
+something is broken, uncertain, or was my mistake, say so directly and early.
+
+## What this project is
+
+A local-first personal assistant. A Python backend on the owner's Windows 11
+desktop, an 8B model in Ollama on the same machine, a Tauri 2 desktop shell
+around it, and an Android companion reachable over Tailscale.
+
+- `jarvis-desktop/` - the Tauri desktop app. Rust in `src-tauri/`, the windows
+  in `src/`.
+- `backend/` - patches against the Python backend, which lives outside this
+  repo (`docs/ARCHITECTURE.md` §9 says where), plus tests that prove each
+  patch works.
+- `jarvis-client/` - the Android app (Jetpack Compose) that actually talks to
+  the backend, over the real API (`docs/`'s `JARVIS-API.md`).
+- `jarvis-android/` - an older Android app, kept for reference. It speaks a
+  WebSocket protocol invented before `JARVIS-API.md` existed, and none of its
+  endpoints exist on the backend, so it cannot talk to Jarvis at all. Its
+  safe, self-contained parts (the approval widget, a quick-link widget) have
+  already been adapted into `jarvis-client`; its duplex audio streaming was
+  deliberately **not** ported, because `jarvis-client`'s own voice-print gate
+  needs a complete recorded clip to check, and streaming would undermine
+  that. See the module's own README before assuming anything else in it is
+  safe to copy over verbatim.
+
+## The five rules that are not negotiable
+
+1. Anything touching email, files, credentials or stored memory stays on the
+   local model. The app sends none of it anywhere.
+2. The app never opens a public tunnel. No ngrok, no Cloudflare Tunnel, no
+   Tailscale Funnel, no "share my Jarvis".
+3. API keys are allowed in the app - the owner reversed the old blanket ban
+   on 2026-09-17, to unblock things like a GitHub API integration. Any key
+   still gets the same care the pairing token already gets: never logged,
+   sent only to the one service it authenticates against, and kept out of
+   anything the app writes to disk in plain text.
+4. The app never auto-approves anything, and blocks acting when the event
+   stream is stale.
+5. Non-commercial build. Sideloaded via adb, never listed on Play.
+
+Also standing: do not build the model catalogue, the memory graph, or deep
+config editing on the phone. A client must not do speech-to-text. Never build a
+control that clears a rush latch or approves in bulk. Send
+`X-Jarvis-Client: hud` on every request. Never log the token.
+
+Amended by the owner on 2026-09-18: **switching the local model from the
+phone is allowed** - between models the desktop already has, via
+`/api/models/switch`, which raises an approval card like any other change.
+The catalogue is still off the phone: no browsing, no downloading, no
+`/api/models/install`.
+
+## Tell the owner when something is wrong
+
+Standing instruction from them: "Tell me plainly when something in the brief is
+wrong, out of date, or won't work on the platform - I'd much rather hear that
+than have you route around it quietly."
+
+## Do not claim more than the evidence supports
+
+This has caused real damage in this project more than once: a stack frame read
+as a cause and relayed as "confirmed", and a bug invented by grepping my own
+draft and mistaking it for the source file.
+
+- Verify against the actual file before stating anything about it. Especially
+  before stating it to the other session.
+- Quote the evidence. Let the side that owns the code do the diagnosing.
+- "I checked X and it says Y" beats "Y". "I have not checked" beats a guess
+  delivered confidently.
+
+## How the Android apps get built
+
+There is no local Android build in this container. `dl.google.com` is blocked
+by the network policy, so the Android Gradle plugin cannot resolve and
+**GitHub Actions is the only compiler available** for `jarvis-client` and
+`jarvis-android`. Expect a CI round trip (~15 min) to find out whether
+anything compiles. Check work carefully before pushing.
+
+The `jarvis-client` APK is published to the rolling `client-latest` release,
+but only when the emulator smoke job passes. `jarvis-android` no longer
+publishes a release at all - see the top-level `README.md` for why.
+
+## Checking the Rust without waiting for CI
+
+`cargo clippy` fails in the dev container: the product is a Windows app, the
+Linux dependency graph pulls `gdk-sys`, and GTK is not installed. For a long
+time that meant every Rust change was pushed unverified and checked by CI five
+minutes later.
+
+**It does not have to be.** The `x86_64-pc-windows-msvc` target is installed,
+and checking against it selects the *Windows* dependency graph, which has no
+GTK in it. Nothing is linked, so no MSVC toolchain is needed:
+
+```
+cd jarvis-desktop/src-tauri
+cargo fmt --check
+cargo check  --target x86_64-pc-windows-msvc --all-targets
+cargo clippy --target x86_64-pc-windows-msvc --all-targets -- -D warnings
+```
+
+That is two of the three things CI runs, on the same code CI compiles,
+including every `#[cfg(windows)]` block — which a Linux check would have
+skipped entirely, and which is where the unsafe FFI lives. It takes about
+twenty seconds warm.
+
+The third, `cargo test`, still needs a Windows host. Write the Rust tests
+anyway; they are compiled by `--all-targets` above, so at least they are known
+to build. A "GNU compiler is not supported for this target" warning in the
+output is expected and harmless.
 
 ## PowerShell: ONE line, ready to copy
 
@@ -76,60 +204,6 @@ stderr output from a native program into a terminating error**, even on
 success. `git apply --verbose` writes "Checking patch x..." to stderr every
 time, so the script died on the first of nineteen patches. Wrap native calls:
 save the preference, set `Continue`, restore in a `finally`.
-
-## Explain things simply
-
-The owner is a **beginner developer**. Write for someone who is smart and is
-learning, not for someone who already knows the words.
-
-- Say what a thing *is* before using its name.
-- Short sentences, plain words.
-- Say what to actually do — which file, which command, in order.
-- Lead with the answer; reasoning after it.
-
-This is about clarity, not about hiding things. Do not soften bad news or skip
-caveats. Say them in plain words instead. If something is broken, uncertain,
-or was my mistake, say so directly and early.
-
-## Do not claim more than the evidence supports
-
-This has caused real damage in this project more than once: a stack frame read
-as a cause and relayed as "confirmed", and a bug invented by grepping my own
-draft and mistaking it for the source file.
-
-- Verify against the actual file before stating anything about it. Especially
-  before stating it to the other session.
-- Quote the evidence. Let the side that owns the code do the diagnosing.
-- "I checked X and it says Y" beats "Y". "I have not checked" beats a guess
-  delivered confidently.
-
-## Checking the Rust without waiting for CI
-
-`cargo clippy` fails in the dev container: the product is a Windows app, the
-Linux dependency graph pulls `gdk-sys`, and GTK is not installed. For a long
-time that meant every Rust change was pushed unverified and checked by CI five
-minutes later.
-
-**It does not have to be.** The `x86_64-pc-windows-msvc` target is installed,
-and checking against it selects the *Windows* dependency graph, which has no
-GTK in it. Nothing is linked, so no MSVC toolchain is needed:
-
-```
-cd jarvis-desktop/src-tauri
-cargo fmt --check
-cargo check  --target x86_64-pc-windows-msvc --all-targets
-cargo clippy --target x86_64-pc-windows-msvc --all-targets -- -D warnings
-```
-
-That is two of the three things CI runs, on the same code CI compiles,
-including every `#[cfg(windows)]` block — which a Linux check would have
-skipped entirely, and which is where the unsafe FFI lives. It takes about
-twenty seconds warm.
-
-The third, `cargo test`, still needs a Windows host. Write the Rust tests
-anyway; they are compiled by `--all-targets` above, so at least they are known
-to build. A "GNU compiler is not supported for this target" warning in the
-output is expected and harmless.
 
 ## Where everything is written down
 

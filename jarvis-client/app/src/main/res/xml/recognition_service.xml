@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- selectableAsDefault="false" is the whole point of this file, and leaving
+     it out was a real bug with the blast radius of the entire phone.
+
+     AOSP defaults this attribute to TRUE (RecognitionServiceInfo: "boolean
+     selectableAsDefault = true; // default"). With that default, and with
+     the android.speech.RecognitionService intent-filter this service used to
+     declare, the system enumerated JarvisRecognitionServiceStub as a
+     candidate system speech recogniser and offered it in Settings -> Voice
+     input. Had it ever been picked - by hand, or by findAvailRecognizer()
+     falling through to the first available service when the configured one
+     went missing - then EVERY SpeechRecognizer call on the device would have
+     returned ERROR_CLIENT instantly, because that is all this stub does.
+     Gboard voice typing, every other app, with nothing naming Jarvis as the
+     cause. From an app whose own rule is that it does no speech recognition.
+
+     The intent-filter is gone for the same reason and costs nothing:
+     VoiceInteractionServiceInfo reads the `recognitionService` ATTRIBUTE
+     STRING out of voice_interaction_service.xml and resolves the component
+     directly. It never queries by action, so the filter bought nothing and
+     was the thing that made this discoverable.
+
+     No settingsActivity: there is nothing to configure on a service that
+     never recognises anything - see JarvisRecognitionServiceStub's own doc. -->
+<recognition-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:selectableAsDefault="false" />
