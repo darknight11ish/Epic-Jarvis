@@ -37,8 +37,32 @@ permissions = ["allow-set-theme"]
 # dot and has no approval UI, so it does not.
 [[set]]
 identifier = "approvals"
-description = "Answer a pending approval gate."
-permissions = ["allow-decide-approval"]
+description = "Answer a pending approval gate, or annotate one without answering it."
+permissions = [
+  "allow-decide-approval",
+  # A note attached to a proposal before it is decided. It approves nothing,
+  # so it rides with the windows that already render the gate rather than
+  # earning a set of its own.
+  "allow-amend-approval",
+]
+
+# Pause, resume or stop the turn Jarvis is running right now, and annotate it.
+# Granted to the two windows that actually draw those controls - the quickbar
+# and the widget - and to nothing else, the same reasoning `approvals` above
+# gives for withholding itself from the settings window.
+#
+# Separate from `approvals` because it is a different question: `approvals`
+# answers a gate Jarvis is waiting on, this interrupts work already running.
+# A window could plausibly want one and not the other.
+[[set]]
+identifier = "task-control"
+description = "Pause, resume, stop or annotate the running turn."
+permissions = [
+  "allow-pause-task",
+  "allow-resume-task",
+  "allow-stop-task",
+  "allow-inject-task-note",
+]
 
 # Real microphone capture and the spoken reply - see src-tauri/src/voice.rs's
 # own module docstring for why this is granted to the quickbar and NOT to the

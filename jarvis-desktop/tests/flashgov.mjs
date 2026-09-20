@@ -386,6 +386,153 @@ check("a chip's own governor still holds a genuine fast flash on that chip", () 
     `transitions in a second against a limit of ${MAX_PER_S}`);
 });
 
+/* ---------------------------------------------------------------------- *
+ * limits.flash.strobe_max_s - the DURATION cap.
+ *
+ * The governor limits how OFTEN the screen changes. It cannot limit how LONG
+ * a strobe keeps changing, because a strobe inside the transition budget
+ * passes it for ever - and `error` is both the state most likely to carry a
+ * strobe and the state that lasts until someone fixes the error. The spec
+ * has said "never more than strobe_max_s at full face width" since the
+ * beginning; nothing on this side enforced it until now.
+ * ---------------------------------------------------------------------- */
+
+const STROBE_MAX_S = spec.limits.flash.strobe_max_s;
+// The real strobe pattern out of the real spec, not a name invented here.
+const STROBE_ID = spec.patterns.find(p => p.kind === "strobe").id;
+
+check("a strobe stops changing once it has run past strobe_max_s", () => {
+  const gov = newFlashGovernor();
+  // Alternating bright/dark every sample, i.e. a strobe as far as the
+  // governor is concerned, bound to the spec's real strobe pattern.
+  SEQ = [BRIGHT, DARK]; calls = 0;
+  const bind = { pattern: STROBE_ID };
+  const seen = [];
+  // 6 seconds at 10 samples/sec, well past the 2s cap.
+  for (let i = 0; i < 60; i++) {
+    const now = i * 0.1;
+    seen.push({ now, hex: governedResolve(gov, bind, now, 1, 0, now).a });
+  }
+  const afterCap = seen.filter(s => s.now > STROBE_MAX_S + 0.5);
+  const distinct = new Set(afterCap.map(s => s.hex));
+  assert.equal(distinct.size, 1,
+    `after ${STROBE_MAX_S}s a strobe must hold one colour, saw ` +
+    `${[...distinct].join(", ")}`);
+});
+
+check("and it holds the LIT phase, not the dark one", () => {
+  const gov = newFlashGovernor();
+  SEQ = [BRIGHT, DARK]; calls = 0;
+  const bind = { pattern: STROBE_ID };
+  let last = null;
+  for (let i = 0; i < 60; i++) {
+    const now = i * 0.1;
+    last = governedResolve(gov, bind, now, 1, 0, now).a;
+  }
+  // Holding the dark phase would read as "the face switched off", which is
+  // the wrong answer for the state most likely to be strobing.
+  assert.equal(relativeLuma(last), relativeLuma(BRIGHT),
+    `a spent strobe must freeze lit, froze on ${last}`);
+});
+
+check("a non-strobe pattern is never capped by the strobe budget", () => {
+  const gov = newFlashGovernor();
+  SEQ = [BRIGHT, DARK]; calls = 0;
+  // `pulse` is not a strobe: slow, and nothing to do with this limit.
+  const bind = { pattern: spec.patterns.find(p => p.kind !== "strobe").id };
+  const seen = [];
+  for (let i = 0; i < 60; i++) {
+    const now = i * 0.1;
+    seen.push(governedResolve(gov, bind, now, 1, 0, now).a);
+  }
+  // It is still governed (3/s), but it must NOT be frozen to one colour.
+  assert.ok(new Set(seen.slice(40)).size > 1,
+    "the duration cap leaked onto a pattern that is not a strobe");
+});
+
+check("the strobe budget resets when the binding stops being a strobe", () => {
+  const gov = newFlashGovernor();
+  SEQ = [BRIGHT, DARK]; calls = 0;
+  const strobe = { pattern: STROBE_ID };
+  const calm = { pattern: spec.patterns.find(p => p.kind !== "strobe").id };
+  for (let i = 0; i < 60; i++) governedResolve(gov, strobe, i * 0.1, 1, 0, i * 0.1);
+  governedResolve(gov, calm, 6.1, 1, 0, 6.1);   // leaves the strobe
+  assert.equal(gov.strobeStartedAt, null,
+    "a strobe that ended must not leave its budget spent for the next one");
+});
+
+/* ---------------------------------------------------------------------- *
+ * The strobe PERIOD floor, clamped at the point of use in resolve().
+ *
+ * Driven against the real `resolve` out of faces.html rather than the
+ * double, because the floor lives inside it. 2/max_transitions_per_s, not
+ * 1/: a strobe makes two opposing transitions per period.
+ * ---------------------------------------------------------------------- */
+
+// The whole pattern engine, in one contiguous slice: `CMAP`/`hexOf` through
+// `resolve` itself. Sliced rather than retyped, same rule as the governor
+// above - a floor that is only correct in this file's copy is not a floor.
+const engineSource = slice(html, "const CMAP = {};", "function newFlashGovernor(){", false);
+const realResolve = new Function("SPEC", "lerp",
+  `${colSource}\n${engineSource}\nreturn resolve;`,
+)(spec, (a, b, t) => a + (b - a) * t);
+
+// The gap between consecutive transitions, in seconds. Asserting on this
+// rather than on a one-second count, because the floor lands the rate at
+// EXACTLY max_transitions_per_s: a sliding window straddling that boundary
+// legitimately sees a fourth, and the governor is what holds it. What the
+// floor itself guarantees is the spacing, so that is what is measured.
+const SAMPLE_S = 0.005;
+
+function shortestGap(bind, resolveFn) {
+  let last = null, lastAt = null, shortest = Infinity;
+  for (let i = 0; i < 400; i++) {
+    const t = i * SAMPLE_S;
+    const hex = resolveFn(bind, t, 1, 0).a;
+    if (last !== null && hex !== last) {
+      if (lastAt !== null) shortest = Math.min(shortest, t - lastAt);
+      lastAt = t;
+    }
+    last = hex;
+  }
+  return shortest;
+}
+
+// One period holds two transitions, so the floor on the period is twice the
+// floor on the gap between them.
+const GAP_FLOOR = 1 / spec.limits.flash.max_transitions_per_s;
+// One sample step of slack: a transition can only be SEEN on a sample
+// boundary, so a true gap of exactly GAP_FLOOR reads as up to one step short.
+// Tighter than this measures the sampling grid, not the floor.
+const GAP_SLACK = SAMPLE_S;
+
+check("resolve() floors a too-fast strobe period at 2/max_transitions_per_s", () => {
+  const gap = shortestGap({ pattern: STROBE_ID, params: { period_s: 0.05 } }, realResolve);
+  assert.ok(gap >= GAP_FLOOR - GAP_SLACK,
+    `a period_s of 0.05 must be floored, but transitions were ${gap}s apart ` +
+    `against a floor of ${GAP_FLOOR}s`);
+});
+
+check("and an explicit period_s of 0 is floored too, not read as absent", () => {
+  // `||` treated this as absent and substituted a default - the exact shape
+  // of the spec's own `found_14_sep` incident.
+  const gap = shortestGap({ pattern: STROBE_ID, params: { period_s: 0 } }, realResolve);
+  assert.ok(gap >= GAP_FLOOR - GAP_SLACK,
+    `period_s: 0 must be floored, but transitions were ${gap}s apart`);
+});
+
+check("CONTROL: without the floor that binding would have been far too fast", () => {
+  // Proves the checks above are measuring the floor and not some other
+  // limiter: the same arithmetic, unfloored, is an order of magnitude over.
+  const unfloored = (bind, t) => {
+    const on = ((t / bind.params.period_s) % 1) < 0.5;
+    return { a: on ? BRIGHT : DARK };
+  };
+  const gap = shortestGap({ pattern: STROBE_ID, params: { period_s: 0.05 } }, unfloored);
+  assert.ok(gap < GAP_FLOOR,
+    `the control must be over the floor to be a control, was ${gap}s`);
+});
+
 console.log(`\n${fails.length === 0 ? `all ${ran}` : `${fails.length} of ${ran}`} checks ` +
             `${fails.length === 0 ? "passed" : "failed"}`);
 if (fails.length) {

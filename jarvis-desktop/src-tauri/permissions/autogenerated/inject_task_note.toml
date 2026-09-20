@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-inject-task-note"
+description = "Enables the inject_task_note command without any pre-configured scope."
+commands.allow = ["inject_task_note"]
+
+[[permission]]
+identifier = "deny-inject-task-note"
+description = "Denies the inject_task_note command without any pre-configured scope."
+commands.deny = ["inject_task_note"]

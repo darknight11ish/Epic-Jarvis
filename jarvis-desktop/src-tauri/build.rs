@@ -25,6 +25,16 @@ fn main() {
             "get_pending_approvals",
             "refresh_link",
             "decide_approval",
+            // A note on a proposal, and the controls for the turn already
+            // running. `jarvis-link.js` invoked all five of these before any
+            // of them existed, so every one of those buttons failed at the
+            // Tauri boundary - see permissions/surfaces.toml's "approvals"
+            // and "task-control" sets for which windows get them.
+            "amend_approval",
+            "pause_task",
+            "resume_task",
+            "stop_task",
+            "inject_task_note",
             // The interruption budget and the daily brief. Reads and two
             // writes; the tray calls the same functions in-process, so it
             // needs no grant.

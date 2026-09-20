@@ -593,6 +593,15 @@ pub fn run() {
             commands::stream_chat,
             commands::cancel_chat,
             commands::decide_approval,
+            // The five `jarvis-link.js` has invoked since before they
+            // existed. Without these lines every task-control button and the
+            // approval note failed at the Tauri boundary, which reads to the
+            // user as the button doing nothing.
+            commands::pause_task,
+            commands::resume_task,
+            commands::stop_task,
+            commands::inject_task_note,
+            commands::amend_approval,
             commands::set_route_lane,
             stream::get_link_state,
             stream::get_pending_approvals,

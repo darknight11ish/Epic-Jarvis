@@ -3009,7 +3009,22 @@ function resolve(bind, t, amp, seed){
       return { a, b: lift(a, -0.5) };
     }
     case "strobe": {
-      const on = ((t / (q.period_s || .7)) % 1) < .5;
+      // CLAMPED, like flicker above, and for the same reason: this is the
+      // point of use, so the floor holds for a hand-written binding and for
+      // anything a future randomiser emits, not just for what the spec's own
+      // params happen to say.
+      //
+      // 2/max_transitions_per_s, not 1/: a strobe makes TWO opposing
+      // transitions per period (on->off->on). Dividing once floors the period
+      // at 0.33s, which is 6 transitions a second against a hard limit of 3.
+      //
+      // `??` not `||`: `||` treats an explicit `period_s: 0` as absent and
+      // silently substituted a default, which is the exact shape of the bug
+      // the spec's own `found_14_sep` note records. The clamp below would
+      // catch a 0 anyway - this just stops it being a lie on the way past.
+      const maxTr = SPEC?.limits?.flash?.max_transitions_per_s ?? 3;
+      const strobeS = Math.max(q.period_s ?? 0.8, 2 / maxTr);
+      const on = ((t / strobeS) % 1) < .5;
       const a = hexOf(on ? (bind.color || q.a) : q.b);
       return { a, b: lift(a, -0.5) };
     }
@@ -3045,6 +3060,13 @@ function newFlashGovernor(){
     // note at that line for why that is the correct reading of the limit.
     lastDirection: null,
     recent: [],           // REAL-time seconds of opposing transitions let through
+    // `limits.flash.strobe_max_s`: a strobe must never run more than two
+    // seconds at full face width. Kept here, per surface, for the same reason
+    // the governor itself is per surface - and because the state that most
+    // often strobes is `error`, which lasts until someone fixes the error.
+    strobeStartedAt: null,  // REAL-time second this strobe began, or null
+    strobeLit: null,        // brightest { a, b } this strobe has shown
+    strobeLitLuma: -1,
   };
 }
 /** Resolves through `gov`, holding `gov.held` instead of `candidate` when
@@ -3063,7 +3085,42 @@ function newFlashGovernor(){
  *  backwards. `now` defaults to `t` for the callers whose clock already IS
  *  wall time (the swatch strip). */
 function governedResolve(gov, bind, t, amp, seed, now = t){
-  const candidate = resolve(bind, t, amp, seed);
+  let candidate = resolve(bind, t, amp, seed);
+
+  // The duration cap, applied BEFORE the governor and never instead of it -
+  // the same order the Android port uses. The governor limits how OFTEN the
+  // screen changes; this limits how LONG a strobe may keep changing at all.
+  // A binding inside the transition budget passes the governor for ever, so
+  // without this an `error` strobe ran until the error was fixed.
+  //
+  // Frozen on the lit phase, not the dark one: the dark phase is the
+  // pattern's neutral, and holding that reads as "the face switched off",
+  // which is the wrong answer for the state most likely to be strobing.
+  // Tracked by luminance rather than by phase arithmetic so this needs
+  // nothing from `resolve`'s internals - the lit phase is, by construction,
+  // the brighter of the two.
+  const strobeKind = (SPEC?.patterns || []).find(p => p.id === bind?.pattern)?.kind === "strobe";
+  if(!strobeKind){
+    gov.strobeStartedAt = null;
+    gov.strobeLit = null;
+    gov.strobeLitLuma = -1;
+  } else {
+    if(gov.strobeStartedAt === null){
+      gov.strobeStartedAt = now;
+      gov.strobeLit = null;
+      gov.strobeLitLuma = -1;
+    }
+    const lum = relativeLuma(candidate.a);
+    if(lum > gov.strobeLitLuma){
+      gov.strobeLit = candidate;
+      gov.strobeLitLuma = lum;
+    }
+    const strobeMaxS = SPEC?.limits?.flash?.strobe_max_s ?? 2.0;
+    if(now - gov.strobeStartedAt > strobeMaxS && gov.strobeLit !== null){
+      candidate = gov.strobeLit;
+    }
+  }
+
   if(gov.held === null){
     gov.held = candidate;
     gov.heldLuma = relativeLuma(candidate.a);

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stop-task"
+description = "Enables the stop_task command without any pre-configured scope."
+commands.allow = ["stop_task"]
+
+[[permission]]
+identifier = "deny-stop-task"
+description = "Denies the stop_task command without any pre-configured scope."
+commands.deny = ["stop_task"]

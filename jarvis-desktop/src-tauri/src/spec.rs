@@ -123,6 +123,12 @@ struct Spec {
     /// does not count as a transition at all, so a pattern drifting through
     /// near-identical shades cannot be held hostage by the governor.
     min_luma_delta: f64,
+    /// `limits.flash.strobe_max_s` - how long a strobe may run at all, as
+    /// opposed to how often it may change. The governor cannot express this:
+    /// a strobe inside the transition budget passes it indefinitely, and the
+    /// state most likely to carry a strobe is `error`, which lasts until
+    /// someone fixes the error. [`FlashGovernor`] enforces it.
+    strobe_max_s: f64,
 }
 
 struct Pattern {
@@ -207,6 +213,9 @@ fn spec() -> &'static Spec {
         let min_luma_delta = root["limits"]["flash"]["min_luma_delta"]
             .as_f64()
             .unwrap_or(0.1);
+        let strobe_max_s = root["limits"]["flash"]["strobe_max_s"]
+            .as_f64()
+            .unwrap_or(2.0);
 
         Spec {
             colors,
@@ -216,6 +225,7 @@ fn spec() -> &'static Spec {
             flicker_rate_hz_max,
             max_transitions_per_s,
             min_luma_delta,
+            strobe_max_s,
         }
     })
 }
@@ -568,7 +578,22 @@ pub fn resolve(bind: &Binding, t: f64, amp: f64, seed: f64) -> Resolved {
         }
 
         "strobe" => {
-            let on = ((t / num(q, "period_s", 0.7)) % 1.0) < 0.5;
+            // CLAMPED at the point of use, exactly as the flicker rate above
+            // is, so the floor holds for a hand-written binding and not only
+            // for what the spec's own params happen to say.
+            //
+            // 2/max_transitions_per_s, not 1/: a strobe makes TWO opposing
+            // transitions per period (on->off->on). Flooring with a single
+            // division allows 0.33s, which is six transitions a second
+            // against a hard limit of three.
+            //
+            // The default is the spec's own 0.8, not 0.7. The two ports had
+            // drifted apart on a number the spec states once.
+            // `spec`, not `spec()`: this function binds the spec to a local
+            // of the same name at its top, which shadows the accessor.
+            let floor = 2.0 / f64::from(spec.max_transitions_per_s.max(1));
+            let period = num(q, "period_s", 0.8).max(floor);
+            let on = ((t / period) % 1.0) < 0.5;
             let a = if on {
                 hex_of(bind.color.as_deref().or_else(|| text(q, "a")))
             } else {
@@ -626,6 +651,18 @@ pub struct FlashGovernor {
     /// opposing transitions let through in roughly the last second, oldest
     /// first.
     recent: Vec<f64>,
+    /// REAL-time second the current strobe began, or `None` when the binding
+    /// is not a strobe. `limits.flash.strobe_max_s` is a cap on DURATION,
+    /// which the transition budget above cannot express.
+    strobe_started_at: Option<f64>,
+    /// The brightest colour this strobe has shown, and its luma. A spent
+    /// strobe freezes here rather than on the dark phase: the dark phase is
+    /// the pattern's own neutral, and holding that reads as "the face
+    /// switched off" - the wrong answer for the state most likely to be
+    /// strobing. Tracked by luminance so this needs nothing from `resolve`'s
+    /// internals; the lit phase is by construction the brighter of the two.
+    strobe_lit: Option<Resolved>,
+    strobe_lit_luma: f64,
 }
 
 impl FlashGovernor {
@@ -635,6 +672,9 @@ impl FlashGovernor {
             held_luma: 0.0,
             last_direction: None,
             recent: Vec::new(),
+            strobe_started_at: None,
+            strobe_lit: None,
+            strobe_lit_luma: -1.0,
         }
     }
 
@@ -657,7 +697,43 @@ impl FlashGovernor {
     /// The parameter exists in this port so the two stay line-for-line the
     /// same algorithm, which is the rule for this pair.
     pub fn resolve(&mut self, bind: &Binding, t: f64, amp: f64, seed: f64, now: f64) -> Resolved {
-        let candidate = resolve(bind, t, amp, seed);
+        let mut candidate = resolve(bind, t, amp, seed);
+
+        // The DURATION cap, applied before the governor and never instead of
+        // it — the same order the `faces.html` port and the Android port both
+        // use. The governor limits how often the screen changes; this limits
+        // how long a strobe may keep changing at all. A strobe inside the
+        // transition budget passes the governor for ever, so without this an
+        // `error` strobe ran until the error was fixed.
+        // The same lookup `resolve` does, fallback included: an unknown id
+        // renders as `patterns[0]` there, so it must be judged as
+        // `patterns[0]` here too. Today that is `solid` and the distinction
+        // is academic; it stops being academic the moment the spec is
+        // reordered, and these two ports are meant to stay line-for-line.
+        let is_strobe = spec()
+            .patterns
+            .iter()
+            .find(|p| p.id == bind.pattern)
+            .or_else(|| spec().patterns.first())
+            .map(|p| p.kind == "strobe")
+            .unwrap_or(false);
+        if is_strobe {
+            let began = *self.strobe_started_at.get_or_insert(now);
+            let lum = luma(candidate.a);
+            if lum > self.strobe_lit_luma {
+                self.strobe_lit = Some(candidate);
+                self.strobe_lit_luma = lum;
+            }
+            if now - began > spec().strobe_max_s {
+                if let Some(lit) = self.strobe_lit {
+                    candidate = lit;
+                }
+            }
+        } else {
+            self.strobe_started_at = None;
+            self.strobe_lit = None;
+            self.strobe_lit_luma = -1.0;
+        }
 
         let Some(held) = self.held else {
             self.held = Some(candidate);
@@ -1024,6 +1100,113 @@ mod tests {
             transitions < 12,
             "expected the governor to hold most of a 10 Hz strobe's \
              transitions over 2s, saw {transitions} distinct outputs"
+        );
+    }
+
+    /// `limits.flash.strobe_max_s` — the DURATION cap, which the transition
+    /// budget above cannot express. A strobe slow enough to sit inside the
+    /// budget passes the governor for ever, and `error` is both the state
+    /// most likely to carry a strobe and the state that lasts until someone
+    /// fixes the error. The spec has said "never more than strobe_max_s at
+    /// full face width" since the beginning; nothing on this side enforced
+    /// it until this test existed.
+    #[test]
+    fn a_strobe_stops_changing_once_it_passes_strobe_max_s() {
+        let bind = fast_strobe();
+        let mut gov = FlashGovernor::new();
+        let mut after_cap: Vec<Resolved> = Vec::new();
+
+        let mut t = 0.0;
+        while t < 6.0 {
+            let out = gov.resolve(&bind, t, 0.0, 0.0, t);
+            // Half a second of slack past the cap, so this is not asserting
+            // on the exact frame the budget runs out.
+            if t > spec().strobe_max_s + 0.5 {
+                after_cap.push(out);
+            }
+            t += 0.05;
+        }
+
+        assert!(!after_cap.is_empty(), "the drive must reach past the cap");
+        let first = after_cap[0];
+        assert!(
+            after_cap.iter().all(|r| r.a == first.a),
+            "after {}s a strobe must hold one colour, but it kept changing",
+            spec().strobe_max_s
+        );
+    }
+
+    /// And it must freeze LIT. Freezing on the dark phase would leave the
+    /// face looking switched off, which is the wrong answer for the state
+    /// most likely to be strobing.
+    #[test]
+    fn a_spent_strobe_freezes_on_its_lit_phase() {
+        let bind = fast_strobe();
+        let mut gov = FlashGovernor::new();
+        let mut brightest = f64::MIN;
+        let mut last = Rgb::FALLBACK;
+
+        let mut t = 0.0;
+        while t < 6.0 {
+            let out = gov.resolve(&bind, t, 0.0, 0.0, t);
+            brightest = brightest.max(luma(out.a));
+            last = out.a;
+            t += 0.05;
+        }
+
+        assert!(
+            (luma(last) - brightest).abs() < f64::EPSILON,
+            "a spent strobe must hold its brightest phase, held luma {} \
+             against a brightest of {brightest}",
+            luma(last)
+        );
+    }
+
+    /// The period floor, clamped inside `resolve` at the point of use so it
+    /// holds for a hand-written binding and not only for the spec's own
+    /// params. `2/max_transitions_per_s`, because a strobe makes two
+    /// opposing transitions per period — flooring with a single division
+    /// still allows six a second against a limit of three.
+    #[test]
+    fn resolve_floors_a_too_fast_strobe_period() {
+        let mut params = serde_json::Map::new();
+        // Absurd on purpose, and an explicit 0 would have been read as
+        // "absent" by the `||` this replaced.
+        params.insert("period_s".into(), serde_json::json!(0.0));
+        let bind = Binding {
+            pattern: "strobe".to_string(),
+            params,
+            ..Default::default()
+        };
+
+        // Measured as the gap between changes, not as a count inside a
+        // window: the floor lands the rate at exactly the limit, so a window
+        // straddling that boundary legitimately sees one more.
+        let floor_gap = 1.0 / f64::from(spec().max_transitions_per_s);
+        let step = 0.005;
+        let mut last: Option<Rgb> = None;
+        let mut last_at: Option<f64> = None;
+        let mut shortest = f64::MAX;
+
+        let mut t = 0.0;
+        while t < 2.0 {
+            let a = resolve(&bind, t, 0.0, 0.0).a;
+            if let Some(prev) = last {
+                if prev != a {
+                    if let Some(at) = last_at {
+                        shortest = shortest.min(t - at);
+                    }
+                    last_at = Some(t);
+                }
+            }
+            last = Some(a);
+            t += step;
+        }
+
+        assert!(
+            shortest >= floor_gap - step,
+            "period_s: 0 must be floored, but changes were {shortest}s apart \
+             against a floor of {floor_gap}s"
         );
     }
 
