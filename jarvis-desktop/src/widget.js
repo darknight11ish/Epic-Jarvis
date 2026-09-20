@@ -475,8 +475,15 @@ function openApproval(approval) {
  * static Approve button (below) is the only way to approve — the exact
  * behaviour this card had before options existed at all. Two or more:
  * the static Approve button is hidden (Deny is not — denying never needs
- * to say which option) and one button per option appears instead, each a
- * full plan of its own to approve, never a modifier on a shared one.
+ * to say which option) and one button per option appears instead.
+ *
+ * Those per-option buttons are rendered **disabled**, for the same reason
+ * and the same way `main.js`'s copy of this function is - see its comment.
+ * Short version: `decide_approval` in Rust never receives `option_id` at
+ * all (docs/JARVIS-API.md §8), so before this fix every option button sent
+ * the identical `/api/approve` request with nothing saying which plan was
+ * meant. jarvis-client's `needsChoice` (`ApiModels.kt`) took the same way
+ * out first.
  */
 function renderOptions(approval) {
   const options = Array.isArray(approval.options) ? approval.options : [];
@@ -490,6 +497,8 @@ function renderOptions(approval) {
     btn.type = "button";
     btn.className = "appr-option";
     btn.dataset.optionId = option.id;
+    btn.disabled = true;
+    btn.title = "This desktop can't tell the server which option was picked yet — see docs/JARVIS-API.md §8. Deny still works.";
     const label = document.createElement("span");
     label.className = "opt-label";
     label.textContent = option.label; // textContent: model-authored text.
@@ -500,7 +509,6 @@ function renderOptions(approval) {
       summary.textContent = option.summary;
       btn.append(summary);
     }
-    btn.addEventListener("click", () => decide(true, option.id));
     dom.apprOptions.append(btn);
   }
 }
@@ -525,7 +533,10 @@ function syncApprovalButtons() {
   const blocked = currentLink().stale || state.busy;
   dom.btnApprYes.disabled = blocked;
   dom.btnApprNo.disabled = blocked;
-  for (const opt of dom.apprOptions.children) opt.disabled = blocked;
+  // Not `= blocked`: `renderOptions` leaves these permanently disabled (see
+  // its own comment), and `= blocked` would re-enable them once the stream
+  // stopped being stale.
+  if (blocked) for (const opt of dom.apprOptions.children) opt.disabled = true;
   // The note is a separate action from deciding (see `state.noteBusy`'s own
   // comment) but it still needs the stream live to mean anything, and it
   // still needs to stop once a decision on THIS card is in flight or has

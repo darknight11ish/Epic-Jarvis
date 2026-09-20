@@ -64,15 +64,18 @@ await check("Deny still works on a multi-option card, with no option id", async 
   assert.equal(sent[0].optionId, undefined, "denying should never carry an option id");
 });
 
-await check("clicking an option sends that option's id, approved", async () => {
+await check("option buttons are disabled - option_id never reaches decide_approval (docs/JARVIS-API.md §8)", async () => {
+  // Was "clicking an option sends that option's id, approved" - that only
+  // proved the JS-side plumbing worked, which was never the bug. Rust's
+  // `decide_approval` takes `(app, id, approved)`; Tauri drops `option_id`
+  // before any request is built, so the option a person clicked was never
+  // the option approved. See widget.js's copy of this test for the fuller
+  // story - same fix, same reason, mirrored here for the quickbar window.
   const page = await quickbar({ pending: [K.APPROVAL_WITH_OPTIONS] });
-  await page.locator('#approval-options .approval-option[data-option-id="opt_reply"]').click();
-  await page.waitForTimeout(200);
-  const sent = await decides(page);
+  const optionButtons = page.locator("#approval-options .approval-option");
+  const disabledFlags = await optionButtons.evaluateAll((els) => els.map((el) => el.disabled));
   await page.close();
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].approved, true);
-  assert.equal(sent[0].optionId, "opt_reply");
+  assert.deepEqual(disabledFlags, [true, true], "no option can be approved until a decide-with-option route exists");
 });
 
 /* ── §3b: a note before the first decision ───────────────────────────────── */

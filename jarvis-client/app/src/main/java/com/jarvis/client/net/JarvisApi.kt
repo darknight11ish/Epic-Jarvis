@@ -653,13 +653,28 @@ class JarvisApi(
     // ------------------------------------------------------------- chat ----
 
     /**
-     * Streams the reply as a chunked HTTP body — **not** SSE, whatever the
-     * shape suggests. The returned [Call] is the interrupt: cancel it and
-     * generation stops.
+     * Streams the reply as a chunked HTTP body — or as SSE; see
+     * [ChatChunkParser]'s own doc for why both are real. The returned [Call]
+     * is the interrupt: cancel it and generation stops.
+     *
+     * The body was `{"message": "<text>"}` here, and that was wrong - not a
+     * simplification of the real shape, a different, unread one.
+     * `jarvis-desktop/src-tauri/src/commands.rs:777-784` names the actual
+     * contract, established against the real backend rather than guessed:
+     * `jarvis_hud.py`'s `_build_payload` forwards only
+     * `model / messages / stream / temperature / max_tokens` upstream, in the
+     * OpenAI shape `/v1/chat/completions` expects. A bare `message` key is
+     * not one of those, so the backend had nothing to read it as.
+     *
+     * `has_image` is always false here: this client has no screenshot
+     * capture, so there is never an image to route the turn toward. `auto`
+     * mirrors the desktop's own `true` - matched rather than guessed,
+     * because the desktop side is the one already confirmed against the
+     * backend.
      */
     fun chatCall(message: String): Call? {
         val target = url("/api/chat") ?: return null
-        val body = """{"message":${quote(message)}}"""
+        val body = """{"messages":[{"role":"user","content":${quote(message)}}],"has_image":false,"stream":true,"auto":true}"""
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
         return client.newCall(req)
