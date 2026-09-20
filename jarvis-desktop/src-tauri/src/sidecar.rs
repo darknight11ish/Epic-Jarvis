@@ -358,20 +358,54 @@ pub async fn ensure_backend(app: &AppHandle) -> Result<String, String> {
     let state = app.state::<SupervisorState>();
     let _gate = state.gate.lock().await;
 
-    if let Some((pid, exited)) = state.snapshot() {
-        return Ok(if exited {
-            format!(
-                "Already supervising the backend. The process we launched (pid {pid}) has \
-                 exited — normal for a launcher that re-execs — and its tree is still ours \
-                 to stop."
-            )
-        } else {
-            format!("Already supervising the backend (pid {pid}).")
-        });
+    let snapshot = state.snapshot();
+
+    // A process we launched that is still running settles it on its own: there
+    // is nothing to decide and no reason to pay for a port probe.
+    if let Some((pid, false)) = snapshot {
+        return Ok(format!("Already supervising the backend (pid {pid})."));
     }
 
     let base = commands::jarvis_base(app);
-    if backend_reachable(app, &base).await {
+    let reachable = backend_reachable(app, &base).await;
+
+    if let Some((pid, true)) = snapshot {
+        // The process we launched is gone. That ALONE does not mean the backend
+        // is: a launcher that re-execs leaves the real server as a grandchild
+        // inside our tree, which is why `snapshot` reaps the zombie and refuses
+        // to drop the tree — see its own comment for the backend this killed
+        // mid-turn when an earlier version forgot an exited child.
+        //
+        // So ask the only question that actually settles it, rather than
+        // inferring death from the exit: is anything serving?
+        if reachable {
+            return Ok(format!(
+                "Already supervising the backend. The process we launched (pid {pid}) has \
+                 exited — normal for a launcher that re-execs — and its tree is still ours \
+                 to stop."
+            ));
+        }
+
+        // Nothing is serving and the process we launched is gone, so this tree
+        // is spent. Release it and fall through to a fresh start.
+        //
+        // Dropping `Owned` closes the KILL_ON_JOB_CLOSE job, which takes any
+        // stuck grandchild with it — the cleanup we want here precisely
+        // BECAUSE the probe above just established that nothing is serving.
+        // Taken out from under the lock before the drop, for the reason
+        // `stop_owned` gives: `supervisor_status` takes this same lock from
+        // the tray on the main thread.
+        //
+        // Without this the slot stayed `Some` for the life of the app: a
+        // backend that died on its own could never be restarted from the app
+        // again, the tray kept offering to stop a dead pid, and the only way
+        // out was Stop-then-Start, which reads to the user as a no-op.
+        let spent = {
+            let mut slot = state.lock();
+            slot.take()
+        };
+        drop(spent);
+    } else if reachable {
         // §5: attach, don't duplicate.
         return Ok(format!(
             "A backend is already listening on {base}; attached to it rather than starting a second."
