@@ -555,6 +555,17 @@ object JarvisRuntime {
                     Log.w(TAG, "no frame for ${since}ms; treating the link as stale")
                     _stale.value = true
                     _linkDetail.value = "No keepalive for ${since / 1000}s"
+                    // Every OTHER place in this file that sets `_stale = true`
+                    // pairs it with this - except, until now, here. Without it,
+                    // a queue refreshed long ago (before this gap even started)
+                    // was enough to satisfy the branch below the moment a bare
+                    // keepalive slipped through, with the pending list never
+                    // re-read at all. `EventStream.Signal.Alive` only stamps
+                    // `lastFrameAt` (see `onEach` above `.collect` in
+                    // `startStream`) - it proves the socket delivered a byte, not
+                    // that any approval-resolving event survived the gap it just
+                    // came out of.
+                    refreshedSinceOpen = false
                 } else if (_link.value == LinkState.CONNECTED && _stale.value &&
                     lastFrameAt != 0L && refreshedSinceOpen
                 ) {
@@ -566,11 +577,17 @@ object JarvisRuntime {
                     // connection that was answering.
                     //
                     // `refreshedSinceOpen` is the load-bearing half of the test
-                    // above. Without it the branch fired on keepalives alone,
-                    // and onOpen sets CONNECTED before it re-fetches anything —
-                    // so a slow refresh left a window in which the watchdog
-                    // opened the gate over the queue cached from before the
-                    // disconnect, and the owner could approve against it.
+                    // above, now for two reasons rather than one: it still
+                    // covers onOpen's own slow-refresh window, and it now also
+                    // covers THIS branch, since the line above resets it the
+                    // moment a gap is declared. So this only fires once
+                    // `refreshPending` has actually run since - which a real
+                    // `"approval"` event forces via `onEvent`, but a bare
+                    // keepalive never does. A gap that heals via nothing but
+                    // keepalives leaves the gate shut until the 90s hard
+                    // timeout forces a real reconnect and refresh; that costs
+                    // up to 20 more seconds of "not connected", which is the
+                    // safe direction to be wrong in.
                     Log.i(TAG, "keepalives resumed after ${since}ms; link is live again")
                     _stale.value = false
                     _linkDetail.value = null
@@ -1050,6 +1067,11 @@ object JarvisRuntime {
      * The stale check is the safety rule, not a nicety: approving against a
      * queue you cannot confirm is live is the hazard the whole gate exists to
      * prevent, and it is exactly what a cached inbox invites.
+     *
+     * Deliberately silent on `needsChoice`: this blocker gates BOTH decisions,
+     * and denying a multi-option item needs no option ("refusing is always
+     * the safe direction" - see [decide]'s own check, which is where that one
+     * lives, gated on `approve` in a way this shared function cannot be).
      */
     fun decisionBlocker(item: PendingItem, nowMs: Long = System.currentTimeMillis()): String? {
         if (_stale.value || _link.value != LinkState.CONNECTED) {
@@ -1085,6 +1107,23 @@ object JarvisRuntime {
     }
 
     suspend fun decide(item: PendingItem, approve: Boolean): ApiResult<Unit> {
+        // Checked here rather than only in [ApprovalCard]'s `canApprove`: this
+        // is the one function that actually sends the decision, the same
+        // reason the staleness check lives in [decisionBlocker] and not in
+        // each screen. A disabled button is a courtesy, not a gate - this app
+        // has paid for skipping that distinction before (the approvals
+        // widget's own `connected` check missing the stale case, same shape
+        // of bug). No route exists yet that can tell the server which option
+        // was meant (`net/ApiModels.kt`'s `needsChoice` doc comment), so
+        // approving one at all - from this call, whatever screen, widget, or
+        // future surface reaches it - would silently apply whichever plan
+        // the server defaults to.
+        if (approve && item.needsChoice) {
+            val msg = "This proposal offers ${item.options.size} options, and no " +
+                "Jarvis client can pick one yet. Deny still works."
+            _notice.value = msg
+            return ApiResult.Failed(ApiError.Unreachable(msg))
+        }
         val blocker = decisionBlocker(item)
         if (blocker != null) {
             _notice.value = blocker

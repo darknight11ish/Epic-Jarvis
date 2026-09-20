@@ -734,7 +734,19 @@ object Geodesic : Face {
             val b = ((bright[i] + bright[j]) / 2f + ampBoost).coerceAtMost(1f)
             drawLine(
                 color = (if (b > 0.25f) mix(cool, hot, b) else cool)
-                    .copy(alpha = (0.05f + (d - 0.55f).coerceAtLeast(0f) * 1.5f) * (0.35f + b * 1.6f)),
+                    .copy(
+                        // Neither factor is bounded by 1 on its own - the
+                        // first reaches 0.725 at d's max, the second 1.95 at
+                        // b's (b is explicitly capped at 1 a few lines up,
+                        // so that ceiling is reached, not theoretical) - and
+                        // their product peaks at 1.41, over what
+                        // `Color.copy(alpha = ...)` accepts. It throws
+                        // `IllegalArgumentException` rather than clamping,
+                        // so an uncoerced value here was a crash on a
+                        // front-facing, fully-lit vertex, not a visual bug.
+                        alpha = ((0.05f + (d - 0.55f).coerceAtLeast(0f) * 1.5f) *
+                            (0.35f + b * 1.6f)).coerceIn(0f, 1f),
+                    ),
                 start = Offset(cx + xs[i] * r, cy + ys[i] * r),
                 end = Offset(cx + xs[j] * r, cy + ys[j] * r),
                 strokeWidth = r * (0.006f + 0.012f * b) * d.coerceAtLeast(0.2f),

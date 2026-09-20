@@ -282,7 +282,7 @@ object ApprovalNotifier {
             // and the notifications it posted become uncancellable.
             .addExtras(Bundle().apply { putString(EXTRA_APPROVAL_ID, item.id) })
             .setGroup(GROUP)
-            .setContentIntent(openCard(context, item.id))
+            .setContentIntent(openCard(context, item.id, notificationId))
             // Deny only, never Approve - and Deny only when the desktop's own
             // notice says refusing without reading is safe.
             //
@@ -332,7 +332,7 @@ object ApprovalNotifier {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setGroup(GROUP)
             .setGroupSummary(true)
-            .setContentIntent(openCard(context, null))
+            .setContentIntent(openCard(context, null, SUMMARY_ID))
             .build()
 
     /**
@@ -360,17 +360,21 @@ object ApprovalNotifier {
         )
     }
 
-    private fun openCard(context: Context, approvalId: String?): PendingIntent {
+    private fun openCard(context: Context, approvalId: String?, requestCode: Int): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .setAction(ACTION_OPEN_APPROVAL)
         if (approvalId != null) intent.putExtra(EXTRA_APPROVAL_ID, approvalId)
         return PendingIntent.getActivity(
             context,
-            // A distinct request code per approval, or FLAG_UPDATE_CURRENT
-            // would rewrite every earlier intent's extras to the newest id and
-            // every notification in the drawer would open the same card.
-            approvalId?.hashCode() ?: 0,
+            // The same collision-free id [denyIntent] uses, not
+            // `approvalId?.hashCode()`: a hash collision between two live
+            // approvals would rewrite the earlier one's intent extras to
+            // the newer id under FLAG_UPDATE_CURRENT, and its notification
+            // would open the wrong card. The summary passes its own fixed
+            // SUMMARY_ID, which sits just below the per-item range and so
+            // can never collide with one.
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

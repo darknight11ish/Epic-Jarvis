@@ -258,7 +258,20 @@ class Speaker(private val context: Context) {
                 }
             })
             val params = Bundle()
-            engine.speak(text, TextToSpeech.QUEUE_FLUSH, params, id)
+            val queued = engine.speak(text, TextToSpeech.QUEUE_FLUSH, params, id)
+            // A rejected utterance is not guaranteed any callback at all on
+            // every OEM engine - `onError` is documented for a FAILURE
+            // during synthesis, not for `speak()` itself refusing to queue
+            // one. Without this, that path left the listener registered and
+            // the continuation suspended forever: a Jarvis reply that failed
+            // to queue never resumed the voice loop for any later turn.
+            if (queued != TextToSpeech.SUCCESS) {
+                Log.w(TAG, "speak() refused the utterance (code $queued)")
+                _level.value = null
+                runCatching { engine.setOnUtteranceProgressListener(null) }
+                if (cont.isActive) cont.resume(Unit)
+                return@suspendCancellableCoroutine
+            }
             cont.invokeOnCancellation { runCatching { engine.stop() }; _level.value = null }
         }
     }
