@@ -136,20 +136,28 @@ def t_authenticated_requests_are_opt_in_and_disclosed():
         # _get is what actually sets headers; run() takes a fetch override for
         # the network call itself, so exercise _get directly with NoNetwork
         # to prove it WOULD attach the header, without opening a socket.
+        #
+        # The seam is `build_opener`, not `urlopen`: _get goes through an
+        # opener now so it can refuse redirects without handing the token to
+        # the redirect target. Same assertion, same no-socket guarantee - only
+        # the interception point moved.
         import urllib.request
-        real_urlopen = urllib.request.urlopen
-        def fake_urlopen(req, timeout=None):
-            seen_headers.update(dict(req.header_items()))
-            class Resp:
-                def __enter__(self_): return self_
-                def __exit__(self_, *a): return False
-                def read(self_): return b'{"items": []}'
-            return Resp()
-        urllib.request.urlopen = fake_urlopen
+        real_build_opener = urllib.request.build_opener
+        def fake_build_opener(*handlers):
+            class Opener:
+                def open(self_, req, timeout=None):
+                    seen_headers.update(dict(req.header_items()))
+                    class Resp:
+                        def __enter__(self__): return self__
+                        def __exit__(self__, *a): return False
+                        def read(self__): return b'{"items": []}'
+                    return Resp()
+            return Opener()
+        urllib.request.build_opener = fake_build_opener
         try:
             R._get(p2.queries[0].url)
         finally:
-            urllib.request.urlopen = real_urlopen
+            urllib.request.build_opener = real_build_opener
         check("an authenticated request carries the bearer token",
               seen_headers.get("Authorization") == "Bearer not-a-real-token",
               repr(seen_headers))

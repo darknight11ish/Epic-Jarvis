@@ -76,6 +76,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field, asdict
@@ -313,10 +314,42 @@ def describe(p: Plan) -> str:
 #   Execution - only the enumerated request(s)
 # --------------------------------------------------------------------------
 
+class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
+    """Stops a redirect from carrying the bearer token to another host.
+
+    `urllib` copies every header except content-length/content-type onto the
+    redirect target, cross-host included, so a 302 from the Home Assistant
+    host - or from anything that can answer as it: plain `http://`, DNS, a
+    reverse proxy - hands over the long-lived token. Rule 3 says a key is
+    "sent only to the one service it authenticates against"; following a
+    redirect is precisely how it stops being.
+
+    (CPython 3.13 strips `Authorization` across hosts. This does not depend
+    on running that version, and still refuses a same-host redirect, which
+    3.13 would follow with the header intact.)
+
+    Refused rather than stripped, deliberately: an authenticated REST call
+    to `/api/states/...` has no legitimate reason to redirect, and a 401
+    from a silently stripped header reads as "wrong token" and sends the
+    owner hunting in the wrong place. This says what actually happened.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            code,
+            f"refused to follow a redirect to {newurl}: the Home Assistant "
+            f"token would have been sent there. Point {URL_ENV} at the final "
+            f"address instead.",
+            headers,
+            fp,
+        )
+
+
 def _default_fetch(q: Query) -> dict:
     """The real call. Adds the real bearer token fresh from the environment -
     never cached, never logged, never part of a `Query`/`Plan` a card was
-    shown for."""
+    shown for, and never followed onto a redirect (see `_RefuseRedirect`)."""
     token = os.environ.get(TOKEN_ENV, "")
     headers = {"Accept": "application/json"}
     if token:
@@ -326,7 +359,8 @@ def _default_fetch(q: Query) -> dict:
         headers["Content-Type"] = "application/json"
         data = json.dumps(q.body).encode("utf-8")
     req = urllib.request.Request(q.url, data=data, method=q.method, headers=headers)
-    with urllib.request.urlopen(req, timeout=20.0) as r:
+    opener = urllib.request.build_opener(_RefuseRedirect)
+    with opener.open(req, timeout=20.0) as r:
         raw = r.read().decode("utf-8", "replace")
         return json.loads(raw) if raw.strip() else {}
 

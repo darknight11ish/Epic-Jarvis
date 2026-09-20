@@ -54,6 +54,7 @@ import json
 import os
 import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field, asdict
@@ -232,6 +233,31 @@ def describe(p: Plan) -> str:
 #   Execution - only ever with a plan a human said yes to
 # --------------------------------------------------------------------------
 
+class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
+    """Stops a redirect from carrying the GitHub token to another host.
+
+    `urllib` copies every header except content-length/content-type onto the
+    redirect target, cross-host included, so a 302 hands over the token.
+    Rule 3 says a key is "sent only to the one service it authenticates
+    against", and following a redirect is how it stops being.
+
+    Lower risk here than in `jarvis_home`, because the host is the fixed
+    `api.github.com` rather than one the owner points at an env var - but
+    the control is the same one and cheap, and "low risk" is a property of
+    today's URL builder, not of this function.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            code,
+            f"refused to follow a redirect to {newurl}: the GitHub token "
+            f"would have been sent there.",
+            headers,
+            fp,
+        )
+
+
 def _get(url: str, timeout: float = 20.0) -> dict:
     headers = {
         "Accept": "application/vnd.github+json",
@@ -241,7 +267,8 @@ def _get(url: str, timeout: float = 20.0) -> dict:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    opener = urllib.request.build_opener(_RefuseRedirect)
+    with opener.open(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 

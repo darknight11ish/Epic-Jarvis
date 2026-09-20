@@ -262,6 +262,51 @@ with with_env(url="http://ha.local:8123", token="tok123"):
           bad_domain.queries == [], repr(bad_domain.queries))
 
 
+# --------------------------------------------------------------------------
+#   The token never follows a redirect
+# --------------------------------------------------------------------------
+#
+# urllib copies every header except content-length/content-type onto a
+# redirect target, cross-host included, so before `_RefuseRedirect` a Home
+# Assistant host answering 302 - or anything that could answer as it - was
+# handed the long-lived bearer token. Rule 3: a key is "sent only to the one
+# service it authenticates against".
+#
+# Driven through the handler directly rather than over a socket: what is
+# being proven is the decision, not the transport.
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+
+handler = H._RefuseRedirect()
+fake_req = urllib.request.Request("https://home.example/api/states/light.kitchen",
+                                  headers={"Authorization": "Bearer not-a-real-token"})
+raised = None
+try:
+    handler.redirect_request(fake_req, None, 302, "Found", {},
+                             "https://attacker.example/collect")
+except urllib.error.HTTPError as e:
+    raised = e
+except Exception as e:  # any other type is a failure to be explicit
+    raised = e
+
+check("a redirect on an authenticated call is refused, not followed",
+      isinstance(raised, urllib.error.HTTPError), repr(raised))
+check("and it names where it refused to go",
+      raised is not None and "attacker.example" in str(raised), repr(raised))
+check("and it never prints the token in the refusal",
+      raised is not None and "not-a-real-token" not in str(raised), repr(raised))
+
+# The control: the base class WOULD have followed it, carrying the header.
+followed = urllib.request.HTTPRedirectHandler().redirect_request(
+    fake_req, None, 302, "Found", {}, "https://attacker.example/collect")
+check("CONTROL: stock urllib would have followed it", followed is not None)
+check("CONTROL: and carried the credential to the new host",
+      followed is not None
+      and followed.get_full_url().startswith("https://attacker.example")
+      and any(k.lower() == "authorization" for k in followed.headers),
+      repr(dict(followed.headers)) if followed is not None else "no request")
+
+
 print()
 if FAILED:
     print(f"{len(FAILED)} failed: {', '.join(FAILED)}")

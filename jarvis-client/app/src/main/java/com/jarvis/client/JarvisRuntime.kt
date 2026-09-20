@@ -22,6 +22,7 @@ import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
 import com.jarvis.client.widget.ApprovalWidget
+import com.jarvis.client.widget.QuickLinkWidget
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -360,15 +361,27 @@ object JarvisRuntime {
                 }
         }
 
-        // The home-screen widget has no collector of its own — GlanceAppWidget
-        // draws once when asked and then goes back to being inert, so
-        // something on this side has to ask again every time the state it
-        // shows could have changed. `updateAll` re-runs provideGlance and
-        // pushes the new RemoteViews to every placed instance; combine, not
-        // two separate collectors, so a pending item arriving in the same
-        // tick as a link change still resolves to one redraw.
+        // The home-screen widgets have no collector of their own —
+        // GlanceAppWidget draws once when asked and then goes back to being
+        // inert, so something on this side has to ask again every time the
+        // state they show could have changed. `updateAll` re-runs
+        // provideGlance and pushes the new RemoteViews to every placed
+        // instance; combine, not two separate collectors, so a pending item
+        // arriving in the same tick as a link change still resolves to one
+        // redraw.
+        //
+        // BOTH widgets, not just the approvals one. QuickLinkWidget renders
+        // `link` and has `updatePeriodMillis="0"`, so when it was left out of
+        // this loop nothing ever asked it to redraw: it froze on whatever it
+        // showed when the launcher first drew it. The worst shape of that is
+        // a widget placed after a reboot, drawn by a process woken only to
+        // draw it, where `_link` is still OFFLINE — reporting "Offline" for
+        // ever over a perfectly healthy link.
         widgetJob = scope.launch {
-            combine(_pending, _link) { _, _ -> }.collect { ApprovalWidget().updateAll(app) }
+            combine(_pending, _link) { _, _ -> }.collect {
+                ApprovalWidget().updateAll(app)
+                QuickLinkWidget().updateAll(app)
+            }
         }
     }
 

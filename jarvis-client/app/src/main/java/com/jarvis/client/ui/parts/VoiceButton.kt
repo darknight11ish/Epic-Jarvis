@@ -110,6 +110,14 @@ fun VoiceButton(
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onBegin()
                     var cancelled = false
+                    // Set only by the loop below finishing on its own terms,
+                    // which is the one thing that distinguishes a finger
+                    // actually coming off the glass from this coroutine being
+                    // torn down under it. `cancelled` cannot carry that: it
+                    // tracks the slide-up gesture, and a teardown slides
+                    // nothing, so it is false in exactly the case the comment
+                    // below says must never send.
+                    var released = false
                     // try/finally, because this coroutine is cancellable and the
                     // thing it owns is an open microphone.
                     //
@@ -140,12 +148,20 @@ fun VoiceButton(
                             if (!change.pressed) { change.consume(); break }
                             change.consume()
                         }
+                        released = true
                     } finally {
                         wouldCancel = false
                         // A torn-down gesture is a cancel, never a send: audio
                         // captured while nobody was holding the button must not
                         // reach the desktop.
-                        if (cancelled) onCancel() else onRelease()
+                        //
+                        // Which is why this asks `released` and not just
+                        // `cancelled`. Testing `cancelled` alone sent on every
+                        // teardown — the link blip described above reached the
+                        // `else` branch with `cancelled` false and uploaded the
+                        // half-held clip, which is the exact outcome the
+                        // try/finally was added to prevent.
+                        if (released && !cancelled) onRelease() else onCancel()
                     }
                 }
             }

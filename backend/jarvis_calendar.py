@@ -76,6 +76,7 @@ from __future__ import annotations
 
 import os
 import re
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta, timezone
@@ -227,10 +228,37 @@ def describe(p: Plan) -> str:
 #   Execution - one request, then a minimal, honest ICS read
 # --------------------------------------------------------------------------
 
+class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
+    """Stops a redirect from carrying the CalDAV password to another host.
+
+    `urllib` copies every header except content-length/content-type onto the
+    redirect target, cross-host included, so a 302 hands over Basic auth -
+    which, unlike a bearer token, is the owner's actual reusable password in
+    base64. Rule 3 says a credential is "sent only to the one service it
+    authenticates against".
+
+    Today this is also reached only for methods the handler redirects, and
+    `REPORT` is not one of them - but that is an accident of which verb
+    CalDAV happens to use, not a control. This is the control.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            code,
+            f"refused to follow a redirect to {newurl}: the calendar password "
+            f"would have been sent there. Point {URL_ENV} at the final address "
+            f"instead.",
+            headers,
+            fp,
+        )
+
+
 def _default_fetch(q: Query) -> str:
     """The real CalDAV call. Basic auth from the environment, read fresh -
-    never cached, never logged. Raises on any non-2xx status; callers see
-    that as a real error rather than an empty, misleadingly clean result."""
+    never cached, never logged, and never followed onto a redirect (see
+    `_RefuseRedirect`). Raises on any non-2xx status; callers see that as a
+    real error rather than an empty, misleadingly clean result."""
     user = os.environ.get(USER_ENV, "")
     password = os.environ.get(PASSWORD_ENV, "")
     req = urllib.request.Request(
@@ -240,7 +268,8 @@ def _default_fetch(q: Query) -> str:
         import base64
         token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
         req.add_header("Authorization", f"Basic {token}")
-    with urllib.request.urlopen(req, timeout=20.0) as r:
+    opener = urllib.request.build_opener(_RefuseRedirect)
+    with opener.open(req, timeout=20.0) as r:
         return r.read().decode("utf-8", "replace")
 
 
