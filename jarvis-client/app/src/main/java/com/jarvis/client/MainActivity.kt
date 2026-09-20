@@ -86,6 +86,14 @@ class MainActivity : FragmentActivity() {
      */
     private val sharedText = mutableStateOf<String?>(null)
 
+    /**
+     * Set when the [com.jarvis.client.widget.QuickLinkWidget]'s Mic action
+     * opened the app. Consumed the same way [focusApproval] is: a
+     * `LaunchedEffect` reads it once and clears it, so a later
+     * recomposition does not re-fire the mic.
+     */
+    private val startVoiceRequested = mutableStateOf(false)
+
     /** Set when the runtime itself failed to start. Shown instead of the app. */
     private val startupError = mutableStateOf<String?>(null)
 
@@ -151,6 +159,7 @@ class MainActivity : FragmentActivity() {
         lastCrash.value = CrashLog.read(this)
         readApprovalIntent(intent)
         readShareIntent(intent)
+        readVoiceIntent(intent)
 
         setContent { App() }
 
@@ -173,11 +182,22 @@ class MainActivity : FragmentActivity() {
         setIntent(intent)
         readApprovalIntent(intent)
         readShareIntent(intent)
+        readVoiceIntent(intent)
     }
 
     private fun readApprovalIntent(intent: Intent?) {
         if (intent?.action != ApprovalNotifier.ACTION_OPEN_APPROVAL) return
         focusApproval.value = intent.getStringExtra(ApprovalNotifier.EXTRA_APPROVAL_ID) ?: ""
+    }
+
+    /**
+     * `singleTask`, so a second tap on the widget's Mic action while the app
+     * is already open re-delivers here rather than starting a new instance -
+     * same reason [readApprovalIntent] needs the `onNewIntent` half too.
+     */
+    private fun readVoiceIntent(intent: Intent?) {
+        if (intent?.action != ACTION_START_VOICE) return
+        startVoiceRequested.value = true
     }
 
     /**
@@ -480,6 +500,17 @@ class MainActivity : FragmentActivity() {
             // nowhere.
             delay(FOCUS_HOLD_MS)
             if (focusApproval.value == id) focusApproval.value = null
+        }
+
+        // Cleared before beginVoice() runs, not after: beginVoice() may only
+        // launch the permission dialog rather than start capture, and a flag
+        // still true when that dialog's own result callback recomposes this
+        // effect would fire the mic a second time on top of it.
+        LaunchedEffect(startVoiceRequested.value) {
+            if (!startVoiceRequested.value) return@LaunchedEffect
+            startVoiceRequested.value = false
+            nav.resetTo(Screen.HOME)
+            beginVoice()
         }
 
         JarvisTheme(chrome = chrome, idleColor = idleColour) {
@@ -995,6 +1026,11 @@ class MainActivity : FragmentActivity() {
         if (!runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)) return
         val intent = rm.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
         runCatching { assistantRolePermission.launch(intent) }
+    }
+
+    companion object {
+        /** Fired by [com.jarvis.client.widget.QuickLinkWidget]'s Mic action. */
+        const val ACTION_START_VOICE = "com.jarvis.client.action.START_VOICE"
     }
 }
 
