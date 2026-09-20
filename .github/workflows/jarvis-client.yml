@@ -24,6 +24,32 @@ jobs:
         working-directory: jarvis-client
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Put the signing key back
+        # From the DEBUG_KEYSTORE_B64 repository secret, not from the repo. The
+        # key used to be committed; it was public, so it was removed and
+        # replaced. build.gradle.kts still reads keystore/debug.keystore from
+        # the repository root, so that is where this writes it.
+        #
+        # github.workspace is explicit because jarvis-client.yml sets a
+        # job-level working-directory of jarvis-client, and this file does not
+        # belong there.
+        working-directory: ${{ github.workspace }}
+        env:
+          KEY: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::The DEBUG_KEYSTORE_B64 secret is missing. Stopping on purpose:"
+            echo "::error::build.gradle.kts guards the keystore on exists(), so the build"
+            echo "::error::would NOT fail - it would sign with a throwaway key, and"
+            echo "::error::adb install -r over the copy on the phone would then fail with"
+            echo "::error::INSTALL_FAILED_UPDATE_INCOMPATIBLE, forcing an uninstall that"
+            echo "::error::wipes the pairing secret."
+            exit 1
+          fi
+          mkdir -p keystore
+          printf '%s' "$KEY" | base64 -d > keystore/debug.keystore
+          echo "Signing key restored."
+
 
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
