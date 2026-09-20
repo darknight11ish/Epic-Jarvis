@@ -14,8 +14,9 @@ import org.junit.Test
 
 /**
  * Two additions from the desktop's 2026-09-18 catch-up: `/api/models`
- * (the owner's amendment allowing a switch, never an install, from the
- * phone) and `options` on a proposal (AUTONOMY-PROPOSALS §3a).
+ * (the owner's amendment allowing a switch from the phone - install
+ * followed on 2026-09-20, see `ApiContractTest`'s own install test for its
+ * wire shape) and `options` on a proposal (AUTONOMY-PROPOSALS §3a).
  *
  * `ModelsInfo` is deliberately tolerant, per its own doc comment: the route's
  * shape is documented by the desktop's `brain.js renderModels` and nothing

@@ -70,23 +70,27 @@ object ChatChunkParser {
     private val FIELD_ONLY = Regex("^(event|id|retry):", RegexOption.IGNORE_CASE)
 
     /**
-     * Strict, deliberately NOT the shared [JarvisJson].
+     * Strict, deliberately NOT the shared [JarvisJson], which sets
+     * `isLenient = true` for the typed REST models. It rejects what
+     * `JSON.parse` rejects and this app's own lenient instance does not:
+     * unquoted object keys, single quotes, a trailing comma.
      *
-     * `JarvisJson` sets `isLenient = true` for the typed REST models, and
-     * lenient mode parses a bare unquoted word as a JSON literal. So
-     * `parseToJsonElement("Done")` SUCCEEDED, returning a `JsonPrimitive`
-     * whose `isString` is false - which failed the string test below, fell
-     * through to the `!is JsonObject` line, and was thrown away as carrying
-     * nothing. A plain-token upstream emitting `Yes.` or `Done` rendered
-     * nothing at all, while `Yes, I did.` (a space makes it invalid even
-     * leniently) rendered fine, so the loss looked like dropped words rather
-     * than a parser bug.
-     *
-     * `main.js` uses `JSON.parse`, which is strict and throws on exactly
-     * these, reaching its raw-token fallback. Matching it is the whole point
-     * of this file, so this instance matches it.
+     * It does NOT rescue a bare word, and a previous version of this comment
+     * claimed it did. `parseToJsonElement` reads an unquoted token through
+     * `consumeStringLenient` whatever `isLenient` is set to, so
+     * `parseToJsonElement("Done")` succeeds either way and returns a
+     * `JsonPrimitive` whose `isString` is false. That is handled below,
+     * where the value is, rather than here.
      */
     private val StrictJson = Json { isLenient = false; ignoreUnknownKeys = true }
+
+    /**
+     * The JSON literals a bare token could legitimately be.
+     *
+     * Anything else that parses as a non-string primitive is a plain word the
+     * parser accepted too readily, and belongs in the reply.
+     */
+    private val JSON_LITERALS = setOf("true", "false", "null")
 
     fun consume(rawLine: String): Result {
         var line = rawLine.trim()
@@ -107,13 +111,39 @@ object ChatChunkParser {
             // stream produces. Same fallback `consumeLine` uses.
             return Result.Text(line)
 
-        if (chunk is JsonPrimitive && chunk.isString) {
+        if (chunk is JsonPrimitive) {
             val text = chunk.content
-            return if (text.isEmpty()) Result.Ignored else Result.Text(text)
+            if (chunk.isString) {
+                return if (text.isEmpty()) Result.Ignored else Result.Text(text)
+            }
+            // A bare token the parser accepted as a JSON literal when
+            // `JSON.parse` would have thrown.
+            //
+            // This is where the text loss actually lived, and it survived one
+            // attempt to fix it upstream of here. `parseToJsonElement` reads
+            // an unquoted token through `consumeStringLenient` regardless of
+            // the `isLenient` setting, so `Done` and `Yes` PARSE - as
+            // primitives whose `isString` is false, which then fell straight
+            // into the "carries nothing" branch below. A model whose whole
+            // reply was one plain word rendered nothing at all, while
+            // `Yes, I did.` rendered fine, because the space leaves trailing
+            // input and makes the parse fail for real. The loss looked like
+            // dropped words rather than a parser bug.
+            //
+            // So the test is on the VALUE. Only the three literals and a
+            // number are things `JSON.parse` would also have produced; every
+            // other bare token is prose, and gets the same raw-token
+            // treatment an unparseable line does.
+            return when {
+                text in JSON_LITERALS -> Result.Ignored
+                text.toDoubleOrNull() != null -> Result.Ignored
+                text.isEmpty() -> Result.Ignored
+                else -> Result.Text(text)
+            }
         }
         if (chunk !is JsonObject) {
-            // A bare number/bool/null chunk. `deltaFromChunk` treats any
-            // non-object, non-string chunk as carrying nothing.
+            // A top-level array. `deltaFromChunk` treats any non-object,
+            // non-string chunk as carrying nothing.
             return Result.Ignored
         }
 
@@ -131,19 +161,59 @@ object ChatChunkParser {
     }
 
     /**
-     * `chunk.error` in the source. Not full JS truthiness - `false`, `0` and
-     * `""` are still read as "no error" here, which covers every real error
-     * shape (a string, or `{"message": …}`) without chasing every falsy
-     * edge case JS has and Kotlin does not.
+     * Said plainly when the chunk carries one: the fallback below is what
+     * `Failed` shows when the server reports an error with nothing readable
+     * attached. It is worse than the server's own words and better than
+     * silence, which is what used to happen.
+     */
+    private const val UNNAMED_ERROR = "The desktop reported an error without saying what."
+
+    /**
+     * `chunk.error` in the source, and now the falsy cases that comment
+     * claimed were handled and were not.
+     *
+     * The bug this fixes: an error with no readable message - `{"error": {}}`,
+     * or the shape a proxy emits, `{"error": {"type": "overloaded", "code":
+     * 503}}` - returned null here. Null means "not an error", so the chunk
+     * fell through to [deltaText] (empty) and [isTerminal] (false) and came
+     * back [Result.Ignored]. The stream then sat there until the socket closed
+     * and `send` returned an empty reply with no error set: a question that
+     * visibly did nothing. An error object is an error whether or not it
+     * bothered to explain itself, so its PRESENCE is now what decides, and the
+     * message is only what gets shown.
+     *
+     * The falsy guard is also real now. The old comment said `false` and `0`
+     * were read as "no error"; `contentOrNull` renders them as the strings
+     * "false" and "0", both non-blank, so `{"error": false}` was reported as a
+     * failure whose message was the word "false". Those two are now checked
+     * before anything is rendered.
      */
     private fun errorMessage(chunk: JsonObject): String? {
         val error = chunk["error"] ?: return null
-        val message = when (error) {
-            is JsonPrimitive -> error.contentOrNull
-            is JsonObject -> (error["message"] as? JsonPrimitive)?.contentOrNull
-            else -> null
+        return when (error) {
+            is JsonPrimitive -> {
+                // JsonNull is a JsonPrimitive whose content is the literal
+                // "null", so it has to be caught by this and not by the `?:`
+                // above, which only sees an absent key.
+                val text = error.contentOrNull ?: return null
+                if (!error.isString && (text == "false" || text.toDoubleOrNull() == 0.0)) {
+                    return null
+                }
+                // `""` is falsy in the source too, so a blank string here is
+                // "no error" rather than an unnamed one. An error OBJECT is
+                // different: `{}` is truthy in JS, and it is what a proxy
+                // emits when it has a status and no prose.
+                text.takeIf { it.isNotBlank() } ?: return null
+            }
+            is JsonObject -> {
+                val message = (error["message"] as? JsonPrimitive)?.contentOrNull
+                    ?: (error["detail"] as? JsonPrimitive)?.contentOrNull
+                    ?: (error["type"] as? JsonPrimitive)?.contentOrNull
+                message?.takeIf { it.isNotBlank() } ?: UNNAMED_ERROR
+            }
+            // An array, or anything else. Truthy in the source, so an error.
+            else -> UNNAMED_ERROR
         }
-        return message?.takeIf { it.isNotBlank() }
     }
 
     private fun JsonObject.stringField(key: String): String? =

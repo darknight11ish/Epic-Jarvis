@@ -11,7 +11,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import okhttp3.Call
+import okhttp3.Response
 
 /**
  * One turn of conversation.
@@ -109,14 +114,52 @@ class ChatSession(private val api: JarvisApi) {
             // `ensureActive()` inside the read loop cannot bind to anything but
             // this coroutine.
             val io = this
+            // Every write to the SHARED flows goes through one of these two.
+            //
+            // The `finally` below already refuses to clear `_streaming` and
+            // `call` unless this call is still the current one, and gives the
+            // reason: `send` starts by cancelling the previous call, and the
+            // loser unwinds through this same block afterwards. The flows the
+            // loser writes on its way out needed the identical guard and did
+            // not have it. `send` #2 sets `_error.value = null` and
+            // `_reply.value = ""`; call #1, failing for a real reason at that
+            // same moment, then wrote its error over the clean slate and its
+            // last half-line of text over the empty reply - so the new question
+            // appeared on screen already carrying the old one's error, or the
+            // old one's tail.
+            fun failWith(message: String) {
+                if (call === c) _error.value = message
+            }
             try {
                 c.execute().use { resp ->
                     if (!resp.isSuccessful) {
-                        _error.value = when (resp.code) {
+                        // The server's own words first, when it has any.
+                        //
+                        // "The desktop answered 503." is true and useless. The
+                        // backend returns 503 with a body that says WHICH thing
+                        // is not up and usually what to do about it - the model
+                        // is still loading, Ollama is not running - and that
+                        // sentence was being thrown away in favour of a number,
+                        // leaving the owner to go and read a log to learn
+                        // something the reply already contained.
+                        val detail = serverDetail(resp)
+                        val generic = when (resp.code) {
                             401, 403 -> "The desktop refused that token."
                             404 -> "This server has no chat endpoint."
                             else -> "The desktop answered ${resp.code}."
                         }
+                        // The token is in the REQUEST, never in the response, so
+                        // there is nothing of the token to leak here. 401/403
+                        // still lead with our own sentence: a server saying
+                        // "invalid bearer" adds nothing to "refused that token"
+                        // and reads worse.
+                        failWith(
+                            when {
+                                detail == null -> generic
+                                resp.code == 401 || resp.code == 403 -> "$generic ($detail)"
+                                else -> "$generic $detail"
+                            },
+                        )
                         return@use
                     }
                     // Decoded as CHARACTERS, not as whatever bytes happened
@@ -155,7 +198,13 @@ class ChatSession(private val api: JarvisApi) {
                         if (!force && now - shownAt < PUBLISH_MS) return
                         shownAt = now
                         val text = acc.toString()
-                        _reply.value = text
+                        // Same identity guard as `failWith`, for the same
+                        // reason. `onDelta` is NOT guarded: it belongs to this
+                        // call alone - that is the whole point of it existing
+                        // rather than a second subscriber to `reply` - so it
+                        // still gets every delta it was promised even once a
+                        // newer call owns the shared flow.
+                        if (call === c) _reply.value = text
                         onDelta?.invoke(text)
                     }
 
@@ -179,7 +228,7 @@ class ChatSession(private val api: JarvisApi) {
                             }
                             ChatChunkParser.Result.Terminal -> true
                             is ChatChunkParser.Result.Failed -> {
-                                _error.value = result.message
+                                failWith(result.message)
                                 failed = true
                                 true
                             }
@@ -245,7 +294,7 @@ class ChatSession(private val api: JarvisApi) {
                     Log.d(TAG, "chat interrupted by the user")
                 } else {
                     Log.w(TAG, "chat failed", t)
-                    _error.value = t.message ?: "The reply stopped unexpectedly."
+                    failWith(t.message ?: "The reply stopped unexpectedly.")
                 }
             } finally {
                 // Nothing left to cancel on; the read is over either way.
@@ -277,6 +326,58 @@ class ChatSession(private val api: JarvisApi) {
 
     private companion object {
         const val TAG = "JarvisChat"
+
+        /**
+         * How much of a failed response body to look at, in bytes.
+         *
+         * A backend error is a sentence. Anything larger than this is a stack
+         * trace or an HTML error page from something in between, neither of
+         * which belongs on a phone screen - and reading it in full would mean
+         * buffering an unbounded body to render one line of it.
+         */
+        const val ERROR_BODY_MAX = 4L * 1024
+
+        /** Longest server sentence shown, in characters. */
+        const val ERROR_DETAIL_MAX = 300
+
+        /**
+         * The one useful sentence out of a failed response, or null.
+         *
+         * `peekBody` rather than `body.string()`: it copies out of the buffer
+         * and leaves the body itself untouched, so this cannot interfere with
+         * anything downstream that still expects to read it.
+         *
+         * FastAPI's own error shape is `{"detail": "..."}`, so that is tried
+         * first; `error` and `message` cover the rest of what this backend and
+         * its proxies emit. A body that is not JSON is used as-is, which is
+         * what a plain-text 503 from a reverse proxy looks like. HTML is
+         * dropped outright - a whole error PAGE has no sentence in it worth
+         * pulling out by hand.
+         */
+        fun serverDetail(resp: Response): String? {
+            val raw = runCatching { resp.peekBody(ERROR_BODY_MAX).string() }
+                .getOrNull()?.trim().orEmpty()
+            if (raw.isEmpty() || raw.startsWith("<")) return null
+
+            val fromJson = runCatching {
+                val obj = Json.parseToJsonElement(raw) as? JsonObject
+                obj?.let {
+                    (it["detail"] as? JsonPrimitive)?.contentOrNull
+                        ?: (it["message"] as? JsonPrimitive)?.contentOrNull
+                        ?: ((it["error"] as? JsonObject)?.get("message") as? JsonPrimitive)
+                            ?.contentOrNull
+                        ?: (it["error"] as? JsonPrimitive)?.contentOrNull
+                }
+            }.getOrNull()
+
+            val text = (fromJson ?: raw).replace(Regex("\\s+"), " ").trim()
+            if (text.isEmpty()) return null
+            return if (text.length <= ERROR_DETAIL_MAX) {
+                text
+            } else {
+                text.take(ERROR_DETAIL_MAX - 1).trimEnd() + "…"
+            }
+        }
 
         /** Characters per read now, not bytes - see the decode note in [send]. */
         const val CHUNK = 8 * 1024

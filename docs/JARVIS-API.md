@@ -376,9 +376,9 @@ produced `jarvis-android`'s unusable protocol.
 | `/api/watch/remove` | POST | object | `brain.rs:228` | **no** | |
 | `/api/watch/seen` | POST | object | `brain.rs:248` | **no** | The consume, vs the GET peek. |
 | `/api/skills/decide` | POST | `{"name": …, "remove": true}` | `brain.rs:258` | **no** | **Removal only.** There is deliberately no install route: installing runs the scanner and the gate inside the module. |
-| `/api/models/install` | POST | — | `brain.rs:434` | **no — by rule** | The catalogue stays off the phone. |
-| `/api/models/switch` | POST | `{"ref": …}` | `brain.rs:435` | `JarvisApi.kt:315` | Allowed from the phone since the 2026-09-18 amendment: tier `ask`, so success means "a card was raised". |
-| `/api/models/rollback` | POST | `{}` | `brain.rs:436` | `JarvisApi.kt:318` | Tier `auto`; never waits. |
+| `/api/models/install` | POST | `{"ref": …}` | `brain.rs:434` | `JarvisApi.kt:326` | Allowed from the phone since the 2026-09-20 amendment: tier `ask`, same shape as switch. No catalogue - the ref is typed in, never browsed. |
+| `/api/models/switch` | POST | `{"ref": …}` | `brain.rs:435` | `JarvisApi.kt:310` | Allowed from the phone since the 2026-09-18 amendment: tier `ask`, so success means "a card was raised". |
+| `/api/models/rollback` | POST | `{}` | `brain.rs:436` | `JarvisApi.kt:314` | Tier `auto`; never waits. |
 | `/api/memory/decide` | POST | `{"id": <int>, "accept": bool}` | `brain.rs:283` | `JarvisApi.kt:417` | One id, one decision. **No list form anywhere** — a "keep all" would be an approve-all with another name. |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs:308` | **no** | Retires rather than deletes. No undo. |
 | `/api/memory/edit` | POST | object | `brain.rs:329` | **no** | |
@@ -523,9 +523,11 @@ they explain why several obvious routes are missing rather than forgotten.
 - **No bulk decisions anywhere.** No approve-all, no "keep all" for memory, no
   route that clears a rush latch. `/api/digest/seen` marks read and decides
   nothing.
-- **The phone does not get the catalogue, the memory graph, or deep config
-  editing.** Switching between models the desktop already has is allowed
-  (amended 2026-09-18); installing is not.
+- **The phone does not get to browse the catalogue, the memory graph, or
+  deep config.** Switching between models the desktop already has is
+  allowed (amended 2026-09-18), and so is installing a typed-in model name
+  (amended 2026-09-20) - both raise an approval card like any other change.
+  There is still no scrollable, searchable list of what could be installed.
 - **A client must not do speech-to-text.** Hence one complete WAV per
   utterance, and no streaming audio.
 - **No public tunnel, ever.** Everything here is loopback or Tailscale.

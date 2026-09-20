@@ -1,6 +1,8 @@
 package com.jarvis.client.widget
 
 import android.content.Context
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -18,6 +20,7 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.unit.ColorProvider
 import androidx.glance.layout.Alignment
@@ -184,12 +187,23 @@ class ApprovalWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.defaultWeight().fillMaxWidth()
                     .clickable(actionStartActivity<MainActivity>()),
             ) {
-                Text(text = item.title, maxLines = 1, style = TextStyle(
+                // `item.notice` first, `item.title`/`item.summary` only as
+                // the fallback - the same order, and for the same reason, as
+                // `ApprovalNotifier.textFor`. Its doc says outright why:
+                // those two are row prose, "and row prose can carry text
+                // somebody else wrote... composing it here at all is the
+                // mistake". A `raised` item is exactly that - an attacker's
+                // sentence, quoted - and this widget was putting it on the
+                // home screen in full while the notification refused to.
+                // The notice is the desktop's own wording for the same item.
+                val headline = item.notice?.title?.takeIf { it.isNotBlank() } ?: item.title
+                val detail = item.notice?.body?.takeIf { it.isNotBlank() } ?: item.summary
+                Text(text = headline, maxLines = 1, style = TextStyle(
                     color = Palette.TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                 ))
-                if (item.summary.isNotBlank()) {
+                if (detail.isNotBlank()) {
                     Text(
-                        text = item.summary,
+                        text = detail,
                         maxLines = 2,
                         style = TextStyle(color = Palette.TextMuted, fontSize = 11.sp),
                     )
@@ -213,18 +227,28 @@ class ApprovalWidget : GlanceAppWidget() {
                     onClick = actionStartActivity<MainActivity>(),
                     modifier = GlanceModifier.defaultWeight(),
                 )
-                Spacer(GlanceModifier.width(8.dp))
                 // Deny alone is a direct widget action - refusing is always
                 // the safe direction, the same rule the lock-screen
                 // notification's own Deny action already runs on.
-                PillButton(
-                    label = "Deny",
-                    tint = Palette.StatusBad,
-                    onClick = actionRunCallback<DenyActionCallback>(
-                        actionParametersOf(DenyActionCallback.PARAM_ID to item.id),
-                    ),
-                    modifier = GlanceModifier.defaultWeight(),
-                )
+                //
+                // And on the same CONDITION as that notification, which this
+                // widget was ignoring: `ApprovalNotifier` offers its Deny
+                // action only `if (item.notice?.denyOk != false)`, so an item
+                // the desktop marked `deny_ok: false` had no one-tap Deny in
+                // the drawer and a one-tap Deny on the home screen. Two
+                // surfaces disagreeing about whether an item is safe to
+                // refuse unread is the disagreement mattering most.
+                if (item.notice?.denyOk != false) {
+                    Spacer(GlanceModifier.width(8.dp))
+                    PillButton(
+                        label = "Deny",
+                        tint = Palette.StatusBad,
+                        onClick = actionRunCallback<DenyActionCallback>(
+                            actionParametersOf(DenyActionCallback.PARAM_ID to item.id),
+                        ),
+                        modifier = GlanceModifier.defaultWeight(),
+                    )
+                }
             }
         }
     }
@@ -305,7 +329,30 @@ class DenyActionCallback : ActionCallback {
         // failure here would be an uncaught exception in a Glance worker.
         if (runCatching { JarvisRuntime.initialize(context) }.isFailure) return
         if (!JarvisRuntime.isInitialized) return
-        val item = JarvisRuntime.pending.value.firstOrNull { it.id == id } ?: return
+        val item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
+        if (item == null) {
+            // Said out loud, not swallowed. This used to be `?: return`, and
+            // silence is the worst available answer: the owner believes they
+            // refused something, while either the desktop is still waiting or
+            // it was resolved hours ago - and the widget looks identical
+            // either way. The launcher can re-post a cached tile from a
+            // process that has never fetched anything, so this is reachable
+            // by simply tapping Deny the morning after.
+            //
+            // `EventService.denyFromNotification` has handled the identical
+            // case properly all along; this is the same response, because it
+            // is the same event on a different surface. A Toast because the
+            // app is almost certainly not on screen when a widget button is
+            // tapped, and the in-app notice too so the explanation survives
+            // until it is.
+            Log.w(TAG, "widget Deny tapped for an approval that is not pending any more")
+            val message = "That request is no longer waiting - it was handled elsewhere, " +
+                "or Jarvis restarted since the widget last drew."
+            runCatching { Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
+            runCatching { JarvisRuntime.setNotice(message) }
+            runCatching { ApprovalWidget().updateAll(context) }
+            return
+        }
         JarvisRuntime.decideDetached(item, approve = false)
         // No updateAll() here, and that is the correction rather than an
         // omission. This used to redraw immediately under a comment claiming
@@ -319,5 +366,6 @@ class DenyActionCallback : ActionCallback {
 
     companion object {
         val PARAM_ID = ActionParameters.Key<String>("approval_id")
+        private const val TAG = "JarvisApprovalWidget"
     }
 }

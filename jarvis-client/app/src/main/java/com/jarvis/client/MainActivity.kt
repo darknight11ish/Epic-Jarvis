@@ -781,6 +781,15 @@ class MainActivity : FragmentActivity() {
                                 }
                             }
                         },
+                        onInstallModel = { ref ->
+                            if (!modelBusy) {
+                                modelBusy = true
+                                scope.launch {
+                                    JarvisRuntime.installModel(ref)
+                                    modelBusy = false
+                                }
+                            }
+                        },
                         memoryAsOf = memoryAsOfResult,
                         memoryAsOfBusy = memoryAsOfBusy,
                         onQueryMemoryAsOf = { epochSeconds ->

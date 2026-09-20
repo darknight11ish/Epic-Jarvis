@@ -114,10 +114,16 @@ fun BrainScreen(
      * capability reporting false means hide the UI for it.
      */
     models: ModelsInfo? = null,
-    /** True while a switch or rollback is in flight, so neither can double-send. */
+    /** True while a switch, rollback or install is in flight, so none can double-send. */
     modelBusy: Boolean = false,
     onSwitchModel: (ref: String) -> Unit = {},
     onRollbackModel: () -> Unit = {},
+    /**
+     * Asks the desktop to download [ref]. CLAUDE.md's 2026-09-20 amendment -
+     * before that, this screen had no way to reach `/api/models/install` at
+     * all, on purpose.
+     */
+    onInstallModel: (ref: String) -> Unit = {},
     /**
      * "What did I believe on this date?" - `GET /api/memory/facts?known_at=`,
      * the route named in the desktop's 2026-09-18 feature audit. Read-only
@@ -200,6 +206,7 @@ fun BrainScreen(
                             canAct = link == LinkState.CONNECTED && !stale,
                             onSwitch = onSwitchModel,
                             onRollback = onRollbackModel,
+                            onInstall = onInstallModel,
                         )
                     }
                 }
@@ -380,8 +387,10 @@ private fun ModelsPlate(
     canAct: Boolean,
     onSwitch: (String) -> Unit,
     onRollback: () -> Unit,
+    onInstall: (String) -> Unit,
 ) {
     val chrome = LocalChrome.current
+    var installRef by rememberSaveable { mutableStateOf("") }
     val current = models.currentRef
     val entries = models.entries
     Plate {
@@ -403,66 +412,95 @@ private fun ModelsPlate(
                 style = MaterialTheme.typography.bodyMedium,
                 color = chrome.textMid,
             )
-            return@Plate
-        }
-        entries.forEachIndexed { i, entry ->
-            if (i > 0) Rule()
-            val isCurrent = entry.ref == current
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        entry.ref,
-                        style = com.jarvis.client.ui.theme.JarvisType.machine,
-                        color = chrome.textHi,
-                    )
-                    val meta = listOfNotNull(
-                        entry.family,
-                        entry.sizeBytes?.let { bytes(it) },
-                        if (entry.ref == models.previous && !isCurrent) "the previous model" else null,
-                    )
-                    if (meta.isNotEmpty()) {
-                        Gap(2)
+        } else {
+            entries.forEachIndexed { i, entry ->
+                if (i > 0) Rule()
+                val isCurrent = entry.ref == current
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            meta.joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = chrome.textLo,
+                            entry.ref,
+                            style = com.jarvis.client.ui.theme.JarvisType.machine,
+                            color = chrome.textHi,
+                        )
+                        val meta = listOfNotNull(
+                            entry.family,
+                            entry.sizeBytes?.let { bytes(it) },
+                            if (entry.ref == models.previous && !isCurrent) "the previous model" else null,
+                        )
+                        if (meta.isNotEmpty()) {
+                            Gap(2)
+                            Text(
+                                meta.joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textLo,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    if (isCurrent) {
+                        Pill("Active", color = chrome.okInk)
+                    } else {
+                        Quiet(
+                            if (busy) "…" else "Use",
+                            enabled = !busy && canAct,
+                            onClick = { onSwitch(entry.ref) },
                         )
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                if (isCurrent) {
-                    Pill("Active", color = chrome.okInk)
-                } else {
-                    Quiet(
-                        if (busy) "…" else "Use",
-                        enabled = !busy && canAct,
-                        onClick = { onSwitch(entry.ref) },
-                    )
-                }
             }
-        }
-        val previous = models.previous?.takeIf { it.isNotBlank() && it != current }
-        if (previous != null) {
-            Gap(6)
-            Quiet(
-                if (busy) "…" else "Roll back to $previous",
-                color = chrome.textMid,
-                enabled = !busy && canAct,
-                onClick = onRollback,
-            )
+            val previous = models.previous?.takeIf { it.isNotBlank() && it != current }
+            if (previous != null) {
+                Gap(6)
+                Quiet(
+                    if (busy) "…" else "Roll back to $previous",
+                    color = chrome.textMid,
+                    enabled = !busy && canAct,
+                    onClick = onRollback,
+                )
+            }
         }
         Gap(8)
         Text(
             "Use asks the desktop and raises a card here to approve, like any " +
                 "other change. A switch takes six to ten seconds while one model " +
-                "unloads and the next loads - fine once, not per question. " +
-                "Installing new models stays on the desktop.",
+                "unloads and the next loads - fine once, not per question.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textLo,
         )
+        Gap(12)
+        Rule()
+        Gap(10)
+        Text(
+            "Install a model the desktop does not have yet. Same rule as Use: this " +
+                "only asks - approving it is a separate step, and a download runs for " +
+                "minutes rather than seconds, so it is worth approving from the desktop " +
+                "where you can watch it. Type the name the way you would give it to " +
+                "Ollama, e.g. llama3.1:8b.",
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textLo,
+        )
+        Gap(10)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextInput(
+                value = installRef,
+                onValueChange = { installRef = it },
+                placeholder = "model:tag",
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Quiet(
+                if (busy) "…" else "Install",
+                enabled = !busy && canAct && installRef.isNotBlank(),
+                onClick = {
+                    onInstall(installRef)
+                    installRef = ""
+                },
+            )
+        }
     }
 }
 

@@ -255,7 +255,7 @@ class JarvisApi(
      * without it the server answers 403 before it ever looks at the token.
      */
     fun Request.Builder.authed(): Request.Builder = apply {
-        header(TOKEN_HEADER, tokens.token())
+        header(TOKEN_HEADER, headerSafe(tokens.token()))
         header(CLIENT_HEADER, CLIENT_VALUE)
         header("Accept", "application/json")
     }
@@ -306,16 +306,25 @@ class JarvisApi(
      * `POST /api/models/switch {"ref": ...}` - the body the desktop's
      * `brain_model` command sends, copied rather than guessed. Tier `ask` on
      * the server, so success means "a decision card was raised".
-     *
-     * There is deliberately no `install` here. Downloading weights is the
-     * model catalogue, which stays off the phone; a switch only ever chooses
-     * between models the desktop already holds.
      */
     suspend fun switchModel(ref: String): ApiResult<Unit> =
         postJson("/api/models/switch", """{"ref":${quote(ref)}}""")
 
     /** `POST /api/models/rollback {}` - tier `auto`, never waits. */
     suspend fun rollbackModel(): ApiResult<Unit> = postJson("/api/models/rollback", "{}")
+
+    /**
+     * `POST /api/models/install {"ref": ...}` - same body shape as
+     * [switchModel], same `brain_model` command on the desktop side, same
+     * tier `ask`: a 2xx means a decision card was raised, not that anything
+     * downloaded. The owner types `ref` in, the same as at a terminal or in
+     * `ollama pull <ref>` - there is still no on-phone BROWSING of what is
+     * installable, only of what already is (`models()`, above). CLAUDE.md's
+     * 2026-09-20 amendment is the record of this being allowed; see it for
+     * why a typed name and not a catalogue.
+     */
+    suspend fun installModel(ref: String): ApiResult<Unit> =
+        postJson("/api/models/install", """{"ref":${quote(ref)}}""")
 
     // ------------------------------------------------- autonomy proposals --
 
@@ -737,6 +746,51 @@ class JarvisApi(
 
         const val TOKEN_HEADER = "X-Jarvis-Token"
         const val CLIENT_HEADER = "X-Jarvis-Client"
+
+        /**
+         * Strips anything OkHttp will not accept in a header value.
+         *
+         * This exists for ONE reason, and it is the standing rule "never log
+         * the token". `Headers.Builder` validates every value and, on a bad
+         * character, throws an `IllegalArgumentException` whose message is
+         * `Unexpected char 0x0a at 12 in X-Jarvis-Token value: <the value>` -
+         * OkHttp only withholds the value for headers it knows are sensitive,
+         * and its list is `Authorization`, `Cookie`, `Proxy-Authorization`,
+         * `Set-Cookie`. `X-Jarvis-Token` is not on it, and OkHttp has no way
+         * to know that it should be. So the whole token went into the
+         * exception message - which this app then logs with `Log.w` and, in
+         * `ChatSession`, puts on screen as the error text.
+         *
+         * Not hypothetical: `setToken` trims the ends, so a pasted trailing
+         * newline is handled, but a token pasted with a line break INSIDE it,
+         * or one carrying a curly quote or a zero-width space from a chat app,
+         * reaches here intact and trips exactly this.
+         *
+         * Stripping rather than throwing. The stripped token is wrong, so the
+         * desktop answers 401 and the owner sees "The desktop refused that
+         * token." - which is both true and the right next step (re-pair). A
+         * thrown exception here would instead surface as a crash, on a code
+         * path that runs for every single request.
+         *
+         * The kept range is the printable ASCII OkHttp allows in a value,
+         * minus the space: a pairing token has no spaces in it, and keeping
+         * them would let an invisible-looking one through.
+         */
+        fun headerSafe(token: String): String {
+            val safe = token.filter { it.code in 0x21..0x7E }
+            if (safe.length != token.length) {
+                // The LENGTHS, never the value, and never the characters that
+                // were removed - a token is short enough that naming its bad
+                // characters narrows it.
+                Log.w(
+                    TAG,
+                    "the stored token has characters that cannot go in an HTTP header; " +
+                        "sending it without them (${token.length} -> ${safe.length} chars). " +
+                        "The desktop will refuse this - re-pair to fix it.",
+                )
+            }
+            return safe
+        }
 
         /**
          * The server compares this against the literal string "hud" for a

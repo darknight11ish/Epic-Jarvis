@@ -179,6 +179,29 @@ class ApiContractTest {
     }
 
     /**
+     * CLAUDE.md's 2026-09-20 amendment: install joins switch as tier `ask`,
+     * so the request shape is the same one `approvePostsTheIdAlone` proves
+     * above for a different route - the same `{"ref": ...}` body
+     * `switchModel` already sends, on `/install` instead of `/switch`.
+     *
+     * The 202 is the point, not an afterthought: `docs/JARVIS-API.md` says
+     * install answers 202 while switch answers a 2xx generically, and
+     * `postJson`'s own `isSuccessful` check treats every 2xx alike - so this
+     * is the one place that distinction would go unnoticed if `postJson`
+     * ever narrowed to `== 200`.
+     */
+    @Test
+    fun installPostsTheRefAloneAndAcceptsA202() = runBlocking {
+        routes["/api/models/install"] = MockResponse().setResponseCode(202).setBody("{}")
+        val out = api.installModel("llama3.1:8b")
+        assertTrue(out is ApiResult.Ok)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("POST", req.method)
+        assertEquals("/api/models/install", req.path)
+        assertEquals("""{"ref":"llama3.1:8b"}""", req.body.readUtf8())
+    }
+
+    /**
      * A refused token must be BadToken, not a generic server error: the two
      * produce different sentences, and only one of them tells the owner to go
      * and re-pair.
