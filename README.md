@@ -116,8 +116,9 @@ fault cannot ship green.
 
 - `docs/AUDIT-2026-09-14.md` — the five-reviewer audit of both Android apps,
   and what was done about each finding.
-- `docs/GEMINI-AUDIT-PROMPT.md` and `docs/SOURCE-BUNDLE.md` — for handing the
-  tree to an outside reviewer.
+- `docs/GEMINI-AUDIT-PROMPT.md` and `docs/SOURCE-BUNDLE-1-of-2.md` /
+  `-2-of-2.md` (regenerate with `tools/gen_source_bundle.py --parts 2`) —
+  for handing the tree to an outside reviewer.
 
 ## Layout
 

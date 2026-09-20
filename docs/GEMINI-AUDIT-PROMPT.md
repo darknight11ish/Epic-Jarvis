@@ -1,13 +1,19 @@
 # Audit prompt — `jarvis-client`
 
-Paste everything below the line into Gemini, and attach **`SOURCE-BUNDLE.md`**
-(every source file in the module, plus the CI workflows that build it).
+Paste everything below the line into Gemini, and attach **both**
+`SOURCE-BUNDLE-1-of-2.md` **and** `SOURCE-BUNDLE-2-of-2.md` — the module
+outgrew a single upload, so `tools/gen_source_bundle.py` now splits it in
+two by whole file (nothing is cut mid-file; each part's own header lists
+every file in the bundle and says which part actually holds it). Attach
+both in the same message so Gemini treats them as one review, not two
+independent ones.
 
-Optionally also attach `AUDIT-2026-09-14.md` — three earlier audit passes on this
-code. Attaching it makes the review sharper, because it can check those
-conclusions rather than rediscover them. Leaving it off gives you a clean second
-opinion. Both are reasonable; don't attach it if you want to know whether an
-independent reader reaches the same findings.
+Optionally also attach `AUDIT-2026-09-14.md` and `AUDIT-FINDINGS-2026-09-19.md`
+— earlier audit passes on this code (the second one spans all four codebases
+in the repo, Android included). Attaching either makes the review sharper,
+because it can check those conclusions rather than rediscover them. Leaving
+both off gives you a clean second opinion. All reasonable; don't attach them
+if you want to know whether an independent reader reaches the same findings.
 
 ---
 
@@ -91,12 +97,29 @@ because they are the ones a reader cannot catch by reading carefully.
   off-only. Check that "could not reach the desktop" can never render as "off",
   and that the displayed state is the desktop's reported one rather than the
   one just requested.
+- **Model install** (`ModelsPlate` in `BrainScreen.kt`, `JarvisRuntime.installModel`,
+  `JarvisApi.installModel`). The newest capability in the app, added
+  2026-09-20, and unlike everything else in this list it has never been
+  looked at by anyone but the session that wrote it. It is meant to have the
+  exact same safety shape as the model-switch control it sits next to — tier
+  `ask`, gated on the same `actionBlocker`/stale-link check, no auto-approve
+  — but check that claim rather than trust the comment making it. Also worth
+  a look: whether a model name typed with control characters, an absurd
+  length, or JSON-breaking punctuation can reach the request body unescaped.
 
 ## What I already know, so don't spend the review on it
 
-- **This code has never been compiled on the machine that wrote it.** The
-  Android Gradle plugin cannot be resolved through that network, so CI is the
-  only thing that builds it. Assume no local verification of anything.
+- **This code has never been compiled on the machine that wrote it, and still
+  isn't.** The Android Gradle plugin cannot be resolved through that
+  network, so GitHub Actions CI is the only thing that ever builds it, and
+  every change here is written and reviewed by reading, then checked by a
+  ~15-minute CI round trip. As of 2026-09-20 CI does now go further than a
+  compile: the release build launches on an emulator, the instrumentation
+  suite runs against it, and the running process is watched for 15 seconds
+  before the build is allowed to publish. That proves the app starts and its
+  first screen works — it does not walk every screen, so a fault reachable
+  only several taps in would still get through, and there is still no
+  verification on real hardware of anything.
 - **Push-to-talk has never met a real microphone.** Capture, playback and the
   permission flow are untested on hardware.
 - **The wake word is not built.** No model is bundled and the phone never
