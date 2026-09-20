@@ -102,8 +102,16 @@ control that clears a rush latch or approves in bulk. Send
 Amended by the owner on 2026-09-18: **switching the local model from the
 phone is allowed** - between models the desktop already has, via
 `/api/models/switch`, which raises an approval card like any other change.
-The catalogue is still off the phone: no browsing, no downloading, no
-`/api/models/install`.
+
+Amended by the owner on 2026-09-20: **installing a model from the phone is
+allowed too**, the same shape as switching - a typed model reference posted
+to `/api/models/install`, tier `ask` on the server, raising an approval
+card like any other change; nothing downloads until that card is approved.
+What is still off the phone is *browsing*: there is no catalogue to scroll
+or search, no list of what could be installed, only of what already is.
+The owner types the name by hand, the same as at a terminal
+(`ollama pull <ref>`) - see `BrainScreen.kt`'s `ModelsPlate` and
+`JarvisRuntime.installModel`.
 
 ## Tell the owner when something is wrong
 

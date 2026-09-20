@@ -108,10 +108,13 @@ because they are the ones a reader cannot catch by reading carefully.
 ## What I do not want suggested
 
 Play Store policy compliance. Analytics, telemetry or crash-reporting SaaS. Any
-tunnelling or remote-access service. Anything requiring an API key. A model
-catalogue, a memory graph, or deep config editing on the phone — all three are
-deliberately out of scope. Generic advice about dependency injection frameworks
-or architecture patterns, unless a specific bug follows from the current shape.
+tunnelling or remote-access service. Anything requiring an API key. A
+browsable model catalogue, a memory graph, or deep config editing on the
+phone — all three are deliberately out of scope; installing a model the
+owner names by hand is in scope, since CLAUDE.md's 2026-09-20 amendment
+allows it (see `BrainScreen.kt`'s `ModelsPlate`). Generic advice about
+dependency injection frameworks or architecture patterns, unless a specific
+bug follows from the current shape.
 
 ## How to report
 

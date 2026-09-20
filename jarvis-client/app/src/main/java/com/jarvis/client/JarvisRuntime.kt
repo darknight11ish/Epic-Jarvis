@@ -816,6 +816,47 @@ object JarvisRuntime {
         return result
     }
 
+    /**
+     * Asks the desktop to download and install [ref].
+     *
+     * The phone-side half of CLAUDE.md's 2026-09-20 amendment: install joins
+     * switch as tier `ask`, so this is the exact same shape as
+     * [switchModel] - a 2xx means a decision card was raised, not that
+     * anything downloaded. `ref` is typed in by the owner; there is no
+     * on-phone browsing of what is installABLE, only of what already IS
+     * ([refreshModels]).
+     *
+     * Deliberately does NOT call [refreshModels] on success, unlike
+     * [switchModel] - nothing about the installed list has changed yet, only
+     * a pending decision has appeared, and that decision has to be approved
+     * (very possibly on the desktop, since a fresh download is exactly the
+     * kind of six-to-ten-second wait worth watching) before anything is
+     * different. The list catches up on its own: the `"model"` SSE event
+     * already re-reads it once the desktop actually finishes, same as it
+     * does for a switch made from the desktop's own Brain window.
+     */
+    suspend fun installModel(ref: String): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        // A blank ref is a UI bug, not a user error worth its own message -
+        // the caller (ModelsPlate) disables Install until something is
+        // typed, the same way it already disables Use/Roll back. Trimmed
+        // rather than validated further: what counts as a real model name
+        // is the desktop's call, not this app's to second-guess.
+        val result = api.installModel(ref.trim())
+        when (result) {
+            is ApiResult.Ok -> {
+                _notice.value = "Install requested — approve it like any other " +
+                    "change to start the download."
+                refreshPending()
+            }
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
+        return result
+    }
+
     // -------------------------------------------------------- appearance ----
 
     /**

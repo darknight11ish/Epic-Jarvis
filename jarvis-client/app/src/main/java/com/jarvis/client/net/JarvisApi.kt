@@ -306,16 +306,25 @@ class JarvisApi(
      * `POST /api/models/switch {"ref": ...}` - the body the desktop's
      * `brain_model` command sends, copied rather than guessed. Tier `ask` on
      * the server, so success means "a decision card was raised".
-     *
-     * There is deliberately no `install` here. Downloading weights is the
-     * model catalogue, which stays off the phone; a switch only ever chooses
-     * between models the desktop already holds.
      */
     suspend fun switchModel(ref: String): ApiResult<Unit> =
         postJson("/api/models/switch", """{"ref":${quote(ref)}}""")
 
     /** `POST /api/models/rollback {}` - tier `auto`, never waits. */
     suspend fun rollbackModel(): ApiResult<Unit> = postJson("/api/models/rollback", "{}")
+
+    /**
+     * `POST /api/models/install {"ref": ...}` - same body shape as
+     * [switchModel], same `brain_model` command on the desktop side, same
+     * tier `ask`: a 2xx means a decision card was raised, not that anything
+     * downloaded. The owner types `ref` in, the same as at a terminal or in
+     * `ollama pull <ref>` - there is still no on-phone BROWSING of what is
+     * installable, only of what already is (`models()`, above). CLAUDE.md's
+     * 2026-09-20 amendment is the record of this being allowed; see it for
+     * why a typed name and not a catalogue.
+     */
+    suspend fun installModel(ref: String): ApiResult<Unit> =
+        postJson("/api/models/install", """{"ref":${quote(ref)}}""")
 
     // ------------------------------------------------- autonomy proposals --
 
