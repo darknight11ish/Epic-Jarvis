@@ -73,6 +73,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, asdict
@@ -196,10 +197,44 @@ def describe(p: Plan) -> str:
 #   Execution - one request, then a normalised, bounded read
 # --------------------------------------------------------------------------
 
+class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
+    """Stops a redirect from carrying the credential to another host.
+
+    The same guard `jarvis_home`, `jarvis_research` and `jarvis_calendar`
+    each already carry, and the one module doing authenticated HTTP that was
+    left without it. `urllib` copies every header except
+    content-length/content-type onto the redirect target, cross-host
+    included, so a 302 hands over the Obsidian bearer key. Rule 3 says a key
+    is "sent only to the one service it authenticates against"; following a
+    redirect is precisely how it stops being.
+
+    This matters more here than the shared default suggests: the endpoints
+    are env-configurable (`JARVIS_JOPLIN_URL`/`JARVIS_OBSIDIAN_URL`) and
+    Joplin's default is plain `http://127.0.0.1:41184`, so whatever answers
+    on that port can redirect.
+
+    Refused rather than stripped, for the reason the other three give: a 401
+    from a silently stripped header reads as "wrong key" and sends the owner
+    hunting in the wrong place.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            code,
+            f"refused to follow a redirect to {newurl}: the notes credential "
+            f"would have been sent there. Point the notes URL at the final "
+            f"address instead.",
+            headers,
+            fp,
+        )
+
+
 def _default_fetch(p: Plan):
     """The real call. Adds the real credential fresh from the environment -
     never cached, never logged, never part of the `Plan` a card was shown
-    for. Returns the backend's raw parsed JSON."""
+    for, and never followed onto a redirect (see `_RefuseRedirect`).
+    Returns the backend's raw parsed JSON."""
     headers = {"Accept": "application/json"}
     url = p.url
     if p.backend == "joplin":
@@ -210,7 +245,8 @@ def _default_fetch(p: Plan):
         key = os.environ.get(OBSIDIAN_KEY_ENV, "")
         headers["Authorization"] = f"Bearer {key}"
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=20.0) as r:
+    opener = urllib.request.build_opener(_RefuseRedirect)
+    with opener.open(req, timeout=20.0) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 

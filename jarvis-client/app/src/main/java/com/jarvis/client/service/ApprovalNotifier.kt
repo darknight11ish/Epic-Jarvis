@@ -351,9 +351,17 @@ object ApprovalNotifier {
             // the same collision-free counter that already exists to keep two
             // live approvals from colliding on a notification id, so reusing it
             // here keeps two live approvals from colliding on a Deny action
-            // too. It is still distinct from openCard()'s request code range
-            // (FIRST_ID and up vs. a raw hashCode), so FLAG_UPDATE_CURRENT
-            // can't overwrite one pending intent's extras with the other's.
+            // too.
+            //
+            // This used to add that the code stays "distinct from openCard()'s
+            // request code range (FIRST_ID and up vs. a raw hashCode)". That
+            // stopped being true when openCard was given the same
+            // notificationId to fix its own collision, and the sentence was
+            // left behind describing a version that no longer exists. Nothing
+            // breaks - getService and getActivity are different PendingIntent
+            // kinds and do not collide on request code alone - but the stated
+            // safety argument was void, so it is gone rather than left to be
+            // trusted by whoever changes openCard next.
             notificationId,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

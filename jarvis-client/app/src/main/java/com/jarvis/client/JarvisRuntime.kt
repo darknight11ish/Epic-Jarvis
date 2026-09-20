@@ -373,12 +373,30 @@ object JarvisRuntime {
         // BOTH widgets, not just the approvals one. QuickLinkWidget renders
         // `link` and has `updatePeriodMillis="0"`, so when it was left out of
         // this loop nothing ever asked it to redraw: it froze on whatever it
-        // showed when the launcher first drew it. The worst shape of that is
-        // a widget placed after a reboot, drawn by a process woken only to
-        // draw it, where `_link` is still OFFLINE — reporting "Offline" for
-        // ever over a perfectly healthy link.
+        // showed when the launcher first drew it.
+        //
+        // `_stale` is in the combine, and leaving it out was a real bug rather
+        // than an omission of taste: [ApprovalWidget] computes its `live` from
+        // `stale.value` AND `link.value`, so a `_stale` transition that reaches
+        // no collector changes what the widget WOULD draw without redrawing it.
+        // Both directions were wrong, and both are the ordinary path:
+        //
+        //  - Connecting. `onOpen` sets `_link = CONNECTED` (redraw, `_stale`
+        //    still true), then `refreshAll()` assigns `_pending` (redraw,
+        //    `_stale` STILL true), and only then clears `_stale` - which
+        //    emitted nothing. The last frame the launcher ever got was the one
+        //    taken while `live` was false, so a real queue rendered
+        //    "Approvals pending — desktop unreachable", with no Deny button, on
+        //    a healthy link, indefinitely. With an empty queue it was worse:
+        //    re-assigning `emptyList()` is conflated away by StateFlow, so the
+        //    widget sat on "Not checked yet" for ever.
+        //  - Going stale. The watchdog sets `_stale = true` and deliberately
+        //    leaves `_link` CONNECTED, so nothing redrew and the widget kept
+        //    offering a Deny that `decisionBlocker` would refuse, explaining
+        //    itself only in an in-app notice nobody is looking at - which is
+        //    the exact failure ApprovalWidget's own comment claims to prevent.
         widgetJob = scope.launch {
-            combine(_pending, _link) { _, _ -> }.collect {
+            combine(_pending, _link, _stale) { _, _, _ -> }.collect {
                 ApprovalWidget().updateAll(app)
                 QuickLinkWidget().updateAll(app)
             }

@@ -26,7 +26,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import jarvis_mobile_ws
-from jarvis_mobile_ws import ApprovalVerifier, MobileEndpoint, compute_accept
+from jarvis_mobile_ws import (ApprovalVerifier, MobileEndpoint, compute_accept,
+                              MAX_MESSAGE_FRAGMENTS)
 
 failures = []
 
@@ -305,6 +306,65 @@ check("a whole-message cap exists and is larger than one frame",
 src = inspect.getsource(jarvis_mobile_ws)
 check("the cap is enforced on assembly, not just declared",
       "MAX_MESSAGE_BYTES" in src.split("MAX_MESSAGE_BYTES =", 1)[1])
+
+
+# --- the fragment-COUNT cap -------------------------------------------------
+#
+# The byte cap above could not see an empty fragment. A zero-length
+# continuation frame is six bytes on the wire and adds nothing to the byte
+# total, so `fragments` grew without limit while the cap never tripped - the
+# exact unbounded growth MAX_MESSAGE_BYTES exists to stop, through the one
+# door it does not watch. Worse, the total was recomputed with
+# `sum(len(f) for f in fragments)` on every frame, making assembly quadratic:
+# ~3s of CPU for 16k such frames, on a thread-per-connection server.
+def frames_socket(payload: bytes) -> jarvis_mobile_ws.MobileSocket:
+    """A MobileSocket reading from a fixed byte string instead of a socket."""
+    return jarvis_mobile_ws.MobileSocket(None, io.BytesIO(payload), io.BytesIO())
+
+
+def wsframe(fin: bool, opcode: int, body: bytes = b"") -> bytes:
+    """One raw frame. Not the `frame()` above: that one always sets FIN, and
+    these tests are specifically about frames that do not."""
+    # Masked, because that is what a client must send; an all-zero mask key
+    # makes the masking the identity so the body stays readable here.
+    return (bytes([(0x80 if fin else 0) | opcode, 0x80 | len(body)])
+            + b"\x00\x00\x00\x00" + body)
+
+
+flood = wsframe(False, jarvis_mobile_ws.OP_TEXT)
+flood += wsframe(False, jarvis_mobile_ws.OP_CONT) * (MAX_MESSAGE_FRAGMENTS + 5)
+try:
+    frames_socket(flood).read_message()
+    refused = False
+except jarvis_mobile_ws.WebSocketClosed:
+    refused = True
+check("a flood of EMPTY continuation frames is refused, not assembled for ever",
+      refused)
+
+# CONTROL: the same shape, safely under the cap, still assembles.
+ok_msg = wsframe(False, jarvis_mobile_ws.OP_TEXT, b"he")
+ok_msg += wsframe(False, jarvis_mobile_ws.OP_CONT, b"ll")
+ok_msg += wsframe(True, jarvis_mobile_ws.OP_CONT, b"o")
+check("CONTROL: an ordinary fragmented message still assembles",
+      frames_socket(ok_msg).read_message() == (jarvis_mobile_ws.OP_TEXT, b"hello"))
+
+
+# --- Sec-WebSocket-Key is ASCII-checked before it reaches sha1 --------------
+#
+# `compute_accept` does `key.encode("ascii")`, and http.client decodes headers
+# as latin-1, so one high byte raised UnicodeEncodeError straight out of
+# `_handshake` - which runs outside `serve`'s try block and took the serving
+# thread with it. Identical cause and blast radius to the Authorization crash
+# above; this header is read first, and before any token is checked.
+crashed = False
+try:
+    ok, status = try_handshake(open_ep, **{"Sec-WebSocket-Key": "abcdefghijklmnop=é"})
+except UnicodeEncodeError:
+    crashed = True
+    ok, status = None, None
+check("a non-ASCII Sec-WebSocket-Key is refused, not a crash",
+      not crashed and ok is False)
+check("and it is refused as a bad request", status == 400)
 
 
 print(f"\n{'ALL PASS' if not failures else 'FAILURES: ' + ', '.join(failures)}")

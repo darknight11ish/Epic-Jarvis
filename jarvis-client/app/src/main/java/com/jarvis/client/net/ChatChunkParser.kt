@@ -1,5 +1,6 @@
 package com.jarvis.client.net
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -68,6 +69,25 @@ object ChatChunkParser {
 
     private val FIELD_ONLY = Regex("^(event|id|retry):", RegexOption.IGNORE_CASE)
 
+    /**
+     * Strict, deliberately NOT the shared [JarvisJson].
+     *
+     * `JarvisJson` sets `isLenient = true` for the typed REST models, and
+     * lenient mode parses a bare unquoted word as a JSON literal. So
+     * `parseToJsonElement("Done")` SUCCEEDED, returning a `JsonPrimitive`
+     * whose `isString` is false - which failed the string test below, fell
+     * through to the `!is JsonObject` line, and was thrown away as carrying
+     * nothing. A plain-token upstream emitting `Yes.` or `Done` rendered
+     * nothing at all, while `Yes, I did.` (a space makes it invalid even
+     * leniently) rendered fine, so the loss looked like dropped words rather
+     * than a parser bug.
+     *
+     * `main.js` uses `JSON.parse`, which is strict and throws on exactly
+     * these, reaching its raw-token fallback. Matching it is the whole point
+     * of this file, so this instance matches it.
+     */
+    private val StrictJson = Json { isLenient = false; ignoreUnknownKeys = true }
+
     fun consume(rawLine: String): Result {
         var line = rawLine.trim()
         if (line.isEmpty()) return Result.Ignored
@@ -82,7 +102,7 @@ object ChatChunkParser {
         if (line.isEmpty()) return Result.Ignored
         if (line == "[DONE]") return Result.Terminal
 
-        val chunk = runCatching { JarvisJson.parseToJsonElement(line) }.getOrNull()
+        val chunk = runCatching { StrictJson.parseToJsonElement(line) }.getOrNull()
             ?: // Not JSON - a raw token, the shape a plain (non-SSE) text
             // stream produces. Same fallback `consumeLine` uses.
             return Result.Text(line)

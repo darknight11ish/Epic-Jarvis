@@ -14,8 +14,16 @@ import java.nio.IntBuffer
  * silently draws nothing, which on a device this can't be watched running
  * would look identical to "it never got called". `compileProgram` asks the
  * driver directly (`glGetShaderiv`/`glGetProgramiv` with the log) and turns
- * a bad shader into a real Kotlin exception instead, so `FaceRenderTest`
- * has something to catch.
+ * a bad shader into a real Kotlin exception instead.
+ *
+ * That exception is CAUGHT by each renderer's `onSurfaceCreated` and recorded
+ * in [lastBuildFailure], rather than being allowed off the GLThread. It used
+ * to propagate, and the comment here used to say it did so "so
+ * `FaceRenderTest` has something to catch" - which was never true: the test
+ * catches nothing, it reads `CrashLog` back from disk after the process has
+ * already died. Since the selected face is persisted, that death repeated on
+ * every launch, so a shader one driver disliked bricked the app until its
+ * data was cleared. [lastBuildFailure] is what the test asserts on now.
  *
  * Not a renderer and not an abstraction over draw calls - each face's own
  * `GLSurfaceView.Renderer` still owns its own buffer ids, uniform locations
@@ -23,6 +31,20 @@ import java.nio.IntBuffer
  * copied verbatim into both of this app's mesh faces.
  */
 object GL {
+
+    /**
+     * Set by a renderer whose shader would not build, and never cleared by
+     * one that succeeds - so a failure cannot be papered over by whichever
+     * face happens to be drawn next.
+     *
+     * This exists because the failure is otherwise invisible: the renderer
+     * degrades to a dark surface on purpose, which on a device nobody is
+     * watching looks the same as a face that is simply dark. Cleared by
+     * `FaceRenderTest` before each face and asserted null after.
+     */
+    @Volatile
+    var lastBuildFailure: String? = null
+
     fun compileProgram(vertexSrc: String, fragmentSrc: String): Int {
         val vs = compileShader(GLES30.GL_VERTEX_SHADER, vertexSrc)
         val fs = compileShader(GLES30.GL_FRAGMENT_SHADER, fragmentSrc)

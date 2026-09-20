@@ -1,6 +1,7 @@
 package com.jarvis.client.face.gl
 
 import android.opengl.GLES30
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import com.jarvis.client.FaceState
 import com.jarvis.client.face.FaceFrame
@@ -260,7 +261,18 @@ class MembraneRenderer : MeshRenderer {
         // renderer measures its own timestep with is stale by however long that
         // was. See RESUME_GAP_S.
         lastFrameNanos = 0L
-        program = GL.compileProgram(VS, FS)
+        // Caught rather than thrown - same reasoning as TokamakRenderer's copy
+        // of this. `GL.compileProgram` ends in `error(...)` on GLSurfaceView's
+        // GLThread, where nothing catches it, and the chosen face is persisted:
+        // a driver that rejects this shader killed the process on every launch
+        // until app data was cleared.
+        program = runCatching { GL.compileProgram(VS, FS) }
+            .onFailure {
+                Log.w("JarvisFaceGL", "Membrane shader would not build; face disabled", it)
+                GL.lastBuildFailure = "membrane: ${it.message}"
+            }
+            .getOrDefault(0)
+        if (program == 0) return
         aPosLoc = GLES30.glGetAttribLocation(program, "aPos")
         aNrmLoc = GLES30.glGetAttribLocation(program, "aNrm")
         aAuxLoc = GLES30.glGetAttribLocation(program, "aAux")
@@ -354,6 +366,19 @@ class MembraneRenderer : MeshRenderer {
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        // The shader did not build on this device (see onSurfaceCreated). A
+        // dark, still surface beats an uninitialised framebuffer - and beats
+        // the process dying, which is what used to happen instead.
+        if (program == 0) {
+            GLES30.glClearColor(
+                Spec.BACKGROUND.red,
+                Spec.BACKGROUND.green,
+                Spec.BACKGROUND.blue,
+                1f,
+            )
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
+            return
+        }
         val f = frame ?: return
         step(f)
         upload()

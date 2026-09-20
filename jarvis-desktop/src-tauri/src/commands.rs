@@ -919,10 +919,38 @@ pub async fn decide_approval(
     app: AppHandle,
     id: String,
     approved: bool,
+    option_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let id = id.trim();
     if id.is_empty() {
         return Err("that approval has no id to answer".to_string());
+    }
+
+    // Declared so it can be REFUSED, not so it can be forwarded.
+    //
+    // `jarvis-link.js` has always attached `option_id` when a proposal
+    // carries several plans, and this signature did not take it - so Tauri
+    // dropped the key silently and the call went through as a plain
+    // whole-proposal approve. The webview's per-option buttons were disabled
+    // to stop that, which is the fix this function's own comment below calls
+    // insufficient: "a disabled button is a courtesy, not a gate: any window
+    // holding the `approvals` capability reaches this directly".
+    //
+    // No backend route accepts a choice yet (docs/AUTONOMY-PROPOSALS.md §3b
+    // proposes one; docs/JARVIS-API.md records that none is confirmed), so
+    // the honest answer is to refuse rather than to approve something other
+    // than what was asked for. Forwarding it would be inventing a server
+    // contract; dropping it silently is what this is here to stop.
+    if let Some(option) = option_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|o| !o.is_empty())
+    {
+        return Err(format!(
+            "this Jarvis cannot approve one option out of several yet, so \
+             nothing was sent - option {option:?} was not chosen. Deny works \
+             normally; approving needs a server route that can carry the choice."
+        ));
     }
 
     // Rule 4 - "block acting when the event stream is stale" - was enforced

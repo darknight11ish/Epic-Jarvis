@@ -189,6 +189,9 @@ permissions = [
   "allow-check-for-update",
   "allow-set-update-check-on-start",
   "allow-install-update",
+  # Restart is the second half of installing one: without it the new binary
+  # is on disk and the running process is still the old one.
+  "allow-restart-app",
   "allow-get-api-settings",
   "allow-set-api-settings",
   "allow-supervisor-status",
@@ -275,6 +278,7 @@ permissions = [
   "allow-brain-memory-learning",
   "allow-brain-memory-export",
   "allow-brain-memory-as-of",
+  "allow-brain-memory-sleep-time",
 ]
 
 # ---------------------------------------------------------------------------

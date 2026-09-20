@@ -47,8 +47,17 @@ import com.jarvis.client.MainActivity
  * Mic does not record from here - a Glance worker has no microphone access
  * of its own, and would not survive the seconds a capture takes even if it
  * did. It opens [MainActivity] with [MainActivity.ACTION_START_VOICE], which
- * runs the exact same permission-checked [MainActivity] path the in-app mic
- * button uses, not a second one.
+ * brings the app up on Home with the mic button under the thumb.
+ *
+ * It does NOT start a capture, and this comment used to claim it "runs the
+ * exact same permission-checked MainActivity path the in-app mic button
+ * uses". It ran half of that path - the half that opens the microphone.
+ * `VoiceSession.begin` stops recording when `releaseRequested` is set, and
+ * only [VoiceButton]'s press-and-hold gesture ever sets it; a tap on a tile
+ * has no release, so the recorder ran to its 1-120s cap and uploaded the
+ * result. Starting the mic from any surface that cannot also END it is the
+ * bug, not the wiring, so the tile stops one step short and lets the hold do
+ * what only a hold can.
  */
 class QuickLinkWidget : GlanceAppWidget() {
 

@@ -162,6 +162,29 @@ await check("the Rust command refuses a stale queue too, not just the buttons", 
     "the staleness check must come before the request, not after it");
 });
 
+// Same reasoning, second gate. `jarvis-link.js` attaches `option_id` when a
+// proposal carries several plans, and for a long time this signature did not
+// take one - so Tauri dropped the key and the call landed as a plain
+// whole-proposal approve. The per-option buttons were disabled in the webview
+// to stop that, which is exactly the "courtesy, not a gate" this file's own
+// comment above rejects: any window with the `approvals` capability can
+// invoke the command directly. There is still no server route that can carry
+// a choice, so the command must REFUSE rather than approve something else.
+await check("the Rust command refuses an option it cannot actually send", async () => {
+  const src = await (await import("node:fs/promises")).readFile(
+    new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  const fn = src.slice(src.indexOf("pub async fn decide_approval"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
+  assert.match(body, /option_id:\s*Option<String>/,
+    "decide_approval must accept option_id, or Tauri drops it silently");
+  const refusal = body.indexOf("option_id");
+  const post = body.indexOf(".post(");
+  assert.ok(refusal > 0 && refusal < post,
+    "the option check must come before the request, not after it");
+  assert.match(body, /return Err\(format!\(\s*\n?\s*"this Jarvis cannot approve one option/,
+    "an option_id must produce an error, not be forwarded or ignored");
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\none action, one decision");
