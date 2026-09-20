@@ -160,6 +160,32 @@ class ChatSession(private val api: JarvisApi) {
                     }
 
                     var failed = false
+
+                    /** @return true when the caller should stop reading. */
+                    fun handle(line: String): Boolean =
+                        when (val result = ChatChunkParser.consume(line)) {
+                            is ChatChunkParser.Result.Text -> {
+                                acc.append(result.delta)
+                                // Published as it arrives - the whole reason
+                                // the body is chunked is so the reply appears
+                                // as it is written - but at most every
+                                // PUBLISH_MS. Token-by-token that is still
+                                // ~20 updates a second, which reads as smooth
+                                // typing, while a burst of tiny lines no
+                                // longer costs one full string copy and one
+                                // recomposition each.
+                                publish(force = false)
+                                result.terminal
+                            }
+                            ChatChunkParser.Result.Terminal -> true
+                            is ChatChunkParser.Result.Failed -> {
+                                _error.value = result.message
+                                failed = true
+                                true
+                            }
+                            ChatChunkParser.Result.Ignored -> false
+                        }
+
                     readLoop@ while (true) {
                         // Blocking reads never suspend, so nothing here would
                         // otherwise notice that the coroutine is gone. `closer`
@@ -169,7 +195,21 @@ class ChatSession(private val api: JarvisApi) {
                         // into a reply nobody is waiting for.
                         io.ensureActive()
                         val n = reader.read(chunk)
-                        if (n < 0) break
+                        if (n < 0) {
+                            // A final line with no trailing newline is still a
+                            // line, and dropping it was not a tail-end nicety:
+                            // `main.js`'s own loop ends with
+                            // `if (pending.trim()) consumeLine(pending)` and
+                            // this port left it out. Against the plain-token
+                            // (non-SSE) upstream this file's own header
+                            // describes - one that streams words with no
+                            // newlines at all - EVERY token landed in
+                            // `lineBuf`, `acc` stayed empty, and `send`
+                            // returned "" with no error: a blank reply on
+                            // screen and a voice loop that said nothing.
+                            if (lineBuf.isNotEmpty()) handle(lineBuf.toString())
+                            break
+                        }
                         if (n == 0) continue
                         var start = 0
                         for (i in 0 until n) {
@@ -178,29 +218,7 @@ class ChatSession(private val api: JarvisApi) {
                             start = i + 1
                             val line = lineBuf.toString()
                             lineBuf.setLength(0)
-                            when (val result = ChatChunkParser.consume(line)) {
-                                is ChatChunkParser.Result.Text -> {
-                                    acc.append(result.delta)
-                                    // Published as it arrives - the whole
-                                    // reason the body is chunked is so the
-                                    // reply appears as it is written - but at
-                                    // most every PUBLISH_MS. Token-by-token
-                                    // that is still ~20 updates a second,
-                                    // which reads as smooth typing, while a
-                                    // burst of tiny lines no longer costs one
-                                    // full string copy and one recomposition
-                                    // each.
-                                    publish(force = false)
-                                    if (result.terminal) break@readLoop
-                                }
-                                ChatChunkParser.Result.Terminal -> break@readLoop
-                                is ChatChunkParser.Result.Failed -> {
-                                    _error.value = result.message
-                                    failed = true
-                                    break@readLoop
-                                }
-                                ChatChunkParser.Result.Ignored -> {}
-                            }
+                            if (handle(line)) break@readLoop
                         }
                         if (start < n) lineBuf.append(chunk, start, n - start)
                     }

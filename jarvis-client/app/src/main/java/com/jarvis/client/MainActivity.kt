@@ -121,9 +121,17 @@ class MainActivity : FragmentActivity() {
      * Asked the first time the microphone button is held, never at launch.
      *
      * A permission dialog on first run, before the app has shown what it is
-     * for, is the one most people refuse — and the refusal is sticky. Granting
-     * it starts the capture immediately, so the hold that asked is the hold
-     * that records.
+     * for, is the one most people refuse — and the refusal is sticky.
+     *
+     * This used to add "granting it starts the capture immediately, so the
+     * hold that asked is the hold that records". That is no longer true and
+     * should not be made true again. The dialog takes window focus, which
+     * tears down [VoiceButton]'s `pointerInput`; its `finally` then fires
+     * `onRelease`/`onCancel`, and both now clear this callback (see
+     * [releaseVoice]). So the grant finds nothing to invoke and the first
+     * hold records nothing — the owner presses again, and that press both
+     * opens and closes the microphone. Starting a capture whose gesture has
+     * already ended is the bug that fix exists to prevent.
      */
     private var micGrantedCallback: (() -> Unit)? = null
 
@@ -502,15 +510,35 @@ class MainActivity : FragmentActivity() {
             if (focusApproval.value == id) focusApproval.value = null
         }
 
-        // Cleared before beginVoice() runs, not after: beginVoice() may only
-        // launch the permission dialog rather than start capture, and a flag
-        // still true when that dialog's own result callback recomposes this
-        // effect would fire the mic a second time on top of it.
+        // Opens Home ready to talk. It does NOT call beginVoice(), and that is
+        // the whole point of this block.
+        //
+        // It used to. The widget's Mic tile fires ACTION_START_VOICE, which
+        // lands here, which called beginVoice() -> VoiceSession.begin(). But
+        // `begin` opens the microphone and hands `Recorder.record` a
+        // `stopWhen = { turn.releaseRequested }`, and `releaseRequested` is
+        // set by exactly two callers - `release()` and `cancel()` - both wired
+        // solely to [VoiceButton]'s press-and-hold gesture. A tap on a home
+        // screen tile has no gesture to end, so nothing ever set it: the
+        // recorder ran to `maxSamples` (the desktop's own cap, clamped to
+        // 1-120s in Recorder) and `deliver()` then UPLOADED whatever the room
+        // had said for up to two minutes. A phone tapped in a pocket recorded
+        // and sent the pocket.
+        //
+        // That also falsified this app's loudest promise, in VoiceButton's own
+        // KDoc: "while the button is down the microphone is open, and when it
+        // is not, it is not. There is no state in which the app is listening
+        // and the owner has to remember that it is." There was exactly such a
+        // state, and it was reachable in one tap from the home screen.
+        //
+        // So the tile now does what it can honestly do: bring the app up on
+        // Home, where the mic button is under the thumb. Opening the mic still
+        // takes a deliberate hold, which is the only gesture that also carries
+        // its own release.
         LaunchedEffect(startVoiceRequested.value) {
             if (!startVoiceRequested.value) return@LaunchedEffect
             startVoiceRequested.value = false
             nav.resetTo(Screen.HOME)
-            beginVoice()
         }
 
         JarvisTheme(chrome = chrome, idleColor = idleColour) {

@@ -2,6 +2,7 @@ package com.jarvis.client.face.gl
 
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import com.jarvis.client.FaceState
 import com.jarvis.client.face.FaceFrame
@@ -206,7 +207,20 @@ class TokamakRenderer : MeshRenderer {
         // way: after a real context loss the stale ids name nothing in the new
         // context, so the driver ignores them.
         deleteGlObjects()
-        program = GL.compileProgram(VS, FS)
+        // Caught, not allowed to propagate. `GL.compileProgram` ends in
+        // `error(...)`, and this runs on GLSurfaceView's own GLThread where
+        // nothing catches it - so a driver that rejects any construct in this
+        // GLES 3.00 source took the whole process down. The chosen face is
+        // PERSISTED, so relaunching restored the same face and died again:
+        // an unrecoverable loop with no way out but clearing app data. A face
+        // that will not compile should cost that face, not the app.
+        program = runCatching { GL.compileProgram(VS, FS) }
+            .onFailure {
+                Log.w("JarvisFaceGL", "Tokamak shader would not build; face disabled", it)
+                GL.lastBuildFailure = "tokamak: ${it.message}"
+            }
+            .getOrDefault(0)
+        if (program == 0) return
         aPosLoc = GLES30.glGetAttribLocation(program, "aPos")
         aNrmLoc = GLES30.glGetAttribLocation(program, "aNrm")
         aCurLoc = GLES30.glGetAttribLocation(program, "aCur")
@@ -299,6 +313,19 @@ class TokamakRenderer : MeshRenderer {
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        // The shader did not build on this device (see onSurfaceCreated).
+        // Clearing to the spec's own background leaves a dark, still surface
+        // rather than whatever the uninitialised framebuffer holds.
+        if (program == 0) {
+            GLES30.glClearColor(
+                Spec.BACKGROUND.red,
+                Spec.BACKGROUND.green,
+                Spec.BACKGROUND.blue,
+                1f,
+            )
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
+            return
+        }
         val f = frame ?: return
         val st = stFor(f.motion)
         val inst = st.inst * if (f.motion == FaceState.LISTENING) 1f + f.amp else 1f

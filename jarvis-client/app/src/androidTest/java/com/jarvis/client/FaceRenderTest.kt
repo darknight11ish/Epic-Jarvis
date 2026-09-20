@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jarvis.client.face.Faces
+import com.jarvis.client.face.gl.GL
 import com.jarvis.client.platform.CrashLog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -78,6 +79,13 @@ class FaceRenderTest {
 
         for (face in Faces.all) {
             CrashLog.clear(context)
+            // The GL faces no longer take the process down when their shader
+            // will not build on this device - they log it, record it here and
+            // degrade to a dark surface, because the selected face is
+            // persisted and a crash therefore repeated on every launch. That
+            // makes CrashLog alone blind to exactly the failure this test was
+            // written to catch, so the marker is checked too.
+            GL.lastBuildFailure = null
             JarvisRuntime.appearance.setFace(face.id)
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 assertEquals(
@@ -89,6 +97,11 @@ class FaceRenderTest {
                 assertNull(
                     "face '${face.id}' threw while rendering:\n" + (CrashLog.read(context) ?: ""),
                     CrashLog.read(context),
+                )
+                assertNull(
+                    "face '${face.id}' could not build its shader on this device: " +
+                        (GL.lastBuildFailure ?: ""),
+                    GL.lastBuildFailure,
                 )
             }
         }
