@@ -54,4 +54,57 @@ class PlatformReadinessTest {
         assertFalse(PlatformReadiness.cleartextPermitted("example.com"))
         assertFalse(PlatformReadiness.cleartextPermitted("jarvis.example.com"))
     }
+
+    /**
+     * The form the pairing screen's own helper text produces, and the one that
+     * was reported as a problem when it is not one.
+     *
+     * `ClientSettings.baseUrl()` accepts a host with the scheme already typed
+     * in. The old check took `substringBefore(':')`, which reduced
+     * `http://desktop.ts.net:4719` to the string `"http"` — so the readiness
+     * screen told the owner their perfectly good MagicDNS name was NOT
+     * permitted in cleartext, and to go and find the MagicDNS name they had
+     * just typed. A false alarm on the one screen that exists to stop people
+     * chasing network faults that are really policy.
+     */
+    @Test
+    fun `a host with the scheme typed in is still permitted`() {
+        assertTrue(PlatformReadiness.cleartextPermitted("http://desktop.tail1234.ts.net:4719"))
+        assertTrue(PlatformReadiness.cleartextPermitted("http://desk.ts.net"))
+        assertTrue(PlatformReadiness.cleartextPermitted("HTTP://Desk.TS.NET"))
+        assertTrue(PlatformReadiness.cleartextPermitted("desktop.tail1234.ts.net:4719"))
+    }
+
+    /** https is not cleartext, so the policy does not apply and must not warn. */
+    @Test
+    fun `https never warns about cleartext`() {
+        assertTrue(PlatformReadiness.cleartextPermitted("https://desktop.tail1234.ts.net"))
+        assertTrue(PlatformReadiness.cleartextPermitted("https://example.com"))
+    }
+
+    /**
+     * The shape of the other app's worst bug, in the check that cites it.
+     *
+     * OkHttp parses `foo.ts.net:8080@evil.com` as userinfo plus the host
+     * `evil.com`, and `evil.com/foo.ts.net` as `evil.com` with a path. Splitting
+     * on the first colon saw `.ts.net` in both and reported permitted. The
+     * platform would still refuse the connection, so this failed safe — but the
+     * screen was stating the opposite of the truth about where the request goes.
+     */
+    @Test
+    fun `userinfo and path cannot smuggle a permitted name past the check`() {
+        assertFalse(PlatformReadiness.cleartextPermitted("foo.ts.net:8080@evil.com"))
+        assertFalse(PlatformReadiness.cleartextPermitted("http://foo.ts.net:8080@evil.com"))
+        assertFalse(PlatformReadiness.cleartextPermitted("evil.com/foo.ts.net"))
+        assertFalse(PlatformReadiness.cleartextPermitted("http://evil.com/foo.ts.net"))
+    }
+
+    /** Nonsense must be refused rather than throwing or being waved through. */
+    @Test
+    fun `unparseable input is refused`() {
+        assertFalse(PlatformReadiness.cleartextPermitted(""))
+        assertFalse(PlatformReadiness.cleartextPermitted("   "))
+        assertFalse(PlatformReadiness.cleartextPermitted("::::"))
+        assertFalse(PlatformReadiness.cleartextPermitted("http://"))
+    }
 }

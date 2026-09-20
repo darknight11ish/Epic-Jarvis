@@ -1,6 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  minSdk is 33, so this always wins and there are deliberately no legacy PNGs
+  alongside it: an ic_launcher.png in mipmap-*dpi could never be read on any
+  device this app runs on, and would be a quarter of a megabyte of resource
+  that exists to be ignored.
+
+  The source artwork's bezel is not here. An adaptive icon's outline is chosen
+  by the launcher — circle, squircle, rounded square, teardrop — and a drawn
+  ring fights that mask, reading as a small icon inside someone else's frame.
+  The glow is the identity; the ring was the mock-up's frame.
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
-    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <!--
+      Themed icons, Android 13+. A separate layer rather than the foreground
+      reused: the launcher flattens this to one tint, and the nebula haze that
+      reads as glow in colour becomes grey mush in silhouette.
+    -->
+    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
 </adaptive-icon>

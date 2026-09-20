@@ -15,7 +15,17 @@ android {
         minSdk = 33
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1-step0"
+        // Not "step0" any more. The number is cosmetic — versionCode is
+        // pinned at 1 so any build installs over any other — but a version
+        // string naming a step this app passed long ago is one more thing
+        // quietly asserting something untrue.
+        versionName = "0.1"
+
+        // There was no instrumentation runner, so there was nowhere to put a
+        // test that actually starts the app. That is the gap that let a crash
+        // in onCreate ship green: the suite compiled the APK and ran unit
+        // tests, and never once launched it.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // The shared debug key, committed at the repository root. Without it AGP mints
@@ -44,12 +54,67 @@ android {
     buildTypes {
         debug { isMinifyEnabled = false }
         release {
-            // Minify off and proguardFiles listed anyway advertises a shrink that
-            // does not happen. This module has no serialization runtime and no
-            // reflective entry points yet, so the rules file is genuinely empty of
-            // anything load-bearing; when step 2 adds the SSE client and its models,
-            // turn this on rather than adding keeps that nothing verifies.
-            isMinifyEnabled = false
+            // On, finally. The blocker recorded here for months was "this needs
+            // the kotlinx-serialization keep rules" — and the library has
+            // shipped them since 1.5: kotlinx-serialization-core 1.7.3, the
+            // exact version declared below, carries
+            // META-INF/com.android.tools/r8/kotlinx-serialization-r8.pro, and
+            // OkHttp 4.12.0 carries META-INF/proguard/okhttp3.pro. R8 consumes
+            // both without being asked. Checked by unzipping the artifacts, not
+            // by reading about them.
+            //
+            // This mattered more than a smaller APK, and it is now settled:
+            // the workflow publishes THIS build, not the debug one. It gates
+            // on an emulator actually installing and starting the shrunk APK
+            // before the release is cut, so a shrinker fault cannot ship
+            // green. A debuggable build would have ART's optimisations off and
+            // every class interpreted — app and libraries alike, including the
+            // reactor's frame loop — and would leave `adb shell run-as` open
+            // on the data directory, where hardware Keystore binding stops a
+            // key being EXTRACTED but not USED by anything running as the app.
+            //
+            // (This paragraph used to assert the published artifact WAS the
+            // debug one. That stopped being true when the release gate landed,
+            // and an audit caught the comment still arguing for a decision
+            // already made — which would leave a reader thinking the shipped
+            // APK is debuggable when it is not.)
+            //
+            // Signed with the same committed debug key, so `adb install -r`
+            // over an existing install still works: the certificate is what
+            // has to match, not the build type.
+            //
+            // THE TRIPWIRE ON THAT KEY, recorded here because this is where
+            // someone will be standing when it matters: `keystore/debug.keystore`
+            // is committed to this repository. Android decides whether an APK
+            // may replace an installed app by CERTIFICATE, and a same-signature
+            // update inherits the existing data directory and the Keystore
+            // alias — so anyone holding this key can build an app the phone
+            // accepts as an update to this one and simply ask the Keystore to
+            // decrypt the pairing token. No root, no `run-as`.
+            //
+            // That is survivable today only because the repository is PRIVATE.
+            // It is a one-way door: making the repo public exposes the key
+            // retroactively and for every commit in history, and no later
+            // rotation can un-publish it. So — rotate this key BEFORE the repo
+            // is ever made public or shared, never after. Rotating costs one
+            // uninstall/reinstall on the phone and re-pairing, because the new
+            // certificate will not match the installed one.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+    }
+
+    testOptions {
+        unitTests {
+            // The pattern engine is pure maths over androidx Color, but a stray
+            // android.* call in a transitive would otherwise throw "not mocked"
+            // rather than returning something the test can assert on.
+            isReturnDefaultValues = true
         }
     }
 
@@ -102,10 +167,69 @@ dependencies {
     // as a material3 transitive.
     implementation("androidx.compose.foundation:foundation")
 
+    // The home-screen approval widget. 1.1.1, not a newer release: it is the
+    // exact version the retired jarvis-android/ module already compiled
+    // successfully against (compileSdk 35, Compose BOM 2024.10.01) - the only
+    // real precedent for this dependency working anywhere in this monorepo,
+    // and this project has no local build to verify a different choice
+    // against. compileSdk 36 here is a ceiling raised from that module's 35,
+    // never lowered, so its own minCompileSdk requirement is still satisfied.
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.glance:glance:1.1.1")
+
     // The serialization compiler plugin is applied in build.gradle.kts but no
     // runtime was declared, so the first @Serializable anyone wrote would have
     // failed to resolve rather than working. Step 2's event models need it.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // The transport. OkHttp rather than Ktor because the SSE stream wants a
+    // socket held open for an hour with no read timeout, and chat wants a
+    // chunked body cancelled mid-flight to interrupt generation - both are
+    // one-liners here.
+    // A fingerprint instead of a tap for irreversible and outbound decisions -
+    // the one item on the brief's list a browser genuinely cannot do.
+    implementation("androidx.biometric:biometric:1.1.0")
+    // Not used directly - this app has no fragments of its own and is pure
+    // Compose. It is here to raise a floor that biometric:1.1.0 sets too low:
+    // it depends on androidx.fragment 1.2.5, and `registerForActivityResult`
+    // needs 1.3.0 or newer. Gradle takes the highest, so declaring the minimum
+    // is all this does.
+    //
+    // Found by building the release variant for the first time. The check is
+    // `InvalidFragmentVersionForActivityResult`, and it is fatal only under
+    // lintVitalRelease - which runs on release builds and nothing else - so it
+    // had never run at all. That is the whole argument for building this
+    // variant in CI: the failure was latent, not new.
+    //
+    // It is also not merely a lint nag. MainActivity registers two permission
+    // contracts at construction, and BiometricPrompt - the gate that rule 4
+    // leans on for irreversible approvals - drives a fragment internally.
+    implementation("androidx.fragment:fragment:1.3.0")
+
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okio:okio:3.6.0")
 
     testImplementation("junit:junit:4.13.2")
+
+    // Deliberately just enough to launch the activity and read its lifecycle
+    // state. No Compose test rule: the reactor runs an unbounded
+    // withFrameNanos loop, and Compose's test clock treats a running animation
+    // as "not idle", so a ComposeTestRule would sit waiting for a face that is
+    // never going to stop. ActivityScenario has no such coupling.
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+
+    // A server that answers, for the contract tests. Pinned to the same 4.12.0
+    // as OkHttp itself: MockWebServer 5.x replaced MockResponse's setters with
+    // a builder, so the version is load-bearing, not incidental.
+    //
+    // androidTest rather than a JVM unit test, deliberately. TokenStore needs
+    // the real Keystore and JarvisApi takes it as a constructor argument, so a
+    // JVM test could only reach this code by making the token store injectable
+    // - a production change to suit a test. On the emulator the whole stack is
+    // real, including the network security config, which already permits
+    // cleartext to 127.0.0.1.
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

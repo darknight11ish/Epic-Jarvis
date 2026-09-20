@@ -19,4 +19,22 @@
 
     <string name="channel_link_name">Jarvis link</string>
     <string name="channel_link_desc">Ongoing connection to your Jarvis backend.</string>
+    <string name="channel_approval_name">Approvals</string>
+    <string name="channel_approval_desc">A decision is waiting. This channel makes
+        a sound: it is the only thing that tells you an approval arrived while the
+        app was closed.</string>
+    <string name="channel_approval_quiet_name">Approvals (quiet)</string>
+    <string name="channel_approval_quiet_desc">Approvals that can be undone and stay
+        on your desktop, and approvals raised only because a message tried to hurry
+        you. Shown without a sound.</string>
+    <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
+    <string name="approvals_waiting">%1$d approvals waiting</string>
+    <string name="approval_deny_action">Deny</string>
+
+    <string name="widget_approval_name">Jarvis approvals</string>
+    <string name="widget_approval_desc">The oldest pending approval, at a glance.
+        Deny answers it directly; approving always opens the app.</string>
+
+    <string name="widget_quicklink_name">Jarvis quick link</string>
+    <string name="widget_quicklink_desc">The link status, and a one-tap Mic to start talking.</string>
 </resources>

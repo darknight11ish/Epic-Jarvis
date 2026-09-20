@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- recognitionService points at a stub that recognises nothing (see
+     JarvisRecognitionServiceStub's own doc) - this app has no client-side
+     speech-to-text and never will. supportsAssist is the whole reason this
+     file exists: it is what tells RoleManager this service is a candidate
+     for ROLE_ASSISTANT rather than a plain voice-command handler.
+     supportsLaunchVoiceAssistFromKeyguard is left at its default (false):
+     JarvisVoiceInteractionSession opens MainActivity, which itself is not
+     configured to show over the keyguard, so offering that entry point
+     would be a promise this app does not keep. -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.jarvis.client.assistant.JarvisVoiceInteractionSessionService"
+    android:recognitionService="com.jarvis.client.assistant.JarvisRecognitionServiceStub"
+    android:supportsAssist="true" />

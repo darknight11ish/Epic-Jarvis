@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.jarvis.client.JarvisRuntime
 
 /**
  * Restarts the link after a reboot or an app update.
@@ -23,6 +24,17 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             -> {
+                // Only a paired phone has a link to restart. Unpaired, this
+                // posted a foreground notification and looped on 401s until
+                // the owner noticed - on a phone that had never been told a
+                // desktop address. `isPaired()` needs the runtime, which is
+                // not necessarily up in a receiver-only process start, so it
+                // is initialised here first; it is cheap and idempotent.
+                runCatching { JarvisRuntime.initialize(context) }
+                if (!JarvisRuntime.isPaired()) {
+                    Log.i(TAG, "not paired; nothing to restart after ${intent.action}")
+                    return
+                }
                 Log.i(TAG, "restarting link after ${intent.action}")
                 EventService.start(context)
             }

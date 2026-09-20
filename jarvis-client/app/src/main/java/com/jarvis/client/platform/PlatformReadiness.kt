@@ -1,12 +1,15 @@
 package com.jarvis.client.platform
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
+import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * The four items in ANDROID-BUILD.md §3.1, reported rather than assumed.
@@ -47,10 +50,51 @@ object PlatformReadiness {
      * bug in the other app sent a bearer token to a public host in the clear.
      */
     fun cleartextPermitted(host: String): Boolean {
-        val h = host.trim().lowercase().substringBefore(':').trim('/')
-        if (h.isEmpty()) return false
+        val url = parsed(host) ?: return false
+        // https is not cleartext at all, so the policy simply does not apply and
+        // warning about it would be a false alarm.
+        if (!url.isHttp) return true
+        val h = url.host
         if (h in CLEARTEXT_EXACT) return true
         return CLEARTEXT_SUFFIXES.any { h.endsWith(it) }
+    }
+
+    /**
+     * The host OkHttp will actually dial, parsed rather than split.
+     *
+     * The previous version took `substringBefore(':')`, and a colon is not where
+     * a host ends. It got four cases wrong, and the one that mattered was not
+     * the malicious one:
+     *
+     * - `http://desktop.ts.net:4719` — a form [ClientSettings.baseUrl] expressly
+     *   accepts — reduced to `"http"`, so the screen told the owner their host
+     *   was NOT permitted and to go and find a MagicDNS name they had already
+     *   typed. A false alarm on the one screen whose job is to stop people
+     *   chasing phantom network faults.
+     * - `https://desktop.ts.net` warned about cleartext for a connection that
+     *   does not use any.
+     * - `evil.com/foo.ts.net` and `foo.ts.net:8080@evil.com` both reported
+     *   permitted while OkHttp would dial `evil.com`. The platform still refuses
+     *   those connections, so this failed safe — but it is the identical shape
+     *   to the bug that, in the other app, put a bearer token on the wire to a
+     *   public host, and the comment above already cites it.
+     *
+     * Hand-splitting a URL is what produced all four. This asks the same parser
+     * the request will use.
+     */
+    private data class Parsed(val host: String, val isHttp: Boolean)
+
+    private fun parsed(raw: String): Parsed? {
+        val t = raw.trim().trim('/')
+        if (t.isEmpty()) return null
+        val withScheme = when {
+            t.startsWith("http://", ignoreCase = true) ||
+                t.startsWith("https://", ignoreCase = true) -> t
+            // Matches ClientSettings.baseUrl(), which assumes http for a bare host.
+            else -> "http://$t"
+        }
+        val url = runCatching { withScheme.toHttpUrlOrNull() }.getOrNull() ?: return null
+        return Parsed(url.host.lowercase(), url.scheme.equals("http", ignoreCase = true))
     }
 
     /**
@@ -66,6 +110,10 @@ object PlatformReadiness {
             .getOrDefault(false)
     }
 
+    fun micGranted(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+
     fun notificationsGranted(context: Context): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
@@ -73,6 +121,30 @@ object PlatformReadiness {
         } else {
             true
         }
+
+    /**
+     * Whether this app is the system's held `RoleManager.ROLE_ASSISTANT`.
+     *
+     * Not whether the role EXISTS on this device (`isRoleAvailable` - every
+     * phone this app's minSdk reaches has it) but whether the OWNER actually
+     * picked Jarvis for it, which is the thing worth reporting: the plain
+     * `ACTION_ASSIST` intent-filter alone made this app a candidate in the
+     * old-style "Assist app" picker some OEMs still show, but said nothing
+     * about the newer role-based one, and nothing in the app could tell
+     * which state the phone was actually in.
+     */
+    fun assistantRoleHeld(context: Context): Boolean {
+        val rm = ContextCompat.getSystemService(context, RoleManager::class.java) ?: return false
+        return runCatching { rm.isRoleHeld(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
+    }
+
+    /** False only where the API predates the role entirely - this app's own
+     *  minSdk (33) is well past that, but a defensive check costs nothing
+     *  and a stray `RoleManager` failure must not crash this screen. */
+    fun assistantRoleAvailable(context: Context): Boolean {
+        val rm = ContextCompat.getSystemService(context, RoleManager::class.java) ?: return false
+        return runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
+    }
 
     fun report(context: Context, host: String): List<ReadinessItem> = listOf(
         ReadinessItem(
@@ -92,6 +164,24 @@ object PlatformReadiness {
             },
         ),
         ReadinessItem(
+            title = "Microphone",
+            detail = if (micGranted(context)) {
+                "Granted. Push-to-talk will record and send one utterance at a time."
+            } else {
+                "Not granted yet. Asked for the first time you hold the microphone " +
+                    "button, not at launch. Audio is sent to your desktop to be " +
+                    "checked and transcribed there — this app never transcribes."
+            },
+            state = if (micGranted(context)) {
+                ReadinessItem.State.OK
+            } else {
+                // Not a warning. Push-to-talk is opt-in by holding a button,
+                // and an app that nags for a microphone it is not using is the
+                // reason people refuse the prompt that matters.
+                ReadinessItem.State.INFO
+            },
+        ),
+        ReadinessItem(
             title = "Foreground service type",
             detail = "specialUse. dataSync would be capped at six hours a day on " +
                 "Android 15 and the service would be killed when the budget ran out.",
@@ -100,10 +190,27 @@ object PlatformReadiness {
         ReadinessItem(
             title = "Notifications",
             detail = if (notificationsGranted(context)) {
-                "Granted. The ongoing service notification will be visible."
+                "Granted. Approvals are announced in the drawer, and the ongoing " +
+                    "service notification is visible."
             } else {
-                "Denied. The service will still run, but its notification is hidden " +
-                    "from the drawer and only appears in the Task Manager."
+                // The old wording here was "its notification is hidden from the
+                // drawer and only appears in the Task Manager". True of the
+                // ongoing service notification, and it buried the part that
+                // matters: with this denied, NOT ONE approval is announced. The
+                // service keeps running, the link stays up, nothing looks
+                // broken - and requests waiting on an answer sit unseen.
+                // ApprovalNotifier counts them; this is where that count shows.
+                val silenced = ApprovalNotifier.silenced
+                val waiting = when (silenced) {
+                    0 -> ""
+                    1 -> " - one is waiting unannounced right now"
+                    else -> " - $silenced are waiting unannounced right now"
+                }
+                "Denied, and that is worse than it sounds: no approval is " +
+                    "announced at all" + waiting +
+                    ". The service still runs and nothing else looks broken, so " +
+                    "this screen is the only place it shows. The ongoing service " +
+                    "notification is hidden too, and appears only in the Task Manager."
             },
             state = if (notificationsGranted(context)) {
                 ReadinessItem.State.OK
@@ -137,6 +244,31 @@ object PlatformReadiness {
                 ReadinessItem.State.INFO
             } else {
                 ReadinessItem.State.WARN
+            },
+        ),
+        ReadinessItem(
+            title = "Digital assistant",
+            detail = if (!assistantRoleAvailable(context)) {
+                "This phone has no assistant role to hold. The plain assist " +
+                    "gesture (long-press home, or the assist swipe) may still " +
+                    "open Jarvis on some launchers."
+            } else if (assistantRoleHeld(context)) {
+                "Jarvis is the held assistant app. Long-press home, or the " +
+                    "assist gesture, opens this app - nothing about what " +
+                    "happens once it opens is different from a normal launch."
+            } else {
+                "Not set. Some launchers only offer the assist gesture to " +
+                    "whichever app holds this role, rather than to anything " +
+                    "with a plain assist intent-filter."
+            },
+            state = when {
+                !assistantRoleAvailable(context) -> ReadinessItem.State.INFO
+                assistantRoleHeld(context) -> ReadinessItem.State.OK
+                // Not a warning: nothing is broken or missing by not holding
+                // this - it is a convenience, and the plain intent-filter
+                // already covers the launchers that use it. Same tier as
+                // Microphone above, for the same reason.
+                else -> ReadinessItem.State.INFO
             },
         ),
         ReadinessItem(
