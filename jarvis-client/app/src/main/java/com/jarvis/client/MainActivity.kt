@@ -219,6 +219,20 @@ class MainActivity : FragmentActivity() {
         if (!text.isNullOrEmpty()) sharedText.value = text
     }
 
+    /**
+     * Today, as a plain `YYYY-MM-DD` - what "not now" on the sleep offer
+     * actually promises to remember, and for how long. See `sleepOfferDismissedOn`
+     * below: the old `Boolean` this replaces made a dismissal permanent, because
+     * `rememberSaveable` survives exactly the kind of process death - the OS
+     * reclaiming a backgrounded app under memory pressure - that this offer is
+     * ABOUT. A user who dismissed it once could open the app two days later,
+     * have Android hand back the saved `true` from before, and never see the
+     * offer again until they cleared app data. Recomputed on each call rather
+     * than cached: a value fixed at first composition would miss the day
+     * actually rolling over while the app sits open past midnight.
+     */
+    private fun todayLocal(): String = java.time.LocalDate.now().toString()
+
     @Composable
     private fun App() {
         // Before anything else, and before touching the runtime: if startup
@@ -302,7 +316,7 @@ class MainActivity : FragmentActivity() {
         // reading the same still-cached server data cannot re-adopt an offer
         // just turned down.
         //
-        // `sleepOfferDismissed` is still rememberSaveable, like `paired`
+        // `sleepOfferDismissedOn` is still rememberSaveable, like `paired`
         // above, so a rotation can't resurrect a card the owner deliberately
         // turned down - but it is now set ONLY on a durable answer: a local
         // dismiss, or a write that actually came back. A write still in flight
@@ -320,7 +334,14 @@ class MainActivity : FragmentActivity() {
         // survived `dismissed` flag is what stops that from re-adopting the
         // offer just turned down.
         var cachedSleepOffer by remember { mutableStateOf<JsonObject?>(null) }
-        var sleepOfferDismissed by rememberSaveable { mutableStateOf(false) }
+        // A date string, not a bare Boolean - "not now" means not now, not
+        // forever. See [todayLocal]'s own doc comment for the bug a plain
+        // Boolean had: rememberSaveable outlives the exact process death
+        // this offer exists to survive, so a dismissal from two nights ago
+        // read back as "still dismissed" on a night the server had raised a
+        // brand new offer.
+        var sleepOfferDismissedOn by rememberSaveable { mutableStateOf<String?>(null) }
+        val sleepOfferDismissedToday = sleepOfferDismissedOn == todayLocal()
         /** A write is in flight - suppress re-adoption, but never across a rotation. */
         var sleepOfferAnswering by remember { mutableStateOf(false) }
         var sleepOfferBusy by remember { mutableStateOf(false) }
@@ -418,7 +439,7 @@ class MainActivity : FragmentActivity() {
             val offer = (brain.memory?.get("setup") as? JsonObject)
                 ?.get("sleep_time_offer") as? JsonObject
             if (offer != null && cachedSleepOffer == null &&
-                !sleepOfferDismissed && !sleepOfferAnswering
+                !sleepOfferDismissedToday && !sleepOfferAnswering
             ) {
                 cachedSleepOffer = offer
             }
@@ -747,8 +768,11 @@ class MainActivity : FragmentActivity() {
                                     if (result is ApiResult.Ok) {
                                         // Durable: the answer reached the
                                         // desktop, so now it is safe to let it
-                                        // survive a rotation.
-                                        sleepOfferDismissed = true
+                                        // survive a rotation. Dated, not just
+                                        // true - a fresh offer tomorrow is a
+                                        // different question, not the one just
+                                        // answered.
+                                        sleepOfferDismissedOn = todayLocal()
                                     } else {
                                         cachedSleepOffer = answered
                                     }
@@ -757,7 +781,7 @@ class MainActivity : FragmentActivity() {
                         },
                         onDismissSleepOffer = {
                             cachedSleepOffer = null
-                            sleepOfferDismissed = true
+                            sleepOfferDismissedOn = todayLocal()
                         },
                         notice = notice,
                         onDismissNotice = { JarvisRuntime.clearNotice() },

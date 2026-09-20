@@ -36,5 +36,6 @@
         Deny answers it directly; approving always opens the app.</string>
 
     <string name="widget_quicklink_name">Jarvis quick link</string>
-    <string name="widget_quicklink_desc">The link status, and a one-tap Mic to start talking.</string>
+    <string name="widget_quicklink_desc">The link status, and a one-tap Talk button that opens the
+        app with the hold-to-talk mic ready - it does not record from the widget itself.</string>
 </resources>

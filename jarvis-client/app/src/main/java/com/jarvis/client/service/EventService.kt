@@ -106,53 +106,80 @@ class EventService : Service() {
     /**
      * The Deny button on an approval notification.
      *
-     * The lookup below CAN miss, and the comment that used to sit here said it
-     * could not. The reasoning was that the notification cannot exist unless
-     * this service put it there - true of the notification, false of the
-     * process. Android reclaims the process overnight; the notification stays in
-     * the drawer, and the service that restarts sticky behind it starts with an
-     * empty `pending` and no memory of the approval. Tapping Deny then found
-     * nothing and returned in silence: no sound, no error, notification still
-     * sitting there, and nothing to distinguish it from a Deny that worked. So
-     * the miss is handled rather than assumed away - see below.
+     * The lookup below CAN miss, and used to miss FAR more often than the
+     * comment that once sat here admitted. `startStream()` just above this
+     * call is fire-and-forget - it launches its own connect-and-refresh
+     * coroutine and returns immediately - so on a cold process (Android
+     * reclaimed it overnight; the notification stayed in the drawer) the very
+     * next line read `pending.value` before that refresh had any chance to
+     * land. Not an edge case: on a genuine cold start this raced every single
+     * time, and lost every single time, because nothing here ever waited.
+     *
+     * So this now asks once, directly, before deciding the item is really
+     * gone - the same `refreshPending()` the watchdog now also calls directly
+     * for the same reason (see `JarvisRuntime.startStream`'s watchdog
+     * comment): a plain GET that does not depend on the SSE stream's own
+     * timing, so it can resolve long before `startStream`'s asynchronous
+     * refresh would have. Only if the item is STILL missing after that fresh
+     * read is it treated as actually gone.
      *
      * No confirmation, no biometric: this is the same unguarded
      * `decide(item, approve = false)` InboxScreen's own Deny button already
      * sends, on the same "refusing something you have not read costs only a
      * retry" reasoning `notice.deny_ok` states server-side.
      *
-     * Nothing on the normal path cancels the notification directly (the stale
-     * case above is the exception, because there is no decision to make and so
-     * nothing that will ever resync it). `decide`'s own success
-     * path calls `refreshPending()`, which changes `JarvisRuntime.pending` and
-     * runs this service's own watcher, which resyncs the drawer - the same
-     * path that already removes a notification approved or denied from the
-     * desktop instead. A failure leaves the item, and the notification, right
-     * where they were: this queue never shows "gone" before the desktop has
-     * actually said so, the same rule the Brain screen's memory queue holds
-     * by staying busy rather than optimistically hiding a row.
+     * Nothing on the normal path cancels the notification directly (the
+     * still-missing case below is the exception, because there is no
+     * decision to make and so nothing that will ever resync it). `decide`'s
+     * own success path calls `refreshPending()`, which changes
+     * `JarvisRuntime.pending` and runs this service's own watcher, which
+     * resyncs the drawer - the same path that already removes a notification
+     * approved or denied from the desktop instead. A failure leaves the
+     * item, and the notification, right where they were: this queue never
+     * shows "gone" before the desktop has actually said so, the same rule
+     * the Brain screen's memory queue holds by staying busy rather than
+     * optimistically hiding a row.
      */
     private fun denyFromNotification(id: String?) {
-        val item = id?.let { target -> JarvisRuntime.pending.value.firstOrNull { it.id == target } }
-        if (item == null) {
-            // Say so, out loud, and take the dead notification away.
-            //
-            // Silence here was the worst possible answer: the user believes
-            // they refused something, and either the desktop is still waiting
-            // for a decision or it was resolved hours ago - and the drawer
-            // looks identical in both cases. A toast because the app is very
-            // likely not on screen when a notification action is tapped, and
-            // the in-app notice as well so the explanation is still there when
-            // they do open it.
-            Log.w(TAG, "deny tapped for an approval that is not pending any more")
-            val message = "That request is no longer waiting - it was handled elsewhere, " +
-                "or Jarvis restarted since the notification was posted."
-            runCatching { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
-            runCatching { JarvisRuntime.setNotice(message) }
-            if (id != null) runCatching { ApprovalNotifier.cancelFor(this, id) }
-            return
-        }
+        if (id == null) return
         scope.launch {
+            var item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
+            if (item == null) {
+                JarvisRuntime.refreshPending()
+                item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
+            }
+            if (item == null) {
+                // Say so, out loud, and take the dead notification away.
+                //
+                // Silence here was the worst possible answer: the user
+                // believes they refused something, and either the desktop is
+                // still waiting for a decision or it was resolved hours ago -
+                // and the drawer looks identical in both cases. A toast
+                // because the app is very likely not on screen when a
+                // notification action is tapped, and the in-app notice as
+                // well so the explanation is still there when they do open
+                // it.
+                //
+                // The wording splits on whether the fresh read above actually
+                // landed. Connected and still missing is real evidence the
+                // item is gone - the desktop was just asked and said so. Not
+                // connected means this proved nothing either way: the item
+                // could easily still be sitting open on the desktop, and
+                // saying "handled elsewhere" here would be exactly the false
+                // closure this whole rewrite exists to stop.
+                Log.w(TAG, "deny tapped for an approval that is not pending any more")
+                val message = if (JarvisRuntime.stale.value || JarvisRuntime.link.value != LinkState.CONNECTED) {
+                    "Could not reach the desktop to check - this may still be waiting. " +
+                        "Open the app once it reconnects."
+                } else {
+                    "That request is no longer waiting - it was handled elsewhere, " +
+                        "or Jarvis restarted since the notification was posted."
+                }
+                runCatching { Toast.makeText(this@EventService, message, Toast.LENGTH_LONG).show() }
+                runCatching { JarvisRuntime.setNotice(message) }
+                runCatching { ApprovalNotifier.cancelFor(this@EventService, id) }
+                return@launch
+            }
             // The result was discarded here. `decide()` already sets a notice
             // on failure - unreachable, stale, already handled - but a notice
             // is a view on a screen, and the whole reason this action exists

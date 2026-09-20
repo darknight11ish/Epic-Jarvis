@@ -616,9 +616,21 @@ private fun JobPlate(job: JobRecord) {
  * lookup - `docs/ANDROID-FEATURE-AUDIT.md` §4 P3, marked optional there. A
  * plain typed date, not a `DatePickerDialog`: the audit's own rule against
  * deep config UI on the phone argues just as well against importing a whole
- * calendar picker for one field that is asked for rarely. `YYYY-MM-DD` is
- * parsed as a UTC midnight, which is what the query's own name - "known at"
- * a moment, not a day - actually needs.
+ * calendar picker for one field that is asked for rarely.
+ *
+ * `YYYY-MM-DD` is parsed as LOCAL midnight, not `ZoneOffset.UTC` - this used
+ * to read `atStartOfDay(ZoneOffset.UTC)`, on the reasoning that the query's
+ * own name, "known at" a moment rather than a day, only needed A moment and
+ * UTC was as good as any. It is not: the desktop's own `promptValidTo` in
+ * `brain.js` hit this exact trap first and documents it in its own comment -
+ * "A bare YYYY-MM-DD is parsed as local midnight, not Date.parse's UTC
+ * midnight - west of Greenwich that shift lands the timestamp on the
+ * previous calendar day". A UTC choice here is not neutral; it is wrong for
+ * everyone west of Greenwich, in the specific direction of silently dropping
+ * every fact learned on the typed date itself. Matching the desktop's own
+ * fix - local midnight, not UTC, and not end-of-day either, which would
+ * have been a second, different disagreement with the one working
+ * precedent in this repo.
  */
 @Composable
 private fun MemoryAsOfPlate(
@@ -630,7 +642,9 @@ private fun MemoryAsOfPlate(
     var text by rememberSaveable { mutableStateOf("") }
     val epochSeconds = remember(text) {
         runCatching {
-            java.time.LocalDate.parse(text).atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond()
+            java.time.LocalDate.parse(text)
+                .atStartOfDay(java.time.ZoneId.systemDefault())
+                .toEpochSecond()
         }.getOrNull()
     }
     val rows = remember(result) { result?.let { flatten(it) }.orEmpty() }
