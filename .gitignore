@@ -1,31 +1,24 @@
-# Gradle / Android
-.gradle/
-build/
-local.properties
-captures/
-*.apk
-*.aab
+# Signing keys. One was committed once, while this repository was public.
+# Never again: no key, of any kind, in git.
 *.keystore
 *.jks
-# ...except the shared debug key. It is deliberately committed so every build
-# signs with the same certificate and `adb install -r` upgrades in place rather
-# than forcing an uninstall that wipes the pairing secret. See keystore/README.md.
-!keystore/debug.keystore
-.cxx/
+*.p12
+*.pfx
+*.pem
+*.key
+keystore/
 
-# IDE
-.idea/
-*.iml
-.DS_Store
+# Secrets and local settings
+.env
+.env.*
+*.local
+local.properties
 
-# Node (React Native / Capacitor)
-node_modules/
-
-# Flutter
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-
-# Python bytecode from the desktop endpoint module and its tests.
+# Build output
+jarvis-desktop/src-tauri/target/
+jarvis-client/build/
+jarvis-client/app/build/
+jarvis-client/.gradle/
 __pycache__/
-*.py[cod]
+*.pyc
+node_modules/
