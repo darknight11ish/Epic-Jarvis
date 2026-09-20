@@ -70,23 +70,27 @@ object ChatChunkParser {
     private val FIELD_ONLY = Regex("^(event|id|retry):", RegexOption.IGNORE_CASE)
 
     /**
-     * Strict, deliberately NOT the shared [JarvisJson].
+     * Strict, deliberately NOT the shared [JarvisJson], which sets
+     * `isLenient = true` for the typed REST models. It rejects what
+     * `JSON.parse` rejects and this app's own lenient instance does not:
+     * unquoted object keys, single quotes, a trailing comma.
      *
-     * `JarvisJson` sets `isLenient = true` for the typed REST models, and
-     * lenient mode parses a bare unquoted word as a JSON literal. So
-     * `parseToJsonElement("Done")` SUCCEEDED, returning a `JsonPrimitive`
-     * whose `isString` is false - which failed the string test below, fell
-     * through to the `!is JsonObject` line, and was thrown away as carrying
-     * nothing. A plain-token upstream emitting `Yes.` or `Done` rendered
-     * nothing at all, while `Yes, I did.` (a space makes it invalid even
-     * leniently) rendered fine, so the loss looked like dropped words rather
-     * than a parser bug.
-     *
-     * `main.js` uses `JSON.parse`, which is strict and throws on exactly
-     * these, reaching its raw-token fallback. Matching it is the whole point
-     * of this file, so this instance matches it.
+     * It does NOT rescue a bare word, and a previous version of this comment
+     * claimed it did. `parseToJsonElement` reads an unquoted token through
+     * `consumeStringLenient` whatever `isLenient` is set to, so
+     * `parseToJsonElement("Done")` succeeds either way and returns a
+     * `JsonPrimitive` whose `isString` is false. That is handled below,
+     * where the value is, rather than here.
      */
     private val StrictJson = Json { isLenient = false; ignoreUnknownKeys = true }
+
+    /**
+     * The JSON literals a bare token could legitimately be.
+     *
+     * Anything else that parses as a non-string primitive is a plain word the
+     * parser accepted too readily, and belongs in the reply.
+     */
+    private val JSON_LITERALS = setOf("true", "false", "null")
 
     fun consume(rawLine: String): Result {
         var line = rawLine.trim()
@@ -107,13 +111,39 @@ object ChatChunkParser {
             // stream produces. Same fallback `consumeLine` uses.
             return Result.Text(line)
 
-        if (chunk is JsonPrimitive && chunk.isString) {
+        if (chunk is JsonPrimitive) {
             val text = chunk.content
-            return if (text.isEmpty()) Result.Ignored else Result.Text(text)
+            if (chunk.isString) {
+                return if (text.isEmpty()) Result.Ignored else Result.Text(text)
+            }
+            // A bare token the parser accepted as a JSON literal when
+            // `JSON.parse` would have thrown.
+            //
+            // This is where the text loss actually lived, and it survived one
+            // attempt to fix it upstream of here. `parseToJsonElement` reads
+            // an unquoted token through `consumeStringLenient` regardless of
+            // the `isLenient` setting, so `Done` and `Yes` PARSE - as
+            // primitives whose `isString` is false, which then fell straight
+            // into the "carries nothing" branch below. A model whose whole
+            // reply was one plain word rendered nothing at all, while
+            // `Yes, I did.` rendered fine, because the space leaves trailing
+            // input and makes the parse fail for real. The loss looked like
+            // dropped words rather than a parser bug.
+            //
+            // So the test is on the VALUE. Only the three literals and a
+            // number are things `JSON.parse` would also have produced; every
+            // other bare token is prose, and gets the same raw-token
+            // treatment an unparseable line does.
+            return when {
+                text in JSON_LITERALS -> Result.Ignored
+                text.toDoubleOrNull() != null -> Result.Ignored
+                text.isEmpty() -> Result.Ignored
+                else -> Result.Text(text)
+            }
         }
         if (chunk !is JsonObject) {
-            // A bare number/bool/null chunk. `deltaFromChunk` treats any
-            // non-object, non-string chunk as carrying nothing.
+            // A top-level array. `deltaFromChunk` treats any non-object,
+            // non-string chunk as carrying nothing.
             return Result.Ignored
         }
 

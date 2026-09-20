@@ -53,18 +53,30 @@ class ChatChunkParserTest {
     }
 
     /**
-     * The lenient-JSON bug. `JarvisJson` sets `isLenient = true`, and lenient
-     * mode parses a bare word as a non-string primitive - so `Done` parsed
-     * successfully, failed the `isString` test, fell through the `!is
-     * JsonObject` line and was discarded. A model whose whole reply was one
-     * plain token rendered nothing, while `Yes, I did.` rendered fine, because
-     * the space makes it invalid even leniently.
+     * The text-loss bug, and the reason this test exists rather than a comment
+     * claiming it is fixed: the first attempt at it was wrong, and only a test
+     * said so. `parseToJsonElement` reads an unquoted token through
+     * `consumeStringLenient` WHATEVER `isLenient` is set to, so switching to a
+     * strict `Json` instance changed nothing - `Done` still parsed, as a
+     * primitive whose `isString` is false, and was still discarded as carrying
+     * nothing. Meanwhile `Yes, I did.` rendered fine, because the space leaves
+     * trailing input and fails the parse for real, so the loss looked like
+     * dropped words rather than a parser bug.
      */
     @Test
     fun `a bare token that happens to look like a JSON literal is still text`() {
         assertEquals("Done", text("Done"))
         assertEquals("Yes", text("Yes"))
         assertEquals("Yes, I did.", text("Yes, I did."))
+    }
+
+    /** The three literals and a number really do carry nothing, though. */
+    @Test
+    fun `a genuine bare literal still carries nothing`() {
+        assertEquals(ChatChunkParser.Result.Ignored, ChatChunkParser.consume("true"))
+        assertEquals(ChatChunkParser.Result.Ignored, ChatChunkParser.consume("false"))
+        assertEquals(ChatChunkParser.Result.Ignored, ChatChunkParser.consume("null"))
+        assertEquals(ChatChunkParser.Result.Ignored, ChatChunkParser.consume("42"))
     }
 
     // ------------------------------------------------------------ errors ---
