@@ -55,6 +55,14 @@ OP_PONG = 0xA
 # The phone sends 20ms PCM chunks; anything approaching this is malformed.
 MAX_FRAME_BYTES = 1 << 20
 
+# The cap on a whole MESSAGE, which is a different thing from the cap on one
+# frame. `MAX_FRAME_BYTES` bounds each fragment; without this, a peer that
+# cleared the handshake could stream continuation frames with `fin=0` for
+# ever and grow the serving thread by a megabyte at a time until the process
+# died. Four frames' worth: larger than anything this protocol legitimately
+# sends, small enough that refusing it costs nothing.
+MAX_MESSAGE_BYTES = 4 * MAX_FRAME_BYTES
+
 # The client pings every 25s. Three missed intervals means the peer is gone.
 READ_TIMEOUT_SECONDS = 90.0
 
@@ -217,6 +225,18 @@ class MobileSocket:
                 fragments = [payload]
             else:
                 raise WebSocketClosed(f"reserved opcode {opcode:#x}")
+
+            # Checked on assembly, not per frame: the per-frame cap above
+            # bounds one fragment, and an unbounded NUMBER of bounded
+            # fragments is still unbounded. Closing is the right answer
+            # rather than truncating - a message this large is malformed on
+            # this protocol, and a truncated one would be parsed as if it
+            # were whole.
+            if sum(len(f) for f in fragments) > MAX_MESSAGE_BYTES:
+                raise WebSocketClosed(
+                    f"message exceeded {MAX_MESSAGE_BYTES} bytes across "
+                    f"{len(fragments)} fragments"
+                )
 
             if fin:
                 assert message_op is not None
@@ -428,6 +448,7 @@ class MobileEndpoint:
         verifier: ApprovalVerifier,
         *,
         auth_token: str | None = None,
+        allowed_origins: Iterable[str] | None = None,
         on_approval: Callable[[str, bool, MobileSocket], None] | None = None,
         on_audio: Callable[[bytes, MobileSocket], None] | None = None,
         on_event: Callable[[dict[str, Any], MobileSocket], None] | None = None,
@@ -435,6 +456,12 @@ class MobileEndpoint:
     ) -> None:
         self._verifier = verifier
         self._auth_token = auth_token or None
+        # Empty by default, and that is the safe default rather than a
+        # missing feature: the only real client of this endpoint is a native
+        # Android app, which sends no `Origin` at all and so is unaffected.
+        # A browser always sends one, so the default refuses every web page.
+        # Pass origins explicitly to allow any.
+        self._allowed_origins = frozenset(allowed_origins or ())
         self._on_approval = on_approval
         self._on_audio = on_audio
         self._on_event = on_event
@@ -545,12 +572,41 @@ class MobileEndpoint:
             self._refuse(handler, 400, "missing Sec-WebSocket-Key")
             return False
 
+        # A browser cannot be talked into forging `Origin`, and it always
+        # sends one. A native client (the phone, a script) sends none. So an
+        # Origin that is present and not allow-listed is, by construction, a
+        # web page trying to reach this endpoint - and this endpoint
+        # broadcasts approval cards with their title, summary and detail.
+        #
+        # Same-origin policy does NOT apply to WebSockets and there is no
+        # preflight, so without this check any page the owner happened to be
+        # visiting could open ws://127.0.0.1:<port>/api/mobile/ws, read every
+        # broadcast and inject events. The bearer token was the only thing
+        # standing in the way, and it is optional.
+        #
+        # Absent rather than empty is the test: `Origin: null` is what a
+        # sandboxed iframe sends, and that is a browser too.
+        origin = headers.get("Origin")
+        if origin is not None and origin not in self._allowed_origins:
+            self._refuse(handler, 403, "origin not allowed")
+            return False
+
         # Rejecting here drops the TCP stream before any WebSocket state is
         # allocated, which a token carried in the first frame cannot do.
         if self._auth_token is not None:
             presented = (headers.get("Authorization") or "").strip()
             expected = f"Bearer {self._auth_token}"
-            if not hmac.compare_digest(presented, expected):
+            # Compared as BYTES. `hmac.compare_digest` raises TypeError on
+            # str arguments containing non-ASCII, and `http.client` decodes
+            # headers as latin-1 - so one high byte in `Authorization` from
+            # an unauthenticated caller raised out of `_handshake`, which is
+            # called outside `serve`'s own try block, and took the serving
+            # thread with it. Bytes have no such restriction and the
+            # comparison stays constant-time.
+            if not hmac.compare_digest(
+                presented.encode("utf-8", "surrogateescape"),
+                expected.encode("utf-8", "surrogateescape"),
+            ):
                 self._refuse(handler, 401, "bad or missing bearer token")
                 return False
 

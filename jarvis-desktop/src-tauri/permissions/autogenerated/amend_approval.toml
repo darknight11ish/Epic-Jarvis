@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-amend-approval"
+description = "Enables the amend_approval command without any pre-configured scope."
+commands.allow = ["amend_approval"]
+
+[[permission]]
+identifier = "deny-amend-approval"
+description = "Denies the amend_approval command without any pre-configured scope."
+commands.deny = ["amend_approval"]

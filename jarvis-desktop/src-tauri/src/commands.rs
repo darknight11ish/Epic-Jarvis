@@ -986,6 +986,128 @@ pub async fn decide_approval(
         .unwrap_or_else(|_| serde_json::json!({ "ok": true, "endpoint": endpoint, "raw": body })))
 }
 
+/// The shared half of the task controls and `amend_approval`: POST a small
+/// JSON body, and turn anything that is not a 2xx into a sentence.
+///
+/// Deliberately NOT gated on a stale stream, unlike [`decide_approval`].
+/// None of its callers is a decision: a note is an annotation, and pause,
+/// resume and stop are the safe direction in the same sense Deny is — the
+/// moment you most want to stop a running task is the moment the link is
+/// misbehaving, and a Stop button that refuses to work because the link is
+/// unhealthy is a Stop button that fails when it is needed. `jarvis-client`
+/// reached the same conclusion on its own side, where `decisionBlocker`
+/// gates `decide`/`revert` and deliberately does not gate amend.
+async fn post_task_control(
+    app: &AppHandle,
+    path: &str,
+    body: serde_json::Value,
+) -> Result<(), String> {
+    let base = jarvis_base(app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{base}{path}"))
+        .headers(jarvis_headers(app)?)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {base}")
+            } else {
+                format!("unable to reach `{path}`: {e}")
+            }
+        })?;
+
+    let status = response.status();
+    if status.is_success() {
+        return Ok(());
+    }
+    let detail = response.text().await.unwrap_or_default();
+    // A 404 is the expected answer from a backend that has not added these
+    // routes yet, and saying so beats a bare status code: these four are
+    // `docs/AUTONOMY-PROPOSALS.md` §3d's own proposed names, not confirmed
+    // against a backend that lives outside this repository.
+    if status.as_u16() == 404 {
+        return Err(format!(
+            "this Jarvis backend has no `{path}` route, so there is nothing \
+             to send that to yet"
+        ));
+    }
+    Err(format!(
+        "the server answered HTTP {} to {path}: {}",
+        status.as_u16(),
+        detail.trim()
+    ))
+}
+
+/// Pause, resume, or stop whatever Jarvis is running right now, and add a
+/// note to it — `docs/AUTONOMY-PROPOSALS.md` §3d.
+///
+/// These four and [`amend_approval`] were invoked by `jarvis-link.js` long
+/// before they existed here, so every one of those buttons failed at the
+/// Tauri boundary with "command not found" rather than reaching the
+/// backend at all. `jarvis-client` has called the same routes over plain
+/// HTTP the whole time, so the desktop was the odd one out.
+///
+/// None of the four takes a task id, matching the phone and matching this
+/// project's own rule that "the current turn" is singular.
+#[tauri::command]
+pub async fn pause_task(app: AppHandle) -> Result<(), String> {
+    post_task_control(&app, "/api/task/pause", serde_json::json!({})).await
+}
+
+#[tauri::command]
+pub async fn resume_task(app: AppHandle) -> Result<(), String> {
+    post_task_control(&app, "/api/task/resume", serde_json::json!({})).await
+}
+
+#[tauri::command]
+pub async fn stop_task(app: AppHandle) -> Result<(), String> {
+    post_task_control(&app, "/api/task/stop", serde_json::json!({})).await
+}
+
+#[tauri::command]
+pub async fn inject_task_note(app: AppHandle, note: String) -> Result<(), String> {
+    post_task_control(&app, "/api/task/note", serde_json::json!({ "note": note })).await
+}
+
+/// Percent-encodes one path segment.
+///
+/// Hand-rolled rather than pulled from `url`, which is not a dependency of
+/// this crate, and deliberately NOT `form_urlencoded`: that is the encoding
+/// for a query string, where a space becomes `+`. Inside a path a `+` is a
+/// literal plus, so an id containing a space would address a different
+/// resource. Unreserved characters per RFC 3986 pass through; everything
+/// else becomes %XX.
+fn encode_path_segment(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    for byte in raw.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(*byte as char);
+            }
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
+}
+
+/// A note attached to a pending proposal before it is decided — NOT a
+/// decision, and it approves nothing.
+///
+/// The id is percent-encoded into the path, the same as the phone does:
+/// an id carrying a `/` or a `?` would otherwise address a different route
+/// entirely.
+#[tauri::command]
+pub async fn amend_approval(app: AppHandle, id: String, note: String) -> Result<(), String> {
+    let encoded = encode_path_segment(&id);
+    post_task_control(
+        &app,
+        &format!("/api/pending/{encoded}/amend"),
+        serde_json::json!({ "note": note }),
+    )
+    .await
+}
+
 /// Records the route lane the quickbar last saw, so the widget's pill can show
 /// it without running a stream of its own.
 #[tauri::command]

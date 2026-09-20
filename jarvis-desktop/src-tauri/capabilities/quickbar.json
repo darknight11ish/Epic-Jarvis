@@ -12,6 +12,7 @@
     "core:webview:allow-internal-toggle-devtools",
     "jarvis-link",
     "approvals",
+    "task-control",
     "quickbar-surface",
     "attention-surface",
     "voice"

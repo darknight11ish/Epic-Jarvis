@@ -12,6 +12,8 @@ a library that would share this module's own assumptions.
 import base64
 import hashlib
 import hmac
+import inspect
+import io
 import json
 import os
 import socket
@@ -23,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import jarvis_mobile_ws
 from jarvis_mobile_ws import ApprovalVerifier, MobileEndpoint, compute_accept
 
 failures = []
@@ -197,5 +200,112 @@ check("audio frames tagged + binary", op2 == 0x2 and a1[0] == 3 and len(a1) == 6
 check("audio_stream_end sent", json.loads(end)["type"] == "audio_stream_end")
 
 s.close(); srv.shutdown()
+
+
+# ---------------------------------------------------------------------------
+#   Handshake hardening
+# ---------------------------------------------------------------------------
+#
+# Driven against `_handshake` directly with a stand-in handler: what is being
+# proven is the decision, not the socket. Each case is the shape of a real
+# defect, not a hypothetical.
+print("\nHandshake:")
+
+from jarvis_mobile_ws import MAX_MESSAGE_BYTES, MAX_FRAME_BYTES  # noqa: E402
+
+
+class FakeHandler:
+    """Just enough handler for `_handshake`: headers, and somewhere to write."""
+
+    def __init__(self, headers):
+        self.headers = headers
+        self.status = None
+        self.wfile = io.BytesIO()
+        self._sent = []
+
+    def send_response(self, status):
+        self.status = status
+
+    def send_header(self, *a):
+        pass
+
+    def end_headers(self):
+        pass
+
+
+def handshake_headers(**over):
+    base = {
+        "Upgrade": "websocket",
+        "Connection": "Upgrade",
+        "Sec-WebSocket-Version": "13",
+        "Sec-WebSocket-Key": base64.b64encode(b"0123456789abcdef").decode(),
+    }
+    base.update(over)
+    return {k: v for k, v in base.items() if v is not None}
+
+
+def try_handshake(endpoint, **over):
+    h = FakeHandler(handshake_headers(**over))
+    ok = endpoint._handshake(h)
+    return ok, h.status
+
+
+# --- the origin check -------------------------------------------------------
+#
+# Browsers do not apply same-origin policy to WebSockets and send no
+# preflight, so before this check any page the owner happened to be visiting
+# could open this endpoint and read every approval card broadcast on it.
+open_ep = MobileEndpoint(v)
+ok, status = try_handshake(open_ep, Origin="https://evil.example")
+check("a browser origin is refused", ok is False and status == 403)
+
+ok, _ = try_handshake(open_ep, Origin=None)
+check("CONTROL: a native client, which sends no Origin, still connects", ok is True)
+
+ok, status = try_handshake(open_ep, Origin="null")
+check("a sandboxed iframe's 'null' origin is refused too", ok is False and status == 403)
+
+allowed_ep = MobileEndpoint(v, allowed_origins=["https://trusted.example"])
+ok, _ = try_handshake(allowed_ep, Origin="https://trusted.example")
+check("an explicitly allowed origin connects", ok is True)
+ok, status = try_handshake(allowed_ep, Origin="https://evil.example")
+check("and allow-listing one origin does not admit another", ok is False and status == 403)
+
+
+# --- the non-ASCII Authorization crash --------------------------------------
+#
+# `hmac.compare_digest` raises TypeError on str arguments containing
+# non-ASCII, and http.client decodes headers as latin-1. `_handshake` is
+# called outside `serve`'s try block, so one high byte from an
+# unauthenticated caller took the serving thread down.
+auth_ep = MobileEndpoint(v, auth_token="right-token")
+crashed = False
+try:
+    ok, status = try_handshake(auth_ep, Authorization="Bearer ü")
+except TypeError:
+    crashed = True
+    ok, status = None, None
+check("a non-ASCII bearer token is refused, not a crash", not crashed and ok is False)
+check("and it is refused as unauthorised", status == 401)
+
+ok, _ = try_handshake(auth_ep, Authorization="Bearer right-token")
+check("CONTROL: the correct token still connects", ok is True)
+ok, status = try_handshake(auth_ep, Authorization="Bearer wrong-token")
+check("CONTROL: a wrong token is still refused", ok is False and status == 401)
+
+
+# --- the message cap --------------------------------------------------------
+#
+# MAX_FRAME_BYTES bounds ONE fragment; an unbounded number of bounded
+# fragments is still unbounded, and grew the serving thread a megabyte at a
+# time until the process died.
+check("a whole-message cap exists and is larger than one frame",
+      MAX_MESSAGE_BYTES > MAX_FRAME_BYTES)
+
+src = inspect.getsource(jarvis_mobile_ws)
+check("the cap is enforced on assembly, not just declared",
+      "MAX_MESSAGE_BYTES" in src.split("MAX_MESSAGE_BYTES =", 1)[1])
+
+
 print(f"\n{'ALL PASS' if not failures else 'FAILURES: ' + ', '.join(failures)}")
 sys.exit(1 if failures else 0)
