@@ -65,9 +65,30 @@ class Speaker(private val context: Context) {
     @Volatile private var track: AudioTrack? = null
     @Volatile private var cancelled = false
 
+    /**
+     * Clears the stop flag. Call once per turn, BEFORE anything is spoken.
+     *
+     * This exists because [play] and [speakOnDevice] used to clear it
+     * themselves, on entry - which quietly erased a cancel that had already
+     * arrived. A reply is spoken sentence by sentence as it streams
+     * (`VoiceSession.speakStreamed`), so each sentence is a separate [play];
+     * the owner sliding to cancel during sentence one set the flag, and
+     * sentence two - already past its `api.say` and entering [play] - wiped
+     * it and spoke in full. `play`'s write loop has no suspension point, so
+     * cancelling the coroutine could not stop it either. Jarvis finished a
+     * sentence out loud after being told to stop.
+     *
+     * Arming here and nowhere else means the flag only ever clears when a
+     * new turn genuinely begins.
+     */
+    fun arm() {
+        cancelled = false
+    }
+
     /** Plays a WAV the desktop synthesised. Real levels, straight off the samples. */
     suspend fun play(wav: ByteArray) = withContext(Dispatchers.IO) {
-        cancelled = false
+        // Re-checked here, not cleared. See [arm].
+        if (cancelled) return@withContext
         val pcm = runCatching { Wav.decode(wav) }.getOrNull() ?: return@withContext
         val rate = runCatching { Wav.rateOf(wav) }.getOrDefault(Wav.SAMPLE_RATE)
         val minBuf = AudioTrack.getMinBufferSize(
@@ -192,7 +213,10 @@ class Speaker(private val context: Context) {
      */
     suspend fun speakOnDevice(text: String): Boolean {
         if (text.isBlank()) return true
-        cancelled = false
+        // Refused rather than cleared, for the reason in [arm]: a cancel that
+        // arrived while the previous sentence was playing must survive into
+        // this one.
+        if (cancelled) return false
         val engine = ensureTts() ?: return false
 
         // Chosen explicitly, never left to the engine default. `voices` can

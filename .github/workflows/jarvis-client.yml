@@ -295,10 +295,45 @@ jobs:
       # boundary now except the installed SDK, which is on disk.
       - name: Start the emulator and launch the app
         run: |
+          # `-e` is NOT set here, and is on anyway: GitHub runs every `run:`
+          # block as `bash -e {0}`. That matters more than it looks. With `-e`
+          # and `pipefail` both on, ANY command substitution whose pipeline
+          # ends non-zero kills the step on the spot - including a `x=$(...)`
+          # assignment written as a question rather than as an action. That is
+          # what silently killed this step for three merges; see the pid check
+          # at the bottom.
           set -uo pipefail
           mkdir -p "$ANDROID_AVD_HOME"
-          echo no | avdmanager create avd -n smoke \
-            -k "system-images;android-34;default;x86_64" --force
+          if ! echo no | avdmanager create avd -n smoke \
+            -k "system-images;android-34;default;x86_64" --force; then
+            echo "::error::The AVD could not be created, so there is no device to test on."
+            exit 1
+          fi
+
+          # Guest Vulkan off, before the emulator is launched.
+          #
+          # The emulator draws for the guest through a host component called
+          # gfxstream, and "Failed to find ColorBuffer: <n>" - which the
+          # emulator log tail has carried on every failed run of this job - is
+          # gfxstream being handed a handle for a graphics buffer it no longer
+          # has. Leaving Vulkan available to the guest gives it a second way to
+          # allocate those buffers, and turning it off is the standard
+          # workaround for this error on a runner with no GPU. Nothing in this
+          # app uses Vulkan - Compose and the GLES faces both go through
+          # OpenGL - so there is nothing here for it to take away.
+          #
+          # This file is an override layer on top of the SDK's own
+          # emulator/lib/advancedFeatures.ini, so naming two features leaves
+          # every other default alone. It is read from $HOME/.android;
+          # ANDROID_AVD_HOME above moves the AVDs, not this.
+          #
+          # BEST-EFFORT. I cannot run an emulator here to confirm it, and the
+          # evidence below says the graphics stack is probably not what is
+          # failing anyway. It is cheap, it is documented, and it narrows what
+          # the next run has to explain.
+          mkdir -p "$HOME/.android"
+          printf 'Vulkan = off\nGLDirectMem = on\n' >> "$HOME/.android/advancedFeatures.ini"
+          echo "Emulator feature overrides:"; cat "$HOME/.android/advancedFeatures.ini"
 
           # Assert it exists HERE, so a creation that silently went elsewhere
           # fails on the line that created it rather than five minutes later
@@ -310,9 +345,29 @@ jobs:
             exit 1
           fi
 
+          # `-gpu swiftshader_indirect` is KEPT, deliberately, and this is the
+          # evidence for not churning it: `FaceRenderTest` launches the app
+          # once per face in `Faces.all` on this very emulator - including the
+          # `GLSurfaceView` faces, which ask for real GLES 3.0 and an
+          # RGBA8888 + 16-bit-depth config, and the AGSL face, whose shader is
+          # compiled at runtime by the device's own Skia - and asserts both
+          # that the activity reaches RESUMED and that `GL.lastBuildFailure`
+          # is null. Those tests pass on every run of this job. Software GL is
+          # demonstrably able to serve this app's shaders on this image, so
+          # swapping the renderer would be a guess that risks breaking the one
+          # part of this job that works.
+          #
+          # -memory 4096, up from 2048. A GitHub ubuntu-latest runner has 16GB,
+          # and a 2GB Android device that has just finished running a whole
+          # instrumentation suite can have Android's low-memory killer take
+          # the next app that starts - which looks EXACTLY like the failure
+          # here (process gone, nothing in the crash buffer, because a
+          # low-memory kill is not a crash and writes nothing there). A guess,
+          # but a free one: the exit-info dump added below will say
+          # outright if that is what happened.
           "$ANDROID_HOME/emulator/emulator" -avd smoke \
             -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
-            -camera-back none -camera-front none -memory 2048 \
+            -camera-back none -camera-front none -memory 4096 \
             -gpu swiftshader_indirect -accel auto > "$RUNNER_TEMP/emulator.log" 2>&1 &
           EMU=$!
 
@@ -467,7 +522,13 @@ jobs:
           # signatures. It does not walk every screen. A keep rule missing for
           # something only reachable three taps in would still get through.
           echo "::group::The release build on the device"
-          rel=$(find app/build/outputs/apk/release -name 'app-release.apk' 2>/dev/null | head -1)
+          # `|| true` on the assignment, not decoration. If the release
+          # directory does not exist, `find` exits non-zero, `pipefail` hands
+          # that status to the whole pipeline, and under `-e` the ASSIGNMENT
+          # is the failing command - so the step would die here and the
+          # friendly message two lines down, written for exactly this case,
+          # would never be printed. Same bug as the pid check below, same fix.
+          rel=$(find app/build/outputs/apk/release -name 'app-release.apk' 2>/dev/null | head -1) || true
           if [ -z "$rel" ] || [ ! -e "$rel" ]; then
             echo "::error::No release APK was built, so there is nothing to smoke or publish."
             find app/build/outputs/apk -name '*.apk' 2>/dev/null || true
@@ -498,14 +559,108 @@ jobs:
             *Error*|*Exception*) echo "::error::The release APK would not start."; exit 1 ;;
           esac
 
-          # Long enough for Compose to lay out a first frame and for a
-          # first-decode crash to have already happened.
-          sleep 15
+          # ---------------------------------------------------------------
+          # Is it still running? This is the check that broke the job, and it
+          # broke by dying rather than by reporting.
+          #
+          # It used to be one line:
+          #
+          #   pid=$(adb shell pidof com.jarvis.client 2>/dev/null | ... )
+          #
+          # `pidof` exits 1 when it finds no process, `adb shell` passes the
+          # remote exit code back, `pipefail` makes that the status of the
+          # whole pipeline, and under `-e` (which GitHub sets on every step)
+          # an assignment whose command substitution failed IS a failed
+          # command. So the step exited 1 ON THAT LINE - before the `if` below
+          # it, which is where the explanation lived. The EXIT trap still ran,
+          # so every failed run showed twelve lines of emulator log and
+          # "Process completed with exit code 1", and the app's actual fate
+          # was never printed because nothing ever asked about it. Three
+          # merges went past this reading the emulator log as the culprit.
+          #
+          # Two guards, and they do different jobs. `|| true` INSIDE the guest
+          # shell makes "no such process" a normal answer rather than a
+          # failure, which leaves adb's own non-zero exit meaning the one
+          # thing it should: adb could not reach the device. And the sampling
+          # below tests the assignment with `if ! pid=$(...)`, because a
+          # command in an `if` condition is exempt from `-e` - so a dead
+          # device is a branch to report on instead of a step that stops
+          # mid-sentence. Nothing here is weaker than it was: the app still
+          # has to be running at the end of the same fifteen seconds. It just
+          # says which thing went wrong.
+          sample_pid() {
+            adb shell 'pidof com.jarvis.client || true' 2>/dev/null \
+              | tr -d '\r' | awk '{print $1}'
+          }
 
-          pid=$(adb shell pidof com.jarvis.client 2>/dev/null | tr -d '\r' | awk '{print $1}')
+          # Everything worth knowing about a process that is no longer there.
+          # `exit-info` first because it is three lines and usually decisive:
+          # Android records WHY it reaped each process, so CRASH, ANR,
+          # LOW_MEMORY and "the shell killed it" stop being guesses.
+          explain_death() {
+            echo "--- what Android says ended the process ---"
+            adb shell dumpsys activity exit-info com.jarvis.client 2>/dev/null | head -40 || true
+            echo "--- crash buffer ---"
+            adb logcat -d -b crash 2>/dev/null | tail -60 || true
+            echo "--- anything about this app, or about memory pressure ---"
+            { adb logcat -d 2>/dev/null \
+              | grep -iE "jarvis|AndroidRuntime|lowmemorykiller|lmkd|am_kill|ANR in" \
+              | tail -60; } || true
+            echo "--- the emulator's own complaints ---"
+            { grep -iE "panic|fatal|abort|ERROR" "$RUNNER_TEMP/emulator.log" | tail -20; } || true
+          }
+
+          # Sampled across the same fifteen seconds instead of one `sleep 15`
+          # and one look. The window is unchanged and so is the assertion; the
+          # difference is that "it never had a process", "it died at +6s" and
+          # "it died and something restarted it" are three different bugs, and
+          # a single sample at the end could not tell them apart - the last of
+          # them it could not see at all, because a restarted app has a pid.
+          first_pid=""
+          pid=""
+          gone_at=""
+          adb_down=""
+          elapsed=0
+          for _ in 1 2 3 4 5; do
+            sleep 3
+            elapsed=$((elapsed + 3))
+            if ! pid=$(sample_pid); then
+              adb_down=$elapsed
+              pid=""
+              break
+            fi
+            if [ -n "$pid" ] && [ -z "$first_pid" ]; then
+              first_pid=$pid
+            fi
+            if [ -z "$pid" ] && [ -z "$gone_at" ]; then
+              gone_at=$elapsed
+            fi
+          done
+
+          if [ -n "$adb_down" ]; then
+            echo "::error::The device stopped answering adb ${adb_down}s after the release APK was started."
+            echo "::error::That is the EMULATOR going away, not the app crashing - the two"
+            echo "::error::look identical from here, which is why this case is reported separately."
+            adb devices || true
+            tail -40 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
+            exit 1
+          fi
+          if [ -z "$first_pid" ]; then
+            echo "::error::The release APK was started but never had a running process."
+            echo "::error::'am start' reported success, so this is the process dying within"
+            echo "::error::three seconds of launch - the shape a stripped class takes."
+            explain_death
+            exit 1
+          fi
           if [ -z "$pid" ]; then
-            echo "::error::The release APK started and then died."
-            adb logcat -d -b crash | tail -60 || true
+            echo "::error::The release APK started and then died (gone by ${gone_at}s)."
+            explain_death
+            exit 1
+          fi
+          if [ "$pid" != "$first_pid" ]; then
+            echo "::error::The release APK crashed and was restarted inside the 15s window"
+            echo "::error::(started as pid $first_pid, now pid $pid)."
+            explain_death
             exit 1
           fi
           echo "Still alive after 15s, pid $pid"
@@ -541,6 +696,20 @@ jobs:
         with:
           name: jarvis-client-smoke-report
           path: jarvis-client/app/build/reports/androidTests/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # The WHOLE emulator log, not the twelve lines the trap prints. Those
+      # twelve are the right thing in the log - they are what is read first
+      # and they must not be buried - but they are a tail, and three failed
+      # runs were diagnosed from them alone, wrongly. This costs nothing on a
+      # green run and means the next red one can be read properly.
+      - name: Upload the emulator log
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: jarvis-client-emulator-log
+          path: ${{ runner.temp }}/emulator.log
           if-no-files-found: ignore
           retention-days: 7
 

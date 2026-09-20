@@ -134,6 +134,35 @@ class VoiceSession(
 
     private var current: Turn? = null
 
+    // The guard the [Turn] doc above promises ("a turn now only ever writes
+    // the shared phase while it IS current"), actually applied to every
+    // write rather than to one.
+    //
+    // Only `begin`'s `finally` carried it. Everything in `deliver` and
+    // `speakStreamed` wrote `_phase`/`_notice`/`_transcript` unconditionally,
+    // and those run on Dispatchers.Default with long stretches that have no
+    // suspension point - so `Job.cancel()` cannot interrupt them. A turn
+    // whose `api.utterance` had already returned would run on while the owner
+    // slid to cancel and pressed again, then stamp its own OFF and its own
+    // "that wasn't you" notice over the NEW turn: button un-armed, face idle,
+    // stale notice on screen, and the microphone recording for the turn that
+    // is actually live. Verbatim the failure the doc says was eliminated.
+    private fun setPhase(t: Turn, phase: Phase) {
+        if (current === t) _phase.value = phase
+    }
+
+    private fun setNotice(t: Turn, text: String?) {
+        if (current === t) _notice.value = text
+    }
+
+    private fun setTranscript(t: Turn, text: String?) {
+        if (current === t) _transcript.value = text
+    }
+
+    private fun setMicLevel(t: Turn, level: Float?) {
+        if (current === t) _micLevel.value = level
+    }
+
     /** Call before offering the button. Never assumes; a failure leaves it hidden. */
     suspend fun refreshStatus() {
         when (val r = api.voiceStatus()) {
@@ -213,21 +242,21 @@ class VoiceSession(
             // SPEAKING for ever, because the button and the face both render
             // from it.
             try {
-            _phase.value = Phase.CAPTURING
+            setPhase(turn, Phase.CAPTURING)
             val maxSeconds = status.value.audioIn.maxSeconds.toFloat()
             val captured = recorder.record(
                 maxSeconds = maxSeconds,
-                onLevel = { _micLevel.value = it },
+                onLevel = { setMicLevel(turn, it) },
                 stopWhen = { turn.releaseRequested },
             )
-            _micLevel.value = null
+            setMicLevel(turn, null)
 
             when (captured) {
                 is Recorder.Result.Refused -> {
-                    _phase.value = Phase.OFF
-                    _notice.value = describe(captured.why)
+                    setPhase(turn, Phase.OFF)
+                    setNotice(turn, describe(captured.why))
                 }
-                is Recorder.Result.Captured -> deliver(captured.wav, source)
+                is Recorder.Result.Captured -> deliver(turn, captured.wav, source)
             }
             } finally {
                 // Only if this turn is still the current one - the same guard
@@ -288,12 +317,12 @@ class VoiceSession(
         running.cancel()
     }
 
-    private suspend fun deliver(wav: ByteArray, source: String) {
-        _phase.value = Phase.VERIFYING
+    private suspend fun deliver(turn: Turn, wav: ByteArray, source: String) {
+        setPhase(turn, Phase.VERIFYING)
         val result = api.utterance(wav, source)
         if (result is ApiResult.Failed) {
-            _phase.value = Phase.OFF
-            _notice.value = "Could not reach the desktop to check that."
+            setPhase(turn, Phase.OFF)
+            setNotice(turn, "Could not reach the desktop to check that.")
             return
         }
         val heard = (result as ApiResult.Ok).value
@@ -307,8 +336,8 @@ class VoiceSession(
             Heard.Outcome.NO_ENGINE,
             Heard.Outcome.REFUSED,
             -> {
-                _phase.value = Phase.OFF
-                _notice.value = heard.message()
+                setPhase(turn, Phase.OFF)
+                setNotice(turn, heard.message())
                 return
             }
             Heard.Outcome.TRANSCRIBED -> Unit
@@ -319,15 +348,20 @@ class VoiceSession(
             // Belt and braces: `ok:true` with nothing in it would read
             // downstream as silence, and acting on silence is acting on
             // nothing at all.
-            _phase.value = Phase.OFF
-            _notice.value = "Nothing came back to send."
+            setPhase(turn, Phase.OFF)
+            setNotice(turn, "Nothing came back to send.")
             return
         }
 
-        _transcript.value = text
-        _phase.value = Phase.THINKING
-        speakStreamed(text)
-        _phase.value = Phase.OFF
+        setTranscript(turn, text)
+        setPhase(turn, Phase.THINKING)
+        // Armed once, here, for the whole turn - never inside `play`. A reply
+        // is spoken sentence by sentence, so clearing the flag per sentence
+        // erased a cancel that had arrived during the previous one and Jarvis
+        // spoke on. See `Speaker.arm`.
+        speaker.arm()
+        speakStreamed(turn, text)
+        setPhase(turn, Phase.OFF)
     }
 
     /**
@@ -344,7 +378,7 @@ class VoiceSession(
      * them as locals rather than fields makes that true by construction
      * rather than by remembering to reset them.
      */
-    private suspend fun speakStreamed(text: String) {
+    private suspend fun speakStreamed(turn: Turn, text: String) {
         var spokenUpTo = 0
         var spokeAny = false
         val queue = Channel<String>(Channel.UNLIMITED)
@@ -355,7 +389,7 @@ class VoiceSession(
         // when the queue is closed AND drained, never merely when it is
         // momentarily empty (a fast model can easily outrun TTS).
         val drainJob = scope.launch {
-            for (sentence in queue) speak(sentence)
+            for (sentence in queue) speak(turn, sentence)
         }
 
         try {
@@ -364,7 +398,7 @@ class VoiceSession(
                     spokenUpTo = consumedTo
                     if (!spokeAny) {
                         spokeAny = true
-                        _phase.value = Phase.SPEAKING
+                        setPhase(turn, Phase.SPEAKING)
                     }
                     SpeechText.stripMarkdownForSpeech(sentence).takeIf { it.isNotBlank() }
                         ?.let { queue.trySend(it) }
@@ -375,7 +409,7 @@ class VoiceSession(
                 .let(SpeechText::stripMarkdownForSpeech)
                 .trim()
             if (remainder.isNotEmpty()) {
-                if (!spokeAny) _phase.value = Phase.SPEAKING
+                if (!spokeAny) setPhase(turn, Phase.SPEAKING)
                 queue.trySend(remainder)
             }
             queue.close()
@@ -413,23 +447,28 @@ class VoiceSession(
      * refused unless the server says otherwise. Silence with the reply on
      * screen is an acceptable outcome; uploading it is not.
      */
-    private suspend fun speak(text: String) {
+    private suspend fun speak(turn: Turn, text: String) {
         when (val said = api.say(text)) {
             is ApiResult.Ok -> when (val out = said.value) {
                 is SaidAloud.Audio -> speaker.play(out.wav)
                 is SaidAloud.NoEngine -> {
                     if (!out.fallbackOk) {
-                        _notice.value = out.reason
-                            ?: "Jarvis has no voice on this desktop. The reply is on screen."
+                        setNotice(
+                            turn,
+                            out.reason
+                                ?: "Jarvis has no voice on this desktop. The reply is on screen.",
+                        )
                         return
                     }
                     val spoke = runCatching { speaker.speakOnDevice(text) }
                         .onFailure { Log.w(TAG, "on-device synthesis failed", it) }
                         .getOrDefault(false)
                     if (!spoke) {
-                        _notice.value =
+                        setNotice(
+                            turn,
                             "No offline voice on this phone, so it was not spoken aloud. " +
-                            "The reply is on screen."
+                                "The reply is on screen.",
+                        )
                     }
                 }
             }
@@ -437,7 +476,10 @@ class VoiceSession(
             // that authorises this device to speak the text, and a failure is
             // not that - it carries no permission at all.
             is ApiResult.Failed -> {
-                _notice.value = "Could not reach the desktop to speak that. The reply is on screen."
+                setNotice(
+                    turn,
+                    "Could not reach the desktop to speak that. The reply is on screen.",
+                )
             }
         }
     }

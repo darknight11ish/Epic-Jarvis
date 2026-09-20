@@ -131,19 +131,59 @@ object ChatChunkParser {
     }
 
     /**
-     * `chunk.error` in the source. Not full JS truthiness - `false`, `0` and
-     * `""` are still read as "no error" here, which covers every real error
-     * shape (a string, or `{"message": …}`) without chasing every falsy
-     * edge case JS has and Kotlin does not.
+     * Said plainly when the chunk carries one: the fallback below is what
+     * `Failed` shows when the server reports an error with nothing readable
+     * attached. It is worse than the server's own words and better than
+     * silence, which is what used to happen.
+     */
+    private const val UNNAMED_ERROR = "The desktop reported an error without saying what."
+
+    /**
+     * `chunk.error` in the source, and now the falsy cases that comment
+     * claimed were handled and were not.
+     *
+     * The bug this fixes: an error with no readable message - `{"error": {}}`,
+     * or the shape a proxy emits, `{"error": {"type": "overloaded", "code":
+     * 503}}` - returned null here. Null means "not an error", so the chunk
+     * fell through to [deltaText] (empty) and [isTerminal] (false) and came
+     * back [Result.Ignored]. The stream then sat there until the socket closed
+     * and `send` returned an empty reply with no error set: a question that
+     * visibly did nothing. An error object is an error whether or not it
+     * bothered to explain itself, so its PRESENCE is now what decides, and the
+     * message is only what gets shown.
+     *
+     * The falsy guard is also real now. The old comment said `false` and `0`
+     * were read as "no error"; `contentOrNull` renders them as the strings
+     * "false" and "0", both non-blank, so `{"error": false}` was reported as a
+     * failure whose message was the word "false". Those two are now checked
+     * before anything is rendered.
      */
     private fun errorMessage(chunk: JsonObject): String? {
         val error = chunk["error"] ?: return null
-        val message = when (error) {
-            is JsonPrimitive -> error.contentOrNull
-            is JsonObject -> (error["message"] as? JsonPrimitive)?.contentOrNull
-            else -> null
+        return when (error) {
+            is JsonPrimitive -> {
+                // JsonNull is a JsonPrimitive whose content is the literal
+                // "null", so it has to be caught by this and not by the `?:`
+                // above, which only sees an absent key.
+                val text = error.contentOrNull ?: return null
+                if (!error.isString && (text == "false" || text.toDoubleOrNull() == 0.0)) {
+                    return null
+                }
+                // `""` is falsy in the source too, so a blank string here is
+                // "no error" rather than an unnamed one. An error OBJECT is
+                // different: `{}` is truthy in JS, and it is what a proxy
+                // emits when it has a status and no prose.
+                text.takeIf { it.isNotBlank() } ?: return null
+            }
+            is JsonObject -> {
+                val message = (error["message"] as? JsonPrimitive)?.contentOrNull
+                    ?: (error["detail"] as? JsonPrimitive)?.contentOrNull
+                    ?: (error["type"] as? JsonPrimitive)?.contentOrNull
+                message?.takeIf { it.isNotBlank() } ?: UNNAMED_ERROR
+            }
+            // An array, or anything else. Truthy in the source, so an error.
+            else -> UNNAMED_ERROR
         }
-        return message?.takeIf { it.isNotBlank() }
     }
 
     private fun JsonObject.stringField(key: String): String? =

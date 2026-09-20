@@ -82,6 +82,19 @@ class MembraneRenderer : MeshRenderer {
         // device here to profile it against.
         const val N = 40
         const val AMPL_H = 0.42f
+
+        /**
+         * Where the ring source sits when `tf.dir` is negative, as a fraction
+         * of the skin's radius. See the excitation loop in [step].
+         *
+         * Not at the rim itself. The rim is clamped - [mask] stops at 0.96 of
+         * the radius and everything past it is held at zero - so a source any
+         * closer would be fighting that clamp, and the half of its energy that
+         * goes outward would reflect straight back off it. At 0.7 the outward
+         * half damps into the rim and the inward half has most of the skin to
+         * travel across, which is the half anyone is meant to see.
+         */
+        const val RING_SOURCE_R_FRAC = 0.7f
         const val DIST = 4.2f
         const val FIXED_STEP = 1f / 60f
 
@@ -388,6 +401,17 @@ class MembraneRenderer : MeshRenderer {
     /** Advances the simulation by whatever real time has actually passed. */
     private fun step(f: FaceFrame) {
         val st = stFor(f.motion)
+        // The STATE's transform, not the borrowed motion's table. Every other
+        // face gets this for free, because every other face reads `f.angle` and
+        // the shell has already folded `tf.rate` and `tf.dir` into it
+        // (`FaceView.advance`: `angle += dt * rate * tf.dir * faceSpeed`). This
+        // one builds its own clock out of `System.nanoTime()` - deliberately,
+        // so the physics is not throttled by the frame-rate gate - and in doing
+        // so it stepped straight past the transform layer. The four borrowed
+        // states were all wrong here and nowhere else: BANKED's `rate 0.0`,
+        // which the spec says means "the clock actually stops", kept running at
+        // full speed; STANDBY ran at 1.0 instead of 0.5; ERROR ran forwards.
+        val tf = Spec.transformFor(f.state)
         val now = System.nanoTime()
         val elapsed = if (lastFrameNanos == 0L) {
             0f
@@ -401,7 +425,7 @@ class MembraneRenderer : MeshRenderer {
         // after any resume spends the whole step budget on catch-up.
         val dt = if (elapsed > RESUME_GAP_S) 0f else elapsed
 
-        accumulator += dt * st.rate
+        accumulator += dt * st.rate * tf.rate
         // The only place time is discarded. See MAX_STEPS_PER_FRAME: the cap is
         // the worst legitimate frame, so this trims genuine stalls only, and
         // the loop below drains the whole of what is left - the physics runs at
@@ -446,7 +470,25 @@ class MembraneRenderer : MeshRenderer {
 
             // Excitation applied after the step, so it reads as a real
             // impulse rather than a forced boundary condition.
+            //
+            // WHERE it is applied is `tf.dir`. Negating the drive's phase - the
+            // obvious reading of "backwards" - is not visible on a drum: an
+            // inverted sine at the same point source still radiates outward,
+            // which is the one thing the direction is supposed to tell you
+            // apart from. So the source MOVES instead. Forwards it is the
+            // reference's own point source at the centre and the rings expand;
+            // backwards it is a ring out near the rim, and the rings collapse
+            // inward onto the centre. Nothing else in this app moves inward,
+            // which is the point of `tf.dir` per `Spec.transformFor`: "the
+            // direction is the signal ... colour alone fails for the one man in
+            // twelve with a red-green deficiency".
+            //
+            // This is an interpretation, not a port - the reference has no
+            // reversed membrane to copy - so it is the one thing here worth a
+            // second opinion from a real screen.
             val ph = physicsTime
+            val inward = tf.dir < 0
+            val ringR = mid * RING_SOURCE_R_FRAC
             for (j in 1 until N - 1) {
                 for (i in 1 until N - 1) {
                     val q = j * N + i
@@ -454,7 +496,13 @@ class MembraneRenderer : MeshRenderer {
                     val di = i - mid
                     val dj = j - mid
                     val cd = di * di + dj * dj
-                    z[q] += exp(-cd * 0.10f * gs) * (drive * 0.30f * sin(ph * 1.3f))
+                    val falloff = if (inward) {
+                        val d = sqrt(cd) - ringR
+                        exp(-d * d * 0.10f * gs)
+                    } else {
+                        exp(-cd * 0.10f * gs)
+                    }
+                    z[q] += falloff * (drive * 0.30f * sin(ph * 1.3f))
                 }
             }
             steps++

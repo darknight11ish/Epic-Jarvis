@@ -173,7 +173,32 @@ class EventService : Service() {
         watcher = null
         // Nothing is listening for these any more, and a decision request that
         // outlives the connection that could deliver the answer is a trap.
-        ApprovalNotifier.clear(this)
+        //
+        // EXCEPT when the service is dying because it could not start at all.
+        // `clear` calls `restore` first, which deliberately adopts
+        // notifications posted by PREVIOUS processes - so on the path the
+        // manifest itself describes (the system reclaims the process
+        // overnight, the sticky restart lands with the app in the background,
+        // and a background foreground-service start is refused) the service's
+        // dying act was to cancel last night's real approval. Morning: an
+        // empty drawer, and a widget reading "Not checked yet". The request
+        // was still open on the desktop and had become invisible on the phone.
+        //
+        // Those notifications are not a dead end either: their Deny action
+        // targets this service with ACTION_DENY, which starts the stream
+        // again before answering. Keeping them is strictly better than the
+        // trap this guard was written for - that trap is a link the owner
+        // deliberately stopped, which is the case still cleared below.
+        if (lastStartFailure == null) {
+            ApprovalNotifier.clear(this)
+        } else {
+            Log.w(
+                TAG,
+                "not clearing approval notifications: this service is stopping because " +
+                    "startForeground was refused ($lastStartFailure), and they may be the " +
+                    "only sign left that something is waiting",
+            )
+        }
         JarvisRuntime.stopStream()
         // The on-device text-to-speech engine, which nothing else releases.
         // Creating a TextToSpeech binds a service for the life of the process,
