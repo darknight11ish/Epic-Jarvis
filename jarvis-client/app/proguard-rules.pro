@@ -36,3 +36,43 @@
 # there is. Obfuscated frames would make it useless.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# WorkManager's own Room database, kept by name.
+#
+# The paragraph at the top of this file said nothing needed adding beyond
+# what the libraries ship themselves. That held until the first real release
+# build was actually launched on a device rather than only compiled, and it
+# crashed before drawing a frame:
+#
+#   FATAL EXCEPTION: main
+#   Unable to get provider androidx.startup.InitializationProvider
+#   Caused by: java.lang.RuntimeException: Failed to create an instance of
+#       androidx.work.impl.WorkDatabase
+#       at androidx.work.WorkManagerInitializer.b(Unknown Source:93)
+#
+# Nothing in this app's own source uses WorkManager - it arrives only
+# transitively, through androidx.glance:glance-appwidget, which schedules
+# widget refreshes through it. WorkManager keeps its own job queue in a Room
+# database (androidx.work.impl.WorkDatabase), and Room does not construct
+# its generated implementation (WorkDatabase_Impl) directly: it looks the
+# class up by name at runtime and reflectively calls its no-arg
+# constructor. R8 cannot see that reflective call, so with nothing else in
+# the app's static call graph referencing WorkDatabase_Impl, it read the
+# constructor as unreachable and stripped it - a known, repeatedly-reported
+# failure mode of Room-backed libraries under R8's full mode, not something
+# specific to this app. androidx.work's and androidx.room's own consumer
+# rules evidently do not cover WorkManager's INTERNAL database this way -
+# if they did, the crash above would not have happened - so it is named
+# explicitly here instead.
+#
+# NOT verified by inspecting the library's own bytecode: this container has
+# no route to dl.google.com (see the top-level CLAUDE.md), so there is no
+# way to open the AAR and check its consumer-rules.pro the way the
+# kotlinx-serialization and okhttp entries above were checked. This is the
+# documented shape of the exact crash above, matched against the exact
+# stack trace this build produced rather than assumed from the library
+# name alone - and GitHub Actions, the only compiler this module has, is
+# what actually confirms it on the next run.
+-keep class * extends androidx.room.RoomDatabase {
+    <init>();
+}
