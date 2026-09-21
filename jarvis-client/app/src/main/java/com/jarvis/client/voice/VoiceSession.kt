@@ -109,6 +109,24 @@ class VoiceSession(
     private var job: Job? = null
 
     /**
+     * The job [cancel] just tore down, if it has not actually finished
+     * unwinding yet - see [begin]'s own use of it.
+     *
+     * `job` itself is nulled out synchronously in [cancel], with no `join`,
+     * so a re-tap landing right after a cancel sees `job == null` and sails
+     * straight through the "still finishing" guard in [begin] - correctly,
+     * for the state THAT guard is about (button-vs-button double taps), but
+     * `job` going null is not evidence the old turn's hardware is free.
+     * `Recorder.record`'s read loop blocks on `AudioRecord.read` between
+     * checks of its stop flag, so `job.cancel()` (a cooperative request) does
+     * not interrupt an in-flight read - the old `AudioRecord` is not
+     * `release()`d until that read returns and the loop notices the flag.
+     * Rapid slide-to-cancel-then-retap could race a brand new `AudioRecord`
+     * against a hardware handle the platform had not freed yet.
+     */
+    private var releasing: Job? = null
+
+    /**
      * One turn's identity and its own stop flag.
      *
      * Both used to be shared across turns, and both went wrong on a
@@ -243,6 +261,18 @@ class VoiceSession(
             // from it.
             try {
             setPhase(turn, Phase.CAPTURING)
+            // The comment above on `previous`/`job` already covers the
+            // SOFTWARE half of a rapid cancel-then-retap - the new turn no
+            // longer inherits the old one's stop flag. This is the HARDWARE
+            // half: `job` going null in [cancel] is not the old `AudioRecord`
+            // being released, only a request that it be. Waiting here, not
+            // before launching this coroutine, is what lets the button react
+            // instantly (CAPTURING above is already visible) while the
+            // actual microphone open stays serialised behind whatever is
+            // still unwinding - typically well under the time of one audio
+            // buffer, per [releasing]'s own doc comment on why `read()`
+            // cannot be interrupted any faster than that.
+            releasing?.join()
             val maxSeconds = status.value.audioIn.maxSeconds.toFloat()
             val captured = recorder.record(
                 maxSeconds = maxSeconds,
@@ -303,7 +333,13 @@ class VoiceSession(
         _micLevel.value = null
         _phase.value = Phase.OFF
         if (running == null) return
+        // Tracked separately from `job`, which is already null above - see
+        // [releasing]'s own doc comment. Cleared in the SAME handler that
+        // already runs on this job's completion, so nothing new is added
+        // beyond remembering which job that handler belongs to.
+        releasing = running
         running.invokeOnCompletion {
+            if (releasing === running) releasing = null
             // Only if no newer turn has taken over. This handler belongs to the
             // turn being cancelled, and it used to write the shared phase
             // unconditionally — so a dying turn could stamp OFF over a turn

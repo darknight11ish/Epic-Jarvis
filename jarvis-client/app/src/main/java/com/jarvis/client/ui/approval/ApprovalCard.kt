@@ -135,15 +135,28 @@ fun ApprovalCard(
         onDeny()
     }
 
-    // Swipe-to-approve, for exactly one class of item.
+    // Swipe, gated on `canDecide` rather than `canApprove`.
     //
     // A swipe is a gesture people make without reading. That is fine for
     // "switch to the other model", where rollback is one tap and nothing left
     // the machine. It is not fine for sending an email. The test is a single
     // server-computed field and nothing else - not re-derived here, not cached
     // against an id, and refused outright for anything carrying `raised`.
+    //
+    // Gating the whole gesture on `canApprove` used to also take deny-by-swipe
+    // down with it: a `needsChoice` item sets `canApprove = false` (below), so
+    // `item.swipeable && canApprove` was false for it, and BOTH directions
+    // went dead - while the help text two blocks down, gated only on
+    // `item.swipeable`, kept promising "Swipe right to approve, left to
+    // deny" underneath a card that could not feel either. Deny needs no
+    // option and stays available on a `needsChoice` item everywhere else on
+    // this screen (the Deny button's own `enabled = canDecide`, not
+    // `canApprove`); the swipe gesture is the one place that rule was not
+    // actually wired through. So the gesture detector is live whenever a
+    // decision of EITHER kind could be sent, and only the completed drag
+    // decides which direction is honoured.
     val swipeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
-    val swipeModifier = if (canApprove && item.swipeable) {
+    val swipeModifier = if (canDecide && item.swipeable) {
         Modifier.pointerInput(item.id) {
             detectHorizontalDragGestures(
                 onDragEnd = {
@@ -162,7 +175,11 @@ fun ApprovalCard(
                         // and the buttons grey out while the decision is in
                         // flight, so the spring-back does not read as "ignored".
                         when {
-                            offset.value > swipeThresholdPx -> {
+                            // A right-swipe past the threshold on a needsChoice
+                            // item springs back and does nothing - the same
+                            // silent refusal a disabled Approve button already
+                            // gives a tap, not a new behaviour invented here.
+                            offset.value > swipeThresholdPx && canApprove -> {
                                 approve()
                                 offset.animateTo(0f)
                             }
@@ -236,6 +253,15 @@ fun ApprovalCard(
         // risk.why goes on the card whether or not a swipe is allowed. A card
         // that explains why it will not take a gesture teaches the rule; one
         // that silently refuses reads as a bug.
+        //
+        // `item.swipeable` alone used to decide the wording, which is what
+        // let this card promise "Swipe right to approve" over a needsChoice
+        // item, where the gesture handler above will spring back and do
+        // nothing on exactly that swipe - the options list rendered above
+        // already explains why (§3b: no route yet to say which plan was
+        // meant), so this line drops the approve half rather than repeat it.
+        // Left-to-deny is never dropped: it works whenever `item.swipeable`
+        // does, `needsChoice` or not.
         if (item.risk.why.isNotBlank()) {
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -246,10 +272,11 @@ fun ApprovalCard(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = if (item.swipeable) {
-                        "Swipe right to approve, left to deny — ${item.risk.why}"
-                    } else {
-                        item.risk.why
+                    text = when {
+                        item.swipeable && canApprove ->
+                            "Swipe right to approve, left to deny — ${item.risk.why}"
+                        item.swipeable -> "Swipe left to deny — ${item.risk.why}"
+                        else -> item.risk.why
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = T.Dim,

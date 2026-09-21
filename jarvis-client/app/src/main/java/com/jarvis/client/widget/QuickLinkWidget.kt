@@ -102,7 +102,16 @@ class QuickLinkWidget : GlanceAppWidget() {
                 // Reachable even off the link: opening the app to a dropped
                 // connection is still useful (Checks screen explains why),
                 // where a Deny-style direct action would just fail silently.
-                PillButton(label = "Mic", tint = QuickLinkPalette.Accent, onClick = startVoice(context))
+                //
+                // Labelled "Talk", not "Mic" - the comment above already
+                // explains what this button does NOT do (record from the
+                // tile itself), and "Mic" on a button that opens an app
+                // screen rather than a microphone made exactly the false
+                // promise that comment is about. "Talk" still says what
+                // tapping it is FOR - one tap closer to the hold-to-talk
+                // button than the rest of the row's own bare open is - without
+                // implying capture starts here.
+                PillButton(label = "Talk", tint = QuickLinkPalette.Accent, onClick = startVoice(context))
             }
         }
     }

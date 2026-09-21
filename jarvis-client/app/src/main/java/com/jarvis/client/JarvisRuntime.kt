@@ -584,31 +584,69 @@ object JarvisRuntime {
                     // that any approval-resolving event survived the gap it just
                     // came out of.
                     refreshedSinceOpen = false
-                } else if (_link.value == LinkState.CONNECTED && _stale.value &&
-                    lastFrameAt != 0L && refreshedSinceOpen
-                ) {
+                } else if (_link.value == LinkState.CONNECTED && _stale.value && lastFrameAt != 0L) {
                     // And back again. Staleness used to be a one-way door: the
-                    // only `_stale = false` in this file is in onOpen, so a link
-                    // the watchdog had given up on stayed condemned until the
-                    // stream was torn down and rebuilt — up to an hour of every
-                    // approval being refused with "not connected" on a
-                    // connection that was answering.
+                    // only `_stale = false` in this file, before this branch
+                    // existed, was in onOpen - so a link the watchdog had
+                    // given up on stayed condemned until the stream was torn
+                    // down and rebuilt.
                     //
-                    // `refreshedSinceOpen` is the load-bearing half of the test
-                    // above, now for two reasons rather than one: it still
-                    // covers onOpen's own slow-refresh window, and it now also
-                    // covers THIS branch, since the line above resets it the
-                    // moment a gap is declared. So this only fires once
-                    // `refreshPending` has actually run since - which a real
-                    // `"approval"` event forces via `onEvent`, but a bare
-                    // keepalive never does. A gap that heals via nothing but
-                    // keepalives leaves the gate shut until the 90s hard
-                    // timeout forces a real reconnect and refresh; that costs
-                    // up to 20 more seconds of "not connected", which is the
-                    // safe direction to be wrong in.
-                    Log.i(TAG, "keepalives resumed after ${since}ms; link is live again")
-                    _stale.value = false
-                    _linkDetail.value = null
+                    // `refreshedSinceOpen` is still the load-bearing test: it
+                    // only opens the gate once `refreshPending` has actually
+                    // run since the gap was declared, which a real
+                    // `"approval"` event forces via `onEvent` but a bare
+                    // keepalive never does (see the comment on the branch
+                    // above). The line that USED to sit here read exactly
+                    // that flag and stopped, on the reasoning that the 90s
+                    // hard read timeout on `streamClient` would force a real
+                    // reconnect within twenty more seconds either way.
+                    //
+                    // It does not, in the one case that matters most: a
+                    // socket that keeps answering. OkHttp's read timeout
+                    // measures the gap since the last byte, so it only ever
+                    // fires after a TRUE 90s silence - and a link whose
+                    // keepalives merely slowed to 75s, or arrive on schedule
+                    // again the moment the gap crosses 70s, never produces
+                    // one. `EventStream.Signal.Down` never arrives,
+                    // `onOpen` never re-runs, and `refreshedSinceOpen` never
+                    // becomes true on its own. Reproduced by tracing the
+                    // state machine by hand, not on a device: a link that
+                    // recovers by resuming its OWN keepalive schedule,
+                    // without ever going the full 90s silent, stayed
+                    // condemned until an unrelated approval event happened
+                    // to arrive - which, on a quiet night, could be never.
+                    //
+                    // So this branch now asks directly rather than waiting to
+                    // be handed the answer. `refreshPending` is a plain GET;
+                    // it needs the phone's normal network path, not this
+                    // specific SSE socket, so it can succeed even seconds
+                    // before the stream itself would notice anything. Called
+                    // in this coroutine rather than `scope.launch`, so it
+                    // naturally serialises against the next tick instead of
+                    // risking two overlapping refreshes.
+                    if (refreshedSinceOpen) {
+                        Log.i(TAG, "keepalives resumed after ${since}ms; link is live again")
+                        _stale.value = false
+                        _linkDetail.value = null
+                    } else if (since <= KEEPALIVE_GAP_MS) {
+                        Log.i(TAG, "stale link still connected; asking directly rather than waiting")
+                        refreshPending()
+                        // `refreshPending` sets `refreshedSinceOpen` itself on
+                        // success (and leaves it false, with its own notice,
+                        // on failure) - open the gate now rather than making
+                        // the owner wait for a tick that would only re-read
+                        // the same flag.
+                        if (refreshedSinceOpen) {
+                            _stale.value = false
+                            _linkDetail.value = null
+                        }
+                    }
+                    // `since > KEEPALIVE_GAP_MS` here (stale, and still no
+                    // frame within the gap) is deliberately left to the
+                    // branch above: it re-declares staleness on the next
+                    // tick, which is a no-op beyond re-logging, and asking
+                    // again here would just be a second attempt at a request
+                    // already timing out.
                 }
             }
         }
@@ -852,7 +890,15 @@ object JarvisRuntime {
                     "change to start the download."
                 refreshPending()
             }
-            is ApiResult.Failed -> _notice.value = describe(result.error)
+            // describeDraft, not describe: a 404 here almost certainly means a
+            // desktop old enough to predate this route, and describe's own
+            // wording for that - "not a Jarvis server" - reads as the
+            // connection being hijacked. amendPending and pauseTask already
+            // draw this distinction for the same reason; install missed it
+            // because it was written by copying switchModel/rollbackModel,
+            // neither of which is new enough on the server to ever 404 this
+            // way in practice.
+            is ApiResult.Failed -> _notice.value = describeDraft(result.error)
         }
         return result
     }
