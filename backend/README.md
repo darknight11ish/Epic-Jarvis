@@ -5,12 +5,13 @@
 > is the detail.
 
 
-Twenty-five patches against the Jarvis backend, each with an executable test.
-The last three - `ui-control-wiring.patch`, `ollama-direct.patch` and
-`tool-calling-wiring.patch` - sit outside the ordered stack below: each only
-touches its own few lines, shared with no other patch here, and the one real
-ordering constraint among them (tool-calling needs ollama-direct) is a
-logical one, not a textual one - see their own sections, after the table.
+Twenty-six patches against the Jarvis backend, each with an executable test.
+The last four - `ui-control-wiring.patch`, `ollama-direct.patch`,
+`tool-calling-wiring.patch` and `loopback-too.patch` - sit outside the ordered
+stack below: each only touches its own few lines, shared with no other patch
+here. Two ordering constraints remain: tool-calling needs ollama-direct (a
+logical one), and loopback-too needs token-file (a textual one - its context
+is token-file's output). See their own sections, after the table.
 
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
@@ -55,6 +56,7 @@ on a throwaway copy instead.
 | `ui-control-wiring.patch` | `jarvis_gate.py` | Registers the three new capabilities below with the gate's own `_RISK`/`_TOOL_ACTIONS` tables. Textually independent of everything above it — see its own section. |
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
+| `loopback-too.patch` | `jarvis_hud.py` | **Pairing the phone unplugged the desktop.** `JARVIS_HUD_BIND` moved the one socket off `127.0.0.1` instead of adding one, and the desktop's HUD may only talk to loopback. Also serves `127.0.0.1` when bound elsewhere. Needs `token-file.patch` — see its own section. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -2294,6 +2296,55 @@ and wires `announce` to the same `_activity()` doorbell everything else in
 this project already uses, and the `run_local_turn` call sits inside a `try`
 whose broad handler actually writes to the client rather than just
 returning - the specific regression described just above.
+
+---
+
+# `loopback-too.patch` — binding for the phone must not unplug the desktop
+
+`main()` opens one socket: `ThreadingHTTPServer((bind, HUD_PORT), Handler)`.
+`JARVIS_HUD_BIND` (and the desktop's own "Let my phone reach this" setting,
+which sets it) therefore *moved* the listener off `127.0.0.1` rather than
+adding a second address. `docs/INSTALL.md` §2.5 tells the owner to leave the
+desktop's Base URL at `http://127.0.0.1:4719`, and the HUD page's
+Content-Security-Policy only allows `127.0.0.1` and `localhost` - so the
+moment the phone could reach Jarvis, the desktop could not.
+
+Found on the owner's machine, not in review: with the backend bound to a
+NordVPN Meshnet address the phone answered, while Edge on the same PC was
+refused at `http://localhost:4719`. Pointing the desktop at the mesh address
+instead "fixed" its event stream (that runs in Rust, outside any CSP) and
+broke the HUD window completely, because every request the page made was then
+refused by its own policy.
+
+The patch adds `_loopback_companion(bind, port, handler)`: when the main bind
+is not already loopback (or a wildcard, which covers it), it starts a second
+`ThreadingHTTPServer` on `127.0.0.1:port` with **the same `Handler`** in a
+daemon thread, and says so on the banner. Same handler means the same token
+and origin checks, and loopback is this server's default bind anyway, so this
+opens nothing the default setup does not. If `127.0.0.1:port` is already taken
+it prints why and carries on - the phone still works, which is better than
+refusing to boot over the desktop's half.
+
+Two things it does not change, both worth knowing:
+
+- **A backend started by hand still needs `JARVIS_HUD_ORIGINS`.** The HUD page
+  is served from `http://tauri.localhost`, which the server's allowlist cannot
+  guess. The desktop passes it when it starts the backend itself
+  (`sidecar.rs`); from a terminal, set
+  `$env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"` before `jarvis_hud.py`.
+- **`/api/shutdown` arriving on the loopback listener** may only stop that
+  listener, depending on how `_install_shutdown` reaches the server. The
+  desktop's supervised stop already kills the process tree when the backend
+  is still there after asking, and Ctrl+C in a terminal stops the main
+  listener, which ends the process and its daemon thread.
+
+`test_loopback_too.py` runs the real function against real sockets - lifted
+from the installed `jarvis_hud.py`, or from this patch's own `+` lines when
+none is installed - with `127.0.0.2` standing in for the mesh address: no
+second listener for loopback or wildcard binds, both addresses answering
+through the same handler for a mesh bind, a warning instead of a crash when
+`127.0.0.1` is taken, and (installed file only) `main()` calling it before the
+main socket opens.
 
 ---
 

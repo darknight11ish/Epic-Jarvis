@@ -257,6 +257,17 @@ Tailscale."** Type this machine's own Tailscale address there (it looks like
 starts it. Leave the field blank — the default — and nothing changes: the
 backend stays loopback-only.
 
+**Keep the desktop's own Base URL at `http://127.0.0.1:4719` either way.** The
+backend used to have one socket, so a bind address *moved* it off loopback and
+the desktop lost it the moment the phone could reach it. `loopback-too.patch`
+makes it listen on `127.0.0.1` as well. Do not point the desktop at the
+mesh address instead: its HUD window is only allowed to talk to `127.0.0.1`
+and `localhost`, and every request it makes to anything else is refused.
+
+NordVPN Meshnet works in place of Tailscale: put this machine's Meshnet
+address in the field above, and on the phone pair with its Meshnet name
+(`something.nord:4719`), not the address.
+
 That field refuses `0.0.0.0` outright, on either side: the setting will not
 save it, and if it somehow reached the backend, `jarvis_hud._bind_address()`
 would still be binding every interface on the machine, not just the tailnet.
@@ -271,8 +282,14 @@ hand instead:
 ```powershell
 $env:HUD_TOKEN = "<a long random string you invent>"
 $env:JARVIS_HUD_BIND = "<your Tailscale 100.x address>"
+$env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"
 C:\...\python.exe jarvis_hud.py
 ```
+
+`JARVIS_HUD_ORIGINS` is the one the desktop also sets for a backend it starts
+itself. Without it the server refuses every request from the desktop's HUD
+window as cross-origin — the window's pages come from `http://tauri.localhost`,
+which the server has no way to guess.
 
 The server refuses to start on a non-loopback bind with no token, which is
 correct. Its refusal message tells you to edit `bind_address` in

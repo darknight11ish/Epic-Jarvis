@@ -24,7 +24,7 @@ Then:
 |---|---|
 | `npm run test:all` | everything below, in order |
 | `npm run test:tokens` | no colour is welded into a component where a theme cannot reach it, and the `rgb(var(--hue-rgb) / a)` form actually resolves. The Python half needs no Playwright. |
-| `npm run test:ui` | the audited ship blockers, each one a bug that shipped, and the IA findings — things that were unreachable and things that were not true |
+| `npm run test:ui` | the HUD window served exactly as the packaged app serves it (Tauri's header CSP with its script hashes) and actually sending a message; then the audited ship blockers, each one a bug that shipped, and the IA findings — things that were unreachable and things that were not true |
 | `npm run test:a11y` | live regions, headings, the roving tablist, hue-only state, text scaling, and whether a disabled control is still readable in all four themes |
 | `npm run test:themes` | every theme's contrast over a black **and** a white backdrop, every window's theme reach, and colour distinctness under three kinds of colour-blindness |
 | `npm run test:voice` | the speech envelope against `jarvis-visual-spec.json`. Needs no browser. |

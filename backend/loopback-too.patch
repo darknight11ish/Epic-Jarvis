@@ -1,0 +1,51 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -183,6 +183,39 @@
+         return ""
+ 
+ 
++def _loopback_companion(bind, port, handler):
++    """Also answer on 127.0.0.1 when the main listener is bound elsewhere.
++
++    JARVIS_HUD_BIND exists so a phone can reach this over a private mesh
++    (Tailscale, NordVPN Meshnet). But this server has one socket, so setting
++    it MOVED the listener off loopback instead of adding one - and the desktop
++    app's HUD window may only talk to 127.0.0.1/localhost: its page CSP says
++    so, and docs/INSTALL.md tells the owner to leave its URL there. Pairing
++    the phone silently disconnected the desktop. On the owner's machine a
++    browser was refused at localhost:4719 while the phone answered fine.
++
++    Same Handler, so the same token and origin checks. Loopback is also this
++    server's default bind, so this opens nothing the default setup does not.
++
++    Returns the running server, or None when the main bind already covers
++    loopback or the port is taken - the phone still works then, so say so
++    rather than fail the whole boot over it.
++    """
++    if bind in ("127.0.0.1", "::1", "localhost", "0.0.0.0", "::", ""):
++        return None
++    import threading
++    try:
++        companion = ThreadingHTTPServer(("127.0.0.1", port), handler)
++    except OSError as exc:
++        print(f"  loopback   NOT SERVED on 127.0.0.1:{port} ({exc})")
++        print("             the phone still works; this machine's own apps cannot reach it")
++        return None
++    threading.Thread(target=companion.serve_forever, name="hud-loopback",
++                     daemon=True).start()
++    print(f"  loopback   127.0.0.1:{port} as well - for this machine's own apps")
++    return companion
++
++
+ HUD_TOKEN = _resolve_token()
+ 
+ 
+@@ -2324,6 +2357,8 @@
+     if not os.environ.get("HUD_TOKEN", "").strip() and HUD_TOKEN:
+         print(f"  token      {TOKEN_FILE}")
+         print("             (pair the phone with this; it was made on first run)")
++    # Before the main socket, so the banner lists every address together.
++    _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+     httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)
+     _install_shutdown(httpd)

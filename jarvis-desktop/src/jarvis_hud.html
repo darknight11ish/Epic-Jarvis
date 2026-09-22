@@ -1,3 +1,9 @@
+<meta charset="utf-8">
+<!-- First, and not decoration. Without it WebView2 decodes this page as
+     windows-1252, the non-ASCII characters in the main script change, and
+     that script's text no longer matches the sha256 Tauri computed from the
+     UTF-8 file at build time - so the header CSP refuses to run it at all.
+     No Send button, no status, no error on screen. tests/hud.mjs holds it. -->
 <title>Jarvis HUD</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src 'self' http://127.0.0.1:4719 http://localhost:4719 http://127.0.0.1:* http://localhost:*; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'">
@@ -532,7 +538,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 
     <div id="banner">
       <b>Demo data.</b>
-      <span id="banner-text">Jarvis is not answering yet — run <span class="mono">uv run jarvis serve</span>, then reload.</span>
+      <span id="banner-text">Jarvis is not answering yet — start Ollama and <span class="mono">python jarvis_hud.py</span>, then reload.</span>
     </div>
 
     <div class="stage-bar">
@@ -1486,9 +1492,9 @@ function addMessage(role, text){
 }
 
 const DEMO_REPLIES = [
-  "I am running in demo mode, sir — the assistant itself is not answering yet. Start it with `uv run jarvis serve` and reload this page, and I will route through the real model.",
+  "I am running in demo mode, sir — the assistant itself is not answering yet. Start Ollama and `python jarvis_hud.py`, reload this page, and I will route through the real model.",
   "Not connected to the local model at the moment. The brain map beside this is live sample data, so you can still see how the view behaves.",
-  "Standing by. Once `jarvis serve` is up on port 8000 this panel talks to it directly — nothing else to configure."
+  "Standing by. Once Ollama and the HUD server are both up, this panel talks to them directly — nothing else to configure."
 ];
 
 let SEND_INFLIGHT = null;
@@ -1722,10 +1728,17 @@ async function boot(){
   }catch(e){ status = null; }
 
   if(status){
-    S.online = !!status.jarvis;
+    // Ollama being up is enough to chat: since backend/ollama-direct.patch the
+    // local lane goes to Ollama directly. Gating on status.jarvis alone - the
+    // separate OpenJarvis agent on :8000, which this setup never ran - kept the
+    // page on sample replies for ever against a backend that could answer. A
+    // backend without that patch now fails the turn with its own 503 naming
+    // :8000, which is at least the true reason.
+    S.online = !!(status.jarvis || status.ollama);
     S.lanes = status.lanes || [];
     S.defaultModel = status.default_model || "local model";
-    led("led-jarvis", status.jarvis, status.jarvis ? "up" : "not running");
+    led("led-jarvis", status.jarvis,
+        status.jarvis ? "up" : (status.ollama ? "not running · optional" : "not running"));
     led("led-ollama", status.ollama);
     led("led-proxy",  status.proxy);
     $("r-tools").textContent = status.tools || "—";
@@ -1736,7 +1749,7 @@ async function boot(){
         Math.round(100*status.budget.day_used/status.budget.day_limit) + "%";
     }
     S.jarvisMemory = !!status.jarvis_injects_memory;
-    $("brand-sub").textContent = S.online ? "online · local first" : "offline · start jarvis serve";
+    $("brand-sub").textContent = S.online ? "online · local first" : "offline · start ollama";
   } else {
     led("led-jarvis", false, "no hud server");
     led("led-ollama", false, "—");
@@ -1753,10 +1766,10 @@ async function boot(){
   if(!S.online){
     $("banner").classList.add("on");
     $("banner-text").innerHTML = status
-      ? 'Jarvis is not answering on port 8000 yet — run <span class="mono">uv run jarvis serve</span>, then reload.'
+      ? 'The local model is not answering — open the Ollama app (or run <span class="mono">ollama serve</span>), then reload.'
       : 'Serving without the HUD server — run <span class="mono">python jarvis_hud.py</span> on your desktop for live data.';
     addMessage("system", status
-      ? "HUD server is up, but the assistant is not answering on port 8000 yet. Everything below is sample data."
+      ? "HUD server is up, but Ollama (the local model) is not answering yet. Everything below is sample data."
       : "Running as a preview. On your desktop, start it with python jarvis_hud.py to connect to the real Jarvis.");
   } else {
     addMessage("jarvis", "Systems online, sir. Local model loaded and the brain map is current. What are we working on?");

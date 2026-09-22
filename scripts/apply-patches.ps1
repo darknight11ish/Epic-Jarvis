@@ -99,6 +99,10 @@ $PATCHES = @(
     # a tool-enabled local turn only makes sense once the local lane is
     # actually reaching Ollama.
     'tool-calling-wiring.patch'
+    # Its context lines are token-file's output (the token banner and the
+    # line above HUD_TOKEN), which nothing after token-file touches. Last so
+    # a backend that already has everything above takes only this.
+    'loopback-too.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------

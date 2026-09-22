@@ -24,7 +24,15 @@ const JPEG_QUALITY: u8 = 82;
 /// needs and slow to hand across the IPC bridge.
 const MAX_CAPTURE_WIDTH: u32 = 1920;
 /// Per-service timeout for [`check_server_health`].
-const HEALTH_TIMEOUT: Duration = Duration::from_millis(1_500);
+///
+/// Was 1.5 s, and the owner's backend answers `/api/status` slower than that:
+/// its traceback showed the 200 being written to a socket this probe had
+/// already closed (WinError 10053), while the tray reported "offline: Jarvis
+/// Core" against a server that was up. `/api/status` probes :8000 and :4000
+/// itself, and on Windows a connect to a closed local port takes about two
+/// seconds to fail. The probe is on-demand and never on a timer, so waiting
+/// longer costs nothing but a slower answer when something really is down.
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
 /// Connect timeout for the chat stream. There is deliberately no *total*
 /// timeout: a long answer is a long-lived response body, and `Client::timeout`
 /// would guillotine it mid-sentence.
