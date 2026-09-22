@@ -34,13 +34,18 @@ object PlatformReadiness {
      * res/xml/network_security_config.xml by hand: there is no API to read the
      * parsed config back, so a mismatch here is a lie on the readiness screen
      * rather than a runtime failure.
+     *
+     * Two mesh products, same shape: Tailscale's MagicDNS name and NordVPN
+     * Meshnet's Nord Name are both a name the user types at run time, so both
+     * get a suffix entry here exactly like the XML's two `<domain>` rows.
      */
-    private val CLEARTEXT_EXACT = setOf("ts.net", "localhost", "127.0.0.1")
-    private val CLEARTEXT_SUFFIXES = listOf(".ts.net")
+    private val CLEARTEXT_EXACT = setOf("ts.net", "nord", "localhost", "127.0.0.1")
+    private val CLEARTEXT_SUFFIXES = listOf(".ts.net", ".nord")
 
     /**
-     * Mirrors what `<domain includeSubdomains="true">ts.net</domain>` actually
-     * matches: the domain itself and labels beneath it, and nothing else.
+     * Mirrors what `<domain includeSubdomains="true">ts.net</domain>` (and the
+     * `nord` row beside it) actually match: the domain itself and labels
+     * beneath it, and nothing else.
      *
      * The previous predicate held a bare `"ts.net"` and tested it with `endsWith`,
      * so `notmyts.net` and `evilts.net` — registrable public domains that have
@@ -150,12 +155,14 @@ object PlatformReadiness {
         ReadinessItem(
             title = "Cleartext HTTP",
             detail = if (host.isBlank()) {
-                "No host set yet. A MagicDNS name ending .ts.net is permitted; a bare IP is not."
+                "No host set yet. A name ending .ts.net (Tailscale) or .nord " +
+                    "(NordVPN Meshnet) is permitted; a bare IP is not."
             } else if (cleartextPermitted(host)) {
                 "Permitted for $host by the network security config."
             } else {
-                "$host is NOT permitted in cleartext. Use the desktop's MagicDNS " +
-                    "name (….ts.net) rather than its IP address."
+                "$host is NOT permitted in cleartext. Use the desktop's Tailscale " +
+                    "MagicDNS name (….ts.net) or Meshnet Nord Name (….nord) " +
+                    "rather than its IP address."
             },
             state = if (host.isNotBlank() && cleartextPermitted(host)) {
                 ReadinessItem.State.OK

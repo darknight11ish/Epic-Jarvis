@@ -49,11 +49,13 @@ private data class Faq(val q: String, val a: String)
 private val FAQS = listOf(
     Faq(
         "Do I need Tailscale for this to work?",
-        "Yes. Jarvis's brain runs on your desktop, and this phone only reaches " +
-            "it over Tailscale — a private network between only the devices you " +
-            "own, never the open internet. When you pair, type the desktop's " +
-            "Tailscale name (it ends in .ts.net), not its 100.x address " +
-            "directly — this phone is only allowed to trust a small, named " +
+        "You need a private mesh network between only the devices you own, " +
+            "never the open internet — Tailscale is one, and NordVPN's Meshnet " +
+            "is another, if you already have a NordVPN account. Jarvis's brain " +
+            "runs on your desktop, and this phone only reaches it over that " +
+            "mesh. When you pair, type the desktop's mesh name — Tailscale's " +
+            "ends in .ts.net, Meshnet's ends in .nord — not its 100.x address " +
+            "directly. This phone is only allowed to trust a small, named " +
             "list of hosts, and a name is on that list where a raw address " +
             "cannot be.",
     ),

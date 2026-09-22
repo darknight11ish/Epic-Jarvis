@@ -10,8 +10,9 @@ import org.junit.Test
  * mirror.
  *
  * `<domain includeSubdomains="true">ts.net</domain>` matches `ts.net` and labels
- * beneath it, and nothing else. The screen this feeds exists to make that policy
- * legible, so a predicate that disagrees with it is worse than no screen at all.
+ * beneath it, and nothing else. `nord` is the same rule for NordVPN Meshnet's
+ * own Nord Name. The screen this feeds exists to make that policy legible, so a
+ * predicate that disagrees with it is worse than no screen at all.
  */
 class PlatformReadinessTest {
 
@@ -25,6 +26,13 @@ class PlatformReadinessTest {
     }
 
     @Test
+    fun `nordvpn meshnet nord names are permitted`() {
+        assertTrue(PlatformReadiness.cleartextPermitted("secret.meerkat-andes.nord"))
+        assertTrue(PlatformReadiness.cleartextPermitted("desk.nord"))
+        assertTrue(PlatformReadiness.cleartextPermitted("nord"))
+    }
+
+    @Test
     fun `a suffix that is not a subdomain is refused`() {
         // These are registrable public domains. A bare "ts.net" entry tested with
         // endsWith reported them permitted.
@@ -32,10 +40,17 @@ class PlatformReadinessTest {
         assertFalse(PlatformReadiness.cleartextPermitted("evilts.net"))
         assertFalse(PlatformReadiness.cleartextPermitted("mylocalhost"))
         assertFalse(PlatformReadiness.cleartextPermitted("not127.0.0.1"))
+        // Same shape of false positive, for the newer suffix: "mynord.com" and
+        // "anordable.net" contain "nord" but are not the "nord" TLD or a label
+        // beneath it.
+        assertFalse(PlatformReadiness.cleartextPermitted("mynord.com"))
+        assertFalse(PlatformReadiness.cleartextPermitted("anordable.net"))
     }
 
     @Test
-    fun `bare tailscale addresses are refused, because the config cannot express a CIDR range`() {
+    fun `bare mesh addresses are refused, because the config cannot express a CIDR range`() {
+        // Tailscale and NordVPN Meshnet both hand out addresses from the same
+        // CGNAT block, so one pair of cases covers both products.
         assertFalse(PlatformReadiness.cleartextPermitted("100.64.0.1"))
         assertFalse(PlatformReadiness.cleartextPermitted("100.101.102.103"))
     }

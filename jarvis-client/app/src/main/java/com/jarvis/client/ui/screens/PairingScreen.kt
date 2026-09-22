@@ -94,8 +94,9 @@ fun PairingScreen(
             value = host,
             onValueChange = { host = it },
             label = "Desktop host",
-            placeholder = "your-desktop.tailnet.ts.net:4719",
-            supportingText = "Use the MagicDNS name, not the 100.x address — the network " +
+            placeholder = "your-desktop.tailnet.ts.net:4719  (or ….nord for Meshnet)",
+            supportingText = "Use a Tailscale MagicDNS name (….ts.net) or a NordVPN " +
+                "Meshnet Nord Name (….nord), not the 100.x address — the network " +
                 "security config can permit a name but cannot express a CIDR range.",
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
