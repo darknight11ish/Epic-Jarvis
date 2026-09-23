@@ -429,12 +429,12 @@ that makes it true is named.
 **No longer missing** (this section used to list them, and was wrong once
 they landed):
 
-- `jarvis_speech.py` now exists, in `backend/`, as a whole new file. It is
-  what the four `/api/voice/*` routes call: speaker check first, then
-  speech-to-text, and text-to-speech back, all through sherpa-onnx on this
-  machine. It ships **no model files**, so until the owner downloads them and
-  names them in `[voice]`, those routes answer "not available" honestly
-  rather than working.
+- `jarvis_speech.py` now exists, in `backend/`, with `jarvis_wakeword.py`,
+  and `apply-patches.ps1` copies both in. It is what the four `/api/voice/*`
+  routes call: speech check (Silero VAD), speaker check, then speech-to-text,
+  and text-to-speech back, all on this machine. Its model files are NOT in the
+  repo: until the owner runs the installs in `backend/README.md` ("Voice that
+  works"), those routes answer "not installed" honestly rather than working.
 - `jarvis_framework.py`, `jarvis_router.py`, `jarvis_initiative.py`,
   `jarvis_compute.py` and `jarvis_sleep.py` exist as **rebuilds** in
   `backend/rebuilt/`, with `jarvis_events.py`, `jarvis_memory.py`,
@@ -448,11 +448,12 @@ they landed):
 
 **Still missing:**
 
-- **Wake-word listening.** `jarvis_speech.set_wake_enabled()` stores an
-  on/off flag, and the phone shows it, but nothing anywhere listens for a
-  wake phrase: no keyword model, no always-on capture loop. The desktop's
-  "listen automatically" is a loudness detector in `voice.rs`, not a wake
-  word. Talking to Jarvis means push-to-talk or that switch.
+- **A wake word measured on real speech.** "Hey Jarvis" is built (openWakeWord's
+  model, on the phone and through the PC; turning it on is an approval card),
+  but it has only been tested on synthesised voices: 44/44 heard, and the
+  false alarms it produced were all dropped by the transcript check. Its
+  false-alarm rate on real speech, TV, and battery use on the phone are not
+  measured yet.
 - **A picture-capable local model.** The default model (`qwen3:8b`, via
   `jarvis-primary.Modelfile`) reads text only. A screenshot sent to it is
   not seen, so the quickbar asks Ollama first (`local_model_vision`) and
@@ -502,7 +503,7 @@ Do not relitigate these without new evidence.
 |---|---|
 | Reachability | Tailscale, properly. Never a public tunnel. |
 | Face / appearance | Rendered locally on each device; the server is a sync channel only. |
-| Voice | sherpa-onnx for everything — STT, speaker verification, wake word, Kokoro TTS, Silero VAD. 0 GB VRAM. First audio is 0.5–1.5 s, not 100 ms; design a "thinking" state that survives a second of silence. |
+| Voice | sherpa-onnx for STT (Parakeet TDT 0.6B v2), speaker verification, Kokoro TTS, Silero VAD. 0 GB VRAM. First audio is 0.5–1.5 s, not 100 ms; design a "thinking" state that survives a second of silence. **The wake word is the exception**: openWakeWord's `hey_jarvis` model on ONNX Runtime, on the phone and the PC alike - sherpa-onnx has no Android library on Maven Central/Google, and the TOML and `WAKE-WORD.md` had already chosen openWakeWord. Measured side by side in `backend/README.md`. |
 | Cloud / API keys | Allowed, **per use, with permission**. Jarvis works out what it genuinely needs the internet for, explains it, and asks. No standing grant. |
 | Structured output | Ollama's native `format: <schema>` — GBNF at the sampler. **Not** `outlines`, which cannot constrain Ollama. |
 | Sandbox | Git worktrees, not Docker. |

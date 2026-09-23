@@ -1,5 +1,51 @@
 # The wake word — what it needs before it can be built
 
+## Status, 2026-09-23: built
+
+Everything below this section is the design record from before it was
+built, kept because its reasoning still holds. What was decided and built:
+
+- **The spotter: openWakeWord's `hey_jarvis` model**, the "intended path" of
+  §1 - the three files §1 asked for are now in
+  `jarvis-client/app/src/main/assets/wakeword/` (with their CC BY-NC-SA
+  licence beside them) and downloaded onto the PC by the owner. They were
+  fetched from the project's GitHub release, which the proxy allows; the 404s
+  in §1 were raw-file paths. Run through ONNX Runtime: on the phone
+  `com.microsoft.onnxruntime:onnxruntime-android` 1.22.0 from Maven Central
+  (pinned - 1.30.0 adds a telemetry uploader), on the PC the `onnxruntime`
+  pip package. The phone's Kotlin (`voice/WakeSpotter.kt`) and the PC's
+  Python (`backend/jarvis_wakeword.py`) implement the same streaming steps
+  and were checked to score within 0.0005 of each other.
+- **Porcupine: not chosen.** The owner's API-key change made it allowable,
+  but `jarvis-framework.toml` records that its free tier ended in June 2026
+  and that it checks its key online - a licence call from the phone on a
+  timer, and an account the wake word would depend on - while openWakeWord
+  needs neither and has a model for this exact phrase.
+- **Where detection runs.** On the phone, on the phone (§1's requirement):
+  nothing is sent until the phrase is heard. On the desktop, the Jarvis
+  server on the same PC runs it: the desktop app cuts the room's sound into
+  sentences and sends each over loopback only (it refuses a non-loopback
+  server address), and the server drops any without the phrase before the
+  owner check or speech-to-text. Either way the PC checks the phrase again,
+  then the voice, then transcribes - and the transcript must start with
+  "hey Jarvis", which stops "...the computer was called Jarvis".
+- **§2's service**: `service/WakeWordService.kt`, its own foreground service
+  of type `microphone` (the link keeps `specialUse`), with a notification and
+  a Stop action, never started at boot, `START_NOT_STICKY`.
+- **§4's order**, all five: the separate service (1); a 2-second ring buffer
+  so the clip holds the phrase (2); the spotter behind an interface
+  (`WakeModels`), a model that fails to load being a named failure (3); the
+  toggle, gated on the desktop's switch and saying the microphone indicator
+  stays on (4); and `WakeListenTest`'s "a wake-word capture is never made or
+  sent while the desktop says the wake word is off" (5).
+- **§3's "approval means approved"** is now true in the module too: ON raises
+  one card (`change_own_config`), OFF is immediate.
+
+The owner's steps, and what was and was not measured, are in
+`backend/README.md`, "Voice that works".
+
+---
+
 Step 3 of the current build order. It is **not** blocked on the API: the
 transport exists and push-to-talk already uses it. It is blocked on two things
 that are decisions rather than work, and one platform requirement the brief

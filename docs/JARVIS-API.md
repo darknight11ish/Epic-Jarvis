@@ -366,7 +366,7 @@ only what Jarvis itself said it did.
 | `/api/voice/status` | GET | — | **no** | `JarvisApi.kt:553` | Phone calls it before showing a mic button; failure returns refusing defaults. |
 | `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word` | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
-| `/api/voice/wake` | POST | `{"enabled": bool}` | **no** | `JarvisApi.kt:651` | Phone-only. |
+| `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
 | `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...]}` | **no** | `JarvisApi.enrollVoice` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
 
 **The audio format is fixed and the server will not convert.** 16 kHz,
@@ -384,14 +384,33 @@ deliberately — that flag decides whether the owner's reply gets handed to the
 handset's default engine, which on a stock phone is Google's. A 200 carrying
 no audio is treated as a server fault, not as permission to synthesise locally.
 
-**`/api/voice/wake` approves, it does not apply.** Success means a decision
-card was raised, not that the wake word is now on. Re-read `/api/voice/status`
-to learn the truth (`JarvisApi.kt:644-651`).
-*Checked 2026-09-23, and not what this repository's module does:*
-`backend/jarvis_speech.py`'s `set_wake_enabled()` writes the setting at once,
-with no card - its docstring says so. Whether `jarvis_hud.py`'s route puts a
-gate in front of it is not visible here. Clients should keep re-reading the
-status either way, which is what the phone does.
+**`/api/voice/wake` with `true` asks, it does not apply.** Since 2026-09-23
+`jarvis_speech.set_wake_enabled(True)` raises ONE approval card
+(`change_own_config`, through `jarvis_gate.check()`, the tier checked before
+the card and on the answer) and returns at once with
+`{"ok": true, "pending": true, "enabled": false, "message": ...}`. Only
+approving the card turns it on. A second request while a card waits is
+`{"ok": false, "pending": true, "error": ...}`; a tier other than `ask` is
+`{"ok": false, "error": ...}` and no card. `false` is immediate -
+`{"ok": true, "enabled": false}` - and also cancels a waiting card (approving
+it afterwards does nothing). What `jarvis_hud.py`'s route does with this dict
+is not visible here; the module used to return `{"ok": true, "enabled": ...}`
+for both. Re-read `/api/voice/status` to learn the truth:
+`listening.wake_word`, `listening.wake_word_pending`, and a `wake` block -
+`{enabled, pending, expires_in?, last?, phrase, threshold, awake_seconds,
+spotter: {available, engine, why}}` (`spotter` says whether this PC can hear
+"hey Jarvis" in a clip, which the desktop app's listening needs).
+
+**`source=wake_word`.** The server refuses it while the wake word is off
+(`available: false`). Otherwise it runs, in order: Silero VAD (no speech ->
+refused), the "hey Jarvis" spotter (not heard -> refused, never voice-checked
+or transcribed), the owner check, speech-to-text, and finally the transcript
+must start with "hey Jarvis" (else `text: ""`, "ignored"). Four fields were
+added to the reply: `wake_heard` (the phrase was heard, from the owner),
+`wake_score`, `awake` (the clip was only "hey Jarvis": the next `wake_word`
+clip within `awake_seconds` needs no phrase), `awake_seconds`. The returned
+`text` has the phrase removed. A client drops a reply with `wake_heard:
+false` silently. `backend/README.md`, "Voice that works", has the details.
 
 **`/api/voice/enroll` - "Train my voice"** (`voice-enroll.patch`, module
 `jarvis_voice_enroll.py`). The phone sends the owner's recorded sentences:
@@ -640,10 +659,11 @@ know which side the backend agrees with.
    in comments and neither is wrong, but the two devices will disagree about
    when the same quiet backend has died.
 
-5. **Voice control routes are phone-only.** `/api/voice/status` and
-   `/api/voice/wake` have no desktop call site at all — the desktop posts
-   `utterance` and `say` and nothing else. So the wake word can be toggled
-   from the phone and not from the machine it runs on.
+5. **Voice control routes were phone-only.** Until 2026-09-23 the desktop
+   posted `utterance` and `say` and nothing else. Now its "hey Jarvis" button
+   (`voice.rs` `ensure_wake_ready`) reads `/api/voice/status` and, when the
+   wake word is off, posts `/api/voice/wake {"enabled": true}` - which raises
+   the approval card, the same as the phone's button.
 
 6. **`/api/visual-spec` is desktop-only.** `spec_drift.rs` fetches it and
    compares structurally; the phone's `SpecDriftTest` compares Kotlin constants

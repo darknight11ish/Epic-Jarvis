@@ -61,6 +61,32 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+"HEY JARVIS" - MODEL FILES AND LIBRARIES (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+openWakeWord pre-trained models, release v0.5.1 -
+https://github.com/dscripka/openWakeWord (David Scripka)
+  melspectrogram.onnx, embedding_model.onnx, hey_jarvis_v0.1.onnx
+  Shipped inside the Android app (jarvis-client/app/src/main/assets/wakeword/)
+  and downloaded onto the PC by the owner (backend/README.md). Unmodified.
+  Licence: Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+  International - https://creativecommons.org/licenses/by-nc-sa/4.0/
+  NON-COMMERCIAL: this is the dependency rule 5 refers to. Jarvis stays a
+  non-commercial build while these files are in it. openWakeWord's own code
+  is Apache-2.0 and is not used; jarvis_wakeword.py and WakeSpotter.kt
+  re-implement its streaming steps. The embedding model is derived from
+  Google's speech_embedding (Apache-2.0).
+
+ONNX Runtime 1.22.0 (Microsoft), MIT - https://github.com/microsoft/onnxruntime
+  The Android library runs the models on the phone
+  (com.microsoft.onnxruntime:onnxruntime-android, from Maven Central); the
+  PC uses the Python package (pip install onnxruntime).
+
+sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
+  The PC's speech-to-text, spoken replies and Silero VAD. The model files
+  the owner downloads carry their own licences: NVIDIA Parakeet TDT 0.6B v2
+  (CC-BY-4.0), Kokoro-82M v0.19 (Apache-2.0), Silero VAD (MIT), 3D-Speaker
+  CAM++ (Apache-2.0).
+
 SUMMARY BY LICENCE
 ------------------
 (Apache-2.0 OR MIT) AND BSD-3-Clause (1): encoding_rs

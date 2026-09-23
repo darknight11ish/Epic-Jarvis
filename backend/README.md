@@ -32,8 +32,13 @@ Added later on 2026-09-23, one more at the very end: **`voice-enroll.patch`**
 ("Train my voice" on the phone). It needs `voice-503.patch` and `appearance.patch` before it (its context is their output).
 It comes with a new module, `jarvis_voice_enroll.py`, and with updated copies
 of `jarvis_speech.py` and `rebuilt\jarvis_voice.py`; the script copies all
-three in. Its own section, at the very end of this file, also has the steps
+three in. Its own section, near the end of this file, also has the steps
 to install the better voice check.
+
+And after that, no patch but a new module: **`jarvis_wakeword.py`** ("hey
+Jarvis"), with a new `jarvis_speech.py` that finally has speech-to-text, a
+voice and Silero VAD to run. The last section of this file, "Voice that
+works", has the one-line installs for the models and what was measured.
 
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
@@ -174,7 +179,7 @@ job by hand (take everything off, then put everything on):
 `jarvis_owned_tables.py`, the updated `jarvis_agent.py`,
 `jarvis_browser_control.py` (which stays switched off until `[tools].enabled`
 names `"browser_control"`), and, since "Train my voice",
-`jarvis_voice_enroll.py`, `jarvis_speech.py` and `rebuilt\jarvis_voice.py`. Each patch only adds a call into one of these, and the call quietly does nothing when the
+`jarvis_voice_enroll.py`, `jarvis_speech.py` and `rebuilt\jarvis_voice.py`, and since "hey Jarvis", `jarvis_wakeword.py`. Each patch only adds a call into one of these, and the call quietly does nothing when the
 file is missing, so a backend without them would pass every test with the
 new features switched off. The script compares each file with the one in
 this repository's `backend\` folder; if yours is missing or different, it
@@ -928,6 +933,11 @@ explicitly. Until that line is added, `status()` says so in its `note` field
 rather than pretending to be the active engine. TTS has no such conflict —
 the TOML has no TTS section — so `tts_engine` defaults to `"sherpa-onnx"`.
 
+*Resolved 2026-09-23:* nothing reads the faster-whisper keys, and leaving
+them made speech-to-text impossible. The default is now `"sherpa-onnx"` in the
+code and the shipped TOML, the model is found by its files, and "Voice that
+works" (end of this file) has the line that changes your own TOML.
+
 ## What is not here
 
 Model files. No STT model, no Kokoro voice, no Silero VAD weight ships in
@@ -962,7 +972,9 @@ takes effect immediately, in its own small state file
 (`~/.openjarvis/voice/wake_override.json`), deliberately not the framework
 TOML. Wiring a real gate check in front of it is left for whoever holds
 `jarvis_gate.py`'s actual source, the same shape of gap already recorded
-above for the secret-scan and denial-constraint features.
+above for the secret-scan and denial-constraint features. *Resolved
+2026-09-23:* turning it ON now raises one card through `jarvis_gate.check()`,
+the call `jarvis_voice_enroll.py` already makes; OFF stays immediate.
 
 ## Test it
 
@@ -3846,12 +3858,13 @@ repository. The desktop's `voice.rs` assumes the same thing.
 
 **2. The talk button now shows only when talking can actually work:** your
 voice is trained (or voice is set to `"broad"`), **and** the PC has
-speech-to-text set up. The shipped config says `stt_engine =
+speech-to-text set up. The shipped config said `stt_engine =
 "faster-whisper"`, which `jarvis_speech.py` does not speak, so on your PC the
-button will stay hidden after training until speech-to-text is set up. The
+button stays hidden after training until speech-to-text is set up. The
 Checks screen says so in words ("Talk button on Home: hidden. The PC has no
 speech-to-text set up yet"). That is the honest answer - a button that can
-only ever say "no engine" is worse than none.
+only ever say "no engine" is worse than none. *Since fixed:* see "Voice that
+works" at the end of this file for the install.
 
 **3. The basic voice check does not keep strangers out.** Without a speaker
 model the PC uses a "spectral" check: how loud each band of pitch is. Tried
@@ -3868,8 +3881,9 @@ the same. This repository's `jarvis_speech.set_wake_enabled()` applies the
 change at once with no card - its own docstring says so, because
 `jarvis_gate.py`'s interface was not visible when it was written. So "Train
 my voice" does not copy wake. It calls `jarvis_gate.check()` directly, the
-way `jarvis_skill_discovery.py` and `jarvis_agent.py` already do. The wake
-route was not changed.
+way `jarvis_skill_discovery.py` and `jarvis_agent.py` already do. *Since
+fixed:* `set_wake_enabled(True)` now raises its card the same way (see "Voice
+that works" at the end of this file).
 
 **5. The desktop's microphone records at its own rate** (often 48 kHz) and
 sends that. The speaker model is now told the real rate and copes. The basic
@@ -4238,3 +4252,199 @@ refused while a task runs; only the three modes are accepted; the patch applies
 after `note-capture.patch` and reverts.
 
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->
+
+# Voice that works: speech-to-text, a spoken voice, and "hey Jarvis"
+
+Added 2026-09-23. **What was wrong, in plain words:**
+
+1. **Push-to-talk could never be turned into words.** The shipped settings
+   file said `stt_engine = "faster-whisper"`, an engine Jarvis has no code
+   for. `jarvis_speech.py` only speaks sherpa-onnx, so it refused every clip
+   and the phone's talk button stayed hidden. The default is now
+   `"sherpa-onnx"`, and step 3 below changes that line in your own settings
+   file for you.
+2. **Jarvis had no voice.** No model files were on the PC.
+3. **Turning on "hey Jarvis" happened with no approval card**, although
+   `docs/JARVIS-API.md` said it raised one. It now raises one.
+4. **The desktop's "automatic listening" sent everything it heard to be
+   transcribed**, cut up by a plain loudness trigger, not the Silero VAD the
+   architecture names. It now listens for "hey Jarvis" only, and the PC runs
+   Silero VAD on every clip.
+5. **Nothing listened for "hey Jarvis" anywhere.** Now the phone and the
+   desktop both can - off by default, and only after you approve a card.
+
+## Install the voice models (one time)
+
+Paste each line into PowerShell, one at a time, in this order. Each download
+is checked against a SHA-256 measured from the real file; a wrong file is
+deleted and nothing is installed. Everything lands in the `voice-models`
+folder inside Jarvis's settings folder (normally
+`C:\Users\pcadmin\.openjarvis\voice-models`). **About 850 MB in all.** None of
+it uses the graphics card.
+
+**1. The two Python packages** (sherpa-onnx runs speech-to-text, the voice
+and Silero VAD; onnxruntime runs the wake word):
+
+```powershell
+python -m pip install --upgrade sherpa-onnx onnxruntime; python -c "import sherpa_onnx, onnxruntime; print('OK - sherpa-onnx', sherpa_onnx.__version__, 'and onnxruntime', onnxruntime.__version__, 'are installed')"
+```
+
+**2. Speech-to-text** - NVIDIA's Parakeet TDT 0.6B v2 (English, with
+punctuation), 480 MB, into `voice-models\stt`:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $m = Join-Path $base 'voice-models'; New-Item -ItemType Directory -Force -Path $m | Out-Null; $f = Join-Path $env:TEMP 'jarvis-stt.tar.bz2'; Write-Host 'Downloading speech-to-text (480 MB)...'; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2' -OutFile $f; if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '157C157BC51155E03E37D2466522A3A737DD9C72BB25F36EB18912964161E1AD') { Remove-Item $f; Write-Host 'That is not the expected file, so nothing was installed. Run this line again.' -ForegroundColor Red } else { tar -xjf $f -C $m; Remove-Item $f; $d = Join-Path $m 'stt'; if (Test-Path $d) { Rename-Item $d ('stt-old-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }; Rename-Item (Join-Path $m 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8') 'stt'; Write-Host "OK - speech-to-text is in $d" -ForegroundColor Green }
+```
+
+**3. Tell Jarvis to use it.** This changes the one `stt_engine` line in your
+`jarvis-framework.toml` from `"faster-whisper"` to `"sherpa-onnx"`, keeping a
+copy of the old file beside it (`jarvis-framework.toml.before-voice`):
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $t = python -c "import jarvis_framework as f; print(f.config_path() or '')"; if (-not $t) { Write-Host 'Could not find jarvis-framework.toml (or jarvis_framework.py is not in this folder). Nothing was changed.' -ForegroundColor Red } else { $s = [IO.File]::ReadAllText($t); $rx = [regex]'(?m)^([ \t]*)stt_engine[ \t]*=[^\r\n]*'; if ($s -match '(?m)^[ \t]*stt_engine[ \t]*=[ \t]*"sherpa-onnx"') { Write-Host "Already set: $t says stt_engine = sherpa-onnx" -ForegroundColor Green } elseif ($rx.IsMatch($s)) { Copy-Item $t "$t.before-voice" -Force; $s = $rx.Replace($s, '${1}stt_engine = "sherpa-onnx"', 1); [IO.File]::WriteAllText($t, $s, (New-Object Text.UTF8Encoding $false)); Write-Host "OK - $t now says stt_engine = sherpa-onnx (the old copy is $t.before-voice)" -ForegroundColor Green } else { Write-Host "$t has no stt_engine line. Add stt_engine = `"sherpa-onnx`" under [voice]." -ForegroundColor Yellow } }
+```
+
+**4. Jarvis's voice** - Kokoro v0.19 (English, 11 voices), 320 MB, into
+`voice-models\tts`:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $m = Join-Path $base 'voice-models'; New-Item -ItemType Directory -Force -Path $m | Out-Null; $f = Join-Path $env:TEMP 'jarvis-tts.tar.bz2'; Write-Host 'Downloading the voice (320 MB)...'; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2' -OutFile $f; if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '912804855A04745FA77A30BE545B3F9A5D15C4D66DB00B88CBCD4921DF605AC7') { Remove-Item $f; Write-Host 'That is not the expected file, so nothing was installed. Run this line again.' -ForegroundColor Red } else { tar -xjf $f -C $m; Remove-Item $f; $d = Join-Path $m 'tts'; if (Test-Path $d) { Rename-Item $d ('tts-old-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }; Rename-Item (Join-Path $m 'kokoro-en-v0_19') 'tts'; Write-Host "OK - the voice is in $d" -ForegroundColor Green }
+```
+
+**5. The speech detector (Silero VAD) and the "hey Jarvis" model** - four
+small files, 4 MB, into `voice-models\vad` and `voice-models\wakeword`:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $ow = 'https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/'; $files = @( @('vad', 'silero_vad.onnx', 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx', '9E2449E1087496D8D4CABA907F23E0BD3F78D91FA552479BB9C23AC09CBB1FD6'), @('wakeword', 'melspectrogram.onnx', ($ow + 'melspectrogram.onnx'), 'BA2B0E0F8B7B875369A2C89CB13360FF53BAC436F2895CCED9F479FA65EB176F'), @('wakeword', 'embedding_model.onnx', ($ow + 'embedding_model.onnx'), '70D164290C1D095D1D4EE149BC5E00543250A7316B59F31D056CFF7BD3075C1F'), @('wakeword', 'hey_jarvis_v0.1.onnx', ($ow + 'hey_jarvis_v0.1.onnx'), '94A13CFE60075B132F6A472E7E462E8123EE70861BC3FB58434A73712EE0D2CB') ); $ok = $true; foreach ($x in $files) { $d = Join-Path (Join-Path $base 'voice-models') $x[0]; New-Item -ItemType Directory -Force -Path $d | Out-Null; $p = Join-Path $d $x[1]; Invoke-WebRequest -UseBasicParsing -Uri $x[2] -OutFile $p; if ((Get-FileHash $p -Algorithm SHA256).Hash -ne $x[3]) { Remove-Item $p; $ok = $false; Write-Host "$($x[1]) is not the expected file - deleted it." -ForegroundColor Red } }; if ($ok) { Write-Host "OK - the speech detector and the wake word are in $base\voice-models" -ForegroundColor Green } else { Write-Host 'Run this line again.' -ForegroundColor Red }
+```
+
+**6. Put the new code on the PC**, from this repository's folder. It copies
+in `jarvis_speech.py` and the new `jarvis_wakeword.py` (backing up older
+copies first):
+
+```powershell
+.\scripts\apply-patches.ps1
+```
+
+**7. Check it works.** Jarvis speaks a sentence with its new voice, listens
+for "hey Jarvis" in it, and writes down what it heard. It saves the sentence
+it spoke to `C:\Users\pcadmin\.openjarvis\voice\self-test.wav` so you can
+play it. Nothing is sent anywhere:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; python jarvis_speech.py --test
+```
+
+Look for `Wake word: HEARD` and `heard 'Hey Jarvis, what is the weather like
+tomorrow?'`. Then **restart Jarvis**. The phone's talk button appears once
+your voice is trained (Checks -> Your voice) - it was hidden only because
+speech-to-text was missing.
+
+*Optional:* Jarvis's voice defaults to an American female voice (number 0).
+For a British male voice add `tts_speaker_id = 9` under `[voice]` in
+`jarvis-framework.toml` (10 is another; 5 and 6 are American male).
+
+## "Hey Jarvis"
+
+**How to turn it on.** Two steps, on purpose:
+
+1. **Allow it on the PC.** On the phone: Checks -> *Wake word* -> **Turn on
+   "hey Jarvis"**. Or on the desktop: the round button next to the microphone
+   in the Jarvis bar. Either one raises **one approval card**. Nothing changes
+   until you approve it (tier `ask` for `change_own_config`; checked before
+   the card and again on your answer).
+2. **Switch listening on where you want it.** On the phone: **Listen on this
+   phone** (same card). On the desktop: the same round button again, after
+   approving. Each stays on until you turn it off; the phone's also stops when
+   the phone restarts or Android closes Jarvis. Turning the wake word OFF is
+   immediate, never a card.
+
+**What happens, and where.**
+
+| | where it runs | what it sends, and where |
+|---|---|---|
+| waiting for "hey Jarvis" (phone) | on the phone: openWakeWord's "hey jarvis" model through ONNX Runtime | **nothing**. The microphone is open; Android shows its microphone dot and a notification the whole time |
+| waiting for "hey Jarvis" (desktop) | the desktop app cuts the room's sound into sentences by loudness; the Jarvis server **on the same PC** runs the model on each | each sentence goes to the PC's own Jarvis over loopback (`127.0.0.1`) and is dropped there unless it holds "hey Jarvis" - not voice-checked, not transcribed, not kept. The desktop refuses to listen at all if its server address is not this PC |
+| it heard "hey Jarvis" | | the phone sends that sentence (from 2 s before the phrase to your pause) to your PC over Tailscale. **Never anywhere else** |
+| on the PC | `jarvis_speech.hear()`: Silero VAD -> "hey Jarvis" checked again -> your voice checked -> speech-to-text -> the sentence must start with "hey Jarvis" | the words go to Jarvis like typed text. "Hey Jarvis." on its own opens an 8-second window for the next sentence |
+
+No company's servers are involved at any point, and no API key is needed.
+
+**Why openWakeWord, not Porcupine or sherpa-onnx's keyword spotter.**
+`jarvis-framework.toml` had already named openWakeWord and its `hey_jarvis`
+model (`wake_phrase`, `wake_threshold = 0.5`), and said why Picovoice's
+Porcupine was out: its free tier ended in June 2026 and it checks its licence
+key over the internet. `docs/WAKE-WORD.md` had also chosen it. It has a
+model trained for exactly "hey jarvis", and it runs on ONNX Runtime, which
+the phone can get from Maven Central (the only place its build fetches from)
+and the PC from pip. sherpa-onnx's open-vocabulary keyword spotter was
+measured on the same clips (below): fewer false alarms, more misses - but
+there is no sherpa-onnx library for Android on Maven Central or Google's
+repository, so the phone could not use it without committing a 40 MB binary.
+The models are CC BY-NC-SA 4.0 (non-commercial; recorded in
+`THIRD-PARTY-NOTICES.txt`), which rule 5 already allows for.
+
+## What was measured here, and what was not
+
+Checked in the dev container (Linux, 4 CPU cores, no GPU), with sherpa-onnx
+1.13.8 and onnxruntime 1.30.0, against the real downloads above. The test
+speech was **synthesised by Kokoro** in its 11 voices - there is no recording
+of a real person here. Ten sentences per voice, 110 clips: four start with
+"hey Jarvis", six do not (including "Hey Jason, ...", "Put the jar of jam
+...", and "... the computer was called Jarvis").
+
+- **Speech-to-text** (Parakeet, 2 threads): 109 of the 110 sentences came
+  back word for word, all 44 "hey Jarvis" ones included (`'Hey Jarvis, what
+  time is it?'`); the one miss was "shelf" heard as "shell". About 0.09x real
+  time: 0.3 s for a 3 s clip. SenseVoice and Moonshine were also tried:
+  faster, but they wrote "Javis", "Pig Jarvis" and "Hage-Arvis".
+- **Voice** (Kokoro fp32, 2 threads): `say()` produced a 24 kHz WAV, 3.4 s of
+  speech in about 1.2-3 s. (The int8 Kokoro was about 2.5x slower on this CPU,
+  so the full one is the recommended download.)
+- **Wake word**, openWakeWord at the shipped threshold 0.5: **44 of 44** "hey
+  Jarvis" clips heard, **8 of 66** others wrongly heard - all eight are "...
+  the computer was called Jarvis". Each of those is then dropped on the PC,
+  because the transcript does not start with "hey Jarvis". The phone's Kotlin
+  spotter, run on a desktop JVM with the same models, scored within 0.0005 of
+  the PC's on every clip. sherpa-onnx's spotter for comparison: 39 of 44
+  heard, 0 of 66 wrong.
+- **End to end**, the phone's real `WakeWordService` + `VoiceSession` +
+  `JarvisApi` on a desktop JVM with a fake microphone, talking over HTTP to
+  the real `jarvis_speech.hear()`: "hey Jarvis, what time is it?" reached the
+  chat as `what time is it?`; "Hey Jason ..." and "Put the jar of jam ..."
+  sent nothing; "hey Jarvis." + a pause + a sentence reached the chat as the
+  sentence; the "called Jarvis" false alarm was sent to the PC and dropped
+  there.
+
+**Found, and worth knowing: the voice check let other synthetic voices
+through.** With a voice print made from three clips of one Kokoro voice, the
+other ten Kokoro voices passed the owner check on 30-70% of their clips
+(threshold 0.35). Kokoro's voices all come from one model and are more alike
+than real people, so this is probably pessimistic - but it has not been tried
+with a second real person. Please have someone else try the talk button once
+after training; if they get through, raise `threshold` under `[voice]` (0.5
+is a reasonable next step) and train again.
+
+**Not checked:** anything on Windows or a phone - these PowerShell lines
+(PowerShell could not be run by the session that wrote them; Windows 10/11's
+built-in `tar` is assumed to unpack `.tar.bz2`), the pip install on Windows,
+a real microphone, the phone's battery use while listening, and how often
+"hey Jarvis" fires by mistake over hours of real conversation or TV
+(openWakeWord's authors report under 0.5 per hour for their models). Also
+not visible here: the route in `jarvis_hud.py` that calls
+`set_wake_enabled()`. For ON it now receives `{"ok": true, "pending": true}`
+(a card is up) where it used to get `{"ok": true, "enabled": true}`, and it
+is assumed to pass that on as before.
+
+## Test it
+
+```powershell
+python backend\test_wakeword.py; python backend\test_speech.py; python backend\test_voice_contract.py
+```
+
+`test_wakeword.py`: the order in `hear()` (each later step made to fail if it
+is reached), the follow-up window, every way the approval card can end, the
+transcript check, 48 kHz audio, and that the spotter module writes and logs
+nothing. To also run the real models once they are installed, set
+`$env:JARVIS_TEST_VOICE_MODELS = "$env:USERPROFILE\.openjarvis\voice-models"`
+first.
