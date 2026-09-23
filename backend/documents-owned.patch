@@ -1,0 +1,65 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -646,7 +646,11 @@
+ 
+ def collect_documents() -> tuple[list, list]:
+     """Indexed documents from the searchable SQLite store."""
+-    if not _has_table(DOCS_DB, "documents"):
++    # Only a table Epic-Jarvis made. Another program - OpenJarvis's indexer,
++    # if its copy is ever run - can create one with this exact name in this
++    # exact file, and what it indexed would then reach the brain map with
++    # nobody having decided that. documents-owned.patch.
++    if not (_has_table(DOCS_DB, "documents") and _documents_are_ours(DOCS_DB)):
+         return [], []
+     nodes, links = [], []
+     try:
+@@ -841,7 +845,13 @@
+             "facts": FACTS_FILE.exists(),
+             # The table, not the file. This line read DOCS_DB.exists() and so
+             # was true on every boot, for a table that has never existed.
+-            "documents": _has_table(DOCS_DB, "documents"),
++            "documents": (_has_table(DOCS_DB, "documents")
++                          and _documents_are_ours(DOCS_DB)),
++            # A documents table is there but Epic-Jarvis did not make it -
++            # most likely OpenJarvis's indexer. It is not read; this says so
++            # rather than leaving "documents: false" to look like nothing.
++            "documents_not_ours": (_has_table(DOCS_DB, "documents")
++                                   and not _documents_are_ours(DOCS_DB)),
+             "knowledge": KG_DB.exists(),
+             "skills": SKILLS_DIR.exists(),
+             "config": CONFIG_FILE.exists(),
+@@ -929,7 +939,9 @@
+         if text:
+             corpus.append({"id": f"fact:{i}", "text": text, "kind": "fact"})
+ 
+-    if _has_table(DOCS_DB, "documents"):
++    # The same rule as collect_documents: this is the path into the model's
++    # prompts, so a table another program made must never be read here.
++    if _has_table(DOCS_DB, "documents") and _documents_are_ours(DOCS_DB):
+         try:
+             con = _ro_sqlite(DOCS_DB)
+             for doc_id, content in con.execute(
+@@ -2131,6 +2143,23 @@
+         con.close()
+ 
+ 
++def _documents_are_ours(db_path) -> bool:
++    """Did Epic-Jarvis record creating the documents table in this file?
++
++    memory.db lives in ~/.openjarvis, the folder OpenJarvis also uses, and
++    OpenJarvis's document indexer creates a table called `documents` there.
++    A table having the right name proves nothing about who made it. The
++    record is kept by jarvis_owned_tables.py; with no record, or with that
++    module missing, the answer is no - the side that keeps unknown text out
++    of the prompts.
++    """
++    try:
++        import jarvis_owned_tables
++        return jarvis_owned_tables.created_by_us(db_path, "documents")
++    except Exception:
++        return False
++
++
+ def _lane_names() -> list:
+     if not PROXY_FILE.exists():
+         return []

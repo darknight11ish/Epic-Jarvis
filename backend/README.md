@@ -57,6 +57,8 @@ on a throwaway copy instead.
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
 | `loopback-too.patch` | `jarvis_hud.py` | **Pairing the phone unplugged the desktop.** `JARVIS_HUD_BIND` moved the one socket off `127.0.0.1` instead of adding one, and the desktop's HUD may only talk to loopback. Also serves `127.0.0.1` when bound elsewhere. Needs `token-file.patch` — see its own section. |
+| `documents-owned.patch` | `jarvis_hud.py` | **If you ever ran the OpenJarvis copy you downloaded, what it indexed would reach Jarvis's prompts.** Its indexer makes a `documents` table in the same `memory.db`. Now only a table Epic-Jarvis recorded creating is read. Needs `documents-honesty.patch` and `jarvis_owned_tables.py` — see its own section. |
+| `speed-record.patch` | `jarvis_hud.py` | Records how fast each answer was — numbers only, to a file on this PC — and shows it on the Models screen. Needs `gpu-offload.patch`, `tool-calling-wiring.patch` and `jarvis_speed.py` — see its own section. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -2763,3 +2765,276 @@ was written). Against the pre-patch `run()` in any of the three, the new
 `checkpoint`-passing cases fail with a `TypeError` for an unexpected
 keyword - which is the correct failure for a parameter that does not
 exist yet, not a false pass.
+
+---
+
+# Two new modules to copy first: `jarvis_speed.py` and `jarvis_owned_tables.py`
+
+The two patches below call two new modules. Like `jarvis_research.py`, they
+ship as whole files, because there is nothing on your PC to patch for them.
+Copy both into the backend folder before running `apply-patches.ps1`. From
+the folder you cloned this repository into:
+
+```powershell
+Copy-Item .\backend\jarvis_speed.py, .\backend\jarvis_owned_tables.py "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\"; Write-Host "Copied both into the backend folder."
+```
+
+If you forget, nothing breaks. Every call into them is wrapped. Without
+`jarvis_speed.py` nothing gets timed. Without `jarvis_owned_tables.py` the
+documents table is never read, which is the safe side.
+
+---
+
+# `documents-owned.patch` — another program's table must not reach your prompts
+
+Apply after `documents-honesty.patch`. It must come after it, because its
+context lines are that patch's output. `apply-patches.ps1` lists it last.
+
+**The problem.** Epic-Jarvis keeps its memory in `~/.openjarvis\memory.db`.
+That is OpenJarvis's folder and OpenJarvis's file name, left over from when
+Jarvis was designed to sit in front of OpenJarvis. OpenJarvis was never part
+of this setup, but you did download a copy once. If that copy is ever run, its
+document indexer creates a table called `documents` in that same file
+(OpenJarvis `rust/crates/openjarvis-tools/src/storage/sqlite.rs:58-67`).
+`jarvis_hud.py` reads a table with exactly that name in three places: the
+brain map, the status line, and the text that retrieval puts in front of the
+model. So whatever OpenJarvis indexed would start reaching Jarvis's prompts,
+and nobody would have decided that.
+
+**The fix.** All three readers now ask a second question. It is not only
+"is there a `documents` table?" but also "did Epic-Jarvis record creating
+it?" (`_documents_are_ours()`). The record is one row in
+`epic_jarvis_created_tables`, kept by `jarvis_owned_tables.py`. A table with
+the right name and no record is left completely alone: never read, never
+changed, never deleted.
+
+**What you will notice: nothing.** Nothing in Epic-Jarvis creates a
+`documents` table today, so the documents were never read before this patch
+and are still not read after it. The difference is that this now stays true
+if another program adds one. The brain map's `sources` gains one field,
+`documents_not_ours`. It is `true` when a `documents` table is there that
+Epic-Jarvis did not make, so the screen can say so rather than show a quiet
+`documents: false`.
+
+**For a future feature that really does index documents.** It must create
+the table with `jarvis_owned_tables.create_owned_table(con, "documents", ddl)`.
+That writes the table and its record in one transaction. It refuses when
+a table with that name is already there. It also refuses
+`CREATE TABLE IF NOT EXISTS`, which would quietly adopt someone else's table.
+
+## Test it
+
+```powershell
+python test_documents_owned.py
+```
+
+Twenty checks in the container, and four more on your PC once the patch is
+applied. Real SQLite files: a table made the way OpenJarvis makes it is "not
+ours", and its rows are still all there afterwards. Epic-Jarvis refuses to
+create over it. A table made through `create_owned_table` is "ours" (the
+control). A create that fails half-way leaves no record behind.
+It also rehearses the patch against the text `documents-honesty.patch` wrote,
+using `git apply` on a stand-in file (`_skeleton.py`). **That proves the
+context matches the earlier patch's output. It does not prove the rest of your
+real file matches.** Only `apply-patches.ps1`'s rehearsal against your real
+files can prove that. On your PC, where the patched `jarvis_hud.py` exists,
+the test also lifts the real `_documents_are_ours` out of it and runs it.
+Against an unpatched `jarvis_hud.py` that part fails, which is correct.
+
+---
+
+# `speed-record.patch` and `jarvis_speed.py` — how fast was each answer?
+
+Apply after `gpu-offload.patch` and `tool-calling-wiring.patch`. It must come
+after both, because its context lines are their output. `apply-patches.ps1`
+lists it last.
+
+**The problem.** "Jarvis got slow" had no answer except a feeling. An Ollama
+update, a game holding video memory, or a model that no longer fits on the
+graphics card can each make every answer take three times as long. Nothing
+recorded it. The only timings anywhere were one-off measurements typed into
+`docs/MODEL-TOPOLOGY.md`.
+
+**What it records.** One row per answer, in `speed.jsonl` in the Jarvis
+settings folder (`%USERPROFILE%\.openjarvis\` unless you moved it):
+
+- which model answered
+- how long until the first word
+- how long the whole answer took
+- words per second and tokens per second
+- how much of the model was on the graphics card
+- whether tools were used
+
+**What it never records: any words of the conversation.** Not the question,
+not the answer, not a summary. That is enforced in code: every row goes
+through a filter (`_clean()`). It keeps only a fixed list of field names, and
+only numbers, true/false values and a model name. A text field passed in by
+mistake is dropped, not written. The stream is read as it passes through, to
+count words and time them. The text is never kept.
+
+**It stays on this PC.** There is no upload, no leaderboard and no
+analytics. OpenJarvis has all three, and they are exactly the part not
+copied. The file is only ever added to. At about 250 bytes a row, a hundred
+answers a day comes to about 9 MB a year. Reading only looks at the end of
+the file, so its size never slows anything down.
+
+**Where it hooks in.** A few small hooks in `jarvis_hud.py`, each wrapped so
+that timing can never be the reason an answer fails:
+
+- A stopwatch starts before the request goes to Ollama.
+- Both answer paths (plain, and with tools) show each chunk to the meter
+  *after* it has been sent to you.
+- A finished answer is recorded. An answer cut off because the phone dropped
+  out is never recorded, since half an answer's speed is not a speed.
+- `GET /api/models` gains a `speed` block, next to the `offload` block from
+  `gpu-offload.patch`.
+
+The graphics-card share comes from `jarvis_models.offload_status()`. It is
+looked up after the answer, on a background thread, so it never holds an
+answer open.
+
+**Tool answers are marked.** When tools are on, the time to the first word
+includes the tool calls, and any wait for you to approve one. So those
+answers are left out of the "first word" figure on the screen, and counted
+everywhere else.
+
+**The slowdown warning.** When the last 10 answers on a model are 30% or
+more slower than the 20 before them, the `speed.note` says so in words. It
+stays silent until there are 30 answers, because a verdict from three answers
+would be noise.
+
+**Not verified:**
+
+- Whether Ollama's OpenAI-style stream reports token counts. The meter
+  handles all three cases: exact counts from Ollama's own timings when they
+  are present, `usage` when that is sent, and counting stream pieces when
+  neither is. Each row says which one it used (`token_source`).
+- Power readings on the 2080 Super. They were not attempted.
+
+## Test it
+
+```powershell
+python test_speed_record.py
+```
+
+Sixty-three checks with no network (opening a socket fails the test) and a
+fake clock. The main one: an answer full of a distinctive secret sentence is
+timed, then every word of it is searched for in the file, and none is found.
+Also checked:
+
+- a word split across two stream pieces counts once;
+- all three stream shapes are handled;
+- a broken or unwritable file never raises;
+- the slowdown warning, with a control where nothing changed;
+- the patch rehearsed against what `gpu-offload.patch` and
+  `tool-calling-wiring.patch` wrote.
+
+The same limit applies as above: the rehearsal proves the context matches
+those patches, not the rest of your real file. On your PC it also reads the
+patched `jarvis_hud.py` and checks that both answer paths feed and finish
+the meter, and that no `finish` sits inside an error handler.
+
+---
+
+# The Tripwire speed check — a function, and the hook still to add
+
+**Tripwire is not in this repository.** `jarvis_tripwire.py` exists only on
+your PC. The only trace of it here is its name in `selftest.py` and its
+settings in `jarvis-framework.toml` §21. So this could not be wired in and
+tested for real. What exists is the part Tripwire calls, in `jarvis_speed.py`,
+tested on its own.
+
+`jarvis-framework.toml` §21 says Tripwire already runs a few fixed test
+prompts ("probes") on the old model before a swap and on the new one after
+it. Ollama's own replies carry exact timings, so the hook is small. In
+`jarvis_tripwire.py`, wherever it runs its probes:
+
+```python
+import jarvis_speed
+speed = jarvis_speed.SwitchSpeed(old_model, new_model)
+# before the swap, for each probe reply:   speed.add("old", reply)
+# after the swap, for each probe reply:    speed.add("new", reply)
+result["speed"] = speed.finish()
+```
+
+`finish()` returns the comparison, with a sentence ready to show ("Old: 41
+tokens/s. New: 20 tokens/s. The new model is about 51% slower."). It always
+adds, in these words: "This measures speed only. It cannot tell you whether
+the new model's answers are better or worse." It also writes a `switch` row
+to `speed.jsonl`, so the Models screen shows the last switch even if
+Tripwire's own result screen is closed.
+
+Two things to know:
+
+- **If the probes go through the OpenAI-style endpoint**, their replies
+  carry no timings. Wrap each call with `speed.timed("old", lambda: ...)`
+  instead. You then get a first-word time from the wall clock but no speed
+  figure.
+- **Never measure the old model after the swap.** Running a prompt on it
+  loads it again, and on an 8 GB card that pushes the new model off the card.
+  So `measure(model)` (three fixed prompts of its own, for when Tripwire's
+  probes cannot be timed) is for the new model, or for the old one *before*
+  the swap and only when `is_loaded(old)` says it is already in memory. If
+  the old model was not measured, `finish()` falls back to the last stored
+  measurement of it, then to its recent real answers. The sentence says which
+  one it used.
+
+`measure()` talks only to Ollama on this PC and refuses any other address
+before sending anything. It sends only the three fixed prompts in
+`FIXED_PROMPTS`, which are about nothing in particular. It never sends
+`num_ctx`, because a different context size would make Ollama reload the
+model. It is covered by `test_speed_record.py` (the switch and measure
+sections).
+
+---
+
+# `selftest.py` step 7 — the doctor: is the model ready, and on the card?
+
+**The problem.** The self-test never mentioned Ollama. The most common way
+Jarvis goes wrong could pass every check it had. That is when part of the
+model spills off the graphics card onto the CPU: every answer gets several
+times slower, and no error appears anywhere.
+
+**What it checks now**, at the end of every run, even when backend files
+are missing:
+
+| check | fails when | how to fix it, as printed |
+|---|---|---|
+| Ollama answers | nothing is listening | start the Ollama app, or `ollama serve` |
+| the configured model is downloaded | it is not in Ollama's list | `ollama pull <name>`, or for `jarvis-primary` the `ollama create` line |
+| it is fully on the graphics card | any of it is on the CPU, with the percentage | close what is holding video memory, restart Ollama |
+| context size | *warning only*, when Ollama gave the model under 8192 tokens | `docs/MODEL-TOPOLOGY.md` |
+| `OLLAMA_KV_CACHE_TYPE` | *warning only*, when it is not `q8_0` in this window | `docs/MODEL-TOPOLOGY.md`, "Setup" |
+
+**Read-only, and it loads nothing.** It sends three GET requests to Ollama:
+`/api/version`, `/api/tags` and `/api/ps`. None of them loads a model. So when
+no model is loaded, the graphics-card check says **skip**, with "Ask Jarvis
+anything, then run this again". It does not load a model to find out. When a
+different model is loaded, that is a warning, not a failure. When Ollama's
+address is not this PC, nothing is sent there at all and it says so.
+
+The two cache checks can only ever warn. The right numbers depend on the card
+and the model. A smaller cache means a shorter memory of the conversation,
+not something broken. The `OLLAMA_KV_CACHE_TYPE` check can only see the
+settings of the window the self-test runs in, not Ollama's own, and it says
+that too.
+
+The configured model comes from `jarvis_models.current_model()`, the same
+call the Models screen makes, or from `JARVIS_MODEL` when that is set.
+
+## Test it
+
+```powershell
+python test_selftest_doctor.py
+```
+
+Thirty-six checks with a fake Ollama that records every URL. It checks that
+only the three read-only paths are ever asked, all GET with no body, and never
+`/api/generate`, `/api/chat`, `/api/pull` or `/api/show`. It also checks:
+
+- no loaded model is a skip, not a failure;
+- a 65% spill fails with "65%" in the message;
+- the cache checks never produce a failure, with a control where nothing
+  warns;
+- another machine's address is never contacted;
+- strange replies never crash it.
