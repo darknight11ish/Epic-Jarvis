@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.core.content.ContextCompat
 import com.jarvis.client.platform.CrashLog
+import com.jarvis.client.platform.GpuProbe
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
 
@@ -19,6 +20,12 @@ class JarvisApp : Application() {
                 if (JarvisRuntime.isInitialized) JarvisRuntime.tokens.token() else null
             }.getOrNull()
         }
+
+        // Asks the graphics driver what it is, on a background thread, so a
+        // software renderer (an emulator) has the face at Low before it first
+        // draws. Once per process; see GpuProbe.
+        GpuProbe.start()
+
         val manager = ContextCompat.getSystemService(this, NotificationManager::class.java)
             ?: return
 

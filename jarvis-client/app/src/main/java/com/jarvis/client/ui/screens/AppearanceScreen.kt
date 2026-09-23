@@ -29,7 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -54,12 +56,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.FaceState
 import com.jarvis.client.data.EdgePref
+import com.jarvis.client.data.FaceTuning
 import com.jarvis.client.data.FaceSize
 import com.jarvis.client.data.Look
 import com.jarvis.client.data.MotionPref
 import com.jarvis.client.data.calmFace
+import com.jarvis.client.face.Binding
 import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Face
+import com.jarvis.client.face.FaceQuality
 import com.jarvis.client.face.FaceThumbnail
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.face.Faces
@@ -88,6 +93,13 @@ import kotlin.math.roundToInt
  * never reaches the other screen at all.
  */
 private const val UNDO_WINDOW_MS = 10_000L
+
+/**
+ * How long after the last Pattern or Colour pick in the face editor the state
+ * colours are sent to the desktop. Long enough that tapping through a few
+ * colours is one send, short enough that the desktop is never far behind.
+ */
+private const val EDIT_SETTLE_MS = 2_000L
 
 /**
  * Appearance — the theme, the look, the face and the state colours.
@@ -175,8 +187,22 @@ fun AppearanceScreen(
      * tapped. It is laid out three to a row, each cell the same width.
      */
     faceTile: (@Composable (face: Face, selected: Boolean, onClick: () -> Unit) -> Unit)? = null,
+    /**
+     * The face editor's Pattern and Colour controls: one state's new binding.
+     * Part of the shared state colours, so it reaches the desktop - once the
+     * owner stops editing, through [onBindingsSettled], not on every tap.
+     */
+    onEditBinding: (FaceState, Binding) -> Unit = { _, _ -> },
+    /** The face editor's phone-only settings. See [FaceTuning]. */
+    faceTuning: FaceTuning = FaceTuning(),
+    onFaceTuningChange: (FaceTuning) -> Unit = {},
+    /** Android's own Battery Saver is on, which turns the face's on too. */
+    phoneBatterySaver: Boolean = false,
 ) {
     val chrome = LocalChrome.current
+    // What the face is actually running with right now - what Auto picked, or
+    // what battery saver forces. Changes rarely (at most every two seconds).
+    val liveBudget by FaceQuality.live.collectAsState()
 
     // Cycle states: steps the one live preview through all eight states every
     // four seconds, so picking colours doesn't mean tapping through them by
@@ -220,6 +246,16 @@ fun AppearanceScreen(
     // the dispose path below, which pushes. Losing an Undo is the safe way
     // round; losing the push would leave the desktop silently out of step.
     var undoTo by remember { mutableStateOf<Bindings?>(null) }
+    // The face editor's Reset also puts the quality, frame rate and speed
+    // back, so its Undo has to bring those back too. Null for the State
+    // colours' own Randomise and Reset, which never touch them.
+    var undoTuningTo by remember { mutableStateOf<FaceTuning?>(null) }
+    // The face editor: closed every visit, like More options.
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    // Pattern and colour picks not yet sent to the desktop. Sent once the
+    // owner has stopped picking for a moment, or leaves the screen - one
+    // push for a run of taps, not one per tap.
+    var editsUnsent by remember { mutableIntStateOf(0) }
     // "More options" starts closed every visit; saveable so turning the phone
     // does not snap it shut while the owner is in it.
     var moreOpen by rememberSaveable { mutableStateOf(false) }
@@ -231,15 +267,71 @@ fun AppearanceScreen(
         settle()
         undoTo = null
     }
+    LaunchedEffect(editsUnsent) {
+        if (editsUnsent == 0) return@LaunchedEffect
+        delay(EDIT_SETTLE_MS)
+        // While an Undo window is open, its own close sends the colours -
+        // including these edits - so there is nothing to add here.
+        if (undoTo == null) settle()
+        editsUnsent = 0
+    }
     DisposableEffect(Unit) {
         onDispose {
-            if (undoTo != null) settle()
+            if (undoTo != null || editsUnsent > 0) settle()
         }
     }
     val roll: (String, () -> Unit) -> Unit = { message, action ->
         undoTo = bindings
+        undoTuningTo = null
         undoMessage = message
         action()
+    }
+    val editBinding: (FaceState, Binding) -> Unit = { state, binding ->
+        onEditBinding(state, binding)
+        editsUnsent += 1
+    }
+
+    // The Undo line after Randomise or Reset, shown under whichever set of
+    // buttons the owner is looking at. Shown only when the roll actually
+    // changed something: forty tries that found nothing separated enough
+    // leave the colours alone, and Reset on the defaults is a no-op - an Undo
+    // for either would undo nothing.
+    val undoLine: @Composable () -> Unit = {
+        val previous = undoTo
+        val previousTuning = undoTuningTo
+        val undo = onUndoBindings
+        val changed = previous != bindings || (previousTuning != null && previousTuning != faceTuning)
+        if (undo != null && previous != null && changed) {
+            Gap(6)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    undoMessage + if (desktopSyncs) {
+                        " Sent to your desktop when this goes away."
+                    } else {
+                        ""
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Quiet(
+                    "Undo",
+                    onClick = {
+                        undo(previous)
+                        previousTuning?.let(onFaceTuningChange)
+                        settle()
+                        undoTo = null
+                        undoTuningTo = null
+                    },
+                )
+            }
+        }
     }
 
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
@@ -401,6 +493,39 @@ fun AppearanceScreen(
                             )
                         }
                         Gap(12)
+                        // The face editor: the reactor kit's controls, in one
+                        // dropdown that starts closed, so this screen stays
+                        // simple for anyone who never opens it. Right under
+                        // the preview, because its State control drives it.
+                        FaceEditor(
+                            open = editorOpen,
+                            onOpenChange = { editorOpen = it },
+                            previewState = previewState,
+                            onPreviewState = {
+                                cyclingStates = false
+                                previewState = it
+                            },
+                            bindings = bindings,
+                            onEditBinding = editBinding,
+                            tuning = faceTuning,
+                            onTuningChange = onFaceTuningChange,
+                            live = liveBudget,
+                            phoneBatterySaver = phoneBatterySaver,
+                            desktopSyncs = desktopSyncs,
+                            onRandomise = { roll("New colours.", onRandomise) },
+                            onReset = {
+                                val before = faceTuning
+                                roll("Face editor reset to the defaults.") {
+                                    onResetBindings()
+                                    // Battery saver is a power choice, not a
+                                    // look, so Reset leaves it as it is.
+                                    onFaceTuningChange(FaceTuning(batterySaver = before.batterySaver))
+                                }
+                                undoTuningTo = before
+                            },
+                            undoLine = undoLine,
+                        )
+                        Gap(12)
                         // The still-picture picker goes here: see [faceTile].
                         // Until something passes one, the name-only chips stay.
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -512,41 +637,7 @@ fun AppearanceScreen(
                                 onClick = { roll("Colours reset to the defaults.", onResetBindings) },
                             )
                         }
-                        // Shown only when the roll actually changed something:
-                        // forty tries that found nothing separated enough leave
-                        // the colours alone, and Reset on the defaults is a
-                        // no-op - an Undo for either would undo nothing.
-                        val previous = undoTo
-                        val undo = onUndoBindings
-                        if (undo != null && previous != null && previous != bindings) {
-                            Gap(6)
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .semantics { liveRegion = LiveRegionMode.Polite },
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    undoMessage + if (desktopSyncs) {
-                                        " Sent to your desktop when this goes away."
-                                    } else {
-                                        ""
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = chrome.textMid,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Quiet(
-                                    "Undo",
-                                    onClick = {
-                                        undo(previous)
-                                        settle()
-                                        undoTo = null
-                                    },
-                                )
-                            }
-                        }
+                        undoLine()
                         Gap(6)
                         Text(
                             // Convention, never randomised. A green alarm is a
@@ -718,7 +809,7 @@ private val TEXT_SCALES = listOf(0.90f, 1f, 1.10f, 1.20f, 1.30f)
  * number at all, so exact equality would light up nothing even when the drag
  * landed on 75% to the eye.
  */
-private fun near(a: Float, b: Float): Boolean = abs(a - b) < 0.005f
+internal fun near(a: Float, b: Float): Boolean = abs(a - b) < 0.005f
 
 /** The spec's pattern ids, in words a person would use. Unknown ids fall back to the id. */
 private val PLAIN_PATTERN_NAMES: Map<Pattern, String> = mapOf(
@@ -736,7 +827,7 @@ private val PLAIN_PATTERN_NAMES: Map<Pattern, String> = mapOf(
     Pattern.STROBE to "Flash",
 )
 
-private fun plainPattern(p: Pattern): String = PLAIN_PATTERN_NAMES[p] ?: p.id
+internal fun plainPattern(p: Pattern): String = PLAIN_PATTERN_NAMES[p] ?: p.id
 
 /**
  * The two top-level groups, "On this phone" and "Shared with your desktop".
@@ -763,7 +854,7 @@ private fun GroupHeader(title: String, detail: String) {
 
 /** One labelled control inside a plate: a title, the control, and an optional line under it. */
 @Composable
-private fun Setting(
+internal fun Setting(
     title: String,
     caption: String? = null,
     content: @Composable () -> Unit,
@@ -790,11 +881,12 @@ private fun Setting(
 
 /** A row of equal-width [OptionChip]s, exactly one of which is normally selected. */
 @Composable
-private fun <T> Choices(
+internal fun <T> Choices(
     options: List<T>,
     isSelected: (T) -> Boolean,
     label: (T) -> String,
     onPick: (T) -> Unit,
+    enabled: Boolean = true,
 ) {
     Row(
         Modifier.fillMaxWidth(),
@@ -805,6 +897,7 @@ private fun <T> Choices(
                 label = label(option),
                 isSelected = isSelected(option),
                 modifier = Modifier.weight(1f),
+                enabled = enabled,
                 onClick = { onPick(option) },
             )
         }
@@ -824,10 +917,12 @@ private fun <T> Choices(
  * area that answers a tap.
  */
 @Composable
-private fun OptionChip(
+internal fun OptionChip(
     label: String,
     isSelected: Boolean,
     modifier: Modifier = Modifier,
+    /** False: shown, but greyed and not tappable (e.g. while Battery saver overrides it). */
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -838,15 +933,19 @@ private fun OptionChip(
             .minimumInteractiveComponentSize()
             .semantics { selected = isSelected }
             .clip(shape)
-            .background(if (isSelected) accent else chrome.surface2)
-            .pressable(role = Role.RadioButton, onClick = onClick)
+            .background(if (isSelected && enabled) accent else chrome.surface2)
+            .pressable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = if (isSelected) chrome.surface0 else chrome.textMid,
+            color = when {
+                !enabled -> chrome.textLo
+                isSelected -> chrome.surface0
+                else -> chrome.textMid
+            },
             textAlign = TextAlign.Center,
         )
     }
@@ -868,11 +967,13 @@ private fun OptionChip(
  * the one part that does nothing.
  */
 @Composable
-private fun SwitchRow(
+internal fun SwitchRow(
     title: String,
     detail: String?,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
+    /** False: shown as it is, but cannot be changed here (the phone is holding it). */
+    enabled: Boolean = true,
 ) {
     val chrome = LocalChrome.current
     Row(
@@ -884,6 +985,7 @@ private fun SwitchRow(
                 interactionSource = remember { MutableInteractionSource() },
                 // No ripple, like every other control built on `pressable`.
                 indication = null,
+                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onChange,
             )
@@ -913,7 +1015,7 @@ private fun SwitchRow(
         // it - semantics are only what TalkBack reads, not what takes touches -
         // and it calls the same `onChange` the row does.
         Box(Modifier.clearAndSetSemantics { }) {
-            Toggle(checked = checked, onCheckedChange = onChange)
+            Toggle(checked = checked, onCheckedChange = onChange, enabled = enabled)
         }
     }
 }

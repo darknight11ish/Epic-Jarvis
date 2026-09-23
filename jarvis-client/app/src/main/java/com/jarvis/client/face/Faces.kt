@@ -675,9 +675,10 @@ object Spiral : Face {
     override val name = "Spiral"
 
     // The kit's `small_n(w, 600, 1500)`; at its solo quality that reaches
-    // 1500 * 1.9 = 2850 (see FirstFiveKit.detail).
+    // 1500 * 1.9 = 2850 (see FirstFiveKit.detail), and 1500 * 2.0 = 3000 at
+    // the face editor's Max.
     private const val KIT_STARS = 1500
-    private const val MAX_STARS = 2850
+    private const val MAX_STARS = 3000
 
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 0.25f
@@ -838,9 +839,10 @@ object Iris : Face {
     override val fit = 0.86f
 
     // The kit's `small_n(w, 120, 220)`; at its solo quality that reaches
-    // round(220 * 1.9) = 418 (see FirstFiveKit.detail).
+    // round(220 * 1.9) = 418 (see FirstFiveKit.detail), and 440 at the face
+    // editor's Max (2.0).
     private const val KIT_FIBRES = 220
-    private const val MAX_FIBRES = 418
+    private const val MAX_FIBRES = 440
 
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 1.4f
@@ -1387,8 +1389,13 @@ private object KitParity {
      * itself calls "the only place worth judging sharpness". That is the
      * phone's Home face. Thumbnails are small enough that [detail]'s ramp
      * brings them back down on its own.
+     *
+     * No longer a constant: the face editor's Quality (or Auto adjust)
+     * chooses it. 1.9 at High, the default - the value this was before - and
+     * less at Medium and Low. See [QualityTier] for the mapping. Arrays below
+     * are sized for Max's 2.0.
      */
-    const val QUALITY = 1.9f
+    val QUALITY: Float get() = FaceQuality.detail
 
     val PLUS = androidx.compose.ui.graphics.BlendMode.Plus
     val ROUND = androidx.compose.ui.graphics.StrokeCap.Round
@@ -3234,7 +3241,7 @@ object Swarm : Face {
  *
  * The drawing is the reference's line for line (artifact 4390-4447): up to
  * 361 fish by canvas size (the reference's `detail(w, 90, 190)` at its
- * single-face quality of 1.9, see CoreKit.detail), the same
+ * single-face quality of 1.9, see CoreKit.detail; 380 at Max), the same
  * camera (yaw t x 0.12, pitch -0.12, distance 3.2, scale 1.7 S), body length
  * 0.042 S x depth, a quadratic body and a triangular tail, colour from a
  * depth-shaded structural tone to the hot one by `flank^3`, and far-to-near
@@ -3264,9 +3271,10 @@ object Shoal : Face {
     override val fit = 0.8f
 
     // The reference's `detail(w, 90, 190)`; at its single-face quality that
-    // reaches round(190 * 1.9) = 361 (see CoreKit.detail).
+    // reaches round(190 * 1.9) = 361 (see CoreKit.detail), and 380 at the
+    // face editor's Max (2.0). The fish past 361 are only ever drawn at Max.
     private const val KIT_N = 190
-    private const val N = 361
+    private const val N = 380
     private const val SPREAD_TAU_S = 0.6f
 
     private val seed = FloatArray(N) { hash01(it * 31 + 9) }

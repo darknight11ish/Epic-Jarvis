@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -32,12 +34,15 @@ import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.data.calmFace
+import com.jarvis.client.face.FaceBudget
+import com.jarvis.client.face.FaceQuality
 import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.PlatformReadiness
+import com.jarvis.client.platform.PowerWatch
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
@@ -382,6 +387,30 @@ class MainActivity : FragmentActivity() {
         val look by appearance.look.collectAsState()
         // The dark theme Follow the system returns to at dusk (custom-8).
         val preferredDark by appearance.preferredDark.collectAsState()
+        // The face editor's quality, frame rate, speed, Auto adjust and
+        // Battery saver. Phone-only - see AppearanceStore.faceTuning.
+        val faceTuning by appearance.faceTuning.collectAsState()
+
+        // Android's own Battery Saver, and how hot the phone is, for the face
+        // editor's Battery saver (which turns itself on while Android's is on)
+        // and Auto adjust (which lowers its ceiling when the phone is hot).
+        // Listened for, so the face changes the moment either does.
+        var phoneSaver by remember { mutableStateOf(false) }
+        var phoneHeat by remember { mutableIntStateOf(0) }
+        DisposableEffect(Unit) {
+            val stop = PowerWatch.watch(this@MainActivity) { saver, heat ->
+                phoneSaver = saver
+                phoneHeat = heat
+            }
+            onDispose { stop() }
+        }
+        // Everything FaceView draws with comes through here: the one live
+        // budget, FaceQuality, re-resolved whenever a setting or the phone's
+        // state changes. Nothing here reaches the desktop. A SideEffect, not a
+        // LaunchedEffect, so it lands before the next frame is drawn rather
+        // than a frame or two after it - and it is a cheap comparison when
+        // nothing changed.
+        SideEffect { FaceQuality.configure(faceTuning, phoneSaver, phoneHeat) }
 
         val link by JarvisRuntime.link.collectAsState()
         val linkDetail by JarvisRuntime.linkDetail.collectAsState()
@@ -477,7 +506,10 @@ class MainActivity : FragmentActivity() {
         // first seconds, and battery saver or heat can arrive at any time.
         // In every other state the loop exits after one pass.
         val faceOnScreen = paired && !repairing && nav.current == Screen.HOME
-        LaunchedEffect(faceState, faceOnScreen) {
+        // The face editor's Frame rate choice (and Battery saver) decide how
+        // hard the panel is asked: see FaceBudget.smoothFor.
+        val smooth = FaceBudget.smoothFor(faceTuning, phoneSaver)
+        LaunchedEffect(faceState, faceOnScreen, smooth) {
             val enteredAt = SystemClock.elapsedRealtime()
             while (true) {
                 val high = DisplayRate.wantsHigh(
@@ -485,9 +517,10 @@ class MainActivity : FragmentActivity() {
                     faceOnScreen = faceOnScreen,
                     msInState = SystemClock.elapsedRealtime() - enteredAt,
                     constrained = DisplayRate.constrained(this@MainActivity),
+                    pref = smooth,
                 )
                 DisplayRate.setHigh(this@MainActivity, window.peekDecorView(), high)
-                if (!DisplayRate.couldWantHigh(faceState, faceOnScreen)) break
+                if (!DisplayRate.couldWantHigh(faceState, faceOnScreen, smooth)) break
                 delay(RATE_RECHECK_MS)
             }
         }
@@ -1167,6 +1200,14 @@ class MainActivity : FragmentActivity() {
                         // rotation every composition scope is being cancelled at
                         // that same moment.
                         onBindingsSettled = { JarvisRuntime.pushAppearanceDetached() },
+                        // The face editor. Pattern and colour edit the shared
+                        // state colours (pushed once editing settles, through
+                        // onBindingsSettled above); everything else in it is
+                        // this phone's own and never leaves it.
+                        onEditBinding = appearance::setBinding,
+                        faceTuning = faceTuning,
+                        onFaceTuningChange = appearance::setFaceTuning,
+                        phoneBatterySaver = phoneSaver,
                         // Still pictures, one per face, instead of name-only chips.
                         faceTile = { f, selected, onClick ->
                             FaceSpecimen(face = f, bindings = bindings, isSelected = selected, onClick = onClick)

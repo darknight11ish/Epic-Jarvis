@@ -126,8 +126,9 @@ object GL {
      * The multiplier is [SOLO_DETAIL], the kit's solo view: "the grid is a
      * picker; the actual product shows ONE face. Solo is what Jarvis will
      * really look like", and solo runs every face at a detail of at least
-     * 1.9. On any phone-sized face that saturates at the cap - 168 x 64 for
-     * the torus, 168 cells across for the drum.
+     * 1.9. At High (the default, 1.9) any phone-sized face saturates at the
+     * cap - 168 x 64 for the torus, 168 cells across for the drum. Medium and
+     * Low build a coarser mesh, which is the point of them.
      *
      * Both mesh faces used to use a fixed grid "until it can be measured on
      * real hardware" - 48 x 18 for the torus and 40 x 40 for the drum, a
@@ -137,8 +138,8 @@ object GL {
      * were stepped across 18 rings, which is the faceting the kit's own GPU
      * notes say the mesh path exists to remove.
      *
-     * [px] is the kit's `GPUPX`: device pixels times its default `gpu` scale
-     * of 0.8, which is what [meshPx] computes.
+     * [px] is the kit's `GPUPX`: device pixels times the quality tier's `gpu`
+     * scale, which is what [meshPx] computes.
      */
     fun detail(px: Float, lo: Int, hi: Int, cap: Int): Int {
         val k = ((px - 200f) / 620f).coerceIn(0f, 1f)
@@ -146,11 +147,24 @@ object GL {
         return maxOf(lo, kotlin.math.round(minOf(cap.toFloat(), n)).toInt())
     }
 
-    /** The kit's solo-view detail multiplier: `Math.max(1.9, Q.detail)`. */
-    const val SOLO_DETAIL = 1.9f
+    /**
+     * The kit's solo-view detail multiplier: `Math.max(1.9, Q.detail)` - 1.9
+     * at the default High. Read from [com.jarvis.client.face.FaceQuality] on
+     * this GL thread (it is @Volatile there), so the face editor's Quality
+     * and Auto adjust reach the mesh: ensureMesh/ensureGrid rebuild when the
+     * answer changes.
+     */
+    val SOLO_DETAIL: Float get() = com.jarvis.client.face.FaceQuality.detail
 
-    /** The kit's `GPUPX` for a surface: its short side in device pixels x 0.8. */
-    fun meshPx(surfaceW: Int, surfaceH: Int): Float = minOf(surfaceW, surfaceH) * 0.8f
+    /**
+     * The kit's `GPUPX` for a surface: its short side in device pixels times
+     * the quality tier's `gpu` share (0.62 Low, 0.8 Medium, 1.0 High and Max).
+     * This used to be a fixed 0.8, the kit's Medium; at phone sizes the
+     * detail cap is reached either way at High, so Home's default mesh is
+     * the same size it was (a small preview gets a slightly finer one).
+     */
+    fun meshPx(surfaceW: Int, surfaceH: Int): Float =
+        minOf(surfaceW, surfaceH) * com.jarvis.client.face.FaceQuality.gpu
 
     /**
      * The reflection panorama ([com.jarvis.client.face.EnvMap]) as a GL

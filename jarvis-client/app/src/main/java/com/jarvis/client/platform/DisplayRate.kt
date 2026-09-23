@@ -158,8 +158,9 @@ object DisplayRate {
      * @param msInState how long [state] has been the face's state.
      * @param constrained [constrained] of the current context, passed in so
      *   this stays pure.
-     * @param pref the owner's Smooth motion choice. Defaults to AUTO, which is
-     *   the behaviour above; nothing wires a setting to it yet.
+     * @param pref how hard the owner wants the panel driven, from the face
+     *   editor's Frame rate and Battery saver (see FaceBudget.smoothFor).
+     *   Defaults to AUTO, which is the behaviour above.
      */
     fun wantsHigh(
         state: FaceState,
@@ -323,9 +324,9 @@ object DisplayRate {
 }
 
 /**
- * The owner's choice for how hard to drive the screen. Only AUTO is used
- * today; OFF and ALWAYS exist so a "Smooth motion" setting can be wired to
- * [DisplayRate.wantsHigh] without changing its shape. Neither choice can
+ * The owner's choice for how hard to drive the screen, worked out from the
+ * face editor's Frame rate and Battery saver by FaceBudget.smoothFor: OFF for
+ * a chosen 60 or battery saver, ALWAYS for Max, AUTO otherwise. Neither choice can
  * speed the face itself up - this is the panel's refresh rate, not the
  * face's motion - and ALWAYS still never asks in battery saver or when hot.
  */

@@ -115,9 +115,11 @@ internal object CoreKit {
      * The kit's `QUALITY` in its single-face view (`SOLO.detail =
      * Math.max(1.9, Q.detail)`), the view the phone's face corresponds to.
      * The same value as `KitParity.QUALITY` in Faces.kt (private there) and
-     * `GL.SOLO_DETAIL`; lower all three together if a phone cannot keep up.
+     * `GL.SOLO_DETAIL`, because all three read [FaceQuality.detail]: 1.9 at
+     * the default High, less at Medium and Low, 2.0 at Max. The face
+     * editor's Quality, or Auto adjust, picks it.
      */
-    const val QUALITY = 1.9f
+    val QUALITY: Float get() = FaceQuality.detail
 
     /** The reference's `shade()`: scale the RGB channels, clamped. Alpha kept. */
     fun shade(c: Color, m: Float): Color = Color(

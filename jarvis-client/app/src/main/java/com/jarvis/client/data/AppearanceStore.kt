@@ -30,8 +30,8 @@ import kotlin.random.Random
  * simply never asked, and this store works exactly as it always did.
  *
  * Everything else here is per device and never synced: the theme, the dark
- * theme Follow the system returns to ([preferredDark]), the face size, and
- * the [look] record.
+ * theme Follow the system returns to ([preferredDark]), the face size, the
+ * [look] record, and the face editor's [faceTuning].
  */
 class AppearanceStore(context: Context) {
 
@@ -95,6 +95,23 @@ class AppearanceStore(context: Context) {
      * or the owner's layout would be overwritten by the app's.
      */
     fun setFaceFraction(value: Float) = setLook(_look.value.copy(faceFraction = value))
+
+    private val _faceTuning = MutableStateFlow(FaceTuning.decode(prefs.getString(KEY_FACE_TUNING, null)))
+
+    /**
+     * The face editor's phone-only settings: quality, frame rate, speed, Auto
+     * adjust and Battery saver. See [FaceTuning]. Per device and never in
+     * [toSyncDocument]: what this phone's graphics can draw says nothing about
+     * the desktop's.
+     */
+    val faceTuning: StateFlow<FaceTuning> = _faceTuning.asStateFlow()
+
+    /** Clamped and saved. */
+    fun setFaceTuning(value: FaceTuning) {
+        val clamped = value.clamped()
+        prefs.edit { putString(KEY_FACE_TUNING, clamped.encode()) }
+        _faceTuning.value = clamped
+    }
 
     private val _preferredDark = MutableStateFlow(loadPreferredDark())
 
@@ -181,6 +198,14 @@ class AppearanceStore(context: Context) {
     fun setBindings(value: Bindings) {
         prefs.edit { putString(KEY_BINDINGS, encode(value)) }
         _bindings.value = value
+    }
+
+    /**
+     * One state's binding, from the face editor's Pattern and Colour
+     * controls. The others are left exactly as they are.
+     */
+    fun setBinding(state: FaceState, binding: Binding) {
+        setBindings(Bindings(_bindings.value.byState + (state to binding)))
     }
 
     fun resetBindings() {
@@ -481,6 +506,7 @@ class AppearanceStore(context: Context) {
         const val KEY_FACE_SIZE = "face_size"
         const val KEY_LOOK = "look"
         const val KEY_PREFERRED_DARK = "preferred_dark"
+        const val KEY_FACE_TUNING = "face_tuning"
 
         /**
          * 500ms crossfade plus 500ms dwell means two opposing swings can be no

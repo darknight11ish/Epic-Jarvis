@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import com.jarvis.client.FaceState
 import com.jarvis.client.face.gl.MeshFaces
@@ -45,6 +46,7 @@ import kotlin.math.max
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntOffset
@@ -171,7 +173,16 @@ fun FaceView(
     // Conflated: a burst of touches is one wake, not a queue of them.
     val wake = remember { Channel<Unit>(Channel.CONFLATED) }
 
+    // How long the last draw took, for the Auto adjust governor. Written by
+    // the Canvas below (main thread) or by the mesh faces' GL thread, read by
+    // the frame loop - hence the @Volatile fields inside.
+    val drawCost = remember { DrawCost() }
+
     LaunchedEffect(state) { host.onStateChange(state) }
+
+    // A new face's first frames include one-off work (a shader compiling, a
+    // point cloud being built), which is not what it costs to keep drawing.
+    LaunchedEffect(face.id) { FaceQuality.onFaceChanged() }
 
     // The frame loop is suspended while the app is not at least STARTED.
     //
@@ -185,9 +196,64 @@ fun FaceView(
     // at ON_START; `last` is re-declared inside, so the first frame back is
     // treated as a fresh start rather than one enormous delta.
     val frameLoopOwner = LocalLifecycleOwner.current
+
+    // The panel's refresh rate, as the platform reports it, for the frame
+    // budget (see FaceQuality). Asked every couple of seconds rather than
+    // listened for: the answer changes when DisplayRate asks for a faster
+    // mode, or when the phone drops the rate for battery or heat, and one
+    // cached read every two seconds is nothing next to a frame. Never per
+    // frame, and stopped with the screen off like the loop below.
+    val hostView = LocalView.current
+    LaunchedEffect(hostView, frameLoopOwner) {
+        frameLoopOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                runCatching { hostView.display?.refreshRate }.getOrNull()
+                    ?.let { FaceQuality.setPanelHz(it) }
+                delay(PANEL_POLL_MS)
+            }
+        }
+    }
+
     LaunchedEffect(face, bindings, frameLoopOwner) {
         frameLoopOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             var last = 0L
+            // Every vsync, drawn or skipped: for the divisor count and for the
+            // fastest vsync gap seen lately (see FramePacing.vsyncPeriodMs).
+            var vsyncs = 0L
+            var lastVsync = 0L
+            var windowMin = Float.MAX_VALUE
+            var prevWindowMin = Float.MAX_VALUE
+            var windowCount = 0
+            // Which branch drew the last frame. A switch between them makes one
+            // gap that belongs to neither, and it is not reported.
+            var onVsync = false
+
+            // Before the very first frame: is this a software renderer (an
+            // emulator)? Normally answered long before now - GpuProbe starts
+            // with the process - but if not, wait a moment rather than draw
+            // one detailed frame too many on a device that may not survive
+            // it. Returns at once after the first time.
+            com.jarvis.client.platform.GpuProbe.await(GPU_PROBE_WAIT_MS)
+                ?.let { FaceQuality.onGpuProbed(it) }
+
+            // One drawn frame, reported to the Auto adjust governor. A few
+            // float operations; it never measures anything itself.
+            fun report(nowNs: Long, intervalNs: Long, expectedMs: Float, b: ResolvedBudget) {
+                if (!b.governed) return
+                val periodMs = FramePacing.vsyncPeriodMs(b.panelHz, min(windowMin, prevWindowMin))
+                val budgetMs = periodMs * b.stride
+                // A mesh face draws on its own GL thread, so its lateness shows
+                // in that thread's gaps, not in this loop's.
+                val intervalMs = max(intervalNs / 1_000_000f, drawCost.glGapNanos / 1_000_000f)
+                val costMs = FramePacing.frameCostMs(
+                    drawMs = drawCost.nanos / 1_000_000f,
+                    intervalMs = intervalMs,
+                    expectedIntervalMs = if (expectedMs > 0f) expectedMs else budgetMs,
+                    budgetMs = budgetMs,
+                )
+                FaceQuality.onFrame(nowNs / 1_000_000L, costMs, budgetMs)
+            }
+
             while (true) {
                 val fps = Spec.fpsFor(liveState)
                 if (fps in 1..30) {
@@ -212,27 +278,60 @@ fun FaceView(
                     // rather than at the end of the step.
                     withTimeoutOrNull(stepMs) { wake.receive() }
                     val now = System.nanoTime()
+                    // The first frame, or the first after the vsync branch: its
+                    // gap is not this branch's, so it is not reported.
+                    val fresh = last == 0L || onVsync
                     if (last == 0L) last = now
-                    val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
+                    val interval = now - last
+                    val dt = (interval / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                     last = now
-                    if (host.advance(dt, liveState, mic(), speech(), bindings, face, calm)) {
+                    onVsync = false
+                    val b = FaceQuality.current
+                    if (host.advance(dt, liveState, mic(), speech(), bindings, face, calm || b.calm, b.speed)) {
                         frame = host.snapshot()
+                        if (!fresh) report(now, interval, stepMs.toFloat(), b)
                     }
                 } else {
                     withFrameNanos { now ->
+                        // The fastest gap between vsyncs seen lately, over two
+                        // windows of 120 so an old reading ages out. See
+                        // FramePacing.vsyncPeriodMs for why it is needed.
+                        if (lastVsync != 0L) {
+                            val gapMs = (now - lastVsync) / 1_000_000f
+                            if (gapMs > 0.5f && gapMs < windowMin) windowMin = gapMs
+                            if (++windowCount >= 120) {
+                                prevWindowMin = windowMin
+                                windowMin = Float.MAX_VALUE
+                                windowCount = 0
+                            }
+                        }
+                        lastVsync = now
+                        vsyncs++
+                        val b = FaceQuality.current
+                        // Pace to a whole divisor of the refresh rate (the
+                        // kit's divisor rule): with a stride of 2 on a 120 Hz
+                        // panel, every other vsync is skipped here and costs
+                        // nothing. `last` is left alone, so the next drawn
+                        // frame's dt covers the skipped time - frame skipping,
+                        // not slow motion.
+                        if (b.stride > 1 && last != 0L && vsyncs % b.stride != 0L) return@withFrameNanos
+                        val fresh = last == 0L || !onVsync
                         if (last == 0L) last = now
                         // Measured on the surface that actually matters, rather
                         // than assumed: the panel drops rate on its own for battery
                         // saver, brightness and heat, and a face driven by an
                         // assumed delta runs at the wrong speed the moment it does.
                         com.jarvis.client.platform.DisplayRate.sample(now - last)
-                        val dt = ((now - last) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
+                        val interval = now - last
+                        val dt = (interval / 1_000_000_000.0).toFloat().coerceIn(0f, 0.25f)
                         last = now
+                        onVsync = true
                         // Resting states draw at 30 rather than the display rate.
                         // The accumulated dt is handed to the draw, so motion covers
                         // the same distance — frame skipping, not slow motion.
-                        if (host.advance(dt, liveState, mic(), speech(), bindings, face, calm)) {
+                        if (host.advance(dt, liveState, mic(), speech(), bindings, face, calm || b.calm, b.speed)) {
                             frame = host.snapshot()
+                            if (!fresh) report(now, interval, 0f, b)
                         }
                     }
                 }
@@ -305,11 +404,16 @@ fun FaceView(
             // its draw lambda; the lambda gives the mesh branch the same shape,
             // read only where it is used (see GLFaceSurface).
             key(face.id) {
-                GLFaceSurface(mesh, { frame }, face, notches, background, glowK)
+                GLFaceSurface(mesh, { frame }, face, notches, background, glowK, drawCost)
             }
         } else {
             Canvas(Modifier.matchParentSize()) {
-                drawFace(frame, face, notches, glowSprite, background, glowK)
+                // Timed for the Auto adjust governor: two clock reads a frame.
+                val t0 = System.nanoTime()
+                // The quality tier's `post`: no glow at Low or in battery saver.
+                val postGlow = if (FaceQuality.current.post) glowK else 0f
+                drawFace(frame, face, notches, glowSprite, background, postGlow)
+                drawCost.nanos = System.nanoTime() - t0
             }
         }
     }
@@ -372,6 +476,69 @@ private fun stillFrameOf(face: Face, bindings: Bindings): FaceFrame {
 }
 
 private const val STILL_FRAME_STEPS = 38
+
+/** How often FaceView re-reads the panel's refresh rate. Never per frame. */
+private const val PANEL_POLL_MS = 2_000L
+
+/**
+ * How long a face's frame loop waits, once per process, for GpuProbe's answer
+ * before its first frame. Normally the answer is already in; this only
+ * matters if the probe is still running when Home first appears.
+ */
+private const val GPU_PROBE_WAIT_MS = 800L
+
+/**
+ * What the last frame cost, for the Auto adjust governor (see
+ * [FaceQuality.onFrame]). Written by whichever thread draws - the main thread
+ * for a canvas face, the GL thread for a mesh face - and read by the frame
+ * loop on the main thread, hence @Volatile. Two longs: nothing allocated per
+ * frame.
+ */
+internal class DrawCost {
+    /** How long the last draw call itself took. */
+    @Volatile var nanos: Long = 0L
+
+    /**
+     * For a mesh face: the gap between the starts of its last two GL frames,
+     * or 0. A slow GPU shows here, on the GL thread, and never in the main
+     * thread's own frame gaps. Always 0 for a canvas face.
+     */
+    @Volatile var glGapNanos: Long = 0L
+}
+
+/**
+ * A mesh face's renderer, timed. Every call goes straight through to [inner];
+ * this only reads the clock around `onDrawFrame`, on the GL thread, and
+ * writes two longs into [cost].
+ */
+private class TimedRenderer(
+    private val inner: MeshRenderer,
+    private val cost: DrawCost,
+) : GLSurfaceView.Renderer {
+    private var lastStart = 0L
+
+    override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
+        lastStart = 0L
+        inner.onSurfaceCreated(gl, config)
+    }
+
+    override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
+        inner.onSurfaceChanged(gl, width, height)
+    }
+
+    override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
+        val start = System.nanoTime()
+        val gap = if (lastStart == 0L) 0L else start - lastStart
+        // A long pause (the face was off screen, nothing asked for a frame) is
+        // not a slow frame, so it is not reported as one.
+        cost.glGapNanos = if (gap in 1L..GL_GAP_MAX_NANOS) gap else 0L
+        lastStart = start
+        inner.onDrawFrame(gl)
+        cost.nanos = System.nanoTime() - start
+    }
+}
+
+private const val GL_GAP_MAX_NANOS = 1_500_000_000L
 
 /**
  * The mesh faces' silhouettes, for [FaceThumbnail] only - see there for why
@@ -461,6 +628,7 @@ private fun GLFaceSurface(
     notches: Int,
     background: Color,
     glow: Float,
+    drawCost: DrawCost,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     // AndroidView's factory runs exactly once per call site and hands back
@@ -488,7 +656,9 @@ private fun GLFaceSurface(
                 // the torus and drum silhouettes were single-sample
                 // staircases. Falls back to exactly the old config.
                 setEGLConfigChooser(com.jarvis.client.face.gl.GL.MsaaConfigChooser())
-                setRenderer(mesh)
+                // Wrapped only to time it for the Auto adjust governor; every
+                // call goes straight through to the face's own renderer.
+                setRenderer(TimedRenderer(mesh, drawCost))
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
             }.also { glSurfaceView = it }
         },
@@ -535,6 +705,8 @@ private fun GLFaceSurface(
         val radius = w / 2f * 0.5f * face.fit
         val hot = dimmed(f.swatch.a, f.dim, background)
         val cool = dimmed(f.swatch.b, f.dim, background)
+        // The quality tier's `post`: no glow at Low or in battery saver.
+        val glowNow = if (FaceQuality.current.post) glow else 0f
 
         // Tokamak's own reference composites a soft, centre-bright radial
         // wash back over its GPU mesh output after drawing it (the `gr0`
@@ -550,10 +722,10 @@ private fun GLFaceSurface(
         // `S * 1.05` on that same S) - so the wash is 2 radii. It was 2.5, a
         // wash a quarter wider than the kit's; narrowing it only ever takes
         // light away.
-        if (face.id == "tokamak" && glow > 0f) {
+        if (face.id == "tokamak" && glowNow > 0f) {
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(hot.copy(alpha = 0.13f * glow), hot.copy(alpha = 0f)),
+                    colors = listOf(hot.copy(alpha = 0.13f * glowNow), hot.copy(alpha = 0f)),
                     center = Offset(cx, cy),
                     radius = radius * 2f,
                 ),
@@ -563,8 +735,8 @@ private fun GLFaceSurface(
         }
 
         when (f.overlay) {
-            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, radius, hot, f)
-            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, radius, cool, notches)
+            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, w, hot, f)
+            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, w, cool, notches)
             else -> Unit
         }
 
@@ -574,7 +746,9 @@ private fun GLFaceSurface(
                 color = hot.copy(alpha = (1f - f.ringFrac) * 0.6f),
                 radius = w * Spec.TAP_RING_FRAC * f.ringFrac,
                 center = at,
-                style = Stroke(width = 2f),
+                // The kit's `max(1, w * 0.006)`: a line that scales with the
+                // face, not a fixed 2 px that is a hairline on a big screen.
+                style = Stroke(width = max(1f, w * 0.006f)),
             )
         }
     }
@@ -741,14 +915,21 @@ class FaceHost {
         face: Face,
         /** Calm motion: see FaceView's `calmMotion`. Only ever slows. */
         calm: Boolean = false,
+        /**
+         * The face editor's "All speeds" multiplier. Under calm motion it is
+         * capped at 1 first, so calm still only ever slows the face: speed
+         * cannot override the phone's own request for less motion.
+         */
+        speed: Float = 1f,
     ): Boolean {
         if (wanted != state) onStateChange(wanted)
         this.calm = calm
-        // Exactly 1 when calm is off, so a full-motion face advances exactly
-        // as it always has.
-        val calmK = if (calm) CALM_MOTION_RATE else 1f
+        val speedK = if (speed.isFinite() && speed > 0f) speed else 1f
+        // Exactly 1 when calm is off and speed is 1, so a default face
+        // advances exactly as it always has.
+        val motionK = if (calm) CALM_MOTION_RATE * min(speedK, 1f) else speedK
         t += dtIn
-        motionT += dtIn * calmK
+        motionT += dtIn * motionK
         accum += dtIn
 
         val tf = Spec.transformFor(state)
@@ -800,8 +981,8 @@ class FaceHost {
         rate = smooth(rate, rateTarget, dt, Spec.RATE_EASE_S, Spec.RATE_EASE_S)
         val motion = tf.borrow
         val faceSpeed = face.speedFor(motion)
-        angle += dt * rate * tf.dir * faceSpeed * calmK
-        tableAngle += dt * rate * faceSpeed * calmK
+        angle += dt * rate * tf.dir * faceSpeed * motionK
+        tableAngle += dt * rate * faceSpeed * motionK
 
         // Colour: resolve the target, then crossfade from what is on screen.
         val target = resolve(bindings.of(state), t, drive, governor, strobeBudget, seed)
@@ -998,8 +1179,8 @@ private fun DrawScope.drawFace(
         face.draw(this, cx, cy, radius * push, lifted, cool, f)
 
         when (f.overlay) {
-            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, radius, lifted, f)
-            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, radius, cool, notches)
+            Spec.Overlay.CLOCK -> drawApprovalClock(cx, cy, w, lifted, f)
+            Spec.Overlay.NOTCHES -> drawNotches(cx, cy, w, cool, notches)
             else -> Unit
         }
 
@@ -1009,11 +1190,31 @@ private fun DrawScope.drawFace(
                 color = lifted.copy(alpha = (1f - f.ringFrac) * 0.6f),
                 radius = w * Spec.TAP_RING_FRAC * f.ringFrac,
                 center = at,
-                style = Stroke(width = 2f),
+                // The kit's `max(1, w * 0.006)`: a line that scales with the
+                // face, not a fixed 2 px that is a hairline on a big screen.
+                style = Stroke(width = max(1f, w * 0.006f)),
             )
         }
     }
 }
+
+/**
+ * The kit's radius basis for every state overlay, as a share of the face's
+ * box: `R = Math.min(w, h) * 0.44`, "the rim of the FACE, not of the buffer"
+ * (the spec's `overlay_spec.radius_basis`).
+ *
+ * The overlays used to be sized from the shell's own radius instead - a
+ * quarter of the box times the face's `fit`, times 1.5 - which put the clock
+ * and the notch ring at 0.375 of the box, or less for a face that fits
+ * itself smaller. That was right for the old faces. The ported kit faces
+ * draw out to the kit's own rim - the kit says "faces draw inside
+ * `min(w,h)/2 - w*0.06`", which is 0.44 of the box - so a ring at 0.375 cut
+ * across the face instead of sitting around it. Now both follow the kit: the clock
+ * at 0.95 R (0.418 of the box), the notch ring at 0.93 R, notches from
+ * 0.86 R to 0.99 R, and the knock from 0.12 R out to 0.94 R - independent of
+ * `fit`, as the kit's are.
+ */
+private const val OVERLAY_R_FRAC = 0.44f
 
 /**
  * The waiting clock: an arc from twelve o'clock closing clockwise, with the
@@ -1022,11 +1223,15 @@ private fun DrawScope.drawFace(
  * Approval and listening measure 4.5 ΔE apart for a deuteranope, so two states
  * may share a hue only if they never share a movement. This is approval's
  * identity, and it is legible with no colour at all.
+ *
+ * @param w the face's box, its shorter side. Radii and line widths are the
+ *   kit's shares of it - see [OVERLAY_R_FRAC].
  */
 private fun DrawScope.drawApprovalClock(
-    cx: Float, cy: Float, r: Float, tint: Color, f: FaceFrame,
+    cx: Float, cy: Float, w: Float, tint: Color, f: FaceFrame,
 ) {
-    val ring = r * 1.5f
+    val big = w * OVERLAY_R_FRAC
+    val ring = big * 0.95f
     drawArc(
         color = tint.copy(alpha = 0.22f),
         startAngle = -90f,
@@ -1034,7 +1239,7 @@ private fun DrawScope.drawApprovalClock(
         useCenter = false,
         topLeft = Offset(cx - ring, cy - ring),
         size = Size(ring * 2, ring * 2),
-        style = Stroke(width = 3f),
+        style = Stroke(width = max(1f, w * 0.004f)),
     )
     drawArc(
         color = tint,
@@ -1043,7 +1248,7 @@ private fun DrawScope.drawApprovalClock(
         useCenter = false,
         topLeft = Offset(cx - ring, cy - ring),
         size = Size(ring * 2, ring * 2),
-        style = Stroke(width = 3f),
+        style = Stroke(width = max(1.5f, w * 0.010f), cap = StrokeCap.Round),
     )
 
     // The knock: a ring leaving the core every 1.6 s. It repeats, it is
@@ -1053,27 +1258,38 @@ private fun DrawScope.drawApprovalClock(
         val e = 1f - (1f - ph) * (1f - ph) * (1f - ph)
         drawCircle(
             color = tint.copy(alpha = (1f - e) * 0.55f),
-            radius = r * (0.12f + e * 0.82f) * 1.5f,
+            radius = big * (0.12f + e * 0.82f),
             center = Offset(cx, cy),
-            style = Stroke(width = 2f),
+            style = Stroke(width = max(1f, w * 0.008f * (1f - e * 0.5f))),
         )
     }
 }
 
-/** The rim ring drawn full, with one notch per waiting item. */
-private fun DrawScope.drawNotches(cx: Float, cy: Float, r: Float, tint: Color, notches: Int) {
-    val ring = r * 1.5f
-    drawCircle(tint.copy(alpha = 0.35f), ring, Offset(cx, cy), style = Stroke(width = 3f))
+/**
+ * The rim ring drawn full, with one notch per waiting item.
+ *
+ * @param w the face's box, its shorter side - see [OVERLAY_R_FRAC].
+ */
+private fun DrawScope.drawNotches(cx: Float, cy: Float, w: Float, tint: Color, notches: Int) {
+    val big = w * OVERLAY_R_FRAC
+    drawCircle(
+        tint.copy(alpha = 0.35f),
+        big * 0.93f,
+        Offset(cx, cy),
+        style = Stroke(width = max(1f, w * 0.004f)),
+    )
     if (notches <= 0) return
     val n = min(notches, 24)
+    val inner = big * 0.86f
+    val outer = big * 0.99f
+    val stroke = max(1.5f, w * 0.012f)
     for (i in 0 until n) {
         val a = (-PI / 2 + i * (PI2 / n)).toFloat()
-        val inner = ring - r * 0.12f
         drawLine(
             color = tint,
             start = Offset(cx + cos(a) * inner, cy + sin(a) * inner),
-            end = Offset(cx + cos(a) * (ring + r * 0.06f), cy + sin(a) * (ring + r * 0.06f)),
-            strokeWidth = 3f,
+            end = Offset(cx + cos(a) * outer, cy + sin(a) * outer),
+            strokeWidth = stroke,
         )
     }
 }

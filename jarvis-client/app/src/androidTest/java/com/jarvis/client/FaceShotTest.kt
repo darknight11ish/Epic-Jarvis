@@ -21,6 +21,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jarvis.client.face.Face
+import com.jarvis.client.face.FaceQuality
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.face.Faces
 import com.jarvis.client.face.Spec
@@ -128,6 +129,9 @@ class FaceShotTest {
 
         note("Jarvis face photographs - FaceShotTest")
         note("device: ${Build.MANUFACTURER} ${Build.MODEL}, API ${Build.VERSION.SDK_INT}")
+        // What the one-time GPU check saw (GpuProbe). A software renderer puts
+        // Auto adjust at Low before the first face draws.
+        note("gpu: ${com.jarvis.client.platform.GpuProbe.renderer ?: "(not known yet)"}")
         note("each face: IDLE, ${SHOT_DP}dp square, ~${ANIMATE_MS}ms after it first drew")
         note("capture: UiAutomation.takeScreenshot() (the composited display, GL layers included), cropped to the face")
 
@@ -261,6 +265,11 @@ class FaceShotTest {
                 "$name: ${crop.width}x${crop.height}px (${SHOT_DP}dp at %.3fx), ".format(density[0]) +
                     "screen ${shot.width}x${shot.height}, " +
                     "%.1f%% of pixels brighter than the ground".format(lit * 100f) +
+                    // What Auto adjust was drawing at when the picture was
+                    // taken: on a software renderer (this emulator) it starts
+                    // at Low, so a picture is never mistaken for High.
+                    ", quality ${FaceQuality.current.tier.id} at up to ${FaceQuality.current.fps} fps" +
+                    (if (FaceQuality.softwareGpu) " (software GPU)" else "") +
                     (if (lit < 0.005f) " - LOOKS BLANK" else "") +
                     (CrashLog.read(context)?.let { " - CRASH LOG: ${it.lineSequence().firstOrNull()}" } ?: "") +
                     (GL.lastBuildFailure?.let { " - GL BUILD FAILURE: $it" } ?: ""),
