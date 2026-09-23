@@ -6,6 +6,7 @@ import com.jarvis.client.data.TokenStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -270,8 +271,17 @@ class JarvisApi(
     suspend fun status(): ApiResult<StatusInfo> =
         get("/api/status", StatusInfo.serializer())
 
-    suspend fun pending(): ApiResult<List<PendingItem>> =
-        get("/api/pending", ListSerializer(PendingItem.serializer()), PENDING_KEYS)
+    suspend fun pending(): ApiResult<List<PendingItem>> = pendingRead().map { it.items }
+
+    /**
+     * `/api/pending`, row by row: the list is found as raw JSON, then each row
+     * is read on its own (see [decodePendingRows]), so one row in an
+     * unexpected shape costs that row - counted in [PendingRead.skipped] -
+     * rather than the whole queue.
+     */
+    suspend fun pendingRead(): ApiResult<PendingRead> =
+        get("/api/pending", ListSerializer(JsonElement.serializer()), PENDING_KEYS)
+            .map { decodePendingRows(it) }
 
     suspend fun attention(): ApiResult<Attention> =
         get("/api/attention", AttentionResponse.serializer()).map { it.flatten() }

@@ -139,13 +139,24 @@ class ApiContractTest {
 
     // ------------------------------------------------------------- shapes ---
 
-    /** The wrapper `/api/pending` actually sends, decoded through the real stack. */
+    /**
+     * The wrapper `/api/pending` actually sends, decoded through the real
+     * stack. The row carries what jarvis_gate.pending() puts on it - `action`,
+     * `detail` as JSON text, `notice` - and no `title`: this test used to
+     * hand the phone a title the server never sends.
+     */
     @Test
     fun pendingDecodesTheServersRealShape() = runBlocking {
         routes["/api/pending"] = ok(
             """{"available":true,
-                "pending":[{"id":"a1","title":"Send the email to Dana",
-                            "risk":{"why":"leaves this machine","swipe_ok":false}}],
+                "pending":[{"id":"a1","action":"send_email","tier":"ask",
+                            "detail":"{\"to\": \"dana@example.com\"}",
+                            "prompt":"Send the email to Dana",
+                            "notice":{"title":"Jarvis wants to send email",
+                                      "body":"there is no unsend. nothing has happened yet.",
+                                      "weight":"heavy","deny_ok":true,"approve_ok":false},
+                            "risk":{"why":"leaves this machine","swipe_ok":false},
+                            "expires_in":120}],
                 "history":[{"id":"old"}]}""",
         )
         val out = api.pending()
@@ -153,7 +164,24 @@ class ApiContractTest {
         val items = (out as ApiResult.Ok).value
         assertEquals(1, items.size)
         assertEquals("a1", items[0].id)
-        assertEquals("Send the email to Dana", items[0].title)
+        assertEquals("Jarvis wants to send email", items[0].title)
+        assertEquals("Send the email to Dana", items[0].summary)
+        assertTrue(items[0].expiresAtMs != null)
+    }
+
+    /** One row the phone cannot read costs that row, never the whole queue. */
+    @Test
+    fun oneUnreadableRowDoesNotSinkTheQueue() = runBlocking {
+        routes["/api/pending"] = ok(
+            """{"available":true,"pending":[{"action":"no_id"},
+                {"id":7,"action":"send_email","detail":{"to":"x"},"raised":true}]}""",
+        )
+        val out = api.pendingRead()
+        assertTrue("$out", out is ApiResult.Ok)
+        val read = (out as ApiResult.Ok).value
+        assertEquals(1, read.skipped)
+        assertEquals("7", read.items.single().id)
+        assertTrue(read.items.single().raised != null)
     }
 
     /**

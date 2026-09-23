@@ -1127,15 +1127,31 @@ object JarvisRuntime {
     }
 
     suspend fun refreshPending() {
-        when (val r = api.pending()) {
+        when (val read = api.pendingRead()) {
             is ApiResult.Ok -> {
-                _pending.value = r.value
+                val items = read.value.items
+                _pending.value = items
+                // A row this phone could not read is still a decision waiting
+                // on the desktop. Say so, rather than show a shorter list as
+                // if it were the whole queue. The rows it COULD read stay
+                // decidable: one odd row used to fail the whole read, which
+                // left every card stuck behind "Could not re-read what is
+                // waiting" (see decodePendingRows).
+                val skipped = read.value.skipped
+                if (skipped > 0) {
+                    Log.w(TAG, "$skipped approval row(s) could not be read")
+                    _notice.value = if (skipped == 1) {
+                        "1 waiting approval could not be read on this phone. Open Jarvis on the desktop to see it."
+                    } else {
+                        "$skipped waiting approvals could not be read on this phone. Open Jarvis on the desktop to see them."
+                    }
+                }
                 // A model request whose card has been answered - approved,
                 // denied or expired - is no longer waiting, so the Mind
                 // screen stops saying it is. One whose card could not be
                 // identified is dropped by the next refreshBrain instead.
                 val waitingOn = _brain.value.modelRequest?.cardId
-                if (waitingOn != null && r.value.none { it.id == waitingOn }) {
+                if (waitingOn != null && items.none { it.id == waitingOn }) {
                     _brain.update { b ->
                         if (b.modelRequest?.cardId == waitingOn) b.copy(modelRequest = null) else b
                     }
@@ -1145,12 +1161,12 @@ object JarvisRuntime {
                 // only thing that earns the gate the right to open.
                 refreshedSinceOpen = true
             }
-            is ApiResult.Failed ->
+            is ApiResult.Failed -> {
                 // Gating switched off on the desktop. An empty approvals list
                 // would say "nothing is waiting for you", which is true and
                 // deeply misleading: nothing CAN wait, because nothing is
                 // asking.
-                if (r.error == ApiError.NotAvailable) {
+                if (read.error == ApiError.NotAvailable) {
                     _pending.value = emptyList()
                     _absent.value = _absent.value + "approvals"
                     // Answered, just with "there is no queue here". Nothing is
@@ -1164,12 +1180,13 @@ object JarvisRuntime {
                     // whole refresh into a silent no-op. A queue that could not
                     // be re-read is precisely what stale means, so say so and let
                     // the gate that already reads it do the refusing.
-                    Log.w(TAG, "could not re-read the approval queue: ${r.error}")
+                    Log.w(TAG, "could not re-read the approval queue: ${read.error}")
                     refreshedSinceOpen = false
                     _stale.value = true
                     _linkDetail.value = "Could not re-read what is waiting"
-                    _notice.value = describe(r.error)
+                    _notice.value = describe(read.error)
                 }
+            }
         }
     }
 

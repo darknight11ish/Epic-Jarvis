@@ -4,6 +4,7 @@ import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.Raised
 import com.jarvis.client.net.Risk
+import com.jarvis.client.net.decodePendingRows
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -62,17 +63,27 @@ class ApprovalRuleTest {
         assertFalse(rushed.swipeable)
     }
 
+    /**
+     * Through the phone's real reader, [decodePendingRows], not the bare
+     * serializer. This used to hand-feed a `"title":"Send email"` the
+     * server never sends, which is how nobody noticed every real card said
+     * "Approval required": the server sends `action` and `notice`, and
+     * the title is made from those.
+     */
     @Test
     fun `risk and raised survive a full round trip`() {
         val json = """
-            {"id":"b2","title":"Send email","tier":"ask",
+            {"id":"b2","action":"send_email","tier":"ask",
              "risk":{"reversible":"no","reach":"outbound","swipe_ok":false,
                      "why":"there is no unsend","classified":true},
              "raised":{"code":"rushed","text":"Tier raised",
                        "quote":"quick, before it expires","source":"tool:browser_navigate",
                        "from_tier":"auto","to_tier":"ask","count_today":4}}
         """.trimIndent()
-        val item = JarvisJson.decodeFromString(PendingItem.serializer(), json)
+        val read = decodePendingRows(listOf(JarvisJson.parseToJsonElement(json)))
+        assertEquals(0, read.skipped)
+        val item = read.items.single()
+        assertEquals("Jarvis wants to send email", item.title)
         assertEquals("there is no unsend", item.risk.why)
         assertEquals("quick, before it expires", item.raised?.quote)
         assertEquals("tool:browser_navigate", item.raised?.source)
