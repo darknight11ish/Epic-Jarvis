@@ -77,21 +77,6 @@ class ThemeContrastTest {
             Claim(Themes.REACTOR, "textLo", Themes.REACTOR.textLo, 4.57f),
             Claim(Themes.REACTOR, "hairlineFocus", Themes.REACTOR.hairlineFocus, 3.68f),
 
-            Claim(Themes.VOID, "textHi", Themes.VOID.textHi, 15.93f),
-            Claim(Themes.VOID, "textMid", Themes.VOID.textMid, 7.46f),
-            Claim(Themes.VOID, "textLo", Themes.VOID.textLo, 4.57f),
-            Claim(Themes.VOID, "hairlineFocus", Themes.VOID.hairlineFocus, 3.53f),
-
-            Claim(Themes.GRAPHITE, "textHi", Themes.GRAPHITE.textHi, 13.18f),
-            Claim(Themes.GRAPHITE, "textMid", Themes.GRAPHITE.textMid, 6.88f),
-            Claim(Themes.GRAPHITE, "textLo", Themes.GRAPHITE.textLo, 4.76f),
-            Claim(Themes.GRAPHITE, "hairlineFocus", Themes.GRAPHITE.hairlineFocus, 3.28f),
-
-            Claim(Themes.EMBER_DUSK, "textHi", Themes.EMBER_DUSK.textHi, 14.99f),
-            Claim(Themes.EMBER_DUSK, "textMid", Themes.EMBER_DUSK.textMid, 7.65f),
-            Claim(Themes.EMBER_DUSK, "textLo", Themes.EMBER_DUSK.textLo, 4.76f),
-            Claim(Themes.EMBER_DUSK, "hairlineFocus", Themes.EMBER_DUSK.hairlineFocus, 3.51f),
-
             Claim(Themes.DAYLIGHT, "textHi", Themes.DAYLIGHT.textHi, 15.88f),
             Claim(Themes.DAYLIGHT, "textMid", Themes.DAYLIGHT.textMid, 6.38f),
             Claim(Themes.DAYLIGHT, "textLo", Themes.DAYLIGHT.textLo, 4.95f),

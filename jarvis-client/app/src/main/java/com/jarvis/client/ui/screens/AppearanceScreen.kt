@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,7 +56,6 @@ import com.jarvis.client.FaceState
 import com.jarvis.client.data.EdgePref
 import com.jarvis.client.data.FaceSize
 import com.jarvis.client.data.Look
-import com.jarvis.client.data.LookPreset
 import com.jarvis.client.data.MotionPref
 import com.jarvis.client.data.calmFace
 import com.jarvis.client.face.Bindings
@@ -142,8 +142,6 @@ fun AppearanceScreen(
     look: Look = Look(),
     /** A fine control changed. The whole new record, ready for `AppearanceStore.setLook`. */
     onLookChange: (Look) -> Unit = {},
-    /** A preset was tapped, including "Back to X". The store decides whether the theme may change now. */
-    onApplyPreset: (LookPreset) -> Unit = {},
     /** The theme Follow the system uses when the phone is dark. */
     preferredDark: Chrome = if (current.dark) current else Themes.DEFAULT,
     /**
@@ -222,6 +220,9 @@ fun AppearanceScreen(
     // the dispose path below, which pushes. Losing an Undo is the safe way
     // round; losing the push would leave the desktop silently out of step.
     var undoTo by remember { mutableStateOf<Bindings?>(null) }
+    // "More options" starts closed every visit; saveable so turning the phone
+    // does not snap it shut while the owner is in it.
+    var moreOpen by rememberSaveable { mutableStateOf(false) }
     var undoMessage by remember { mutableStateOf("") }
     val settle by rememberUpdatedState(onBindingsSettled)
     LaunchedEffect(undoTo) {
@@ -251,72 +252,6 @@ fun AppearanceScreen(
         ) {
             if (notice != null) {
                 item(key = "notice") { Notice(notice, onDismissNotice) }
-            }
-
-            // ------------------------------------------------ On this phone --
-
-            item(key = "group-phone") {
-                GroupHeader(
-                    "On this phone",
-                    "Only how this phone looks. None of it is sent to your desktop, " +
-                        "and none of it changes your desktop's settings.",
-                )
-            }
-
-            item(key = "look") {
-                Section("Look") {
-                    Plate {
-                        val custom = look.isCustom(current.id)
-                        Text(
-                            look.label(current.id),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = chrome.textHi,
-                        )
-                        Gap(2)
-                        Text(
-                            if (custom) {
-                                "You changed something below. The preset it started " +
-                                    "from is kept, so you can go back to it."
-                            } else {
-                                look.basedOn.blurb
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = chrome.textMid,
-                        )
-                        Gap(10)
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            LookPreset.entries.chunked(2).forEach { pair ->
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    pair.forEach { preset ->
-                                        OptionChip(
-                                            label = preset.label,
-                                            isSelected = !custom && preset == look.basedOn,
-                                            modifier = Modifier.weight(1f),
-                                            onClick = { onApplyPreset(preset) },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        if (custom) {
-                            Gap(4)
-                            Quiet(
-                                "Back to ${look.basedOn.label}",
-                                onClick = { onApplyPreset(look.basedOn) },
-                            )
-                        }
-                        Gap(6)
-                        Text(
-                            "Night and Outdoor also pick a theme, and turn off " +
-                                "Follow the system.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = chrome.textLo,
-                        )
-                    }
-                }
             }
 
             // Above the theme list now, not below it: whether the list means
@@ -373,65 +308,15 @@ fun AppearanceScreen(
                 }
             }
 
-            item(key = "accent") {
-                Section("Accent") {
-                    Plate {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(LocalAccent.current),
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    "Follows your Idle colour",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = chrome.textHi,
-                                )
-                                Gap(2)
-                                // There is deliberately no accent picker. The
-                                // accent is a function of the bindings, which is
-                                // what stops the chrome ever disagreeing with the
-                                // face about what colour Jarvis is.
-                                Text(
-                                    "Not a separate setting: the caret, focus ring and " +
-                                        "selection take the face's idle colour, stepped until " +
-                                        "it is legible on this theme.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = chrome.textMid,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
             item(key = "home-layout") {
-                Section("Home layout") {
+                Section("Home") {
                     Plate {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            val share = (look.faceFraction * 100).roundToInt()
-                            Setting(
-                                title = "Face share of Home · $share%",
-                                caption = "How much of Home the face's panel takes. Dragging " +
-                                    "the handle on Home sets this too.",
-                            ) {
-                                Choices(
-                                    options = FACE_SHARES,
-                                    isSelected = { near(it, look.faceFraction) },
-                                    label = { "${(it * 100).roundToInt()}%" },
-                                    onPick = { onLookChange(look.copy(faceFraction = it)) },
-                                )
-                            }
                             Setting(
                                 title = "Face size on Home",
-                                caption = "Extra large fills the face's panel. Full screen is for " +
-                                    "talking: just Jarvis and the microphone, and the chat comes " +
-                                    "back on its own when something needs you. Both use more " +
-                                    "battery than Large. Hidden takes Jarvis off Home entirely " +
-                                    "and gives the chat the whole screen.",
+                                caption = "Full screen is for talking: just Jarvis and the " +
+                                    "microphone. Hidden gives the chat the whole screen. The two " +
+                                    "biggest sizes use more battery.",
                             ) {
                                 // Rows of three: five options in one row leaves too
                                 // little room for "Extra large" at normal text size,
@@ -453,134 +338,6 @@ fun AppearanceScreen(
                                     isSelected = { it == look.navAlwaysShown },
                                     label = { if (it) "Always shown" else "Hidden until swiped" },
                                     onPick = { onLookChange(look.copy(navAlwaysShown = it)) },
-                                )
-                            }
-                            // Not a setting, on purpose, and said here so its
-                            // absence from this list does not read as an
-                            // oversight. The status line is how rule 4 shows
-                            // on screen: without it, Home would show old data
-                            // without saying so.
-                            Text(
-                                "The status line at the top of Home is always shown. It is how " +
-                                    "Jarvis tells you the link is down or out of date, so it " +
-                                    "cannot be turned off.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = chrome.textLo,
-                            )
-                            Column {
-                                SwitchRow(
-                                    title = "Make room for approvals",
-                                    detail = "Shrinks the face while something is waiting for you, " +
-                                        "so Approve and Deny are on screen. It never decides anything.",
-                                    checked = look.makeRoomForApprovals,
-                                    onChange = { onLookChange(look.copy(makeRoomForApprovals = it)) },
-                                )
-                                SwitchRow(
-                                    title = "Shrink the face while typing",
-                                    detail = null,
-                                    checked = look.shrinkWhileTyping,
-                                    onChange = { onLookChange(look.copy(shrinkWhileTyping = it)) },
-                                )
-                                SwitchRow(
-                                    title = "Follow the reply",
-                                    detail = "Keeps the newest words of a reply in view as they arrive.",
-                                    checked = look.followReply,
-                                    onChange = { onLookChange(look.copy(followReply = it)) },
-                                )
-                            }
-                            Setting(title = "Tapping the face") {
-                                Choices(
-                                    options = listOf(true, false),
-                                    isSelected = { it == look.tapFaceOpensMind },
-                                    label = { if (it) "Opens Mind" else "Does nothing" },
-                                    onPick = { onLookChange(look.copy(tapFaceOpensMind = it)) },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            item(key = "adjust") {
-                Section("Adjust") {
-                    Plate {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Setting(
-                                title = "Glow",
-                                caption = "A share of the theme's own glow. It can only dim it, " +
-                                    "never brighten it.",
-                            ) {
-                                Choices(
-                                    options = GLOWS,
-                                    isSelected = { near(it, look.glow) },
-                                    label = { "${(it * 100).roundToInt()}%" },
-                                    onPick = { onLookChange(look.copy(glow = it)) },
-                                )
-                            }
-                            // Full is not offered. See MotionPref: the only thing
-                            // it could add is overriding the phone's own request
-                            // for less motion, and these settings only reduce.
-                            // A stored FULL shows as Follow phone, which is how
-                            // every reader treats it.
-                            Setting(
-                                title = "Motion",
-                                caption = "Calm slows the face down. Nothing here speeds anything up.",
-                            ) {
-                                Choices(
-                                    options = listOf(MotionPref.FOLLOW, MotionPref.CALM),
-                                    isSelected = {
-                                        it == look.motion ||
-                                            (it == MotionPref.FOLLOW && look.motion == MotionPref.FULL)
-                                    },
-                                    label = { it.label },
-                                    onPick = { onLookChange(look.copy(motion = it)) },
-                                )
-                            }
-                            Setting(title = "Spacing") {
-                                Choices(
-                                    options = listOf(false, true),
-                                    isSelected = { it == look.compact },
-                                    label = { if (it) "Compact" else "Comfortable" },
-                                    onPick = { onLookChange(look.copy(compact = it)) },
-                                )
-                            }
-                            Setting(title = "Corners") {
-                                Choices(
-                                    options = listOf(false, true),
-                                    isSelected = { it == look.sharp },
-                                    label = { if (it) "Sharp" else "Rounded" },
-                                    onPick = { onLookChange(look.copy(sharp = it)) },
-                                )
-                            }
-                            Setting(
-                                title = "Text size",
-                                caption = "100% follows your phone's own text size. The others are " +
-                                    "a step up or down from it.",
-                            ) {
-                                Choices(
-                                    options = TEXT_SCALES,
-                                    isSelected = { near(it, look.textScale) },
-                                    label = { "${(it * 100).roundToInt()}%" },
-                                    onPick = { onLookChange(look.copy(textScale = it)) },
-                                )
-                            }
-                            Setting(title = "Panel edges") {
-                                Choices(
-                                    options = EdgePref.entries,
-                                    isSelected = { it == look.edges },
-                                    label = { it.label },
-                                    onPick = { onLookChange(look.copy(edges = it)) },
-                                )
-                            }
-                            Setting(
-                                title = "Screen transitions",
-                                caption = "Always off when the phone asks for less animation.",
-                            ) {
-                                Choices(
-                                    options = listOf(true, false),
-                                    isSelected = { it == look.transitions },
-                                    label = { if (it) "Standard" else "Off" },
-                                    onPick = { onLookChange(look.copy(transitions = it)) },
                                 )
                             }
                         }
@@ -799,6 +556,145 @@ fun AppearanceScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textLo,
                         )
+                    }
+                }
+            }
+
+            // Everything else, closed until asked for. The owner found the
+            // full list too much on one screen; none of it is needed to set
+            // the app up, and each control keeps working exactly as before.
+            item(key = "more") {
+                Plate {
+                    SwitchRow(
+                        title = "More options",
+                        detail = if (moreOpen) null else "Glow, motion, text size, spacing and how Home behaves.",
+                        checked = moreOpen,
+                        onChange = { moreOpen = it },
+                    )
+                    if (moreOpen) {
+                        Gap(12)
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            val share = (look.faceFraction * 100).roundToInt()
+                            Setting(
+                                title = "Face share of Home · $share%",
+                                caption = "How much of Home the face's panel takes. Dragging " +
+                                    "the handle on Home sets this too.",
+                            ) {
+                                Choices(
+                                    options = FACE_SHARES,
+                                    isSelected = { near(it, look.faceFraction) },
+                                    label = { "${(it * 100).roundToInt()}%" },
+                                    onPick = { onLookChange(look.copy(faceFraction = it)) },
+                                )
+                            }
+                            Column {
+                                SwitchRow(
+                                    title = "Make room for approvals",
+                                    detail = "Shrinks the face while something is waiting for you, " +
+                                        "so Approve and Deny are on screen. It never decides anything.",
+                                    checked = look.makeRoomForApprovals,
+                                    onChange = { onLookChange(look.copy(makeRoomForApprovals = it)) },
+                                )
+                                SwitchRow(
+                                    title = "Shrink the face while typing",
+                                    detail = null,
+                                    checked = look.shrinkWhileTyping,
+                                    onChange = { onLookChange(look.copy(shrinkWhileTyping = it)) },
+                                )
+                                SwitchRow(
+                                    title = "Follow the reply",
+                                    detail = "Keeps the newest words of a reply in view as they arrive.",
+                                    checked = look.followReply,
+                                    onChange = { onLookChange(look.copy(followReply = it)) },
+                                )
+                            }
+                            Setting(title = "Tapping the face") {
+                                Choices(
+                                    options = listOf(true, false),
+                                    isSelected = { it == look.tapFaceOpensMind },
+                                    label = { if (it) "Opens Mind" else "Does nothing" },
+                                    onPick = { onLookChange(look.copy(tapFaceOpensMind = it)) },
+                                )
+                            }
+                            Setting(
+                                title = "Glow",
+                                caption = "A share of the theme's own glow. It can only dim it, " +
+                                    "never brighten it.",
+                            ) {
+                                Choices(
+                                    options = GLOWS,
+                                    isSelected = { near(it, look.glow) },
+                                    label = { "${(it * 100).roundToInt()}%" },
+                                    onPick = { onLookChange(look.copy(glow = it)) },
+                                )
+                            }
+                            // Full is not offered. See MotionPref: the only thing
+                            // it could add is overriding the phone's own request
+                            // for less motion, and these settings only reduce.
+                            // A stored FULL shows as Follow phone, which is how
+                            // every reader treats it.
+                            Setting(
+                                title = "Motion",
+                                caption = "Calm slows the face down. Nothing here speeds anything up.",
+                            ) {
+                                Choices(
+                                    options = listOf(MotionPref.FOLLOW, MotionPref.CALM),
+                                    isSelected = {
+                                        it == look.motion ||
+                                            (it == MotionPref.FOLLOW && look.motion == MotionPref.FULL)
+                                    },
+                                    label = { it.label },
+                                    onPick = { onLookChange(look.copy(motion = it)) },
+                                )
+                            }
+                            Setting(title = "Spacing") {
+                                Choices(
+                                    options = listOf(false, true),
+                                    isSelected = { it == look.compact },
+                                    label = { if (it) "Compact" else "Comfortable" },
+                                    onPick = { onLookChange(look.copy(compact = it)) },
+                                )
+                            }
+                            Setting(title = "Corners") {
+                                Choices(
+                                    options = listOf(false, true),
+                                    isSelected = { it == look.sharp },
+                                    label = { if (it) "Sharp" else "Rounded" },
+                                    onPick = { onLookChange(look.copy(sharp = it)) },
+                                )
+                            }
+                            Setting(
+                                title = "Text size",
+                                caption = "100% follows your phone's own text size. The others are " +
+                                    "a step up or down from it.",
+                            ) {
+                                Choices(
+                                    options = TEXT_SCALES,
+                                    isSelected = { near(it, look.textScale) },
+                                    label = { "${(it * 100).roundToInt()}%" },
+                                    onPick = { onLookChange(look.copy(textScale = it)) },
+                                )
+                            }
+                            Setting(title = "Panel edges") {
+                                Choices(
+                                    options = EdgePref.entries,
+                                    isSelected = { it == look.edges },
+                                    label = { it.label },
+                                    onPick = { onLookChange(look.copy(edges = it)) },
+                                )
+                            }
+                            Setting(
+                                title = "Screen transitions",
+                                caption = "Always off when the phone asks for less animation.",
+                            ) {
+                                Choices(
+                                    options = listOf(true, false),
+                                    isSelected = { it == look.transitions },
+                                    label = { if (it) "Standard" else "Off" },
+                                    onPick = { onLookChange(look.copy(transitions = it)) },
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -31,7 +31,7 @@ import kotlin.random.Random
  *
  * Everything else here is per device and never synced: the theme, the dark
  * theme Follow the system returns to ([preferredDark]), the face size, and
- * the [look] record with its presets.
+ * the [look] record.
  */
 class AppearanceStore(context: Context) {
 
@@ -73,12 +73,10 @@ class AppearanceStore(context: Context) {
      * layout, glow, motion, density, shape, text size, panel edges and the
      * behaviour switches. See [Look].
      *
-     * One record rather than a key per setting, because the presets are what
-     * make a dozen controls usable: "Night" is several of these at once, and
-     * "Custom (from Night)" is decided by comparing the whole record with the
-     * preset (docs/UI-AUDIT-2026-09-23.md §4). Per device, like the theme,
-     * and never in [toSyncDocument]: none of it is part of the vocabulary
-     * the desktop shares, and none of it touches the desktop's settings.
+     * One record rather than a key per setting, so a dozen controls are one
+     * save and one read. Per device, like the theme, and never in
+     * [toSyncDocument]: none of it is part of the vocabulary the desktop
+     * shares, and none of it touches the desktop's settings.
      */
     val look: StateFlow<Look> = _look.asStateFlow()
 
@@ -97,27 +95,6 @@ class AppearanceStore(context: Context) {
      * or the owner's layout would be overwritten by the app's.
      */
     fun setFaceFraction(value: Float) = setLook(_look.value.copy(faceFraction = value))
-
-    /**
-     * Applies a preset. Returns false, and changes NOTHING, when the preset
-     * needs a theme change the dwell governor refuses right now - the same
-     * "one theme change at a time" answer a hand-picked theme gets. All or
-     * nothing, so "Night" never lands as half its settings on the wrong theme.
-     *
-     * A preset that names a theme turns Follow the system off, for the reason
-     * MainActivity's theme pick does: it is a deliberate choice of theme, and
-     * leaving the switch on would snap it straight back at the next dusk.
-     * Presets without a theme leave both alone.
-     */
-    fun applyPreset(preset: LookPreset, nowMs: Long = SystemClock.elapsedRealtime()): Boolean {
-        val theme = preset.themeId?.let { Themes.byId(it) }
-        if (theme != null) {
-            if (!setTheme(theme, nowMs)) return false
-            setFollowSystem(false)
-        }
-        setLook(preset.applyTo(_look.value))
-        return true
-    }
 
     private val _preferredDark = MutableStateFlow(loadPreferredDark())
 
@@ -449,7 +426,6 @@ class AppearanceStore(context: Context) {
      * the owner chose.
      */
     private fun encodeLook(l: Look): String = JSONObject().apply {
-        put("based_on", l.basedOn.id)
         put("face_fraction", l.faceFraction.toDouble())
         put("nav_always_shown", l.navAlwaysShown)
         put("glow", l.glow.toDouble())
@@ -493,7 +469,6 @@ class AppearanceStore(context: Context) {
             shrinkWhileTyping = b("shrink_while_typing", d.shrinkWhileTyping),
             followReply = b("follow_reply", d.followReply),
             tapFaceOpensMind = b("tap_face_opens_mind", d.tapFaceOpensMind),
-            basedOn = LookPreset.byId(o.optString("based_on")),
         ).clamped()
     }.getOrDefault(Look())
 
@@ -633,10 +608,8 @@ enum class EdgePref(val id: String, val label: String) {
  * phone's rule against deep config editing is about the backend, and this
  * is a paint choice on one screen.
  *
- * The first nine fields are the "Adjust" controls a [LookPreset] sets. The
- * four behaviour switches after them are NOT part of any preset: applying
- * "Night" should not quietly change whether the face makes room for an
- * approval, so [LookPreset.applyTo] leaves them where they are.
+ * A record the phone saved before the presets were removed may still carry
+ * a "based_on" key; [loadLook] simply does not read it.
  */
 data class Look(
     /** The face's share of Home, 0.20..0.85. The rest is the conversation. */
@@ -667,7 +640,7 @@ data class Look(
      */
     val transitions: Boolean = true,
 
-    // Behaviour switches: not part of any preset -----------------------------
+    // Behaviour switches -----------------------------------------------------
     /**
      * Shrink the face while an approval is waiting, so Approve and Deny are
      * on screen. It only moves the layout; it never decides anything.
@@ -679,9 +652,6 @@ data class Look(
     val followReply: Boolean = true,
     /** Tapping the face opens Mind. False: it does nothing. */
     val tapFaceOpensMind: Boolean = true,
-
-    /** The preset this look started from, for "Custom (from Focus)". */
-    val basedOn: LookPreset = LookPreset.FOCUS,
 ) {
     /** Every number pulled into its range, and NaN back to its default. */
     fun clamped(): Look = copy(
@@ -690,13 +660,6 @@ data class Look(
         glow = glow.orIfNotFinite(1f).coerceIn(MIN_GLOW, 1f),
         textScale = textScale.orIfNotFinite(1f).coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE),
     )
-
-    /** True when a fine control has moved away from [basedOn], or its theme did. */
-    fun isCustom(themeId: String): Boolean = !basedOn.matches(this, themeId)
-
-    /** "Focus", or "Custom (from Focus)" once anything has been changed. */
-    fun label(themeId: String): String =
-        if (isCustom(themeId)) "Custom (from ${basedOn.label})" else basedOn.label
 
     companion object {
         /** Home's own limits: neither pane may be dragged away entirely. */
@@ -711,87 +674,5 @@ data class Look(
         const val MAX_TEXT_SCALE = 1.3f
 
         private fun Float.orIfNotFinite(default: Float): Float = if (isFinite()) this else default
-    }
-}
-
-/**
- * One-tap looks, per docs/UI-AUDIT-2026-09-23.md §4.
- *
- * Each preset is the default [Look] with a few fields changed, plus
- * optionally a theme. Anything a preset does not mention is the default, so
- * applying one is predictable: "Conversation" after a custom text size puts
- * the text size back too. Only the behaviour switches are left alone.
- */
-enum class LookPreset(
-    val id: String,
-    val label: String,
-    /** One line for the picker, in plain words. */
-    val blurb: String,
-    /** The theme this preset picks, or null to leave the theme alone. Checked by LookTest. */
-    val themeId: String?,
-) {
-    FOCUS(
-        "focus", "Focus",
-        "The face takes most of Home. Tabs hidden until you swipe. The default.",
-        null,
-    ),
-    CONVERSATION(
-        "conversation", "Conversation",
-        "A smaller face and more room to read. Tabs always shown, tighter spacing.",
-        null,
-    ),
-    NIGHT(
-        "night", "Night",
-        "Ember Dusk, a dimmer glow and calmer motion.",
-        "ember_dusk",
-    ),
-    OUTDOOR(
-        "outdoor", "Outdoor",
-        "Daylight, tabs always shown, and slightly larger text.",
-        "daylight",
-    ),
-    ;
-
-    /** The Adjust fields this preset sets. */
-    private fun adjustments(): Look {
-        val base = Look(basedOn = this)
-        return when (this) {
-            FOCUS -> base
-            CONVERSATION -> base.copy(faceFraction = 0.35f, navAlwaysShown = true, compact = true)
-            NIGHT -> base.copy(glow = 0.6f, motion = MotionPref.CALM)
-            OUTDOOR -> base.copy(navAlwaysShown = true, textScale = 1.1f)
-        }
-    }
-
-    /** [look] with this preset's Adjust fields, keeping its behaviour switches. */
-    fun applyTo(look: Look): Look {
-        val a = adjustments()
-        return look.copy(
-            faceFraction = a.faceFraction,
-            navAlwaysShown = a.navAlwaysShown,
-            glow = a.glow,
-            motion = a.motion,
-            compact = a.compact,
-            sharp = a.sharp,
-            textScale = a.textScale,
-            edges = a.edges,
-            transitions = a.transitions,
-            basedOn = this,
-        )
-    }
-
-    /**
-     * Whether [look] is still exactly this preset. Worked out rather than
-     * stored as a "customised" flag, so moving a control back to where the
-     * preset had it makes the label honest again by itself.
-     */
-    fun matches(look: Look, themeId: String): Boolean =
-        applyTo(look) == look && (this.themeId == null || this.themeId == themeId)
-
-    companion object {
-        val DEFAULT = FOCUS
-
-        /** Anything unknown or missing is the default, never a crash. */
-        fun byId(id: String?): LookPreset = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
 }

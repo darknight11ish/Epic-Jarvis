@@ -1156,11 +1156,6 @@ class MainActivity : FragmentActivity() {
                         modifier = root,
                         look = look,
                         onLookChange = appearance::setLook,
-                        onApplyPreset = {
-                            if (!appearance.applyPreset(it)) {
-                                JarvisRuntime.setNotice("One theme change at a time — give it a moment.")
-                            }
-                        },
                         preferredDark = preferredDark,
                         // Sets the dark theme and leaves Follow the system on,
                         // unlike a normal theme pick, which turns it off.
