@@ -1,14 +1,31 @@
 package com.jarvis.client.face
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.toArgb
 import com.jarvis.client.FaceState
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.hypot
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * A face draws itself and knows nothing about Jarvis.
@@ -105,232 +122,1001 @@ object Faces {
     fun byId(id: String): Face = all.firstOrNull { it.id == id } ?: default
 }
 
-/** Concentric rings. The quiet one. */
+/**
+ * Concentric rings round a glowing core: the classic, tightened.
+ *
+ * A line-for-line port of the Reactor Kit artifact's `arc` draw(), which is
+ * also the desktop's (faces.html) - the two are byte-identical for this face.
+ * The version it replaces was five plain arcs and a dot, drawn at a quarter
+ * of the box; this is the artifact's four layers - a 72-tick bezel, three
+ * segmented rings turning at their own rates, a ring of 60 spokes the voice
+ * drives, and a bloomed core with the dark triangle cut into it.
+ *
+ * Every length and line width is a fraction of [FirstFiveKit.sz], the same
+ * fraction the artifact takes of its canvas width, so a 715px phone box gets
+ * the same several-pixel strokes the artifact draws rather than hairlines.
+ *
+ * Two inputs the artifact has and this port does not: the pointer lean
+ * (`TOUCH`, spokes pulling toward a held finger - the phone reports taps, not
+ * a held position) and the beat detector (`HUD.beat`, which nothing on the
+ * phone computes). Both are additive terms that are zero when idle in the
+ * artifact too, so leaving them out removes a reaction, not any drawing.
+ */
 object Arc : Face {
     override val id = "arc"
     override val name = "Arc"
 
+    // The artifact's per-state `sp`. The shell integrates this into
+    // `f.angle`, which is exactly the artifact's PHASE.
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.8f
-        FaceState.THINKING -> 2.2f
-        FaceState.SPEAKING -> 1.4f
-        else -> 0.45f
+        FaceState.LISTENING -> 0.7f
+        FaceState.THINKING -> 1.35f
+        FaceState.SPEAKING -> 0.5f
+        else -> 0.22f
     }
+
+    /** The artifact's per-state `gl`: how strongly the core blooms. */
+    private fun bloomFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.95f
+        FaceState.THINKING -> 0.8f
+        FaceState.SPEAKING -> 1f
+        else -> 0.42f
+    }
+
+    // The core's triangle, rebuilt in place each frame rather than allocated.
+    private val tri = Path()
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        val rings = 5
-        for (i in 0 until rings) {
-            val k = i / (rings - 1f)
-            val rr = r * (0.35f + k * 0.65f)
-            val dir = if (i % 2 == 0) 1f else -1f
-            val sweep = 90f + 150f * (0.5f + 0.5f * sin(f.tableAngle * (0.6f + k) + i))
-            drawArc(
-                color = mix(cool, hot, k * (0.5f + 0.5f * f.amp)),
-                startAngle = Math.toDegrees((f.angle * dir * (0.4f + k)).toDouble()).toFloat(),
-                sweepAngle = sweep,
-                useCenter = false,
-                topLeft = Offset(cx - rr, cy - rr),
-                size = androidx.compose.ui.geometry.Size(rr * 2, rr * 2),
-                style = Stroke(width = r * 0.045f),
+    ) = FirstFiveKit.frame(scope, r) { paint(cx, cy, r, hot, cool, f) }
+
+    private fun DrawScope.paint(cx: Float, cy: Float, r: Float, hot: Color, cool: Color, f: FaceFrame) {
+        val sz = FirstFiveKit.sz(r)
+        // `min(w,h)/2 - w*.06` on the artifact's square canvas.
+        val rim = sz * 0.44f
+        val t = f.t
+        // Speaking and thinking pulse on the clock rather than the level, as
+        // the artifact's do; listening is the one state driven by the mic.
+        val drive = when (f.motion) {
+            FaceState.LISTENING -> f.amp
+            FaceState.SPEAKING -> 0.42f + 0.32f * abs(sin(t * 6f))
+            FaceState.THINKING -> 0.3f + 0.14f * sin(t * 3.4f)
+            else -> 0.16f + 0.05f * sin(t * 1.3f)
+        }
+        val spin = f.angle + f.yaw
+
+        // The bezel: 72 ticks, every sixth one long and brighter.
+        val tickRot = spin * 0.35f
+        val tickW = sz * 0.006f
+        for (i in 0 until 72) {
+            val a = i / 72f * PI2 + tickRot
+            val long = i % 6 == 0
+            val inner = rim - if (long) rim * 0.09f else rim * 0.045f
+            val ca = cos(a)
+            val sa = sin(a)
+            drawLine(
+                color = cool,
+                start = Offset(cx + ca * rim, cy + sa * rim),
+                end = Offset(cx + ca * inner, cy + sa * inner),
+                strokeWidth = tickW,
+                alpha = if (long) 0.7f else 0.26f,
             )
         }
-        drawCircle(hot, r * (0.10f + 0.04f * f.amp), Offset(cx, cy))
+
+        // Three segmented rings, each turning at its own rate and direction.
+        // The yaw terms are the artifact's own: a drag turns each ring by a
+        // different amount, which is what makes them read as separate layers.
+        ring(cx, cy, rim * 0.82f, 6, 0.34f, sz * 0.016f, cool, 0.85f, -spin * 0.8f + f.yaw * 0.6f)
+        ring(cx, cy, rim * 0.68f, 12, 0.18f, sz * 0.009f, hot, 0.4f, spin * 1.4f + f.yaw * 1.3f)
+        ring(cx, cy, rim * 0.55f, 3, 0.55f, sz * 0.026f, cool, 0.3f, -spin * 0.5f + f.yaw * 0.4f)
+
+        // Sixty spokes pointing inward from 0.44 of the rim; their length is
+        // the drive, with a fast per-spoke shimmer on top.
+        val spokeW = sz * 0.007f
+        val spokeAlpha = (0.12f + drive * 0.5f).coerceIn(0f, 1f)
+        val base = rim * 0.44f
+        for (i in 0 until 60) {
+            val a = i / 60f * PI2
+            val n = sin(i * 2.1f + t * 7f) * 0.5f + 0.5f
+            val len = rim * 0.04f + drive * rim * 0.3f * (0.35f + n * 0.65f)
+            val ca = cos(a)
+            val sa = sin(a)
+            drawLine(
+                color = hot,
+                start = Offset(cx + ca * base, cy + sa * base),
+                end = Offset(cx + ca * (base - len), cy + sa * (base - len)),
+                strokeWidth = spokeW,
+                alpha = spokeAlpha,
+            )
+        }
+
+        // The core: a bloom out to 2.3x, then a solid centre over it. The
+        // gradient goes through FirstFiveKit.radial, which is what keeps it as
+        // tight as the artifact's - see there.
+        val cr = rim * 0.22f + drive * rim * 0.09f
+        val centre = Offset(cx, cy)
+        drawCircle(
+            brush = FirstFiveKit.radial(
+                0f to hot,
+                0.3f to hot.copy(alpha = 0.75f),
+                0.65f to cool.copy(alpha = 0.2f),
+                1f to Color.Transparent,
+                center = centre,
+                radius = cr * 2.3f,
+            ),
+            radius = cr * 2.3f,
+            center = centre,
+            alpha = bloomFor(f.motion).coerceAtMost(1f),
+        )
+        drawCircle(hot, cr * 0.42f, centre)
+
+        // The dark triangle cut into the core, counter-rotating. The artifact
+        // strokes it in its background colour, #04070c, which is the spec's
+        // background and so Spec.BACKGROUND here.
+        val triRot = -spin * 0.25f
+        tri.reset()
+        for (i in 0 until 3) {
+            val a = i / 3f * PI2 - PI.toFloat() / 2f + triRot
+            val x = cx + cos(a) * cr * 0.3f
+            val y = cy + sin(a) * cr * 0.3f
+            if (i == 0) tri.moveTo(x, y) else tri.lineTo(x, y)
+        }
+        tri.close()
+        drawPath(tri, Spec.BACKGROUND, alpha = 0.85f, style = Stroke(width = sz * 0.016f))
+    }
+
+    /** The artifact's `ring()`: [segs] arcs round the circle, each short by [gap] radians. */
+    private fun DrawScope.ring(
+        cx: Float, cy: Float, rad: Float, segs: Int, gap: Float,
+        width: Float, color: Color, alpha: Float, rot: Float,
+    ) {
+        val stroke = Stroke(width = width)
+        val step = PI2 / segs
+        val sweep = Math.toDegrees((step - gap).toDouble()).toFloat()
+        val topLeft = Offset(cx - rad, cy - rad)
+        val box = Size(rad * 2f, rad * 2f)
+        for (i in 0 until segs) {
+            drawArc(
+                color = color,
+                startAngle = Math.toDegrees((rot + i * step).toDouble()).toFloat(),
+                sweepAngle = sweep,
+                useCenter = false,
+                topLeft = topLeft,
+                size = box,
+                alpha = alpha,
+                style = stroke,
+            )
+        }
     }
 }
 
-/** Five inclined orbits, depth sorted. */
+/**
+ * Five bodies on inclined, eccentric orbits, depth sorted around a glowing core.
+ *
+ * A port of the artifact's `orbit` draw() (identical to the desktop's). What
+ * it replaced was five rings of 48 evenly spaced dots - a pattern, not
+ * orbits. Here each body is a real Kepler ellipse, r = a(1-e^2)/(1+e cos),
+ * with its path traced faintly behind it, seen through a true perspective
+ * camera; the states change the eccentricity, not just the speed, so
+ * thinking swings the bodies out on long ellipses and listening pulls them
+ * into tight circles. The core is painted at the right point in the depth
+ * sort, so the far bodies pass behind it and the near ones in front.
+ */
 object Orbit : Face {
     override val id = "orbit"
     override val name = "Orbit"
 
+    private const val BODIES = 5
+    private const val PATH_STEPS = 64
+
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 1.0f
-        FaceState.THINKING -> 2.6f
-        FaceState.SPEAKING -> 1.6f
-        else -> 0.5f
+        FaceState.LISTENING -> 1.1f
+        FaceState.THINKING -> 0.75f
+        FaceState.SPEAKING -> 0.5f
+        else -> 0.35f
     }
+
+    /** The artifact's per-state `ecc`. */
+    private fun eccFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.04f
+        FaceState.THINKING -> 0.55f
+        FaceState.SPEAKING -> 0.25f
+        else -> 0.15f
+    }
+
+    // Per-frame scratch, on the singleton rather than reallocated - the same
+    // pattern Fullerene's buffers set out. Every slot is written before it is
+    // read, so nothing carries between frames.
+    private val bx = FloatArray(BODIES)
+    private val by = FloatArray(BODIES)
+    private val bz = FloatArray(BODIES)
+    private val bd = FloatArray(BODIES)
+    private val order = IntArray(BODIES)
+    private val trace = Path()
+
+    // The artifact traces each orbit at a fixed 1.1 px. That is its own raw
+    // number, not a fraction of the canvas, and it is 1.1 of the artifact's
+    // BACKING pixels - which on a phone are finer than device pixels - so a
+    // fixed 1.1 device px here is already a touch heavier than the reference.
+    private val traceStroke = Stroke(width = 1.1f)
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        val steps = 48
-        for (o in 0 until 5) {
-            val incl = (o / 5f) * PI.toFloat() * 0.8f + f.pitch * 0.4f
-            // Hoisted: these were recomputed for all 48 steps of the inner
-            // loop, 480 redundant trig calls a frame.
-            val ci = cos(incl)
+    ) = FirstFiveKit.frame(scope, r) { paint(cx, cy, r, hot, cool, f) }
+
+    private fun DrawScope.paint(cx: Float, cy: Float, r: Float, hot: Color, cool: Color, f: FaceFrame) {
+        val sz = FirstFiveKit.sz(r)
+        val t = f.t
+        val phase = f.angle
+        // The spin (ry) rides the state's speed; the slow nod (rx) stays on
+        // the raw clock, so it does not speed up when Jarvis starts thinking.
+        FirstFiveKit.view(phase * 0.5f + f.yaw, -0.42f + sin(t * 0.18f) * 0.1f + f.pitch)
+        val dist = 4.2f
+        val scale = sz * 1.15f
+        val baseEcc = eccFor(f.motion)
+        val traceColor = cool.copy(alpha = 0.30f)
+
+        for (i in 0 until BODIES) {
+            val orbR = 0.42f + i * 0.22f
+            val incl = (i - 2) * 0.42f
             val si = sin(incl)
-            for (s in 0 until steps) {
-                val a = s / steps.toFloat() * PI2 + f.angle * (0.5f + o * 0.15f) + f.yaw
-                val x = cos(a) * r
-                val y = sin(a) * r * ci
-                // Depth is read for size and alpha only, never position. Raising
-                // it is the one change that makes the most 3D faces read as
-                // volumes: far particles smaller and fainter, near ones bigger.
-                val z = sin(a) * si
-                val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
-                drawCircle(
-                    color = mix(cool, hot, d).copy(alpha = 0.25f + 0.75f * d),
-                    radius = r * (0.012f + 0.022f * d) * (1f + f.amp * 0.5f),
-                    center = Offset(cx + x, cy + y),
-                )
+            val ci = cos(incl)
+            val ecc = baseEcc * (1f + i * 0.12f)
+            val ang = phase * (1.6f - i * 0.2f) + i * 1.31f
+            val rr = orbR * (1f - ecc * ecc) / (1f + ecc * cos(ang))
+            // The orbit plane is tilted about X by its inclination.
+            val ox = cos(ang) * rr
+            val oz = sin(ang) * rr
+            FirstFiveKit.proj(ox, oz * si, oz * ci, dist, scale, cx, cy)
+            bx[i] = FirstFiveKit.px
+            by[i] = FirstFiveKit.py
+            bz[i] = FirstFiveKit.pz
+            bd[i] = FirstFiveKit.pd
+            order[i] = i
+
+            // The path itself, faint, drawn before any body.
+            trace.reset()
+            for (k in 0..PATH_STEPS) {
+                val a2 = k / PATH_STEPS.toFloat() * PI2
+                val r2 = orbR * (1f - ecc * ecc) / (1f + ecc * cos(a2))
+                val z0 = sin(a2) * r2
+                FirstFiveKit.proj(cos(a2) * r2, z0 * si, z0 * ci, dist, scale, cx, cy)
+                if (k == 0) trace.moveTo(FirstFiveKit.px, FirstFiveKit.py)
+                else trace.lineTo(FirstFiveKit.px, FirstFiveKit.py)
             }
+            trace.close()
+            drawPath(trace, traceColor, style = traceStroke)
         }
+
+        // Far to near. Five entries: an insertion sort, no comparator object.
+        for (i in 1 until BODIES) {
+            val o = order[i]
+            var j = i - 1
+            while (j >= 0 && bz[order[j]] < bz[o]) {
+                order[j + 1] = order[j]
+                j--
+            }
+            order[j + 1] = o
+        }
+
+        // The core sits at the origin, so it is painted just before the first
+        // body that is nearer than it (z < 0).
+        var coreDrawn = false
+        for (o in order) {
+            if (!coreDrawn && bz[o] < 0f) {
+                paintCore(cx, cy, sz, t, hot, f)
+                coreDrawn = true
+            }
+            val d = bd[o]
+            val rr = max(2f, sz * 0.030f * d * d)
+            val a = min(1f, 0.30f + d * 0.62f)
+            val at = Offset(bx[o], by[o])
+            drawCircle(
+                brush = FirstFiveKit.radial(
+                    0f to hot,
+                    0.4f to cool.copy(alpha = 0.5f),
+                    1f to Color.Transparent,
+                    center = at,
+                    radius = rr * 2.6f,
+                ),
+                radius = rr * 2.6f,
+                center = at,
+                alpha = a,
+            )
+            drawCircle(hot, rr, at, alpha = a)
+        }
+        if (!coreDrawn) paintCore(cx, cy, sz, t, hot, f)
+    }
+
+    private fun DrawScope.paintCore(cx: Float, cy: Float, sz: Float, t: Float, hot: Color, f: FaceFrame) {
+        val cr = sz * 0.075f + if (f.motion == FaceState.LISTENING) f.amp * sz * 0.06f else sz * 0.016f * sin(t * 4f)
+        val centre = Offset(cx, cy)
+        // The artifact's core is white-hot at the centre. White is a literal,
+        // so the shell's dim never reaches it; it is dimmed here by the same
+        // factor instead, so a dimmed state (standby, banked) does not keep a
+        // full-white core in an otherwise dimmed face. At dim 1 it is white.
+        val white = mix(Spec.BACKGROUND, Color.White, f.dim)
+        // Drawn at full strength, the one place this face is brighter
+        // than the artifact, on purpose. The artifact's paintCore never sets
+        // its own alpha, so it inherits whatever the body drawn just before
+        // it left behind - anywhere from 0.3 to 1 - and that value jumps
+        // in a single frame whenever a body crosses in front of the core and
+        // the depth order changes. On a glow half the face across, that
+        // is a sudden brightness step a few times a revolution; the spec's
+        // flash limits are the reason not to copy it.
+        drawCircle(
+            brush = FirstFiveKit.radial(
+                0f to white,
+                0.25f to hot,
+                0.6f to hot.copy(alpha = 0.22f),
+                1f to Color.Transparent,
+                center = centre,
+                radius = cr * 3.4f,
+            ),
+            radius = cr * 3.4f,
+            center = centre,
+        )
     }
 }
 
-/** Hex lattice. */
+/**
+ * Honeycomb with real extruded walls, filling from the middle outward.
+ *
+ * A port of the artifact's `comb` draw() (identical to the desktop's). What
+ * it replaced was 37 flat hexagon outlines. This is a hex lattice on an
+ * axial grid - 37 or 61 cells depending on how big the face is drawn -
+ * seen from above at an angle through a real perspective camera, with each
+ * cell's six inner walls filled and shaded by which way they face, honey
+ * sitting in the bottom at a level that spreads outward from the centre, and
+ * only the wall tops catching the light. Thinking drains it; listening fills
+ * it with the voice.
+ *
+ * The artifact's comb has no spin of its own: it moves only by the fill wave
+ * (on the raw clock) and the drag. That is kept - `speedFor` feeds nothing
+ * here, and still carries the artifact's `sp` so the table is honest.
+ *
+ * Cost: at 61 cells, eight filled or stroked paths each - about 490 path
+ * draws a frame, all from one reused Path. The heaviest of these five.
+ */
 object Comb : Face {
     override val id = "comb"
     override val name = "Comb"
 
+    private const val MAX_CELLS = 61   // a 4-ring hex lattice: 3*4*5 + 1
+    private const val CELL_R = 0.135f
+    private const val DEPTH = 0.20f
+
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.7f
-        FaceState.THINKING -> 1.8f
-        FaceState.SPEAKING -> 1.1f
-        else -> 0.35f
+        FaceState.LISTENING -> 0.35f
+        FaceState.THINKING -> 0.9f
+        FaceState.SPEAKING -> 0.2f
+        else -> 0.10f
     }
+
+    private fun fillFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.80f
+        FaceState.THINKING -> 0.22f
+        FaceState.SPEAKING -> 0.68f
+        else -> 0.55f
+    }
+
+    private fun waveFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 1.6f
+        FaceState.THINKING -> 3.2f
+        FaceState.SPEAKING -> 1.0f
+        else -> 0.6f
+    }
+
+    private val cellX = FloatArray(MAX_CELLS)
+    private val cellZ = FloatArray(MAX_CELLS)
+    private val cellD = FloatArray(MAX_CELLS)
+    private val cellKey = FloatArray(MAX_CELLS)
+    private val order = IntArray(MAX_CELLS)
+    private val topX = FloatArray(6)
+    private val topY = FloatArray(6)
+    private val botX = FloatArray(6)
+    private val botY = FloatArray(6)
+    private val hexCos = FloatArray(6) { cos(it / 6f * PI2) }
+    private val hexSin = FloatArray(6) { sin(it / 6f * PI2) }
+    private val path = Path()
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        val cell = r * 0.28f
-        var ring = 0
-        while (ring <= 3) {
-            val count = if (ring == 0) 1 else ring * 6
-            for (i in 0 until count) {
-                val a = if (ring == 0) 0f else i / count.toFloat() * PI2
-                val dist = cell * ring * 1.55f
-                val x = cx + cos(a) * dist
-                val y = cy + sin(a) * dist
-                val beat = 0.5f + 0.5f * sin(f.tableAngle * 1.4f - ring * 0.8f + i * 0.3f)
-                val k = beat * (0.45f + 0.55f * f.amp)
-                hexagon(x, y, cell * 0.52f, f.angle * 0.25f) { p0, p1 ->
-                    drawLine(
-                        color = mix(cool, hot, k),
-                        start = p0,
-                        end = p1,
-                        strokeWidth = r * 0.018f,
-                    )
-                }
+    ) = FirstFiveKit.frame(scope, r) { paint(cx, cy, r, hot, cool, f) }
+
+    private fun DrawScope.paint(cx: Float, cy: Float, r: Float, hot: Color, cool: Color, f: FaceFrame) {
+        val sz = FirstFiveKit.sz(r)
+        val t = f.t
+        // The artifact passes yaw*.7 and pitch*.7 into rot3, which then adds
+        // the full view yaw and pitch again: a drag turns the comb 1.7x.
+        FirstFiveKit.view(f.yaw * 0.7f + f.yaw, -0.78f + f.pitch * 0.7f + f.pitch)
+        val dist = 4.6f
+        val scale = sz * 1.15f
+        val rings = FirstFiveKit.detail(sz / fit, 3, 4)
+        val fill = fillFor(f.motion)
+        val wave = waveFor(f.motion)
+        val listening = f.motion == FaceState.LISTENING
+
+        var n = 0
+        for (q in -rings..rings) {
+            for (s in max(-rings, -q - rings)..min(rings, -q + rings)) {
+                val x = CELL_R * 1.5f * q
+                val z = CELL_R * sqrt(3f) * (s + q / 2f)
+                cellX[n] = x
+                cellZ[n] = z
+                cellD[n] = hypot(x, z)
+                FirstFiveKit.rot(x, 0f, z)
+                cellKey[n] = FirstFiveKit.rz
+                order[n] = n
+                n++
             }
-            ring++
+        }
+        // Far to near, so near walls cover far ones.
+        for (i in 1 until n) {
+            val o = order[i]
+            var j = i - 1
+            while (j >= 0 && cellKey[order[j]] < cellKey[o]) {
+                order[j + 1] = order[j]
+                j--
+            }
+            order[j + 1] = o
+        }
+
+        val wallTop = Stroke(width = max(0.8f, sz * 0.006f))
+        val coolLit = FirstFiveKit.shade(cool, 1.5f)
+        val hotShade = FirstFiveKit.shade(hot, 0.55f)
+        for (idx in 0 until n) {
+            val c = order[idx]
+            val x = cellX[c]
+            val z = cellZ[c]
+            val d = cellD[c]
+            // Fill spreads outward from the centre; the wave is provisioning.
+            val lvl = ((fill - d * 0.55f) * 2f + sin(t * wave - d * 4f) * 0.18f +
+                (if (listening) f.amp * 0.4f else 0f)).coerceIn(0f, 1f)
+
+            hex(x, z, -DEPTH, CELL_R * 0.92f, dist, scale, cx, cy, topX, topY)
+            hex(x, z, 0f, CELL_R * 0.92f, dist, scale, cx, cy, botX, botY)
+
+            // The six inner walls, so the cell has visible depth. Shaded by
+            // which way each one faces the viewer.
+            for (i in 0 until 6) {
+                val j = (i + 1) % 6
+                path.reset()
+                path.moveTo(topX[i], topY[i])
+                path.lineTo(topX[j], topY[j])
+                path.lineTo(botX[j], botY[j])
+                path.lineTo(botX[i], botY[i])
+                path.close()
+                val facing = topX[j] - topX[i]
+                drawPath(path, FirstFiveKit.shade(cool, 0.22f + max(0f, facing / (sz * 0.06f)) * 0.30f))
+            }
+
+            // The honey sitting in the bottom of the cell.
+            if (lvl > 0.02f) {
+                hex(x, z, -DEPTH * lvl, CELL_R * 0.86f, dist, scale, cx, cy, botX, botY)
+                path.reset()
+                for (i in 0 until 6) {
+                    if (i == 0) path.moveTo(botX[i], botY[i]) else path.lineTo(botX[i], botY[i])
+                }
+                path.close()
+                drawPath(path, mix(hotShade, hot, lvl), alpha = 0.55f + lvl * 0.45f)
+            }
+
+            // Wall tops: the only part catching direct light.
+            path.reset()
+            for (i in 0 until 6) {
+                if (i == 0) path.moveTo(topX[i], topY[i]) else path.lineTo(topX[i], topY[i])
+            }
+            path.close()
+            drawPath(path, mix(coolLit, hot, 0.25f + lvl * 0.4f), style = wallTop)
         }
     }
 
-    /**
-     * Floats, not nullable Offsets.
-     *
-     * `Offset` is a value class over a Long, so it is free — until it is made
-     * nullable, at which point every assignment boxes. `prev` and `first` were
-     * `Offset?`, which cost 7 boxes per hexagon; at 37 hexagons that is 259
-     * allocations a frame, 15,500 a second, around 250 KB/s — the largest
-     * single allocation source in the app, and precisely the shape the
-     * Fullerene comment further down congratulates itself on having removed.
-     *
-     * The Offsets handed to the inlined [edge] are non-null and stay unboxed.
-     */
-    private inline fun hexagon(
-        x: Float, y: Float, rad: Float, rot: Float,
-        edge: (Offset, Offset) -> Unit,
+    /** The artifact's `hexPts`: a hexagon of radius [rad] at height [y], projected. */
+    private fun hex(
+        x: Float, z: Float, y: Float, rad: Float,
+        dist: Float, scale: Float, cx: Float, cy: Float,
+        outX: FloatArray, outY: FloatArray,
     ) {
-        val firstX = x + cos(rot) * rad
-        val firstY = y + sin(rot) * rad
-        var prevX = firstX
-        var prevY = firstY
-        for (i in 1..5) {
-            val a = rot + i / 6f * PI2
-            val px = x + cos(a) * rad
-            val py = y + sin(a) * rad
-            edge(Offset(prevX, prevY), Offset(px, py))
-            prevX = px
-            prevY = py
+        for (i in 0 until 6) {
+            FirstFiveKit.rot(x + hexCos[i] * rad, y, z + hexSin[i] * rad)
+            val k = scale / (dist + FirstFiveKit.rz)
+            outX[i] = cx + FirstFiveKit.rx * k
+            outY[i] = cy + FirstFiveKit.ry * k
         }
-        edge(Offset(prevX, prevY), Offset(firstX, firstY))
     }
 }
 
-/** Logarithmic arms — a particle field, so the depth gain does real work. */
+/**
+ * A barred spiral galaxy whose arms are a traffic jam, not a structure.
+ *
+ * A port of the artifact's `spiral` draw() (identical to the desktop's). What
+ * it replaced was three rigid logarithmic arms of 90 dots each. Here, as in
+ * the artifact, 600-1500 stars (more the bigger the face is drawn) each run
+ * their own closed oval at their own Keplerian rate, and the ovals are turned
+ * a little more the further out they are; nothing is drawn as an arm - the
+ * arms are where the ovals crowd, and they persist while every star moves
+ * through them. Crowded stars are brighter, the youngest carry a small glow,
+ * and the whole field adds light ("lighter" compositing, [BlendMode.Plus]).
+ *
+ * The artifact seeds its stars from Math.random on first draw; this seeds a
+ * fixed generator instead, so the galaxy is the same one every time the face
+ * is picked. Only the star layout is fixed - every position is still a pure
+ * function of the angle, as in the artifact.
+ *
+ * Cost: one `drawCircle` per star, up to 1500 a frame plus about 3% more for
+ * the glows, all additive - the most draw calls of these five, about three
+ * and a half times Kirkwood's 420 rocks, though each one is a small dot.
+ */
 object Spiral : Face {
     override val id = "spiral"
     override val name = "Spiral"
 
+    private const val MAX_STARS = 1500
+
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.6f
-        FaceState.THINKING -> 1.9f
-        FaceState.SPEAKING -> 1.0f
-        else -> 0.3f
+        FaceState.LISTENING -> 0.25f
+        FaceState.THINKING -> 0.6f
+        FaceState.SPEAKING -> 0.16f
+        else -> 0.10f
+    }
+
+    private fun armsFor(motion: FaceState) = when (motion) {
+        FaceState.THINKING -> 4
+        FaceState.SPEAKING -> 3
+        else -> 2
+    }
+
+    private fun windFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.50f
+        FaceState.THINKING -> 0.75f
+        FaceState.SPEAKING -> 0.46f
+        else -> 0.42f
+    }
+
+    // The fixed layout, and everything about each star that is a function of
+    // the layout alone - its orbital rate, its eccentricity and the log term
+    // of its precession - so the draw loop computes only what moves.
+    private val starR = FloatArray(MAX_STARS)
+    private val starA0 = FloatArray(MAX_STARS)
+    private val starZ = FloatArray(MAX_STARS)
+    private val starM = FloatArray(MAX_STARS)
+    private val starC = FloatArray(MAX_STARS)
+    private val starOmega = FloatArray(MAX_STARS)
+    private val starEcc = FloatArray(MAX_STARS)
+    private val starLog = FloatArray(MAX_STARS)
+
+    init {
+        val rnd = kotlin.random.Random(20260923)
+        for (i in 0 until MAX_STARS) {
+            val a = rnd.nextFloat().pow(0.55f)
+            starR[i] = a
+            starA0[i] = rnd.nextFloat() * PI2
+            starZ[i] = (rnd.nextFloat() - 0.5f) * 0.10f / (0.2f + a)
+            starM[i] = rnd.nextFloat()
+            starC[i] = rnd.nextFloat()
+            starOmega[i] = 1f / (0.18f + a)
+            // Ovals rounder in the bulge.
+            starEcc[i] = 0.26f * min(1f, a / 0.30f)
+            starLog[i] = ln(0.10f + a)
+        }
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        val arms = 3
-        val per = 90
-        for (arm in 0 until arms) {
-            for (i in 0 until per) {
-                val k = i / per.toFloat()
-                val a = arm / arms.toFloat() * PI2 + k * 3.4f + f.angle * 0.6f + f.yaw
-                val dist = r * k.pow(0.7f)
-                val wobble = sin(f.tableAngle * 0.8f + k * 6f) * r * 0.03f
-                val d = (1f - k).pow(Spec.DEPTH_GAIN)
+    ) = FirstFiveKit.frame(scope, r) { paint(cx, cy, r, hot, cool, f) }
+
+    private fun DrawScope.paint(cx: Float, cy: Float, r: Float, hot: Color, cool: Color, f: FaceFrame) {
+        val sz = FirstFiveKit.sz(r)
+        val n = FirstFiveKit.detail(sz / fit, 600, MAX_STARS)
+        // As in the artifact, the view is passed in AND added again by the
+        // projection, so a drag turns the disc twice as far as the drag.
+        FirstFiveKit.view(f.yaw + f.yaw, -1.05f + f.pitch + f.pitch)
+        val dist = 4.0f
+        val scale = sz * 1.5f
+        val phase = f.angle
+        val half = armsFor(f.motion) / 2f
+        val wind = windFor(f.motion)
+        // The artifact's PC slots: [hot, cool, their midpoint].
+        val mid = mix(hot, cool, 0.5f)
+        val drift = phase * 0.28f
+
+        for (i in 0 until n) {
+            val a = starR[i]
+            // Where the star is on its own oval.
+            val th = starA0[i] + phase * starOmega[i] * 0.5f
+            val c = cos(th * half)
+            val rr = a * (1f - starEcc[i] * c)
+            // Apsidal precession with radius: the tilt that winds the nest of
+            // ovals into a spiral instead of a rosette.
+            val ang = th + starLog[i] / wind + drift
+            FirstFiveKit.proj(cos(ang) * rr, starZ[i], sin(ang) * rr, dist, scale, cx, cy)
+            val d = FirstFiveKit.pd
+            // A star lingers longest at the near end of its oval, which is
+            // also where the ovals crowd - so the arm holds more stars, longer.
+            val crowd = abs(c).pow(2.4f)
+            val young = crowd > 0.62f && starC[i] > 0.5f
+            val m = starM[i]
+            val col = if (young || a < 0.22f) mid else cool
+            val br = (0.045f + crowd * 0.62f) * (if (young) 1.9f else 1f) * (0.35f + m * 0.85f)
+            val rad = max(0.45f, sz * 0.0042f * d * (if (young) 1.7f else 1f) * (0.35f + m))
+            val at = Offset(FirstFiveKit.px, FirstFiveKit.py)
+            drawCircle(
+                color = col,
+                radius = rad,
+                center = at,
+                alpha = min(0.92f, br * d),
+                blendMode = BlendMode.Plus,
+            )
+            // The brightest arm stars carry their own little HII glow.
+            if (young && m > 0.72f) {
                 drawCircle(
-                    color = mix(cool, hot, d * (0.5f + 0.5f * f.amp))
-                        .copy(alpha = 0.2f + 0.8f * d),
-                    radius = r * (0.006f + 0.018f * d),
-                    center = Offset(cx + cos(a) * dist, cy + sin(a) * dist + wobble),
+                    color = cool,
+                    radius = rad * 3.4f,
+                    center = at,
+                    alpha = (0.12f * crowd).coerceIn(0f, 1f),
+                    blendMode = BlendMode.Plus,
                 )
             }
         }
-        drawCircle(hot, r * (0.07f + 0.03f * f.amp), Offset(cx, cy))
+
+        // The bulge, added over the stars.
+        FirstFiveKit.proj(0f, 0f, 0f, dist, scale, cx, cy)
+        val c0 = Offset(FirstFiveKit.px, FirstFiveKit.py)
+        drawCircle(
+            brush = FirstFiveKit.radial(
+                0f to hot.copy(alpha = 0.45f),
+                0.4f to mid.copy(alpha = 0.14f),
+                1f to Color.Transparent,
+                center = c0,
+                radius = sz * 0.16f,
+            ),
+            radius = sz * 0.16f,
+            center = c0,
+            blendMode = BlendMode.Plus,
+        )
     }
 }
 
-/** Overlapping aperture blades. */
+/**
+ * An eye, built the way an iris actually is.
+ *
+ * A port of the artifact's `iris` draw() (identical to the desktop's). What
+ * it replaced was nine straight lines and a dot. This is the artifact's
+ * anatomy: 120-220 stromal fibres (more the bigger the face is drawn), each
+ * a gently wandering seven-point curve from the pupil out to the limbus with
+ * its own depth and brightness; the raised collarette ring; a black pupil
+ * that dilates on the state - wide when listening, a pinhole when thinking -
+ * and a dark limbal ring round the edge.
+ *
+ * The pupil eases toward its target rather than jumping - "a real sphincter
+ * has mass" - which is the one piece of state this face carries, and why
+ * SpecDriftTest lists iris among the faces that cannot be pinned. The
+ * artifact eases by 6% a frame; this eases by the matching time constant
+ * (0.27 s, which is 6% a frame at 60 Hz) so a 120 Hz panel does not dilate
+ * twice as fast.
+ *
+ * One deliberate difference: the artifact paints its sclera gradient over the
+ * whole canvas, opaque to the corners, which replaces the background. Here
+ * the same gradient fades to transparent at its outer edge instead, so the
+ * eye sits in the theme's own well like every other face (see the single
+ * ground in FaceView's drawFace) rather than in its own grey rectangle.
+ *
+ * Cost: up to 220 anti-aliased path strokes a frame, the most fill work of
+ * these five after Comb. Worth watching on an old phone.
+ */
 object Iris : Face {
     override val id = "iris"
     override val name = "Iris"
     override val fit = 0.86f
 
+    private const val MAX_FIBRES = 220
+
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.9f
-        FaceState.THINKING -> 2.0f
-        FaceState.SPEAKING -> 1.3f
-        else -> 0.4f
+        FaceState.LISTENING -> 1.4f
+        FaceState.THINKING -> 2.2f
+        FaceState.SPEAKING -> 0.9f
+        else -> 0.5f
     }
+
+    private fun pupilFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.46f
+        FaceState.THINKING -> 0.15f
+        FaceState.SPEAKING -> 0.34f
+        else -> 0.30f
+    }
+
+    private fun jitterFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.09f
+        FaceState.THINKING -> 0.05f
+        FaceState.SPEAKING -> 0.04f
+        else -> 0.02f
+    }
+
+    // The artifact's per-fibre hash, frac(sin(i * 12.9898) * 43758.5453), in
+    // double precision like the reference, computed once.
+    private val fibreRnd = FloatArray(MAX_FIBRES) {
+        val s = kotlin.math.sin(it * 12.9898) * 43758.5453
+        (s - kotlin.math.floor(s)).toFloat()
+    }
+
+    // sin(k/6 * PI) for the seven points along a fibre: the wander is zero at
+    // both ends and largest in the middle.
+    private val bow = FloatArray(7) { sin(it / 6f * PI.toFloat()) }
+
+    private var pupil = 0.30f
+    private var lastT = Float.NaN
+
+    private val fibre = Path()
+    private val disc = Path()
+
+    // Each fibre has its own width, so each needs its own Stroke: 220 new
+    // objects a frame if made in the draw. These are rebuilt only when the
+    // face's size changes, so while it holds still (idle, thinking) the fibres
+    // allocate nothing. Speaking and listening push the size every frame, and
+    // then they are rebuilt every frame - no worse than making them inline.
+    private val fibreStrokes = Array(MAX_FIBRES) { Stroke(width = 1f) }
+    private var strokesFor = -1f
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        val blades = 9
-        val open = 0.35f + 0.25f * (0.5f + 0.5f * sin(f.tableAngle * 0.9f)) + f.amp * 0.15f
-        for (i in 0 until blades) {
-            val a = i / blades.toFloat() * PI2 + f.angle * 0.3f
-            val inner = r * open
-            val p0 = Offset(cx + cos(a) * inner, cy + sin(a) * inner)
-            val p1 = Offset(cx + cos(a + 0.9f) * r, cy + sin(a + 0.9f) * r)
-            drawLine(
-                color = mix(cool, hot, i / blades.toFloat()),
-                start = p0,
-                end = p1,
-                strokeWidth = r * 0.05f,
+    ) = FirstFiveKit.frame(scope, r) { paint(cx, cy, r, hot, cool, f) }
+
+    private fun DrawScope.paint(cx: Float, cy: Float, r: Float, hot: Color, cool: Color, f: FaceFrame) {
+        val sz = FirstFiveKit.sz(r)
+        val rim = sz * 0.44f
+        val centre = Offset(cx, cy)
+
+        // The pupil eases toward the state's size. A step backwards in the
+        // clock, or a long gap, means this singleton was just drawn by some
+        // other host (a thumbnail, a new screen): snap rather than ease from
+        // a stranger's pupil.
+        val target = max(0.08f, pupilFor(f.motion) * if (f.motion == FaceState.LISTENING) 1f + f.amp * 0.5f else 1f)
+        val dt = f.t - lastT
+        pupil = if (dt.isNaN() || dt < 0f || dt > 0.5f) target
+        else pupil + (target - pupil) * (1f - exp(-dt / 0.27f))
+        lastT = f.t
+        val pr = rim * pupil
+
+        // Sclera: the artifact's off-centre gradient, lit from the upper left.
+        // A two-point gradient (focal point offset from the centre) is not
+        // something Compose's Brush offers, so this is Android's own
+        // RadialGradient, API 31+, well inside this app's minSdk 33.
+        drawRect(
+            brush = scleraBrush(cx, cy, rim),
+            topLeft = Offset.Zero,
+            size = size,
+        )
+
+        disc.reset()
+        disc.addOval(Rect(centre, rim))
+        clipPath(disc) {
+            drawCircle(FirstFiveKit.shade(cool, 0.45f), rim, centre)
+
+            val nf = FirstFiveKit.detail(sz / fit, 120, MAX_FIBRES)
+            if (sz != strokesFor) {
+                for (i in 0 until MAX_FIBRES) {
+                    fibreStrokes[i] = Stroke(width = max(0.6f, sz * 0.004f * (0.5f + fibreRnd[i])))
+                }
+                strokesFor = sz
+            }
+            val jit = jitterFor(f.motion)
+            for (i in 0 until nf) {
+                val a = i / nf.toFloat() * PI2
+                val rnd = fibreRnd[i]
+                val wob = sin(a * 7f + f.angle) * jit + (rnd - 0.5f) * 0.06f
+                val inner = pr * (1f + rnd * 0.10f)
+                val outer = rim * (0.86f + rnd * 0.14f)
+                val lit = 0.35f + rnd * 0.65f
+                fibre.reset()
+                for (k in 0..6) {
+                    val fk = k / 6f
+                    val rr = inner + (outer - inner) * fk
+                    val aa = a + wob * bow[k] * 1.6f
+                    val x = cx + cos(aa) * rr
+                    val y = cy + sin(aa) * rr
+                    if (k == 0) fibre.moveTo(x, y) else fibre.lineTo(x, y)
+                }
+                drawPath(
+                    fibre,
+                    mix(FirstFiveKit.shade(cool, 0.5f + lit * 0.7f), hot, rnd * rnd * 0.5f),
+                    alpha = 0.30f + lit * 0.55f,
+                    style = fibreStrokes[i],
+                )
+            }
+
+            // Collarette: the raised ridge where the two muscle layers meet.
+            drawCircle(
+                color = hot.copy(alpha = 0.5f),
+                radius = pr * 1.32f,
+                center = centre,
+                style = Stroke(width = max(1f, sz * 0.008f)),
             )
+            drawCircle(Color.Black, pr, centre)
         }
-        // The pupil, unchanged. It was followed by a drifting catchlight - a
-        // highlight here plus a second small offset one that tracked touch -
-        // removed to match the reactor kit's v10, which dropped the same two
-        // elements from its own Iris. No reason was given upstream for the
-        // removal; ported as a straight parity change, not because a defect
-        // was found in this port on its own.
-        drawCircle(hot, r * open * 0.55f, Offset(cx, cy))
+
+        // The wet limbal ring: the edge of the iris darkens into the sclera.
+        drawCircle(
+            brush = FirstFiveKit.radial(
+                0f to Color.Transparent,
+                0.72f to Color.Transparent,
+                1f to Color.Black.copy(alpha = 0.85f),
+                center = centre,
+                radius = rim,
+            ),
+            radius = rim,
+            center = centre,
+        )
     }
+
+    // The artifact's #1a1c1e at the lit point and its #050403 at the edge -
+    // the edge here with no alpha, so the gradient hands over to the well
+    // instead of covering it. Expanded the same way FirstFiveKit.radial
+    // expands its stops, once, since these two colours never change.
+    private val scleraStops = FirstFiveKit.expand(arrayOf(0f to Color(0xFF1A1C1E), 1f to Color(0x00050403)))
+    private val scleraPos = FloatArray(scleraStops.size) { scleraStops[it].first }
+    private val scleraColors = LongArray(scleraStops.size) { android.graphics.Color.pack(scleraStops[it].second.toArgb()) }
+
+    private fun scleraBrush(cx: Float, cy: Float, rim: Float): Brush = ShaderBrush(
+        android.graphics.RadialGradient(
+            cx - rim * 0.2f, cy - rim * 0.25f, rim * 0.1f,
+            cx, cy, rim * 1.5f,
+            scleraColors,
+            scleraPos,
+            android.graphics.Shader.TileMode.CLAMP,
+        ),
+    )
+}
+
+/**
+ * The shared bits of the artifact's drawing kit that Arc, Orbit, Comb,
+ * Spiral and Iris use: its perspective projection, its `shade`, and its
+ * `detail` scaling. Named for those five so it cannot collide with a helper
+ * another face adds to this file.
+ *
+ * Mutable scratch on a singleton, like the faces' own buffers: every face is
+ * drawn on the main thread, one at a time, and every register is written by
+ * the call that the caller reads it straight after.
+ */
+private object FirstFiveKit {
+
+    /**
+     * The artifact's canvas size for a face drawn at radius [r].
+     *
+     * FaceView hands a face `r = (box / 4) * fit * speechPush`. The artifact
+     * draws into the whole box - its `min(w, h)` - and then scales the result
+     * by fit and the same push. So 4r is exactly the artifact's `min(w, h)`
+     * with that scale already applied, and every fraction the artifact takes
+     * of its canvas becomes the same fraction of this.
+     */
+    fun sz(r: Float) = 4f * r
+
+    /**
+     * The frame each of the five draws in.
+     *
+     * Nothing at all for a zero-size box (mid-layout), whose zero radius the
+     * gradients would hand to Android's RadialGradient, which rejects it with
+     * an exception.
+     *
+     * And clipped to the box. The artifact draws into a canvas that clips at
+     * its own edge; a Compose Canvas does not. At the artifact's scale a
+     * thinking Orbit's outer body and the Spiral's outer arm reach past the
+     * box, so without this they would paint over whatever sits round it.
+     */
+    inline fun frame(scope: DrawScope, r: Float, body: DrawScope.() -> Unit) {
+        if (r <= 0f) return
+        scope.clipRect(block = body)
+    }
+
+    /**
+     * The artifact's `detail(w, lo, hi)`: more geometry the bigger the face is
+     * actually drawn, from `lo` at 200 px to `hi` at 820 px. Its quality
+     * multiplier is 1 on every surface this port has, so it is left out.
+     */
+    fun detail(px: Float, lo: Int, hi: Int): Int {
+        val k = ((px - 200f) / 620f).coerceIn(0f, 1f)
+        return max(lo, (lo + (hi - lo) * k).roundToInt())
+    }
+
+    private var cyw = 1f
+    private var syw = 0f
+    private var cpt = 1f
+    private var spt = 0f
+
+    /** Sets the camera for [rot] and [proj]: yaw about Y, then pitch about X. */
+    fun view(yaw: Float, pitch: Float) {
+        cyw = cos(yaw)
+        syw = sin(yaw)
+        cpt = cos(pitch)
+        spt = sin(pitch)
+    }
+
+    var rx = 0f
+    var ry = 0f
+    var rz = 0f
+
+    /** The artifact's `rot3`, into [rx], [ry], [rz]. */
+    fun rot(x: Float, y: Float, z: Float) {
+        val x1 = x * cyw - z * syw
+        val z1 = x * syw + z * cyw
+        rx = x1
+        ry = y * cpt - z1 * spt
+        rz = y * spt + z1 * cpt
+    }
+
+    var px = 0f
+    var py = 0f
+    var pz = 0f
+    var pd = 0f
+
+    /**
+     * The artifact's `proj`, into [px], [py], [pz] and [pd]. [pd] is the
+     * unitless depth factor raised to the spec's depth_gain: read for size
+     * and alpha only, never position, so far things are smaller and fainter.
+     */
+    fun proj(x: Float, y: Float, z: Float, dist: Float, scale: Float, cx: Float, cy: Float) {
+        rot(x, y, z)
+        val k = scale / (dist + rz)
+        px = cx + rx * k
+        py = cy + ry * k
+        pz = rz
+        pd = (dist / (dist + rz)).pow(Spec.DEPTH_GAIN)
+    }
+
+    /**
+     * A radial gradient that fades the way the artifact's do.
+     *
+     * The browser's canvas blends gradient colours before applying alpha, so
+     * the artifact's halos - every one of which ends on `rgba(0,0,0,0)` -
+     * darken as they fade and fall off as the square of the distance.
+     * Android's gradients (and Compose Desktop's) blend after, which falls off
+     * in a straight line: the same stops drew every halo visibly wider and
+     * brighter than the artifact's. Measured in the browser: white fading to
+     * transparent black, over black, reads 143 / 63 / 16 at a quarter, half
+     * and three quarters of the way; blended after alpha it would read 191 /
+     * 128 / 64.
+     *
+     * So each span between the caller's stops is split into [SUB] smaller
+     * ones, sampled from the browser's curve. Between two nearby samples the
+     * two blend orders agree to within about one level of 255, which makes
+     * this correct whichever order the device uses.
+     */
+    fun radial(vararg stops: Pair<Float, Color>, center: Offset, radius: Float): Brush =
+        Brush.radialGradient(*expand(stops), center = center, radius = radius)
+
+    /** [radial]'s stop expansion, on its own for the one gradient Brush cannot draw (Iris's sclera). */
+    fun expand(stops: Array<out Pair<Float, Color>>): Array<Pair<Float, Color>> =
+        Array((stops.size - 1) * SUB + 1) { n ->
+            if (n == (stops.size - 1) * SUB) {
+                stops.last()
+            } else {
+                val (o0, c0) = stops[n / SUB]
+                val (o1, c1) = stops[n / SUB + 1]
+                val u = (n % SUB) / SUB.toFloat()
+                // [mix] interpolates alpha alongside the colour channels, not
+                // premultiplied: exactly the browser's blend.
+                (o0 + (o1 - o0) * u) to mix(c0, c1, u)
+            }
+        }
+
+    private const val SUB = 6
+
+    /**
+     * The artifact's `shade(col, m)`: every channel multiplied by [m], clamped.
+     * Unlike [lift], which blends toward white, this can push a colour past
+     * itself - `shade(c, 1.5)` is how the comb's wall tops catch the light.
+     */
+    fun shade(c: Color, m: Float): Color = Color(
+        red = (c.red * m).coerceIn(0f, 1f),
+        green = (c.green * m).coerceIn(0f, 1f),
+        blue = (c.blue * m).coerceIn(0f, 1f),
+        alpha = c.alpha,
+    )
 }
 
 /** Truncated icosahedron cage. Survives thinking and speaking where geodesic smears. */
