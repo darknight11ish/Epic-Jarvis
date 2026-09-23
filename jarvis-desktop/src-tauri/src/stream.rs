@@ -139,6 +139,15 @@ pub struct StreamState {
     /// launch for five decisions the owner may have parked days ago. The first
     /// read establishes the baseline and says nothing.
     seeded: std::sync::atomic::AtomicBool,
+    /// True only while the queue on screen came from a successful read of
+    /// `/api/pending` made on THIS connection. Reset to false every time a
+    /// connection opens, set by [`refresh_pending`] on each read.
+    ///
+    /// The `hello` branch needs it: the queue is read once just before the
+    /// hello frame arrives, and a failure there used to be forgotten - a
+    /// following `hello {stale: false}` then cleared `stale` and re-enabled
+    /// Approve and Deny over the last run's queue.
+    queue_read: std::sync::atomic::AtomicBool,
 }
 
 impl StreamState {
@@ -403,10 +412,18 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
     // Same reasoning for the queue: `note()` only publishes on change, so a
     // client that connects while three approvals are already waiting hears
     // nothing at all until a fourth arrives.
-    // Result ignored deliberately: this is the initial prime, and
-    // `refresh_pending` has already set `stale` itself if it failed. There is
-    // no `stale = false` here to guard.
-    let _ = refresh_pending(app, base).await;
+    //
+    // The result is recorded in `queue_read` rather than returned here,
+    // because the decision it feeds is made later, when `hello` arrives. It
+    // used to be thrown away (`let _ =`), with a comment saying there was no
+    // `stale = false` to guard - but there was one, in the `hello` branch, and
+    // a clean `hello {stale: false}` after a failed read here cleared `stale`
+    // over the previous run's queue. The phone never had this gap: it clears
+    // `stale` only after a successful re-read (JarvisRuntime.onOpen).
+    app.state::<StreamState>()
+        .queue_read
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+    refresh_pending(app, base).await;
 
     let mut frame = Frame::default();
     // Lines are cut from raw bytes so a multi-byte character split across two
@@ -495,11 +512,17 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 println!("[jarvis] the event bus restarted; resetting the resume point");
             }
 
-            // `stale` is cleared only once the re-read below has landed. It
-            // used to be cleared here unconditionally, which enabled Approve
-            // and Deny for two network round-trips against a queue that had
-            // just been declared untrustworthy.
-            let settled = !(stale || renumbered);
+            // `stale` is cleared only once the queue has actually been read
+            // on this connection - see `hello_may_clear_stale`. It used to be
+            // cleared here unconditionally, which enabled Approve and Deny for
+            // two network round-trips against a queue that had just been
+            // declared untrustworthy; and after that, on `!stale` alone, which
+            // did the same whenever the read just before hello had failed.
+            let queue_read = app
+                .state::<StreamState>()
+                .queue_read
+                .load(std::sync::atomic::Ordering::Relaxed);
+            let settled = hello_may_clear_stale(stale, renumbered, queue_read);
             publish_link(app, |link| {
                 link.connected = true;
                 link.error = None;
@@ -539,6 +562,11 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 }
                 crate::emit_all(app, crate::events::JARVIS_RESYNC, ());
             } else {
+                // A clean hello, but the queue read just before it failed.
+                // Try once more now; `stale` stays set unless it lands.
+                if !settled && refresh_pending(app, base).await {
+                    publish_link(app, |link| link.stale = false);
+                }
                 // A clean resume still needs one read. The `attention` event
                 // only fires on a change, so a desktop that connects to a
                 // quiet system would sit on `known: false` — and therefore on
@@ -559,10 +587,17 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
 
         // The doorbell. §3 rule 1: the event says something changed, so read
         // the thing that changed — once, here, not once per window.
-        // Same here: nothing downstream clears `stale` on the strength of
-        // this call, and a failure has already set it.
+        // A failure has already set `stale`. A success while connected (that
+        // is, after this connection's hello) is exactly what "the queue is
+        // confirmed live" means, so it may clear a `stale` left by an earlier
+        // failed read - the same rule the phone's watchdog follows. Without
+        // this, one failed read left the buttons disabled until the stream
+        // happened to reconnect.
         "approval" => {
-            let _ = refresh_pending(app, base).await;
+            let read = refresh_pending(app, base).await;
+            if read && app.state::<StreamState>().link().connected {
+                publish_link(app, |link| link.stale = false);
+            }
         }
 
         "activity" => {
@@ -717,21 +752,21 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
                     status.as_u16()
                 );
                 // Not knowing is not the same as knowing there is nothing.
-                publish_link(app, |link| link.stale = true);
+                mark_queue_unread(app);
                 return false;
             }
             match response.json().await {
                 Ok(body) => body,
                 Err(err) => {
                     eprintln!("[jarvis] /api/pending returned something unreadable: {err}");
-                    publish_link(app, |link| link.stale = true);
+                    mark_queue_unread(app);
                     return false;
                 }
             }
         }
         Err(err) => {
             eprintln!("[jarvis] /api/pending unavailable: {err}");
-            publish_link(app, |link| link.stale = true);
+            mark_queue_unread(app);
             return false;
         }
     };
@@ -772,6 +807,9 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         fresh
     };
     publish_link(app, |link| link.approvals = items.len());
+    state
+        .queue_read
+        .store(true, std::sync::atomic::Ordering::Relaxed);
 
     // The ping. A gate that arrives while the owner is in another window
     // produced nothing they could perceive without looking: the tray icon went
@@ -857,6 +895,27 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     true
 }
 
+/// A read of `/api/pending` failed: the queue on screen is the last one we
+/// knew, not the current one. Every failure path goes through here so none of
+/// them can set `stale` and forget `queue_read`, or the other way round.
+fn mark_queue_unread(app: &AppHandle) {
+    app.state::<StreamState>()
+        .queue_read
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+    publish_link(app, |link| link.stale = true);
+}
+
+/// Whether a `hello` frame may clear `stale` on its own.
+///
+/// Only when the server says we are caught up (`hello_stale` false), the bus
+/// has not been renumbered by a backend restart, AND the approval queue was
+/// actually read on this connection. The last condition is the one that was
+/// missing: `hello {stale: false}` says the EVENT ring is intact, not that we
+/// hold the current queue.
+fn hello_may_clear_stale(hello_stale: bool, renumbered: bool, queue_read: bool) -> bool {
+    !(hello_stale || renumbered) && queue_read
+}
+
 /// Applies a link change and, if anything moved, tells every window and repaints
 /// the tray. One function so a caller cannot update the state and forget one of
 /// the two consumers.
@@ -924,6 +983,34 @@ mod tests {
         assert_eq!(activity_state(&flat), Some("thinking"));
         assert_eq!(activity_state(&noted), Some("working"));
         assert_eq!(activity_state(&serde_json::json!({})), None);
+    }
+
+    /// The reconnect case from the audit: the queue read made just before the
+    /// hello frame failed (backend restarting, 503), then `hello {stale:
+    /// false}` arrived. Approve and Deny must stay disabled.
+    #[test]
+    fn a_clean_hello_after_a_failed_queue_read_stays_stale() {
+        assert!(!hello_may_clear_stale(false, false, false));
+    }
+
+    #[test]
+    fn a_clean_hello_after_a_good_queue_read_clears_stale() {
+        assert!(hello_may_clear_stale(false, false, true));
+    }
+
+    #[test]
+    fn a_stale_or_renumbered_hello_never_clears_stale_by_itself() {
+        // Those two re-read everything first and clear `stale` only if the
+        // re-read lands; the hello alone never does.
+        assert!(!hello_may_clear_stale(true, false, true));
+        assert!(!hello_may_clear_stale(false, true, true));
+        assert!(!hello_may_clear_stale(true, true, false));
+    }
+
+    #[test]
+    fn a_fresh_state_has_not_read_the_queue() {
+        let state = StreamState::default();
+        assert!(!state.queue_read.load(std::sync::atomic::Ordering::Relaxed));
     }
 
     #[test]
