@@ -316,6 +316,7 @@ only what Jarvis itself said it did.
 | `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word` | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | **no** | `JarvisApi.kt:651` | Phone-only. |
+| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...]}` | **no** | `JarvisApi.enrollVoice` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
 
 **The audio format is fixed and the server will not convert.** 16 kHz,
 16-bit, mono PCM in a WAV container, resampled on the client. The phone's
@@ -335,6 +336,56 @@ no audio is treated as a server fault, not as permission to synthesise locally.
 **`/api/voice/wake` approves, it does not apply.** Success means a decision
 card was raised, not that the wake word is now on. Re-read `/api/voice/status`
 to learn the truth (`JarvisApi.kt:644-651`).
+*Checked 2026-09-23, and not what this repository's module does:*
+`backend/jarvis_speech.py`'s `set_wake_enabled()` writes the setting at once,
+with no card - its docstring says so. Whether `jarvis_hud.py`'s route puts a
+gate in front of it is not visible here. Clients should keep re-reading the
+status either way, which is what the phone does.
+
+**`/api/voice/enroll` - "Train my voice"** (`voice-enroll.patch`, module
+`jarvis_voice_enroll.py`). The phone sends the owner's recorded sentences:
+
+```
+POST /api/voice/enroll
+{"clips": ["<base64 of one WAV>", ...]}       3 to 8 clips, each 1-10 s,
+                                              16 kHz 16-bit mono, not silent
+```
+
+JSON with base64 rather than a raw WAV body, because there are several clips
+and each needs its own boundary. The route checks origin and token like the
+other writes. Answers:
+
+| code | body | meaning |
+|---|---|---|
+| `202` | `{"ok": true, "pending": true, "clips": 5, "seconds": 21.4, "message": "..."}` | The clips are held **in memory** and ONE approval card (action `change_own_config`) is up. **Nothing is enrolled yet.** |
+| `400` | `{"error": "clip 3 is too short (0.6 s) - read the whole sentence"}` | A clip, the count or the body is wrong. The sentence names the clip and is written for the owner. |
+| `409` | `{"error": "...", "pending": true, "expires_in": 140}` | A training card is already waiting. It is not replaced. |
+| `409` | `{"error": "change_own_config is tier 'auto' ...", "pending": false}` | The tier is not `ask`, so no card was raised. |
+| `503` | `{"error": "voice training is not installed on this PC", "available": false}` | `jarvis_voice_enroll.py` is missing. |
+
+Approving the card runs `jarvis_voice.enroll()` with the same embedder
+`hear()` uses, then deletes the clips. Denying, a timeout or any refusal
+deletes them and changes nothing. The outcome shows up in the status:
+
+**`/api/voice/status`** now sends the nested shape the phone reads -
+`available`, `listening` (`push_to_talk`, `push_to_talk_why`, `wake_word`,
+`wake_word_why`), `stt`, `tts`, `audio_in`, and `gate` (`mode`, `enabled`,
+`enrolled`, `samples`, `threshold`, `embedder`, `speaker_model`,
+`needs_retraining`, `note`, and `training`: `available`, `pending`, `clips`
+and `expires_in` while a card waits, `last` = `{outcome, at, samples,
+reason}` once one has been answered). The old flat keys are still there.
+Before 2026-09-23 only the flat keys were sent, so the phone's
+`listening.push_to_talk` was always missing and its talk button never
+appeared. `listening.push_to_talk` is true only when a clip could get an
+answer end to end: the voice is trained (or mode is `broad`) **and** there
+is speech-to-text on the PC. `backend/test_voice_contract.py` checks this
+JSON against `VoiceModels.kt` and the desktop's `voice.rs`.
+
+**`/api/voice/utterance`'s answer** carries both clients' names:
+`is_owner`/`available` (desktop, `voice.rs` `HeardRaw`) and `ok`/`owner`
+(phone, `Heard`), plus `mode`, `seconds` and `engine`. This assumes the
+route sends `jarvis_speech.Heard.as_dict()` unchanged, as `voice.rs` also
+assumes; the route's reply line is not in this repository.
 
 **A client must not do speech-to-text.** That is a standing rule in
 `CLAUDE.md`, and it is why `utterance` posts a complete recorded clip rather

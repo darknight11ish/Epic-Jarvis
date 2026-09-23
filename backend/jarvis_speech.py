@@ -333,11 +333,81 @@ def _files_present(*paths: str) -> bool:
     return all(p and Path(p).is_file() for p in paths)
 
 
+#: What `/api/voice/utterance` takes. Fixed, and the server does not
+#: convert: see docs/JARVIS-API.md §5. `max_seconds` is what the phone uses
+#: as its recording cap.
+AUDIO_IN = {
+    "format": "WAV, 16-bit mono PCM",
+    "sample_rate": 16000,
+    "max_seconds": 30.0,
+    "client_stt_allowed": False,
+    "why": ("the voice check can only check a voice if it is given the voice; "
+            "a client that turned speech into text itself would send words, "
+            "and there would be nothing left to check"),
+}
+
+
+def _training_state() -> dict:
+    """The "Train my voice" card, as the phone shows it. Never raises: a
+    missing jarvis_voice_enroll.py means the feature is not installed, which
+    is an answer, not an error."""
+    try:
+        import jarvis_voice_enroll
+    except Exception:
+        return {"available": False, "pending": False,
+                "why": "jarvis_voice_enroll.py is not in the backend folder"}
+    try:
+        return jarvis_voice_enroll.state()
+    except Exception as exc:
+        return {"available": False, "pending": False,
+                "why": f"could not read it ({type(exc).__name__})"}
+
+
+def _push_to_talk(voice: dict, stt_ok: bool, voice_loaded: bool):
+    """(can a push-to-talk clip actually get an answer?, why not).
+
+    The phone shows its talk button only when this is True, so it must mean
+    "end to end": the owner check can pass AND there is something to turn
+    the words into text. The first thing in the way is the one reported,
+    in words the owner can act on.
+
+    Not enrolled, in owner mode, is a NO: verify() refuses every voice when
+    there is no profile, so a button would only ever answer "that didn't
+    sound like you" - which reads as the product being broken. The phone
+    points at "Train my voice" instead, using this `why`.
+    """
+    if not voice_loaded:
+        return False, "The voice check (jarvis_voice.py) is missing on the PC."
+    if not voice.get("enabled", False):
+        return False, "Voice is switched off in the PC's settings ([voice] enabled)."
+    broad = str(voice.get("mode", "owner")).strip().lower() == "broad"
+    if not broad and voice.get("needs_retraining"):
+        return False, ("The PC's voice check changed since you trained it. "
+                       "Train your voice again.")
+    if not broad and not voice.get("enrolled"):
+        return False, ("Jarvis has not learned your voice yet. Use Train my "
+                       "voice on the Checks screen.")
+    if not stt_ok:
+        return False, ("The PC has no speech-to-text set up yet, so it cannot "
+                       "turn what you say into words.")
+    return True, ""
+
+
 def status() -> dict:
     """What the voice loop can actually do right now. Never overstates - a
     listed capability the owner then finds does not work is worse than one
-    honestly reported missing."""
-    voice = jarvis_voice.status() if jarvis_voice is not None else {
+    honestly reported missing.
+
+    TWO SHAPES IN ONE REPLY, on purpose. The flat keys (enabled, enrolled,
+    stt_available, ...) are what this module always returned. The nested
+    ones - listening, stt, tts, audio_in, gate - are what the phone reads
+    (jarvis-client net/VoiceModels.kt); it was written against that shape
+    and got none of it, so `listening.push_to_talk` was always missing and
+    its talk button never appeared. test_voice_contract.py now reads the
+    phone's own data classes and fails if a field goes missing again.
+    """
+    voice_loaded = jarvis_voice is not None
+    voice = jarvis_voice.status() if voice_loaded else {
         "enabled": False, "mode": "owner", "enrolled": False, "samples": 0,
         "threshold": 0.35, "embedder": "none", "speaker_model": False,
         "note": "jarvis_voice is not importable here",
@@ -370,19 +440,73 @@ def status() -> dict:
         notes.append("Kokoro TTS model files are not on disk yet (looked "
                       f"under {Path(tts_paths['model']).parent}).")
 
+    stt_ok = stt_wanted_sherpa and stt_files_ok
+    tts_ok = tts_engine_name == "sherpa-onnx" and tts_files_ok
+    wake_on = _wake_enabled()
+    ptt, ptt_why = _push_to_talk(voice, stt_ok, voice_loaded)
+
+    if stt_ok:
+        stt_status = "ready"
+    elif not stt_wanted_sherpa:
+        stt_status = (f"not set up: stt_engine is {stt_engine_name!r}; set it to "
+                      "\"sherpa-onnx\" and add the model files")
+    else:
+        stt_status = "sherpa-onnx is selected but its model files are not on disk yet"
+
     return {
         **voice,
         "stt_engine": stt_engine_name,
-        "stt_available": stt_wanted_sherpa and stt_files_ok,
+        "stt_available": stt_ok,
         "tts_engine": tts_engine_name,
-        "tts_available": tts_engine_name == "sherpa-onnx" and tts_files_ok,
-        "wake_word_enabled": _wake_enabled(),
+        "tts_available": tts_ok,
+        "wake_word_enabled": wake_on,
         "wake_phrase": _cfg("wake_phrase", "hey_jarvis"),
         # The route's own comment explains why: a client that transcribed
         # locally would send text, and the owner-voice gate would have
         # nothing left to check.
         "local_stt_on_client_allowed": False,
         "note": " ".join(notes),
+
+        # ---- the nested shape the phone reads (VoiceModels.kt) ----------
+        "available": True,
+        "listening": {
+            "push_to_talk": ptt,
+            "push_to_talk_why": ptt_why,
+            "wake_word": wake_on,
+            "wake_word_why": ("switched on" if wake_on else
+                              "off unless you turn it on: a phone's "
+                              "microphone goes wherever you do"),
+        },
+        "stt": {
+            "engine": stt_engine_name,
+            "available": stt_ok,
+            "status": stt_status,
+            # Never. Recognising speech on the client is the one thing that
+            # would disarm the owner check.
+            "client_fallback_ok": False,
+        },
+        "tts": {
+            "engine": tts_engine_name,
+            "available": tts_ok,
+            "status": ("ready" if tts_ok else
+                       "no Kokoro model files on disk yet"),
+            # The same answer /api/voice/say gives with its 503: the client
+            # may speak text it already holds, with an ON-DEVICE voice only.
+            "client_fallback_ok": True,
+        },
+        "audio_in": dict(AUDIO_IN),
+        "gate": {
+            "mode": voice.get("mode", "owner"),
+            "enabled": bool(voice.get("enabled", False)),
+            "enrolled": bool(voice.get("enrolled", False)),
+            "samples": int(voice.get("samples", 0) or 0),
+            "threshold": float(voice.get("threshold", 0.0) or 0.0),
+            "embedder": str(voice.get("embedder", "none")),
+            "speaker_model": bool(voice.get("speaker_model", False)),
+            "needs_retraining": bool(voice.get("needs_retraining", False)),
+            "note": str(voice.get("note", "")),
+            "training": _training_state(),
+        },
     }
 
 
@@ -399,9 +523,38 @@ class Heard:
     available: bool = True
     source: str = "push_to_talk"
     reason: str = ""
+    mode: str = "owner"
+    seconds: float = 0.0
+    engine: str = ""
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        """What /api/voice/utterance sends back - assuming, as the desktop's
+        voice.rs also does, that the route sends this dict as it is (the
+        route's reply line is not in this repository to check).
+
+        Carries BOTH clients' names for the same facts. The desktop reads
+        `is_owner` / `available` (voice.rs HeardRaw). The phone reads `ok` /
+        `owner` (VoiceModels.kt Heard), and before this it got neither, so
+        every answer - including a real transcript - read as "didn't catch
+        that". `ok` means a transcript was actually produced: the owner check
+        passed AND there was an engine to turn the words into text. The
+        phone tells "that didn't sound like you" apart from "too short" by
+        `threshold > 0`, which only a clip that reached the voice check has.
+        """
+        d = asdict(self)
+        d["owner"] = bool(self.is_owner)
+        d["ok"] = bool(self.is_owner and self.available)
+        return d
+
+
+def _takes_rate(fn) -> bool:
+    """Whether a jarvis_voice function accepts `sample_rate` (added
+    2026-09-23). The PC may still hold the copy from before that."""
+    try:
+        import inspect
+        return "sample_rate" in inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
 
 
 def hear(raw: bytes, source: str = "push_to_talk") -> Heard:
@@ -413,9 +566,10 @@ def hear(raw: bytes, source: str = "push_to_talk") -> Heard:
         return Heard(False, source=source, available=False,
                       reason="could not read that as a 16-bit PCM WAV clip")
     samples, sample_rate = parsed
+    seconds = round(len(samples) / float(sample_rate or 16000), 2)
 
     if jarvis_voice is None:
-        return Heard(False, source=source, available=False,
+        return Heard(False, source=source, available=False, seconds=seconds,
                       reason="jarvis_voice is not importable; refusing "
                              "rather than skipping the owner check")
 
@@ -423,27 +577,34 @@ def hear(raw: bytes, source: str = "push_to_talk") -> Heard:
         embedder = jarvis_voice.EcapaEmbedder()
     except Exception:
         embedder = jarvis_voice.Embedder()
-    verdict = jarvis_voice.verify(samples, embedder)
+    # The real sample rate goes with the clip: the desktop records at its
+    # microphone's own rate, and the speaker model resamples when told it.
+    # Only to a jarvis_voice.py that takes it - an older copy on the PC
+    # would raise TypeError here, and this call is not wrapped.
+    if _takes_rate(jarvis_voice.verify):
+        verdict = jarvis_voice.verify(samples, embedder, sample_rate=sample_rate)
+    else:
+        verdict = jarvis_voice.verify(samples, embedder)
+    common = dict(score=verdict.score, threshold=verdict.threshold,
+                  source=source, mode=verdict.mode, seconds=seconds)
 
     if not verdict.is_owner:
-        return Heard(False, score=verdict.score, threshold=verdict.threshold,
-                     source=source, reason=verdict.reason)
+        return Heard(False, reason=verdict.reason, **common)
 
     if _stt_engine() is None:
-        return Heard(True, score=verdict.score, threshold=verdict.threshold,
-                     source=source, available=False,
+        return Heard(True, available=False,
                      reason="that was you, but no speech-to-text model is "
-                            "installed here yet - see jarvis_speech.status()")
+                            "installed here yet - see jarvis_speech.status()",
+                     **common)
 
     try:
         text = _transcribe(samples, sample_rate)
     except Exception as exc:
-        return Heard(True, score=verdict.score, threshold=verdict.threshold,
-                     source=source, available=False,
-                     reason=f"transcription failed ({type(exc).__name__})")
+        return Heard(True, available=False,
+                     reason=f"transcription failed ({type(exc).__name__})",
+                     **common)
 
-    return Heard(True, text=text, score=verdict.score,
-                 threshold=verdict.threshold, source=source)
+    return Heard(True, text=text, engine=str(_cfg("stt_engine", "")), **common)
 
 
 def say(text: str) -> Optional[bytes]:

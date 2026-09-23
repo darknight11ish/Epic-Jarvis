@@ -28,6 +28,13 @@ module copied into the backend folder too: `jarvis_feedback.py`,
 `jarvis_intake.py`, `jarvis_skill_discovery.py`, and `jarvis_speed.py` with
 `jarvis_owned_tables.py`. Each section says how.
 
+Added later on 2026-09-23, one more at the very end: **`voice-enroll.patch`**
+("Train my voice" on the phone). It needs `voice-503.patch` and `appearance.patch` before it (its context is their output).
+It comes with a new module, `jarvis_voice_enroll.py`, and with updated copies
+of `jarvis_speech.py` and `rebuilt\jarvis_voice.py`; the script copies all
+three in. Its own section, at the very end of this file, also has the steps
+to install the better voice check.
+
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
 
@@ -77,6 +84,7 @@ on a throwaway copy instead.
 | `skill-suggest.patch` | `jarvis_hud.py` | `GET /api/skills/suggestions`: a read-only view of the routines Jarvis has noticed and the skill offers it made. Needs `appearance.patch` (textual) and `jarvis_skill_discovery.py` copied beside `jarvis_hud.py` — see its own section at the end. |
 | `documents-owned.patch` | `jarvis_hud.py` | **If you ever ran the OpenJarvis copy you downloaded, what it indexed would reach Jarvis's prompts.** Its indexer makes a `documents` table in the same `memory.db`. Now only a table Epic-Jarvis recorded creating is read. Needs `documents-honesty.patch` and `jarvis_owned_tables.py` — see its own section. |
 | `speed-record.patch` | `jarvis_hud.py` | Records how fast each answer was — numbers only, to a file on this PC — and shows it on the Models screen. Needs `gpu-offload.patch`, `tool-calling-wiring.patch` and `jarvis_speed.py` — see its own section. |
+| `voice-enroll.patch` | `jarvis_hud.py` | **"Train my voice" from the phone.** `POST /api/voice/enroll` takes the owner's recorded sentences, holds them in memory and raises ONE approval card. Only approving it replaces the voice print; the recordings are deleted either way. Needs `voice-503.patch` and `appearance.patch` (textual), and `jarvis_voice_enroll.py` — see its own section at the end. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -159,9 +167,10 @@ job by hand (take everything off, then put everything on):
 
 **It also copies in the new modules the patches call** - `jarvis_intake.py`,
 `jarvis_feedback.py`, `jarvis_skill_discovery.py`, `jarvis_speed.py`,
-`jarvis_owned_tables.py`, the updated `jarvis_agent.py`, and
+`jarvis_owned_tables.py`, the updated `jarvis_agent.py`,
 `jarvis_browser_control.py` (which stays switched off until `[tools].enabled`
-names `"browser_control"`). Each patch only adds a call into one of these, and the call quietly does nothing when the
+names `"browser_control"`), and, since "Train my voice",
+`jarvis_voice_enroll.py`, `jarvis_speech.py` and `rebuilt\jarvis_voice.py`. Each patch only adds a call into one of these, and the call quietly does nothing when the
 file is missing, so a backend without them would pass every test with the
 new features switched off. The script compares each file with the one in
 this repository's `backend\` folder; if yours is missing or different, it
@@ -882,6 +891,12 @@ machine: do not let this one overwrite it.** Diff the two first — this one
 was written to the interface the patches already expect, so if the real file
 implements the same four functions, keeping yours and discarding this one
 loses nothing.
+
+**Changed 2026-09-23:** `apply-patches.ps1` now copies this file in (after
+backing up whatever copy is there, into the `_jarvis-backup-...` folder). The
+phone's talk button depends on this version - see the `voice-enroll.patch`
+section at the end, "the phone never showed its talk button". If you do have
+a different, real `jarvis_speech.py`, the backup folder has it.
 
 ## Order matters, and it is the one thing this file exists to protect
 
@@ -3714,3 +3729,180 @@ backend carrying both patches, 7 more run through the real
 `jarvis_extract.py`: the retire card has no "Both are true", the keep-both
 route refuses it and leaves it waiting, and accepting it still retires the
 fact.
+
+---
+
+# `voice-enroll.patch` — "Train my voice"
+
+**What it is.** Jarvis only obeys your voice. It learns what you sound like
+from a few recorded sentences. Until 2026-09-23 nothing could do that
+learning: `jarvis_voice.enroll()` existed, but no route, screen or script
+called it. So in the default "owner" mode every voice was refused, yours
+included.
+
+**How to use it.** On the phone: open **Checks** (the platform checks
+screen), find the **Your voice** card, tap **Train my voice**. Read the five
+sentences one at a time (tap Record, read, tap Stop - each clip's length is
+shown and you can redo any of them), then tap **Send to your PC**. An
+approval card appears, on the PC and on the phone. Approve it. That is the
+moment Jarvis learns your voice - not before.
+
+## Why there is a card
+
+Your voice print decides who Jarvis obeys. Replacing it is a change to
+Jarvis's own settings, action `change_own_config`, which is tier `"ask"` in
+`jarvis-framework.toml`. The card is also what stops someone who picks up
+your unlocked phone from recording their own voice and becoming "you" in one
+tap: the card says "If you did not just do this on your phone, say no".
+
+## What the PC does
+
+| | |
+|---|---|
+| `POST /api/voice/enroll` | Body `{"clips": ["<base64 WAV>", ...]}`. Checks the clips, keeps them **in memory only**, raises **one** card, answers `202` at once. Enrols nothing. |
+| approve the card | `jarvis_voice.enroll()` builds the voice print from the clips, then the clips are deleted. |
+| deny, or nobody answers in 3 minutes | Nothing changes. The clips are deleted. |
+| a second training while a card waits | `409` - "approve or deny that card first", with the seconds left. It does not replace the first: that card would still be on screen, and approving it would then enrol the wrong clips or nothing. |
+| `change_own_config` not `"ask"` | `409` before any card, saying to set it back to `"ask"`. A card that no person answers must not replace your voice. |
+| limits | 3 to 8 clips, each 1 to 10 seconds, 16 kHz 16-bit mono WAV, not silent. Anything else is a `400` naming the clip: "clip 3 is too short (0.6 s) - read the whole sentence". Eight clips of ten seconds fit inside the backend's 4 MB request limit. |
+| `/api/voice/status` | `gate.enrolled`, `gate.samples`, `gate.embedder`, `gate.speaker_model`, `gate.needs_retraining`, and `gate.training` (a card waiting, and how the last one ended). |
+
+The card is raised through `jarvis_gate.check()` on a background thread,
+the same way `jarvis_skill_discovery.offer()` raises its "make this a
+skill?" card (the check blocks until someone answers). The tier is checked
+before the card and again on the answer: `allowed` is also `True` on tiers
+`auto` and `notify`, where nobody was asked.
+
+Nothing logs audio or the token. The audit log gets two lines per training,
+with counts and seconds only. The card shows the number of clips and their
+total length, nothing else. `test_voice_enroll.py` checks all of that,
+including that `jarvis_voice_enroll.py` has no print, logging or file-write
+call in it at all.
+
+## Found while building it - read these
+
+**1. The phone never showed its talk button.** The phone reads
+`/api/voice/status` as `listening`, `stt`, `tts`, `audio_in` and `gate`
+blocks, and shows the talk button only when `listening.push_to_talk` is
+true. `jarvis_speech.status()` sent none of those - only flat keys - so the
+button could never appear, whatever else worked. The utterance answer had the
+same gap: the phone reads `ok` and `owner`, the module sent `is_owner`, so
+even a real transcript would have read as "didn't catch that". Fixed in
+`jarvis_speech.py`: it now sends both shapes (the flat keys stay, for the
+desktop). `test_voice_contract.py` reads the phone's own `VoiceModels.kt`
+and the desktop's `voice.rs` and fails if a field either of them reads goes
+missing again. One thing not checked: that `jarvis_hud.py`'s utterance route
+sends `Heard.as_dict()` as it is. The route's reply line is not in this
+repository. The desktop's `voice.rs` assumes the same thing.
+
+**2. The talk button now shows only when talking can actually work:** your
+voice is trained (or voice is set to `"broad"`), **and** the PC has
+speech-to-text set up. The shipped config says `stt_engine =
+"faster-whisper"`, which `jarvis_speech.py` does not speak, so on your PC the
+button will stay hidden after training until speech-to-text is set up. The
+Checks screen says so in words ("Talk button on Home: hidden. The PC has no
+speech-to-text set up yet"). That is the honest answer - a button that can
+only ever say "no engine" is worse than none.
+
+**3. The basic voice check does not keep strangers out.** Without a speaker
+model the PC uses a "spectral" check: how loud each band of pitch is. Tried
+on four different synthesised voices here, it scored every one of them above
+0.9 against the others, and the bar is 0.35 - so every voice passed as every
+other. That is expected from how it works (those numbers are never negative,
+so any two voices look alike). It stops silence and noise, not a person. The
+phone says "Using the basic voice check, which cannot reliably tell two
+people apart" until the better one is installed. **Install it (below).**
+
+**4. The precedent in the brief was not what the code does.** The brief said
+`POST /api/voice/wake` raises an approval card, and `docs/JARVIS-API.md` says
+the same. This repository's `jarvis_speech.set_wake_enabled()` applies the
+change at once with no card - its own docstring says so, because
+`jarvis_gate.py`'s interface was not visible when it was written. So "Train
+my voice" does not copy wake. It calls `jarvis_gate.check()` directly, the
+way `jarvis_skill_discovery.py` and `jarvis_agent.py` already do. The wake
+route was not changed.
+
+**5. The desktop's microphone records at its own rate** (often 48 kHz) and
+sends that. The speaker model is now told the real rate and copes. The basic
+spectral check is not, and a voice trained at 16 kHz on the phone may score
+differently from the desktop's microphone. One more reason for the better
+check.
+
+## Install the better voice check (recommended)
+
+The better check is a speaker model: a 30 MB file that turns a voice into
+numbers that really do differ between people. It runs on the processor, not
+the graphics card, through `sherpa-onnx` - the same engine the rest of
+Jarvis's voice uses. No PyTorch needed.
+
+Paste each line into PowerShell, one at a time.
+
+**1. Install sherpa-onnx** into the Python that runs Jarvis:
+
+```powershell
+python -m pip install --upgrade sherpa-onnx; python -c "import sherpa_onnx; print('sherpa-onnx', sherpa_onnx.__version__, 'is installed')"
+```
+
+**2. Download the speaker model.** It lands in the `voice-models\speaker`
+folder inside Jarvis's settings folder (normally
+`C:\Users\pcadmin\.openjarvis\voice-models\speaker\model.onnx`), and the
+line checks it is the right file:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path $base 'voice-models\speaker'; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx' -OutFile (Join-Path $d 'model.onnx'); if ((Get-FileHash (Join-Path $d 'model.onnx') -Algorithm SHA256).Hash -eq '357A834F702B80161E5B981182C038E18553C1F2CA752ED6CEC2052365D4129B') { Write-Host "OK - the speaker model is at $d\model.onnx" -ForegroundColor Green } else { Write-Host "That is not the expected file. Delete $d\model.onnx and run this line again." -ForegroundColor Red }
+```
+
+(`speaker-recongition` is misspelled in the real address. Leave it.)
+
+**3. Put the new code on the PC.** From this repository's folder, run the
+patch script. It applies `voice-enroll.patch` and copies in
+`jarvis_voice_enroll.py`, `jarvis_speech.py` and `jarvis_voice.py`, backing
+up any older copies first:
+
+```powershell
+.\scripts\apply-patches.ps1
+```
+
+**4. Check the PC sees the model.** This prints the voice check's status.
+Look for `embedder  sherpa-onnx:357a834f702b` and `speaker_model  True`:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; python jarvis_voice.py
+```
+
+If it still says `spectral-v1`, the `note` line says why (for example "the
+sherpa-onnx package is not installed").
+
+**5. Restart Jarvis, then train your voice on the phone** (Checks → Your
+voice → Train my voice) and approve the card. If you trained with the basic
+check before installing the model, train again: a voice print made with one
+check cannot be used by the other, and the phone will say "Your PC's voice
+check changed since you trained it".
+
+To use a different model file instead, set `speaker_model = "C:/path/to/file.onnx"`
+under `[voice]` in `jarvis-framework.toml`.
+
+**What was checked, and what was not.** Checked in the dev container: the
+download address works (29,596,978 bytes, the SHA-256 above), `sherpa-onnx`
+1.13.8 installs with pip and loads the model, and a voice trained through
+the real enrolment code with this model passes `jarvis_speech.hear()`
+(`JARVIS_TEST_SPEAKER_MODEL=<file> python backend/test_voice_enroll.py`).
+**Not checked:** the Windows `pip` install, these PowerShell lines on
+Windows (PowerShell could not be run by the session that wrote them), and how
+well the model tells real people apart - there was no recording of several
+real people to try it on. Its bar is still the config's `threshold = 0.35`;
+after training, it is worth having someone else try the talk button once.
+
+## Test it
+
+```powershell
+python backend\test_voice_enroll.py; python backend\test_voice_contract.py
+```
+
+`test_voice_enroll.py`: staging never enrols; approving enrols and deletes
+the clips; denying, a timeout, a refusal or a wrong tier deletes them and
+enrols nothing; every limit is a `400` naming the clip; a second training is
+a `409`; no audio or token in the audit, the card, stdout or the status; the
+patch applies to what `voice-503` and `appearance` wrote (GNU `patch`, the script's fallback, was also tried by hand: no fuzz) and leaves `test_voice_503.py`'s
+four `_no_speech` call sites at four. `test_voice_contract.py`: the status
+and utterance JSON against the phone's and the desktop's own field lists.

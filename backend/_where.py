@@ -94,7 +94,8 @@ def explain() -> str:
 #: one only adds a call into it, and that call quietly falls back when the
 #: import fails - so a backend without the file runs, with the feature off.
 SHIPPED = ("jarvis_intake.py", "jarvis_feedback.py", "jarvis_skill_discovery.py",
-           "jarvis_speed.py", "jarvis_owned_tables.py", "jarvis_agent.py")
+           "jarvis_speed.py", "jarvis_owned_tables.py", "jarvis_agent.py",
+           "jarvis_voice_enroll.py", "jarvis_speech.py")
 
 
 def _same_text(a: Path, b: Path) -> bool:

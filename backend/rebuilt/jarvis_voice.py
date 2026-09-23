@@ -34,18 +34,32 @@ The one exception is `mode = "broad"`, which is the owner explicitly choosing
 otherwise, and it is reported in every verdict so nothing can be accepted
 without it being visible why.
 
-WHAT IS NOT HERE: the ECAPA model. `EcapaEmbedder` needs speechbrain or an
-ONNX model file, and neither is installed by this file. jarvis_speech already
-expects that - it wraps the constructor in try/except and falls back - so the
-fallback is the honest path rather than a stub pretending to be a neural
-speaker embedder. The fallback is spectral and it says `semantic = False`.
+WHAT IS NOT HERE: the speaker model itself. `EcapaEmbedder` needs either a
+sherpa-onnx speaker-embedding model file (preferred: one ~30 MB file, no
+PyTorch) or speechbrain, and neither is installed by this file. jarvis_speech
+already expects that - it wraps the constructor in try/except and falls back -
+so the fallback is the honest path rather than a stub pretending to be a
+neural speaker embedder. The fallback is spectral and it says
+`semantic = False`.
+
+Where the model file is looked for (added 2026-09-23 with "Train my voice"):
+`[voice] speaker_model` if set, otherwise
+`<config dir>/voice-models/speaker/model.onnx` - the same `voice-models`
+folder jarvis_speech reads its speech-to-text and Kokoro files from. The
+model this was tested with is 3D-Speaker's CAM++ English VoxCeleb export
+from the sherpa-onnx releases
+(`3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx`); backend/README.md has
+the one-line install. The class keeps its old name because jarvis_speech
+constructs it by that name.
 """
 from __future__ import annotations
 
 import array
+import hashlib
 import json
 import math
 import os
+import threading
 import time
 import wave
 from dataclasses import dataclass, asdict, field
@@ -245,38 +259,134 @@ class Embedder:
         return self.name
 
 
-class EcapaEmbedder(Embedder):
-    """The real speaker model, if speechbrain is installed.
+def speaker_model_path() -> Path:
+    """Where the sherpa-onnx speaker model is looked for. Whether it is THERE
+    is a separate question - see `EcapaEmbedder`. `[voice] speaker_model`
+    wins; otherwise the file sits beside jarvis_speech's other models."""
+    configured = str(_cfg("speaker_model", "") or "").strip()
+    if configured:
+        return Path(os.path.expanduser(configured))
+    return _profile_dir().parent / "voice-models" / "speaker" / "model.onnx"
 
-    RAISES from __init__ when it is not, and that is required rather than
-    sloppy: jarvis_speech does
+
+#: One loaded model, reused. jarvis_speech builds an EcapaEmbedder for every
+#: utterance and status() builds one for every status read, so loading a
+#: 30 MB model each time would put a second of disk and CPU in front of
+#: every answer. Keyed on the file's size and modification time, so dropping
+#: a different model in place is noticed without a restart.
+_SHERPA: dict = {}
+_SHERPA_LOCK = threading.Lock()
+
+#: Why the model file, if present, could not be used - shown by status() so
+#: "I put the file there and nothing changed" has an answer on screen.
+_speaker_model_error = ""
+
+
+def _sherpa_extractor(path: Path):
+    """(extractor, name) for the model file at `path`. Raises if sherpa_onnx
+    is missing or the file will not load. For a missing or corrupt file the
+    real package raises RuntimeError - checked, it does not abort the
+    process."""
+    import sherpa_onnx  # noqa: raises ImportError when not installed
+    st = path.stat()
+    key = (str(path), st.st_size, st.st_mtime_ns)
+    with _SHERPA_LOCK:
+        hit = _SHERPA.get(key)
+        if hit is not None:
+            return hit
+        cfg = sherpa_onnx.SpeakerEmbeddingExtractorConfig(model=str(path),
+                                                         num_threads=1)
+        ext = sherpa_onnx.SpeakerEmbeddingExtractor(cfg)
+        # The NAME goes into every saved profile, and verify() refuses a
+        # profile made by a different embedder. So it must change when the
+        # model changes: two different models both called "sherpa-onnx"
+        # would compare vectors that mean different things. A short hash of
+        # the file does that; the file name does not (it is model.onnx by
+        # default whatever is inside).
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        hit = (ext, "sherpa-onnx:" + h.hexdigest()[:12])
+        _SHERPA.clear()
+        _SHERPA[key] = hit
+        return hit
+
+
+class EcapaEmbedder(Embedder):
+    """The real speaker model: a sherpa-onnx model file if there is one,
+    otherwise speechbrain's ECAPA if that is installed.
+
+    RAISES from __init__ when neither is available, and that is required
+    rather than sloppy: jarvis_speech does
 
         try:    embedder = jarvis_voice.EcapaEmbedder()
         except: embedder = jarvis_voice.Embedder()
 
     so a constructor that quietly returned a working-looking object with
     spectral behaviour would make the fallback unreachable and mislabel every
-    verdict as ECAPA.
+    verdict as a speaker model.
     """
 
     name = "ecapa"
     dim = 192
     semantic = True
+    #: embed() accepts the clip's sample rate. The sherpa model resamples to
+    #: what it was trained on when told the real rate; told nothing, it would
+    #: read a 48 kHz desktop clip as 16 kHz and embed nonsense. The spectral
+    #: fallback and the tests' stubs take one argument, so verify() and
+    #: enroll() only pass the rate to an embedder that says it takes one.
+    takes_rate = True
 
     def __init__(self, source: str = "speechbrain/spkrec-ecapa-voxceleb") -> None:
+        global _speaker_model_error
+        self._kind = ""
+        path = speaker_model_path()
+        if path.is_file():
+            try:
+                self._ext, self.name = _sherpa_extractor(path)
+                self.dim = int(self._ext.dim)
+                self._kind = "sherpa-onnx"
+                _speaker_model_error = ""
+                return
+            except ImportError:
+                _speaker_model_error = ("the speaker model file is there but "
+                                        "the sherpa-onnx package is not "
+                                        "installed: pip install sherpa-onnx")
+            except Exception as exc:
+                _speaker_model_error = (f"the speaker model file at {path} "
+                                        f"would not load ({type(exc).__name__})")
         from speechbrain.inference.speaker import EncoderClassifier  # noqa
         import torch  # noqa
         self._torch = torch
         self._m = EncoderClassifier.from_hparams(source=source)
+        self._kind = "speechbrain"
 
-    def embed(self, audio) -> list:
+    def embed(self, audio, sample_rate: Optional[int] = None) -> list:
         x = _pcm(audio)
         if len(x) < 512:
             return []
+        if self._kind == "sherpa-onnx":
+            import numpy as np  # sherpa_onnx requires it, so it is there
+            stream = self._ext.create_stream()
+            stream.accept_waveform(int(sample_rate or 16000),
+                                   np.asarray(x, dtype=np.float32))
+            stream.input_finished()
+            if not self._ext.is_ready(stream):
+                return []
+            return _norm([float(i) for i in self._ext.compute(stream)])
         t = self._torch.tensor([x], dtype=self._torch.float32)
         with self._torch.no_grad():
             v = self._m.encode_batch(t).squeeze().tolist()
         return _norm([float(i) for i in (v if isinstance(v, list) else [v])])
+
+
+def _embed(emb, audio, sample_rate: Optional[int]):
+    """One clip through `emb`, with the sample rate only for an embedder that
+    says it takes one (see EcapaEmbedder.takes_rate)."""
+    if sample_rate and getattr(emb, "takes_rate", False):
+        return emb.embed(audio, sample_rate=sample_rate)
+    return emb.embed(audio)
 
 
 # --------------------------------------------------------------------------
@@ -379,7 +489,8 @@ def load_profile(path: Optional[Path] = None) -> Optional[VoiceProfile]:
     return prof if prof.usable else None
 
 
-def enroll(clips: list, embedder=None, path: Optional[Path] = None) -> VoiceProfile:
+def enroll(clips: list, embedder=None, path: Optional[Path] = None,
+           sample_rate: Optional[int] = None) -> VoiceProfile:
     """Build a profile from sample clips.
 
     Implements the config's promise: "Enrolment lowers it automatically if
@@ -390,7 +501,7 @@ def enroll(clips: list, embedder=None, path: Optional[Path] = None) -> VoiceProf
     policy change nobody asked for.
     """
     emb = embedder or Embedder()
-    vecs = [v for v in (emb.embed(c) for c in clips) if v]
+    vecs = [v for v in (_embed(emb, c, sample_rate) for c in clips) if v]
     if not vecs:
         raise ValueError("no usable audio in those clips")
 
@@ -470,7 +581,7 @@ class Verdict:
         return asdict(self)
 
 
-def verify(audio, embedder=None) -> Verdict:
+def verify(audio, embedder=None, sample_rate: Optional[int] = None) -> Verdict:
     """Is this the owner? Called by jarvis_speech before any transcription.
 
     ORDER MATTERS. jarvis_speech's own comment explains why this must answer
@@ -507,7 +618,7 @@ def verify(audio, embedder=None) -> Verdict:
                                f"{emb.name!r} is loaded - re-enrol to use it"))
 
     try:
-        vec = emb.embed(audio)
+        vec = _embed(emb, audio, sample_rate)
         # Anything not list-shaped: a scalar, a string, a generator. len() on
         # a float raised TypeError straight out of verify(), and
         # jarvis_speech.hear() does not wrap this call - so a bad embedder
@@ -543,10 +654,27 @@ def status() -> dict:
     and reported to clients as a capability, so it must not overstate."""
     prof = load_profile()
     try:
-        EcapaEmbedder()
-        model = "ecapa"
+        # "ecapa" for speechbrain, "sherpa-onnx:<hash>" for a model file.
+        model = EcapaEmbedder().name
     except Exception:
         model = "spectral-v1"
+    speaker_model = model != "spectral-v1"
+    # A profile made with one embedder cannot be checked with another -
+    # verify() refuses it, correctly. That is exactly what happens the day
+    # the better model is installed over a profile trained on the basic
+    # check, and without this the owner would read "trained" and be refused.
+    retrain = bool(prof and prof.embedder and prof.embedder != model)
+    note = ""
+    if not speaker_model:
+        note = ("no speaker model installed: the fallback is a coarse "
+                "spectral signature and will not reliably separate similar "
+                "voices")
+        if _speaker_model_error:
+            note += f" ({_speaker_model_error})"
+    if retrain:
+        note = (note + ". " if note else "") + (
+            "your voice was trained with a different voice check than the one "
+            "installed now, so it will be refused until you train it again")
     return {
         "enabled": bool(_cfg("enabled", True)),
         "mode": str(_cfg("mode", "owner") or "owner"),
@@ -554,13 +682,13 @@ def status() -> dict:
         "samples": prof.samples if prof else 0,
         "threshold": prof.threshold if prof else _clamp_threshold(_cfg("threshold", 0.35)),
         "embedder": model,
-        "speaker_model": model == "ecapa",
+        "speaker_model": speaker_model,
+        "profile_embedder": prof.embedder if prof else "",
+        "needs_retraining": retrain,
+        "speaker_model_path": str(speaker_model_path()),
         "wake_phrase": _cfg("wake_phrase", "hey_jarvis"),
         "wake_word_enabled": bool(_cfg("wake_word_enabled", False)),
-        "note": ("" if model == "ecapa" else
-                 "no speaker model installed: the fallback is a coarse "
-                 "spectral signature and will not reliably separate similar "
-                 "voices"),
+        "note": note,
     }
 
 

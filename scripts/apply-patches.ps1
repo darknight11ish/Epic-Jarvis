@@ -145,6 +145,13 @@ $PATCHES = @(
     # into the backend folder; without it nothing is timed and every
     # answer works exactly as before.
     'speed-record.patch'
+    # "Train my voice". Its context lines are voice-503's output (the end of
+    # the /api/voice/say branch) and appearance's (the "/api/appearance" line
+    # in the models tuple right after it), which nothing later touches - so
+    # it only has to come after those two; last is simplest. Needs
+    # jarvis_voice_enroll.py copied in; without it the new route answers 503
+    # "voice training is not installed on this PC".
+    'voice-enroll.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
@@ -718,12 +725,25 @@ try {
         'jarvis_owned_tables.py'     # documents-owned.patch
         'jarvis_agent.py'            # tool-calling-wiring.patch; updated for skill-suggest
         'jarvis_browser_control.py'  # jarvis_agent.py's "browser_control" tool; stays OFF until [tools].enabled names it
+        'jarvis_voice_enroll.py'     # voice-enroll.patch ("Train my voice")
+        # The two below are needed by "Train my voice" too. jarvis_speech.py
+        # now sends the status shape the phone reads (without it the phone's
+        # talk button never appears), and the rebuilt jarvis_voice.py learned
+        # to use a sherpa-onnx speaker model file. The new jarvis_speech.py
+        # still works with an older jarvis_voice.py, but not the other way
+        # round, so both are copied. An older copy of either is backed up
+        # first, like every file here.
+        'jarvis_speech.py'
+        'rebuilt/jarvis_voice.py'   # forward slash: a path on Windows and on Linux alike
     )
     $copied = 0
     foreach ($m in $SHIPPED) {
         $src = Join-Path $PatchDir $m
         if (-not (Test-Path -LiteralPath $src)) { continue }
-        $dst = Join-Path $BackendPath $m
+        # By file name: 'rebuilt/jarvis_voice.py' lands beside jarvis_hud.py,
+        # not in a rebuilt folder the backend never looks in.
+        $leaf = Split-Path -Leaf $m
+        $dst = Join-Path $BackendPath $leaf
         $had = Test-Path -LiteralPath $dst
         if ($had -and (Get-FileHash -LiteralPath $dst).Hash -eq (Get-FileHash -LiteralPath $src).Hash) {
             continue
@@ -732,7 +752,7 @@ try {
             if (-not (Test-Path -LiteralPath $backup)) {
                 New-Item -ItemType Directory -Path $backup -Force | Out-Null
             }
-            Copy-Item -LiteralPath $dst -Destination (Join-Path $backup $m) -Force
+            Copy-Item -LiteralPath $dst -Destination (Join-Path $backup $leaf) -Force
         }
         Copy-Item -LiteralPath $src -Destination $dst -Force
         $copied++
