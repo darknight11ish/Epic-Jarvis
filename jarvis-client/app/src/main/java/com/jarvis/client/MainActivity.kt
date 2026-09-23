@@ -6,7 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +33,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.face.Faces
 import com.jarvis.client.face.Spec
+import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
@@ -44,6 +47,7 @@ import com.jarvis.client.ui.approval.BiometricGate
 import com.jarvis.client.ui.rememberNavState
 import com.jarvis.client.ui.screens.AppearanceScreen
 import com.jarvis.client.ui.screens.BrainScreen
+import com.jarvis.client.ui.screens.ConnectionInfo
 import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.FaqScreen
 import com.jarvis.client.ui.screens.HomeActions
@@ -242,6 +246,9 @@ class MainActivity : FragmentActivity() {
                 title = "Jarvis could not start",
                 detail = trace,
                 onDismiss = { finish() },
+                // It closes the app, so it says so. "Continue" here promised
+                // an app that was not going to appear.
+                dismissLabel = "Close app",
             )
             return
         }
@@ -250,6 +257,7 @@ class MainActivity : FragmentActivity() {
                 title = "Jarvis could not start",
                 detail = "The runtime reported that it never initialised, and did not say why.",
                 onDismiss = { finish() },
+                dismissLabel = "Close app",
             )
             return
         }
@@ -280,6 +288,25 @@ class MainActivity : FragmentActivity() {
         // able to bounce a paired device back to pairing, because this was the
         // one flag of the three that was not saved.
         var paired by rememberSaveable { mutableStateOf(JarvisRuntime.isPaired()) }
+        // Pairing AGAIN, with a desktop already paired. `paired` stays true the
+        // whole time: the saved desktop and token are still the ones in use,
+        // and remain so unless the new ones connect (see onPair below). Before
+        // this existed `paired` could only ever become true, so once paired the
+        // pairing screen was unreachable - while the app's own BadToken message
+        // told the owner to "paste it again". Saveable for the same reason
+        // `paired` is: a rotation must not drop the owner out of the screen
+        // they are typing into.
+        var repairing by rememberSaveable { mutableStateOf(false) }
+        // The address being typed on the pairing screen, held here rather than
+        // inside it. The screen leaves composition when the owner opens Platform
+        // checks or Help, and it used to take the typed address with it; Checks
+        // then judged the saved one, usually blank. Only ever written to
+        // settings by onPair, as before. Not a secret - the token is not here.
+        var pairingHost by rememberSaveable { mutableStateOf(JarvisRuntime.settings.host.value) }
+        // Set once the pairing screen has been brought back for the current
+        // token refusal, so "Keep current desktop" is not overruled a moment
+        // later by the same refusal. Cleared when the refusal clears.
+        var tokenRefusalHandled by rememberSaveable { mutableStateOf(false) }
         // Deliberately NOT saveable, unlike `paired` above.
         //
         // `busy` is cleared in exactly one place: the handshake coroutine
@@ -428,12 +455,58 @@ class MainActivity : FragmentActivity() {
             chat.error.collectLatest { if (it != null) JarvisRuntime.setNotice(it) }
         }
 
-        // The panel is asked for its fastest rate only while the face wants
-        // every frame - listening, thinking, speaking, error. Idle draws at
-        // 30 and standby and banked far below that, so a 120 Hz request held
-        // through them was battery spent on frames nothing drew.
-        LaunchedEffect(faceState) {
-            DisplayRate.setHigh(this@MainActivity, window.peekDecorView(), Spec.fpsFor(faceState) == 0)
+        // The panel is asked for its fastest rate only while the face is on
+        // screen AND in a state that uses it - see DisplayRate.wantsHigh for
+        // the whole rule. It used to follow the face's state alone, so reading
+        // the Inbox during a long THINKING task held a 120 Hz panel at 120 for
+        // a screen of still text, and ERROR held it until someone fixed the
+        // error. Home is where the face is the thing being looked at;
+        // Appearance's small preview does not need 120 Hz.
+        //
+        // A loop rather than a single call, but only while the answer can
+        // still change on its own: THINKING drops the high rate after its
+        // first seconds, and battery saver or heat can arrive at any time.
+        // In every other state the loop exits after one pass.
+        val faceOnScreen = paired && !repairing && nav.current == Screen.HOME
+        LaunchedEffect(faceState, faceOnScreen) {
+            val enteredAt = SystemClock.elapsedRealtime()
+            while (true) {
+                val high = DisplayRate.wantsHigh(
+                    state = faceState,
+                    faceOnScreen = faceOnScreen,
+                    msInState = SystemClock.elapsedRealtime() - enteredAt,
+                    constrained = DisplayRate.constrained(this@MainActivity),
+                )
+                DisplayRate.setHigh(this@MainActivity, window.peekDecorView(), high)
+                if (!DisplayRate.couldWantHigh(faceState, faceOnScreen)) break
+                delay(RATE_RECHECK_MS)
+            }
+        }
+
+        // When the desktop refuses the token, go back to the pairing screen
+        // rather than leaving the owner on Home with an error that says "paste
+        // it again" and nowhere to paste it.
+        //
+        // Two places report a refusal, and neither is a typed signal this file
+        // can read: the stream's `linkDetail` (EventStream.kt writes exactly
+        // "Token refused" for a 401/403) and a request's notice (JarvisRuntime
+        // turns ApiError.BadToken into the sentence noticeFor returns). Both
+        // are matched as the strings they are. If either wording changes this
+        // stops firing - it fails towards "stays on Home", never towards
+        // unpairing, because nothing here clears the saved token.
+        val badTokenNotice = remember { JarvisRuntime.noticeFor(ApiError.BadToken) }
+        val tokenRefused = paired &&
+            (linkDetail == TOKEN_REFUSED_DETAIL || notice == badTokenNotice)
+        LaunchedEffect(tokenRefused) {
+            if (!tokenRefused) {
+                tokenRefusalHandled = false
+                return@LaunchedEffect
+            }
+            if (tokenRefusalHandled || repairing) return@LaunchedEffect
+            tokenRefusalHandled = true
+            pairingHost = JarvisRuntime.settings.host.value
+            repairing = true
+            nav.resetTo(Screen.HOME)
         }
 
         LaunchedEffect(brain.memory) {
@@ -522,6 +595,10 @@ class MainActivity : FragmentActivity() {
         // it: the tap navigated home and left you a list to hunt through.
         LaunchedEffect(focusApproval.value) {
             val id = focusApproval.value ?: return@LaunchedEffect
+            // A tap on an approval notification means "show me that card", and
+            // the pairing screen would hide it. The desktop in use is the saved
+            // one either way, so leaving re-pairing loses nothing but typing.
+            repairing = false
             nav.resetTo(Screen.HOME)
             JarvisRuntime.refreshPending()
             // Held long enough to scroll to and be noticed, then dropped. A
@@ -570,17 +647,48 @@ class MainActivity : FragmentActivity() {
                 .windowInsetsPadding(WindowInsets.systemBars)
 
             // Pairing outranks the stack: there is nothing to show until there
-            // is somewhere to talk to. The checks screen is the exception,
+            // is somewhere to talk to. Two screens are the exception. Checks,
             // because "why can I not connect" has to be answerable from here.
-            if (!paired && nav.current != Screen.CHECKS) {
+            // Help, because its first question is "Do I need Tailscale?", and
+            // that is asked before pairing, not after.
+            //
+            // `repairing` shows this same screen to a phone that IS paired, so
+            // the owner can change the desktop or the token.
+            if ((!paired || repairing) &&
+                nav.current != Screen.CHECKS && nav.current != Screen.FAQ
+            ) {
+                val replacing = paired
+                // Leaves re-pairing and keeps the desktop in use. A "refused
+                // that token" notice left over from an attempt made here is
+                // dropped with it: the old token was put back, and on Home the
+                // sentence would read as being about that one. If the old token
+                // really is refused, the stream still says so in the status.
+                val leaveRepair: () -> Unit = {
+                    repairing = false
+                    if (notice == badTokenNotice) JarvisRuntime.clearNotice()
+                }
+                if (replacing) {
+                    // System back does the same as the on-screen button.
+                    // Composed after NavBackHandler, so it takes the press first.
+                    BackHandler(onBack = leaveRepair)
+                }
                 PairingScreen(
-                    initialHost = JarvisRuntime.settings.host.value,
+                    initialHost = pairingHost,
                     hasToken = JarvisRuntime.tokens.hasToken(),
                     busy = busy,
-                    notice = notice,
+                    // Brought back by a refusal the stream reported, there may be
+                    // no notice yet - so say why the screen appeared.
+                    notice = notice ?: if (tokenRefused) badTokenNotice else null,
                     onPair = { host, token ->
                         busy = true
                         scope.launch {
+                            // Only filled in when re-pairing. Held in this
+                            // coroutine and nowhere else, never logged, and
+                            // dropped when it ends. `oldToken` stays empty when
+                            // no new token was typed - then the stored one is
+                            // never touched, so there is nothing to put back.
+                            var oldHost = ""
+                            var oldToken = ""
                             // Off the main thread. `setToken` generates a
                             // hardware-backed AES key on first pair, which is a
                             // TEE/StrongBox round trip — several hundred
@@ -589,28 +697,65 @@ class MainActivity : FragmentActivity() {
                             // into its own busy state, and an ANR candidate on a
                             // slow device.
                             withContext(Dispatchers.IO) {
+                                if (replacing) {
+                                    oldHost = JarvisRuntime.settings.host.value
+                                    if (token.isNotBlank()) oldToken = JarvisRuntime.tokens.token()
+                                }
                                 JarvisRuntime.settings.setHost(host)
                                 if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
                             }
                             val result = JarvisRuntime.handshake()
-                            busy = false
                             if (result is ApiResult.Ok) {
+                                busy = false
                                 paired = true
+                                repairing = false
+                                pairingHost = JarvisRuntime.settings.host.value
                                 // The stream lives in the service, not here: a
                                 // backgrounded activity's connection is
                                 // suspended within about a minute, which is
                                 // exactly how approvals silently stop arriving.
                                 EventService.start(this@MainActivity)
+                                if (replacing) {
+                                    // The running stream is still talking to the
+                                    // old desktop, or retrying the old token.
+                                    // Replaced the same way Home's Retry does it,
+                                    // so it picks up the new address and token
+                                    // now rather than at its next backoff.
+                                    JarvisRuntime.startStream(force = true)
+                                    scope.launch { JarvisRuntime.refreshAll() }
+                                }
                                 // Picks up whatever face the owner's other
                                 // device already chose, the moment there is
                                 // somewhere to ask. A no-op, silently, on a
                                 // backend without the capability.
                                 JarvisRuntime.refreshAppearance()
+                            } else {
+                                // A re-pair that did not connect changes
+                                // nothing: the desktop and token that were in
+                                // use go back. A typo must never be what
+                                // unpairs a phone that was working. The
+                                // handshake's own notice stays up to say why.
+                                //
+                                // `oldToken` is empty when it could not be read
+                                // (the Keystore is briefly unavailable) - then
+                                // there is nothing to restore, and clearing the
+                                // new one would unpair the phone outright, so
+                                // the new one is left.
+                                if (replacing) {
+                                    withContext(Dispatchers.IO) {
+                                        JarvisRuntime.settings.setHost(oldHost)
+                                        if (oldToken.isNotEmpty()) JarvisRuntime.tokens.setToken(oldToken)
+                                    }
+                                }
+                                busy = false
                             }
                         }
                     },
                     onOpenReadiness = { nav.go(Screen.CHECKS) },
                     modifier = root,
+                    onHostChange = { pairingHost = it },
+                    onOpenHelp = { nav.go(Screen.FAQ) },
+                    onCancel = if (replacing) leaveRepair else null,
                 )
                 return@JarvisTheme
             }
@@ -618,15 +763,19 @@ class MainActivity : FragmentActivity() {
             when (nav.current) {
                 Screen.CHECKS -> {
                     val host by JarvisRuntime.settings.host.collectAsState()
+                    // Before pairing, or while re-pairing, the address to judge
+                    // is the one being typed, not the saved one: that is the
+                    // question the owner came here to ask.
+                    val judgedHost = if (!paired || repairing) pairingHost else host
                     // `pending` is a key because the Notifications item reports
                     // how many approvals are currently going unannounced, and
                     // that number moves with the pending list. Without it the
                     // report would be cached from whenever the permission last
                     // changed and quietly go stale.
-                    val items = remember(tick, host, pending) {
+                    val items = remember(tick, judgedHost, pending) {
                         PlatformReadiness.report(
                             this@MainActivity,
-                            host,
+                            judgedHost,
                         )
                     }
                     val wakeWord by voice.wakeWord.collectAsState()
@@ -687,6 +836,34 @@ class MainActivity : FragmentActivity() {
                             }
                         },
                         modifier = root,
+                        // The saved host, not the typed one: this card is about
+                        // the link that is actually running.
+                        connection = ConnectionInfo(
+                            host = host,
+                            paired = paired,
+                            link = link,
+                            stale = stale,
+                            detail = linkDetail,
+                        ),
+                        // The same call as Home's Retry, `force` and all - see
+                        // the comment on onReconnect in HomeActions below.
+                        onReconnect = {
+                            EventService.start(this@MainActivity)
+                            JarvisRuntime.startStream(force = true)
+                            scope.launch { JarvisRuntime.refreshAll() }
+                        },
+                        onChangeDesktop = if (paired) {
+                            {
+                                // Filled in with the saved address, unless a
+                                // re-pair is already under way - then the
+                                // address being typed is kept.
+                                if (!repairing) pairingHost = host
+                                repairing = true
+                                nav.resetTo(Screen.HOME)
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
 
@@ -1133,6 +1310,19 @@ class MainActivity : FragmentActivity() {
 
 /** How long to wait before re-offering a theme the dwell window refused. */
 private const val THEME_RETRY_MS = 600L
+
+/**
+ * How often the refresh-rate choice is re-checked while it can still change on
+ * its own (THINKING's time limit, battery saver, heat). Slow enough to cost
+ * nothing, quick enough that battery saver lets go of 120 Hz within moments.
+ */
+private const val RATE_RECHECK_MS = 2_000L
+
+/**
+ * The stream's reason for a 401/403, exactly as `net/EventStream.kt` writes it.
+ * Matched as a string because that is all `linkDetail` carries.
+ */
+private const val TOKEN_REFUSED_DETAIL = "Token refused"
 
 /**
  * How long a notification-focused approval stays marked on the home list.
