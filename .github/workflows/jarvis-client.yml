@@ -382,23 +382,6 @@ jobs:
             # (boot completed, panics, driver errors); the boot-property dump
             # that made up the bulk of it has never once been the answer.
 
-            # The face photographs FaceShotTest left on the device, pulled
-            # HERE - in the EXIT trap - so they are collected whether the
-            # step passed or failed, and before the emulator (and the files
-            # with it) is killed below. "Upload the face photographs"
-            # publishes them. /data/local/tmp because the app's own storage
-            # is wiped when the suite uninstalls it; see the test's comment.
-            #
-            # Every line here is `|| true` or cannot fail: these pictures are
-            # evidence, never a gate, and a command failing under -e inside
-            # this trap would also skip the `kill` at the bottom of it. Pulled
-            # into $RUNNER_TEMP itself, which adb turns into
-            # $RUNNER_TEMP/jarvis-face-shots.
-            timeout 120 adb pull /data/local/tmp/jarvis-face-shots "$RUNNER_TEMP" >/dev/null 2>&1 || true
-            shots=$( { find "$RUNNER_TEMP/jarvis-face-shots" -name '*.png' 2>/dev/null || true; } | wc -l )
-            echo "Face photographs pulled off the device: ${shots:-0} (artifact: jarvis-client-face-shots)"
-            [ "${shots:-0}" -gt 0 ] || echo "  none - FaceShotTest did not run, or saved nothing; its manifest.txt, if pulled, says why"
-
             echo "::group::Emulator log (tail)"
             tail -12 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
             echo "::endgroup::"
@@ -427,7 +410,18 @@ jobs:
           adb logcat -v time > "$RUNNER_TEMP/device.log" 2>/dev/null &
           LOGCAT=$!
 
-          if ! ./gradlew connectedDebugAndroidTest --stacktrace 2>&1 | tee smoke.log; then
+          # FaceShotTest does NOT run here; it has its own job, `face-shots`,
+          # below. Twice in a row (a4c5ba9, 9473ca7) the emulator itself
+          # went down during it - a segfault in the emulator process, with
+          # "Failed to find ColorBuffer" from its graphics layer - while
+          # FaceRenderTest, which draws the same twenty faces without
+          # resizing the display or taking screenshots, passed. The pictures
+          # are evidence, not a gate, and a test that can take the whole
+          # device down with it must not be what stops the APK being
+          # published.
+          if ! ./gradlew connectedDebugAndroidTest --stacktrace \
+               -Pandroid.testInstrumentationRunnerArguments.notClass=com.jarvis.client.FaceShotTest \
+               2>&1 | tee smoke.log; then
             kill "$LOGCAT" 2>/dev/null || true
             # Ordered noisiest-first, so the thing worth reading is LAST.
             # GitHub's log API serves a tail, and the emulator prints ~110
@@ -451,7 +445,7 @@ jobs:
               echo "::endgroup::"
             fi
             echo "::group::The last tests the device started, and its last words"
-            grep -E "TestRunner: (started|finished|failed)" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -8 || true
+            grep -E "TestRunner\(.*\): (started|finished|failed):" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -8 || true
             echo "--- last 25 lines of the device log ---"
             tail -25 "$RUNNER_TEMP/device.log" 2>/dev/null || true
             echo "::endgroup::"
@@ -549,11 +543,9 @@ jobs:
             exit 1
           fi
 
-          # FaceShotTest overrides the display to phone size and density for
-          # its pictures and puts it back itself, in a `finally`. Reset once
-          # more here in case its process died before it could, so the
-          # release build below starts on the emulator's own display. A no-op
-          # otherwise, and not a check: nothing here can fail the step.
+          # FaceShotTest no longer runs in this job (see `face-shots`), but it
+          # used to override the display here, so reset it anyway: a no-op
+          # on a display nothing touched, and nothing here can fail the step.
           adb shell wm density reset >/dev/null 2>&1 || true
           adb shell wm size reset >/dev/null 2>&1 || true
 
@@ -768,27 +760,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      # One PNG per face, taken by FaceShotTest on the emulator at phone
-      # density (see that test's comment for exactly how), plus a
-      # manifest.txt saying what was captured and anything that went wrong.
-      # This is the only way anyone not holding the phone can SEE what the
-      # Android faces draw. Pulled off the device by the trap in the step
-      # above.
-      #
-      # On success AND failure: a red run is when a picture of what the faces
-      # actually drew helps most. `continue-on-error` because this is
-      # evidence, not a gate - an upload hiccup must never be what stops the
-      # APK below from being published.
-      - name: Upload the face photographs
-        if: success() || failure()
-        continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: jarvis-client-face-shots
-          path: ${{ runner.temp }}/jarvis-face-shots
-          if-no-files-found: warn
-          retention-days: 7
-
       # The RELEASE apk, which the step above has just started on a real
       # device. `app-release.apk` and not `*.apk`: the debug build and the
       # androidTest build are both sitting in the same tree, and picking the
@@ -861,3 +832,113 @@ jobs:
                "Settings -> Actions -> General -> Workflow permissions to" \
                "'Read and write permissions'. The APK is still available as the" \
                "jarvis-client-debug-apk run artifact."
+
+  # The face photographs, on their own emulator, never gating anything.
+  #
+  # FaceShotTest used to run inside `smoke`, and twice took the emulator down
+  # with it (see the comment on the test command there). Here it gets a
+  # device built at phone size and density from the start - 1080x2160 at
+  # 420 dpi, what the test was switching the 320x640 panel to with
+  # `wm size` / `wm density` mid-run - so its own override becomes a no-op
+  # instead of a live resize under a running GL surface. Whether that is what
+  # was crashing the emulator is not known; this job exists to find out
+  # without costing a release, which is why it is continue-on-error.
+  face-shots:
+    runs-on: ubuntu-latest
+    needs: build
+    continue-on-error: true
+    timeout-minutes: 30
+    env:
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.avd
+    defaults:
+      run:
+        working-directory: jarvis-client
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+
+      - name: Let the runner use KVM
+        working-directory: .
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install the system image
+        working-directory: .
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "system-images;android-34;default;x86_64" \
+                               "platforms;android-34" "platform-tools" "emulator"
+
+      - name: Compile the app and the test
+        run: |
+          set -uo pipefail
+          chmod +x ./gradlew
+          ./gradlew assembleDebug assembleDebugAndroidTest
+
+      - name: Photograph every face
+        run: |
+          set -uo pipefail
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd -n shots \
+            -k "system-images;android-34;default;x86_64" --force
+          # Phone-sized from boot. config.ini is the AVD's own hardware
+          # description; the emulator reads it at start.
+          cfg="$ANDROID_AVD_HOME/shots.avd/config.ini"
+          sed -i '/^hw.lcd.width=/d;/^hw.lcd.height=/d;/^hw.lcd.density=/d' "$cfg"
+          printf 'hw.lcd.width=1080\nhw.lcd.height=2160\nhw.lcd.density=420\n' >> "$cfg"
+          mkdir -p "$HOME/.android"
+          printf 'Vulkan = off\nGLDirectMem = on\n' >> "$HOME/.android/advancedFeatures.ini"
+
+          "$ANDROID_HOME/emulator/emulator" -avd shots \
+            -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+            -camera-back none -camera-front none -memory 4096 \
+            -gpu swiftshader_indirect -accel auto > "$RUNNER_TEMP/emulator.log" 2>&1 &
+          EMU=$!
+
+          finish() {
+            # Every adb call here has a timeout: on a device that has gone
+            # away, adb waits for it forever otherwise.
+            timeout 120 adb pull /data/local/tmp/jarvis-face-shots "$RUNNER_TEMP" >/dev/null 2>&1 || true
+            shots=$( { find "$RUNNER_TEMP/jarvis-face-shots" -name '*.png' 2>/dev/null || true; } | wc -l )
+            echo "Face photographs pulled off the device: ${shots:-0} (artifact: jarvis-client-face-shots)"
+            if ! kill -0 "$EMU" 2>/dev/null; then
+              echo "::warning::The emulator process died during the photographs."
+            fi
+            echo "::group::Emulator log (tail)"
+            tail -30 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
+            echo "::endgroup::"
+            kill "$EMU" 2>/dev/null || true
+          }
+          trap finish EXIT
+
+          timeout 300 adb wait-for-device || { echo "::error::no device"; exit 1; }
+          timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done' \
+            || { echo "::error::the emulator never finished booting"; exit 1; }
+          timeout 20 adb shell wm size || true
+          timeout 20 adb shell wm density || true
+
+          ./gradlew connectedDebugAndroidTest \
+            -Pandroid.testInstrumentationRunnerArguments.class=com.jarvis.client.FaceShotTest
+
+      - name: Upload the face photographs
+        if: success() || failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: jarvis-client-face-shots
+          path: ${{ runner.temp }}/jarvis-face-shots
+          if-no-files-found: warn
+          retention-days: 7
