@@ -1144,30 +1144,88 @@ function renderProposals() {
   rows(
     dom.memoryProposals,
     items,
-    (p) =>
-      row({
-        tag: "proposed",
-        state: "warn",
-        title: String(p.text || "(no text)"),
-        meta: [
-          p.replaces ? `would replace: ${p.replaces}` : "",
-          p.confidence != null ? `confidence ${Number(p.confidence).toFixed(2)}` : "",
-          p.source ? `from ${p.source}` : "",
-          ago(p.created),
-        ],
-        actions: [
-          button("Keep", async () => {
-            await memoryWrite("brain_memory_decide", { id: Number(p.id), accept: true },
-              "Kept. Jarvis can recall it now.");
-          }, { title: "Add it to memory. It can be reworded or forgotten later.", live: true }),
-          button("Discard", async () => {
-            await memoryWrite("brain_memory_decide", { id: Number(p.id), accept: false },
-              "Discarded. It was never in memory.");
-          }, { title: "Throw the proposal away. Nothing is removed from memory, because it was never there.", live: true }),
-        ],
-      }),
+    (p) => proposalRow(p),
     "Nothing is waiting. Either Jarvis has not heard anything worth keeping, or learning is off."
   );
+}
+
+/**
+ * One review card. Three kinds, each labelled for what its buttons really do:
+ *
+ * - an ordinary proposal: Keep / Discard, plus "Both are true" when the
+ *   server says the card corrects an older fact and both can stand
+ *   (`keep_both_ok`, memory-intake.patch);
+ * - a "stop using this fact?" card (`source == "feedback_retire"`,
+ *   feedback.patch): accepting RETIRES the fact it names, so its buttons say
+ *   "Stop using this fact" / "Keep using it", never "Keep" - which on this
+ *   card would do the opposite of what it says;
+ * - any card whose text reads like a planted instruction (`flags`) carries
+ *   a plain-words warning. The warning drops nothing; the owner decides.
+ *
+ * Still one card, one decision. Nothing here decides more than one.
+ */
+function proposalRow(p) {
+  const id = Number(p.id);
+  const flags = Array.isArray(p.flags) ? p.flags.filter((f) => f && typeof f === "object") : [];
+  const retire = p.source === "feedback_retire";
+  const meta = retire
+    ? [
+        p.replaces_text || p.replaces ? `The fact: “${p.replaces_text || p.replaces}”` : "",
+        "Stopping it does not delete it: the fact stays in Jarvis's history, marked as no longer used.",
+        ago(p.created),
+      ]
+    : [
+        p.replaces ? `would replace: ${p.replaces}` : "",
+        p.verbatim ? "your own words" : "",
+        p.confidence != null ? `confidence ${Number(p.confidence).toFixed(2)}` : "",
+        p.source ? `from ${p.source}` : "",
+        ago(p.created),
+      ];
+  const actions = retire
+    ? [
+        button("Stop using this fact", async () => {
+          await memoryWrite("brain_memory_decide", { id, accept: true },
+            "Jarvis will stop using that fact. It stays in the history.");
+        }, { title: "Jarvis stops recalling this fact. It is not deleted.", live: true }),
+        button("Keep using it", async () => {
+          await memoryWrite("brain_memory_decide", { id, accept: false },
+            "Kept. Jarvis will go on using that fact.");
+        }, { title: "Leave the fact exactly as it is.", live: true }),
+      ]
+    : [
+        button("Keep", async () => {
+          await memoryWrite("brain_memory_decide", { id, accept: true },
+            "Kept. Jarvis can recall it now.");
+        }, { title: "Add it to memory. It can be reworded or forgotten later.", live: true }),
+        ...(p.keep_both_ok === true
+          ? [button("Both are true", async () => {
+              await memoryWrite("brain_memory_keep_both", { id },
+                "Kept both. The older fact stays current too.");
+            }, { title: "Keep this AND the fact it would replace. Nothing is retired.", live: true })]
+          : []),
+        button("Discard", async () => {
+          await memoryWrite("brain_memory_decide", { id, accept: false },
+            "Discarded. It was never in memory.");
+        }, { title: "Throw the proposal away. Nothing is removed from memory, because it was never there.", live: true }),
+      ];
+  const item = row({
+    tag: retire ? "stop using?" : "proposed",
+    state: retire || flags.length ? "bad" : "warn",
+    title: String(p.text || "(no text)"),
+    meta,
+    actions,
+  });
+  if (flags.length) {
+    const warn = el("div", "row-warning");
+    warn.append(el("strong", "", "Careful: this reads like an instruction someone slipped in, not a fact about you. "));
+    warn.append(el("span", "", "Only keep it if you really said this. "));
+    for (const f of flags) {
+      if (f.why) warn.append(el("span", "row-warning-why", String(f.why)));
+    }
+    const main = item.querySelector(".row-main");
+    (main || item).append(warn);
+  }
+  return item;
 }
 
 function renderFacts() {

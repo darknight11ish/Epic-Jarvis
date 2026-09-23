@@ -383,6 +383,23 @@ pub async fn brain_memory_sleep_time(
     post(&app, "/api/memory/sleep_time", body).await
 }
 
+/// "Both are true": the third answer on a correction card
+/// (memory-intake.patch). Keeps the new fact AND leaves the old one current -
+/// nothing is retired or deleted. One proposal id, one decision, exactly like
+/// [`brain_memory_decide`], and gated on a live link the same way. The window
+/// offers it only on a card whose `keep_both_ok` is true, which only a
+/// patched backend sends.
+#[tauri::command]
+pub async fn brain_memory_keep_both(app: AppHandle, id: i64) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    post(
+        &app,
+        "/api/memory/keep_both",
+        serde_json::json!({ "id": id }),
+    )
+    .await
+}
+
 /// Every fact and every pending proposal, for the owner to keep a copy of.
 ///
 /// A command rather than a read section because it is large and wanted rarely;

@@ -416,6 +416,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             // scripted to say.
             const reply = (window.__chatReplies || []).shift();
             const onmessage = args && args.onEvent && args.onEvent.onmessage;
+            // The answer's id, sent ahead of the answer exactly as
+            // commands.rs pump_chat does (TURN_LINE_PREFIX). A scenario
+            // sets window.__turnId; unset, no id - an unpatched backend.
+            if (window.__turnId && typeof onmessage === "function") {
+              onmessage("\u001fjarvis-turn:" + window.__turnId);
+            }
             if (reply && typeof onmessage === "function") {
               const chunks = Array.isArray(reply) ? reply : [reply];
               for (const chunk of chunks) {
@@ -448,6 +454,16 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                      bindings: (window.__appearance || {}).bindings || {}, updated: 0 };
           case "appearance_colours": return window.__appearanceColours || {};
           case "open_faces": window.__calls.push(["__openedFaces"]); return null;
+          // feedback.patch. `window.__markRoute = false` is a backend
+          // without the route (commands.rs turns a 404 into this).
+          case "mark_answer":
+            window.__marks = window.__marks || [];
+            window.__marks.push({ turnId: args.turnId, mark: args.mark });
+            if (window.__markRoute === false) return { available: false, status: 404 };
+            return { ok: true, turn_id: args.turnId, mark: args.mark };
+          case "brain_memory_keep_both":
+            window.__memoryWrites.push({ cmd, ...args });
+            return { ok: true };
           case "get_hotkeys": return window.__hotkeys;
           // Matches commands.rs's get_autostart/set_autostart shape - falling
           // through to the bare `default: return null` below made

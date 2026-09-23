@@ -428,8 +428,112 @@
           return realFetch(jarvis.url(path), merged);
         }
       }
+      // The page's own chat request (jfetch("/api/chat") -> the backend's
+      // absolute URL). The answer's id rides in X-Jarvis-Route as
+      // `turn_id` (feedback.patch); section 6 puts a right/wrong mark on
+      // the answer it belongs to. Read-only: the response is passed back
+      // to the page untouched.
+      if (/\/api\/chat(\?|$)/.test(path)) {
+        return realFetch(input, init).then(function (res) {
+          try {
+            var raw = res.headers.get("X-Jarvis-Route");
+            var route = raw ? JSON.parse(raw) : null;
+            var id = route && route.turn_id;
+            if (typeof id === "string" && /^[0-9a-f]{32}$/.test(id)) expectAnswer(id);
+          } catch (err) {
+            /* no id: no mark */
+          }
+          return res;
+        });
+      }
       return realFetch(input, init);
     };
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 6. Right or wrong: the mark on one answer (feedback.patch)
+   *
+   * Under the answer the id belongs to - the next "jarvis" message the page
+   * adds to #log - two small buttons. One answer, one mark; pressing the
+   * one already on takes it back. Posted straight to the backend the page
+   * already talks to (window.JARVIS's own url and headers, token included),
+   * because this window has no app commands. A backend without the route
+   * answers 404/503 and the buttons remove themselves, quietly. A mark
+   * changes no memory; it only counts.
+   * ---------------------------------------------------------------- */
+  var awaitingTurn = null;
+
+  function expectAnswer(turnId) {
+    awaitingTurn = turnId;
+    var log = document.getElementById("log");
+    if (!log || typeof MutationObserver === "undefined") return;
+    var watch = new MutationObserver(function (records) {
+      for (var i = 0; i < records.length; i++) {
+        var added = records[i].addedNodes;
+        for (var j = 0; j < added.length; j++) {
+          var node = added[j];
+          if (node.nodeType === 1 && node.classList.contains("msg") && node.classList.contains("jarvis")) {
+            watch.disconnect();
+            if (awaitingTurn === turnId) attachMark(node, turnId);
+            return;
+          }
+        }
+      }
+    });
+    watch.observe(log, { childList: true });
+    // An answer that never arrives (an error) must not leave this watching.
+    setTimeout(function () { watch.disconnect(); }, 120000);
+  }
+
+  function attachMark(msg, turnId) {
+    var row = document.createElement("div");
+    row.className = "jarvis-mark";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", "Was this answer right?");
+    var q = document.createElement("span");
+    q.textContent = "Was this answer right?";
+    var right = document.createElement("button");
+    right.type = "button";
+    right.textContent = "Right";
+    var wrong = document.createElement("button");
+    wrong.type = "button";
+    wrong.textContent = "Wrong";
+    var current = "none";
+    function paint() {
+      right.setAttribute("aria-pressed", String(current === "right"));
+      wrong.setAttribute("aria-pressed", String(current === "wrong"));
+    }
+    function send(mark) {
+      var next = current === mark ? "none" : mark;
+      var api = window.JARVIS;
+      if (!api || typeof api.url !== "function") return;
+      right.disabled = wrong.disabled = true;
+      realFetch(api.url("/api/feedback/mark"), {
+        method: "POST",
+        cache: "no-store",
+        headers: api.headers({ "Content-Type": "application/json", "X-Jarvis-Client": "hud" }),
+        body: JSON.stringify({ turn_id: turnId, mark: next }),
+      })
+        .then(function (res) {
+          if (res.status === 404 || res.status === 501 || res.status === 503) {
+            row.remove();
+            return;
+          }
+          if (res.ok) current = next;
+        })
+        .catch(function () { /* leave it as it was */ })
+        .then(function () {
+          right.disabled = wrong.disabled = false;
+          paint();
+        });
+    }
+    right.addEventListener("click", function () { send("right"); });
+    wrong.addEventListener("click", function () { send("wrong"); });
+    paint();
+    row.appendChild(q);
+    row.appendChild(right);
+    row.appendChild(wrong);
+    msg.appendChild(row);
   }
 
   /* ---------------------------------------------------------------- *

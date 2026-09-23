@@ -166,6 +166,10 @@ const dom = {
   offline: $("offline"),
   offlineText: $("offline-text"),
   micLabel: $("mic-label"),
+  answerMark: $("answer-mark"),
+  markRight: $("mark-right"),
+  markWrong: $("mark-wrong"),
+  answerMarkNote: $("answer-mark-note"),
   approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
@@ -2030,7 +2034,14 @@ async function streamViaBackend(payload) {
   let settled = false;
 
   channel.onmessage = (line) => {
-    if (settled || typeof line !== "string") return;
+    if (typeof line !== "string") return;
+    // The answer's id, sent by stream_chat ahead of the answer itself - not
+    // part of it, so it never reaches consumeLine.
+    if (line.startsWith(TURN_LINE_PREFIX)) {
+      state.turnId = line.slice(TURN_LINE_PREFIX.length);
+      return;
+    }
+    if (settled) return;
     // `consumeLine` returns true on the stream's own terminator, and on an
     // approval gate — both mean stop reading.
     if (consumeLine(line)) {
@@ -2187,6 +2198,10 @@ async function send(promptText) {
 
   state.buffer = "";
   state.chunks = 0;
+  // A new answer, so no id and no mark until the server gives it one.
+  state.turnId = null;
+  state.turnMark = "none";
+  paintAnswerMark();
   spokenUpTo = 0;
   // A new answer starts from no blocks, or the first paragraph of the second
   // reply never gets its entrance.
@@ -2245,6 +2260,67 @@ async function send(promptText) {
 }
 
 /** Common teardown for every way a stream can end. */
+/* ==========================================================================
+   Right or wrong: the mark on one answer (feedback.patch)
+   --------------------------------------------------------------------------
+   Items 1 and 8 of docs/LEARNING-RESEARCH-2026-09-23.md. The server gives
+   each answer an id (`turn_id` in X-Jarvis-Route); a mark on it counts,
+   for each remembered fact used in that answer, whether it helped or hurt.
+   A mark changes no memory. Enough "wrong" answers built on one fact raise a
+   single "stop using this fact?" card in the Brain's review queue, which
+   still needs its own decision.
+
+   Shown only on a finished answer that has an id, for that answer alone.
+   Pressing the mark that is already on takes it back. A backend without the
+   patch sends no id (nothing shows); one with the id but without the route
+   answers "not available", and the control hides itself again.
+   ========================================================================== */
+
+/** stream_chat's marker for the one line that is the answer's id. */
+const TURN_LINE_PREFIX = "\u001fjarvis-turn:";
+
+function paintAnswerMark() {
+  if (!dom.answerMark) return;
+  const show = Boolean(state.turnId) && state.phase === "done" && !state.markUnavailable;
+  dom.answerMark.hidden = !show;
+  if (!show) return;
+  dom.markRight.setAttribute("aria-pressed", String(state.turnMark === "right"));
+  dom.markWrong.setAttribute("aria-pressed", String(state.turnMark === "wrong"));
+}
+
+async function sendMark(mark) {
+  const turnId = state.turnId;
+  if (!turnId || state.markBusy) return;
+  // Pressing the mark that is already on takes it back.
+  const next = state.turnMark === mark ? "none" : mark;
+  state.markBusy = true;
+  dom.markRight.disabled = true;
+  dom.markWrong.disabled = true;
+  try {
+    const out = await invokeStrict("mark_answer", { turnId, mark: next });
+    if (turnId !== state.turnId) return; // a new answer has started
+    if (out && out.available === false) {
+      // This backend cannot take marks: hide the control, quietly.
+      state.markUnavailable = true;
+    } else {
+      state.turnMark = next;
+      dom.answerMarkNote.textContent =
+        next === "none" ? "Mark taken back." : "Thanks — noted for this answer.";
+    }
+  } catch (error) {
+    dom.answerMarkNote.textContent = "Could not send the mark.";
+    console.error("[jarvis] mark failed:", error);
+  } finally {
+    state.markBusy = false;
+    dom.markRight.disabled = false;
+    dom.markWrong.disabled = false;
+    paintAnswerMark();
+  }
+}
+
+if (dom.markRight) dom.markRight.addEventListener("click", () => sendMark("right"));
+if (dom.markWrong) dom.markWrong.addEventListener("click", () => sendMark("wrong"));
+
 function finishStream(phase, statusText) {
   state.abort = null;
   state.inFlight = null;
@@ -2262,6 +2338,7 @@ function finishStream(phase, statusText) {
 
   updateStat();
   paint({ immediate: true });
+  paintAnswerMark();
 
   // Once, at the end. The answer element carries no live region any more —
   // announcing a growing buffer per repaint is what left a screen reader

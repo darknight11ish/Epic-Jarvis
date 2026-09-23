@@ -64,6 +64,8 @@ fn main() {
             // called by brain.js, absent here, so unreachable from every
             // window.
             "brain_memory_sleep_time",
+            // "Both are true" on a correction card (memory-intake.patch).
+            "brain_memory_keep_both",
             // Backend supervision — settings window only
             "supervisor_status",
             "set_supervision",
@@ -79,6 +81,8 @@ fn main() {
             "set_theme_follow_system",
             // Settings' "Open Faces" button.
             "open_faces",
+            // The right/wrong mark on one answer (feedback.patch). Quickbar.
+            "mark_answer",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
             // Connection settings — settings window only

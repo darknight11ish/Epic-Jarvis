@@ -20,6 +20,33 @@
   opacity: 0.85;
 }
 
+/* The right/wrong mark under a HUD answer (hud_bootstrap.js section 6).
+   Inherits the HUD's own colours. */
+.jarvis-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  opacity: 0.85;
+}
+
+.jarvis-mark button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 1px 8px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.jarvis-mark button[aria-pressed="true"] {
+  opacity: 1;
+  font-weight: 700;
+}
+
 /* The live link line under the brand. */
 #jarvis-link-line[data-tone="warn"],
 #jarvis-link-line[data-tone="bad"] {

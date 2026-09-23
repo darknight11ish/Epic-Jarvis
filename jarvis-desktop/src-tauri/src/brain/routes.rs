@@ -26,7 +26,11 @@ const READ_ROUTES: &[(&str, &str)] = &[
     // [`brain_watch_seen`].
     ("watch_report", "/api/watch/report"),
     ("memory", "/api/memory/status"),
-    ("memory_pending", "/api/memory/pending"),
+    // `retire_cards=1`: the Brain labels feedback.patch's "stop using this
+    // fact?" cards with their own two buttons ("Stop using this fact" /
+    // "Keep using it"), so it asks for them. A backend without the patch
+    // ignores the parameter.
+    ("memory_pending", "/api/memory/pending?retire_cards=1"),
     // Every fact the store holds, retired ones included. A read: the pane
     // shows it, and each change is its own command below.
     ("memory_facts", "/api/memory/facts"),

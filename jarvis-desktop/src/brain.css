@@ -705,6 +705,22 @@ body {
   padding: 6px 0;
 }
 
+/* A review card whose text reads like a planted instruction. */
+.row-warning {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--bad);
+  background: var(--bad-faint);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.row-warning-why {
+  display: block;
+  color: var(--text-muted);
+}
+
 /* A read that failed, as opposed to a module this backend does not have:
    amber and with a Retry, where "Not on this backend." stays grey. */
 .empty.failed {

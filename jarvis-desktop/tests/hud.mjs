@@ -99,6 +99,7 @@ async function openHud(browser, status, pageOptions = {}) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 820 }, ...pageOptions });
   const problems = [];
   const chats = [];
+  const marks = [];
   page.on("pageerror", (e) => problems.push(String(e)));
   page.on("console", (m) => {
     if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) problems.push(m.text());
@@ -123,10 +124,22 @@ async function openHud(browser, status, pageOptions = {}) {
       if (url.pathname === "/api/status") return route.fulfill({ status: 200, headers: cors, json: status });
       if (url.pathname === "/api/chat") {
         chats.push(JSON.parse(req.postData() || "{}"));
+        // feedback.patch: the answer's id in X-Jarvis-Route, exposed to the
+        // page as the backend exposes it. Only when a scenario asks for it.
+        const routeHeaders = status.turnId
+          ? { "X-Jarvis-Route": JSON.stringify({ lane: "qwen3:8b", turn_id: status.turnId }),
+              "Access-Control-Expose-Headers": "X-Jarvis-Route" }
+          : {};
         return route.fulfill({
-          status: 200, headers: cors,
+          status: 200, headers: { ...cors, ...routeHeaders },
           json: { model: "qwen3:8b", choices: [{ message: { role: "assistant", content: "Hello from the backend." } }] },
         });
+      }
+      if (url.pathname === "/api/feedback/mark" && status.turnId) {
+        marks.push(JSON.parse(req.postData() || "{}"));
+        return status.markRoute === false
+          ? route.fulfill({ status: 404, headers: cors, json: { error: "not found" } })
+          : route.fulfill({ status: 200, headers: cors, json: { ok: true } });
       }
       return route.fulfill({ status: 404, headers: cors, json: { error: "not in this test" } });
     }
@@ -135,7 +148,7 @@ async function openHud(browser, status, pageOptions = {}) {
   });
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
   await page.waitForTimeout(800);
-  return { page, problems, chats };
+  return { page, problems, chats, marks };
 }
 
 async function send(page, text) {
@@ -399,6 +412,45 @@ await check("while stale, a HUD approval card cannot be clicked, and is not remo
   await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
   await page.locator("#approvals .yes").click();
   assert.equal(await page.evaluate(() => window.__clicked), 1);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("a HUD answer with an id gets a right/wrong mark, posted to the backend", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId });
+  await send(page, "hi");
+  const mark = page.locator("#log .msg.jarvis .jarvis-mark");
+  assert.equal(await mark.count(), 1, "no mark under the answer");
+  await mark.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(300);
+  assert.deepEqual(marks, [{ turn_id: turnId, mark: "wrong" }]);
+  assert.equal(await mark.locator("button", { hasText: "Wrong" }).getAttribute("aria-pressed"), "true");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("no id, no HUD mark; and a backend without the route removes it", async () => {
+  const plain = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await send(plain.page, "hi");
+  assert.equal(await plain.page.locator(".jarvis-mark").count(), 0);
+  await plain.page.close();
+  const { page } = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
+    turnId: "0123456789abcdef0123456789abcdef", markRoute: false });
+  await send(page, "hi");
+  await page.locator(".jarvis-mark button", { hasText: "Right" }).click();
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator(".jarvis-mark").count(), 0, "the mark stayed after a 404");
+  await page.close();
+});
+
+await check("the old OpenJarvis light is gone, and chat never depended on it", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: true, ollama: false, proxy: false });
+  assert.equal(await page.locator("#led-jarvis").count(), 0);
+  // status.jarvis (the :8000 agent) no longer makes the page think it can
+  // chat: only Ollama does, since ollama-direct.patch.
+  assert.equal(await page.evaluate(() => S.online), false);
   await page.close();
   assert.deepEqual(problems, []);
 });

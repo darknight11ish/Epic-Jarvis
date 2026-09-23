@@ -551,6 +551,17 @@
             -->
             <article class="markdown" id="answer"></article>
             <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+            <!-- The right/wrong mark on THIS answer (feedback.patch). Shown
+                 only when the server gave the answer an id; a backend
+                 without the patch gives none, and a missing route hides it
+                 again. One answer, one mark - there is no "mark all". -->
+            <div class="answer-mark" id="answer-mark" role="group"
+                 aria-labelledby="answer-mark-q" hidden>
+              <span class="answer-mark-q" id="answer-mark-q">Was this answer right?</span>
+              <button class="text-button" type="button" id="mark-right" aria-pressed="false">Right</button>
+              <button class="text-button" type="button" id="mark-wrong" aria-pressed="false">Wrong</button>
+              <span class="answer-mark-note" id="answer-mark-note" role="status"></span>
+            </div>
           </div>
 
           <footer class="card-foot">

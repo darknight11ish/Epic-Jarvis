@@ -32,6 +32,13 @@ const MAX_CAPTURE_WIDTH: u32 = 1920;
 /// itself, and on Windows a connect to a closed local port takes about two
 /// seconds to fail. The probe is on-demand and never on a timer, so waiting
 /// longer costs nothing but a slower answer when something really is down.
+///
+/// Nothing in THIS app probes :8000 (the old OpenJarvis agent, never run
+/// here) - the desktop's "Core" light is Jarvis's own server, read from the
+/// event stream. The :8000 probe is inside the backend's `/api/status`, whose
+/// code is not in this repository, so it cannot be removed from here; until
+/// it is, and while :4000 (LiteLLM, the future cloud lane) is probed the same
+/// way, this timeout has to stay long enough to outwait both.
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
 /// Connect timeout for the chat stream. There is deliberately no *total*
 /// timeout: a long answer is a long-lived response body, and `Client::timeout`
@@ -961,6 +968,78 @@ pub async fn stream_chat(
     outcome
 }
 
+/// Starts the one line on the chat channel that is not part of the answer: the
+/// answer's `turn_id`. A unit-separator control character never appears in
+/// a server's SSE line, so main.js can split this off before anything tries
+/// to read it as text.
+pub const TURN_LINE_PREFIX: &str = "\u{1f}jarvis-turn:";
+
+/// The `turn_id` in an `X-Jarvis-Route` header value, if it holds a valid one:
+/// exactly 32 lower-case hex characters, what `jarvis_feedback.record_turn`
+/// makes. Anything else is ignored rather than passed on.
+pub fn turn_id_from_route(header: &str) -> Option<String> {
+    let route: serde_json::Value = serde_json::from_str(header).ok()?;
+    let id = route.get("turn_id")?.as_str()?;
+    valid_turn_id(id).then(|| id.to_string())
+}
+
+fn valid_turn_id(id: &str) -> bool {
+    id.len() == 32
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// The owner's right/wrong mark on ONE answer (feedback.patch).
+///
+/// One id and one mark, never a list: the server refuses a list with a 400
+/// too, because a "mark all" would move every counter at once. A mark never
+/// changes memory; at most it raises one "stop using this fact?" card in the
+/// ordinary review queue, which still needs its own decision.
+///
+/// A backend without the patch answers 404 (no such route) or 503 (the
+/// module is missing); both come back as `{"available": false}` so the page
+/// can hide the control quietly rather than show an error.
+#[tauri::command]
+pub async fn mark_answer(
+    app: AppHandle,
+    turn_id: String,
+    mark: String,
+) -> Result<serde_json::Value, String> {
+    if !valid_turn_id(&turn_id) {
+        return Err("that answer has no valid id to mark".to_string());
+    }
+    if !matches!(mark.as_str(), "right" | "wrong" | "none") {
+        return Err(format!("`{mark}` is not a mark (right, wrong or none)"));
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .post(format!("{base}/api/feedback/mark"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "turn_id": turn_id, "mark": mark }))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {base}")
+            } else {
+                format!("the mark could not be sent: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    if matches!(status, 404 | 501 | 503) {
+        return Ok(serde_json::json!({ "available": false, "status": status }));
+    }
+    if !(200..300).contains(&status) {
+        return Err(format!(
+            "the server answered HTTP {status}: {}",
+            text.trim()
+        ));
+    }
+    Ok(serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({ "ok": true })))
+}
+
 /// Cancels the stream in flight, if there is one.
 ///
 /// Dropping the `pump_chat` future closes the HTTP connection, so the server
@@ -1005,6 +1084,19 @@ async fn pump_chat(
         } else {
             format!("the server answered HTTP {}: {body}", status.as_u16())
         });
+    }
+
+    // The answer's id, for the right/wrong mark (feedback.patch: `turn_id` in
+    // the JSON `X-Jarvis-Route` header). Sent to the page first, as one line
+    // it can tell apart from the answer - see TURN_LINE_PREFIX. A backend
+    // without the patch sends no id, and the page then shows no mark.
+    if let Some(turn) = response
+        .headers()
+        .get("X-Jarvis-Route")
+        .and_then(|v| v.to_str().ok())
+        .and_then(turn_id_from_route)
+    {
+        let _ = on_event.send(format!("{TURN_LINE_PREFIX}{turn}"));
     }
 
     // Lines are cut from raw bytes so a multi-byte character split across two
@@ -2096,5 +2188,25 @@ mod theme_tests {
             effective_theme("deep-space", false, "deep-space", Some(true)),
             "deep-space"
         );
+    }
+}
+
+#[cfg(test)]
+mod turn_tests {
+    use super::turn_id_from_route;
+
+    /// Only a real 32-character lower-case hex id gets through; a backend
+    /// without feedback.patch sends none and the page shows no mark.
+    #[test]
+    fn a_turn_id_is_read_only_when_it_is_a_real_one() {
+        let good = "0123456789abcdef0123456789abcdef";
+        assert_eq!(
+            turn_id_from_route(&format!(r#"{{"lane":"qwen3:8b","turn_id":"{good}"}}"#)).as_deref(),
+            Some(good)
+        );
+        assert_eq!(turn_id_from_route(r#"{"lane":"qwen3:8b"}"#), None);
+        assert_eq!(turn_id_from_route(r#"{"turn_id":"not-hex"}"#), None);
+        assert_eq!(turn_id_from_route(r#"{"turn_id":["a","b"]}"#), None);
+        assert_eq!(turn_id_from_route("not json"), None);
     }
 }
