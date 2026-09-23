@@ -911,6 +911,13 @@ try {
         # By file name: 'rebuilt/jarvis_voice.py' lands beside jarvis_hud.py,
         # not in a rebuilt folder the backend never looks in.
         $leaf = Split-Path -Leaf $m
+        # The rebuilt event bus only replaces a rebuilt one: an original
+        # jarvis_events.py carries patches (event-allowlist and friends) that
+        # the next run would then fail to find.
+        if ($leaf -eq 'jarvis_events.py' -and -not $UsingRebuilt) {
+            Say "  skipped      $m (this backend does not use the rebuilt modules)" Yellow
+            continue
+        }
         $dst = Join-Path $BackendPath $leaf
         $had = Test-Path -LiteralPath $dst
         if ($had -and (Get-FileHash -LiteralPath $dst).Hash -eq (Get-FileHash -LiteralPath $src).Hash) {

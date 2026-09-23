@@ -736,8 +736,30 @@ def _capability_probe() -> dict:
         "power": has("jarvis_power"),
         "voice": has("jarvis_voice"),
         "persona": has("jarvis_style"),
+        # GET/POST /api/appearance (appearance.patch). The phone only syncs
+        # its face when this is true, and it was never sent - so a face
+        # chosen on one device never reached the other. Not an import:
+        # appearance.patch adds functions to jarvis_hud itself, so this asks
+        # the running server whether it has them.
+        "appearance": _hud_has("_appearance_view"),
         "connectors": {},
     }
+
+    # The power mode, not just "the module is there". The desktop reads
+    # capabilities.power.mode at connect time (stream.rs prime_from_version),
+    # and a bare `true` left it on "active" through quiet hours until the
+    # mode next changed. jarvis_power.status() is the same dict /api/status
+    # is built from: mode (with quiet hours applied), why, since. A non-empty
+    # object still reads as "available" on the phone (ApiModels.kt
+    # asCapabilityFlag).
+    if caps["power"]:
+        try:
+            import jarvis_power
+            st = jarvis_power.status()
+            if isinstance(st, dict) and st:
+                caps["power"] = st
+        except Exception:
+            pass
 
     # Voice is the one the doc singles out: "false until the models are
     # downloaded", so importable is not the same as available. Ask the module
@@ -751,6 +773,17 @@ def _capability_probe() -> dict:
         except Exception:
             caps["voice"] = False
     return caps
+
+
+def _hud_has(name: str) -> bool:
+    """Does the running server define `name`? jarvis_hud.py normally runs as
+    __main__; under a test or an importer it is `jarvis_hud`."""
+    import sys
+    for modname in ("__main__", "jarvis_hud"):
+        mod = sys.modules.get(modname)
+        if mod is not None and callable(getattr(mod, name, None)):
+            return True
+    return False
 
 
 def hello(client: str = "") -> dict:
@@ -778,6 +811,12 @@ def hello(client: str = "") -> dict:
             "ring": RING,
             "latest": BUS.latest,
         },
+        # What Jarvis is doing right now. docs/JARVIS-API.md says /api/version
+        # "also carries activity", and the desktop reads it from here at
+        # connect time - but it was never sent, so a client connecting
+        # mid-turn showed "idle". The state word only; `detail` stays on the
+        # activity event and /api/status, like every other doorbell field.
+        "activity": str(_ACTIVITY.get("state") or "idle"),
         "capabilities": _capability_probe(),
     }
 

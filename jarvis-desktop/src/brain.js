@@ -720,8 +720,19 @@ async function modelAction(action, reference) {
   }
 }
 
+/**
+ * The compute plan. Reads the keys `jarvis_compute.Plan.as_dict()` really
+ * sends - text_model, text_on, vision_resident, tts_resident, simulated,
+ * prefer, devices[], why, total_mb (backend/rebuilt/jarvis_compute.py) -
+ * checked by backend/test_connection_contract.py. It used to read only
+ * plan/mode/gpu/vram_total_mb/gpu_layers/context/note, none of which that
+ * module sends, so this pane always said "No compute plan reported." The old
+ * names are still read as a fallback for a differently-built backend, and a
+ * body wrapped as {plan: {...}} is unwrapped.
+ */
 function renderCompute() {
-  const body = state.data.compute || {};
+  const raw = state.data.compute || {};
+  const body = raw.plan && typeof raw.plan === "object" ? raw.plan : raw;
   const why = unavailable("compute");
   dom.compute.replaceChildren();
   if (why) return dom.compute.append(whyNode("compute"));
@@ -729,9 +740,37 @@ function renderCompute() {
   const dl = el("dl", "kv");
   const add = (k, v) => {
     if (v === undefined || v === null || v === "") return;
-    dl.append(el("dt", "", k), el("dd", "", v));
+    dl.append(el("dt", "", k), el("dd", "", String(v)));
   };
-  add("Plan", body.plan || body.mode || body.strategy);
+  const gb = (mb) => `${(Number(mb) / 1024).toFixed(1)} GB`;
+  const yesNo = (v) => (v === true ? "kept loaded" : v === false ? "loaded when needed" : undefined);
+  const where = (on) => {
+    if (typeof on !== "string" || !on) return on;
+    if (on === "cpu") return "the processor (no graphics card in use)";
+    return on.replace(/cuda:(\d+)/g, "graphics card $1").replace(/\+/g, " + ");
+  };
+
+  add("Model", body.text_model);
+  add("Runs on", where(body.text_on));
+  add("Picture model", yesNo(body.vision_resident));
+  add("Voice model", yesNo(body.tts_resident));
+  add("Aims for", body.prefer === "speed" ? "speed" : body.prefer === "capability"
+    ? "capability (spread over every card)" : body.prefer);
+  const devices = Array.isArray(body.devices) ? body.devices : [];
+  devices.forEach((d) => {
+    if (!d || typeof d !== "object") return;
+    const free = d.free_mb != null ? `${gb(d.free_mb)} free of ` : "";
+    add(`Card ${d.index ?? ""}`.trim(),
+      `${d.name || "graphics card"} - ${free}${d.total_mb != null ? gb(d.total_mb) : "?"}`);
+  });
+  if (!devices.length && Number(body.total_mb) > 0) add("Graphics memory", gb(body.total_mb));
+  add("Why", body.why);
+  if (body.simulated === true) {
+    add("Measured?", "No - no graphics card could be asked, so this is a guess");
+  }
+
+  // Older / other backends.
+  add("Plan", body.mode || body.strategy);
   add("GPU", body.gpu || body.device);
   add(
     "VRAM",

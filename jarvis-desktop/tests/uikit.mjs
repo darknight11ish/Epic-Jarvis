@@ -227,9 +227,12 @@ export const BRAIN = {
             installed: [{ ref: "qwen3:8b", size: 5_100_000_000, family: "qwen3" },
                         { ref: "llama3.1:8b", size: 4_900_000_000, family: "llama" },
                         { ref: "nomic-embed-text", size: 274_000_000, family: "nomic" }] },
-  compute: { plan: "single-gpu", gpu: "RTX 4060 Ti", vram_used_mb: 6248, vram_total_mb: 8192,
-             gpu_layers: 33, context: 8192,
-             note: "8 GB with a compositor holding some of it, so a 7.5-9 GB adapter would spill." },
+  // jarvis_compute.Plan.as_dict() (backend/rebuilt/jarvis_compute.py), one card.
+  compute: { text_model: "qwen3:8b", text_on: "cuda:0", vision_resident: false,
+             tts_resident: false, simulated: false, prefer: "speed",
+             devices: [{ index: 0, name: "NVIDIA GeForce RTX 2080 SUPER", total_mb: 8192, free_mb: 1944 }],
+             why: "speed: text on the freest card; one card only, so vision and voice load on demand",
+             total_mb: 8192 },
   skills: { available: true, skills: [
     { name: "invoice-triage", verdict: "clean", description: "Sorts supplier invoices into the ledger folders.", path: "skills/invoice-triage" },
     { name: "release-notes", verdict: "clean", description: "Turns merged PRs into a changelog." },

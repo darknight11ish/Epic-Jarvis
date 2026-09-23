@@ -542,6 +542,8 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
                 // Everything local is suspect — re-read it, do not replay.
                 println!("[jarvis] resume point unusable; re-reading all state");
                 prime_from_version(app, base).await;
+                // An `appearance` event may be among the ones missed.
+                crate::appearance::refresh_from_server(app).await;
                 let reread = refresh_pending(app, base).await;
                 crate::attention::refresh(app, base).await;
                 // Only if the queue actually came back. This used to clear
@@ -619,6 +621,17 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             }
         }
 
+        // The phone (or another window) saved a face or state colours. The
+        // event is a doorbell - `appearance.patch` publishes it on every
+        // save - so read the document once, here, and let `adopt` repaint
+        // the tray, every window and the HUD. Without this a face chosen on
+        // the phone reached the desktop only when a window was reopened or
+        // the app restarted. `refresh_from_server` never writes back, so a
+        // save on this machine does not echo into a loop.
+        "appearance" => {
+            crate::appearance::refresh_from_server(app).await;
+        }
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.
@@ -645,57 +658,37 @@ fn activity_state(data: &serde_json::Value) -> Option<&str> {
         .or_else(|| data["value"]["state"].as_str())
 }
 
-/// Reads `GET /api/version` for the activity state, which nothing else carries.
+/// Reads the activity state and the power mode at connect time (and again
+/// on every `power` event, whose payload is only the mode string).
+///
+/// `GET /api/version` first. It did not carry either: the rebuilt
+/// `jarvis_events.hello()` had no top-level `activity`, and
+/// `capabilities.power` was a bare `true`, so `["power"]["mode"]` was always
+/// absent and the desktop sat on "active" through quiet hours until the mode
+/// next changed. `hello()` now sends both (backend/rebuilt/jarvis_events.py),
+/// but the owner's server may be older - so anything still missing is read
+/// from `GET /api/status`, which reports the power mode and is what the phone
+/// reads (`StatusInfo.power`). Nothing here is guessed: absent stays absent.
 async fn prime_from_version(app: &AppHandle, base: &str) {
-    let Ok(client) = reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(FETCH_TIMEOUT)
-        .no_proxy()
-        .build()
-    else {
+    let Some(version) = fetch_json(app, base, "/api/version").await else {
         return;
     };
-    let Ok(headers) = commands::jarvis_headers(app) else {
-        return;
-    };
-    let body: serde_json::Value = match client
-        .get(format!("{base}/api/version"))
-        .headers(headers)
-        .send()
-        .await
-    {
-        Ok(response) => {
-            let status = response.status();
-            if !status.is_success() {
-                // A 401 body parses fine and would have left the tray sitting
-                // on the idle colour through an entire conversation.
-                eprintln!("[jarvis] /api/version answered HTTP {}", status.as_u16());
-                return;
-            }
-            match response.json().await {
-                Ok(body) => body,
-                Err(err) => {
-                    eprintln!("[jarvis] /api/version returned something unreadable: {err}");
-                    return;
-                }
-            }
-        }
-        Err(err) => {
-            eprintln!("[jarvis] /api/version unavailable: {err}");
-            return;
-        }
-    };
+    let mut activity = version["activity"].as_str().map(str::to_string);
+    let mut power = power_mode(&version["capabilities"]["power"]);
+    let mut set_by = power_set_by(&version["capabilities"]["power"]);
 
-    let activity = body["activity"].as_str().unwrap_or("idle").to_string();
-    // The power mode rides in the capabilities block rather than at the top
-    // level: `capabilities.power` is `jarvis_power.status()`, and `false` when
-    // the module is not installed at all.
-    let power = body["capabilities"]["power"]["mode"]
-        .as_str()
-        .map(str::to_string);
-    let set_by = body["capabilities"]["power"]["set_by"]
-        .as_str()
-        .map(str::to_string);
+    if activity.is_none() || power.is_none() {
+        if let Some(status) = fetch_json(app, base, "/api/status").await {
+            if activity.is_none() {
+                activity = status["activity"].as_str().map(str::to_string);
+            }
+            if power.is_none() {
+                power = power_mode(&status["power"]);
+                set_by = power_set_by(&status["power"]).or_else(|| power_set_by(&status));
+            }
+        }
+    }
+    let activity = activity.unwrap_or_else(|| "idle".to_string());
     publish_link(app, |link| {
         link.activity = activity;
         if let Some(power) = power {
@@ -703,6 +696,80 @@ async fn prime_from_version(app: &AppHandle, base: &str) {
             link.power_set_by = set_by.clone();
         }
     });
+}
+
+/// One authenticated GET, as JSON. `None` (and a line on stderr) on any
+/// failure: a 401 body parses fine and would otherwise be read as state.
+async fn fetch_json(app: &AppHandle, base: &str, path: &str) -> Option<serde_json::Value> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(FETCH_TIMEOUT)
+        .no_proxy()
+        .build()
+        .ok()?;
+    let headers = commands::jarvis_headers(app).ok()?;
+    match client
+        .get(format!("{base}{path}"))
+        .headers(headers)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status = response.status();
+            if !status.is_success() {
+                eprintln!("[jarvis] {path} answered HTTP {}", status.as_u16());
+                return None;
+            }
+            match response.json().await {
+                Ok(body) => Some(body),
+                Err(err) => {
+                    eprintln!("[jarvis] {path} returned something unreadable: {err}");
+                    None
+                }
+            }
+        }
+        Err(err) => {
+            eprintln!("[jarvis] {path} unavailable: {err}");
+            None
+        }
+    }
+}
+
+/// The power mode out of either shape a server sends: the mode string itself
+/// (`/api/status`'s `power`), or `jarvis_power.status()`'s dict with `mode`
+/// (`/api/version`'s `capabilities.power`). A bare `true`/`false` - "the
+/// module is installed" - carries no mode, and is `None`.
+fn power_mode(value: &serde_json::Value) -> Option<String> {
+    value
+        .as_str()
+        .or_else(|| value["mode"].as_str())
+        .filter(|m| !m.is_empty())
+        .map(str::to_string)
+}
+
+/// Who put Jarvis in its current mode, in the words `tray.rs` understands:
+/// "override" (a person), "schedule" (quiet hours) or "idle" (the idle timer).
+///
+/// `set_by` if the server sends it. `jarvis_power.status()` does not - it
+/// has `why`, a sentence ("the owner, from this PC", "startup", ...) - so the
+/// word is derived from that, and from `quiet_hours`, which is how the mode
+/// can read "quiet" while the stored mode is still "active". Anything else is
+/// `None`, which the tray shows as nothing rather than a guess.
+fn power_set_by(value: &serde_json::Value) -> Option<String> {
+    if let Some(explicit) = value["set_by"].as_str().filter(|s| !s.is_empty()) {
+        return Some(explicit.to_string());
+    }
+    let why = value["why"].as_str().unwrap_or("").to_ascii_lowercase();
+    if why.starts_with("the owner") {
+        return Some("override".to_string());
+    }
+    if why.contains("idle") {
+        return Some("idle".to_string());
+    }
+    if value["quiet_hours"].as_bool() == Some(true) && value["mode"].as_str() == Some("quiet") {
+        return Some("schedule".to_string());
+    }
+    None
 }
 
 /// Re-reads the approval queue and hands the same list to all three surfaces.
@@ -1016,6 +1083,48 @@ fn save_resume(app: &AppHandle, force: bool) {
         if let Err(err) = store.save() {
             eprintln!("[jarvis] unable to persist the event resume point: {err}");
         }
+    }
+}
+
+#[cfg(test)]
+mod power_prime_tests {
+    use super::{power_mode, power_set_by};
+    use serde_json::json;
+
+    /// The shape the rebuilt hello() sends now: jarvis_power.status().
+    #[test]
+    fn the_mode_is_read_from_the_power_status_dict() {
+        let caps = json!({"mode": "quiet", "why": "startup", "quiet_hours": true});
+        assert_eq!(power_mode(&caps).as_deref(), Some("quiet"));
+        assert_eq!(power_set_by(&caps).as_deref(), Some("schedule"));
+    }
+
+    /// The shape it used to send, and still does on an older server: a bare
+    /// flag. No mode in it - so the caller falls back to /api/status.
+    #[test]
+    fn a_bare_flag_has_no_mode() {
+        assert_eq!(power_mode(&json!(true)), None);
+        assert_eq!(power_mode(&json!(false)), None);
+        assert_eq!(power_set_by(&json!(true)), None);
+    }
+
+    /// /api/status's shape: the mode string itself.
+    #[test]
+    fn the_status_route_s_plain_string_is_read() {
+        assert_eq!(power_mode(&json!("standby")).as_deref(), Some("standby"));
+    }
+
+    #[test]
+    fn who_set_it_is_derived_from_why() {
+        let by_hand = json!({"mode": "quiet", "why": "the owner, from this PC"});
+        assert_eq!(power_set_by(&by_hand).as_deref(), Some("override"));
+        let idle = json!({"mode": "quiet", "why": "idle for 30 minutes"});
+        assert_eq!(power_set_by(&idle).as_deref(), Some("idle"));
+        let explicit = json!({"mode": "quiet", "set_by": "override"});
+        assert_eq!(power_set_by(&explicit).as_deref(), Some("override"));
+        // CONTROL: an ordinary startup says nothing rather than guessing.
+        let startup = json!({"mode": "active", "why": "startup", "quiet_hours": false});
+        assert_eq!(power_set_by(&startup), None);
     }
 }
 

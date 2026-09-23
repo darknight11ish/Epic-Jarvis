@@ -299,6 +299,18 @@ pub async fn get_appearance(app: AppHandle) -> Loaded {
     }
 }
 
+/// Re-reads the server's copy after an `appearance` event (stream.rs) and
+/// wears it. Read-only towards the server - it never posts - so a save made
+/// here, which the server announces back as an event, does not loop. A
+/// failure keeps what is already worn: the event is a convenience, and the
+/// next window that opens asks again anyway.
+pub async fn refresh_from_server(app: &AppHandle) {
+    if let Ok(doc) = from_server(app).await {
+        let _ = save_local(app, &doc);
+        adopt(app, &doc);
+    }
+}
+
 /// The appearance document this process is already wearing, from memory.
 ///
 /// For a window that only needs to DRAW the owner's face - the Widget's live

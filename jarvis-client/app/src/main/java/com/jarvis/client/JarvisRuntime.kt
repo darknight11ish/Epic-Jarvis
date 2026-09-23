@@ -530,6 +530,9 @@ object JarvisRuntime {
             is ApiResult.Ok -> {
                 _version.value = result.value
                 _notice.value = null
+                // A new handshake may be a different (or upgraded) server:
+                // ask it about the appearance route afresh.
+                appearanceRoute = null
             }
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
@@ -1088,16 +1091,42 @@ object JarvisRuntime {
     // -------------------------------------------------------- appearance ----
 
     /**
+     * Whether this server answers `/api/appearance`, learnt by asking it:
+     * true once it answered, false once it said 404, null until asked (and
+     * again after every handshake).
+     *
+     * Needed because the capability flag alone was never enough. The
+     * backend's `/api/version` did not list `appearance` at all (the rebuilt
+     * `jarvis_events._capability_probe` had no entry for it until
+     * 2026-09-23, and the owner's server may still be older), while
+     * `appearance.patch` had added the route - so gating on the flag meant
+     * the phone never synced its face with the desktop. Now the flag is
+     * trusted when it says yes, and when it is absent the route is tried
+     * once and a 404 is taken as "not on this server", the same thing §2's
+     * false flag means.
+     */
+    @Volatile private var appearanceRoute: Boolean? = null
+
+    private fun noteAppearanceRoute(result: ApiResult<*>) {
+        when {
+            result is ApiResult.Ok -> appearanceRoute = true
+            result is ApiResult.Failed && result.error == ApiError.NotFound -> appearanceRoute = false
+            // Anything else (unreachable, a 500) says nothing about the route.
+        }
+    }
+
+    /**
      * Pulls the shared face/bindings document - after pairing, on the
-     * `appearance` SSE event, or on demand. Gated on the capability per §2's
-     * rule for a false one: a backend without the route is simply never
-     * asked, and [AppearanceStore] keeps behaving exactly as it did before
-     * this existed. Silent on failure - the local store already has a face,
-     * and a sync miss is not worth a notice banner on every reconnect.
+     * `appearance` SSE event, or on demand. A backend known not to have the
+     * route (see [appearanceRoute]) is not asked again, and [AppearanceStore]
+     * keeps behaving exactly as it did before this existed. Silent on
+     * failure - the local store already has a face, and a sync miss is not
+     * worth a notice banner on every reconnect.
      */
     suspend fun refreshAppearance() {
-        if (!can("appearance")) return
+        if (!can("appearance") && appearanceRoute == false) return
         val result = api.getAppearance()
+        noteAppearanceRoute(result)
         if (result is ApiResult.Ok) {
             appearance.applySyncDocument(org.json.JSONObject(result.value.toString()))
         }
@@ -1110,7 +1139,12 @@ object JarvisRuntime {
      * not a decision, and nothing on this screen depends on it succeeding.
      */
     suspend fun pushAppearance() {
-        if (!can("appearance")) return
+        if (!can("appearance")) {
+            // Ask first, without applying what comes back: applying it here
+            // would overwrite the change this push is about to send.
+            if (appearanceRoute == null) noteAppearanceRoute(api.getAppearance())
+            if (appearanceRoute != true) return
+        }
         api.postAppearance(appearance.toSyncDocument().toString())
     }
 

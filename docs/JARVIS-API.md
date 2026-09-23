@@ -177,7 +177,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
 | `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Falls through to "unhandled" |
-| `appearance` | — | Re-reads the shared document (`JarvisRuntime.kt:707`) |
+| `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
 bell (`stream.rs:506-511`).
@@ -496,7 +496,7 @@ path ever appears in it (`routes.rs:67-101`).
 
 | Endpoint | Method | Desktop | Android | Notes |
 |---|---|---|---|---|
-| `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity`. |
+| `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server. The desktop falls back to `/api/status` for anything an older server leaves out. |
 | `/api/status` | GET | `commands.rs:677`, `routes.rs:16` | `JarvisApi.kt:271` | Reports power mode; nothing writes it (`LinkTileService.kt:26`). |
 | `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
@@ -517,7 +517,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/digest` | GET | `attention.rs:81`, `routes.rs:35` | `JarvisApi.kt:280` | List key: `digest`. |
 | `/api/config` | GET | `routes.rs:36` | **no** | **Read-only: writing answers 501.** This is why there is no shared place to store a preference — `API-DISAGREEMENTS.md` §11. |
 | `/api/visual-spec` | GET | `spec_drift.rs:50` | **no** | Desktop checks its bundled spec against the server's at startup. The phone never fetches it. |
-| `/api/appearance` | GET / POST | `appearance.rs:41` | `JarvisApi.kt:381`, `:391` | See §7 — the clients disagree about whether this exists. |
+| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. |
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
@@ -671,9 +671,15 @@ know which side the backend agrees with.
    If the server records `by`, phone decisions are attributed to nothing. If it
    ignores `by`, the desktop is sending a field nobody reads.
 
-3. **`/api/appearance` — the clients contradict each other about whether it
-   exists.** `appearance.rs:17-24` says under a heading reading *"The route
-   does not exist yet"* that the backend "answers neither", and falls back to
+3. **`/api/appearance` — the clients used to contradict each other about
+   whether it exists.** *Resolved on the desktop side:* `appearance.rs` now
+   says "The route exists once `appearance.patch` is applied", and since
+   2026-09-23 the desktop also handles the `appearance` event. *And on the
+   phone:* it only synced when `/api/version` listed an `appearance`
+   capability, which no backend sent; the rebuilt `jarvis_events.hello()`
+   now does, and the phone also tries the route once and treats a 404 as
+   "not here". What follows is the history. `appearance.rs:17-24` used to say, under a heading reading *"The route
+   does not exist yet"*, that the backend "answers neither", and fell back to
    a local store on every read. The Android client calls it as a normal
    capability (`JarvisApi.kt:381`, `:391`) and even handles an `appearance`
    event to re-read it (`JarvisRuntime.kt:707`). **And `backend/appearance.patch`
