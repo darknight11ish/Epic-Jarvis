@@ -14,14 +14,22 @@
 //! the right rule for a single-owner machine and the wrong one for a team —
 //! there is one owner here.
 //!
-//! ## The route does not exist yet
+//! ## The route exists once `appearance.patch` is applied
 //!
-//! `GET /api/appearance` and `POST /api/appearance` are a proposal, written up
-//! in `docs/APPEARANCE-API.md`. Today the backend answers neither, so every
-//! read falls back to the local store and every write reports that it stayed
-//! local. That is deliberately visible in the UI rather than silent: a picker
-//! that claims to have changed the phone when it has not is worse than one that
-//! says it could not.
+//! `GET /api/appearance` and `POST /api/appearance` were first a proposal,
+//! written up in `docs/APPEARANCE-API.md`. `backend/appearance.patch` now adds
+//! both to `jarvis_hud.py` (tested by `backend/test_appearance.py`): the
+//! document lives in `appearance.json` beside `config.toml`, a save publishes
+//! an `appearance` event, and the write carries the same origin and token
+//! checks as the other desktop-only routes. It needs no approval: it is
+//! cosmetic, and `backend/README.md` says why it should stay that way.
+//!
+//! The backend lives on the owner's machine, not in this repo, so whether a
+//! given backend has the patch is only known at run time. One without it
+//! answers 404 or 501, and then every read falls back to the local store and
+//! every write reports that it stayed local. That is deliberately visible in
+//! the UI rather than silent: a picker that claims to have changed the phone
+//! when it has not is worse than one that says it could not.
 //!
 //! `/api/config` was the obvious existing home and is not one — it is a read on
 //! this side and a 501 on the server, so there is no write path to borrow.
@@ -37,7 +45,7 @@ use crate::commands;
 /// Key in the settings store.
 const STORE_KEY: &str = "appearance";
 
-/// The routes this module would use, once they exist.
+/// The route this module reads and writes (`backend/appearance.patch`).
 const ROUTE: &str = "/api/appearance";
 
 /// Short: this is read on the way into a window the user is already looking at,
