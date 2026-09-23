@@ -274,7 +274,10 @@ is unaffected.
 
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
 changes from it and from nowhere else. Kinds: `approval`, `proposal`,
-`finding`, `power`, `persona`, `model`, `activity`, `appearance`, `hello`.
+`finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
+`hello`. (`step` is the tool loop saying what it is doing - asking the model,
+a tool starting, finishing or refused - with tool names from its own table
+and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. This bus reaches a phone that surfaces notifications with the
@@ -419,20 +422,75 @@ file, not a patch, because there is nothing on the owner's machine to patch.
 
 ## 10. Things that do not exist
 
-Say so rather than designing around imagined code.
+Say so rather than designing around imagined code. This list was last checked
+against the repository on 2026-09-23; an item moves off it only when the file
+that makes it true is named.
 
-- `jarvis_speech.py` — absent, so all four `/api/voice/*` routes are on their
-  failure path on every request.
+**No longer missing** (this section used to list them, and was wrong once
+they landed):
+
+- `jarvis_speech.py` now exists, in `backend/`, as a whole new file. It is
+  what the four `/api/voice/*` routes call: speaker check first, then
+  speech-to-text, and text-to-speech back, all through sherpa-onnx on this
+  machine. It ships **no model files**, so until the owner downloads them and
+  names them in `[voice]`, those routes answer "not available" honestly
+  rather than working.
 - `jarvis_framework.py`, `jarvis_router.py`, `jarvis_initiative.py`,
-  `jarvis_compute.py`, `jarvis_sleep.py` — imported in places, present
-  nowhere in anything handed over. Some may exist on the owner's machine.
-- The `documents` table — read by two code paths, created by none. The status
-  line now says `documents: false`, which is correct. Since
+  `jarvis_compute.py` and `jarvis_sleep.py` exist as **rebuilds** in
+  `backend/rebuilt/`, with `jarvis_events.py`, `jarvis_memory.py`,
+  `jarvis_power.py`, `jarvis_recall.py` and `jarvis_voice.py`. The originals
+  were confirmed gone; each rebuilt file's header says what was recovered and
+  what was inferred. `backend/test_rebuilt.py` tests them.
+- **The memory review pane.** The desktop has it (Brain → Memory: accept,
+  reject, "both are true", edit, forget, and "what did you believe then?"),
+  and so does the phone (Mind). Both read `/api/memory/pending`
+  (`memory-pane.patch`).
+
+**Still missing:**
+
+- **Wake-word listening.** `jarvis_speech.set_wake_enabled()` stores an
+  on/off flag, and the phone shows it, but nothing anywhere listens for a
+  wake phrase: no keyword model, no always-on capture loop. The desktop's
+  "listen automatically" is a loudness detector in `voice.rs`, not a wake
+  word. Talking to Jarvis means push-to-talk or that switch.
+- **A picture-capable local model.** The default model (`qwen3:8b`, via
+  `jarvis-primary.Modelfile`) reads text only. A screenshot sent to it is
+  not seen, so the quickbar asks Ollama first (`local_model_vision`) and
+  offers to send the words without the picture. A vision model such as
+  `qwen2.5vl` would fix it but needs more graphics memory than the 8 GB card
+  has spare beside the main model; the planned second card is where it
+  would go. Pictures never go to a cloud lane (`jarvis_router.choose()`
+  keeps any turn with an image local).
+- **A reasoning trace.** Brain → Live shows each tool Jarvis starts and
+  finishes (the `step` event, from `jarvis_agent.py`, only when tools are
+  switched on), but not the model's private reasoning: that text can quote
+  email or files, and the event bus reaches a phone's lock screen (§6), so
+  it is deliberately not published.
+- The `documents` table - read by two code paths, created by none. The status
+  line says `documents: false`, which is correct. Since
   `documents-owned.patch`, a `documents` table is read only if Epic-Jarvis
   recorded creating it (`jarvis_owned_tables.py`): OpenJarvis's indexer
   makes one with that exact name in the same `memory.db`.
-- A memory review pane. The queue fills; there is no screen to read it on.
-  This is the largest gap.
+- **A published desktop update.** The updater is wired and the release
+  workflow (`.github/workflows/desktop-release.yml`) is written, but nothing
+  is published until the owner generates a signing key and adds it
+  (`jarvis-desktop/README.md`, "Turning on updates"). Until then Settings
+  says updates are not set up.
+
+**Present, but only on the owner's PC** (not missing, and not in this
+repository either):
+
+- `jarvis_jobs`, `jarvis_undo`, `jarvis_ledger`, `jarvis_content_risk`,
+  `jarvis_watch` and `jarvis_hud`. The owner checked their backend folder on
+  2026-09-23 and all six files were there - checked by file presence only,
+  so what is inside them, and the exact shape of the routes they serve, is
+  unverified from here. The Brain's **Work** (`/api/jobs`, `/api/undo`),
+  **Trust** (`/api/ledger`, `/api/content-risk`) and **Watch** (`/api/watch`)
+  tabs read those routes; if a route does not answer, the pane says "Not on
+  this backend." (`brain.js`, `unavailable()`).
+- The rest of the backend (`jarvis_gate.py`, `jarvis_extract.py`,
+  `jarvis_models`, `jarvis_arbiter`, ...) is in the same position (§9).
+  `scripts/check-backend.ps1` is how to see what a folder holds.
 
 ---
 
