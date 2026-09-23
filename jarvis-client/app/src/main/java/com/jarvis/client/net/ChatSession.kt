@@ -48,6 +48,20 @@ class ChatSession(private val api: JarvisApi) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _question = MutableStateFlow<String?>(null)
+
+    /**
+     * The owner's last question, as sent - null until the first one.
+     *
+     * Home shows it as a "You" line above [reply]: the composer is cleared on
+     * send, so an answer used to sit on screen with nothing to say what it
+     * answered. Held in memory only, in this one field, and never written
+     * anywhere - a question can be about email, files or memory, and rule 1
+     * keeps those on this phone and the desktop and nowhere else. Gone when
+     * the process is.
+     */
+    val question: StateFlow<String?> = _question.asStateFlow()
+
     @Volatile private var call: Call? = null
 
     /**
@@ -76,6 +90,10 @@ class ChatSession(private val api: JarvisApi) {
         cancel()
         _reply.value = ""
         _error.value = null
+        // Set as the old reply is cleared, before anything can fail below:
+        // a question that got no answer is still what the owner asked, and
+        // the screen should not go on showing the one before it.
+        _question.value = message
 
         val c = api.chatCall(message)
         if (c == null) {
