@@ -4695,3 +4695,149 @@ patch's lines, writes them to
 `jarvis-client/app/src/test/resources/contract/pending-rows.json`
 (`--write`), and checks the phone, desktop and HUD read every field those rows
 carry. The phone's and desktop's own tests decode that same file.
+
+
+
+---
+
+# `chat-stream.patch` — every local answer, streamed once, and the phone stays connected
+
+**What was wrong** (audit, 2026-09-23):
+
+1. **The HUD window could not read a tool answer.** With tools switched on,
+   the reply was an SSE stream (`data: {...}` lines) sent under the label
+   `Content-Type: application/json`. The HUD page picks how to read a reply
+   from that label, tried to read it as one JSON document, and showed
+   "Could not reach Jarvis: Unexpected token 'd'". A request with
+   `stream: false` got the stream anyway.
+2. **Every local answer was written twice** once any tool was listed in
+   `[tools].enabled` - even a name `jarvis_agent.py` does not have. The model
+   wrote the whole answer unseen (to check for tool calls), it was thrown
+   away, and then written again as a stream: silence, then a different
+   answer.
+3. **The phone gave up during approval cards.** Nothing was sent while an
+   approval card waited (up to three minutes), and the phone stops listening
+   after two minutes of silence - so it said "timeout". The PC never noticed
+   the phone had gone, so an approved tool still ran, and its answer was lost.
+4. **Thinking was never switched off.** The Modelfile says it is off; nothing
+   did it. Ollama switches thinking ON by default for Qwen3, so part of every
+   answer's 1,024-token allowance went on reasoning no window showed.
+5. **The history was sized for 16,384 tokens** whatever the loaded model
+   really has (4,096 unless `jarvis-primary` is the one loaded).
+6. **Error messages** were Python exceptions (`<urlopen error [WinError
+   10061]...>`), or told you to run `uv run jarvis serve`, a program this
+   setup never installs.
+
+**What it does.** Every local turn now goes through
+`jarvis_agent.run_local_turn` (the tool loop), not only a turn with tools on.
+That function, rewritten:
+
+- asks the model **once per round, streaming**. Words go to the app as they
+  are written; a tool call is collected from the same stream. A round with no
+  tool call IS the answer. Tools are offered only if `[tools].enabled` names
+  tools `jarvis_agent.py` really has;
+- writes Ollama's own stream format, with the matching `Content-Type`
+  (`text/event-stream`, or `application/json` for `stream: false`, which now
+  gets one JSON body);
+- never passes on a tool call, the model's reasoning, or the `finish_reason`
+  and `[DONE]` of a round that only asked for a tool (every app stops reading
+  at those);
+- sends `: keepalive` after 10 seconds of silence, and `: jarvis-status
+  approval` while a card waits - both SSE comment lines, which an app that
+  does not know them simply skips;
+- notices when the app has gone (a keepalive cannot be written), and then
+  **does not run** a tool the card approved, tells you so on the doorbell,
+  and stops Ollama generating;
+- sends `reasoning_effort: "none"` (Ollama's supported switch for thinking on
+  this endpoint), asks again without it if an older Ollama refuses the word,
+  and cuts any `<think>...</think>` out of the answer anyway;
+- asks Ollama for the model's real context (`/api/ps`, then `/api/show`,
+  else 4,096) and drops the oldest earlier turns to fit, keeping room for the
+  answer - never the recalled facts or the new question;
+- uses `max_tokens` 1,024 when the app sends none, so every window gets the
+  same length of answer;
+- reports Ollama not running, a model that is not installed, or a timeout
+  as a plain sentence saying what to do.
+
+The patch itself only wires that in: the Content-Type from
+`jarvis_agent.content_type()`, `stream` / `request` / `abort` passed through,
+`"where": "local" | "cloud"` added to `X-Jarvis-Route` (for the Local/Cloud
+badge), the speed recorder told whether a tool really ran, and the 503
+wording. If `jarvis_agent.py` is missing or older, a local turn falls back to
+the plain relay, exactly as before.
+
+**Needs** the `jarvis_agent.py` from this same commit (the script copies it).
+It goes last in the list: its context is `tool-calling-wiring`'s,
+`speed-record`'s and `ollama-direct`'s lines.
+
+**Not checked against your real files.** Rehearsed on a stand-in
+`jarvis_hud.py` built from those patches, like the others. What only your PC
+can show: that your Ollama accepts `reasoning_effort: "none"` (if it does
+not, the answer still comes - it is asked a second time without it), and the
+real context number `/api/ps` reports.
+
+## Test it
+
+```
+python backend\test_chat_stream.py
+python backend\test_chat_stream_contract.py
+python backend\test_agent.py
+```
+
+`test_chat_stream.py`: one request per answer, the Content-Type matches the
+body, `stream: false` is one JSON document, keepalives and the approval
+status while a card waits, an approved tool not run for an app that left,
+thinking off and cut out, `length` passed on, the history trimmed for a
+4,096-token model, plain error sentences, and the patch applying after
+`speed-record`. Every model reply in these tests is Ollama's real stream
+(`_ollama_wire.py`, transcribed from Ollama's source, current and 2025
+formats).
+
+`test_chat_stream_contract.py` runs the real producer and writes what comes
+out to `chat-stream-cases.json` - one copy for the phone's tests, one for the
+desktop's - and fails if either copy is stale. The phone
+(`ChatStreamContractTest.kt`), the quickbar and the HUD page
+(`jarvis-desktop/tests/chat-stream.mjs`) each read those cases with their
+real readers. After changing `jarvis_agent.py`, regenerate them:
+
+```
+python backend\test_chat_stream_contract.py --write
+```
+
+---
+
+# The router's private-topic list now reads your config (`rebuilt/jarvis_router.py`)
+
+**What was wrong.** `[privacy] never_leaves_device` in
+`jarvis-framework.toml` lists what must never reach a cloud model - email,
+inbox, calendar, bank, invoice, tax, financial, medical, files and more -
+and said it was "kept in sync with the _PRIVATE regex in jarvis_router.py by
+hand". It was not. Nine of those words were not in the router at all, and no
+code read the config list, so "summarise my inbox" matched nothing and adding
+a word to the config did nothing.
+
+**What changed.** The router has those words built in now, and it also reads
+the config list on every check (an underscore matches a space or a hyphen,
+so `files_on_disk` catches "files on disk"). A word you add to the config
+applies without a restart.
+
+**Today this is a safety net for later.** No cloud lane is set up on this
+project, so every answer is local anyway. It matters the day one is.
+
+**To take it,** copy the rebuilt router over the one in your backend folder:
+
+```
+Copy-Item -LiteralPath "C:\Users\pcadmin\Epic-Jarvis\backend\rebuilt\jarvis_router.py" -Destination "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\" -Force; Write-Host "Copied jarvis_router.py into the backend folder. Restart the backend to use it."
+```
+
+## Test it
+
+```
+python backend\test_router_private_terms.py
+```
+
+Reads the real config and puts every entry, typed the way a person types it,
+through the real router: each one keeps a long question local (and, as a
+control, the same question without it goes to a cloud lane). Also: the
+built-in list covers the topics with no config at all, and a word added to
+the config takes effect with no code change.

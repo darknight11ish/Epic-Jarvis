@@ -48,11 +48,18 @@ exact `jarvis_gate`/`jarvis-framework.toml` lines each one needs.
 
 TESTING WITHOUT A REAL BACKEND
 Every tool's actual execution and every call to jarvis_gate are behind
-try/except ImportError fallbacks and an injectable `post` (the Ollama HTTP
-call) - the loop's own control flow (call model, see tool_calls, gate each
-one, feed results back, stop when the model stops asking) is provable with
-a scripted fake model and a fake gate, same shape as jarvis_research.py's
-`fetch` injection.
+try/except ImportError fallbacks and an injectable `open_stream` (the Ollama
+HTTP call) - the loop's own control flow (call model, see tool_calls, gate
+each one, feed results back, stop when the model stops asking) is provable
+with a scripted fake model and a fake gate, same shape as
+jarvis_research.py's `fetch` injection. The fake model speaks Ollama's real
+stream format (_ollama_wire.py), and test_chat_stream_contract.py puts what
+this module writes through all three apps' readers.
+
+EVERY LOCAL TURN COMES THROUGH HERE (chat-stream.patch), not only one with
+tools on: with no tool enabled it is one streamed request, relayed with
+thinking cut out, the history fitted to the model's real context, and
+keepalives so a phone does not give up. See run_local_turn.
 """
 
 from __future__ import annotations
@@ -60,6 +67,11 @@ from __future__ import annotations
 import ast
 import json
 import operator
+import re
+import socket
+import threading
+import time
+import urllib.error
 import urllib.request
 from typing import Callable, Optional
 
@@ -786,6 +798,411 @@ def _open_stream(url: str, payload: dict, timeout: float = 300.0):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+def _get_json(url: str, payload: Optional[dict] = None, timeout: float = 4.0) -> dict:
+    """A small JSON call to Ollama's own API - GET, or POST when there is a
+    body. Only used to look up the context length; see _context_length."""
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"},
+        method="POST" if data is not None else "GET")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+# --------------------------------------------------------------------------
+#   What goes down the wire to the app
+# --------------------------------------------------------------------------
+#
+# ONE FORMAT, AND IT IS OLLAMA'S. The HUD page, the quickbar and the phone
+# already read Ollama's OpenAI-compatible stream (`data: {chunk}` lines, a
+# chunk with a `finish_reason`, then `data: [DONE]`), because a turn without
+# tools used to be relayed from Ollama byte for byte. So a tool turn speaks
+# exactly that too: every chunk written here has the shape Ollama's own
+# `openai.ChatCompletionChunk` has (ollama/openai/openai.go), and the tests
+# feed this output through all three apps' real readers
+# (test_chat_stream_contract.py).
+#
+# What is NOT passed on from Ollama, on purpose:
+#   - a round's own `finish_reason: "tool_calls"` chunk and its `[DONE]`.
+#     Every app treats either as "the answer is over" and would stop reading
+#     before the answer was written.
+#   - `tool_calls` deltas. Tools are run here, through the gate; the app
+#     never sees a request to run one.
+#   - `reasoning` deltas (Qwen3's thinking). No app shows them, and thinking
+#     text can quote an email or a file the model just read.
+#
+# Two kinds of line are ADDED, both SSE comments - a line starting with ":",
+# which every SSE reader skips, so an app that does not know them loses
+# nothing:
+#   `: keepalive`               - nothing to say yet, but the PC is still
+#                                 here. Sent after KEEPALIVE_SECONDS of
+#                                 silence, so a phone's "no bytes for two
+#                                 minutes" timeout never fires while an
+#                                 approval card waits (the gate waits up to
+#                                 three minutes) or a cold model loads.
+#   `: jarvis-status <what>`    - what the turn is waiting on, one word from
+#                                 STATUS_WORDS. "approval" means a card is up
+#                                 and nothing happens until someone answers
+#                                 it. Only said once the wait has lasted
+#                                 STATUS_DELAY_SECONDS, so a tool the gate
+#                                 lets through at once never flashes it.
+#
+# With `stream: false` the answer is ONE JSON body, Ollama's own
+# `chat.completion` shape, and the only thing written before it is blank
+# lines ("\n") as keepalives - which every JSON parser skips.
+
+KEEPALIVE_SECONDS = 10.0
+STATUS_DELAY_SECONDS = 1.5
+STATUS_PREFIX = ": jarvis-status "
+STATUS_WORDS = ("thinking", "approval", "working")
+
+#: When the app does not say how long an answer may be. The same number as
+#: `num_predict` in jarvis-primary.Modelfile, so every window gets the same
+#: length of answer whichever model is loaded.
+DEFAULT_MAX_TOKENS = 1024
+
+#: When Ollama cannot say how much context the model has. Ollama's own
+#: fallback on this card (docs/MODEL-TOPOLOGY.md), so the smallest it could be.
+DEFAULT_CONTEXT = 4096
+
+
+def content_type(stream: bool) -> str:
+    """The Content-Type for a reply written by run_local_turn - the header
+    has to match the body, because the HUD page picks its reader from it
+    (`text/event-stream` -> read `data:` lines, anything else ->
+    `res.json()`). It used to be application/json on an SSE body, and the
+    HUD failed every tool turn with "Unexpected token 'd'"."""
+    return "text/event-stream" if stream else "application/json"
+
+
+class ClientGone(Exception):
+    """The app that asked for this turn is no longer listening."""
+
+
+class UpstreamError(Exception):
+    """Ollama could not answer. `str()` is a plain sentence for the owner."""
+
+
+def _status_line(word: str) -> bytes:
+    return f"{STATUS_PREFIX}{word}\n\n".encode("utf-8")
+
+
+def _sse(obj) -> bytes:
+    if obj == "[DONE]":
+        return b"data: [DONE]\n\n"
+    return (b"data: " + json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            + b"\n\n")
+
+
+def _chunk(cid: str, created: int, model: str, delta: dict,
+           finish: Optional[str] = None) -> dict:
+    """One chunk, in exactly the shape Ollama's openai.ChatCompletionChunk
+    serialises to."""
+    return {"id": cid, "object": "chat.completion.chunk", "created": created,
+            "model": model, "system_fingerprint": "fp_ollama",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+
+
+class _Out:
+    """The one writer to the app. Several threads write through it (the turn,
+    and the keepalive below), so it holds a lock; and it remembers when a
+    write failed, which is how this side learns the app went away."""
+
+    _GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError,
+             TimeoutError, socket.timeout, OSError)
+
+    def __init__(self, write: Callable[[bytes], None], sse: bool):
+        self._write = write
+        self.sse = sse
+        self._lock = threading.Lock()
+        self.gone = False
+        self.last = time.monotonic()
+        self.status: Optional[str] = None
+        self.status_since = time.monotonic()
+        self.status_said = True
+
+    def send(self, data: bytes) -> bool:
+        with self._lock:
+            if self.gone:
+                return False
+            try:
+                self._write(data)
+            except self._GONE:
+                self.gone = True
+                return False
+            self.last = time.monotonic()
+            return True
+
+    def set_status(self, word: Optional[str]) -> None:
+        self.status = word
+        self.status_since = time.monotonic()
+        self.status_said = word is None
+
+
+def _heartbeat(out: _Out, stop: threading.Event, every: float, delay: float) -> None:
+    """Keepalives and status lines, until `stop` is set. Runs beside the turn.
+
+    The keepalive is also how a closed app is noticed while nothing else is
+    being written - a gate waiting for a card, a tool running - because a
+    write to a socket nobody reads fails, and `_Out` remembers that."""
+    tick = max(0.02, min(0.5, every / 4, delay / 2 if delay > 0 else 0.5))
+    while not stop.wait(tick):
+        now = time.monotonic()
+        word = out.status
+        if (out.sse and word and not out.status_said
+                and now - out.status_since >= delay):
+            out.status_said = True
+            out.send(_status_line(word))
+        elif now - out.last >= every:
+            out.send(b": keepalive\n\n" if out.sse else b"\n")
+
+
+# --------------------------------------------------------------------------
+#   Qwen3's thinking, kept out of the answer
+# --------------------------------------------------------------------------
+#
+# jarvis-primary.Modelfile says thinking is off, and nothing used to turn it
+# off: Ollama switches thinking ON by default for a model that can think
+# (server/routes.go: `if req.Think == nil ... req.Think = &api.ThinkValue{Value:
+# true}`), so every answer spent part of its 1,024-token allowance on
+# reasoning no window showed. The supported switch on the endpoint this
+# project uses is `reasoning_effort: "none"` (ollama/openai/openai.go,
+# ThinkingFromReasoningEffort: "none" -> think false). Every request below
+# sends it; an Ollama too old to know the word "none" answers 400, and the
+# request goes again without it.
+#
+# And in case thinking still arrives INSIDE the text - an older Ollama that
+# does not separate it, a model whose template does not - the `<think>` block
+# is cut out here, before anything is shown, spoken or kept in history.
+REASONING_OFF = {"reasoning_effort": "none"}
+_reasoning_field_refused = False
+
+
+class _ThinkStripper:
+    """Removes `<think>...</think>` from text that arrives in pieces. A tag
+    split across two pieces is held back until it is whole."""
+
+    OPEN, CLOSE = "<think>", "</think>"
+
+    def __init__(self):
+        self._buf = ""
+        self._inside = False
+        self._after_close = False
+
+    def feed(self, text: str) -> str:
+        self._buf += text
+        out = []
+        while self._buf:
+            if self._inside:
+                i = self._buf.find(self.CLOSE)
+                if i < 0:
+                    keep = _partial_suffix(self._buf, self.CLOSE)
+                    self._buf = self._buf[len(self._buf) - keep:] if keep else ""
+                    break
+                self._buf = self._buf[i + len(self.CLOSE):]
+                self._inside = False
+                self._after_close = True
+                continue
+            if self._after_close:
+                stripped = self._buf.lstrip()
+                if not stripped:
+                    self._buf = ""
+                    break
+                self._buf = stripped
+                self._after_close = False
+            i = self._buf.find(self.OPEN)
+            if i >= 0:
+                out.append(self._buf[:i])
+                self._buf = self._buf[i + len(self.OPEN):]
+                self._inside = True
+                continue
+            keep = _partial_suffix(self._buf, self.OPEN)
+            out.append(self._buf[:len(self._buf) - keep])
+            self._buf = self._buf[len(self._buf) - keep:] if keep else ""
+            break
+        return "".join(out)
+
+    def flush(self) -> str:
+        """What is left at the end. An unfinished think block is dropped."""
+        rest = "" if self._inside else self._buf
+        self._buf = ""
+        return rest
+
+
+def _partial_suffix(text: str, tag: str) -> int:
+    """How many characters at the end of `text` could be the start of `tag`."""
+    for n in range(min(len(tag) - 1, len(text)), 0, -1):
+        if tag.startswith(text[-n:]):
+            return n
+    return 0
+
+
+def strip_thinking(text: str) -> str:
+    """The same cut on a whole piece of text."""
+    s = _ThinkStripper()
+    return s.feed(text) + s.flush()
+
+
+# --------------------------------------------------------------------------
+#   Fitting the conversation into the model's real context
+# --------------------------------------------------------------------------
+#
+# Both apps cap the history they send, sized for num_ctx 16384
+# (jarvis-primary.Modelfile). But the model actually loaded may have 4096 -
+# Ollama's own default, any model switched to from the phone, or
+# jarvis-primary before it was created - and tool results (up to 8,000
+# characters each, six rounds) were in nobody's budget. Past the limit Ollama
+# drops the earliest turns itself, silently, and leaves no room for the answer.
+#
+# This is the one place that can know the real number, so it asks Ollama
+# (/api/ps for the loaded model, /api/show for its Modelfile) and trims to
+# fit BEFORE sending. The apps' own caps stay as an upper bound.
+
+_CTX_CACHE: dict = {}
+_CTX_TTL = 60.0
+
+
+def _lookup_context(ollama_url: str, model: str) -> Optional[int]:
+    """The model's context length as Ollama reports it, or None."""
+    try:
+        ps = _get_json(f"{ollama_url}/api/ps")
+        for m in ps.get("models") or []:
+            names = {m.get("name"), m.get("model")}
+            if model in names or f"{model}:latest" in names:
+                n = int(m.get("context_length") or 0)
+                if n > 0:
+                    return n
+    except Exception:
+        pass
+    try:
+        show = _get_json(f"{ollama_url}/api/show", {"model": model})
+        m = re.search(r"(?m)^\s*num_ctx\s+(\d+)", str(show.get("parameters") or ""))
+        if m:
+            return int(m.group(1))
+    except Exception:
+        pass
+    return None
+
+
+def _context_length(ollama_url: str, model: str) -> int:
+    now = time.monotonic()
+    hit = _CTX_CACHE.get((ollama_url, model))
+    if hit and now - hit[1] < _CTX_TTL:
+        return hit[0]
+    n = _lookup_context(ollama_url, model) or DEFAULT_CONTEXT
+    _CTX_CACHE[(ollama_url, model)] = (n, now)
+    return n
+
+
+def estimate_tokens(obj) -> int:
+    """A pessimistic count: 3 characters a token (English is nearer 4), a
+    few tokens of framing per message, a flat 1,000 for a picture."""
+    if isinstance(obj, list):
+        return sum(estimate_tokens(m) for m in obj)
+    if isinstance(obj, dict) and "role" in obj:
+        content = obj.get("content")
+        n = 6
+        if isinstance(content, str):
+            n += len(content) // 3
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    n += len(str(part.get("text") or "")) // 3
+                else:
+                    n += 1000
+        if obj.get("tool_calls"):
+            n += len(json.dumps(obj["tool_calls"], ensure_ascii=False)) // 3
+        return n
+    return len(json.dumps(obj, ensure_ascii=False)) // 3
+
+
+#: The Modelfile's SYSTEM block and the chat template.
+_TEMPLATE_TOKENS = 300
+
+
+def fit_messages(messages: list, budget: int) -> list:
+    """`messages`, with the oldest earlier turns dropped until they fit in
+    `budget` tokens.
+
+    Never dropped: any system message (the recalled facts, the apps' per-turn
+    notes, the persona), and the current turn - the newest user message and
+    everything after it, tool results included. Earlier turns go oldest
+    first, a question together with its answer, never cut mid-message. When
+    anything has to go, it goes down to three quarters of the budget, so the
+    start of the prompt then stays the same for a few turns and Ollama can
+    reuse what it has already read."""
+    msgs = list(messages)
+    if estimate_tokens(msgs) <= budget:
+        return msgs
+    last_user = max((i for i, m in enumerate(msgs)
+                     if isinstance(m, dict) and m.get("role") == "user"), default=len(msgs))
+    target = int(budget * 0.75)
+    earlier = [i for i in range(last_user)
+               if not (isinstance(msgs[i], dict) and msgs[i].get("role") == "system")]
+    dropped: set = set()
+    total = estimate_tokens(msgs)
+    k = 0
+    while k < len(earlier) and total > target:
+        i = earlier[k]
+        dropped.add(i)
+        total -= estimate_tokens(msgs[i])
+        k += 1
+        # An answer, or a tool result, left without the question before it
+        # goes with it.
+        while k < len(earlier) and msgs[earlier[k]].get("role") != "user":
+            dropped.add(earlier[k])
+            total -= estimate_tokens(msgs[earlier[k]])
+            k += 1
+    return [m for i, m in enumerate(msgs) if i not in dropped]
+
+
+# --------------------------------------------------------------------------
+#   Plain words when Ollama cannot answer
+# --------------------------------------------------------------------------
+
+def _ollama_error_text(raw: str) -> str:
+    """The message out of an Ollama error body: `{"error": {"message": ...}}`
+    on /v1, `{"error": "..."}` on its native API, or the raw text."""
+    try:
+        body = json.loads(raw)
+        err = body.get("error") if isinstance(body, dict) else None
+        if isinstance(err, dict):
+            return str(err.get("message") or "")
+        if isinstance(err, str):
+            return err
+    except Exception:
+        pass
+    return (raw or "").strip()[:300]
+
+
+def plain_error(exc: BaseException, model: str, said: Optional[str] = None) -> str:
+    """What to tell the owner when a request to Ollama failed, and what to
+    do about it. Never a Python exception name on its own.
+
+    `said` is the error body when the caller has already read it (an HTTP
+    error body can only be read once)."""
+    if isinstance(exc, urllib.error.HTTPError):
+        if said is None:
+            try:
+                said = exc.read().decode("utf-8", "replace")
+            except Exception:
+                said = ""
+        said = _ollama_error_text(said)
+        if exc.code == 404 and ("not found" in said.lower() or not said):
+            return (f"The model “{model}” is not installed on this PC. "
+                    f"Install it from Models in the desktop app (or run "
+                    f"`ollama pull {model}`), or switch to a model you have.")
+        return (f"The local model answered with an error (HTTP {exc.code})"
+                + (f": {said}" if said else ".")
+                + " Try again; if it keeps happening, restart Ollama.")
+    reason = getattr(exc, "reason", exc)
+    if isinstance(reason, (socket.timeout, TimeoutError)) or isinstance(exc, (socket.timeout, TimeoutError)):
+        return ("The local model stopped answering for five minutes. It may be "
+                "stuck: restart Ollama, then try again.")
+    return ("The local model is not running. Open Ollama on this PC (or run "
+            "`ollama serve`), then try again.")
+
+
 _MAX_TOOL_CONTENT_CHARS = 8000
 
 
@@ -938,57 +1355,215 @@ def _publish_step(step: dict) -> None:
         pass
 
 
+def offered_tools(enabled_tools) -> list:
+    """The tool names a turn actually offers the model: the ones in
+    `enabled_tools` that are real tools here, in TOOLS order. `None` means
+    every tool (for callers, and tests, that do not read the config).
+
+    `[tools].enabled` in the owner's config can list names this module has
+    never had - that list is shared with collect_tools() and /api/status,
+    which know other things. Offering "tools" that are not here would mean
+    a turn that can only ever be told "no such tool"."""
+    if enabled_tools is None:
+        return list(TOOLS)
+    wanted = set(enabled_tools)
+    return [n for n in TOOLS if n in wanted]
+
+
+class _Round:
+    """What one request to the model produced."""
+
+    def __init__(self):
+        self.text: list = []
+        self.calls: list = []
+        self.finish: Optional[str] = None
+        self.ended = False
+        self.id = ""
+        self.created = 0
+
+    def add_calls(self, deltas) -> None:
+        """Tool calls as they arrive. Ollama sends each call whole in one
+        chunk; the OpenAI format allows the arguments in fragments, the first
+        carrying the id and name. Both are put back together here."""
+        for d in deltas or []:
+            if not isinstance(d, dict):
+                continue
+            fn = d.get("function") or {}
+            cid = d.get("id") or ""
+            same = next((c for c in self.calls if cid and c.get("id") == cid), None)
+            if same is None and not fn.get("name") and self.calls:
+                idx = d.get("index")
+                same = next((c for c in self.calls if c.get("_index") == idx), self.calls[-1])
+            if same is None:
+                same = {"id": cid, "type": "function", "_index": d.get("index"),
+                        "function": {"name": fn.get("name") or "", "arguments": ""}}
+                self.calls.append(same)
+            args = fn.get("arguments")
+            if isinstance(args, dict):
+                same["function"]["arguments"] = args
+            elif isinstance(args, str):
+                prev = same["function"]["arguments"]
+                same["function"]["arguments"] = (prev if isinstance(prev, str) else "") + args
+
+    def tool_calls(self) -> list:
+        return [{k: v for k, v in c.items() if k != "_index"} for c in self.calls]
+
+
+def _read_chunk(obj: dict, rnd: _Round, on_text: Callable[[str], None]) -> None:
+    if not isinstance(obj, dict):
+        return
+    if obj.get("error"):
+        err = obj["error"]
+        msg = err.get("message") if isinstance(err, dict) else err
+        raise UpstreamError(f"The local model stopped with an error: {msg}")
+    rnd.id = rnd.id or str(obj.get("id") or "")
+    rnd.created = rnd.created or int(obj.get("created") or 0)
+    choice = (obj.get("choices") or [{}])[0] or {}
+    delta = choice.get("delta") or choice.get("message") or {}
+    text = delta.get("content")
+    if isinstance(text, str) and text:
+        on_text(text)
+    if delta.get("tool_calls"):
+        rnd.add_calls(delta["tool_calls"])
+    if choice.get("finish_reason"):
+        rnd.finish = str(choice["finish_reason"])
+
+
+def _read_stream(upstream, rnd: _Round, on_text: Callable[[str], None],
+                 out: "_Out") -> None:
+    """Reads one streamed round from Ollama, line by line, until it ends.
+
+    `read1` where the response has it: it returns what has arrived, where
+    `read(1024)` on a chunked response waits until a whole 1,024 bytes have
+    come - several tokens at a time instead of one."""
+    reader = getattr(upstream, "read1", None) or upstream.read
+    buf = b""
+    while True:
+        if out.gone:
+            raise ClientGone()
+        data = reader(1024)
+        if not data:
+            break
+        buf += data
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            _read_line(line, rnd, on_text)
+            if rnd.ended:
+                return
+    if buf.strip():
+        _read_line(buf, rnd, on_text)
+
+
+def _read_line(raw: bytes, rnd: _Round, on_text: Callable[[str], None]) -> None:
+    line = raw.strip()
+    if not line or line.startswith(b":"):
+        return
+    if line[:5].lower() == b"data:":
+        line = line[5:].strip()
+    elif re.match(rb"^(event|id|retry):", line, re.I):
+        return
+    if line == b"[DONE]":
+        rnd.ended = True
+        return
+    try:
+        obj = json.loads(line.decode("utf-8", "replace"))
+    except ValueError:
+        return
+    _read_chunk(obj, rnd, on_text)
+
+
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
-                    stream_out: Callable[[bytes], None],
-                    enabled_tools: Optional[set] = None,
-                    announce: Optional[Callable[[str], None]] = None,
-                    post: Optional[Callable[[str, dict], dict]] = None,
-                    gate_check: Optional[Callable[[str, dict, str], object]] = None,
-                    open_stream: Optional[Callable[[str, dict], object]] = None,
-                    max_rounds: int = 6,
-                    record_chain: Optional[Callable[[list], None]] = None,
-                    on_step: Optional[Callable[[dict], None]] = None) -> None:
-    """Drives the tool loop, then streams the final answer to `stream_out`
-    exactly as raw bytes - the same shape a plain relay would have produced,
-    so the desktop app needs no changes to render it.
+                   stream_out: Callable[[bytes], None],
+                   enabled_tools: Optional[set] = None,
+                   announce: Optional[Callable[[str], None]] = None,
+                   post: Optional[Callable[[str, dict], dict]] = None,
+                   gate_check: Optional[Callable[[str, dict, str], object]] = None,
+                   open_stream: Optional[Callable[[str, dict], object]] = None,
+                   max_rounds: int = 6,
+                   record_chain: Optional[Callable[[list], None]] = None,
+                   on_step: Optional[Callable[[dict], None]] = None,
+                   stream: bool = True,
+                   request: Optional[dict] = None,
+                   abort: Optional[Callable[[object], None]] = None,
+                   context_length: Optional[int] = None,
+                   keepalive_seconds: float = KEEPALIVE_SECONDS,
+                   status_delay: float = STATUS_DELAY_SECONDS) -> dict:
+    """One local chat turn, start to finish: asks the model, runs any tool it
+    asks for through the gate, and writes the answer to `stream_out` as it is
+    written - in Ollama's own format (see "What goes down the wire" above).
 
-    `enabled_tools` is the exact set of tool names to offer the model -
-    normally `set(cfg["tools"]["enabled"])`, the same whitelist
-    collect_tools() and /api/status already read. `None` means every tool
-    in `TOOLS` (used by callers, and tests, that are not reading that
-    config); an empty set means none - the model gets no `tools` field at
-    all and can only ever answer in prose.
+    Every round is ONE streamed request. Words go to the app as they arrive;
+    tool calls are collected from the same stream. A round that asks for no
+    tool IS the answer - it is not asked for a second time. (It used to be:
+    each round was generated whole, unseen, then thrown away and generated
+    again as a stream - silence, and then a different answer.)
 
-    Each round is ONE non-streaming call to Ollama's OpenAI-compatible
-    endpoint with `tools` attached. If the model asks for a tool, every
-    call is gated through jarvis_gate.check() BEFORE it runs - approved,
-    denied or timed out all become one message fed back to the model, never
-    a bare exception. Once a round comes back with no tool call, THAT
-    response is re-requested with stream=True and relayed live - so a plain
-    question that needs no tool still ends up streamed, at the cost of one
-    extra non-streamed round trip to find that out.
+    `stream` is what the app asked for. True: Ollama's SSE lines. False: one
+    `chat.completion` JSON body at the end.
 
-    When the turn is over - after the answer has streamed, or failed to -
-    `record_chain(steps)` gets the list of tools this turn asked for, as
-    `{"tool", "ran", "ok", "outcome"}` dicts in order. Omitted, it is
-    `_record_chain`, which writes one audit line so repeated routines can be
-    counted (jarvis_skill_discovery.py). A turn that used no tool records
-    nothing, and a recorder that raises is ignored.
+    `request` is the app's request body; `temperature`, `top_p` and
+    `max_tokens` are taken from it (max_tokens defaults to
+    DEFAULT_MAX_TOKENS, so every window gets the same length of answer).
 
-    `on_step(step)` is told each step as it happens - see _step_event for
-    exactly what a step may contain (names from our own table, never text).
-    Omitted, it is `_publish_step`: the event bus, for Brain -> Live. A sink
-    that raises is ignored.
+    `enabled_tools` is the set of tool names to offer - see offered_tools().
+    Empty, or none of them real: the model gets no `tools` at all.
+
+    Each tool call is gated through jarvis_gate.check() BEFORE it runs -
+    approved, denied or timed out all become one message fed back to the
+    model, never a bare exception. While the gate waits, the app is sent
+    keepalives and `: jarvis-status approval`. If the app has gone by the
+    time the gate answers, the tool is NOT run and the turn stops: nobody is
+    there to read what it would do.
+
+    `abort(upstream)` is called on a request to Ollama that is being given up
+    on (the app went away), so Ollama stops generating; the default closes
+    it. `post` is an older, non-streaming way to make each round (a whole
+    response dict back) that some tests still use.
+
+    Ollama failing is reported to the app in plain words (plain_error), in
+    the same framing, and this returns normally. Returns a small summary:
+    {"finish_reason", "client_gone", "rounds"}.
+
+    When the turn is over, `record_chain(steps)` gets the list of tools this
+    turn asked for, as `{"tool", "ran", "ok", "outcome"}` dicts in order.
+    Omitted, it is `_record_chain` (jarvis_skill_discovery.py). A turn that
+    used no tool records nothing, and a recorder that raises is ignored.
+
+    `on_step(step)` is told each step as it happens - see _step_event.
+    Omitted, it is `_publish_step`: the event bus, for Brain -> Live.
     """
-    caller = post or (lambda url, payload: _post(url, payload))
     recorder = record_chain if record_chain is not None else _record_chain
     steps: list = []
     checker = gate_check or _gate_check
     streamer = open_stream or (lambda url, payload: _open_stream(url, payload))
+    closer = abort or (lambda up: getattr(up, "close", lambda: None)())
     convo = list(messages)
-    names = TOOLS.keys() if enabled_tools is None else (TOOLS.keys() & enabled_tools)
+    names = offered_tools(enabled_tools)
     tool_schemas = [TOOLS[n].schema() for n in names]
     sink = on_step if on_step is not None else _publish_step
+    req = request or {}
+    opts: dict = {}
+    for key in ("temperature", "top_p"):
+        if isinstance(req.get(key), (int, float)) and not isinstance(req.get(key), bool):
+            opts[key] = req[key]
+    max_tokens = req.get("max_tokens")
+    opts["max_tokens"] = (int(max_tokens) if isinstance(max_tokens, int)
+                          and not isinstance(max_tokens, bool) and max_tokens > 0
+                          else DEFAULT_MAX_TOKENS)
+    url = f"{ollama_url}/v1/chat/completions"
+
+    out = _Out(stream_out, sse=bool(stream))
+    stop_beat = threading.Event()
+    beat = threading.Thread(target=_heartbeat, name="jarvis-keepalive", daemon=True,
+                            args=(out, stop_beat, keepalive_seconds, status_delay))
+    beat.start()
+
+    answer: list = []
+    said = {"any": False, "gap": False}
+    cid = f"chatcmpl-jarvis-{int(time.time() * 1000)}"
+    created = int(time.time())
+    finish: Optional[str] = None
+    rounds = 0
 
     def say_step(phase: str, tool: Optional[str] = None, **kw) -> None:
         try:
@@ -996,178 +1571,144 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         except Exception:
             pass
 
-    for _round in range(max_rounds):
-        say_step("model", round_no=_round + 1)
-        body = {"model": model, "messages": convo, "tools": tool_schemas, "stream": False}
-        resp = caller(f"{ollama_url}/v1/chat/completions", body)
-        choice = (resp.get("choices") or [{}])[0]
-        message = choice.get("message") or {}
-        tool_calls = message.get("tool_calls") or []
-        if not tool_calls:
-            break
-        convo.append(message)
-        for call in tool_calls:
-            fn = (call.get("function") or {})
-            name = fn.get("name", "")
-            raw_args = fn.get("arguments")
-            try:
-                # Some OpenAI-compatible backends hand back `arguments`
-                # already parsed into an object rather than a JSON string -
-                # json.loads() on a dict raises TypeError, not
-                # JSONDecodeError, and an uncaught one here used to escape
-                # run_local_turn entirely and get blamed on Ollama being
-                # down by the caller's outer handler.
-                args = raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
-            except (json.JSONDecodeError, TypeError):
-                args = {}
-            if not isinstance(args, dict):
-                # `arguments` can be valid JSON and still not be an object -
-                # "123" parses to the int 123, '"x"' parses to a string.
-                # Every tool's prepare()/execute() calls args.get(...), so a
-                # non-dict here would crash there instead of just being
-                # treated as the empty arguments it effectively is.
-                args = {}
-            tool = TOOLS.get(name) if name in names else None
-            if tool is None:
-                say_step("tool_refused", name)
-                result = {"ok": False, "error": f"no such tool: {name!r}"}
-            else:
-                lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
-                action_name = lookup_name
+    def emit(text: str) -> None:
+        if not text:
+            return
+        if said["gap"] and said["any"]:
+            text = "\n\n" + text
+        said["gap"] = False
+        said["any"] = True
+        answer.append(text)
+        if out.sse and not out.send(_sse(_chunk(cid, created, model, {"content": text}))):
+            raise ClientGone()
+
+    def budget() -> int:
+        n_ctx = context_length or _context_length(ollama_url, model)
+        return max(512, n_ctx - opts["max_tokens"] - _TEMPLATE_TOKENS
+                   - estimate_tokens(tool_schemas))
+
+    def one_round(offer_tools: bool) -> _Round:
+        global _reasoning_field_refused
+        rnd = _Round()
+        body = {"model": model, "messages": fit_messages(convo, budget()),
+                "stream": True, **opts}
+        if not _reasoning_field_refused:
+            body.update(REASONING_OFF)
+        if offer_tools and tool_schemas:
+            body["tools"] = tool_schemas
+        stripper = _ThinkStripper()
+        first = {"text": True}
+
+        def on_text(piece: str) -> None:
+            clean = stripper.feed(piece)
+            if clean:
+                if first["text"]:
+                    first["text"] = False
+                    out.set_status(None)
+                    say_step("answer")
+                emit(clean)
+
+        if post is not None:
+            whole = dict(body, stream=False)
+            resp = post(url, whole)
+            _read_chunk(resp, rnd, on_text)
+            rnd.ended = True
+        else:
+            for attempt in (1, 2):
                 try:
-                    import jarvis_gate
-                    action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
+                    upstream = streamer(url, body)
+                    break
+                except urllib.error.HTTPError as exc:
+                    raw = ""
+                    try:
+                        raw = exc.read().decode("utf-8", "replace")
+                    except Exception:
+                        pass
+                    said_text = _ollama_error_text(raw).lower()
+                    if (attempt == 1 and exc.code == 400 and "reasoning_effort" in body
+                            and ("reason" in said_text or "think" in said_text)):
+                        # An Ollama that does not know "none" yet. Once per
+                        # process: it will not learn it before a restart.
+                        _reasoning_field_refused = True
+                        body.pop("reasoning_effort", None)
+                        continue
+                    raise UpstreamError(plain_error(exc, model, said=raw)) from exc
+                except (urllib.error.URLError, OSError) as exc:
+                    raise UpstreamError(plain_error(exc, model)) from exc
+            try:
+                with upstream:
+                    _read_stream(upstream, rnd, on_text, out)
+            except ClientGone:
+                try:
+                    closer(upstream)
                 except Exception:
                     pass
-                # prepare() inside the try, like execute() below. It used
-                # to sit outside every handler in this function, so a
-                # prepare-time raise - a tool validating its own arguments,
-                # e.g. {"days_ahead": "seven"} reaching an int() - escaped
-                # run_local_turn entirely and took the whole turn down. This
-                # function's own docstring promises a tool failure comes
-                # back as a tool RESULT the model can read and retry from;
-                # that promise covered execute() and not prepare().
-                try:
-                    state, plan_text = tool.prepare(args)
-                except Exception as exc:
-                    convo.append({"role": "tool",
-                                   "tool_call_id": call.get("id", ""),
-                                   "content": _tool_content(
-                                       {"ok": False,
-                                        "error": f"{name} could not accept those "
-                                                 f"arguments: {type(exc).__name__}: {exc}"})})
-                    steps.append({"tool": name, "ran": False, "ok": False,
-                                  "outcome": "unknown"})
-                    say_step("tool_finished", name, ok=False)
-                    continue
-                if _card_would_be_cut(name, action_name, plan_text):
-                    # Refused BEFORE a card is raised - see _card_would_be_cut.
-                    convo.append({"role": "tool",
-                                   "tool_call_id": call.get("id", ""),
-                                   "content": _tool_content(
-                                       {"ok": False,
-                                        "error": (f"refused: the plan for {name} is too long "
-                                                  f"to show in full on one approval card, so "
-                                                  f"nobody was asked and nothing ran. Make a "
-                                                  f"shorter plan - fewer steps, or split the "
-                                                  f"job into several smaller ones.")})})
-                    steps.append({"tool": name, "ran": False, "ok": False,
-                                  "outcome": "refused"})
-                    say_step("tool_refused", name)
-                    continue
-                verdict = checker(action_name, {"text": plan_text},
-                                   f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
-                # What the GATE said, never what the model said: the outcome
-                # is read off the verdict (gate-outcome.patch), and a verdict
-                # without one is recorded as "unknown" rather than guessed at.
-                step = {"tool": name, "ran": False, "ok": False,
-                        "outcome": str(getattr(verdict, "outcome", None) or "unknown")}
-                steps.append(step)
-                tc = _task_control()
-                # A note the owner attached to THIS card before answering it
-                # (POST /api/pending/<id>/amend). It goes to the model with
-                # the answer - approved or not - and changes nothing about
-                # what was approved. Taken once, so it is never repeated.
-                card_note = None
-                if tc is not None:
-                    try:
-                        card_note = tc.take_amend(getattr(verdict, "request_id", None))
-                    except Exception:
-                        card_note = None
-                if not getattr(verdict, "allowed", False):
-                    say_step("tool_refused", name)
-                    result = {"ok": False,
-                              "error": f"refused: {getattr(verdict, 'reason', 'not approved')}"}
-                elif name in NEEDS_A_PERSON and not _a_person_said_yes(verdict):
-                    # Allowed, but nobody was asked. See NEEDS_A_PERSON.
-                    say_step("tool_refused", name)
-                    vtier = getattr(verdict, "tier", None) or "unknown"
-                    # The gate's own name for the action - the key that
-                    # [autonomy.tiers] uses - rather than the lookup name.
-                    vaction = getattr(verdict, "action", None) or action_name
-                    result = {"ok": False,
-                              "error": (f"refused: {name} {NEEDS_A_PERSON[name]}, so it "
-                                        f"only runs after the owner approves it on a "
-                                        f"card - but the approval gate let it through "
-                                        f"at tier {vtier!r} without asking anyone. "
-                                        f"Nothing was run. To use it, set "
-                                        f"{vaction} to \"ask\" in "
-                                        f"jarvis-framework.toml's [autonomy.tiers].")}
-                else:
-                    say_step("tool_started", name)
-                    if announce:
-                        announce(f"Using {name}...")
-                    kwargs = {"announce": announce} if tool.needs_announce else {}
-                    # A multi-step plan: register it so Pause/Stop can reach
-                    # it, and hand run() the checkpoint it reads before every
-                    # step. The id is the approval card's own when there was
-                    # one, so "this task" and "that card" are the same thing.
-                    task_id = None
-                    if tc is not None and name in _TASK_MODULES:
-                        task_id = getattr(verdict, "request_id", None) or tc.new_task_id()
-                        tc.begin(task_id, name)
-                        kwargs["checkpoint"] = (lambda tid=task_id: tc.checkpoint(tid))
-                    step["ran"] = True
-                    try:
-                        result = tool.execute(args, state, **kwargs)
-                    except Exception as exc:
-                        result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-                    finally:
-                        if task_id is not None:
-                            tc.end(task_id)
-                    if task_id is not None and isinstance(result, dict):
-                        result = _after_task(tc, task_id, name, action_name, state, result)
-                    step["ok"] = isinstance(result, dict) and result.get("ok") is True
-                    say_step("tool_finished", name, ok=step["ok"])
-                if card_note and isinstance(result, dict):
-                    result = dict(result)
-                    result["owner_note"] = card_note
-            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
-                          "content": _tool_content(result)})
-    else:
-        convo.append({"role": "system",
-                       "content": "Too many tool calls in a row; answer with "
-                                  "what you have rather than trying again."})
+                raise
+            except (socket.timeout, TimeoutError) as exc:
+                raise UpstreamError(plain_error(exc, model)) from exc
+        tail = stripper.flush()
+        if tail:
+            if first["text"]:
+                first["text"] = False
+                say_step("answer")
+            emit(tail)
+        return rnd
 
-    # No `tools` here, on purpose: the loop above already decided this turn
-    # is done asking for tools (a round with none requested, or max_rounds
-    # cutting it off), against this exact `convo`. Offering them again on a
-    # second, independent completion - same messages, nonzero temperature -
-    # let the model change its mind and request a tool a second time, whose
-    # raw tool_call delta JSON would then stream to the client with no
-    # gating and no execution at all, since nothing here reads tool_calls
-    # out of a streamed response. Dropping `tools` forces this call to be
-    # what it was always meant to be: the answer, in prose.
-    stream_body = {"model": model, "messages": convo, "stream": True}
-    say_step("answer")
+    def fail(message: str) -> None:
+        if out.sse:
+            out.send(_sse({"error": {"message": message, "type": "jarvis"}}))
+        else:
+            out.send(json.dumps({"error": message}, ensure_ascii=False,
+                                separators=(",", ":")).encode("utf-8") + b"\n")
+
     try:
-        with streamer(f"{ollama_url}/v1/chat/completions", stream_body) as upstream:
-            while True:
-                chunk = upstream.read(1024)
-                if not chunk:
-                    break
-                stream_out(chunk)
+        last: Optional[_Round] = None
+        for _round in range(max_rounds + 1):
+            final = _round == max_rounds
+            if final:
+                convo.append({"role": "system",
+                              "content": "Too many tool calls in a row; answer with "
+                                         "what you have rather than trying again."})
+            rounds += 1
+            say_step("model", round_no=_round + 1)
+            out.set_status("thinking")
+            last = one_round(offer_tools=not final)
+            calls = last.tool_calls()
+            if final or not calls:
+                break
+            text = "".join(last.text)
+            convo.append({"role": "assistant", "content": text,
+                          "tool_calls": [dict(c, function=dict(c["function"]))
+                                         for c in calls]})
+            said["gap"] = True
+            for call in calls:
+                if out.gone:
+                    raise ClientGone()
+                _one_call(call, names, convo, steps, checker, announce, out, say_step)
+        finish = (last.finish if last else None) or ("stop" if last and last.ended else None)
+        if finish == "tool_calls":
+            # The last round asked for a tool anyway, after tools were taken
+            # away (max_rounds). Nothing ran; to the app the answer is over.
+            finish = "stop"
+        if out.sse:
+            if last is not None and (last.ended or last.finish):
+                out.send(_sse(_chunk(cid, created, model, {}, finish or "stop")))
+                out.send(_sse("[DONE]"))
+        else:
+            out.send(json.dumps({
+                "id": cid, "object": "chat.completion", "created": created,
+                "model": model, "system_fingerprint": "fp_ollama",
+                "choices": [{"index": 0,
+                             "message": {"role": "assistant", "content": "".join(answer)},
+                             "finish_reason": finish}],
+            }, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n")
+    except ClientGone:
+        pass
+    except UpstreamError as exc:
+        fail(str(exc))
     finally:
+        stop_beat.set()
+        beat.join(timeout=2)
         # After the answer, so counting can never delay it, and in a
         # `finally` because the tools above ran whether or not the answer
         # made it to the client. Only the tools are recorded - see
@@ -1178,3 +1719,153 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 recorder(steps)
             except Exception:
                 pass
+    return {"finish_reason": finish, "client_gone": out.gone, "rounds": rounds}
+
+
+def _one_call(call: dict, names: list, convo: list, steps: list, checker,
+              announce, out: "_Out", say_step) -> None:
+    """One tool call the model asked for: gate it, run it if allowed, and put
+    the result in `convo` for the model to read."""
+    fn = (call.get("function") or {})
+    name = fn.get("name", "")
+    raw_args = fn.get("arguments")
+    try:
+        # Some OpenAI-compatible backends hand back `arguments` already
+        # parsed into an object rather than a JSON string - json.loads() on a
+        # dict raises TypeError, not JSONDecodeError.
+        args = raw_args if isinstance(raw_args, dict) else json.loads(raw_args or "{}")
+    except (json.JSONDecodeError, TypeError):
+        args = {}
+    if not isinstance(args, dict):
+        # `arguments` can be valid JSON and still not be an object - "123"
+        # parses to the int 123. Every tool calls args.get(...).
+        args = {}
+    tool = TOOLS.get(name) if name in names else None
+    if tool is None:
+        say_step("tool_refused", name)
+        result = {"ok": False, "error": f"no such tool: {name!r}"}
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        return
+    lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
+    action_name = lookup_name
+    try:
+        import jarvis_gate
+        action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
+    except Exception:
+        pass
+    # prepare() inside a try, like execute() below: a prepare-time raise - a
+    # tool validating its own arguments, e.g. {"days_ahead": "seven"} - comes
+    # back as a tool RESULT the model can read and retry from.
+    try:
+        state, plan_text = tool.prepare(args)
+    except Exception as exc:
+        convo.append({"role": "tool",
+                      "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(
+                          {"ok": False,
+                           "error": f"{name} could not accept those "
+                                    f"arguments: {type(exc).__name__}: {exc}"})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
+        say_step("tool_finished", name, ok=False)
+        return
+    if _card_would_be_cut(name, action_name, plan_text):
+        # Refused BEFORE a card is raised - see _card_would_be_cut.
+        convo.append({"role": "tool",
+                      "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(
+                          {"ok": False,
+                           "error": (f"refused: the plan for {name} is too long "
+                                     f"to show in full on one approval card, so "
+                                     f"nobody was asked and nothing ran. Make a "
+                                     f"shorter plan - fewer steps, or split the "
+                                     f"job into several smaller ones.")})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return
+    # The gate may wait minutes for a person. Say so to the app (after a
+    # moment, so a tool the gate lets straight through never flashes it).
+    out.set_status("approval")
+    verdict = checker(action_name, {"text": plan_text},
+                      f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+    out.set_status("thinking")
+    # What the GATE said, never what the model said: the outcome is read off
+    # the verdict (gate-outcome.patch), and a verdict without one is recorded
+    # as "unknown" rather than guessed at.
+    step = {"tool": name, "ran": False, "ok": False,
+            "outcome": str(getattr(verdict, "outcome", None) or "unknown")}
+    steps.append(step)
+    tc = _task_control()
+    # A note the owner attached to THIS card before answering it
+    # (POST /api/pending/<id>/amend). It goes to the model with the answer -
+    # approved or not - and changes nothing about what was approved. Taken
+    # once, so it is never repeated.
+    card_note = None
+    if tc is not None:
+        try:
+            card_note = tc.take_amend(getattr(verdict, "request_id", None))
+        except Exception:
+            card_note = None
+    if not getattr(verdict, "allowed", False):
+        say_step("tool_refused", name)
+        result = {"ok": False,
+                  "error": f"refused: {getattr(verdict, 'reason', 'not approved')}"}
+    elif name in NEEDS_A_PERSON and not _a_person_said_yes(verdict):
+        # Allowed, but nobody was asked. See NEEDS_A_PERSON.
+        say_step("tool_refused", name)
+        vtier = getattr(verdict, "tier", None) or "unknown"
+        # The gate's own name for the action - the key that
+        # [autonomy.tiers] uses - rather than the lookup name.
+        vaction = getattr(verdict, "action", None) or action_name
+        result = {"ok": False,
+                  "error": (f"refused: {name} {NEEDS_A_PERSON[name]}, so it "
+                            f"only runs after the owner approves it on a "
+                            f"card - but the approval gate let it through "
+                            f"at tier {vtier!r} without asking anyone. "
+                            f"Nothing was run. To use it, set "
+                            f"{vaction} to \"ask\" in "
+                            f"jarvis-framework.toml's [autonomy.tiers].")}
+    elif out.gone:
+        # Approved - but the app that asked has gone, so nobody would see
+        # what it did or the answer that followed. Not run; the owner is told
+        # on the event bus, where they still are.
+        say_step("tool_refused", name)
+        if announce:
+            try:
+                announce(f"Did not run {name}: the chat that asked for it was closed.")
+            except Exception:
+                pass
+        raise ClientGone()
+    else:
+        say_step("tool_started", name)
+        out.set_status("working")
+        if announce:
+            announce(f"Using {name}...")
+        kwargs = {"announce": announce} if tool.needs_announce else {}
+        # A multi-step plan: register it so Pause/Stop can reach it, and hand
+        # run() the checkpoint it reads before every step. The id is the
+        # approval card's own when there was one, so "this task" and "that
+        # card" are the same thing.
+        task_id = None
+        if tc is not None and name in _TASK_MODULES:
+            task_id = getattr(verdict, "request_id", None) or tc.new_task_id()
+            tc.begin(task_id, name)
+            kwargs["checkpoint"] = (lambda tid=task_id: tc.checkpoint(tid))
+        step["ran"] = True
+        try:
+            result = tool.execute(args, state, **kwargs)
+        except Exception as exc:
+            result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            if task_id is not None:
+                tc.end(task_id)
+            out.set_status("thinking")
+        if task_id is not None and isinstance(result, dict):
+            result = _after_task(tc, task_id, name, action_name, state, result)
+        step["ok"] = isinstance(result, dict) and result.get("ok") is True
+        say_step("tool_finished", name, ok=step["ok"])
+    if card_note and isinstance(result, dict):
+        result = dict(result)
+        result["owner_note"] = card_note
+    convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                  "content": _tool_content(result)})

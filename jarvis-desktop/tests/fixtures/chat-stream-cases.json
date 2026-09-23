@@ -1,0 +1,177 @@
+{
+  "about": "What /api/chat really sends, made by running the producer (backend/test_chat_stream_contract.py --write). Do not edit by hand.",
+  "status_prefix": ": jarvis-status",
+  "cases": [
+    {
+      "name": "plain relay, Ollama's current format",
+      "producer": "Ollama, relayed byte for byte",
+      "content_type": "text/event-stream",
+      "body": "data: {\"id\":\"chatcmpl-742\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hello\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-742\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" there.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-742\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+      "expect": {
+        "text": "Hello there.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "plain relay, Ollama's 2025 format",
+      "producer": "Ollama, relayed byte for byte",
+      "content_type": "text/event-stream",
+      "body": "data: {\"id\":\"chatcmpl-742\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hello\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-742\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\" there.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-742\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+      "expect": {
+        "text": "Hello there.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "plain relay, stream false",
+      "producer": "Ollama, relayed byte for byte",
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-742\",\"object\":\"chat.completion\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Hello there.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":7,\"total_tokens\":19}}\n",
+      "expect": {
+        "text": "Hello there.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "text/event-stream",
+      "body": "data: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" there.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+      "expect": {
+        "text": "Hello there.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn, Ollama's 2025 format",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "text/event-stream",
+      "body": "data: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" there.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+      "expect": {
+        "text": "Hello there.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn with a tool and an approval card",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "text/event-stream",
+      "body": ": jarvis-status approval\n\n: keepalive\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"It is \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"4.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+      "expect": {
+        "text": "It is 4.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": [
+          "approval"
+        ]
+      }
+    },
+    {
+      "name": "local turn, Qwen3 thinking",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "text/event-stream",
+      "body": "data: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" there.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+      "expect": {
+        "text": "Hello there.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn cut short at the length limit",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "text/event-stream",
+      "body": "data: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"The first half of a long\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion.chunk\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}]}\n\ndata: [DONE]\n\n",
+      "expect": {
+        "text": "The first half of a long",
+        "ended": true,
+        "length": true,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn, Ollama not running",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "text/event-stream",
+      "body": "data: {\"error\":{\"message\":\"The local model is not running. Open Ollama on this PC (or run `ollama serve`), then try again.\",\"type\":\"jarvis\"}}\n\n",
+      "expect": {
+        "text": "",
+        "ended": false,
+        "length": false,
+        "error": "The local model is not running. Open Ollama on this PC (or run `ollama serve`), then try again.",
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn, model not installed",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "text/event-stream",
+      "body": "data: {\"error\":{\"message\":\"The model “qwen3:14b” is not installed on this PC. Install it from Models in the desktop app (or run `ollama pull qwen3:14b`), or switch to a model you have.\",\"type\":\"jarvis\"}}\n\n",
+      "expect": {
+        "text": "",
+        "ended": false,
+        "length": false,
+        "error": "The model “qwen3:14b” is not installed on this PC. Install it from Models in the desktop app (or run `ollama pull qwen3:14b`), or switch to a model you have.",
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn, stream false",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "application/json",
+      "body": "{\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Hello there.\"},\"finish_reason\":\"stop\"}]}\n",
+      "expect": {
+        "text": "Hello there.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn, stream false, a tool and an approval card",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "application/json",
+      "body": "\n{\"id\":\"chatcmpl-jarvis-0\",\"object\":\"chat.completion\",\"created\":1790000000,\"model\":\"jarvis-primary\",\"system_fingerprint\":\"fp_ollama\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"It is 4.\"},\"finish_reason\":\"stop\"}]}\n",
+      "expect": {
+        "text": "It is 4.",
+        "ended": true,
+        "length": false,
+        "error": null,
+        "statuses": []
+      }
+    },
+    {
+      "name": "local turn, stream false, Ollama not running",
+      "producer": "jarvis_agent.run_local_turn",
+      "content_type": "application/json",
+      "body": "{\"error\":\"The local model is not running. Open Ollama on this PC (or run `ollama serve`), then try again.\"}\n",
+      "expect": {
+        "text": "",
+        "ended": false,
+        "length": false,
+        "error": "The local model is not running. Open Ollama on this PC (or run `ollama serve`), then try again.",
+        "statuses": []
+      }
+    }
+  ]
+}

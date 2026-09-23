@@ -2,8 +2,12 @@
 
 Three things are proven, not just the happy path: a denied tool never
 executes, an unclassified/ungated tool fails CLOSED rather than running
-anyway, and the final answer is streamed byte-for-byte from whatever the
-model actually said - never synthesised here.
+anyway, and the answer the app receives is exactly the words the model
+wrote - streamed as they arrive, asked for once, never synthesised here.
+
+The model's side of every streamed turn below is Ollama's REAL
+/v1/chat/completions body, built by _ollama_wire.py from Ollama's own source
+- not an invented `{"done":true}`.
 
     python3 test_agent.py
 """
@@ -18,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_agent.py")
 import jarvis_agent as AG
+import _ollama_wire as W  # noqa: E402
 
 # Every turn in this file would otherwise reach the default end-of-turn
 # recorder, which writes to the real audit log and may raise a real skill
@@ -44,15 +49,22 @@ class NoRealIO:
 
     def __enter__(self):
         self.real_post, self.real_stream = AG._post, AG._open_stream
+        self.real_get = AG._get_json
         def boom_post(*a, **k):
             raise AssertionError("a real HTTP POST ran")
         def boom_stream(*a, **k):
             raise AssertionError("a real streaming request ran")
-        AG._post, AG._open_stream = boom_post, boom_stream
+        def no_lookup(*a, **k):
+            # The context-length lookup (/api/ps, /api/show). Failing here is
+            # the "Ollama cannot say" case: the conservative default is used.
+            raise OSError("no network in this test")
+        AG._post, AG._open_stream, AG._get_json = boom_post, boom_stream, no_lookup
+        AG._CTX_CACHE.clear()
         return self
 
     def __exit__(self, *a):
         AG._post, AG._open_stream = self.real_post, self.real_stream
+        AG._get_json = self.real_get
         return False
 
 
@@ -85,6 +97,49 @@ def deny(*_a, **_k):
     return _No()
 
 
+def _events(resp):
+    """A scripted whole response, as the events Ollama would stream for it."""
+    msg = ((resp.get("choices") or [{}])[0].get("message")) or {}
+    ev = []
+    text = msg.get("content") or ""
+    if len(text) > 1:
+        half = len(text) // 2
+        ev += [("content", text[:half]), ("content", text[half:])]
+    elif text:
+        ev.append(("content", text))
+    calls = msg.get("tool_calls") or []
+    if calls:
+        ev.append(("tool_calls", [{"id": c.get("id"), "name": c["function"]["name"],
+                                   "arguments": c["function"].get("arguments")}
+                                  for c in calls]))
+    ev.append(("done", "stop"))
+    return ev
+
+
+def scripted_stream(responses, legacy=False):
+    """Like scripted_post, but each round is streamed: the opener hands back
+    Ollama's real SSE body for the next scripted response."""
+    calls = []
+    it = iter(responses)
+    def opener(url, payload):
+        calls.append(payload)
+        return W.FakeResponse(W.stream(_events(next(it)), legacy=legacy))
+    return opener, calls
+
+
+def answer_text(streamed) -> str:
+    """The words an app would show, read out of what the turn wrote."""
+    text = []
+    for line in b"".join(streamed).split(b"\n"):
+        line = line.strip()
+        if not line.startswith(b"data:") or line[5:].strip() == b"[DONE]":
+            continue
+        obj = json.loads(line[5:])
+        delta = obj["choices"][0].get("delta") or {}
+        text.append(delta.get("content") or "")
+    return "".join(text)
+
+
 def scripted_post(responses):
     """Returns a `post` that answers each call with the next scripted
     response, and records every payload it was given."""
@@ -97,30 +152,30 @@ def scripted_post(responses):
 
 
 def t_no_tool_call_streams_straight_through():
-    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
-    post, calls = scripted_post(responses)
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi there"}}]}]
+    opener, calls = scripted_stream(responses)
     streamed = []
-    stream_payloads = []
-    def open_stream(url, payload):
-        stream_payloads.append(payload)
-        return FakeStream([b'{"done":true}\n'])
     with NoRealIO():
         AG.run_local_turn(
             [{"role": "user", "content": "hello"}], "qwen3:8b", ollama_url="http://x",
-            stream_out=streamed.append, post=post, gate_check=allow,
-            open_stream=open_stream)
-    check("exactly one non-streaming round trip when no tool is requested",
-          len(calls) == 1, repr(calls))
-    check("the final bytes came from the injected stream, not fabricated",
-          streamed == [b'{"done":true}\n'], repr(streamed))
-    # The bug this guards against: the loop already decided (in the round
-    # above) that this turn needs no tool. Offering `tools` again on the
-    # final streaming call lets a nondeterministic model change its mind and
-    # request a tool a second time, whose raw tool_call delta JSON would
-    # then stream to the client unexecuted and ungated - nothing here reads
-    # tool_calls out of a streamed response.
-    check("the final streaming call does not offer tools",
-          "tools" not in stream_payloads[0], repr(stream_payloads[0]))
+            stream_out=streamed.append, gate_check=allow, open_stream=opener)
+    # The bug this guards against: every turn with tools on used to be
+    # generated TWICE - once whole and unseen to look for tool calls, then
+    # thrown away and generated again as a stream. Silence, then a different
+    # answer. A round that asks for no tool now IS the answer.
+    check("exactly ONE request when no tool is requested - the answer is not asked for twice",
+          len(calls) == 1, repr(len(calls)))
+    check("that one request streams", bool(calls) and calls[0]["stream"] is True, repr(calls))
+    check("the words the app gets are the model's own",
+          answer_text(streamed) == "hi there", repr(streamed))
+    blob = b"".join(streamed)
+    check("the answer ends the way Ollama ends one: a finish_reason, then [DONE]",
+          blob.rstrip().endswith(b"data: [DONE]") and b'"finish_reason":"stop"' in blob,
+          repr(blob[-200:]))
+    check("thinking is switched off on the request (reasoning_effort none)",
+          bool(calls) and calls[0].get("reasoning_effort") == "none", repr(calls))
+    check("an answer length is always set, the same for every window",
+          bool(calls) and calls[0].get("max_tokens") == AG.DEFAULT_MAX_TOKENS, repr(calls))
 
 
 def t_a_denied_tool_never_executes():
@@ -565,7 +620,8 @@ def t_empty_enabled_tools_offers_nothing():
             stream_out=lambda b: None, post=post, gate_check=allow,
             enabled_tools=set(),
             open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
-    check("an empty enabled set offers no tools at all", seen_bodies[0]["tools"] == [])
+    check("an empty enabled set offers no tools at all",
+          not seen_bodies[0].get("tools"), repr(seen_bodies[0]))
 
 
 def t_max_rounds_stops_an_infinite_tool_loop():
@@ -679,17 +735,18 @@ def _two_tool_turn(gate_check, recorder=None, stream_fail=False, on_step=None):
                 {"id": "3", "function": {"name": "made_up_tool", "arguments": "{}"}}]}}]},
             {"choices": [{"message": {"role": "assistant", "content": "done"}}]},
         ]
-        post, calls = scripted_post(responses)
+        real_opener, calls = scripted_stream(responses)
 
         def opener(url, payload):
-            if stream_fail:
-                raise ConnectionError("client went away")
-            return FakeStream([b'{"done":true}\n'])
+            if stream_fail and len(calls) >= 1:
+                calls.append(payload)
+                raise ConnectionError("Ollama went away")
+            return real_opener(url, payload)
         with NoRealIO():
             try:
                 AG.run_local_turn(
                     [{"role": "user", "content": "PLEASE-DO-NOT-LOG-ME"}], "qwen3:8b",
-                    ollama_url="http://x", stream_out=lambda b: None, post=post,
+                    ollama_url="http://x", stream_out=lambda b: None,
                     gate_check=gate_check, open_stream=opener,
                     record_chain=recorder if recorder is not None else got.append,
                     on_step=on_step)
@@ -787,8 +844,8 @@ def t_a_step_sink_that_raises_never_breaks_the_turn():
                           ollama_url="http://x", stream_out=streamed.append, post=post,
                           gate_check=allow, on_step=boom,
                           open_stream=lambda u, p: FakeStream([b"hi"]))
-    check("the answer still streams when the step sink raises", streamed == [b"hi"],
-          repr(streamed))
+    check("the answer still streams when the step sink raises",
+          answer_text(streamed) == "hi", repr(streamed))
 
 
 def t_the_default_step_sink_is_the_event_bus():
@@ -853,8 +910,8 @@ def t_the_recorder_failing_never_breaks_the_turn():
                               ollama_url="http://x", stream_out=streamed.append, post=post,
                               gate_check=allow, record_chain=boom,
                               open_stream=lambda u, p: FakeStream([b"four"]))
-        check("the answer still streams when the recorder raises", streamed == [b"four"],
-              repr(streamed))
+        check("the answer still streams when the recorder raises",
+              answer_text(streamed) == "4", repr(streamed))
     finally:
         AG.TOOLS["calculator"].execute = real
 

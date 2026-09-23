@@ -200,6 +200,15 @@ $PATCHES = @(
     # _loopback_companion function and its call in main()), so it goes
     # after that one; nothing else touches those lines.
     'bind-wildcard.patch'
+    # Every local chat turn through jarvis_agent: streamed once, the right
+    # Content-Type, keepalives while an approval card waits, thinking off,
+    # plain error messages. Its context is tool-calling-wiring's and
+    # speed-record's lines (the tool branch) and ollama-direct's (the 503
+    # message), so it goes after all three; last is simplest. Needs the
+    # jarvis_agent.py from the same commit - an older one has no
+    # content_type(), and the patched code then falls back to the plain
+    # relay exactly as before.
+    'chat-stream.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

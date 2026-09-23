@@ -59,8 +59,14 @@ def build(*patches: str, target: str = "jarvis_hud.py") -> str:
     return "\n".join(body) + "\n"
 
 
-def rehearse(new_patch: str, *earlier: str, target: str = "jarvis_hud.py"):
-    """(ok, output). ok is None when git is not installed - a skip, not a pass."""
+def rehearse(new_patch: str, *earlier: str, target: str = "jarvis_hud.py",
+             on_top: tuple = ()):
+    """(ok, output). ok is None when git is not installed - a skip, not a pass.
+
+    `on_top`: patches applied, in order, to the stand-in built from `earlier`
+    before `new_patch` - for a new patch whose context is text a patch wrote
+    INSIDE another patch's lines (speed-record's inside tool-calling-wiring's),
+    which `build` cannot place, because it lays fragments side by side."""
     git = shutil.which("git")
     if not git:
         return None, "git is not installed, so the rehearsal could not run"
@@ -70,6 +76,13 @@ def rehearse(new_patch: str, *earlier: str, target: str = "jarvis_hud.py"):
         # patch files - apply-patches.ps1 does the same before applying.
         with open(d / target, "w", encoding="utf-8", newline="\n") as f:
             f.write(build(*earlier, target=target))
+        for i, name in enumerate(on_top):
+            below = d / f"below{i}.patch"
+            below.write_bytes((HERE / name).read_bytes().replace(b"\r\n", b"\n"))
+            r = subprocess.run([git, "apply", "--include", target, str(below)], cwd=d,
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                return False, f"{name} (applied first): {r.stderr.strip() or r.stdout.strip()}"
         lf = d / "new.patch"
         lf.write_bytes((HERE / new_patch).read_bytes().replace(b"\r\n", b"\n"))
         steps = [["apply", "--check", str(lf)],
