@@ -48,6 +48,20 @@ class AppearanceStore(context: Context) {
     private val _bindings = MutableStateFlow(loadBindings())
     val bindings: StateFlow<Bindings> = _bindings.asStateFlow()
 
+    private val _faceSize = MutableStateFlow(FaceSize.byId(prefs.getString(KEY_FACE_SIZE, null)))
+
+    /**
+     * How big the face is drawn on Home. Per device, like the theme, and for
+     * the same reason: it is a taste about this screen, not part of the
+     * shared vocabulary - so [toSyncDocument] leaves it out.
+     */
+    val faceSize: StateFlow<FaceSize> = _faceSize.asStateFlow()
+
+    fun setFaceSize(value: FaceSize) {
+        prefs.edit { putString(KEY_FACE_SIZE, value.id) }
+        _faceSize.value = value
+    }
+
     /**
      * When the theme last changed, in wall-clock millis.
      *
@@ -339,6 +353,7 @@ class AppearanceStore(context: Context) {
         const val KEY_FOLLOW_SYSTEM = "follow_system"
         const val KEY_FACE = "face"
         const val KEY_BINDINGS = "bindings"
+        const val KEY_FACE_SIZE = "face_size"
 
         /**
          * 500ms crossfade plus 500ms dwell means two opposing swings can be no
@@ -351,5 +366,28 @@ class AppearanceStore(context: Context) {
         )
 
         const val MIN_SEPARATION = 0.28f
+    }
+}
+
+/**
+ * How big the face is drawn on Home.
+ *
+ * Only ever smaller than the original 260dp, never bigger: a larger face costs
+ * more to draw on every frame, and nobody has yet measured that on the
+ * owner's phone (docs/UI-AUDIT-2026-09-23.md, decision 1). The drawn size is
+ * also capped by the pane it sits in, so a small pane never squashes it.
+ */
+enum class FaceSize(val id: String, val label: String, val sizeDp: Int) {
+    LARGE("large", "Large", 260),
+    MEDIUM("medium", "Medium", 200),
+    SMALL("small", "Small", 150),
+    TINY("tiny", "Tiny", 110),
+    ;
+
+    companion object {
+        val DEFAULT = LARGE
+
+        /** Anything unknown or missing is the default, never a crash. */
+        fun byId(id: String?): FaceSize = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
 }

@@ -32,8 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.FaceState
+import com.jarvis.client.data.FaceSize
 import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Face
 import com.jarvis.client.face.FaceView
@@ -79,6 +82,9 @@ fun AppearanceScreen(
     onPickFace: (Face) -> Unit,
     onRandomise: () -> Unit,
     onResetBindings: () -> Unit,
+    /** How big the face is drawn on Home. Stored on this phone only. */
+    faceSize: FaceSize = FaceSize.DEFAULT,
+    onPickFaceSize: (FaceSize) -> Unit = {},
     onBack: () -> Unit,
     /** What the store refused, e.g. "one theme change at a time". Null hides it. */
     notice: String? = null,
@@ -294,6 +300,26 @@ fun AppearanceScreen(
                 }
             }
 
+            item(key = "face-size") {
+                Section("Face size on Home") {
+                    Plate {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FaceSize.entries.forEach { size ->
+                                SizeChip(size.label, size == faceSize) { onPickFaceSize(size) }
+                            }
+                        }
+                        Gap(8)
+                        Text(
+                            "How big Jarvis is drawn on the Home screen. The dark panel " +
+                                "around it still follows the handle you drag on Home; this " +
+                                "only changes the face inside it. Kept on this phone.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textLo,
+                        )
+                    }
+                }
+            }
+
             item(key = "colours") {
                 Section("State colours") {
                     Plate {
@@ -453,6 +479,32 @@ private fun FaceChip(face: Face, selected: Boolean, onClick: () -> Unit) {
             // around it to the 48dp platform minimum. Measured at ~38dp
             // without this - twenty of these sit in a grid on this screen.
             .minimumInteractiveComponentSize(),
+    )
+}
+
+/**
+ * One option in the face-size row.
+ *
+ * The touch-target modifier comes FIRST here, unlike FaceChip's: placed after
+ * the padding it grows the visible pill itself to 48dp (the audit's a11y-12),
+ * placed first it grows only the area that answers a tap.
+ */
+@Composable
+private fun SizeChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val shape = LocalRadii.current.chipShape
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (isSelected) chrome.surface0 else chrome.textMid,
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .semantics { selected = isSelected }
+            .clip(shape)
+            .background(if (isSelected) accent else chrome.surface2)
+            .pressable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
     )
 }
 

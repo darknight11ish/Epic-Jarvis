@@ -351,6 +351,7 @@ class MainActivity : FragmentActivity() {
         val followSystem by appearance.followSystem.collectAsState()
         val faceId by appearance.faceId.collectAsState()
         val bindings by appearance.bindings.collectAsState()
+        val faceSize by appearance.faceSize.collectAsState()
 
         val link by JarvisRuntime.link.collectAsState()
         val linkDetail by JarvisRuntime.linkDetail.collectAsState()
@@ -885,6 +886,10 @@ class MainActivity : FragmentActivity() {
                         appearance.resetBindings()
                         scope.launch { JarvisRuntime.pushAppearance() }
                     },
+                    // Not pushed: the face's size on Home is this phone's
+                    // taste, not part of the vocabulary shared with the desktop.
+                    faceSize = faceSize,
+                    onPickFaceSize = appearance::setFaceSize,
                     onBack = { nav.back() },
                     notice = notice,
                     onDismissNotice = { JarvisRuntime.clearNotice() },
@@ -914,6 +919,7 @@ class MainActivity : FragmentActivity() {
                         deciding = deciding,
                         focusApproval = focusApproval.value,
                         activityDetail = activityDetail,
+                        faceSize = faceSize,
                     ),
                     // A lambda, so a streamed token redraws the reply and
                     // nothing else. Passing the string rebuilt HomeState on

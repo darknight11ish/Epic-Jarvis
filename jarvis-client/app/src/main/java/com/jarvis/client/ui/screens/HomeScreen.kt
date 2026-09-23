@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,6 +65,7 @@ import com.jarvis.client.LinkState
 import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Face
 import com.jarvis.client.face.FaceView
+import com.jarvis.client.data.FaceSize
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
@@ -91,6 +93,7 @@ import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.LocalRadii
+import com.jarvis.client.ui.theme.Themes
 
 /** The face's starting share of the space below the top bar. */
 private const val DEFAULT_FACE_FRACTION = 0.75f
@@ -164,6 +167,8 @@ data class HomeState(
      * finished is not shown over a link that cannot confirm it.
      */
     val activityDetail: String? = null,
+    /** How big the face is drawn - an Appearance setting, never above 260dp. */
+    val faceSize: FaceSize = FaceSize.DEFAULT,
 )
 
 @Immutable
@@ -461,51 +466,74 @@ private fun FaceBlock(
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
+    // Inside the well the ground is always near-black (Chrome.wellIsLegal),
+    // so on Daylight the light theme's dark ink would be unreadable here. A
+    // dark theme's ink is what was measured against a ground like this one.
+    val wellChrome = if (chrome.dark) chrome else Themes.REACTOR
     Box(
         modifier
+            .padding(horizontal = 12.dp, vertical = 6.dp)
             .clip(LocalRadii.current.shellShape)
+            // The whole pane is the well, not just the square the face draws
+            // in. Painting only that square left a hard-edged black box on
+            // Daylight and empty chrome around it everywhere else.
+            .background(chrome.well)
             .pressable(onClick = actions.onOpenBrain),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            FaceView(
-                state = state.faceState,
-                face = state.face,
-                bindings = state.bindings,
-                notches = state.attention.pending,
-                modifier = Modifier.size(260.dp),
-                // Both levels were being measured and thrown away. The recorder
-                // computes an RMS per audio buffer and the speaker one per chunk,
-                // precisely so the reactor breathes with the real voice rather than
-                // with a generator — and neither reached the face, because these
-                // two parameters defaulted to `{ null }` and no caller passed them.
-                // So the reactor has been running the synthetic envelope through
-                // every word either end has ever said.
-                //
-                // Lambdas rather than values: they are read from the frame loop, in
-                // a coroutine, where a snapshot read subscribes nothing. Fifty
-                // levels a second reach the face and recompose nothing at all.
-                micLevel = { micLevel.value },
-                speechLevel = { speechLevel.value },
-                // The theme's own well, not a hardcoded near-black - see
-                // Chrome.well. A theme whose ground is not that same
-                // near-black (Graphite, Ember Dusk) used to sit the reactor
-                // in a visibly mismatched box; this is the token the theme
-                // system already carries for exactly this, just never read
-                // before now.
-                background = chrome.well,
-            )
-            Gap(6)
-            // The lane, which the phone parsed and threw away. "This left your
-            // machine" is the single most consequential fact the UI carries and
-            // it had no representation here at all.
-            LaneChip(state.status)
-            Gap(6)
-            Text(
-                "State of mind →",
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textLo,
-            )
+        CompositionLocalProvider(LocalChrome provides wellChrome) {
+            Column(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                FaceView(
+                    state = state.faceState,
+                    face = state.face,
+                    bindings = state.bindings,
+                    notches = state.attention.pending,
+                    // The chosen size, but never more than the room left once the
+                    // chip and caption below have theirs: weight(fill = false)
+                    // caps the height, so a pane dragged small shrinks the face
+                    // instead of pushing the caption out of the pane. FaceView
+                    // draws from its smaller side, so a short box stays round.
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .size(state.faceSize.sizeDp.dp),
+                    // Both levels were being measured and thrown away. The recorder
+                    // computes an RMS per audio buffer and the speaker one per chunk,
+                    // precisely so the reactor breathes with the real voice rather than
+                    // with a generator — and neither reached the face, because these
+                    // two parameters defaulted to `{ null }` and no caller passed them.
+                    // So the reactor has been running the synthetic envelope through
+                    // every word either end has ever said.
+                    //
+                    // Lambdas rather than values: they are read from the frame loop, in
+                    // a coroutine, where a snapshot read subscribes nothing. Fifty
+                    // levels a second reach the face and recompose nothing at all.
+                    micLevel = { micLevel.value },
+                    speechLevel = { speechLevel.value },
+                    // The theme's own well, not a hardcoded near-black - see
+                    // Chrome.well. A theme whose ground is not that same
+                    // near-black (Graphite, Ember Dusk) used to sit the reactor
+                    // in a visibly mismatched box; this is the token the theme
+                    // system already carries for exactly this, just never read
+                    // before now.
+                    background = chrome.well,
+                )
+                Gap(6)
+                // The lane, which the phone parsed and threw away. "This left your
+                // machine" is the single most consequential fact the UI carries and
+                // it had no representation here at all.
+                LaneChip(state.status)
+                Gap(6)
+                Text(
+                    "State of mind →",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = wellChrome.textLo,
+                )
+                Gap(6)
+            }
         }
     }
 }
