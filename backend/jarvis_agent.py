@@ -724,6 +724,34 @@ NEEDS_A_PERSON = {
 }
 
 
+#: jarvis_gate stores a card's `detail` as `json.dumps(detail)[:4000]`. A
+#: plan longer than that reached the card cut off mid-step - and still had a
+#: working Approve button - breaking ARCHITECTURE §3's "every command, every
+#: URL, in FULL". A long browser or UI plan could do exactly that.
+_GATE_DETAIL_LIMIT = 4000
+
+
+def _tier_of(action: str) -> str:
+    """The configured tier for `action`, or "ask" when it cannot be read -
+    the same fail-closed default as the gate's own unknown_action_tier."""
+    try:
+        import jarvis_framework
+        return str(jarvis_framework.action_tier(action))
+    except Exception:
+        return "ask"
+
+
+def _card_would_be_cut(name: str, action: str, plan_text: str) -> bool:
+    """True when this call would put a plan in front of a person that the
+    gate would cut short. Only where a person could be asked: an action at
+    tier auto or notify shows no card, and the owner's choice to save notes
+    straight away (2026-09-23) is not overridden here - unless the tool is
+    one that only ever runs on a person's yes (NEEDS_A_PERSON)."""
+    if len(json.dumps({"text": plan_text})) < _GATE_DETAIL_LIMIT:
+        return False
+    return name in NEEDS_A_PERSON or _tier_of(action) not in ("auto", "notify")
+
+
 def _a_person_said_yes(verdict) -> bool:
     """True only when the gate's verdict records a human approving.
 
@@ -1031,6 +1059,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     steps.append({"tool": name, "ran": False, "ok": False,
                                   "outcome": "unknown"})
                     say_step("tool_finished", name, ok=False)
+                    continue
+                if _card_would_be_cut(name, action_name, plan_text):
+                    # Refused BEFORE a card is raised - see _card_would_be_cut.
+                    convo.append({"role": "tool",
+                                   "tool_call_id": call.get("id", ""),
+                                   "content": _tool_content(
+                                       {"ok": False,
+                                        "error": (f"refused: the plan for {name} is too long "
+                                                  f"to show in full on one approval card, so "
+                                                  f"nobody was asked and nothing ran. Make a "
+                                                  f"shorter plan - fewer steps, or split the "
+                                                  f"job into several smaller ones.")})})
+                    steps.append({"tool": name, "ran": False, "ok": False,
+                                  "outcome": "refused"})
+                    say_step("tool_refused", name)
                     continue
                 verdict = checker(action_name, {"text": plan_text},
                                    f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")

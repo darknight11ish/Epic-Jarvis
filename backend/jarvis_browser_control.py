@@ -1693,10 +1693,25 @@ def _plan_hosts(p: Plan) -> list:
     return hosts
 
 
+# The weight the CARD prints is the heavier of two: the steps the model
+# flagged, and the gate's own risk table - which classifies this whole
+# action as one that cannot be undone and leaves the machine (by its worst
+# case: every browser step either sends something or lands on an unread
+# page). The card used to print only the model's flags, so a plan whose Send
+# click the model left unflagged read "weight: normal" while the notice and
+# the risk line said the opposite. `Plan.weight` stays the model's own
+# marking; this is what a person is shown.
+CARD_WEIGHT_LINE = (
+    "weight: heavy - any step in a web page can send something or be impossible to undo, "
+    "so the whole plan is treated that way. The steps marked below are the "
+    "ones Jarvis flagged itself; an unmarked step is not a promise that it "
+    "is safe.")
+
+
 def describe(p: Plan) -> str:
     """The card text. Every step in full, in the order it would run."""
     lines = [f'Jarvis would like to do this in the browser session "{p.session}": {p.goal}',
-             "", f"{len(p.steps)} step(s), weight: {p.weight}."]
+             "", f"{len(p.steps)} step(s), {CARD_WEIGHT_LINE}"]
     if p.steps:
         if p.allowed_domains:
             lines.append("Allowed sites: " + ", ".join(p.allowed_domains)
@@ -1711,7 +1726,7 @@ def describe(p: Plan) -> str:
         lines.append("No requested step could be matched, so nothing would happen.")
     uses_secret = False
     for i, s in enumerate(p.steps, 1):
-        heavy_note = "  [sends something to the other end]" if s.heavy else ""
+        heavy_note = "  [Jarvis flagged: sends something to the other end]" if s.heavy else ""
         inside = (f' (inside {s.within_role or "container"} "{s.within_name}")'
                   if s.within_name else "")
         if s.action == "navigate":

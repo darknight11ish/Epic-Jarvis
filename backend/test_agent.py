@@ -427,6 +427,67 @@ def t_every_outbound_tool_is_refused_unless_a_person_approved():
                       "without asking anyone" in said and action in said, said)
 
 
+def _one_call_turn(tname, plan_text, gate):
+    """One turn asking for `tname`, whose prepare() returns `plan_text`.
+    Returns (executed, gate_calls, what the model was told)."""
+    executed, gate_calls = [], []
+    tool = AG.TOOLS[tname]
+    real_prepare, real_execute = tool.prepare, tool.execute
+    tool.prepare = lambda args: (None, plan_text)
+    tool.execute = lambda args, state, **kw: executed.append(1) or {"ok": True}
+    def watching(action, detail, prompt):
+        gate_calls.append(detail)
+        return gate(action, detail, prompt)
+    post, calls = scripted_post([
+        {"choices": [{"message": {"role": "assistant", "tool_calls": [
+            {"id": "1", "function": {"name": tname, "arguments": "{}"}}]}}]},
+        {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
+    ])
+    try:
+        with NoRealIO():
+            AG.run_local_turn([{"role": "user", "content": "go"}], "m", ollama_url="http://x",
+                              stream_out=lambda b: None, post=post, gate_check=watching,
+                              open_stream=lambda u, p: FakeStream([b""]),
+                              record_chain=lambda s: None)
+    finally:
+        tool.prepare, tool.execute = real_prepare, real_execute
+    return executed, gate_calls, calls[1]["messages"][-1]["content"]
+
+
+def t_a_plan_too_long_for_its_card_is_refused_before_anyone_is_asked():
+    """The gate keeps `json.dumps(detail)[:4000]`. A longer plan used to reach
+    the card cut off mid-step with a live Approve button."""
+    approve = lambda *a: _GateVerdict(True, "ask", "control_computer", "ok", "approved")
+    long_plan = "  1. click \"Send\"\n     why: x\n" * 200
+    executed, gate_calls, said = _one_call_turn("control_computer", long_plan, approve)
+    check("a too-long plan raises no card", gate_calls == [], repr(len(gate_calls)))
+    check("and does not run", executed == [])
+    check("and the model is told to make it shorter", "too long" in said, said)
+    executed, gate_calls, _ = _one_call_turn("control_computer", "  1. click \"Send\"", approve)
+    check("a plan that fits is asked about and, approved, runs",
+          len(gate_calls) == 1 and executed == [1])
+    # Exactly at the edge: the gate's own cut is at 4000 characters of JSON.
+    edge = "x" * (AG._GATE_DETAIL_LIMIT - len(json.dumps({"text": ""})))
+    check("a plan whose JSON is exactly 4000 characters is refused",
+          AG._card_would_be_cut("control_computer", "control_computer", edge))
+    check("one character shorter is not",
+          not AG._card_would_be_cut("control_computer", "control_computer", edge[:-1]))
+
+
+def t_a_long_note_at_auto_is_not_refused_for_its_length():
+    """Owner decision 2026-09-23: notes save straight away at the config's
+    tier. At auto no card is shown, so there is nothing to cut off."""
+    real = AG._tier_of
+    AG._tier_of = lambda action: "auto"
+    try:
+        auto = lambda *a: _GateVerdict(True, "auto", "append_logseq_journal", "auto", "auto")
+        executed, gate_calls, _ = _one_call_turn("append_logseq_journal", "n" * 5000, auto)
+        check("a long note at tier auto still reaches the gate and runs",
+              len(gate_calls) == 1 and executed == [1])
+    finally:
+        AG._tier_of = real
+
+
 def t_every_outbound_gate_action_is_covered():
     """Any tool whose gate action the risk table calls "outbound" (as the
     patches write it) must be in NEEDS_A_PERSON - so adding such a tool
@@ -843,6 +904,8 @@ if __name__ == "__main__":
                t_github_search_resolves_to_an_auto_tier_in_the_shipped_config,
                t_every_outbound_tool_is_refused_unless_a_person_approved,
                t_every_outbound_gate_action_is_covered,
+               t_a_plan_too_long_for_its_card_is_refused_before_anyone_is_asked,
+               t_a_long_note_at_auto_is_not_refused_for_its_length,
                t_calculator_cannot_reach_names_or_calls,
                t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call,
                t_empty_enabled_tools_offers_nothing,

@@ -248,11 +248,26 @@ def plan(goal: str, window: str, requests: list,
         if_refused="nothing in this window changes; the goal is not attempted")
 
 
+# The weight the CARD prints is the heavier of two: the steps the model
+# flagged, and the gate's own risk table - which classifies this whole
+# action as one that cannot be undone and leaves the machine (by its worst
+# case: driving the desktop can click send). The card used to print only the
+# model's flags, so a plan whose Send click the model left unflagged read
+# "weight: normal" while the notice and the risk line said the opposite.
+# `Plan.weight` stays the model's own marking; this is what a person is
+# shown.
+CARD_WEIGHT_LINE = (
+    "weight: heavy - any click can send something or be impossible to undo, "
+    "so the whole plan is treated that way. The steps marked below are the "
+    "ones Jarvis flagged itself; an unmarked step is not a promise that it "
+    "is safe.")
+
+
 def describe(p: Plan) -> str:
     """The card text. Every step in full, in the order it would run."""
     lines = [f"Jarvis would like to do this in the window \"{p.window}\": {p.goal}",
              "",
-             f"{len(p.steps)} step(s), weight: {p.weight}.",
+             f"{len(p.steps)} step(s), {CARD_WEIGHT_LINE}",
              ""]
     if not p.steps:
         lines.append("No requested control could be matched, so nothing "
@@ -260,7 +275,7 @@ def describe(p: Plan) -> str:
     for i, s in enumerate(p.steps, 1):
         target = s.control + (f" (id: {s.automation_id})" if s.automation_id else "")
         detail = f" = {s.value!r}" if s.value is not None else ""
-        lines += [f"  {i}. {s.action} \"{target}\"{detail}{'  [irreversible or leaves the machine]' if s.heavy else ''}",
+        lines += [f"  {i}. {s.action} \"{target}\"{detail}{'  [Jarvis flagged: irreversible or leaves the machine]' if s.heavy else ''}",
                   f"     why: {s.why}", ""]
     if p.unmatched:
         lines.append(f"{len(p.unmatched)} requested step(s) could NOT be "

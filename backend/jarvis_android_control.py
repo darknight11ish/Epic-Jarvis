@@ -177,18 +177,33 @@ def plan(device: str, goal: str, requests: list) -> Plan:
         if_refused="nothing happens on the phone; the goal is not attempted")
 
 
+# The weight the CARD prints is the heavier of two: the steps the model
+# flagged, and the gate's own risk table - which classifies this whole
+# action as one that cannot be undone and leaves the machine (by its worst
+# case: tapping the phone can send a message or complete a purchase). The
+# card used to print only the model's flags, so a plan whose Send click the
+# model left unflagged read "weight: normal" while the notice and the risk
+# line said the opposite. `Plan.weight` stays the model's own marking; this
+# is what a person is shown.
+CARD_WEIGHT_LINE = (
+    "weight: heavy - any tap can send something or be impossible to undo, "
+    "so the whole plan is treated that way. The steps marked below are the "
+    "ones Jarvis flagged itself; an unmarked step is not a promise that it "
+    "is safe.")
+
+
 def describe(p: Plan) -> str:
     """The card text. Every literal command in full - this is an adb
     command line, and summarising it defeats the point of printing one."""
     lines = [f"Jarvis would like to do this on device {p.device}: {p.goal}",
              "",
-             f"{len(p.steps)} step(s), weight: {p.weight}.",
+             f"{len(p.steps)} step(s), {CARD_WEIGHT_LINE}",
              "Talks to your own paired phone over adb. Nothing goes to a "
              "third party.",
              ""]
     for i, s in enumerate(p.steps, 1):
         lines += [f"  {i}. {s.action}" +
-                  ("  [irreversible or leaves the machine]" if s.heavy else ""),
+                  ("  [Jarvis flagged: irreversible or leaves the machine]" if s.heavy else ""),
                   f"     {' '.join(shlex.quote(a) for a in s.argv)}",
                   f"     why: {s.why}", ""]
     if p.rejected:
