@@ -20,6 +20,7 @@ after installing something for the first time:
     Does the server start?
     Does it answer?
     Does the approval gate actually STOP something?
+    Is the model downloaded, and is it on the graphics card?
 
 It changes nothing. It writes no facts, approves nothing, and starts the server
 on a port of its own so a Jarvis you already have running is not disturbed.
@@ -407,6 +408,221 @@ def stage_server() -> None:
 
 
 # ==========================================================================
+#   7. Is the model ready, and on the graphics card?  (the "doctor" step)
+# ==========================================================================
+#
+# The self-test used to say nothing about Ollama at all, so the most common
+# way Jarvis goes wrong - part of the model spilling off the graphics card
+# onto the CPU, which makes every answer several times slower and produces
+# no error anywhere - could pass every check above.
+#
+# READ-ONLY, AND IT LOADS NOTHING. Three GET requests, all to Ollama on this
+# PC: /api/version (is it answering), /api/tags (what is downloaded) and
+# /api/ps (what is in memory right now). None of them loads a model. So when
+# no model is loaded, "is it on the graphics card?" cannot be answered without
+# loading one, and the answer is "skipped", not a guess. `doctor()` takes its
+# fetcher as a parameter so test_selftest_doctor.py can prove exactly which
+# requests it makes.
+
+OLLAMA_PATHS = ("/api/version", "/api/tags", "/api/ps")
+
+
+def _ollama_base() -> str:
+    """Where Ollama is: OLLAMA_URL, else OLLAMA_HOST, else jarvis_models'
+    own setting, else the default port on this machine."""
+    for name in ("OLLAMA_URL", "OLLAMA_HOST"):
+        v = (os.environ.get(name) or "").strip()
+        if v:
+            if "://" not in v:
+                v = "http://" + v
+            # 0.0.0.0 tells a server to listen everywhere; it is not an
+            # address anything connects TO. This machine is.
+            return v.rstrip("/").replace("://0.0.0.0", "://127.0.0.1")
+    try:
+        sys.path.insert(0, str(BACKEND))
+        import jarvis_models as MM
+        v = str(getattr(MM, "OLLAMA", "") or "").strip()
+        if v:
+            return v.rstrip("/")
+    except Exception:
+        pass
+    return "http://127.0.0.1:11434"
+
+
+def _is_loopback(url: str) -> bool:
+    import ipaddress
+    import urllib.parse
+    try:
+        host = urllib.parse.urlsplit(url).hostname or ""
+    except ValueError:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _configured_model():
+    """The model Jarvis is set to use, from jarvis_models.current_model() -
+    the same call the Models screen makes. None if it cannot be told."""
+    try:
+        sys.path.insert(0, str(BACKEND))
+        import jarvis_models as MM
+        cur = MM.current_model()
+    except Exception:
+        cur = None
+    if isinstance(cur, dict):
+        cur = cur.get("ref") or cur.get("name") or cur.get("model")
+    if isinstance(cur, str) and cur.strip():
+        return cur.strip()
+    env = (os.environ.get("JARVIS_MODEL") or "").strip()
+    return env or None
+
+
+def _same_model(a: str, b: str) -> bool:
+    """`qwen3` and `qwen3:latest` are the same model to Ollama."""
+    a, b = (a or "").strip(), (b or "").strip()
+    if not a or not b:
+        return False
+
+    def bare(s: str) -> str:
+        return s[:-7] if s.endswith(":latest") else s
+    return a == b or bare(a) == bare(b)
+
+
+def _get_json(url: str, timeout: float = 4.0):
+    req = urllib.request.Request(url, method="GET")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def doctor(fetch=None, base=None, model=None, env=None) -> list:
+    """The checks, as (status, what, detail) rows. Never raises.
+
+    `fetch(url)` returns parsed JSON or raises. `model` is the configured
+    model's name, or None when it could not be told.
+    """
+    fetch = fetch or _get_json
+    base = (base or _ollama_base()).rstrip("/")
+    env = os.environ if env is None else env
+    rows = []
+
+    if not _is_loopback(base):
+        rows.append((WARN, f"Ollama is set to {base}, which is not this PC",
+                     "The self-test only checks Ollama on this PC, so nothing was "
+                     "sent there. Jarvis's rule is that the model runs here; if "
+                     "that address is deliberate, check it by hand."))
+        return rows
+
+    try:
+        ver = fetch(f"{base}/api/version")
+        v = ver.get("version") if isinstance(ver, dict) else None
+        rows.append((PASS, f"Ollama is answering at {base}"
+                     + (f" (version {v})" if v else "")))
+    except Exception as exc:
+        rows.append((FAIL, f"Ollama is not answering at {base}",
+                     f"{type(exc).__name__}: {exc}\n"
+                     "Jarvis cannot answer anything without it. Start the Ollama "
+                     "app from the Start menu, or run: ollama serve"))
+        rows.append((SKIP, "the model checks, because Ollama is not answering"))
+        return rows
+
+    if not model:
+        rows.append((SKIP, "could not tell which model Jarvis is set to use",
+                     "jarvis_models.current_model() gave no name and JARVIS_MODEL "
+                     "is not set, so there is nothing to check for."))
+        return rows
+
+    names = None
+    try:
+        tags = fetch(f"{base}/api/tags")
+        names = [str(m.get("name") or m.get("model") or "")
+                 for m in (tags or {}).get("models") or [] if isinstance(m, dict)]
+    except Exception as exc:
+        rows.append((WARN, "could not list the downloaded models",
+                     f"{type(exc).__name__}: {exc}"))
+    if names is not None:
+        if any(_same_model(n, model) for n in names):
+            rows.append((PASS, f"the configured model, {model}, is downloaded"))
+        else:
+            fix = ("ollama create jarvis-primary -f backend\\jarvis-primary.Modelfile"
+                   if model.split(":")[0] == "jarvis-primary" else f"ollama pull {model}")
+            rows.append((FAIL, f"the configured model, {model}, is not downloaded",
+                         f"Downloaded here: {', '.join(names) or 'nothing'}.\n"
+                         f"Get it with: {fix}"))
+
+    try:
+        ps = fetch(f"{base}/api/ps")
+        running = [m for m in (ps or {}).get("models") or [] if isinstance(m, dict)]
+    except Exception as exc:
+        rows.append((WARN, "could not ask Ollama what is loaded",
+                     f"{type(exc).__name__}: {exc}"))
+        return rows
+
+    mine = [m for m in running
+            if _same_model(str(m.get("name") or m.get("model") or ""), model)]
+    if not running:
+        rows.append((SKIP, "whether the model fits on the graphics card",
+                     "No model is loaded right now, and this test loads nothing. "
+                     "Ask Jarvis anything, then run this again to check it."))
+        return rows
+    if not mine:
+        others = ", ".join(str(m.get("name") or m.get("model")) for m in running)
+        rows.append((WARN, f"{model} is not the model loaded right now ({others} is)",
+                     "So whether it fits on the graphics card was not checked. "
+                     "Something other than Jarvis may be using Ollama."))
+        return rows
+
+    m = mine[0]
+    total = int(m.get("size") or 0)
+    vram = int(m.get("size_vram") or 0)
+    # A zero total happens while a model is still loading.
+    pct = 100 if total <= 0 else max(0, min(100, round(vram * 100 / total)))
+    if pct >= 99:
+        rows.append((PASS, f"{model} is fully on the graphics card"))
+    elif pct <= 1:
+        rows.append((FAIL, f"{model} is running on the CPU, not the graphics card",
+                     "Every answer will be several times slower, and nothing "
+                     "else says so. Usually another program is holding video "
+                     "memory, or the model is too big for the card. Close games "
+                     "and video tools, restart Ollama, and run this again."))
+    else:
+        rows.append((FAIL, f"only {pct}% of {model} is on the graphics card",
+                     "The rest is on the CPU, which makes every answer slower. "
+                     "Another program may be holding video memory, or the "
+                     "context is too big for the card (docs/MODEL-TOPOLOGY.md)."))
+
+    # The cache-size checks. WARNINGS ONLY, never a failure: the right numbers
+    # depend on the card and the model, and a smaller cache means a shorter
+    # memory of the conversation, not something broken.
+    ctx = m.get("context_length")
+    if isinstance(ctx, int) and not isinstance(ctx, bool) and 0 < ctx < 8192:
+        rows.append((WARN, f"Ollama gave {model} only {ctx} tokens of context",
+                     "jarvis-primary.Modelfile asks for 16384. Ollama falls back "
+                     "to 4096 when the bigger size would not fit, and long "
+                     "conversations then lose their beginning. See "
+                     "docs/MODEL-TOPOLOGY.md."))
+    kv = (env.get("OLLAMA_KV_CACHE_TYPE") or "").strip()
+    if kv != "q8_0":
+        rows.append((WARN, "OLLAMA_KV_CACHE_TYPE is "
+                     + (repr(kv) if kv else "not set") + " in this window, not 'q8_0'",
+                     "If Ollama was started with the same settings, its memory "
+                     "cache is the larger kind, which may not fit on the card. "
+                     "This only sees this window's settings, not Ollama's own. "
+                     "docs/MODEL-TOPOLOGY.md, 'Setup', says how to set it."))
+    return rows
+
+
+def stage_ollama() -> None:
+    header("7. Is the model ready, and on the graphics card?")
+    print("  (read-only: asks Ollama three questions and loads nothing)\n")
+    for row in doctor(model=_configured_model()):
+        say(row[0], row[1], row[2] if len(row) > 2 else "")
+
+
+# ==========================================================================
 
 def main() -> int:
     print(__doc__.split("WHY THIS EXISTS")[0].strip())
@@ -418,6 +634,10 @@ def main() -> int:
         stage_gate()
         stage_memory()
         stage_server()
+    # Outside the `if`: whether Ollama and the model are ready does not
+    # depend on the backend files, and it is worth knowing even when they
+    # are missing.
+    stage_ollama()
 
     header("Summary")
     bad = [r for r in _results if r[0] == FAIL]

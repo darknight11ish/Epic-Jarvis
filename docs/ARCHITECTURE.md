@@ -427,7 +427,10 @@ Say so rather than designing around imagined code.
   `jarvis_compute.py`, `jarvis_sleep.py` — imported in places, present
   nowhere in anything handed over. Some may exist on the owner's machine.
 - The `documents` table — read by two code paths, created by none. The status
-  line now says `documents: false`, which is correct.
+  line now says `documents: false`, which is correct. Since
+  `documents-owned.patch`, a `documents` table is read only if Epic-Jarvis
+  recorded creating it (`jarvis_owned_tables.py`): OpenJarvis's indexer
+  makes one with that exact name in the same `memory.db`.
 - A memory review pane. The queue fills; there is no screen to read it on.
   This is the largest gap.
 

@@ -393,3 +393,4 @@ rather than your fault.
   running as you can read them. On Linux and macOS the backend at least sets
   the file to owner-only; Windows has no equivalent in that code path, so the
   file inherits whatever the folder allows.
+- **Do not run the OpenJarvis copy you downloaded.** It writes into the same `%USERPROFILE%\.openjarvis\` folder as Jarvis, including a `documents` table in `memory.db`; with `documents-owned.patch` applied Jarvis ignores that table, but nothing stops OpenJarvis changing the folder.

@@ -127,6 +127,18 @@ $PATCHES = @(
     # also needs jarvis_skill_discovery.py copied beside jarvis_hud.py, or
     # the route answers "available": false - it never fails the request.
     'skill-suggest.patch'
+    # Its context lines are documents-honesty's output (the three
+    # _has_table(DOCS_DB, "documents") checks and the _has_table function),
+    # so it must come after that one. Needs jarvis_owned_tables.py copied
+    # into the backend folder; without it the documents are simply never
+    # read, which is the safe side.
+    'documents-owned.patch'
+    # Its context lines are gpu-offload's output (the "offload" line in
+    # _models_view) and tool-calling-wiring's (both answer branches of
+    # /api/chat), so it must come after both. Needs jarvis_speed.py copied
+    # into the backend folder; without it nothing is timed and every
+    # answer works exactly as before.
+    'speed-record.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
