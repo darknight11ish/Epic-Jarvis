@@ -173,7 +173,13 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   position:relative; display:flex; align-items:center; justify-content:center;
   padding:10px 0 4px; flex-shrink:0;
 }
-#reactor{width:232px; height:232px; display:block;}
+/* An iframe now, not a canvas: the kit face, see "Arc reactor" in the script.
+   Same box as before, click-through so it reads as part of this page rather
+   than a window inside it. Round, like the Widget's: the face paints its own
+   near-black well edge to edge, and a square of it on this stage's gradient
+   read as a hole cut in the page rather than a reactor sitting on it. */
+#reactor{width:232px; height:232px; display:block; border:0; background:transparent;
+         border-radius:50%; pointer-events:none;}
 .reactor-state{
   position:absolute; bottom:-2px; left:50%; transform:translateX(-50%);
   font-family:var(--f-mono); font-size:9.5px; letter-spacing:.28em;
@@ -552,7 +558,10 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
     <!-- ---- TALK ---- -->
     <section class="view on" id="talk">
       <div class="reactor-wrap">
-        <canvas id="reactor" width="420" height="420" aria-hidden="true"></canvas>
+        <!-- Jarvis's face: the same kit renderer the Widget shows, in
+             display mode, driven by this page's own state. No src here -
+             the script sets it once it knows which face the owner chose. -->
+        <iframe id="reactor" title="Jarvis" tabindex="-1" aria-hidden="true"></iframe>
         <div class="reactor-state" id="reactor-state">standing by</div>
       </div>
 
@@ -838,122 +847,127 @@ function demoGraph(){
 }
 
 /* ==================================================================
- * Arc reactor
+ * Arc reactor — the kit face
+ *
+ * This used to draw its own rings on a canvas: a simpler, separate face
+ * from the one the Widget and the tray wear, and not the one the owner
+ * picked in the Faces window. It is now that face - faces.html in display
+ * mode, the Widget's own renderer, in an iframe of the same size. Every
+ * pixel and every flash / brightness limit comes from faces.html, so this
+ * page cannot drift from it again.
+ *
+ * Two things display mode cannot find out for itself inside this window,
+ * and this module hands it both:
+ *
+ *   - WHICH STATE. This page's own state machine (`reactor.set` below,
+ *     called by voice, send and status) stays the authority, so the label
+ *     under the face and the face can never disagree. Posted to the frame,
+ *     which hud-face-bridge.js applies.
+ *   - WHICH FACE, AND ITS COLOURS. This window has no app commands (see
+ *     capabilities/hud.json), so it cannot ask for the owner's appearance
+ *     document; the shell PUSHES it instead, the same one-way way it pushes
+ *     the event stream (hud_bootstrap.js's `__jarvisFeed`, channel
+ *     "appearance"). The face goes in the frame's URL; the colours are
+ *     posted.
+ *
+ * In a plain browser there is no shell and no push, and the face is the
+ * spec's default in its default colours - still the kit face, just not a
+ * personalised one.
  * ================================================================== */
 const reactor = (() => {
-  const cv = $("reactor"), ctx = cv.getContext("2d");
-  let t = 0, pulse = 0;
+  const frame = $("reactor");
+  const words = { idle:"standing by", listening:"listening", thinking:"thinking", speaking:"speaking" };
+  // This page's states are a subset of the spec's eight, by the same names.
+  // Offline is not one of them: it is "standby" - Jarvis is not answering,
+  // so the face goes quiet. Not "error": the page is still usable on sample
+  // replies, and a red face for "Ollama is not open yet" would be alarm
+  // about an ordinary morning.
+  const FACE_STATE = { idle:"idle", listening:"listening", thinking:"thinking", speaking:"speaking" };
+  const faceState = () => S.online ? (FACE_STATE[S.state] || "idle") : "standby";
 
-  const PALETTE = {
-    idle:      { ring:"#1d5f7a", core:"#6fe3ff", glow:.42, speed:.20 },
-    listening: { ring:"#6fe3ff", core:"#a8f0ff", glow:.95, speed:.65 },
-    thinking:  { ring:"#ffb648", core:"#ffd79a", glow:.78, speed:1.25 },
-    speaking:  { ring:"#6fe3ff", core:"#ffffff", glow:1.0,  speed:.45 },
-    offline:   { ring:"#2e5f78", core:"#5e9ab4", glow:.34, speed:.10 }
-  };
+  let appearance = null;   // the owner's document, once the shell pushes one
+  let ready = false;       // false until we know which face to load
+  let visible = true;      // the Talk view is on screen
+  let shown = "";          // what the frame currently holds, so equal pushes do not reload it
 
-  function arcRing(cx, cy, r, segments, gap, width, color, alpha, rotate){
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(rotate);
-    ctx.strokeStyle = color; ctx.globalAlpha = alpha;
-    ctx.lineWidth = width; ctx.lineCap = "butt";
-    const step = (Math.PI*2)/segments;
-    for(let i=0;i<segments;i++){
-      ctx.beginPath();
-      ctx.arc(0,0,r, i*step, i*step + step - gap);
-      ctx.stroke();
-    }
-    ctx.restore();
+  function post(){
+    const w = frame.contentWindow;
+    // "/" = this page's own origin, and the only receiver the bridge accepts.
+    if (w) w.postMessage({ type:"jarvis-hud-face", state:faceState(), appearance }, "/");
   }
 
-  function frame(){
-    const p = PALETTE[S.online ? S.state : "offline"] || PALETTE.idle;
-    const w = cv.width, h = cv.height, cx = w/2, cy = h/2;
-    const R = Math.min(w,h)/2 - 18;
-
-    t += S.reduced ? 0.002 : 0.01 * (0.6 + p.speed);
-    // Amplitude drives the core when listening; a synthetic envelope when speaking.
-    const drive = S.state === "listening" ? S.level
-                : S.state === "speaking"  ? 0.42 + 0.32*Math.abs(Math.sin(t*6.2))
-                : S.state === "thinking"  ? 0.30 + 0.14*Math.sin(t*3.4)
-                : 0.16 + 0.05*Math.sin(t*1.3);
-    pulse += (drive - pulse) * 0.18;
-
-    ctx.clearRect(0,0,w,h);
-
-    // outer tick ring
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(t*0.35);
-    ctx.strokeStyle = p.ring; ctx.globalAlpha = .5; ctx.lineWidth = 2;
-    for(let i=0;i<72;i++){
-      const a = (i/72)*Math.PI*2;
-      const long = i % 6 === 0;
-      const r1 = R, r2 = R - (long ? 12 : 6);
-      ctx.globalAlpha = long ? .72 : .28;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a)*r1, Math.sin(a)*r1);
-      ctx.lineTo(Math.cos(a)*r2, Math.sin(a)*r2);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // segmented rings, counter-rotating
-    arcRing(cx,cy,R-26, 6, .34, 5, p.ring, .85, -t*0.8);
-    arcRing(cx,cy,R-44, 12, .18, 3, p.core, .40,  t*1.4);
-    arcRing(cx,cy,R-62, 3, .55, 8, p.ring, .30, -t*0.5);
-
-    // amplitude spokes
-    const spokes = 60;
-    ctx.save(); ctx.translate(cx,cy);
-    ctx.strokeStyle = p.core; ctx.lineWidth = 2;
-    for(let i=0;i<spokes;i++){
-      const a = (i/spokes)*Math.PI*2;
-      const noise = Math.sin(i*2.1 + t*7) * .5 + .5;
-      const len = 8 + pulse * 40 * (0.35 + noise*0.65);
-      ctx.globalAlpha = .12 + pulse*.5;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a)*(R-78), Math.sin(a)*(R-78));
-      ctx.lineTo(Math.cos(a)*(R-78-len), Math.sin(a)*(R-78-len));
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // core
-    const coreR = 40 + pulse*16;
-    const g = ctx.createRadialGradient(cx,cy,2, cx,cy,coreR*2.3);
-    g.addColorStop(0, p.core);
-    g.addColorStop(.28, p.core + "cc");
-    g.addColorStop(.6, p.ring + "33");
-    g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.globalAlpha = p.glow;
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx,cy,coreR*2.3,0,Math.PI*2); ctx.fill();
-
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = p.core;
-    ctx.beginPath(); ctx.arc(cx,cy,coreR*.42,0,Math.PI*2); ctx.fill();
-
-    // triangle plate, the one nod to the real reactor
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(-t*0.25);
-    ctx.strokeStyle = "#04070c"; ctx.lineWidth = 5; ctx.globalAlpha = .8;
-    ctx.beginPath();
-    for(let i=0;i<3;i++){
-      const a = (i/3)*Math.PI*2 - Math.PI/2;
-      const x = Math.cos(a)*coreR*.30, y = Math.sin(a)*coreR*.30;
-      i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
-    }
-    ctx.closePath(); ctx.stroke(); ctx.restore();
-
-    requestAnimationFrame(frame);
+  /* Loads, reloads or unloads the frame to match what should be showing.
+   *
+   * Unloaded while the Galaxy view is up. An iframe's animation loop keeps
+   * running under display:none, so hiding the view would stop it being SEEN
+   * but not being DRAWN - the Widget clears its face's src for the same
+   * reason (widget.js, applyFaceVisibility).
+   *
+   * Reloaded, not patched, when the owner's document changes: a face switch
+   * needs a fresh surface anyway, and a reload also drops a colour they have
+   * since reset to the default, which merging the new document over the old
+   * one would keep. It only happens on a save in the Faces window. */
+  function sync(){
+    const face = appearance && typeof appearance.face === "string" ? appearance.face : "";
+    const url = "faces.html?mode=display" + (face ? "&face=" + encodeURIComponent(face) : "");
+    const want = ready && visible ? url : "about:blank";
+    const key = want === "about:blank" ? want
+              : want + "\n" + JSON.stringify((appearance && appearance.bindings) || {});
+    if (key === shown) return;
+    shown = key;
+    frame.src = want;
   }
-  requestAnimationFrame(frame);
+
+  // Every load of faces.html gets the bridge, then the current state. The
+  // bridge is a file, not inline code: the frame's own policy hashes
+  // faces.html's inline scripts, which switches 'unsafe-inline' off there,
+  // so only a same-origin src is allowed to run.
+  frame.addEventListener("load", () => {
+    let doc = null;
+    try { doc = frame.contentDocument; } catch(e) { return; }
+    if (!doc || !doc.documentElement.classList.contains("display-mode")) return;
+    if (doc.getElementById("hud-face-bridge")) { post(); return; }
+    const s = doc.createElement("script");
+    s.id = "hud-face-bridge";
+    s.src = "hud-face-bridge.js";
+    s.onload = post;
+    (doc.head || doc.documentElement).appendChild(s);
+  });
+
+  function adopt(doc){
+    appearance = doc && typeof doc === "object" ? doc : null;
+    ready = true;
+    sync();
+    post();
+  }
+  window.addEventListener("jarvis-appearance", e => adopt(e.detail));
+
+  if (window.__jarvisAppearance) {
+    adopt(window.__jarvisAppearance);
+  } else if (typeof window.__jarvisFeed === "function") {
+    // Inside the shell, which pushes the document as soon as this page has
+    // loaded. Wait a moment for it rather than loading the default face and
+    // then swapping it out under the owner's eyes. If it never comes (an
+    // older shell), load the default anyway.
+    setTimeout(() => { if (!ready) { ready = true; sync(); } }, 1200);
+  } else {
+    ready = true;
+    sync();
+  }
 
   return {
     set(state){
       S.state = state;
-      const words = { idle:"standing by", listening:"listening", thinking:"thinking", speaking:"speaking" };
       const label = S.online ? (words[state] || state) : "offline";
       $("reactor-state").textContent = label;
       $("chip-state").textContent = label;
       $("chip-state").className = "chip" + (state === "thinking" ? " hot" : state === "listening" ? " live" : "");
+      post();
+    },
+    /** Called by setView: the face only runs while the Talk view is up. */
+    show(on){
+      visible = !!on;
+      sync();
     }
   };
 })();
@@ -1656,6 +1670,7 @@ function setView(v){
   $("brain").classList.toggle("on", v === "brain");
   $("stage-title").textContent = v === "talk" ? "Conversation" : "Brain map";
   if(v === "brain") requestAnimationFrame(() => galaxy.resize());
+  reactor.show(v === "talk");
 }
 document.querySelectorAll(".mode").forEach(b =>
   b.addEventListener("click", () => setView(b.dataset.view)));

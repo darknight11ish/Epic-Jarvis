@@ -759,6 +759,12 @@ pub fn run() {
         // Push the current state once, now, so the page is not a frame behind.
         let link = app.state::<stream::StreamState>().link();
         push_to_hud(app, "link", &link);
+
+        // Same reason, for the face its reactor wears. The page waits a
+        // moment for this before loading any face, so the owner's choice is
+        // the first one drawn rather than a swap after the default.
+        let appearance = app.state::<appearance::AppearanceState>().snapshot();
+        push_to_hud(app, "appearance", &appearance);
     });
 
     let app = builder

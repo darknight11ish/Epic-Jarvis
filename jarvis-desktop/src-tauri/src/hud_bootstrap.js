@@ -254,10 +254,26 @@
     try {
       if (channel === "event") deliver(payload);
       else if (channel === "link") linkChanged(payload);
+      else if (channel === "appearance") appearanceChanged(payload);
     } catch (err) {
       console.error("[jarvis] feed failed", err);
     }
   };
+
+  /* The owner's appearance document - which face, which colours - for the
+   * page's reactor, which is the kit face (faces.html in display mode) in
+   * an iframe. Pushed for the same reason as everything else in this feed:
+   * this window has no app commands (capabilities/hud.json), so it cannot
+   * ask for it. Cosmetic only; it approves nothing and carries no secret.
+   *
+   * Kept on `window` as well as announced, because the push can land before
+   * the page's own script has subscribed, and a page that missed it would
+   * wear the default face until the owner next saved. */
+  function appearanceChanged(doc) {
+    if (!doc || typeof doc !== "object") return;
+    window.__jarvisAppearance = doc;
+    window.dispatchEvent(new CustomEvent("jarvis-appearance", { detail: doc }));
+  }
 
   window.EventSource = ShellEventSource;
   console.info("[jarvis] EventSource is served by the shell's single stream");
