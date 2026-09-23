@@ -11,9 +11,14 @@ the exact same function a live conversation triggers once it goes quiet -
 once per historical conversation, exactly as if that history had happened
 live. Everything propose() already guarantees keeps guaranteeing itself here,
 for free, because nothing about propose() changes: the model call is
-whatever `_local_llm` is (Ollama, on this machine, never a cloud lane), a
-proposal still needs a human to accept it before it becomes a fact, and the
-review queue's cap still applies.
+whatever `_local_llm` is (Ollama at OLLAMA_URL), a proposal still needs a
+human to accept it before it becomes a fact, and the review queue's cap
+still applies.
+
+"On this machine" is CHECKED, not assumed. OLLAMA_URL is an environment
+variable, and one pointing at another computer would have sent your whole
+history there. So `run()` refuses to start unless it is this machine, and
+memory-intake.patch makes propose() itself refuse as well, for every caller.
 
 THAT LAST PART IS THE POINT, NOT A LIMITATION TO WORK AROUND. Two full
 conversation histories could easily be thousands of conversations. There is
@@ -52,7 +57,8 @@ conversation twice, which would be slow for no benefit; it is not a second
 copy of the decision the review queue already tracks.
 
 WHAT ACTUALLY LEAVES THIS MACHINE: nothing. Both export files are read from
-disk. Nothing here opens a socket.
+disk. The only connection made is propose()'s own, to Ollama on this machine
+(see above: refused otherwise).
 
 TWO FORMATS, TWO CONFIDENCE LEVELS
 The Claude parser is checked against the export shape this project's own
@@ -386,10 +392,43 @@ def _dated(when):
         return contextlib.nullcontext()
 
 
+def local_model_ok(X) -> bool:
+    """Is jarvis_extract's model on this machine?
+
+    jarvis_extract.local_model_ok() when memory-intake.patch is applied (the
+    same check propose() itself now makes), and otherwise the same test done
+    here on X.OLLAMA - so this script refuses even on a backend that does
+    not have that patch yet. Anything unparseable or missing is a no.
+    """
+    check = getattr(X, "local_model_ok", None)
+    if callable(check):
+        try:
+            return bool(check())
+        except Exception:
+            return False
+    try:
+        import urllib.parse
+        host = (urllib.parse.urlparse(str(getattr(X, "OLLAMA", "") or "")).hostname
+                or "").lower()
+    except Exception:
+        return False
+    return host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
+
+
 def run(sources: list[tuple[str, Path]]) -> int:
     """sources: [("claude", path), ("gemini", path), ...]. Returns an exit
     code, non-zero only when nothing at all could be read."""
     import jarvis_extract as X  # the real module, from BACKEND
+
+    # Before anything is read or marked done: a refusal inside propose()
+    # would return [] for every conversation, and each one would then be
+    # recorded as "already offered" and skipped for ever after.
+    if not local_model_ok(X):
+        print(f"  Refusing to start: OLLAMA_URL is {getattr(X, 'OLLAMA', None)!r}, "
+              f"which is not this computer. Your history would have been sent "
+              f"there. Point OLLAMA_URL at this machine (for example "
+              f"http://127.0.0.1:11434), or remove it, and run this again.")
+        return 2
 
     progress = _load_progress()
     done = set(progress.get("done", []))

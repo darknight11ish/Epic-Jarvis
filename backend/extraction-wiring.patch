@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -399,6 +399,266 @@
+@@ -399,6 +399,282 @@
          pass
  
  
@@ -138,6 +138,18 @@
 +    except Exception as exc:
 +        return {"ok": False, "error": f"{type(exc).__name__}: {exc}",
 +                "enabled": learning_enabled()}
++    # Switching learning ON has to start the learner, not only record the
++    # wish. At boot the thread is started only when learning is already on,
++    # so a backend that booted with it off and was then switched on from the
++    # Brain window said "Learning is on." while nothing ran until the next
++    # restart. start() does nothing when the thread is already running.
++    # Switching OFF needs no call here: offer() and _pass() both read the
++    # switch, so nothing new is queued and a pass already waiting is dropped.
++    if learning_enabled():
++        try:
++            LEARNER.start()
++        except Exception:
++            pass                       # the switch is still recorded
 +    return {"ok": True, "enabled": learning_enabled(),
 +            "floor": EXTRACT_ENABLED,
 +            "note": None if EXTRACT_ENABLED else
@@ -214,6 +226,10 @@
 +        seen = json.dumps(convo, sort_keys=True)[-8000:]
 +        if seen == self._last:
 +            return False                       # nothing new was said
++        # Switched off while this pass was waiting for the quiet: what was
++        # said is dropped here, not kept for later, and no model is asked.
++        if not learning_enabled():
++            return False
 +        try:
 +            import jarvis_extract
 +        except Exception:
@@ -267,7 +283,7 @@
  def _activity(state: str, detail: str = "") -> None:
      """Announce what Jarvis is doing, if the event bus is importable.
  
-@@ -1940,6 +2200,18 @@
+@@ -1940,6 +2216,18 @@
              # refused, client vanished - the turn is over. In a finally block
              # because the one state nobody must be left showing is "thinking".
              _activity("idle")
@@ -286,7 +302,7 @@
  
  
  # Keys whose values are content rather than plumbing. Walking only these
-@@ -2228,6 +2500,20 @@
+@@ -2228,6 +2516,20 @@
              xs = jarvis_extract.setup_status()
              if not xs["setup_complete"]:
                  print("  extraction SCAFFOLD - proposals queue for review; set-up pass still needed")
