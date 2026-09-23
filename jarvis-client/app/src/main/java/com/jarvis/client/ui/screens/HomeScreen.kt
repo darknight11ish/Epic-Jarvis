@@ -5,13 +5,17 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -45,8 +50,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +91,16 @@ import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.LocalRadii
+
+/** The face's starting share of the space below the top bar. */
+private const val DEFAULT_FACE_FRACTION = 0.75f
+
+/** Neither pane may be dragged away entirely - each keeps at least this much. */
+private const val MIN_FACE_FRACTION = 0.20f
+private const val MAX_FACE_FRACTION = 0.85f
+
+/** How far a swipe on [TopReveal] has to travel before it counts. */
+private val REVEAL_THRESHOLD = 28.dp
 
 @Immutable
 data class HomeState(
@@ -219,6 +236,20 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
+    val motion = LocalMotion.current
+    val density = LocalDensity.current
+
+    // Hidden by default. The tabs are one swipe away on TopReveal below, not
+    // gone - but nothing here is fixed across the top of the screen every
+    // time, which is the whole point of giving the face the room back.
+    var topBarVisible by remember { mutableStateOf(false) }
+
+    // The face's share of the space below the top bar - DEFAULT_FACE_FRACTION
+    // to start, and draggable from there on the Grabber between the two
+    // panes. rememberSaveable, so rotating the phone does not reset a resize
+    // the owner just made.
+    var faceFraction by rememberSaveable { mutableStateOf(DEFAULT_FACE_FRACTION) }
+
     Column(
         modifier
             .fillMaxSize()
@@ -226,7 +257,14 @@ fun HomeScreen(
             .navigationBarsPadding()
             .imePadding(),
     ) {
-        LinkBar(state, actions)
+        TopReveal(visible = topBarVisible, onToggle = { topBarVisible = it })
+        AnimatedVisibility(
+            visible = topBarVisible,
+            enter = fadeIn(motion.enter()),
+            exit = fadeOut(motion.micro()),
+        ) {
+            LinkBar(state, actions)
+        }
 
         val listState = rememberLazyListState()
         // Where "Open the approval →" actually lands. The id used to be set and
@@ -237,12 +275,13 @@ fun HomeScreen(
         }
         LaunchedEffect(state.focusApproval, focusIndex) {
             val index = focusIndex ?: return@LaunchedEffect
-            // Counted, not guessed. The face is always item 0; the notice and
-            // the approvals-off plate are conditional; the "waiting on you"
-            // label sits immediately above the cards and exists whenever any
-            // card does - which a found index guarantees. Adding an item to
-            // this list above the cards means adding it here too.
-            val leading = 1 +
+            // Counted, not guessed. The face has its own pane now and is no
+            // longer item 0 here; the notice and the approvals-off plate are
+            // conditional; the "waiting on you" label sits immediately above
+            // the cards and exists whenever any card does - which a found
+            // index guarantees. Adding an item to this list above the cards
+            // means adding it here too.
+            val leading =
                 (if (state.activity == Activity.WORKING || state.activity == Activity.PAUSED) 1 else 0) +
                 (if (state.notice != null) 1 else 0) +
                 (if (state.approvalsOff) 1 else 0) +
@@ -250,72 +289,99 @@ fun HomeScreen(
             listState.animateScrollToItem(leading + index)
         }
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item(key = "face") {
-                FaceBlock(state, actions, micLevel, speechLevel)
-            }
-
-            // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
-            // reports a task running or paused - never while merely thinking
-            // about a chat reply, which WORKING is also used for elsewhere;
-            // that overlap is accepted here the same way LinkBar's own
-            // THINKING/WORKING merge already is, since a stray control on a
-            // short chat turn costs nothing and hiding it during a real task
-            // would cost the one thing this section exists for.
-            if (state.activity == Activity.WORKING || state.activity == Activity.PAUSED) {
-                item(key = "task-controls") {
-                    TaskControlsPlate(paused = state.activity == Activity.PAUSED, actions = actions)
+        // The resizable region: the face pane, a drag handle, and the
+        // conversation below it, sharing whatever height is left once the top
+        // bar (when shown) and the composer have taken theirs.
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            // A plain pixel delta from the drag, turned into a fraction of
+            // THIS box's own height - measured here, not assumed, because the
+            // top bar's own height (zero, hidden; real, revealed) changes how
+            // much of the screen this box actually gets.
+            val dragState = rememberDraggableState { deltaPx ->
+                val heightPx = with(density) { maxHeight.toPx() }
+                if (heightPx > 0f) {
+                    faceFraction = (faceFraction + deltaPx / heightPx)
+                        .coerceIn(MIN_FACE_FRACTION, MAX_FACE_FRACTION)
                 }
             }
 
-            if (state.notice != null) {
-                item(key = "notice") { Notice(state.notice, actions.onDismissNotice) }
-            }
+            Column(Modifier.fillMaxSize()) {
+                FaceBlock(
+                    state, actions, micLevel, speechLevel,
+                    modifier = Modifier.weight(faceFraction).fillMaxWidth(),
+                )
 
-            if (state.approvalsOff) {
-                item(key = "approvals-off") {
-                    Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
-                        Kicker("Approvals are off", color = chrome.warnInk)
-                        Gap(6)
-                        Text(
-                            "The desktop is running without its permission gate, so nothing " +
-                                "will ever arrive here to approve.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = chrome.textMid,
-                        )
+                Grabber(
+                    color = chrome.textLo,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggable(state = dragState, orientation = Orientation.Vertical),
+                )
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f - faceFraction).fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
+                    // reports a task running or paused - never while merely thinking
+                    // about a chat reply, which WORKING is also used for elsewhere;
+                    // that overlap is accepted here the same way LinkBar's own
+                    // THINKING/WORKING merge already is, since a stray control on a
+                    // short chat turn costs nothing and hiding it during a real task
+                    // would cost the one thing this section exists for.
+                    if (state.activity == Activity.WORKING || state.activity == Activity.PAUSED) {
+                        item(key = "task-controls") {
+                            TaskControlsPlate(paused = state.activity == Activity.PAUSED, actions = actions)
+                        }
                     }
+
+                    if (state.notice != null) {
+                        item(key = "notice") { Notice(state.notice, actions.onDismissNotice) }
+                    }
+
+                    if (state.approvalsOff) {
+                        item(key = "approvals-off") {
+                            Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
+                                Kicker("Approvals are off", color = chrome.warnInk)
+                                Gap(6)
+                                Text(
+                                    "The desktop is running without its permission gate, so nothing " +
+                                        "will ever arrive here to approve.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = chrome.textMid,
+                                )
+                            }
+                        }
+                    }
+
+                    if (state.pending.isNotEmpty()) {
+                        item(key = "approvals-label") {
+                            Kicker(
+                                if (state.pending.size == 1) "Waiting on you" else "${state.pending.size} waiting on you",
+                                color = chrome.warnInk,
+                            )
+                        }
+                        items(state.pending, key = { it.id }) { item ->
+                            ApprovalCard(
+                                item = item,
+                                blocker = actions.blockerFor(item),
+                                // Outlined, not auto-answered: scrolling to a card and
+                                // marking it is the whole of "open the approval". Rule
+                                // 4 - nothing is ever approved without a deliberate
+                                // decision - is untouched by it.
+                                focused = item.id == state.focusApproval,
+                                onApprove = { actions.onApprove(item) },
+                                onDeny = { actions.onDeny(item) },
+                                onAmend = { note -> actions.onAmend(item.id, note) },
+                            )
+                        }
+                    }
+
+                    item(key = "reply") { Reply(reply, state.streaming) }
                 }
             }
-
-            if (state.pending.isNotEmpty()) {
-                item(key = "approvals-label") {
-                    Kicker(
-                        if (state.pending.size == 1) "Waiting on you" else "${state.pending.size} waiting on you",
-                        color = chrome.warnInk,
-                    )
-                }
-                items(state.pending, key = { it.id }) { item ->
-                    ApprovalCard(
-                        item = item,
-                        blocker = actions.blockerFor(item),
-                        // Outlined, not auto-answered: scrolling to a card and
-                        // marking it is the whole of "open the approval". Rule
-                        // 4 - nothing is ever approved without a deliberate
-                        // decision - is untouched by it.
-                        focused = item.id == state.focusApproval,
-                        onApprove = { actions.onApprove(item) },
-                        onDeny = { actions.onDeny(item) },
-                        onAmend = { note -> actions.onAmend(item.id, note) },
-                    )
-                }
-            }
-
-            item(key = "reply") { Reply(reply, state.streaming) }
         }
 
         Composer(state, draft, actions, micLevel)
@@ -323,11 +389,68 @@ fun HomeScreen(
 }
 
 /**
- * The face, with a radial lift behind it.
+ * The strip that shows or hides [LinkBar].
  *
- * The lift is a cached bitmap, not a per-frame Brush — see FaceView. Tapping it
- * opens the brain: the face is the only thing on screen that is obviously
- * *Jarvis*, so it is the right door to what Jarvis is doing.
+ * Its own gesture, rather than one more added to the face or the list
+ * below: the face already has a tap (open the brain) and the conversation
+ * already scrolls, and stacking a third gesture on either was one guess too
+ * many to make correctly without a device in hand to try it on. This strip
+ * touches nothing else, so it cannot fight either of them.
+ */
+@Composable
+private fun TopReveal(visible: Boolean, onToggle: (Boolean) -> Unit) {
+    val chrome = LocalChrome.current
+    val thresholdPx = with(LocalDensity.current) { REVEAL_THRESHOLD.toPx() }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .pointerInput(visible) {
+                var total = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { total = 0f },
+                    onDragEnd = {
+                        if (!visible && total > thresholdPx) onToggle(true)
+                        if (visible && total < -thresholdPx) onToggle(false)
+                    },
+                ) { change, dragAmount ->
+                    change.consume()
+                    total += dragAmount
+                }
+            },
+    ) {
+        // Filled brighter while hidden - "swipe down, there's more here" -
+        // and dimmer once the bar is showing, where it now means "swipe up".
+        Grabber(color = chrome.textLo, alpha = if (visible) 0.25f else 0.55f)
+    }
+}
+
+/**
+ * The small pill both drag handles show, so the same "there is more here,
+ * drag me" affordance means the same thing wherever it appears.
+ */
+@Composable
+private fun Grabber(color: Color, modifier: Modifier = Modifier, alpha: Float = 0.45f) {
+    Box(modifier.height(20.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .width(36.dp)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(color.copy(alpha = alpha)),
+        )
+    }
+}
+
+/**
+ * The face, in its own pane above the conversation.
+ *
+ * Tapping it opens the brain: the face is the only thing on screen that is
+ * obviously *Jarvis*, so it is the right door to what Jarvis is doing.
+ *
+ * Sized entirely by the caller's [modifier] rather than an aspect ratio - the
+ * pane is a fraction of the screen the owner can drag, and an aspect ratio
+ * here would fight that instead of filling whatever height the fraction
+ * hands it.
  */
 @Composable
 private fun FaceBlock(
@@ -335,40 +458,44 @@ private fun FaceBlock(
     actions: HomeActions,
     micLevel: State<Float>,
     speechLevel: State<Float?>,
+    modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
     Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1.15f)
+        modifier
             .clip(LocalRadii.current.shellShape)
             .pressable(onClick = actions.onOpenBrain),
         contentAlignment = Alignment.Center,
     ) {
-        FaceView(
-            state = state.faceState,
-            face = state.face,
-            bindings = state.bindings,
-            notches = state.attention.pending,
-            modifier = Modifier.size(260.dp),
-            // Both levels were being measured and thrown away. The recorder
-            // computes an RMS per audio buffer and the speaker one per chunk,
-            // precisely so the reactor breathes with the real voice rather than
-            // with a generator — and neither reached the face, because these
-            // two parameters defaulted to `{ null }` and no caller passed them.
-            // So the reactor has been running the synthetic envelope through
-            // every word either end has ever said.
-            //
-            // Lambdas rather than values: they are read from the frame loop, in
-            // a coroutine, where a snapshot read subscribes nothing. Fifty
-            // levels a second reach the face and recompose nothing at all.
-            micLevel = { micLevel.value },
-            speechLevel = { speechLevel.value },
-        )
-        Column(
-            Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            FaceView(
+                state = state.faceState,
+                face = state.face,
+                bindings = state.bindings,
+                notches = state.attention.pending,
+                modifier = Modifier.size(260.dp),
+                // Both levels were being measured and thrown away. The recorder
+                // computes an RMS per audio buffer and the speaker one per chunk,
+                // precisely so the reactor breathes with the real voice rather than
+                // with a generator — and neither reached the face, because these
+                // two parameters defaulted to `{ null }` and no caller passed them.
+                // So the reactor has been running the synthetic envelope through
+                // every word either end has ever said.
+                //
+                // Lambdas rather than values: they are read from the frame loop, in
+                // a coroutine, where a snapshot read subscribes nothing. Fifty
+                // levels a second reach the face and recompose nothing at all.
+                micLevel = { micLevel.value },
+                speechLevel = { speechLevel.value },
+                // The theme's own well, not a hardcoded near-black - see
+                // Chrome.well. A theme whose ground is not that same
+                // near-black (Graphite, Ember Dusk) used to sit the reactor
+                // in a visibly mismatched box; this is the token the theme
+                // system already carries for exactly this, just never read
+                // before now.
+                background = chrome.well,
+            )
+            Gap(6)
             // The lane, which the phone parsed and threw away. "This left your
             // machine" is the single most consequential fact the UI carries and
             // it had no representation here at all.

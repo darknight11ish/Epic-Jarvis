@@ -76,6 +76,15 @@ fun FaceView(
     micLevel: () -> Float? = { null },
     /** Jarvis's own voice, 0..1, per audio frame. Null when nothing is playing. */
     speechLevel: () -> Float? = { null },
+    /**
+     * The ground this face draws on — [Spec.BACKGROUND] unless a caller reads
+     * [com.jarvis.client.ui.theme.Chrome.well] and passes it, which is the
+     * theme's own answer to what the reactor should sit in. Only the plain
+     * `Canvas` path below reads this; [GLFaceSurface]'s two mesh faces still
+     * clear to [Spec.BACKGROUND] itself, unchanged - their GPU surface would
+     * need its own wiring to follow a theme, and that is not done here.
+     */
+    background: Color = Spec.BACKGROUND,
 ) {
     val host = remember { FaceHost() }
     var frame by remember { mutableStateOf(host.snapshot()) }
@@ -252,7 +261,7 @@ fun FaceView(
             }
         } else {
             Canvas(Modifier.matchParentSize()) {
-                drawFace(frame, face, notches, glow)
+                drawFace(frame, face, notches, glow, background)
             }
         }
     }
@@ -671,22 +680,30 @@ private fun smoothstep(x: Float) = x * x * (3f - 2f * x)
  * A multiply lands banked's already-dark colour around 0.002 relative
  * luminance, which many OLED panels quantise to black — so the state that means
  * "something is waiting" would vanish on the device most likely to show it.
+ *
+ * `bg` defaults to [Spec.BACKGROUND] so [GLFaceSurface]'s calls, which never
+ * pass one, dim toward exactly what they always have — the GL surface beneath
+ * them still clears to that same colour, and dimming toward anything else
+ * would fade their overlays into a ground they are not actually drawn on.
  */
-private fun dimmed(c: Color, dim: Float): Color = mix(Spec.BACKGROUND, c, dim)
+private fun dimmed(c: Color, dim: Float, bg: Color = Spec.BACKGROUND): Color = mix(bg, c, dim)
 
-private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int, glow: ImageBitmap) {
+private fun DrawScope.drawFace(f: FaceFrame, face: Face, notches: Int, glow: ImageBitmap, background: Color) {
     val w = size.minDimension
     val cx = size.width / 2f
     val cy = size.height / 2f
     // faces[].render.fit — a uniform scale so no face touches its edge.
     val radius = w / 2f * 0.5f * face.fit
 
-    // One background for all faces. Each used to paint its own, which showed as
-    // a differently tinted rectangle behind every one.
-    drawRect(Spec.BACKGROUND, size = Size(size.width, size.height))
+    // One ground for all faces on this path - a caller's theme, or
+    // Spec.BACKGROUND by default. Each face used to paint its own background,
+    // which showed as a differently tinted rectangle behind every one; this
+    // keeps that single-ground guarantee while letting the ground itself be
+    // themed, since a theme applies to every face identically or not at all.
+    drawRect(background, size = Size(size.width, size.height))
 
-    val hot = dimmed(f.swatch.a, f.dim)
-    val cool = dimmed(f.swatch.b, f.dim)
+    val hot = dimmed(f.swatch.a, f.dim, background)
+    val cool = dimmed(f.swatch.b, f.dim, background)
 
     // The speech / microphone push: up to 3.5% growth on a loud syllable.
     // Positional, not luminance, so it is not a flash.

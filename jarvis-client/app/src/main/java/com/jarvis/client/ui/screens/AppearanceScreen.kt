@@ -230,6 +230,10 @@ fun AppearanceScreen(
                                 bindings = bindings,
                                 notches = 0,
                                 modifier = Modifier.size(160.dp),
+                                // So this preview matches what Home actually
+                                // shows for the theme being looked at right
+                                // now, rather than always the same near-black.
+                                background = chrome.well,
                             )
                         }
                         Gap(8)
