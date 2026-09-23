@@ -85,6 +85,10 @@ const dom = {
   updateStatus: $("update-status"),
   updateProgress: $("update-progress"),
   updateProgressFill: $("update-progress-fill"),
+  updateIntroOff: $("update-intro-off"),
+  updateIntroOn: $("update-intro-on"),
+  faqUpdateOff: $("faq-update-off"),
+  faqUpdateOn: $("faq-update-on"),
   updateNotes: $("update-notes"),
   updateNotesBody: $("update-notes-body"),
 
@@ -915,6 +919,13 @@ function paintUpdate(status) {
   dom.aboutVersion.textContent = status.current || "—";
   dom.updateAuto.checked = Boolean(status.check_on_start);
   dom.updateAuto.disabled = !status.supported;
+  // "Not set up yet" until this build carries the update key, and not a
+  // moment longer: the same `supported` that greys the buttons.
+  const setUp = Boolean(status.supported);
+  if (dom.updateIntroOff) dom.updateIntroOff.hidden = setUp;
+  if (dom.updateIntroOn) dom.updateIntroOn.hidden = !setUp;
+  if (dom.faqUpdateOff) dom.faqUpdateOff.hidden = setUp;
+  if (dom.faqUpdateOn) dom.faqUpdateOn.hidden = !setUp;
 
   const notes = String(status.notes || "").trim();
   dom.updateNotes.hidden = !notes;

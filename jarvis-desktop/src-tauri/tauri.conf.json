@@ -112,7 +112,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/darknight11ish/Epic-Jarvis/releases/latest/download/latest.json"
+        "https://github.com/darknight11ish/Epic-Jarvis/releases/download/desktop-latest/latest.json"
       ],
       "pubkey": "",
       "windows": {

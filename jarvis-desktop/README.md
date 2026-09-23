@@ -159,28 +159,104 @@ GET carrying nothing but the request — no identifier, no telemetry, no account
 is the same rule the rest of the app follows for every action it can take, and
 an update replaces the executable, so it applies here most of all.
 
-### Turning it on
+### Turning on updates
 
-The updater is inert until you publish a signed release. One-time setup:
+**Where things stand:** the pieces are built, but updates are off until you
+do the steps below once. Settings → Updates says "Not set up yet" until
+then, and that is true.
+
+What is already done: the app's updater (`src-tauri/src/update.rs`), and a
+GitHub Actions workflow (`.github/workflows/desktop-release.yml`) that builds
+the Windows installer on GitHub's own Windows machine every time desktop code
+changes on `main`. Without a key it builds an unsigned installer, keeps it
+with the run for 14 days, and publishes nothing. With a key it signs the
+installer and publishes it, with the small `latest.json` file the app reads,
+to the release called **`desktop-latest`**.
+
+What a signing key is, in one line: a pair of files. The **private** key
+stamps each installer; the **public** key goes inside the app, so the app
+can tell a real installer from a tampered one. The private key must stay
+secret. The public key is safe to share.
+
+**1. Make the key, on your PC.** Open PowerShell and paste this one line.
+It asks for a password twice: pick one and write it down, you need it in
+step 3. (It needs Node, which you already have if you build the app.)
 
 ```powershell
-npm run tauri signer generate -- -w $HOME\.tauri\jarvis.key
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.tauri" | Out-Null; npx --yes @tauri-apps/cli@2 signer generate -w "$env:USERPROFILE\.tauri\jarvis-desktop.key"; Write-Host "Private key (keep secret): $env:USERPROFILE\.tauri\jarvis-desktop.key"; Write-Host "Public key (safe to share): $env:USERPROFILE\.tauri\jarvis-desktop.key.pub"
 ```
 
-Put the **public** key in `src-tauri/tauri.conf.json` under
-`plugins.updater.pubkey`. Keep the private key and its password out of the
-repository; `tauri build` reads them from `TAURI_SIGNING_PRIVATE_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+Both files land in the `.tauri` folder inside your user folder
+(`C:\Users\<you>\.tauri\`). **Back up the private key and the password**
+somewhere safe, such as a password manager. If you lose them, the copies
+already installed cannot accept updates made with a new key, and you would
+have to install once by hand again.
 
-With `pubkey` empty — which is how it ships — the app says so in Settings and
-disables the Check button, rather than offering one that can only ever fail.
+**2. Put the public key in the app.** This copies it to your clipboard:
 
-Then publish a release containing the installers and the generated
-`latest.json`, at the endpoint in `tauri.conf.json`.
+```powershell
+(Get-Content "$env:USERPROFILE\.tauri\jarvis-desktop.key.pub" -Raw).Trim() | Set-Clipboard; Write-Host "The PUBLIC key is on your clipboard."
+```
 
-A download whose signature does not verify is refused before anything is
-executed, so a replaced artifact, a hijacked DNS answer or a proxy rewriting
-the response all fail closed.
+Open `jarvis-desktop\src-tauri\tauri.conf.json`, find the line
+`"pubkey": "",` near the bottom, and paste between the two quotes, so it
+reads `"pubkey": "<the long text>",`. Commit and push that to `main`. (Or
+send the public key to Claude and ask for it to be put in.)
+
+**3. Give GitHub the private key.** This copies it to your clipboard:
+
+```powershell
+(Get-Content "$env:USERPROFILE\.tauri\jarvis-desktop.key" -Raw).Trim() | Set-Clipboard; Write-Host "The PRIVATE key is on your clipboard. Paste it into GitHub now, then copy something else."
+```
+
+Then, on github.com:
+
+1. Open the repository (`darknight11ish/Epic-Jarvis`) and click
+   **Settings** (the tab at the top of the repository, not your account).
+2. In the left column: **Secrets and variables** → **Actions**.
+3. Click the green **New repository secret**.
+4. Name: `TAURI_SIGNING_PRIVATE_KEY`. Secret: paste. Click **Add secret**.
+5. **New repository secret** again. Name:
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Secret: the password from step 1.
+   Click **Add secret**.
+
+Nobody, including you, can read a secret back after saving it; GitHub
+only hands it to the workflow while it builds.
+
+**4. Make the first signed build.** Pushing step 2's change to `main` starts
+it. Or: the repository's **Actions** tab → **Desktop release** (left
+column) → **Run workflow** → **Run workflow**. It takes about 15-25
+minutes. The run's summary says in one line what it did ("Signed, and
+published...", or why not).
+
+**5. Install that build once, by hand.** The copy you have now was built
+without the public key, so it cannot check, or accept, any update. Open the
+repository's **Releases** (right-hand column on the main page) →
+**Jarvis Desktop - latest** → download
+`jarvis-desktop_0.1.<number>_x64-setup.exe` and run it. From then on,
+Settings → Updates shows "Check now", and each new build appears there.
+Installing is still the Install button, pressed by you.
+
+If the run fails at "Publish" with a 403: the repository's **Settings** →
+**Actions** → **General** → **Workflow permissions** → **Read and write
+permissions** → **Save**, then run it again.
+
+**How versions work:** each published build is `0.1.<run number>`, so every
+build is newer than the one before. The updater only ever offers a higher
+number than the one installed.
+
+**What leaves your PC:** a check is one plain request for `latest.json` at
+`https://github.com/darknight11ish/Epic-Jarvis/releases/download/desktop-latest/latest.json`,
+with nothing about you in it. A download whose signature does not match the
+public key inside the app is refused before anything runs, so a replaced
+file, a hijacked DNS answer or a proxy rewriting the response all fail
+closed.
+
+**Why `desktop-latest` and not GitHub's "latest release" link:** that link
+means "whichever normal release in this whole repository is newest", which
+could be anything, and the phone's `client-latest` release lives in the same
+repository. A fixed name for the desktop's own release cannot be taken over
+by something else.
 
 ## IPC surface
 

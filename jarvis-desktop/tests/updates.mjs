@@ -127,6 +127,50 @@ await check("a build with no key says so instead of offering a dead button", asy
   assert.equal(disabled, true, "a Check button that can only fail is still pressable");
 });
 
+await check("\"not set up yet\" follows the build's key, in Updates and in the FAQ", async () => {
+  const read = async (supported) => {
+    const page = await open({ update: { ...K.UPDATE_NONE, supported } });
+    const out = await page.evaluate(() => ({
+      off: !document.getElementById("update-intro-off").hidden,
+      on: !document.getElementById("update-intro-on").hidden,
+      faqOff: !document.getElementById("faq-update-off").hidden,
+      faqOn: !document.getElementById("faq-update-on").hidden,
+      offText: document.getElementById("update-intro-off").textContent,
+    }));
+    await page.close();
+    return out;
+  };
+  const without = await read(false);
+  const withKey = await read(true);
+  assert.deepEqual([without.off, without.on, without.faqOff, without.faqOn], [true, false, true, false],
+    "a build with no key must say updates are not set up");
+  assert.match(without.offText, /Not set up yet/);
+  assert.match(without.offText, /Turning on updates/);
+  assert.deepEqual([withKey.off, withKey.on, withKey.faqOff, withKey.faqOn], [false, true, false, true],
+    "a build WITH a key still said updates were not set up");
+});
+
+await check("before the window has read anything, it says not set up", async () => {
+  // The safe default: a window that has not heard from Rust yet claims
+  // nothing. paintUpdate() switches it once `supported` is known.
+  const html = read("src/settings.html");
+  assert.match(html, /id="update-intro-off">/);
+  assert.match(html, /id="update-intro-on" hidden>/);
+});
+
+await check("the update endpoint is the desktop's own rolling release, and the workflow publishes there", async () => {
+  const conf = JSON.parse(read("src-tauri/tauri.conf.json"));
+  const flow = readFileSync(join(HERE, "..", "..", ".github", "workflows", "desktop-release.yml"), "utf8");
+  assert.deepEqual(conf.plugins.updater.endpoints,
+    ["https://github.com/darknight11ish/Epic-Jarvis/releases/download/desktop-latest/latest.json"]);
+  // Not /releases/latest/: that is whichever full release in the whole repo
+  // is newest, which is not a promise about the desktop at all.
+  assert.match(flow, /TAG: desktop-latest/);
+  assert.doesNotMatch(flow, /TAG: client-latest|release create "?client-latest/);
+  assert.equal(conf.bundle.createUpdaterArtifacts, false,
+    "the committed config must build without a key; the workflow turns signing on");
+});
+
 await check("a failed install is reported, not swallowed", async () => {
   const page = await open({
     update: { ...K.UPDATE_NONE, ...FOUND },

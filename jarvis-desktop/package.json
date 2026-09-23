@@ -27,7 +27,8 @@
     "shots": "node tests/shots.mjs",
     "test:a11y": "node tests/a11y.mjs && node tests/disabled.mjs",
     "test:voice": "node tests/voicecheck.mjs",
-    "test:all": "npm run test:tokens && npm run test:ui && npm run test:a11y && npm run test:themes && npm run test:voice",
+    "test:release": "node tests/updater-manifest.mjs",
+    "test:all": "npm run test:tokens && npm run test:ui && npm run test:a11y && npm run test:themes && npm run test:voice && npm run test:release",
     "faces:spec": "python3 scripts/build-faces-spec.py"
   },
   "devDependencies": {

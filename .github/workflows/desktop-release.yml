@@ -1,0 +1,229 @@
+# Builds the Windows installer for Jarvis Desktop and, once the owner has
+# added a signing key, publishes it where the app looks for updates.
+#
+# What it needs from the owner, once (jarvis-desktop/README.md, "Turning on
+# updates", has the exact steps):
+#
+#   * the PUBLIC key in jarvis-desktop/src-tauri/tauri.conf.json
+#     (plugins.updater.pubkey) - it goes into the app, so the app can check
+#     every download;
+#   * the PRIVATE key and its password as repository secrets
+#     TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD.
+#
+# Until both are there it still builds, unsigned, and keeps the installer as
+# a run artifact - but it publishes nothing and fails nothing. An update the
+# app cannot verify is worse than no update, so there is no unsigned path to
+# the release.
+#
+# Where it publishes: the rolling release tagged `desktop-latest`, the exact
+# URL in tauri.conf.json. Not `/releases/latest/`: that is whichever full
+# release in the whole repository is newest, which says nothing about the
+# desktop, and the phone's `client-latest` lives in the same repository.
+#
+# The version: tauri.conf.json's major.minor plus this workflow's run number
+# (0.1.<n>), so every published build is newer than the last and newer than
+# the 0.1.0 a hand-built copy reports. The updater only offers a HIGHER
+# version, so a rolling build that kept 0.1.0 would never be offered.
+name: Desktop release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "jarvis-desktop/**"
+      - ".github/workflows/desktop-release.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  TAG: desktop-latest
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+        working-directory: jarvis-desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: jarvis-desktop/src-tauri
+
+      # Decides three things up front, and says why, so a run that publishes
+      # nothing is a clear notice rather than a mystery.
+      - name: Decide what this run can do
+        id: plan
+        env:
+          # A yes/no only. The key itself is not read here.
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        run: |
+          set -euo pipefail
+          pubkey=$(node -e 'const c = require("./src-tauri/tauri.conf.json"); const k = ((c.plugins || {}).updater || {}).pubkey || ""; process.stdout.write(k.trim() ? "yes" : "no")')
+          base=$(node -e 'process.stdout.write(String(require("./src-tauri/tauri.conf.json").version || ""))')
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tauri.conf.json has version '$base', not major.minor.patch."
+            exit 1
+          fi
+          version="${base%.*}.${GITHUB_RUN_NUMBER}"
+
+          sign=false
+          publish=false
+          if [ "$HAS_KEY" != "true" ]; then
+            why="The TAURI_SIGNING_PRIVATE_KEY secret is not set, so this build is unsigned and nothing is published. See jarvis-desktop/README.md, 'Turning on updates'."
+          elif [ "$pubkey" != "yes" ]; then
+            why="The signing secret is set, but tauri.conf.json has no public key (plugins.updater.pubkey), so the app could not check a signed download. Nothing is signed or published until it is added."
+          else
+            sign=true
+            if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+              publish=true
+              why="Signed, and published to the '$TAG' release as version $version."
+            else
+              why="Signed, but this is not the default branch, so it is not published. Only the default branch updates the owner's app."
+            fi
+          fi
+
+          echo "::notice::$why"
+          {
+            echo "### Jarvis Desktop $version"
+            echo ""
+            echo "$why"
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "version=$version"
+            echo "sign=$sign"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install the Tauri command-line tool
+        run: npm install --no-audit --no-fund
+
+      # The committed config has createUpdaterArtifacts off, so a build on
+      # the owner's PC works with no key. It is switched on here, and only
+      # when this run can sign; the version is stamped the same way. Merged
+      # from a file, which Tauri accepts in place of inline JSON and which
+      # survives Windows argument quoting untouched.
+      - name: Build the installer
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SIGN: ${{ steps.plan.outputs.sign }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          here=$(pwd -W 2>/dev/null || pwd)
+          conf="$here/release.conf.json"
+          printf '{"version": "%s", "bundle": {"createUpdaterArtifacts": %s}}\n' "$VERSION" "$SIGN" > "$conf"
+          cat "$conf"
+          if [ "$SIGN" = "true" ]; then
+            export TAURI_SIGNING_PRIVATE_KEY="$KEY"
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$KEY_PASSWORD"
+          fi
+          unset KEY KEY_PASSWORD
+          npx tauri build --config "$conf"
+
+      # Renamed to names with no spaces, so the download URL is the plain
+      # file name. A signature covers the file's bytes, not its name.
+      - name: Collect the installers
+        env:
+          SIGN: ${{ steps.plan.outputs.sign }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          bundle=src-tauri/target/release/bundle
+          nsis=$(find "$bundle/nsis" -maxdepth 1 -name '*-setup.exe' 2>/dev/null | head -1 || true)
+          msi=$(find "$bundle/msi" -maxdepth 1 -name '*.msi' 2>/dev/null | head -1 || true)
+          if [ -z "$nsis" ]; then
+            echo "::error::No NSIS installer was built under $bundle/nsis."
+            exit 1
+          fi
+          nsis_out="dist/jarvis-desktop_${VERSION}_x64-setup.exe"
+          msi_out="dist/jarvis-desktop_${VERSION}_x64_en-US.msi"
+          cp "$nsis" "$nsis_out"
+          if [ -n "$msi" ]; then cp "$msi" "$msi_out"; fi
+          if [ "$SIGN" = "true" ]; then
+            if [ ! -f "$nsis.sig" ]; then
+              echo "::error::The build was asked to sign but wrote no $nsis.sig."
+              exit 1
+            fi
+            cp "$nsis.sig" "$nsis_out.sig"
+            if [ -n "$msi" ] && [ -f "$msi.sig" ]; then cp "$msi.sig" "$msi_out.sig"; fi
+          fi
+          ls -l dist
+
+      - name: Keep the installer with this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-desktop-${{ steps.plan.outputs.version }}
+          path: jarvis-desktop/dist/*
+          retention-days: 14
+
+      - name: Write latest.json
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          msi="dist/jarvis-desktop_${VERSION}_x64_en-US.msi"
+          msi_args=()
+          if [ -f "$msi" ] && [ -f "$msi.sig" ]; then msi_args=(--msi "$msi"); fi
+          node scripts/updater-manifest.mjs \
+            --version "$VERSION" \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" \
+            --nsis "dist/jarvis-desktop_${VERSION}_x64-setup.exe" \
+            ${msi_args[@]+"${msi_args[@]}"} \
+            --notes "Jarvis Desktop ${VERSION}, built from commit ${GITHUB_SHA::7}. Install it from Settings -> Updates; nothing installs on its own." \
+            --out dist/latest.json
+          cat dist/latest.json
+
+      # Rolling, like the phone's client-latest: the old release is removed
+      # and this one takes its tag. For the few seconds in between, a check
+      # from the app reads "no releases published yet" and tries again later.
+      - name: Publish to the desktop-latest release
+        id: publish
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          short="${GITHUB_SHA::7}"
+          notes=$(printf '%s\n' \
+            "Jarvis Desktop **$VERSION**, from commit \`$short\` on \`$GITHUB_REF_NAME\`." \
+            "" \
+            "Already installed and signed? Settings -> Updates -> Check now, then Install. Jarvis never installs an update on its own." \
+            "" \
+            "First time, or your copy says updates are not set up: download \`jarvis-desktop_${VERSION}_x64-setup.exe\` below and run it once." \
+            "" \
+            "Every installer here is signed; the app refuses a download whose signature does not match the key it was built with. This tag is rolling.")
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Jarvis Desktop - latest ($VERSION)" \
+            --notes "$notes" \
+            --latest=false
+          echo "Published: $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+
+      - name: Explain a failed publish
+        if: failure() && steps.publish.outcome == 'failure'
+        run: |
+          echo "::warning::Could not publish the release. If the log above says 403," \
+               "open the repository's Settings -> Actions -> General -> Workflow" \
+               "permissions and choose 'Read and write permissions'. The installer" \
+               "is still attached to this run as an artifact."

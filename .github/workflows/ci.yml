@@ -59,6 +59,10 @@ jobs:
       # The chat history limits, and that the phone uses the same numbers.
       # Pure computation, no browser.
       - run: node tests/chat-history.mjs
+      # The updater's latest.json, as desktop-release.yml writes it. No
+      # browser needed, and a wrong key or URL fails silently on the owner's
+      # machine, so it is checked on every push.
+      - run: node tests/updater-manifest.mjs
 
   audit:
     runs-on: ubuntu-latest

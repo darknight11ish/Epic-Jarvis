@@ -28,6 +28,7 @@ Then:
 | `npm run test:a11y` | live regions, headings, the roving tablist, hue-only state, text scaling, and whether a disabled control is still readable in all three themes |
 | `npm run test:themes` | every theme's contrast over a black **and** a white backdrop, every window's theme reach, and colour distinctness under three kinds of colour-blindness |
 | `npm run test:voice` | the speech envelope against `jarvis-visual-spec.json`. Needs no browser. |
+| `npm run test:release` | the updater's `latest.json`, as `.github/workflows/desktop-release.yml` writes it: the three Windows keys, the URLs, the signatures, and that it names the same release the app reads. Needs no browser; CI runs it. |
 | `npm run shots` | renders every surface in every state into `tests/shots/` |
 
 `npm test` remains the Rust suite and needs none of this.

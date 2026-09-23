@@ -212,14 +212,25 @@
 
       <section class="card">
         <h2>Updates</h2>
-        <p class="note">
-          Not set up yet. Checking for updates needs a signing key and a
-          published desktop download on GitHub, and this project has neither
-          so far, so Check now stays off. When it is set up, Jarvis Desktop
-          will check its download page and tell you when a newer version
-          exists. It will never install one by itself: installing is the
-          button below, pressed by you. Checking sends one request with
-          nothing about you in it.
+        <!-- Which of these two shows depends on this build, not on a guess:
+             settings.js paintUpdate() reads `supported`, which is true only
+             when tauri.conf.json carries the update key (update.rs
+             configured()). Until then the first one is the truth. -->
+        <p class="note" id="update-intro-off">
+          Not set up yet. Checking for updates needs a signing key, and this
+          copy of Jarvis Desktop was built without one, so Check now stays
+          off. The steps to turn it on are in the desktop app's README,
+          under "Turning on updates". Once it is set up, Jarvis Desktop
+          checks its download page on GitHub and tells you when a newer
+          version exists. It will never install one by itself: installing
+          is the button below, pressed by you.
+        </p>
+        <p class="note" id="update-intro-on" hidden>
+          Jarvis Desktop checks its download page on GitHub and tells you
+          when a newer version exists. It will never install one by itself:
+          installing is the button below, pressed by you. Every download is
+          checked against this copy's signing key before it runs, and
+          checking sends one request with nothing about you in it.
         </p>
 
         <label class="row">
@@ -388,10 +399,11 @@
           <details class="faq-item">
             <summary class="faq-q">Will Jarvis update itself without asking?</summary>
             <p class="faq-a">
-              No. Update checks are not set up yet (see Updates above), and
-              even once they are, Jarvis only tells you a newer version
-              exists. It never installs one on its own. Installing is always
-              the Install button, pressed by you.
+              No. <span id="faq-update-off">Update checks are not set up yet
+              for this copy (see Updates above), and even once they are,
+              Jarvis</span><span id="faq-update-on" hidden>Jarvis</span> only
+              tells you a newer version exists. It never installs one on its
+              own. Installing is always the Install button, pressed by you.
             </p>
           </details>
 
