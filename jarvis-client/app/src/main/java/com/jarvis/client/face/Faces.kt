@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import com.jarvis.client.FaceState
 import kotlin.math.PI
@@ -1119,77 +1120,218 @@ private object FirstFiveKit {
     )
 }
 
-/** Truncated icosahedron cage. Survives thinking and speaking where geodesic smears. */
+/**
+ * Truncated icosahedron cage - the real C60, sixty atoms and ninety bonds.
+ * Survives thinking and speaking where geodesic smears.
+ *
+ * A line-for-line port of the reactor kit's own Fullerene (the owner's
+ * artifact, the `fullerene` entry in its THEMES list; the same code as the
+ * desktop's `faces.html`). This face used to be a golden-angle spiral of 62
+ * dots joined to their next three neighbours by index, drawn with a flat
+ * depth ramp - a fuzzy ball rather than a cage, and not the molecule the
+ * name promises. The geometry, the camera, the colour slots, the draw order
+ * (far bonds, atoms, near bonds, so the cage reads hollow) and every size
+ * now come from the kit, and every size is a share of the face rather than
+ * a fixed pixel count.
+ */
 object Fullerene : Face {
     override val id = "fullerene"
     override val name = "Fullerene"
 
-    private const val N = 62
-    private val xBuf = FloatArray(N)
-    private val yBuf = FloatArray(N)
-    private val zBuf = FloatArray(N)
+    // The kit's own construction: cut each icosahedral vertex, which lands
+    // the new vertices one third and two thirds along each of the 30 edges -
+    // 60 atoms - and a bond is every pair at the one short separation (0.35;
+    // the next nearest pair is 0.57, so the 0.42 cut cannot catch a wrong one).
+    // Checked once, offline, against the kit's JS: 30 edges, 60 atoms, 90 bonds.
+    private val vx: FloatArray
+    private val vy: FloatArray
+    private val vz: FloatArray
+    private val bondA: IntArray
+    private val bondB: IntArray
 
+    init {
+        val t2 = (1f + kotlin.math.sqrt(5f)) / 2f
+        val raw = arrayOf(
+            floatArrayOf(-1f, t2, 0f), floatArrayOf(1f, t2, 0f),
+            floatArrayOf(-1f, -t2, 0f), floatArrayOf(1f, -t2, 0f),
+            floatArrayOf(0f, -1f, t2), floatArrayOf(0f, 1f, t2),
+            floatArrayOf(0f, -1f, -t2), floatArrayOf(0f, 1f, -t2),
+            floatArrayOf(t2, 0f, -1f), floatArrayOf(t2, 0f, 1f),
+            floatArrayOf(-t2, 0f, -1f), floatArrayOf(-t2, 0f, 1f),
+        )
+        val len = kotlin.math.sqrt(1f + t2 * t2)
+        val ico = raw.map { v -> floatArrayOf(v[0] / len, v[1] / len, v[2] / len) }
+        fun dist(a: FloatArray, b: FloatArray): Float {
+            val dx = a[0] - b[0]
+            val dy = a[1] - b[1]
+            val dz = a[2] - b[2]
+            return kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        }
+        val atoms = ArrayList<FloatArray>(60)
+        for (i in 0 until 12) {
+            for (j in i + 1 until 12) {
+                if (dist(ico[i], ico[j]) >= 1.2f) continue
+                for (k in floatArrayOf(1f / 3f, 2f / 3f)) {
+                    atoms.add(
+                        floatArrayOf(
+                            ico[i][0] + (ico[j][0] - ico[i][0]) * k,
+                            ico[i][1] + (ico[j][1] - ico[i][1]) * k,
+                            ico[i][2] + (ico[j][2] - ico[i][2]) * k,
+                        ),
+                    )
+                }
+            }
+        }
+        vx = FloatArray(atoms.size) { atoms[it][0] }
+        vy = FloatArray(atoms.size) { atoms[it][1] }
+        vz = FloatArray(atoms.size) { atoms[it][2] }
+        val a = ArrayList<Int>()
+        val b = ArrayList<Int>()
+        for (i in atoms.indices) {
+            for (j in i + 1 until atoms.size) {
+                if (dist(atoms[i], atoms[j]) < 0.42f) {
+                    a.add(i)
+                    b.add(j)
+                }
+            }
+        }
+        bondA = a.toIntArray()
+        bondB = b.toIntArray()
+    }
+
+    // Per-frame scratch, written in full before it is read - the same pattern
+    // Orbital and Geodesic use, and safe for the same reason (a singleton face
+    // drawn on one thread).
+    private val px = FloatArray(vx.size)
+    private val py = FloatArray(vx.size)
+    private val pz = FloatArray(vx.size)
+    private val pd = FloatArray(vx.size)
+    private val bondZ = FloatArray(bondA.size)
+    private val bondOrder = IntArray(bondA.size)
+    private val atomOrder = IntArray(vx.size)
+    private val cam = KitParity.Camera()
+    private val labelPaint = KitParity.LabelPaint()
+
+    // The kit's per-state `sp`. It spins the cage as `t * sp * 1.8`, the
+    // absolute clock times the state's speed - which is exactly the pattern
+    // FaceHost's angle comment explains teleports the face on every state
+    // change. So the SPEED is the kit's, and the angle is FaceHost's
+    // integrated one: identical while a state holds, continuous across a
+    // change. The desktop's fix, kept rather than loosened to match.
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.75f
-        FaceState.THINKING -> 2.1f
-        FaceState.SPEAKING -> 1.2f
-        else -> 0.38f
+        FaceState.LISTENING -> 0.5f
+        FaceState.THINKING -> 1.2f
+        FaceState.SPEAKING -> 0.35f
+        else -> 0.22f
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        // A spherical point set rotated by angle and the drag, with edges drawn
-        // between near neighbours. Cheap, and it reads as a cage rather than a
-        // disc because of the depth gain.
-        val n = N
-        // Three reused FloatArrays rather than an ArrayList of Triples.
-        //
-        // The list rebuilt itself every frame: 62 Triples plus about 186 boxed
-        // Floats, so roughly 250 objects a frame and 15,000 a second, for a
-        // nursery collection every few seconds in the middle of a 60fps draw.
-        // The arrays are fields on the face, which is a singleton, so this is
-        // 744 bytes allocated once for the life of the process.
-        val xs = xBuf
-        val ys = yBuf
-        val zs = zBuf
-        val golden = PI.toFloat() * (3f - kotlin.math.sqrt(5f))
-        val cp = cos(f.pitch)
-        val sp = sin(f.pitch)
-        for (i in 0 until n) {
-            val y = 1f - (i / (n - 1f)) * 2f
-            val rad = kotlin.math.sqrt(1f - y * y)
-            val th = golden * i + f.angle * 0.5f + f.yaw
-            val x = cos(th) * rad
-            val z0 = sin(th) * rad
-            xs[i] = x
-            ys[i] = y * cp - z0 * sp
-            zs[i] = y * sp + z0 * cp
-        }
-        for (i in 0 until n) {
-            val x = xs[i]
-            val y = ys[i]
-            val z = zs[i]
-            val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
-            val px = cx + x * r
-            val py = cy + y * r
-            drawCircle(
-                color = mix(cool, hot, d).copy(alpha = 0.25f + 0.75f * d),
-                radius = r * (0.012f + 0.02f * d) * (1f + f.amp * 0.4f),
-                center = Offset(px, py),
-            )
-            // Edges to the next few points only: a full neighbour search is
-            // O(n^2) for a cage nobody can count the edges of.
-            for (j in i + 1 until minOf(i + 4, n)) {
-                val qx = xs[j]
-                val qy = ys[j]
-                val dq = ((zs[j] + 1f) / 2f).pow(Spec.DEPTH_GAIN)
-                drawLine(
-                    color = mix(cool, hot, (d + dq) / 2f).copy(alpha = 0.10f + 0.3f * d),
-                    start = Offset(px, py),
-                    end = Offset(cx + qx * r, cy + qy * r),
-                    strokeWidth = r * 0.008f,
+    ) {
+        with(scope) {
+            KitParity.inKitCanvas(this) {
+                val px0 = KitParity.backingPx(this)
+                val u = 4f * r / px0
+                val mid = mix(hot, cool, 0.5f)
+                // The kit's `stt` table. This face has no palette of its own
+                // in the kit; its slots read PC = [hot, cool, midpoint].
+                // Speaking's accent is a white literal there; here it is white
+                // dimmed toward the ground like every other colour this shell
+                // hands out, so a dimmed state cannot carry a full-white
+                // highlight the rest of the face has given up.
+                val listening = f.motion == FaceState.LISTENING
+                val col: Color
+                val acc: Color
+                val flow: Float
+                when (f.motion) {
+                    FaceState.LISTENING -> { col = mid; acc = hot; flow = 1.6f }
+                    FaceState.THINKING -> { col = mid; acc = mid; flow = 3.4f }
+                    FaceState.SPEAKING -> { col = mid; acc = KitParity.white(f); flow = 1.0f }
+                    else -> { col = cool; acc = mid; flow = 0.6f }
+                }
+
+                // Yaw and pitch are added twice, as in the kit: once here and
+                // once inside its `proj`. Doubling is what the drag feels like
+                // there, so it is what it feels like here.
+                val ry = f.angle * 1.8f + f.yaw + f.yaw
+                val rx = -0.20f + sin(f.angle * 1.1f) * 0.48f + f.pitch + f.pitch
+                cam.aim(ry, rx, dist = 3.6f, scale = 4f * r * 1.35f, cx = cx, cy = cy)
+                val grow = 1f + if (listening) f.amp * 0.06f else 0f
+                for (i in vx.indices) {
+                    cam.at(vx[i] * grow, vy[i] * grow, vz[i] * grow)
+                    px[i] = cam.x
+                    py[i] = cam.y
+                    pz[i] = cam.z
+                    pd[i] = cam.d
+                }
+
+                // Bonds behind, then atoms, then bonds in front - so the cage
+                // reads hollow. Sorted far to near from the identity every
+                // frame (the kit's Array.sort is stable), so the draw order is
+                // a function of this frame alone.
+                for (k in bondA.indices) {
+                    bondZ[k] = (pz[bondA[k]] + pz[bondB[k]]) / 2f
+                    bondOrder[k] = k
+                }
+                KitParity.sortFarFirst(bondOrder, bondZ)
+
+                var drewFar = false
+                for (pass in 0..1) {
+                    val far = pass == 0
+                    for (k in bondOrder) {
+                        if ((bondZ[k] > 0f) != far) continue
+                        val a = bondA[k]
+                        val b = bondB[k]
+                        // Charge circulating around the cage. The kit phases it
+                        // on the bond's position in ITS canvas pixels, so the
+                        // position is mapped back into those before use - on
+                        // raw phone pixels the bands would be a different width.
+                        val kitX = px0 + ((px[a] - cx) + (py[a] - cy)) / u
+                        val ph = sin(kitX * 0.01f + f.t * flow) * 0.5f + 0.5f
+                        val ink = mix(KitParity.shade(col, 0.5f + pd[a] * 0.6f), acc, ph * 0.7f)
+                        drawLine(
+                            color = ink,
+                            start = Offset(px[a], py[a]),
+                            end = Offset(px[b], py[b]),
+                            strokeWidth = kotlin.math.max(0.6f, px0 * 0.010f * pd[a]) * u,
+                            cap = KitParity.ROUND,
+                            alpha = if (far) 0.45f else 1f,
+                        )
+                        if (far) drewFar = true
+                    }
+                    if (far) {
+                        // Near atoms only, far to near.
+                        for (i in atomOrder.indices) atomOrder[i] = i
+                        KitParity.sortFarFirst(atomOrder, pz)
+                        // In the kit the atoms inherit the 0.45 alpha the far
+                        // bonds left on the context - it resets to 1 only
+                        // after them. That is what the cage has always looked
+                        // like there, so it is matched rather than tidied.
+                        val atomAlpha = if (drewFar) 0.45f else 1f
+                        val rim = KitParity.shade(col, 0.7f)
+                        for (i in atomOrder) {
+                            if (pz[i] > 0f) continue
+                            val rad = kotlin.math.max(1f, px0 * 0.019f * pd[i]) * u
+                            drawCircle(
+                                brush = KitParity.conical(
+                                    px[i] - rad * 0.3f, py[i] - rad * 0.3f, rad * 0.1f,
+                                    px[i], py[i], rad, acc, rim,
+                                ),
+                                radius = rad,
+                                center = Offset(px[i], py[i]),
+                                alpha = atomAlpha,
+                            )
+                        }
+                    }
+                }
+
+                labelPaint.draw(
+                    this, "C₆₀",
+                    x = cx + (px0 * 0.06f - px0 / 2f) * u,
+                    y = cy + (px0 * 0.11f - px0 / 2f) * u,
+                    sizePx = KitParity.jsRound(px0 * 0.045f) * u,
+                    color = acc.copy(alpha = 0.45f),
                 )
             }
         }
@@ -1197,240 +1339,653 @@ object Fullerene : Face {
 }
 
 /**
- * Crystal growth: six-fold frost, climbing and receding.
+ * The reactor kit's own camera and sizing, shared by the five faces around
+ * it (Fullerene, Rime, Orbital, Geodesic, Kirkwood) so each one can be a
+ * literal port of the kit's draw code rather than an approximation of it.
  *
- * Deterministic despite looking organic. The branch positions and lengths come
- * from [hash01] on the segment index, so they are irregular but identical on
- * every run and on every device — which is what makes this face testable at
- * all, and is why it was ported ahead of the simulation-driven ones.
+ * Why these faces needed it: every size in the kit is a share of `S`, the
+ * side of its canvas, and that canvas is sized in real pixels - device
+ * pixels times a supersample (see the kit's sizeSurface). The old ports here
+ * mixed shares of the radius with fixed pixel floors and a flat depth ramp,
+ * and drew points a third to a half the size the kit does. Working in the
+ * kit's own pixel space and converting once, through [backingPx], is what
+ * makes a line here the same share of the face as the line there, on any
+ * screen density.
+ */
+private object KitParity {
+    /**
+     * The kit's detail budget for the one face that fills the screen: its
+     * SOLO view, which forces `detail = max(1.9, Q.detail)` and which the kit
+     * itself calls "the only place worth judging sharpness". That is the
+     * phone's Home face. Thumbnails are small enough that [detail]'s ramp
+     * brings them back down on its own.
+     */
+    const val QUALITY = 1.9f
+
+    val PLUS = androidx.compose.ui.graphics.BlendMode.Plus
+    val ROUND = androidx.compose.ui.graphics.StrokeCap.Round
+
+    /**
+     * How many pixels wide the kit's canvas would be for this face: CSS width
+     * times `min(dpr, 2) * 2` (the SOLO supersample), capped at 4x and at the
+     * spec's `max_px` of 1800. Sizes are computed in that space and then
+     * multiplied by `4r / backingPx` - the shell's radius is a quarter of the
+     * face - so fit and the speech push carry through exactly as the kit's
+     * `g.scale(fit * push)` does.
+     */
+    fun backingPx(scope: DrawScope): Float {
+        val density = scope.density.coerceAtLeast(0.5f)
+        val css = scope.size.minDimension / density
+        val scale = kotlin.math.min(kotlin.math.min(density, 2f) * 2f, 4f)
+        return kotlin.math.max(1f, kotlin.math.min(1800f, jsRound(css * scale)))
+    }
+
+    /** The kit's `detail(w, lo, hi, cap)`, at [QUALITY]. */
+    fun detail(backing: Float, lo: Int, hi: Int, cap: Float = hi * 2.4f): Int {
+        val k = ((backing - 200f) / 620f).coerceIn(0f, 1f)
+        val n = (lo + (hi - lo) * k) * QUALITY
+        return kotlin.math.max(lo, jsRound(kotlin.math.min(cap, n)).toInt())
+    }
+
+    /** JavaScript's Math.round - half up - not Kotlin's half-to-even. */
+    fun jsRound(v: Float): Float = kotlin.math.floor(v + 0.5f)
+
+    /**
+     * Clips to the square the kit's canvas occupies. The kit's canvas clips
+     * whatever reaches past its edge (Orbital's near lobes do); a Compose
+     * Canvas does not, so without this those points would be painted over
+     * whatever sits around the face.
+     */
+    inline fun inKitCanvas(scope: DrawScope, block: () -> Unit) {
+        val half = scope.size.minDimension / 2f
+        val mx = scope.size.width / 2f
+        val my = scope.size.height / 2f
+        val canvas = scope.drawContext.canvas
+        canvas.save()
+        canvas.clipRect(mx - half, my - half, mx + half, my + half)
+        try {
+            block()
+        } finally {
+            canvas.restore()
+        }
+    }
+
+    /** The kit's `shade(col, m)`: every channel times m, clamped. */
+    fun shade(c: Color, m: Float): Color = Color(
+        red = (c.red * m).coerceIn(0f, 1f),
+        green = (c.green * m).coerceIn(0f, 1f),
+        blue = (c.blue * m).coerceIn(0f, 1f),
+        alpha = c.alpha,
+    )
+
+    /**
+     * White, dimmed the way the shell dims every colour it hands a face -
+     * toward the ground, by the state's `dim`. The kit draws two literal
+     * whites (Orbital's nucleus, Fullerene's speaking accent) that ignore its
+     * own dim transform. Here they obey it: this can only ever take light
+     * away. [Spec.BACKGROUND] stands in for the themed ground, which a face
+     * is not told; every theme's well is near-black, so the difference is a
+     * rounding error on a dimmed dot.
+     */
+    fun white(f: FaceFrame): Color =
+        if (f.dim >= 1f) Color.White else mix(Spec.BACKGROUND, Color.White, f.dim)
+
+    /**
+     * The kit's radial highlight - `createRadialGradient` with two circles,
+     * which Compose's `Brush.radialGradient` (one centre) cannot express.
+     * Android's own two-circle RadialGradient can (API 31; minSdk is 33).
+     */
+    fun conical(
+        x0: Float, y0: Float, r0: Float,
+        x1: Float, y1: Float, r1: Float,
+        c0: Color, c1: Color,
+    ): androidx.compose.ui.graphics.Brush = androidx.compose.ui.graphics.ShaderBrush(
+        android.graphics.RadialGradient(
+            x0, y0, r0.coerceAtLeast(0f),
+            x1, y1, r1.coerceAtLeast(0.01f),
+            longArrayOf(
+                android.graphics.Color.pack(c0.red, c0.green, c0.blue, c0.alpha),
+                android.graphics.Color.pack(c1.red, c1.green, c1.blue, c1.alpha),
+            ),
+            null,
+            android.graphics.Shader.TileMode.CLAMP,
+        ),
+    )
+
+    /** The kit's radial glow: `c` at `a0` in the middle, falling to nothing at [radius]. */
+    fun glow(c: Color, a0: Float, center: Offset, radius: Float) =
+        radial(center, radius, 0f to c.copy(alpha = a0.coerceIn(0f, 1f)), 1f to Color.Transparent)
+
+    /**
+     * A radial gradient that falls off the way the kit's canvas gradients do.
+     *
+     * The kit ends its glows on `"rgba(0,0,0,0)"` - transparent BLACK - and
+     * its canvas blends between stops unpremultiplied, so the colour darkens
+     * toward black while the alpha fades: halfway out, a glow is a quarter as
+     * bright, not half. Compose's gradient, rendered through Skia, blended the
+     * same two stops premultiplied - a straight-line fade - and measured
+     * against the kit that made Geodesic's node glows and Rime's frost
+     * visibly larger and brighter. Android's own gradient shaders are
+     * understood to blend premultiplied too, but that was not measured on a
+     * device, so this does not depend on it: the kit's curve is sampled here,
+     * six steps per segment, and handed over as stops that give the same
+     * answer under EITHER blending rule - a fully transparent sample takes its
+     * neighbour's colour, so no step ever fades toward a colour it cannot be
+     * seen in.
+     */
+    fun radial(
+        center: Offset,
+        radius: Float,
+        vararg stops: Pair<Float, Color>,
+    ): androidx.compose.ui.graphics.Brush {
+        val steps = 6
+        val out = ArrayList<Pair<Float, Color>>((stops.size - 1) * steps + 1)
+        for (k in 0 until stops.size - 1) {
+            val (t0, c0) = stops[k]
+            val (t1, c1) = stops[k + 1]
+            for (j in (if (k == 0) 0 else 1)..steps) {
+                val s = j / steps.toFloat()
+                out.add(
+                    (t0 + (t1 - t0) * s) to Color(
+                        red = c0.red + (c1.red - c0.red) * s,
+                        green = c0.green + (c1.green - c0.green) * s,
+                        blue = c0.blue + (c1.blue - c0.blue) * s,
+                        alpha = (c0.alpha + (c1.alpha - c0.alpha) * s).coerceIn(0f, 1f),
+                    ),
+                )
+            }
+        }
+        for (i in out.indices) {
+            if (out[i].second.alpha > 0f) continue
+            val near = out.getOrNull(i - 1)?.second?.takeIf { it.alpha > 0f }
+                ?: out.getOrNull(i + 1)?.second ?: continue
+            out[i] = out[i].first to near.copy(alpha = 0f)
+        }
+        return androidx.compose.ui.graphics.Brush.radialGradient(
+            *out.toTypedArray(),
+            center = center,
+            radius = radius.coerceAtLeast(0.01f),
+        )
+    }
+
+    /**
+     * An insertion sort of [order] by [z], largest (farthest) first - the
+     * kit's `sort((a,b) => b.z - a.z)`. Stable like JavaScript's, and on
+     * primitive arrays so a frame allocates nothing for it.
+     */
+    fun sortFarFirst(order: IntArray, z: FloatArray) {
+        for (i in 1 until order.size) {
+            val v = order[i]
+            val zv = z[v]
+            var j = i - 1
+            while (j >= 0 && z[order[j]] < zv) {
+                order[j + 1] = order[j]
+                j--
+            }
+            order[j + 1] = v
+        }
+    }
+
+    /**
+     * The kit's `proj`: rotate about Y, then X, then real perspective. [d] is
+     * its depth factor, `dist / (dist + z)` raised to the spec's depth_gain -
+     * 1 at the origin, above 1 in front, below behind - and is what every
+     * size and alpha in these faces reads. The old ports used
+     * `((z + 1) / 2)^gain`, 0 to 1, which made the far side vanish and the
+     * near side no bigger than the middle.
+     *
+     * Yaw and pitch are NOT added here, unlike the kit's proj, so a caller
+     * can see what it is doing: each face adds `f.yaw` / `f.pitch` itself,
+     * as many times as the kit does.
+     */
+    class Camera {
+        private var cyw = 1f
+        private var syw = 0f
+        private var cpt = 1f
+        private var spt = 0f
+        private var dist = 4f
+        private var scale = 1f
+        private var ox = 0f
+        private var oy = 0f
+        var x = 0f
+        var y = 0f
+        var z = 0f
+        var d = 1f
+
+        fun aim(ry: Float, rx: Float, dist: Float, scale: Float, cx: Float, cy: Float) {
+            cyw = cos(ry)
+            syw = sin(ry)
+            cpt = cos(rx)
+            spt = sin(rx)
+            this.dist = dist
+            this.scale = scale
+            ox = cx
+            oy = cy
+        }
+
+        fun at(px: Float, py: Float, pz: Float) {
+            val x0 = px * cyw - pz * syw
+            val z0 = px * syw + pz * cyw
+            val y1 = py * cpt - z0 * spt
+            val z1 = py * spt + z0 * cpt
+            val k = scale / (dist + z1)
+            x = ox + x0 * k
+            y = oy + y1 * k
+            z = z1
+            d = (dist / (dist + z1)).pow(Spec.DEPTH_GAIN)
+        }
+    }
+
+    /**
+     * The kit's two chemistry labels (`C60`, and Orbital's term symbol) are
+     * canvas `fillText` in a monospace face. Compose's own text drawing needs
+     * a TextMeasurer, which needs a composition to build; the platform canvas
+     * does not. One Paint per face, created on first draw - not at class
+     * load, because `Faces.all` is touched by JVM unit tests where
+     * android.graphics is a stub.
+     */
+    class LabelPaint {
+        private val paint by lazy(LazyThreadSafetyMode.NONE) {
+            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                typeface = android.graphics.Typeface.MONOSPACE
+            }
+        }
+
+        fun draw(scope: DrawScope, text: String, x: Float, y: Float, sizePx: Float, color: Color) {
+            if (sizePx < 1f) return
+            val p = paint
+            p.textSize = sizePx
+            p.color = android.graphics.Color.argb(
+                color.alpha.coerceIn(0f, 1f), color.red, color.green, color.blue,
+            )
+            scope.drawContext.canvas.nativeCanvas.drawText(text, x, y, p)
+        }
+    }
+}
+
+/**
+ * Snow crystal: one arm grown and mirrored six times, branching by
+ * supersaturation.
  *
- * The growth front sweeps out and resets rather than accumulating, so nothing
- * is remembered between frames. A crystal that genuinely accreted would need
- * per-frame state and would then differ between the phone and the desktop from
- * the moment either one dropped a frame.
+ * A literal port of the reactor kit's Rime. The old port here grew six
+ * hash-wandered arms out along a tilted plane and swept a growth front that
+ * reset; the kit's is a straight spine per arm with side branches whose
+ * length follows a supersaturation band along the arm, second-order
+ * branchlets on the big ones, a hexagonal plate at each tip once the crystal
+ * is nearly grown, a hexagonal core and a faint frost halo. It is flat - the
+ * kit's Rime has no pitch - and turns with a drag at half the yaw.
+ *
+ * Still a pure function of the frame: growth is `sin(angle)`, so the crystal
+ * breathes in and out rather than accumulating anything.
  */
 object Rime : Face {
     override val id = "rime"
     override val name = "Rime"
 
-    private const val ARMS = 6
-    private const val SEGMENTS = 14
+    // Reused for every hexagon, every frame. Lazy, not built at class load:
+    // `Faces.all` is touched by JVM unit tests, where the android.graphics
+    // Path underneath is a stub.
+    private val path by lazy(LazyThreadSafetyMode.NONE) { androidx.compose.ui.graphics.Path() }
 
-    // Per-segment and identical for all six arms — frost is symmetric, which
-    // is the whole reason these are hashed on `s` alone. They were recomputed
-    // inside the inner loop, so the same 42 values were derived 6 times a
-    // frame.
-    private val wobBuf = FloatArray(SEGMENTS + 1) { (hash01(it * 37) - 0.5f) * 0.20f }
-    private val branchBuf = FloatArray(SEGMENTS + 1) { hash01(it * 91 + 7) }
-    private val lenBuf = FloatArray(SEGMENTS + 1) { hash01(it * 53) }
-
+    // The kit's per-state `sp` - how fast the growth breathes and the crystal
+    // turns - and `branch`, how long the side arms run. (`grow` is declared in
+    // the kit's table but never read by its draw, so it is not carried here.)
     override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 0.3f
+        FaceState.THINKING -> 0.8f
+        FaceState.SPEAKING -> 0.18f
+        else -> 0.10f
+    }
+
+    private fun branchFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 0.7f
-        FaceState.THINKING -> 1.9f
-        FaceState.SPEAKING -> 1.15f
-        else -> 0.34f
+        FaceState.THINKING -> 1.0f
+        FaceState.SPEAKING -> 0.62f
+        else -> 0.55f
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        // The hex plane is tilted by the drag, so this reads as a plate seen at
-        // an angle rather than a flat snowflake sticker.
-        val cp = cos(f.pitch)
-        // How far the frost has climbed, 0..1, sawtooth. `angle` already
-        // carries the state's speed multiplier, so the growth rate follows the
-        // face's motion table without this needing to know the state.
-        val front = ((f.angle * 0.12f) % 1f + 1f) % 1f
-        val reach = 0.30f + 0.66f * front
+    ) {
+        with(scope) {
+            KitParity.inKitCanvas(this) {
+                val px0 = KitParity.backingPx(this)
+                val u = 4f * r / px0
+                // R is 0.44 of the kit's canvas, in phone pixels.
+                val big = 4f * r * 0.44f
+                val phase = f.angle
+                val branch = branchFor(f.motion)
+                // Growth cycles, so it is always visibly forming.
+                val grow = (sin(phase) * 0.5f + 0.5f) * 0.55f + 0.45f +
+                    if (f.motion == FaceState.LISTENING) f.amp * 0.15f else 0f
+                val centre = Offset(cx, cy)
 
-        for (a in 0 until ARMS) {
-            val base = a * (2f * PI.toFloat() / ARMS) + f.yaw + f.angle * 0.06f
-            var prevX = cx
-            var prevY = cy
-            for (s in 1..SEGMENTS) {
-                val k = s / SEGMENTS.toFloat()
-                if (k > reach) break
-                val rad = r * k * 0.94f
-                // A slight per-segment wander, hashed on the segment rather
-                // than on the arm, so all six arms stay congruent — frost is
-                // symmetric, and six independently wandering arms read as a
-                // scribble.
-                val wob = wobBuf[s]
-                val th = base + wob
-                val x = cx + cos(th) * rad
-                val y = cy + sin(th) * rad * cp
-                // Depth from the tilt: the far half of the plate sits dimmer.
-                val d = ((sin(th) * cp + 1f) / 2f).pow(Spec.DEPTH_GAIN)
-                val fade = (1f - (k / reach).coerceIn(0f, 1f) * 0.45f)
-                val ink = mix(cool, hot, d).copy(alpha = (0.30f + 0.70f * d) * fade)
-
-                drawLine(
-                    color = ink,
-                    start = Offset(prevX, prevY),
-                    end = Offset(x, y),
-                    strokeWidth = r * (0.016f - 0.008f * k) * (1f + f.amp * 0.5f),
+                // Faint halo, the way frost scatters light. The kit's `col`
+                // slot, which its colour binding fills with the cool colour.
+                drawCircle(
+                    brush = KitParity.glow(cool, 0.22f, centre, big * 1.15f),
+                    radius = big * 1.15f,
+                    center = centre,
                 )
 
-                // Side branches, at the hexagonal 60 degrees, on segments the
-                // hash selects. Length falls off outward so the tips look fine
-                // rather than blunt.
-                if (branchBuf[s] > 0.42f && s > 2) {
-                    val blen = r * 0.16f * (1f - k) * (0.6f + 0.8f * lenBuf[s])
-                    // A progression, not a fresh IntArray per segment per arm
-                    // per frame — that was ~50 arrays a frame while Rime was on
-                    // screen, for two values that never change.
-                    for (sign in -1..1 step 2) {
-                        val bth = th + sign * (PI.toFloat() / 3f)
-                        drawLine(
-                            color = ink.copy(alpha = ink.alpha * 0.8f),
-                            start = Offset(x, y),
-                            end = Offset(x + cos(bth) * blen, y + sin(bth) * blen * cp),
-                            strokeWidth = r * 0.008f * (1f + f.amp * 0.4f),
+                val nb = KitParity.detail(px0, 7, 12)
+                val turn = phase * 0.12f + f.yaw * 0.5f
+                val third = PI.toFloat() / 3f
+                for (arm in 0 until 6) {
+                    val a = arm / 6f * PI2 + turn
+                    val ca = cos(a)
+                    val sa = sin(a)
+                    // Arm space (along, across) to screen: the kit's
+                    // translate + rotate, written out.
+                    fun sx(along: Float, across: Float) = cx + along * ca - across * sa
+                    fun sy(along: Float, across: Float) = cy + along * sa + across * ca
+
+                    // Main spine.
+                    drawLine(
+                        color = hot,
+                        start = centre,
+                        end = Offset(sx(big * grow, 0f), sy(big * grow, 0f)),
+                        strokeWidth = kotlin.math.max(0.8f * u, big * 0.014f),
+                        cap = KitParity.ROUND,
+                        alpha = 0.75f,
+                    )
+                    // Side branches: spacing set by the supersaturation at
+                    // that radius, which bands the structure fine and coarse.
+                    for (i in 1..nb) {
+                        val fr = i / nb.toFloat()
+                        if (fr > grow) break
+                        val x = big * fr
+                        val sat = 0.5f + 0.5f * sin(fr * 9.4f + phase * 2f)
+                        val len = big * (0.06f + sat * 0.20f) * branch * sin(fr * PI.toFloat() * 0.9f)
+                        for (s in -1..1 step 2) {
+                            val ba = -s * third
+                            val bx = x + cos(ba) * len
+                            val by = sin(ba) * len
+                            drawLine(
+                                color = hot,
+                                start = Offset(sx(x, 0f), sy(x, 0f)),
+                                end = Offset(sx(bx, by), sy(bx, by)),
+                                strokeWidth = kotlin.math.max(0.5f * u, big * 0.008f * (1f - fr * 0.4f)),
+                                cap = KitParity.ROUND,
+                                alpha = (0.35f + sat * 0.4f).coerceIn(0f, 1f),
+                            )
+                            // Second-order branchlets on the bigger side arms.
+                            if (sat > 0.55f) {
+                                val l2 = len * 0.34f
+                                val a2 = ba + s * 0.9f
+                                for (k in 1..2) {
+                                    val bf = k / 3f
+                                    val qx = x + (bx - x) * bf
+                                    val qy = by * bf
+                                    val ex = qx + cos(a2) * l2
+                                    val ey = qy + sin(a2) * l2
+                                    drawLine(
+                                        color = hot,
+                                        start = Offset(sx(qx, qy), sy(qx, qy)),
+                                        end = Offset(sx(ex, ey), sy(ex, ey)),
+                                        strokeWidth = kotlin.math.max(0.4f * u, big * 0.004f),
+                                        cap = KitParity.ROUND,
+                                        alpha = (0.22f + sat * 0.25f).coerceIn(0f, 1f),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    // The hexagonal plate at the tip.
+                    if (grow > 0.85f) {
+                        val tx = big * grow
+                        val ps = big * 0.05f
+                        path.reset()
+                        for (i in 0 until 6) {
+                            val aa = i / 6f * PI2
+                            val hx = tx + cos(aa) * ps
+                            val hy = sin(aa) * ps
+                            if (i == 0) path.moveTo(sx(hx, hy), sy(hx, hy)) else path.lineTo(sx(hx, hy), sy(hx, hy))
+                        }
+                        path.close()
+                        drawPath(
+                            path = path,
+                            color = hot,
+                            alpha = 0.6f,
+                            style = Stroke(width = kotlin.math.max(0.5f * u, big * 0.006f)),
                         )
                     }
                 }
-                prevX = x
-                prevY = y
+
+                // Central hexagonal core.
+                val core = big * 0.085f
+                path.reset()
+                for (i in 0 until 6) {
+                    val a = i / 6f * PI2 + turn
+                    val hx = cx + cos(a) * core
+                    val hy = cy + sin(a) * core
+                    if (i == 0) path.moveTo(hx, hy) else path.lineTo(hx, hy)
+                }
+                path.close()
+                drawPath(
+                    path = path,
+                    color = hot,
+                    alpha = 0.85f,
+                    style = Stroke(width = kotlin.math.max(1f * u, big * 0.012f)),
+                )
             }
         }
-
-        // The seed, so the centre is not a hole while the frost is low.
-        drawCircle(
-            color = hot.copy(alpha = 0.55f),
-            radius = r * (0.035f + 0.02f * f.amp),
-            center = Offset(cx, cy),
-        )
     }
 }
 
 /**
- * An electron probability cloud: a shell of points, denser where the orbital is.
+ * Where the electron probably is: real spherical harmonics, rejection-sampled.
  *
- * Stateless in the same way [Rime] is — point `i` has a fixed hashed position,
- * and time only rotates and breathes it. Two hashes give a direction and a
- * radius, and the radius is shaped by a lobe function so the cloud has the
- * pinched waist of a p-orbital rather than being a uniform fuzzy ball.
+ * A literal port of the reactor kit's Orbital. The old port here was 240
+ * hashed points on a pinched shell - an orbital-shaped ball. The kit's is the
+ * actual angular wavefunction Y(l, m) for s, p, d and f, sampled so the
+ * density of dots really is the probability, two colours for the two signs
+ * of the wavefunction, and a state that walks up the orbitals (p when idle,
+ * d when listening or speaking, f when thinking), with its term symbol in the
+ * corner.
  *
- * The spec lists this face under `point_batch`, and this does **not** use
- * `drawPoints`. Batching there means building a `List<Offset>` per frame, which
- * boxes every point, and the measurement that would justify it has to happen on
- * the real panel rather than in a software-GL container. 240 `drawCircle` calls
- * is fewer draw operations than Fullerene already issues, so this is the
- * conservative choice until there is a device to measure on.
+ * The one deliberate difference: the kit samples with Math.random, so every
+ * cloud is new; here the sampler is seeded per orbital, so a given state
+ * always shows the same cloud. That keeps this face a pure function of the
+ * frame - the property `SpecDriftTest`'s pinned set depends on - and the
+ * cloud is a cached layout, not evolving state, exactly as the kit's `pts`
+ * cache is.
+ *
+ * Cost: 3,230 additive dots at full size (the kit's SOLO detail). They are
+ * drawn unsorted: the kit sorts them far to near, but its blend is additive
+ * and addition does not care about order, so the sort bought nothing.
  */
 object Orbital : Face {
     override val id = "orbital"
     override val name = "Orbital"
 
-    private const val N = 240
-    private val xBuf = FloatArray(N)
-    private val yBuf = FloatArray(N)
-    private val zBuf = FloatArray(N)
+    // Sampled clouds, keyed by (l, m, count): x, y, z, sign, jitter per point.
+    // Four orbitals at two or three sizes; the bound keeps a resizing
+    // thumbnail from growing it without limit.
+    private val clouds = HashMap<Long, FloatArray>()
+    private val cam = KitParity.Camera()
+    private val labelPaint = KitParity.LabelPaint()
 
-    // The three hashes depend only on the point index, and `hash01` is a
-    // double-precision sin — the most expensive call in the draw path. They
-    // were recomputed every frame: 720 of them, 43,200 a second, producing the
-    // same 720 numbers each time. Computed once, alongside the buffers above
-    // that established the pattern.
-    private val uBuf = FloatArray(N) { hash01(it * 13 + 1) }
-    private val vBuf = FloatArray(N) { hash01(it * 71 + 5) }
-    private val rBuf = FloatArray(N) { hash01(it * 29 + 3) }
+    // The kit gives Orbital no `sp`, so its shell spins it at 1. It does not
+    // read the spin anyway: the tumble below is on the raw clock, as in the kit.
+    override fun speedFor(motion: FaceState) = 1f
 
-    override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.8f
-        FaceState.THINKING -> 2.2f
-        FaceState.SPEAKING -> 1.25f
-        else -> 0.4f
+    private fun lOf(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 2
+        FaceState.THINKING -> 3
+        FaceState.SPEAKING -> 2
+        else -> 1
+    }
+
+    private fun mOf(motion: FaceState) = when (motion) {
+        FaceState.THINKING -> 2
+        FaceState.SPEAKING -> 1
+        else -> 0
+    }
+
+    /** Real spherical harmonics, written out for l = 0..3 - the kit's `Y`. */
+    private fun y(l: Int, m: Int, c: Float, s: Float, ph: Float): Float = when (l) {
+        0 -> 0.282f
+        1 -> if (m == 0) 0.488f * c else 0.488f * s * cos(ph)
+        2 -> when (m) {
+            0 -> 0.315f * (3f * c * c - 1f)
+            1 -> 1.092f * s * c * cos(ph)
+            else -> 0.546f * s * s * cos(2f * ph)
+        }
+        else -> when (m) {
+            0 -> 0.373f * c * (5f * c * c - 3f)
+            2 -> 1.445f * s * s * c * cos(2f * ph)
+            else -> 0.457f * s * (5f * c * c - 1f) * cos(ph)
+        }
+    }
+
+    private fun cloud(l: Int, m: Int, want: Int): FloatArray {
+        val key = (l.toLong() shl 40) or (m.toLong() shl 32) or want.toLong()
+        clouds[key]?.let { return it }
+        // Rejection sampling: propose a point, keep it with probability |Y|^2.
+        // Same draws, same order and same acceptance test as the kit.
+        val rnd = kotlin.random.Random(20260923 + l * 131 + m * 17)
+        val out = FloatArray(want * 5)
+        var n = 0
+        var guard = 0
+        while (n < want && guard++ < want * 40) {
+            val uu = rnd.nextFloat() * 2f - 1f
+            val ph = rnd.nextFloat() * PI2
+            val c = uu
+            val s = kotlin.math.sqrt((1f - c * c).coerceAtLeast(0f))
+            val rr0 = rnd.nextFloat().pow(0.33f)
+            val yy = y(l, m, c, s, ph)
+            if (rnd.nextFloat() < yy * yy * 3.2f) {
+                val rr = rr0 * (0.35f + kotlin.math.abs(yy) * 1.5f)
+                val o = n * 5
+                out[o] = s * cos(ph) * rr
+                out[o + 1] = c * rr
+                out[o + 2] = s * sin(ph) * rr
+                out[o + 3] = if (yy > 0f) 1f else -1f
+                out[o + 4] = rnd.nextFloat()
+                n++
+            }
+        }
+        // If the guard ever ran out, the unfilled tail is marked empty (sign 0)
+        // rather than drawn as a pile of points at the origin.
+        for (i in n until want) out[i * 5 + 3] = 0f
+        if (clouds.size >= 12) clouds.clear()
+        clouds[key] = out
+        return out
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        val cp = cos(f.pitch)
-        val sp = sin(f.pitch)
-        val spin = f.angle * 0.35f + f.yaw
+    ) {
+        with(scope) {
+            KitParity.inKitCanvas(this) {
+                val px0 = KitParity.backingPx(this)
+                val u = 4f * r / px0
+                val l = lOf(f.motion)
+                val m = mOf(f.motion)
+                val want = KitParity.detail(px0, 700, 1700)
+                val pts = cloud(l, m, want)
 
-        for (i in 0 until N) {
-            // A fixed direction per point, from two hashes. The z term is
-            // uniform in cos(theta) so the points spread evenly over the
-            // sphere instead of bunching at the poles.
-            val u = uBuf[i]
-            val v = vBuf[i]
-            val cosT = 1f - 2f * u
-            val sinT = kotlin.math.sqrt((1f - cosT * cosT).coerceAtLeast(0f))
-            val phi = v * 2f * PI.toFloat() + spin
+                // A p or d cloud is close to symmetric about any single axis,
+                // so it tumbles on two axes at incommensurate rates. Yaw and
+                // pitch are added twice, as in the kit (here and in its proj).
+                val ry = f.t * 0.42f + f.yaw + f.yaw
+                val rx = -0.18f + sin(f.t * 0.27f) * 0.55f + f.pitch + f.pitch
+                cam.aim(ry, rx, dist = 3.4f, scale = 4f * r * 1.5f, cx = cx, cy = cy)
+                val puff = 1f + if (f.motion == FaceState.LISTENING) f.amp * 0.22f else 0f
 
-            // The lobe: radius pinched at the equator and full at the poles, so
-            // this reads as an orbital rather than a shell. Breathing on amp.
-            val lobe = 0.45f + 0.55f * (cosT * cosT)
-            val rr = lobe * (0.62f + 0.30f * rBuf[i]) * (1f + f.amp * 0.18f)
+                // The kit's slots: `col` is the structural (cool) colour and
+                // takes the positive lobe; `neg` is neither hot nor cool, so its
+                // colour binding gives it the midpoint.
+                val pos = cool
+                val neg = mix(hot, cool, 0.5f)
+                for (i in 0 until want) {
+                    val o = i * 5
+                    val sign = pts[o + 3]
+                    if (sign == 0f) continue
+                    cam.at(pts[o] * puff, pts[o + 1] * puff, pts[o + 2] * puff)
+                    val rad = kotlin.math.max(0.5f, px0 * 0.006f * cam.d * (0.5f + pts[o + 4])) * u
+                    drawCircle(
+                        color = if (sign > 0f) pos else neg,
+                        radius = rad,
+                        center = Offset(cam.x, cam.y),
+                        alpha = (0.10f + cam.d * 0.30f).coerceIn(0f, 1f),
+                        blendMode = KitParity.PLUS,
+                    )
+                }
 
-            val x0 = sinT * cos(phi) * rr
-            val y0 = cosT * rr
-            val z0 = sinT * sin(phi) * rr
-
-            xBuf[i] = x0
-            yBuf[i] = y0 * cp - z0 * sp
-            zBuf[i] = y0 * sp + z0 * cp
+                // The nucleus, and the term symbol.
+                cam.at(0f, 0f, 0f)
+                drawCircle(
+                    color = KitParity.white(f),
+                    radius = kotlin.math.max(1.5f, px0 * 0.010f) * u,
+                    center = Offset(cam.x, cam.y),
+                )
+                labelPaint.draw(
+                    this, TERMS[l] + "  m=" + m,
+                    x = cx + (px0 * 0.06f - px0 / 2f) * u,
+                    y = cy + (px0 * 0.11f - px0 / 2f) * u,
+                    sizePx = KitParity.jsRound(px0 * 0.05f) * u,
+                    color = pos.copy(alpha = 0.6f),
+                )
+            }
         }
-
-        for (i in 0 until N) {
-            val d = ((zBuf[i] + 1f) / 2f).pow(Spec.DEPTH_GAIN)
-            drawCircle(
-                color = mix(cool, hot, d).copy(alpha = (0.18f + 0.72f * d)),
-                radius = r * (0.006f + 0.014f * d) * (1f + f.amp * 0.35f),
-                center = Offset(cx + xBuf[i] * r, cy + yBuf[i] * r),
-            )
-        }
-
-        // The nucleus. Small, and the only thing in the face that is not a
-        // cloud point, so the eye has somewhere to rest.
-        drawCircle(
-            color = hot.copy(alpha = 0.7f),
-            radius = r * (0.028f + 0.022f * f.amp),
-            center = Offset(cx, cy),
-        )
     }
+
+    private val TERMS = arrayOf("s", "p", "d", "f")
 }
 
 /**
- * Subdivided icosahedron, lit by a wave travelling across the surface.
+ * A sphere that thinks in waves: a once-subdivided icosahedron, lit by waves
+ * travelling across its surface.
  *
- * The reference subdivides each icosahedral face once (42 vertices, three
- * wave origins on `thinking`) and swaps that count per state. This port uses
- * the plain icosahedron (12 vertices, 30 edges — every vertex degree 5) and
- * one wave origin: `speedFor` carries the per-state difference instead, the
- * same simplification every other 3D face here already makes rather than
- * re-deriving geometry per state. Brightness is computed against the
- * UNROTATED vertex positions, same as the reference — the wave lives on the
- * object, not the camera, so it must not depend on how the sphere is turned.
+ * A literal port of the reactor kit's Geodesic. The old port here used the
+ * plain 12-vertex icosahedron and one wave, and said so; the kit subdivides
+ * once (42 vertices, 120 edges) and runs one wave when idle, two when
+ * listening or speaking and three when thinking, each at its own rate. Lit
+ * nodes carry a soft glow of their own and the centre has a faint core glow.
+ *
+ * Brightness is computed against the UNROTATED vertex positions, as in the
+ * kit - the wave lives on the object, not the camera, so it must not depend
+ * on how the sphere is turned.
  */
 object Geodesic : Face {
     override val id = "geodesic"
     override val name = "Geodesic"
 
-    private val verts: Array<FloatArray> = run {
+    private val vx: FloatArray
+    private val vy: FloatArray
+    private val vz: FloatArray
+    private val edgeA: IntArray
+    private val edgeB: IntArray
+
+    init {
+        // The kit's ICO, built the same way: the 20 icosahedral faces, each
+        // split into four by its edge midpoints pushed back out to the sphere.
+        // Midpoints are shared through a map, so each is made once: 12 + 30 =
+        // 42 vertices and 120 edges, in the kit's own insertion order.
         val phi = (1f + kotlin.math.sqrt(5f)) / 2f
-        arrayOf(
+        val xs = ArrayList<Float>()
+        val ys = ArrayList<Float>()
+        val zs = ArrayList<Float>()
+        fun push(x: Float, y: Float, z: Float): Int {
+            val len = kotlin.math.sqrt(x * x + y * y + z * z)
+            xs.add(x / len)
+            ys.add(y / len)
+            zs.add(z / len)
+            return xs.size - 1
+        }
+        val base = arrayOf(
             floatArrayOf(-1f, phi, 0f), floatArrayOf(1f, phi, 0f),
             floatArrayOf(-1f, -phi, 0f), floatArrayOf(1f, -phi, 0f),
             floatArrayOf(0f, -1f, phi), floatArrayOf(0f, 1f, phi),
             floatArrayOf(0f, -1f, -phi), floatArrayOf(0f, 1f, -phi),
             floatArrayOf(phi, 0f, -1f), floatArrayOf(phi, 0f, 1f),
             floatArrayOf(-phi, 0f, -1f), floatArrayOf(-phi, 0f, 1f),
-        ).map { v ->
-            val len = kotlin.math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
-            floatArrayOf(v[0] / len, v[1] / len, v[2] / len)
-        }.toTypedArray()
-    }
-
-    // The 20 triangular faces of the icosahedron, walked once to derive the 30
-    // unique edges — a hand-typed edge list could silently miss or duplicate
-    // one and nothing would catch it, since there is no golden test for any
-    // face's geometry, only for the colour engine (see PatternGoldenTest).
-    private val edges: Array<IntArray> = run {
+        )
+        for (v in base) push(v[0], v[1], v[2])
         val faces = arrayOf(
             intArrayOf(0, 11, 5), intArrayOf(0, 5, 1), intArrayOf(0, 1, 7),
             intArrayOf(0, 7, 10), intArrayOf(0, 10, 11), intArrayOf(1, 5, 9),
@@ -1440,112 +1995,156 @@ object Geodesic : Face {
             intArrayOf(4, 9, 5), intArrayOf(2, 4, 11), intArrayOf(6, 2, 10),
             intArrayOf(8, 6, 7), intArrayOf(9, 8, 1),
         )
-        val seen = HashSet<Int>()
-        val out = ArrayList<IntArray>()
+        val mid = HashMap<Int, Int>()
+        fun midpoint(a: Int, b: Int): Int {
+            val key = minOf(a, b) * 1000 + maxOf(a, b)
+            mid[key]?.let { return it }
+            val i = push((xs[a] + xs[b]) / 2f, (ys[a] + ys[b]) / 2f, (zs[a] + zs[b]) / 2f)
+            mid[key] = i
+            return i
+        }
+        val edges = LinkedHashSet<Int>()
         for (tri in faces) {
-            for (k in 0 until 3) {
-                val a = tri[k]
-                val b = tri[(k + 1) % 3]
-                val lo = minOf(a, b)
-                val hi = maxOf(a, b)
-                val key = lo * 100 + hi
-                if (seen.add(key)) out.add(intArrayOf(lo, hi))
+            val a = tri[0]
+            val b = tri[1]
+            val c = tri[2]
+            val ab = midpoint(a, b)
+            val bc = midpoint(b, c)
+            val ca = midpoint(c, a)
+            val pairs = intArrayOf(
+                a, ab, ab, ca, ca, a, b, bc, bc, ab, ab, b,
+                c, ca, ca, bc, bc, c, ab, bc, bc, ca, ca, ab,
+            )
+            for (k in pairs.indices step 2) {
+                edges.add(minOf(pairs[k], pairs[k + 1]) * 1000 + maxOf(pairs[k], pairs[k + 1]))
             }
         }
-        out.toTypedArray()
+        vx = xs.toFloatArray()
+        vy = ys.toFloatArray()
+        vz = zs.toFloatArray()
+        edgeA = edges.map { it / 1000 }.toIntArray()
+        edgeB = edges.map { it % 1000 }.toIntArray()
     }
 
-    // Scratch space for one draw, kept on the face instead of reallocated. These
-    // four were `FloatArray(12)` locals inside `draw`, so four fresh arrays came
-    // off the heap every frame - about 250 bytes a frame, 30KB a second at
-    // 120fps, dropped into the nursery in the middle of the draw for no reason.
-    // Fullerene and Orbital already keep their point buffers exactly this way,
-    // and it is safe for the same reason: the face is a singleton drawn on one
-    // thread, and all four are pure scratch - every slot is written at the top of
-    // `draw` before anything reads it, so nothing carries over between frames.
-    private val xs = FloatArray(verts.size)
-    private val ys = FloatArray(verts.size)
-    private val depth = FloatArray(verts.size)
-    private val bright = FloatArray(verts.size)
+    // Scratch space for one draw, kept on the face instead of reallocated -
+    // every slot is written at the top of `draw` before anything reads it.
+    private val px = FloatArray(vx.size)
+    private val py = FloatArray(vx.size)
+    private val depth = FloatArray(vx.size)
+    private val bright = FloatArray(vx.size)
+    private val ox = FloatArray(3)
+    private val oy = FloatArray(3)
+    private val oz = FloatArray(3)
+    private val cam = KitParity.Camera()
 
+    // The kit's per-state `sp`, `waves` and `rate`.
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.7f
-        FaceState.THINKING -> 1.7f
-        FaceState.SPEAKING -> 0.9f
-        else -> 0.4f
+        FaceState.LISTENING -> 0.5f
+        FaceState.THINKING -> 0.85f
+        FaceState.SPEAKING -> 0.4f
+        else -> 0.3f
+    }
+
+    private fun wavesFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 2
+        FaceState.THINKING -> 3
+        FaceState.SPEAKING -> 2
+        else -> 1
+    }
+
+    private fun rateFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 1.6f
+        FaceState.THINKING -> 2.3f
+        FaceState.SPEAKING -> 1.0f
+        else -> 0.55f
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        val n = verts.size
-        val cp = cos(f.pitch)
-        val sp = sin(f.pitch)
-        val cyw = cos(f.angle + f.yaw)
-        val syw = sin(f.angle + f.yaw)
-        for (i in 0 until n) {
-            val v = verts[i]
-            val x0 = v[0] * cyw - v[2] * syw
-            val z0 = v[0] * syw + v[2] * cyw
-            xs[i] = x0
-            ys[i] = v[1] * cp - z0 * sp
-            val z = v[1] * sp + z0 * cp
-            depth[i] = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
-        }
+    ) {
+        with(scope) {
+            KitParity.inKitCanvas(this) {
+                val px0 = KitParity.backingPx(this)
+                val u = 4f * r / px0
+                val n = vx.size
+                cam.aim(
+                    ry = f.angle + f.yaw,
+                    rx = sin(f.t * 0.22f) * 0.45f + f.pitch,
+                    dist = 3.4f, scale = 4f * r * 0.60f, cx = cx, cy = cy,
+                )
+                for (i in 0 until n) {
+                    cam.at(vx[i], vy[i], vz[i])
+                    px[i] = cam.x
+                    py[i] = cam.y
+                    depth[i] = cam.d
+                }
 
-        // One wave origin orbiting the sphere on the unrotated object; a
-        // travelling pulse lights whatever vertex it is currently passing.
-        val rate = 0.6f
-        val originAngle = f.t * rate * 0.6f
-        val ox = cos(originAngle)
-        val oy = sin(originAngle * 0.7f)
-        val oz = sin(originAngle)
-        for (i in 0 until n) {
-            val v = verts[i]
-            val dx = v[0] - ox
-            val dy = v[1] - oy
-            val dz = v[2] - oz
-            val d = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz) / 2f
-            var ph = (f.t * rate - d * 2.2f) % 2f
-            if (ph < 0f) ph += 2f
-            bright[i] = if (ph < 1f) (sin(ph * PI.toFloat())).coerceAtLeast(0f) else 0f
-        }
-        val ampBoost = (f.amp * 0.3f).coerceAtMost(0.3f)
+                // Wave origins move over the surface; brightness is distance
+                // from them.
+                val waves = wavesFor(f.motion)
+                val rate = rateFor(f.motion)
+                for (k in 0 until waves) {
+                    val a = f.t * rate * 0.6f + k * PI2 / waves
+                    ox[k] = cos(a)
+                    oy[k] = sin(a * 0.7f)
+                    oz[k] = sin(a)
+                }
+                for (i in 0 until n) {
+                    var best = 0f
+                    for (k in 0 until waves) {
+                        val dx = vx[i] - ox[k]
+                        val dy = vy[i] - oy[k]
+                        val dz = vz[i] - oz[k]
+                        val d = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz) / 2f
+                        // Kotlin's % keeps the dividend's sign, as JavaScript's
+                        // does, so a negative phase is excluded the same way.
+                        val ph = (f.t * rate - d * 2.2f) % 2f
+                        if (ph > 0f && ph < 1f) best = kotlin.math.max(best, sin(ph * PI.toFloat()))
+                    }
+                    bright[i] = best
+                }
 
-        for (edge in edges) {
-            val i = edge[0]
-            val j = edge[1]
-            val d = (depth[i] + depth[j]) / 2f
-            val b = ((bright[i] + bright[j]) / 2f + ampBoost).coerceAtMost(1f)
-            drawLine(
-                color = (if (b > 0.25f) mix(cool, hot, b) else cool)
-                    .copy(
-                        // Neither factor is bounded by 1 on its own - the
-                        // first reaches 0.725 at d's max, the second 1.95 at
-                        // b's (b is explicitly capped at 1 a few lines up,
-                        // so that ceiling is reached, not theoretical) - and
-                        // their product peaks at 1.41, over what
-                        // `Color.copy(alpha = ...)` accepts. It throws
-                        // `IllegalArgumentException` rather than clamping,
-                        // so an uncoerced value here was a crash on a
-                        // front-facing, fully-lit vertex, not a visual bug.
-                        alpha = ((0.05f + (d - 0.55f).coerceAtLeast(0f) * 1.5f) *
-                            (0.35f + b * 1.6f)).coerceIn(0f, 1f),
-                    ),
-                start = Offset(cx + xs[i] * r, cy + ys[i] * r),
-                end = Offset(cx + xs[j] * r, cy + ys[j] * r),
-                strokeWidth = r * (0.006f + 0.012f * b) * d.coerceAtLeast(0.2f),
-            )
-        }
-        for (i in 0 until n) {
-            val b = bright[i]
-            if (b < 0.05f && depth[i] < 0.85f) continue
-            drawCircle(
-                color = (if (b > 0.3f) hot else cool).copy(alpha = (0.18f + b * 0.82f).coerceAtMost(1f)),
-                radius = r * (0.02f + 0.05f * b) * depth[i].coerceAtLeast(0.3f),
-                center = Offset(cx + xs[i] * r, cy + ys[i] * r),
-            )
+                for (e in edgeA.indices) {
+                    val i = edgeA[e]
+                    val j = edgeB[e]
+                    val d = (depth[i] + depth[j]) / 2f
+                    val b = (bright[i] + bright[j]) / 2f
+                    // Clamped both ways: the kit's canvas ignores an alpha
+                    // outside 0..1, but Compose's Color.copy throws on one.
+                    drawLine(
+                        color = if (b > 0.25f) mix(cool, hot, b) else cool,
+                        start = Offset(px[i], py[i]),
+                        end = Offset(px[j], py[j]),
+                        strokeWidth = kotlin.math.max(0.4f, px0 * 0.0018f * (0.6f + b * 2.2f) * d) * u,
+                        alpha = ((0.04f + (d - 0.55f) * 1.5f) * (0.35f + b * 1.6f)).coerceIn(0f, 1f),
+                    )
+                }
+                for (i in 0 until n) {
+                    val b = bright[i]
+                    if (b < 0.05f && depth[i] < 0.85f) continue
+                    val ga = (0.18f + b * 1.2f).coerceIn(0f, 1f)
+                    val rad = kotlin.math.max(0.8f, px0 * 0.004f * (1f + b * 2.6f) * depth[i]) * u
+                    val at = Offset(px[i], py[i])
+                    if (b > 0.3f) {
+                        drawCircle(
+                            brush = KitParity.glow(hot, 0.7f * b, at, rad * 4f),
+                            radius = rad * 4f,
+                            center = at,
+                            alpha = ga,
+                        )
+                    }
+                    drawCircle(color = if (b > 0.3f) hot else cool, radius = rad, center = at, alpha = ga)
+                }
+
+                // The core glow; it swells with the microphone while listening.
+                val cr = (px0 * 0.05f + if (f.motion == FaceState.LISTENING) f.amp * px0 * 0.04f else 0f) * u
+                drawCircle(
+                    brush = KitParity.glow(hot, 0.5f, Offset(cx, cy), cr * 3f),
+                    radius = cr * 3f,
+                    center = Offset(cx, cy),
+                )
+            }
         }
     }
 }
@@ -1554,116 +2153,163 @@ object Geodesic : Face {
  * The Kirkwood gaps: an asteroid belt cleared by resonance with a shepherd
  * body ("Jupiter"), not evenly filled.
  *
- * Positions are a fixed, seeded layout — semi-major axis, eccentricity,
- * phase, a scatter for depth — generated once so the belt is identical every
- * time this face is picked rather than reshuffling. Only each rock's ANGLE
- * advances with time, the same way the reference's own random layout is
- * generated once and cached (`this.rocks`) despite the spec marking this face
- * `integrates_per_frame: false`: the cache is a frozen layout, not evolving
- * simulation state.
+ * A literal port of the reactor kit's Kirkwood. The old port here flattened
+ * the belt into a squashed ellipse with a made-up depth term and drew its
+ * rocks at a third of the kit's size. The kit's belt is a real 3D ring seen
+ * from 54 degrees above the plane through its perspective camera, with a
+ * glowing sun, a glowing Jupiter, the three resonance radii drawn as faint
+ * rings, and more rocks while thinking (when the gaps also half fill in).
  *
- * Depth comes from Orbit's own squashed-ellipse technique in this file, not a
- * real camera pitch: this is a flat belt seen at an angle, not a point cloud
- * on a sphere, so Fullerene's rotation does not apply here.
+ * The layout is seeded and generated once, for the most rocks any state can
+ * ask for; a state that wants fewer uses the first N. The kit regenerates a
+ * fresh random belt whenever its count changes - on every step into or out
+ * of thinking - which here would have been a reshuffle on a state change and
+ * a face that is no longer a pure function of the frame.
  */
 object Kirkwood : Face {
     override val id = "kirkwood"
     override val name = "Kirkwood"
 
-    private const val N = 420
+    // faces[].render.fit for kirkwood is 0.9 in the spec. This face never set
+    // it, so it drew at 1.0 - larger than the kit, with Jupiter's orbit
+    // (1.32 of the belt) nearer the edge than the spec frames it.
+    override val fit = 0.9f
+
     private const val JUPITER_A = 1.32f
 
-    // a = aJupiter * ratio^(-2/3) — Kepler's third law, solved for the radius
-    // that shares Jupiter's orbital period times a simple fraction. A member
-    // function, not a file-level one, so it reads JUPITER_A directly instead
-    // of a second copy of the same literal that could drift from this one.
+    /** The most rocks [KitParity.detail] can return for the kit's largest `n` (700). */
+    private const val MAX_ROCKS = 1680
+
+    // a = aJupiter * ratio^(-2/3) - Kepler's third law, solved for the radius
+    // that shares Jupiter's orbital period times a simple fraction: the 3:1,
+    // 5:2 and 2:1 resonances.
     private fun gapAt(ratio: Float): Float = JUPITER_A * ratio.pow(-2f / 3f)
 
     private val gaps = floatArrayOf(gapAt(3f), gapAt(5f / 2f), gapAt(2f))
 
-    // Jupiter's own angular rate. A constant expression that was sitting in the
-    // draw, so Math.pow ran once a frame for a number fixed at compile time.
+    // Jupiter's own angular rate, a^-1.5.
     private val jupiterOmega = JUPITER_A.pow(-1.5f)
 
-    // Fixed per-rock layout, seeded so it never reshuffles between draws.
-    private val rockA = FloatArray(N)
-    private val rockE = FloatArray(N)
-    private val rockPhase = FloatArray(N)
-    private val rockDepthSeed = FloatArray(N)
-    private val rockSize = FloatArray(N)
+    // Fixed per-rock layout, drawn in the kit's order: a, e, phase, inc, s.
+    private val rockA = FloatArray(MAX_ROCKS)
+    private val rockE = FloatArray(MAX_ROCKS)
+    private val rockPhase = FloatArray(MAX_ROCKS)
+    private val rockInc = FloatArray(MAX_ROCKS)
+    private val rockSize = FloatArray(MAX_ROCKS)
 
-    // a^-1.5: Kepler's angular rate. It is a function of the FIXED layout above
-    // and of nothing else - not of time, not of state - but it was being raised
-    // to a power inside the draw loop, so Math.pow ran once per rock per frame:
-    // 420 calls a frame, about 50,000 a second at 120fps. Precomputed here for
-    // the same reason rockA and rockPhase themselves are: decided once, then
-    // only read. Costs 1.6KB for the life of the process.
-    private val rockOmega = FloatArray(N)
+    // Functions of the fixed layout alone, so decided once: Kepler's rate
+    // a^-1.5 (a Math.pow per rock per frame otherwise), and how clear of a
+    // resonance each orbit sits before the state's `clear` is applied.
+    private val rockOmega = FloatArray(MAX_ROCKS)
+    private val rockClear = FloatArray(MAX_ROCKS)
+
+    // Reused for the three gap rings; lazy for the same reason as Rime's.
+    private val path by lazy(LazyThreadSafetyMode.NONE) { androidx.compose.ui.graphics.Path() }
+    private val cam = KitParity.Camera()
 
     init {
         val rnd = kotlin.random.Random(20260913)
-        for (i in 0 until N) {
+        for (i in 0 until MAX_ROCKS) {
             rockA[i] = 0.45f + rnd.nextFloat() * 0.55f
             rockE[i] = rnd.nextFloat() * 0.10f
             rockPhase[i] = rnd.nextFloat() * PI2
-            rockDepthSeed[i] = (rnd.nextFloat() - 0.5f) * 0.10f
+            rockInc[i] = (rnd.nextFloat() - 0.5f) * 0.10f
             rockSize[i] = rnd.nextFloat()
             rockOmega[i] = rockA[i].pow(-1.5f)
+            var clear = 1f
+            for (gap in gaps) {
+                clear = minOf(clear, (kotlin.math.abs(rockA[i] - gap) / 0.045f).coerceIn(0f, 1f))
+            }
+            rockClear[i] = clear
         }
     }
 
+    // The kit's per-state `sp`.
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.5f
-        FaceState.THINKING -> 1.4f
-        FaceState.SPEAKING -> 0.6f
-        else -> 0.3f
+        FaceState.LISTENING -> 0.22f
+        FaceState.THINKING -> 0.6f
+        FaceState.SPEAKING -> 0.14f
+        else -> 0.10f
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
-    ) = with(scope) {
-        for (i in 0 until N) {
-            val a = rockA[i]
-            var clear = 1f
-            for (gap in gaps) {
-                val dd = kotlin.math.abs(a - gap)
-                clear = minOf(clear, (dd / 0.045f).coerceIn(0f, 1f))
+    ) {
+        with(scope) {
+            KitParity.inKitCanvas(this) {
+                val px0 = KitParity.backingPx(this)
+                val u = 4f * r / px0
+                val thinking = f.motion == FaceState.THINKING
+                // The kit's `n` and `clear`: thinking crowds the belt and lets
+                // the gaps two-thirds fill in.
+                val count = kotlin.math.min(MAX_ROCKS, KitParity.detail(px0, 260, if (thinking) 700 else 520))
+                val clearK = if (thinking) 0.35f else 1f
+                val mid = mix(hot, cool, 0.5f)
+
+                // Yaw and pitch twice, as in the kit (here and in its proj).
+                cam.aim(
+                    ry = f.yaw + f.yaw,
+                    rx = -0.95f + f.pitch + f.pitch,
+                    dist = 4.2f, scale = 4f * r * 1.35f, cx = cx, cy = cy,
+                )
+                val phase = f.angle
+                for (i in 0 until count) {
+                    // How close is this orbit to a resonance? That decides if
+                    // it survives.
+                    val clear = 1f + (rockClear[i] - 1f) * clearK
+                    if (clear < 0.06f) continue
+                    // Kepler: inner orbits are faster.
+                    val ang = rockPhase[i] + phase * rockOmega[i]
+                    val rr = rockA[i] * (1f - rockE[i] * cos(ang * 2f))
+                    cam.at(cos(ang) * rr, rockInc[i], sin(ang) * rr)
+                    val s = rockSize[i]
+                    drawCircle(
+                        color = if (s > 0.9f) mid else cool,
+                        radius = kotlin.math.max(0.5f, px0 * 0.0035f * cam.d * (0.4f + s)) * u,
+                        center = Offset(cam.x, cam.y),
+                        alpha = ((0.18f + s * 0.5f) * clear * cam.d).coerceIn(0f, 1f),
+                        blendMode = KitParity.PLUS,
+                    )
+                }
+
+                // The sun, and Jupiter doing the clearing.
+                cam.at(0f, 0f, 0f)
+                val sun = Offset(cam.x, cam.y)
+                val sunR = px0 * 0.10f * u
+                drawCircle(
+                    brush = KitParity.radial(
+                        sun, sunR,
+                        0f to lift(hot, 0.35f).copy(alpha = 0.85f),
+                        0.35f to hot.copy(alpha = 0.45f),
+                        1f to Color.Transparent,
+                    ),
+                    radius = sunR,
+                    center = sun,
+                )
+                val ja = phase * jupiterOmega
+                cam.at(cos(ja) * JUPITER_A, 0f, sin(ja) * JUPITER_A)
+                val jup = Offset(cam.x, cam.y)
+                val jupR = px0 * 0.045f * cam.d * u
+                drawCircle(
+                    brush = KitParity.radial(jup, jupR, 0f to hot, 0.6f to cool, 1f to Color.Transparent),
+                    radius = jupR,
+                    center = jup,
+                )
+
+                // Label the gaps where they actually are: a one-kit-pixel ring
+                // at each resonance radius.
+                for (gap in gaps) {
+                    path.reset()
+                    for (i in 0..48) {
+                        val a2 = i / 48f * PI2
+                        cam.at(cos(a2) * gap, 0f, sin(a2) * gap)
+                        if (i == 0) path.moveTo(cam.x, cam.y) else path.lineTo(cam.x, cam.y)
+                    }
+                    drawPath(path = path, color = mid, alpha = 0.14f, style = Stroke(width = 1f * u))
+                }
             }
-            if (clear < 0.06f) continue
-
-            // Kepler: inner orbits move faster. Precomputed at init - see rockOmega.
-            val om = rockOmega[i]
-            val ang = rockPhase[i] + f.angle * om + f.yaw
-            val rr = a * (1f - rockE[i] * cos(ang * 2f))
-            val x = cos(ang) * rr
-            // Squashed, like Orbit's own belt: y for the ellipse, a separate
-            // depth term (never read for position) for size and alpha only.
-            val y = sin(ang) * rr * 0.32f
-            val z = sin(ang) * 0.32f + rockDepthSeed[i]
-            val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
-            val bright = if (rockSize[i] > 0.9f) hot else cool
-            drawCircle(
-                color = bright.copy(alpha = ((0.18f + rockSize[i] * 0.5f) * clear * d).coerceIn(0f, 1f)),
-                radius = (r * 0.0035f * d * (0.4f + rockSize[i])).coerceAtLeast(0.5f),
-                center = Offset(cx + x * r, cy + y * r),
-            )
         }
-
-        // The sun, and Jupiter itself doing the clearing.
-        drawCircle(
-            color = lift(hot, 0.35f).copy(alpha = 0.85f),
-            radius = r * 0.09f,
-            center = Offset(cx, cy),
-        )
-        val ja = f.angle * jupiterOmega + f.yaw
-        val jx = cos(ja) * JUPITER_A
-        val jy = sin(ja) * JUPITER_A * 0.32f
-        drawCircle(
-            color = hot,
-            radius = r * 0.032f,
-            center = Offset(cx + jx * r, cy + jy * r),
-        )
     }
 }
 
