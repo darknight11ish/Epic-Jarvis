@@ -247,14 +247,14 @@ $SHIPPED = @(
     # on: the model is offered a tool only when [tools].enabled in
     # jarvis-framework.toml names it, and every action it takes still goes
     # through the approval gate.
-    'jarvis_research.py'         # "research": web search and reading pages
-    'jarvis_ui_control.py'       # "ui_control": reading and clicking other windows
-    'jarvis_android_control.py'  # "android_control": the phone over adb
-    'jarvis_browser_control.py'  # "browser_control": a real browser, via Playwright
-    'jarvis_calendar.py'         # "calendar"
-    'jarvis_email.py'            # "email"
-    'jarvis_notes.py'            # "notes_search"; carries the token-in-an-error fix
-    'jarvis_home.py'             # "home": Home Assistant
+    'jarvis_research.py'         # tool "github_search": is there already a library for this?
+    'jarvis_ui_control.py'       # tool "control_computer": reading and clicking other windows
+    'jarvis_android_control.py'  # tool "control_phone": the phone over adb
+    'jarvis_browser_control.py'  # tool "browser_control": a real browser, via Playwright
+    'jarvis_calendar.py'         # tool "calendar_read"
+    'jarvis_email.py'            # tool "email_check"
+    'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
+    'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
 )
 
 # The settings file. Installed only where none exists; never overwritten.

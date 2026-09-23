@@ -5,7 +5,11 @@
 > is the detail.
 
 
-Thirty-one patches against the Jarvis backend, each with an executable test.
+Thirty-six patches against the Jarvis backend, each with an executable test
+(counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
+refuses to run if a `.patch` file here is missing from it). The paragraphs
+below were written as the list grew, so the counts in them are the count at
+the time.
 The last four of the older ones - `ui-control-wiring.patch`, `ollama-direct.patch`,
 `tool-calling-wiring.patch` and `loopback-too.patch` - sit outside the ordered
 stack below: each only touches its own few lines, shared with no other patch
@@ -96,14 +100,20 @@ on a throwaway copy instead.
 | `power-mode.patch` | `jarvis_hud.py` | **Nothing could change the power mode.** Adds `POST /api/power` (Active / Quiet / Standby) through the gate as `power_manage`. Needs `note-capture.patch` (textual) and `jarvis_power_switch.py` — see its own section, at the end. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 
-## Twenty of the twenty-two actually apply, and that is correct
+## Thirty-four of the thirty-six actually apply, and that is correct
 
 Ten backend modules were lost and rebuilt from scratch (`backend/rebuilt/` —
 see the header of any file in there). The rebuild was written against the
 *patched* behaviour, because the patches were the specification: their `+`
 lines were often the only surviving copy of the original code.
 
-So six of the twenty-two patches are already half-applied by the rebuild:
+`apply-patches.ps1` copies all ten rebuilt modules into your backend folder
+on every run (backing up any older copy first), so these are the versions
+your backend runs. Before 2026-09-24 nothing copied them at all: they got
+there by hand or not at all, and fixes made to them here never reached the
+PC.
+
+So six of the patches are already half-applied by the rebuild:
 
 | patch | half in `rebuilt/` | half still applied, from `rebuilt-patches/` |
 |---|---|---|
@@ -114,8 +124,12 @@ So six of the twenty-two patches are already half-applied by the rebuild:
 | `embedding-guard.patch` | `jarvis_memory.py` | *(nothing — skipped entirely)* |
 | `event-allowlist.patch` | `jarvis_events.py` | *(nothing — skipped entirely)* |
 
-`apply-patches.ps1` detects the rebuilt modules by a marker in their header and
-substitutes the split versions, which is why a clean run reports **19**.
+Because the script installs the rebuilt modules itself, it always applies the
+split versions: 34 patches, four of them as halves, and two skipped. (It used
+to decide by looking for a marker in your `jarvis_memory.py` only - which
+got it wrong on a backend without the rebuilt modules, and ignored
+`jarvis_events.py`, which two of the six are about. `-Revert` still looks,
+in either file, since it has to take off what is actually there.)
 
 **The hazard this creates, and it has already bitten once.** "The rebuild
 contains that half" is an assumption, not a fact, and nothing checked it. Four
@@ -135,24 +149,36 @@ They live here; the modules they test live in your backend folder. Point them
 at it:
 
 ```powershell
-$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; Get-ChildItem backend\test_*.py | ForEach-Object { Write-Host $_.Name -NoNewline; python $_.FullName > $null 2>&1; if ($?) { Write-Host "  ok" -ForegroundColor Green } else { Write-Host "  FAIL" -ForegroundColor Red } }
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; foreach ($t in Get-ChildItem backend\test_*.py) { Write-Host $t.Name -NoNewline; py -3 $t.FullName *> $null; if ($LASTEXITCODE -eq 0) { Write-Host "  ok" -ForegroundColor Green } else { Write-Host "  FAIL" -ForegroundColor Red } }
 ```
 
-`apply-patches.ps1` sets that variable for you. Without it the suites look in
-their own folder, which is right in the dev container — the modules are
-symlinked in there — and wrong everywhere else.
+`$LASTEXITCODE`, not `$?`: in Windows PowerShell 5.1, a program that writes
+anything to its error output while that output is redirected makes `$?`
+false even when it succeeded - and Python's test runner writes its report
+there - so the old line here showed passing suites as FAIL. `py -3`, not
+`python`: on a fresh Windows 11, `python` is a Microsoft Store shortcut, not
+Python.
+
+`apply-patches.ps1` sets that variable and runs them for you. Without it the
+suites look in their own folder, which is right in the dev container — the
+modules are symlinked in there — and wrong everywhere else. CI runs them
+with `backend/run_suites.py`, against a copy of every module this repository
+ships; the suites that need your own `jarvis_hud.py`, `jarvis_gate.py` or
+`jarvis_extract.py` are skipped there, by name, so your PC is the only place
+those run.
 
 ## Apply them
 
-One command:
+One command, from the folder this repository is cloned into
+(`docs/INSTALL.md` step 1.5 walks through it):
 
 ```powershell
-.\scripts\apply-patches.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 ```
 
-Point it somewhere else with
-`-BackendPath "D:\your\path"`, undo with `-Revert`, and skip the test run
-with `-SkipTests`.
+`-ExecutionPolicy Bypass` lets Windows run this one script file without
+changing any setting. Undo the patches with `-Revert`, skip the test run with
+`-SkipTests`, skip pip with `-SkipPackages`.
 
 It backs up every file it is about to touch into a timestamped folder, then
 **applies the whole stack to a throwaway copy first** — so a patch that will
@@ -175,21 +201,50 @@ job by hand (take everything off, then put everything on):
 .\scripts\apply-patches.ps1 -Revert; .\scripts\apply-patches.ps1
 ```
 
-**It also copies in the new modules the patches call** - `jarvis_intake.py`,
-`jarvis_feedback.py`, `jarvis_skill_discovery.py`, `jarvis_speed.py`,
-`jarvis_owned_tables.py`, the updated `jarvis_agent.py`,
-`jarvis_browser_control.py` (which stays switched off until `[tools].enabled`
-names `"browser_control"`), and, since "Train my voice",
-`jarvis_voice_enroll.py`, `jarvis_speech.py` and `rebuilt\jarvis_voice.py`, and since "hey Jarvis", `jarvis_wakeword.py`. Each patch only adds a call into one of these, and the call quietly does nothing when the
-file is missing, so a backend without them would pass every test with the
-new features switched off. The script compares each file with the one in
-this repository's `backend\` folder; if yours is missing or different, it
-backs the old one up into the same `_jarvis-backup-...` folder and copies
-the new one in. `-Revert` leaves them where they are (nothing calls them
-once the patches are off). And when the tests run against your backend
-(`JARVIS_BACKEND` set), a suite for one of these modules now FAILS with
-"copy backend\<name> into the backend folder" if your copy is missing or
-out of date, instead of quietly testing this repository's copy.
+**It also copies in every module this repository ships whole** - the list
+is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
+`backend/_where.py`:
+
+- the ten rebuilt modules in `backend\rebuilt\` (each lands beside
+  `jarvis_hud.py`, not in a `rebuilt` folder);
+- the modules the patches call: `jarvis_intake.py`, `jarvis_feedback.py`,
+  `jarvis_skill_discovery.py`, `jarvis_speed.py`, `jarvis_owned_tables.py`,
+  `jarvis_agent.py`, `jarvis_voice_enroll.py`, `jarvis_speech.py`,
+  `jarvis_task_control.py`, `jarvis_note_capture.py`,
+  `jarvis_power_switch.py`, and `jarvis_wakeword.py` ("hey Jarvis");
+- the tools `jarvis_agent.py` offers: `jarvis_research.py`,
+  `jarvis_ui_control.py`, `jarvis_android_control.py`,
+  `jarvis_browser_control.py`, `jarvis_calendar.py`, `jarvis_email.py`,
+  `jarvis_notes.py`, `jarvis_home.py`. Copying one does not switch it on:
+  the model is only offered a tool that `[tools].enabled` in
+  `jarvis-framework.toml` names.
+
+Every import of these is wrapped, so a missing one never stops anything - it
+just switches a feature off without a word. Until 2026-09-24 the script
+copied only some of them: `jarvis_agent.py` went over without the seven tool
+modules it imports, so every tool answered "unavailable", and nothing copied
+the rebuilt modules. `backend/test_shipped_modules.py` now fails if a module
+that anything shipped imports is not on the list.
+
+The script compares each file with the one in this repository's `backend\`
+folder; if yours is missing or different, it backs the old one up into the
+same `_jarvis-backup-...` folder and copies the new one in. `-Revert` leaves
+them where they are. And when the tests run against your backend
+(`JARVIS_BACKEND` set), a suite for one of these modules FAILS with "copy
+backend\<name> into the backend folder" if your copy is missing or out of
+date, instead of quietly testing this repository's copy.
+
+**Your settings file, `jarvis-framework.toml`, is never overwritten.** If the
+backend would find none (the script looks where `jarvis_framework.py` looks:
+`JARVIS_FRAMEWORK_TOML`, then `%USERPROFILE%\.openjarvis\`, then beside
+`jarvis_hud.py`, then one folder up), this repository's copy
+(`backend\rebuilt\jarvis-framework.toml`) is put beside `jarvis_hud.py`. If
+you have one, it is left alone and the script lists, setting by setting,
+what differs from this repository's copy, for you to decide on.
+
+**And it installs the Python packages** in `backend/requirements.txt`, into
+the real Python (it tries `py -3` first and refuses the Microsoft Store
+shortcut). That file says which feature each package carries.
 
 If a patch will not apply, it prints the reason and changes nothing. That
 output is worth sending back: it almost always means the backend file has
@@ -1070,13 +1125,10 @@ A picture-capable local model, such as `qwen2.5vl`, would need more graphics
 memory than the current card has spare; the planned second card is the place
 for it (`docs/MODEL-TOPOLOGY.md`).
 
-To take this change, copy the rebuilt router over the one in your backend
-folder (it is not one of the files `apply-patches.ps1` copies for you), then
-restart the backend. One line, in PowerShell:
-
-```powershell
-Copy-Item -LiteralPath "C:\Users\pcadmin\Epic-Jarvis\backend\rebuilt\jarvis_router.py" -Destination "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\" -Force; Write-Host "Copied jarvis_router.py into the backend folder. Restart the backend to use it."
-```
+To take this change, run `apply-patches.ps1` (it copies the rebuilt router
+in, backing up your old one), then restart the backend. (This paragraph used
+to give a manual copy command, because the script did not copy the rebuilt
+modules. Since 2026-09-24 it copies all ten.)
 
 ## The other gate in `choose()`, added since: a pasted secret, not just the word for one
 

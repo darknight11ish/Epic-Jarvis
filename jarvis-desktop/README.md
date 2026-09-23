@@ -23,17 +23,23 @@ is not optional:
 
 **1. The backend must be told this origin is legitimate.**
 
+If the desktop app starts the backend for you (Settings → Backend →
+Supervision), it does this itself - `sidecar.rs` sets `JARVIS_HUD_ORIGINS` on
+the backend it starts. If you start the backend yourself, in PowerShell, from
+the backend folder (one line):
+
+```powershell
+$env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"; py -3 jarvis_hud.py
 ```
-set JARVIS_HUD_ORIGINS=http://tauri.localhost,tauri://localhost
-python jarvis_hud.py
-```
+
+That is PowerShell syntax. The old line here, `set JARVIS_HUD_ORIGINS=...`,
+is the Command Prompt's: typed into PowerShell it sets nothing and prints
+nothing, and every request from the HUD window is then refused.
 
 Without it every call from the HUD page is **403**. `_origin_ok()` only falls
 back to the `X-Jarvis-Client: hud` header when a request carries *no* `Origin`,
 and a cross-origin `fetch` from the webview always sends one — so the header
-fallback the page relies on in a browser does nothing here. This is set in the
-child's environment automatically once the app supervises the backend
-(build order step 4); until then it is a manual step.
+fallback the page relies on in a browser does nothing here.
 
 **2. The base URL and token come from the desktop shell, not the page.**
 
@@ -133,8 +139,10 @@ npm test               # the Rust unit tests
 ```
 
 `npm run build` writes the installers to
-`src-tauri/target/release/bundle/msi/` and `.../nsis/`. The NSIS one installs
-per-machine, so it will ask for elevation.
+`src-tauri/target/release/bundle/msi/` and `.../nsis/`. Use the NSIS one
+(`nsis\*-setup.exe`): it installs for your user only, into `%LOCALAPPDATA%`
+(`installMode: currentUser` in `tauri.conf.json`), so it does not ask for
+administrator rights.
 
 Everything in `src/` is copied verbatim — `frontendDist` is `../src` and there
 is no build step for the frontend, so `npm run dev` picks up an edit to a
@@ -142,8 +150,13 @@ is no build step for the frontend, so `npm run dev` picks up an edit to a
 
 ### First run
 
-The app has no window at startup by design: it lives in the notification area.
-Look for the tray icon, or press `Alt`+`Space`.
+Started by you, the app opens the **HUD window** (1280×820, centred) and the
+small **widget** pill at the top-left, and puts an icon in the notification
+area - on Windows 11 that icon starts hidden under the `^` arrow; drag it
+onto the taskbar. Started by Windows at login, or by a notification's Deny
+button, the HUD is built but stays hidden until you open it from the tray
+(`build_hud_window` in `src-tauri/src/lib.rs`). `Alt`+`Space` opens the
+quick-ask bar either way.
 
 If nothing happens on `Alt`+`Space`, the hotkey was refused — PowerToys Run
 claims the same combination. The app raises a Windows notification naming the

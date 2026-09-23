@@ -1,12 +1,19 @@
-# Installing Jarvis Desktop, start to finish
+# Installing Jarvis, start to finish
 
-Written because an audit walked the path from a fresh Windows 11 machine to a
-working system and found **nine of sixteen steps documented nowhere**. Nothing
-here is aspirational: where something does not work yet, it says so and tells
-you what to do instead.
+From a Windows 11 PC with nothing on it to a working, fully patched Jarvis,
+in order. Nothing here is aspirational: where something does not work yet,
+it says so and tells you what to do instead.
 
-Read the whole page once before starting. Two of the steps are much easier if
-you know they are coming.
+**How to use this page.** Every command is ONE line. Copy the whole line,
+paste it into **PowerShell** (Start menu → type `PowerShell` → Enter), press
+Enter, and wait for it to finish before the next one. Where a step says
+"open a NEW PowerShell window", do that - a program you just installed is
+only found by windows opened after it.
+
+The short version of the backend part: install four programs, get two
+folders, then **one script** (`scripts\apply-patches.ps1`) does everything
+else - the patches, the modules, the settings file, the Python packages -
+and tests the result.
 
 ---
 
@@ -24,117 +31,204 @@ breaks the error usually names the wrong one.
 Both clients are windows onto the backend. If the backend is not running,
 both are offline and neither can do anything about it on its own.
 
+Two folders, and they are different:
+
+- **This repository** (the code on GitHub) - the patches, the modules, the
+  scripts, the apps. Step 1.2 puts it at `C:\Users\<you>\Epic-Jarvis`.
+- **Your backend folder** - where `jarvis_hud.py` lives, on your PC only.
+  The owner's is
+  `C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program`.
+  The commands below use that path; change it if yours is elsewhere.
+
 ---
 
 ## Part 1 — The backend
 
-### 1.1 Install Python
+### 1.1 Install the programs
+
+Git (to get this repository), Python (runs the backend) and Ollama (runs the
+model on your graphics card). One line:
 
 ```powershell
-winget install Python.Python.3.12
+winget install --id Git.Git -e; winget install --id Python.Python.3.12 -e; winget install --id Ollama.Ollama -e
 ```
 
-**Do not rely on the `python` command afterwards.** On a fresh Windows 11 the
-name `python` is a Microsoft Store *App Execution Alias* — a zero-byte stub
-that opens the Store if Python is not installed. It is not an error you can
-see: the app will report "Started the backend (pid 12345)" and nothing will be
-listening.
-
-Find the real one and write the path down:
+Then **close PowerShell and open a new one**, and check all three are found:
 
 ```powershell
-py -3 -c "import sys; print(sys.executable)"
+git --version; py -3 --version; ollama --version
 ```
 
-Typically `C:\Users\<you>\AppData\Local\Programs\Python\Python312\python.exe`.
-Use that full path everywhere below.
+Three version numbers means you are done. **Do not use the word `python` on
+its own** to run anything: on a fresh Windows 11, `python` is a Microsoft
+Store shortcut that is not Python at all - it opens the Store, or prints
+"Python was not found", and a program started with it looks started while
+nothing is running. `py -3` is the real one. The scripts here know this and
+use `py -3` themselves.
 
-### 1.2 Get the backend files
+### 1.2 Get this repository
 
-**This step used to be missing from this page, and it cost a day.** It went
-straight to "put the files somewhere" without saying where to get them. When
-ten of them turned out to be absent from the owner's machine, there was
-nothing here to reinstall from.
+One line. It lands in `C:\Users\<you>\Epic-Jarvis`, and the second half moves
+PowerShell into that folder:
 
-So, plainly: **there is no download link.** The backend is not a public
-project. Searching for it found two unrelated things — `open-jarvis/OpenJarvis`
-keeps its code under `src/openjarvis/` with no flat `jarvis_*.py` at all, and
-`Twsman1/JARVIS` has a `jarvis_hud.py` that is a wake-word overlay, not an
-HTTP server. Neither has `jarvis_memory.py` or `jarvis_gate.py`. If a real
-upstream exists, it has not been found.
+```powershell
+git clone https://github.com/darknight11ish/Epic-Jarvis.git "$env:USERPROFILE\Epic-Jarvis"; cd "$env:USERPROFILE\Epic-Jarvis"
+```
+
+If the repository is private, Git opens a browser window to sign in to
+GitHub first. **Run every command below from this folder** - each one names
+files relative to it. To get back here in a new window:
+`cd "$env:USERPROFILE\Epic-Jarvis"`. To update it later: `git pull`.
+
+### 1.3 Get the backend files
+
+**This is the one part no script can do for you, because there is no
+download link.** The backend is not a public project. Searching for it found
+two unrelated things — `open-jarvis/OpenJarvis` keeps its code under
+`src/openjarvis/` with no flat `jarvis_*.py` at all, and `Twsman1/JARVIS` has
+a `jarvis_hud.py` that is a wake-word overlay, not an HTTP server. Neither has
+`jarvis_memory.py` or `jarvis_gate.py`.
 
 What the files are, as far as the evidence goes: they were produced in
-assistant conversations and saved to disk. The owner's copy lives under
-`Documents\Claude\`, `patch_openjarvis.py` is written in the same voice as
-the rest, and there is no installer, package or archive anywhere on the
-machine that contains them.
+assistant conversations and saved to disk, under `Documents\Claude\` on the
+owner's PC. **Those conversations are the only copy** of the files this
+repository does not ship (`jarvis_hud.py`, `jarvis_gate.py`,
+`jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py` and a few more).
+Keep that folder somewhere backed up.
 
-**The practical consequence: those conversations are the only copy.** Save the
-files somewhere backed up, and if one goes missing, the chat history is where
-it is.
+Ten modules that were lost *have* been rebuilt, and live in this repository
+(`backend\rebuilt\`), along with every newer module. You do not copy those by
+hand: step 1.5 does.
 
-### 1.2b Check the folder is complete before anything else
+### 1.4 Check the backend folder
 
-`jarvis_hud.py` needs **all of its sibling `jarvis_*.py` modules in the same
-folder**. There are twenty-six. Most imports are wrapped so a missing one does
-not stop the program starting — which is the problem: it starts, looks healthy,
-and then fails on the first real request.
-
-And one missing file hides the others. `jarvis_framework` is imported by
-fifteen of the twenty-six, so the moment it is absent Python stops at the very
-first import and you never learn what else is gone.
+One line. It reads every file in your backend folder, works out which
+modules they need, and says which are there. It changes nothing.
 
 ```powershell
-.\scripts\check-backend.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\check-backend.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 ```
 
-It reads the import lines of every file you have, works out the full list of
-modules they need, and says which are present — most-needed first. It changes
-nothing. Run it before the patches, and again after recovering any file.
+(`-ExecutionPolicy Bypass` lets Windows run this one script file without
+changing any setting. Without it, Windows refuses script files by default.)
 
-It also wants `jarvis_hud.html` beside it, for the browser HUD. That file lives
-in this repo at `jarvis-desktop/src/jarvis_hud.html`; copy it across, or accept
-that `http://localhost:4719/` returns a 500 while the desktop app works fine.
+- **`ok`** - there.
+- **`not yet`** - this repository ships it; step 1.5 copies it in. Fine.
+- **`MISSING`** - not there, and this repository does not have it either.
+  Find it before going on (the list is most-needed first, and one missing
+  file hides the others). It lists the files that need each one.
 
-**There is nothing to `pip install`.** The backend is standard library only.
-That claim is in its docstring and it is true — verified by walking every
-import.
+### 1.5 Run the one script
 
-### 1.3 Apply the patches
-
-In `backend/` of this repo, in this order. `memory-safety` must go first: until
-it lands, a correction can retire an unrelated fact, and installing the
-embedding model breaks every future write.
+One line:
 
 ```powershell
-copy jarvis_hud.py jarvis_hud.py.bak
-copy jarvis_memory.py jarvis_memory.py.bak
-copy jarvis_extract.py jarvis_extract.py.bak
-git apply path\to\memory-safety.patch
-git apply path\to\events-pump.patch
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 ```
 
-`events-pump.patch` is **not optional if you want the phone.** Without it the
-server never publishes an `approval` event, so a gate raised on the PC does not
-reach the phone until the hourly reconnect. Everything else can be perfect and
-the phone will still look broken.
+In order, it:
 
-### 1.4 Start it
+1. **Rehearses** every patch on a throwaway copy of your files. If any would
+   not apply, it stops, prints why, and says **NOTHING HAS BEEN CHANGED** -
+   true: your folder was never opened. Send that output back.
+2. **Backs up** every file it is about to change, into a
+   `_jarvis-backup-<date>` folder inside your backend folder, then applies
+   the patches. Among them: the pairing token, `127.0.0.1` staying reachable
+   when the phone is paired, chat actually reaching Ollama, nothing ever
+   approved without you, and private content never leaving the PC.
+3. **Copies in every module this repository ships** - the ten rebuilt ones,
+   the tools, and the new modules the patches call - backing up any older
+   copy first.
+4. **The settings file** (`jarvis-framework.toml`): if you have none, it
+   puts this repository's copy beside `jarvis_hud.py`. **If you have one, it
+   is never overwritten** - the script lists, setting by setting, how yours
+   differs from this repository's, for you to decide on.
+5. **Installs the Python packages** in `backend\requirements.txt` (memory
+   search by meaning, the voice features). A minute or two the first time.
+6. **Runs the test suites** against your backend and prints a summary.
+
+It is safe to run again - after a `git pull`, run the same line. It works out
+what is already done and does the rest.
+
+**If it ends with failures**, send back what it printed. A failing suite
+here is a real finding: CI runs the suites too, but the ones that test a
+patch against *your* `jarvis_hud.py` can only run on your PC.
+
+### 1.6 The settings file, and turning tools on
+
+`jarvis-framework.toml` holds the decisions only you make: which actions ask
+you first (`[autonomy.tiers]`), and which tools the model may use. The
+backend looks for it in this order and uses the first it finds:
+
+1. the file named by the `JARVIS_FRAMEWORK_TOML` environment variable, if set;
+2. `C:\Users\<you>\.openjarvis\jarvis-framework.toml`;
+3. beside `jarvis_hud.py` in your backend folder (where step 1.5 puts one);
+4. the folder above that.
+
+**Tools are off until you name them.** Step 1.5 copies in the tool modules
+(checking GitHub for an existing library, reading and clicking other windows,
+the phone over adb, a browser, calendar, email, notes, Home Assistant), but
+the model is offered a tool only if the `enabled` list under `[tools]` names
+it - and every action a tool takes still goes through the approval gate.
+This repository's copy of the file has **no** `[tools]` section, so a PC set
+up from it starts with every tool off. To turn one on, add a section like
+this to the file (the names are the tools' names in
+`backend\jarvis_agent.py`):
+
+```toml
+[tools]
+enabled = ["calculator"]
+```
+
+`backend\README.md` has a section per tool saying what it needs set up first
+and which approval tier it asks under. Restart the backend after editing.
+
+### 1.7 The model
+
+One time. The first two lines are settings Ollama reads at start-up (a
+Modelfile cannot hold them); the rest downloads the base model (about 5 GB)
+and builds Jarvis's tuned copy of it from `backend\jarvis-primary.Modelfile`:
 
 ```powershell
-C:\...\python.exe jarvis_hud.py
+[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_0', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '-1', 'User'); ollama pull qwen3:8b; ollama create jarvis-primary -f backend\jarvis-primary.Modelfile
 ```
 
-Read the banner. Three lines matter:
+Then quit Ollama from its tray icon and start it again, so it reads the two
+settings. [`MODEL-TOPOLOGY.md`](MODEL-TOPOLOGY.md) says why this model and
+these numbers, and how to check it is really running on the graphics card
+and not spilling into system memory (which makes everything about five times
+slower with no warning).
 
-- `hud token  NOT SET` — fine for now, loopback only.
-- `routing off - jarvis_router.py / jarvis_recall.py not found` — **this message
-  names the wrong file.** It prints both names whichever is missing. Check which
-  one you actually lack.
-- If the memory block is missing entirely, one of the five memory modules failed
+**Voice (optional).** Talking to Jarvis needs model files downloaded onto the
+PC as well. `backend\README.md`, section **"Voice that works"**, has the
+steps.
+
+### 1.8 Start it
+
+One line (change the path if your backend folder is elsewhere):
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_hud.py
+```
+
+Read what it prints at the top. Three lines matter:
+
+- A `token` line naming `...\.openjarvis\token` - the pairing token was made
+  (step 1.5 applied the patch that makes it). No token line means it could
+  not write that file; check the folder's permissions.
+- `routing off - jarvis_router.py / jarvis_recall.py not found` — **this
+  message names the wrong file.** It prints both names whichever is missing.
+  Check which one you actually lack.
+- If the memory block is missing entirely, one of the memory modules failed
   to import and Jarvis has no memory. The banner does not say so.
 
 Leave this window open. Everything it prints goes here and nowhere else.
+
+The browser page at `http://localhost:4719/` needs `jarvis_hud.html` beside
+`jarvis_hud.py`. The desktop app does not: it carries its own copy. If you
+want the browser page, copy `jarvis-desktop\src\jarvis_hud.html` into your
+backend folder; without it that address returns an error (a 500) while
+everything else works.
 
 ---
 
@@ -142,14 +236,22 @@ Leave this window open. Everything it prints goes here and nowhere else.
 
 ### 2.1 Build it
 
+It is built on your PC; there is no download yet. That needs three more
+programs - Microsoft's C++ build tools, Rust and Node.js. One line (the build
+tools are large, and the line takes a while):
+
 ```powershell
-cd jarvis-desktop
-npm install
-npm run tauri build
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"; winget install --id Rustlang.Rustup -e; winget install --id OpenJS.NodeJS.LTS -e
 ```
 
-The installers land in `src-tauri\target\release\bundle\` — `nsis\*-setup.exe`
-and `msi\*.msi`. Use the NSIS one.
+Open a NEW PowerShell window, then (one line):
+
+```powershell
+cd "$env:USERPROFILE\Epic-Jarvis\jarvis-desktop"; npm install; npm run tauri build
+```
+
+The installers land in `jarvis-desktop\src-tauri\target\release\bundle\` —
+`nsis\*-setup.exe` and `msi\*.msi`. Use the NSIS one.
 
 ### 2.2 Get past SmartScreen
 
@@ -203,8 +305,12 @@ Tray → **Settings** → **Backend**.
 - **Supervision** is off by default and that is deliberate: with it on, the app
   adopts and kills the backend, which would kill a backend you started in a
   terminal. Turn it on only if you want the app to own the backend's lifetime.
-- If you do turn it on, set **Program** to the full `python.exe` path from step
-  1.1 — not `python` — and **Arguments** to the full path of `jarvis_hud.py`.
+- If you do turn it on, set **Program** to the full path of the real
+  `python.exe` — not `python`, which may be the Store shortcut from step 1.1.
+  This one line prints it:
+  `py -3 -c "import sys; print(sys.executable)"` (typically
+  `C:\Users\<you>\AppData\Local\Programs\Python\Python312\python.exe`).
+  Set **Arguments** to the full path of `jarvis_hud.py`.
 
 **Know the trade:** with supervision on, quitting Jarvis Desktop also stops the
 backend, and therefore stops the phone from reaching anything.
@@ -275,19 +381,43 @@ Tailscale name ending in `.ts.net`, or the Meshnet name ending in `.nord`
 That field refuses `0.0.0.0` outright, on either side: the setting will not
 save it, and if it somehow reached the backend, `jarvis_hud._bind_address()`
 would still be binding every interface on the machine, not just the tailnet.
-Type the specific Tailscale address, never the wildcard — that is what keeps
-the port unreachable from the café Wi-Fi and the Windows Firewall profile out
-of the picture.
+Type the specific Tailscale or Meshnet address, never the wildcard — that is
+what keeps the port unreachable from the café Wi-Fi.
 
-If you start the backend yourself rather than letting the desktop supervise
-it, the desktop's setting does not apply — set the environment variable by
-hand instead:
+**It does NOT keep Windows Firewall out of the picture.** This page used to
+say it did, and that was wrong. The first time the backend listens on the
+`100.x` address, Windows asks whether to let Python through the firewall.
+The Tailscale and Meshnet network adapters are often classed as **Public**
+networks, and the prompt's default is Private only - so the phone can be
+blocked while everything looks right. One line, in PowerShell **opened as
+administrator** (right-click PowerShell → Run as administrator), lets in the
+backend's port from private-mesh addresses only and nothing else:
 
 ```powershell
-$env:HUD_TOKEN = "<a long random string you invent>"
-$env:JARVIS_HUD_BIND = "<your Tailscale 100.x address>"
-$env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"
-C:\...\python.exe jarvis_hud.py
+New-NetFirewallRule -DisplayName "Jarvis backend (private mesh only)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 4719 -RemoteAddress 100.64.0.0/10 -Profile Any
+```
+
+`100.64.0.0/10` is the private address range Tailscale uses for devices on
+your tailnet (all of them start `100.`); NordVPN Meshnet addresses are in it
+too. If you answered **Cancel** or **Don't allow** to Windows' prompt, it
+made a rule that *blocks* Python, and a block beats any allow. This line
+lists Python's rules, so you can see one (it changes nothing):
+
+```powershell
+Get-NetFirewallRule -Direction Inbound | Where-Object { $_.DisplayName -like '*python*' } | Format-Table DisplayName, Action, Profile, Enabled
+```
+
+A row with `Block` in it is the one; delete it in **Windows Defender Firewall
+with Advanced Security → Inbound Rules** (search the Start menu for
+"firewall").
+
+If you start the backend yourself rather than letting the desktop supervise
+it, the desktop's setting does not apply — set the environment variables by
+hand instead, in the same window, from your backend folder (one line; put in
+your own long random token and your own `100.x` address):
+
+```powershell
+$env:HUD_TOKEN = "<a long random string you invent>"; $env:JARVIS_HUD_BIND = "<your 100.x address>"; $env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"; py -3 jarvis_hud.py
 ```
 
 `JARVIS_HUD_ORIGINS` is the one the desktop also sets for a backend it starts
@@ -325,11 +455,30 @@ without one, but the phone cannot pair.
 
 ### 3.3 Pair
 
-1. Sideload the APK: `adb install -r client-latest.apk`
-2. Open it → Pairing → host `yourpc.tailnet.ts.net:4719` (Tailscale) or
+1. **Get the APK.** Open the
+   [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest).
+   The file is named `jarvis-client-<commit>.apk` (for example
+   `jarvis-client-497563d.apk`); the top of the release notes says which
+   branch and commit it was built from.
+2. **Install it**, one of two ways:
+   - **On the phone:** open that page in the phone's browser and tap the
+     `.apk`. The first time, Android asks to allow installing apps from that
+     browser (Settings → Apps → *your browser* → **Install unknown apps** →
+     Allow). Then tap Install.
+   - **From the PC, over USB:** turn on USB debugging on the phone (Settings
+     → About phone → tap **Build number** seven times; then Settings →
+     System → Developer options → **USB debugging**), plug it in, accept the
+     prompt on the phone, and from the folder the APK is in:
+     `adb install -r jarvis-client-<commit>.apk`. (`adb` comes with Google's
+     "SDK Platform Tools", one line: `winget install --id Google.PlatformTools -e`.)
+
+   If it says `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, the copy already on the
+   phone was signed with the old key; [`keystore/README.md`](../keystore/README.md)
+   has the three steps (uninstall once, install, pair again).
+3. Open it → Pairing → host `yourpc.tailnet.ts.net:4719` (Tailscale) or
    `yourpc.nord:4719` (Meshnet, e.g. `marioirelan11-alps.nord:4719`), then the
    token from `%USERPROFILE%\.openjarvis\token`.
-3. Connect.
+4. Connect.
 
 ### 3.4 When it fails
 

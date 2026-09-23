@@ -53,10 +53,23 @@ Non-commercial, for one owner.
 - **Install the phone app:** download the APK from the
   [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest).
   Open it on the phone to install it, or run `adb install -r <file>.apk` from a
-  PC. Each new build installs over the last one.
+  PC. Each new build installs over the last one - except once: builds from
+  before 19 Sep 2026 were signed with a different key, and the phone refuses
+  to update those in place. [`keystore/README.md`](keystore/README.md) says
+  what to do (uninstall once, install, pair again).
 - **The backend** lives on the PC, outside this repo. [`backend/`](backend/)
-  holds the patches applied to it, with a test for each one. Apply them with
-  `scripts/apply-patches.ps1`.
+  holds the patches applied to it, with a test for each one, and the modules
+  it needs. One script puts all of it in place:
+  `scripts/apply-patches.ps1` - [`docs/INSTALL.md`](docs/INSTALL.md) has the
+  exact command.
+
+There is one phone app to install: `jarvis-client`, from the release above.
+`jarvis-android/` is an older app kept only as source to borrow from. It
+speaks a protocol the backend never implemented, so it cannot talk to Jarvis
+at all, and it no longer publishes a release: two similarly named downloads
+where one silently cannot work is a trap, and installing the wrong one reads
+as "my phone is broken" rather than "wrong app". CI still builds it, as a run
+artifact, so it does not rot.
 
 ## Documents
 
@@ -73,7 +86,9 @@ Non-commercial, for one owner.
 
 The phone app is built by GitHub Actions. There is no Android build tooling in
 this repo. A build is published only after an emulator has installed and
-started it.
+started it. Any branch that changes the phone app publishes to the same
+`client-latest` release, so its notes start with the branch and commit the
+APK was built from - check them before installing.
 
 The desktop app builds on Windows with `npm install` and `npm run tauri build`
 in `jarvis-desktop/`. See its [README](jarvis-desktop/README.md) for details.
@@ -87,6 +102,7 @@ in `jarvis-desktop/`. See its [README](jarvis-desktop/README.md) for details.
 | `backend/` | Patches for the backend, and their tests. |
 | `docs/` | Design, install, API and audit documents. |
 | `scripts/`, `tools/` | Build and patch scripts. |
-| `keystore/` | How the app's signing key is restored in CI. The key itself is never committed. |
+| `keystore/` | How the app's signing key is restored in CI from a secret. The key itself is never committed. |
+| `jarvis-android/` | The older phone app, kept as source only (see above). |
 
 Licence: [`LICENSE`](LICENSE) and [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
