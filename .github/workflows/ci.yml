@@ -88,15 +88,18 @@ jobs:
     # the real Python). About twenty suites test a patch against the owner's
     # own jarvis_hud.py / jarvis_gate.py / jarvis_extract.py, which are not in
     # this repository - backend/run_suites.py SKIPS those by name, with the
-    # files each is waiting for, and fails on anything else. numpy is the one
-    # package the voice suites need.
+    # files each is waiting for, and fails on anything else. The voice suites
+    # (test_speech, test_voice_contract, test_wakeword) need the three voice
+    # packages from backend/requirements.txt; nothing else from it is needed,
+    # and the memory ones (fastembed, sqlite-vec) are left out on purpose -
+    # the suites use a hash embedder and must pass without them.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --disable-pip-version-check numpy
+      - run: python -m pip install --disable-pip-version-check numpy sherpa-onnx onnxruntime
       - name: Backend suites (the ones that need no file from the owner's PC)
         run: python backend/run_suites.py
       # Desktop and phone call the same backend; a route one calls and the
