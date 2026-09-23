@@ -469,6 +469,16 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   white-space:pre-wrap; word-break:break-word; margin:4px 0 10px;
   max-height:8.5em; overflow:auto;
 }
+/* Why it matters, whether something tried to rush you, how long is left. */
+.appr .raised{
+  border:1px solid rgba(255,127,127,.55); border-radius:7px; padding:7px 9px;
+  margin:4px 0 8px; color:#ffbcbc; font-size:12.5px;
+}
+.appr .raised .quote{ color:rgba(255,255,255,.82); margin-top:4px; }
+.appr .raised .src{ color:rgba(255,255,255,.72); font-size:11.5px; margin-top:3px; }
+.appr .risk, .appr .left{ font-size:12px; color:rgba(255,255,255,.72); margin:0 0 6px; }
+.appr .left:empty{ display:none; }
+.appr .yes:disabled{ opacity:.45; cursor:not-allowed; }
 .appr .btns{ display:flex; gap:8px; }
 .appr button{
   border-radius:7px; padding:7px 15px; font-weight:600; cursor:pointer;
@@ -1884,21 +1894,106 @@ async function apprPoll(){
 
   for(const p of list){
     if(box.querySelector(`[data-id="${CSS.escape(String(p.id))}"]`)) continue;
-    let detail = p.detail || "";
-    try{ detail = JSON.stringify(JSON.parse(detail), null, 2); }catch(e){}
+    // Seconds left becomes a deadline NOW, at the read (approval-expiry.patch).
+    const deadline = (typeof p.expires_in === "number" && p.expires_in >= 0
+                      && p.expires_in <= 86400) ? Date.now() + p.expires_in * 1000 : null;
     const el = document.createElement("div");
     el.className = "appr"; el.dataset.id = p.id;
-    el.innerHTML =
-      `<div class="hdr"><span class="who">Jarvis wants to: ${apprEscape(p.action)}</span>`
-      + `<span class="tier">${apprEscape(p.tier)}</span></div>`
-      + `<div class="det">${apprEscape(apprDescribe(p, detail))}</div>`
-      + `<div class="btns"><button class="yes">Approve</button>`
-      + `<button class="no">Deny</button></div>`;
-    el.querySelector(".yes").onclick = () => apprDecide(p.id, true, el);
+    if(deadline !== null) el.dataset.deadline = String(deadline);
+    el.innerHTML = apprCardHtml(p, Date.now());
+    const yes = el.querySelector(".yes");
+    // A request cut off before it reached this card cannot be approved from
+    // it: what is shown is not all of what would run.
+    if(apprCutOff(p)) yes.disabled = true;
+    yes.onclick = () => apprDecide(p.id, true, el);
     el.querySelector(".no").onclick  = () => apprDecide(p.id, false, el);
     box.appendChild(el);
   }
+  apprTick();
 }
+
+/* The card, as HTML. Every value from the row is escaped.
+ *
+ * It used to show the action, the tier and the detail, with a one-click
+ * Approve - and nothing about WHY it matters or whether something had tried to
+ * rush the reader, which the quickbar and the desktop widget both show. So an
+ * item raised because outside text tried to hurry the owner looked exactly
+ * like any other here. Now, like them: the rush warning with its quote and
+ * source, the risk sentence, and how long is left. */
+function apprCardHtml(p, now){
+  let detail = p.detail;
+  if(detail && typeof detail === "object") detail = JSON.stringify(detail, null, 2);
+  detail = detail || "";
+  try{ detail = JSON.stringify(JSON.parse(detail), null, 2); }catch(e){}
+  const raised = apprRaised(p.raised);
+  const risk = p.risk && typeof p.risk === "object" ? p.risk : null;
+  let html =
+    `<div class="hdr"><span class="who">Jarvis wants to: ${apprEscape(p.action)}</span>`
+    + `<span class="tier">${apprEscape(p.tier)}</span></div>`;
+  if(raised){
+    html += `<div class="raised"><b>${apprEscape(raised.text
+              || "Tier raised - something Jarvis read tried to rush you")}</b>`
+      + (raised.quote ? `<div class="quote">\u201c${apprEscape(raised.quote)}\u201d</div>` : "")
+      + (raised.source ? `<div class="src">from ${apprEscape(raised.source)}</div>` : "")
+      + `<div class="src">Take your time: nothing runs until you decide.</div></div>`;
+  }
+  html += `<div class="det">${apprEscape(apprDescribe(p, detail))}</div>`;
+  html += `<div class="risk">${apprEscape(apprRiskLine(risk))}</div>`;
+  if(apprCutOff(p)){
+    html += `<div class="risk">This request was cut off before it reached this card, `
+      + `so it cannot be approved here. Deny it and ask Jarvis for a shorter plan.</div>`;
+  }
+  html += `<div class="left"></div>`
+    + `<div class="btns"><button class="yes">Approve</button>`
+    + `<button class="no">Deny</button></div>`;
+  return html;
+}
+
+/* `raised` in every shape the backend has used - an object, true, or JSON
+ * text. Anything truthy counts as raised; an unreadable one is an empty raise,
+ * never "not raised". */
+function apprRaised(v){
+  if(v === null || v === undefined || v === false || v === 0) return null;
+  if(typeof v === "string"){
+    const t = v.trim();
+    if(!t || /^(false|null|0)$/i.test(t)) return null;
+    try{ const o = JSON.parse(t); if(o && typeof o === "object" && !Array.isArray(o)) return o; }catch(e){}
+    return {};
+  }
+  if(Array.isArray(v)) return v.length ? {} : null;
+  if(typeof v === "object") return v;
+  return v ? {} : null;
+}
+
+/* The same sentence the quickbar and widget show (jarvis-link.js riskLine). */
+function apprRiskLine(risk){
+  if(!risk) return "This action is not classified, so treat it as irreversible.";
+  const undo = risk.reversible === "yes" ? "Reversible"
+             : risk.reversible === "hard" ? "Hard to undo" : "No undo";
+  const reach = risk.reach === "local" ? "stays on this machine" : "leaves this machine";
+  return risk.why ? `${undo} \u00b7 ${reach} \u2014 ${risk.why}` : `${undo} \u00b7 ${reach}`;
+}
+
+/* The gate keeps json.dumps(detail)[:4000]: text that long that no longer
+ * parses was cut off on the way here. */
+function apprCutOff(p){
+  if(typeof p.detail !== "string" || p.detail.length < 4000) return false;
+  try{ JSON.parse(p.detail); return false; }catch(e){ return true; }
+}
+
+/* How long each card has left, repainted each second while any is shown. */
+function apprTick(){
+  const now = Date.now();
+  document.querySelectorAll("#approvals .appr[data-deadline]").forEach(el => {
+    const line = el.querySelector(".left");
+    if(!line) return;
+    const left = Math.ceil((Number(el.dataset.deadline) - now) / 1000);
+    line.textContent = left <= 0
+      ? "Expired: Jarvis stopped waiting and refused it by itself."
+      : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left to decide, then Jarvis refuses it by itself.`;
+  });
+}
+setInterval(apprTick, 1000);
 
 function apprDescribe(p, detail){
   // The human must see the COMMAND. A first version rendered `detail`
@@ -1906,6 +2001,8 @@ function apprDescribe(p, detail){
   // so a person approving `rm -rf ~/Documents` was shown a boolean.
   let d = null;
   try{ d = JSON.parse(detail); }catch(e){}
+  // jarvis_agent's cards carry the whole plan, every step, as {"text": ...}.
+  if(d && typeof d.text === "string" && d.text.trim()) return d.text;
   if(d && d.tool){
     return `${d.tool}\n${d.args || ""}`;
   }

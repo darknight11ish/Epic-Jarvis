@@ -94,6 +94,7 @@ on a throwaway copy instead.
 | `task-control.patch` | `jarvis_hud.py` | **The Pause, Resume, Stop and note buttons on both apps went nowhere.** Adds the routes they call. Resume raises an approval card; nothing else here approves anything. Needs `jarvis_task_control.py` and the updated `jarvis_agent.py` — see its own section, at the end. |
 | `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq or Joplin through the gate, and says honestly whether it landed. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
 | `power-mode.patch` | `jarvis_hud.py` | **Nothing could change the power mode.** Adds `POST /api/power` (Active / Quiet / Standby) through the gate as `power_manage`. Needs `note-capture.patch` (textual) and `jarvis_power_switch.py` — see its own section, at the end. |
+| `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -4568,3 +4569,44 @@ transcript check, 48 kHz audio, and that the spotter module writes and logs
 nothing. To also run the real models once they are installed, set
 `$env:JARVIS_TEST_VOICE_MODELS = "$env:USERPROFILE\.openjarvis\voice-models"`
 first.
+
+---
+
+---
+
+# `approval-expiry.patch` — how long each approval card has left
+
+**What it fixes.** An approval waits `approval_timeout_seconds` (180 in the
+shipped `jarvis-framework.toml`) and is then refused on its own. Nothing on
+any screen said so: the phone had a countdown, but it read a field only the
+old WebSocket server ever sent, so it never showed. Cards simply vanished.
+
+**What it does.** One small addition to `jarvis_gate.pending()`: each row gets
+`expires_in`, the whole seconds left (`created` + `APPROVAL_TIMEOUT` - now,
+never below 0). Seconds *left* rather than a clock time, so the phone's clock
+does not have to agree with the PC's. A row whose `created` is not a number
+gets no field, and the apps then show no countdown rather than a wrong one.
+It changes nothing about when a card expires - only who can see it.
+
+**Where it shows.** The phone's card (the bar along the top and the
+"00:43" readout), the quickbar and widget on the desktop, and the HUD page.
+
+**Not checked against your real file.** `jarvis_gate.py` is not in this
+repo. The patch's context lines are `approval-notice.patch`'s own output,
+and the test checks that; it assumes `created` is seconds since 1970 (what
+the apps already read it as) and that `APPROVAL_TIMEOUT` is the number of
+seconds `check()` waits (the line `deadline = time.time() + APPROVAL_TIMEOUT`
+in that patch's context says so). If `git apply` refuses it, nothing else
+depends on it: the countdown just does not appear.
+
+## Test it
+
+```
+python backend\test_approval_contract.py
+```
+
+It also builds one set of approval rows from the real `notice_for` and this
+patch's lines, writes them to
+`jarvis-client/app/src/test/resources/contract/pending-rows.json`
+(`--write`), and checks the phone, desktop and HUD read every field those rows
+carry. The phone's and desktop's own tests decode that same file.

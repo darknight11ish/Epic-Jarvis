@@ -778,12 +778,23 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     // installed — which is not the same as an empty queue, and the API spec
     // says a false capability means hide the UI, not show an empty one.
     let available = body["available"].as_bool().unwrap_or(true);
-    let items: Vec<serde_json::Value> = body["pending"]
+    let mut items: Vec<serde_json::Value> = body["pending"]
         .as_array()
         .or_else(|| body["items"].as_array())
         .or_else(|| body.as_array())
         .cloned()
         .unwrap_or_default();
+    // Turn `expires_in` (seconds left, approval-expiry.patch) into a deadline
+    // NOW, at the moment of the read. The windows may render this list much
+    // later (a window opening reads the cached queue), and "150 s left" read
+    // then would be wrong by however long it sat here.
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    for item in items.iter_mut() {
+        stamp_expiry(item, now_ms);
+    }
 
     let state = app.state::<StreamState>();
     let seeded = state
@@ -794,13 +805,11 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
             .pending
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let known: std::collections::HashSet<String> = slot
-            .iter()
-            .filter_map(|item| item["id"].as_str().map(str::to_owned))
-            .collect();
+        let known: std::collections::HashSet<String> =
+            slot.iter().filter_map(approval_id).collect();
         let fresh = items
             .iter()
-            .filter(|item| item["id"].as_str().is_some_and(|id| !known.contains(id)))
+            .filter(|item| approval_id(item).is_some_and(|id| !known.contains(&id)))
             .cloned()
             .collect();
         *slot = items.clone();
@@ -880,8 +889,8 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         // and it is correct for it to stay unconditional.
         #[cfg(windows)]
         {
-            let id = item["id"].as_str().unwrap_or_default();
-            crate::winrt_toast::notify_approval(app, &title, &body, id);
+            let id = approval_id(item).unwrap_or_default();
+            crate::winrt_toast::notify_approval(app, &title, &body, &id);
         }
         #[cfg(not(windows))]
         crate::commands::notify(app, &title, &body);
@@ -893,6 +902,45 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         serde_json::json!({ "count": items.len(), "items": items, "available": available }),
     );
     true
+}
+
+/// An approval row's id, as text. The gate's ids are strings today, but a
+/// number is accepted too: reading only strings meant a numeric id was never
+/// "seen", so it was never toasted and never counted as known - every
+/// re-read looked like nothing had arrived. `jarvis-link.js` already turns a
+/// number into a string (`String(row.id)`), so this is the same id the
+/// windows answer with.
+fn approval_id(item: &serde_json::Value) -> Option<String> {
+    match &item["id"] {
+        serde_json::Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+/// Longest `expires_in` read as a real countdown. The shipped gate waits 180
+/// seconds; anything over a day is a wrong unit or a bug, and showing no
+/// countdown beats showing a wrong one.
+const MAX_EXPIRES_IN_SECS: f64 = 24.0 * 3600.0;
+
+/// Adds `expires_at_ms` (this machine's clock) to a row that carries
+/// `expires_in` and no deadline of its own. Leaves every other row alone.
+fn stamp_expiry(item: &mut serde_json::Value, now_ms: u64) {
+    if item.get("expires_at_ms").is_some_and(|v| v.is_number()) {
+        return;
+    }
+    let Some(secs) = item.get("expires_in").and_then(|v| v.as_f64()) else {
+        return;
+    };
+    if !secs.is_finite() || !(0.0..=MAX_EXPIRES_IN_SECS).contains(&secs) {
+        return;
+    }
+    if let Some(obj) = item.as_object_mut() {
+        obj.insert(
+            "expires_at_ms".to_string(),
+            serde_json::json!(now_ms + (secs * 1000.0) as u64),
+        );
+    }
 }
 
 /// A read of `/api/pending` failed: the queue on screen is the last one we
@@ -1011,6 +1059,45 @@ mod tests {
     fn a_fresh_state_has_not_read_the_queue() {
         let state = StreamState::default();
         assert!(!state.queue_read.load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    #[test]
+    fn an_approval_id_may_be_a_string_or_a_number() {
+        assert_eq!(
+            approval_id(&serde_json::json!({"id": "a1"})),
+            Some("a1".to_string())
+        );
+        assert_eq!(
+            approval_id(&serde_json::json!({"id": 12})),
+            Some("12".to_string())
+        );
+        assert_eq!(approval_id(&serde_json::json!({"id": ""})), None);
+        assert_eq!(approval_id(&serde_json::json!({"id": null})), None);
+        assert_eq!(approval_id(&serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn expires_in_becomes_a_deadline_at_read_time() {
+        let mut row = serde_json::json!({"id": "a1", "expires_in": 150});
+        stamp_expiry(&mut row, 1_000_000);
+        assert_eq!(row["expires_at_ms"], serde_json::json!(1_150_000u64));
+
+        // A deadline the server already sent is kept.
+        let mut kept = serde_json::json!({"expires_at_ms": 5, "expires_in": 150});
+        stamp_expiry(&mut kept, 1_000_000);
+        assert_eq!(kept["expires_at_ms"], serde_json::json!(5));
+
+        // Absent, negative, or absurd: no countdown rather than a wrong one.
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!({"expires_in": -1}),
+            serde_json::json!({"expires_in": "150"}),
+            serde_json::json!({"expires_in": 90_000_000}),
+        ] {
+            let mut row = bad.clone();
+            stamp_expiry(&mut row, 1_000_000);
+            assert!(row.get("expires_at_ms").is_none(), "{bad}");
+        }
     }
 
     #[test]

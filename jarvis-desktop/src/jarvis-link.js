@@ -144,22 +144,29 @@ function normaliseAttention(raw) {
  */
 export function normaliseApproval(row) {
   if (!row || typeof row !== "object") return null;
-  const id = row.id === undefined || row.id === null ? "" : String(row.id);
+  const id = row.id === undefined || row.id === null ? "" : String(row.id).trim();
   if (!id) return null;
 
   let detail = null;
+  // True when `detail` arrived as text that no longer parses AND is as long
+  // as the gate's cut: the request was cut off before it reached this card,
+  // so what is on screen is not the whole of what would run. Approve is then
+  // refused on every surface (ARCHITECTURE §3: every command, in FULL).
+  let cutOff = false;
   if (typeof row.detail === "string" && row.detail.trim()) {
     try {
       detail = JSON.parse(row.detail);
     } catch (error) {
       detail = row.detail;
+      cutOff = row.detail.length >= GATE_DETAIL_LIMIT;
     }
   } else if (row.detail && typeof row.detail === "object") {
     detail = row.detail;
   }
 
   const risk = row.risk && typeof row.risk === "object" ? row.risk : null;
-  const raised = row.raised && typeof row.raised === "object" ? row.raised : null;
+  const raised = raisedOf(row.raised);
+  const notice = row.notice && typeof row.notice === "object" ? row.notice : null;
   // docs/AUTONOMY-PROPOSALS.md §3a. Zero or one entry means "behaves exactly
   // as today" - callers check `.length > 1`, never truthiness alone, so an
   // absent `options` and a one-item `options` render identically.
@@ -176,6 +183,17 @@ export function normaliseApproval(row) {
 
   return {
     id,
+    cutOff,
+    expiresAt: expiryOf(row),
+    // The gate's own words for this item (jarvis_gate.notice_for): built from
+    // the action name and its risk table, never from the payload.
+    notice: notice
+      ? {
+          title: String(notice.title || ""),
+          body: String(notice.body || ""),
+          weight: String(notice.weight || "heavy"),
+        }
+      : null,
     action: String(row.action || "run an action"),
     tier: String(row.tier || ""),
     prompt: typeof row.prompt === "string" ? row.prompt : "",
@@ -206,8 +224,10 @@ export function normaliseApproval(row) {
           code: String(raised.code || "rushed"),
           // The chip. Already carries "(4th time today)" when the source has
           // tripped this more than once — `jarvis_content_risk.chip_from`
-          // builds the ordinal, so nothing here counts anything.
-          text: String(raised.text || ""),
+          // builds the ordinal, so nothing here counts anything. A raise that
+          // arrived without one (a bare `true`, or an object with no `text`)
+          // still gets a sentence: an empty chip reads as nothing at all.
+          text: String(raised.text || "Tier raised — something Jarvis read tried to rush you"),
           // The attacker's words. Shown in quotation marks, inline, because
           // showing them is the entire point.
           quote: String(raised.quote || ""),
@@ -222,6 +242,68 @@ export function normaliseApproval(row) {
         }
       : null,
   };
+}
+
+/** jarvis_gate stores `detail` as `json.dumps(detail)[:4000]`. */
+const GATE_DETAIL_LIMIT = 4000;
+/** Longer than this is a wrong unit, not a gate timeout (the shipped one is 180 s). */
+const MAX_EXPIRES_IN_SECONDS = 24 * 3600;
+
+/**
+ * `raised`, in every shape the backend has used: an object, `true` (the
+ * doorbell's boolean), or the JSON text of an object (how a database column
+ * holds it). Anything truthy that is not a readable object becomes an empty
+ * raise, never "not raised": the raise is what takes an item out of every
+ * quick gesture, so an unreadable one must fail toward caution. This used to
+ * accept an object only, so `true` quietly counted as not raised.
+ */
+function raisedOf(value) {
+  if (value === null || value === undefined || value === false || value === 0) return null;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text || /^(false|null|0)$/i.test(text)) return null;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    } catch (error) {
+      // Not JSON. Never shown as text: it may be the very words that tried
+      // to rush the reader, and those belong in `quote`, in quotation marks.
+    }
+    return {};
+  }
+  if (Array.isArray(value)) return value.length ? {} : null;
+  if (typeof value === "object") return value;
+  return value ? {} : null;
+}
+
+/**
+ * When the gate stops waiting for this card, in this machine's milliseconds,
+ * or null when nobody said. `expires_at_ms` is stamped by stream.rs at the
+ * moment of the read; `expires_in` (seconds left, approval-expiry.patch) is
+ * the fallback for a row that did not come through it.
+ */
+function expiryOf(row) {
+  const at = Number(row.expires_at_ms);
+  if (row.expires_at_ms !== undefined && row.expires_at_ms !== null && Number.isFinite(at)) return at;
+  const left = row.expires_in;
+  if (typeof left === "number" && Number.isFinite(left) && left >= 0 && left <= MAX_EXPIRES_IN_SECONDS) {
+    return Date.now() + left * 1000;
+  }
+  return null;
+}
+
+/**
+ * How long a card has left, in words: "2:13 left", or "expired", or "" when
+ * nobody said. The gate refuses the card by itself at the deadline, so this
+ * is the difference between a decision and a card that silently vanishes.
+ */
+export function expiryWords(expiresAt, now = Date.now()) {
+  if (expiresAt === null || expiresAt === undefined || !Number.isFinite(expiresAt)) return "";
+  const left = Math.ceil((expiresAt - now) / 1000);
+  if (left <= 0) return "Expired: Jarvis stopped waiting and refused it by itself.";
+  const m = Math.floor(left / 60);
+  const sec = String(left % 60).padStart(2, "0");
+  return `${m}:${sec} left to decide, then Jarvis refuses it by itself.`;
 }
 
 /**

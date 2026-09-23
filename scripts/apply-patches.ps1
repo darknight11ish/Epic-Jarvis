@@ -174,6 +174,11 @@ $PATCHES = @(
     # copied in; without it the route answers 503.
     'power-mode.patch'
     # --- end task controls ---------------------------------------------------
+    # How long each approval card has left (`expires_in` on /api/pending).
+    # Its context is approval-notice's output in jarvis_gate.pending() (the
+    # `d["notice"]` line); ui-control-wiring and note-capture only add lines
+    # above it, so anywhere after approval-notice works - last is simplest.
+    'approval-expiry.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------

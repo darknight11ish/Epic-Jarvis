@@ -96,6 +96,7 @@ import {
   resumeTask,
   linkWords,
   riskLine,
+  expiryWords,
   setMuted,
   stopTask,
   followTheme,
@@ -1790,8 +1791,12 @@ function closeApproval() {
 function syncApprovalButtons() {
   const link = currentLink();
   const blocked = link.stale || state.deciding;
-  dom.approvalApprove.disabled = blocked;
+  // A card whose request was cut off on its way here cannot be approved: what
+  // is on screen is not all of what would run. Deny stays - refusing
+  // something unread costs a retry, approving it is the thing to prevent.
+  dom.approvalApprove.disabled = blocked || Boolean(state.approval && state.approval.cutOff);
   dom.approvalDeny.disabled = blocked;
+  paintApprovalClock();
   // Not `= blocked`: the option buttons `renderOptions` builds are already
   // permanently disabled (see its own comment on why), and setting this to
   // `blocked` would re-enable them the moment the stream stopped being
@@ -1819,6 +1824,30 @@ function syncApprovalButtons() {
   dom.approvalNoteInput.disabled = noteBlocked;
   dom.approvalNoteSend.disabled = noteBlocked;
 }
+
+/**
+ * The line under the risk line: "Nothing runs until you decide", plus how
+ * long the card has left (the gate refuses it by itself at the deadline -
+ * approval-expiry.patch), or why Approve is off for a cut-off request.
+ * Re-painted every second by the ticker below, and only this line: it is not
+ * a live region, so the countdown is never read out.
+ */
+function paintApprovalClock() {
+  const line = document.querySelector("#approval .approval-reassure");
+  if (!line) return;
+  const approval = state.approval;
+  const parts = ["Nothing runs until you decide."];
+  if (approval && approval.cutOff) {
+    parts.push("This request was cut off before it reached this card, so it cannot be approved here - deny it and ask Jarvis for a shorter plan.");
+  }
+  const clock = approval ? expiryWords(approval.expiresAt) : "";
+  if (clock) parts.push(clock);
+  const text = parts.join(" ");
+  if (line.textContent !== text) line.textContent = text;
+}
+setInterval(() => {
+  if (state.approval && !dom.approval.hidden) paintApprovalClock();
+}, 1000);
 
 /**
  * Sends the decision and reports the outcome in the answer card.

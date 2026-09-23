@@ -252,6 +252,28 @@ one clickable button per option as if it could. `main.js`/`widget.js` now
 render those buttons disabled, with a tooltip pointing here, until a real
 decide-with-option route exists on the server (see §8's own note on this).
 
+### What one pending row carries
+
+`id`, `action`, `tier`, `detail`, `prompt`, `created`, `raised` (stored by
+`jarvis_gate`), plus `risk`, `notice` and - with `approval-expiry.patch` -
+`expires_in` (added when the list is read). There is **no `title` and no
+`summary`**: a client makes its title from `notice.title` (else the action
+name) and never from `prompt` or `detail`, because a title also ends up on a
+lock screen. Shapes vary, so both clients read each row on its own and
+accept all of them: `detail` as JSON text or an object; `raised` as an
+object, `true`, or JSON text (any truthy value counts as raised); `id` as
+text or a number. A row that still cannot be read is skipped and the phone
+says so, instead of failing the whole list.
+
+`expires_in` is seconds left before the gate stops waiting and refuses the
+card (`approval_timeout_seconds`, 180 in the shipped config). Seconds left,
+not a clock time, so the phone's clock does not have to agree with the PC's.
+Without the patch the field is absent and no countdown is shown.
+`backend/test_approval_contract.py` builds these rows from the real
+`notice_for` and `expires_in` code into
+`jarvis-client/app/src/test/resources/contract/pending-rows.json`, which the
+phone's and the desktop's tests decode.
+
 ---
 
 ## 4. Chat

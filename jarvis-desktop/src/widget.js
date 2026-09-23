@@ -27,6 +27,7 @@ import {
   pauseTask,
   resumeTask,
   riskLine,
+  expiryWords,
   stopTask,
   followTheme,
   followZoom,
@@ -590,8 +591,10 @@ function syncApprovalButtons() {
   // quickbar has always used `stale || deciding`.
   const link = currentLink();
   const blocked = link.stale || state.deciding;
-  dom.btnApprYes.disabled = blocked;
+  // A cut-off request cannot be approved - see the quickbar's twin.
+  dom.btnApprYes.disabled = blocked || Boolean(state.approval && state.approval.cutOff);
   dom.btnApprNo.disabled = blocked;
+  paintApprovalClock();
   // And say why, on the card. Two grey buttons and nothing else was all the
   // widget showed while the queue could not be confirmed.
   const why = link.stale
@@ -616,6 +619,26 @@ function syncApprovalButtons() {
   dom.apprNoteInput.disabled = noteBlocked;
   dom.btnApprNoteSend.disabled = noteBlocked;
 }
+
+/**
+ * The risk line, plus how long the card has left or why Approve is off for a
+ * request that was cut off. Re-painted every second, and only this line.
+ */
+function paintApprovalClock() {
+  const approval = state.approval;
+  if (!approval) return;
+  const parts = [riskLine(approval.risk)];
+  if (approval.cutOff) {
+    parts.push("Cut off before it reached this card, so it cannot be approved here - deny it and ask Jarvis for a shorter plan.");
+  }
+  const clock = expiryWords(approval.expiresAt);
+  if (clock) parts.push(clock);
+  const text = parts.join(" · ");
+  if (dom.apprRisk.textContent !== text) dom.apprRisk.textContent = text;
+}
+setInterval(() => {
+  if (state.approval && !dom.apprCard.hidden) paintApprovalClock();
+}, 1000);
 
 async function decide(approved, optionId = null) {
   if (!state.approval || state.deciding) return;
