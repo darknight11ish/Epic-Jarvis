@@ -62,6 +62,11 @@ A local-first personal assistant. A Python backend on the owner's Windows 11
 desktop, an 8B model in Ollama on the same machine, a Tauri 2 desktop shell
 around it, and an Android companion reachable over Tailscale.
 
+Hardware: an RTX 2080 Super (8 GB) today. **The owner is adding an RTX 2060
+12 GB as a second card** - plan features with that second, larger-context
+lane in mind, but do not switch anything on that depends on it until it is
+installed and measured. `docs/MODEL-TOPOLOGY.md` has the numbers.
+
 - `jarvis-desktop/` - the Tauri desktop app. Rust in `src-tauri/`, the windows
   in `src/`.
 - `backend/` - patches against the Python backend, which lives outside this

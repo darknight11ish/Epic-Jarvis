@@ -2,6 +2,11 @@
 
 RTX 2080 Super, 8 GB, Turing sm75. Ryzen 9 3900X. Windows 11.
 
+**Coming soon:** an RTX 2060 12 GB as a second card. Everything below the
+next heading was worked out for the 2080 Super alone; see
+[The planned second card](#the-planned-second-card-rtx-2060-12-gb) for what
+changes.
+
 Read this if you are about to change models, change context length, or wonder
 why a long conversation gets strange.
 
@@ -236,6 +241,65 @@ names it but does not yet read the persona. Honouring `memory_top_k=16` would
 roughly triple the injected block, from ~100 to ~320 tokens — small in a 16K
 window, and much cheaper than it was before that patch moved the block out of
 the prefix.
+
+---
+
+## The planned second card: RTX 2060 12 GB
+
+The owner is adding one, alongside the 2080 Super, not instead of it. Recorded
+2026-09-23. Nothing below has been measured on the real cards yet; the figures
+are published specs and the same arithmetic as the budget above.
+
+**Why this card avoids the P100's problems (see the next section).** It is
+the same generation as the 2080 Super: Turing, compute capability 7.5. So:
+one driver branch for both cards, the same fast fused-attention kernels, the
+same `q8_0` cache path, a fan, a normal PCIe power plug and display outputs.
+
+| | 2080 Super | 2060 12 GB |
+|---|---|---|
+| memory | 8 GB | 12 GB |
+| memory speed (published) | ~496 GB/s | ~336 GB/s |
+| board power (published) | ~250 W | ~185 W |
+
+**What it changes.** "Why one model and not two", below, is about one 8 GB
+card: two runners on it do not fit. With a second card each model gets a card
+to itself, so that argument stops applying. What the 12 GB could hold, by the
+same arithmetic as "The budget", assuming no monitor is plugged into it:
+
+```
+Qwen 3 8B  Q4_K_M, q8_0 KV @ 32K   4.67 + 2.39 + 0.63   =  7.69 GiB  ✓
+Qwen 3 14B Q4_K_M, q8_0 KV @ 16K   8.42 + 1.33 + 0.63   = 10.38 GiB  ✓
+ceiling    12 GiB card, no display attached             ≈ 11.4 GiB
+```
+
+(14B KV: 2 × 40 layers × 8 kv_heads × 128 × 1.0625 B = 87,040 B per token.)
+
+Speed: the 2060's memory is about two thirds as fast, so the same model will
+generate noticeably slower on it than on the 2080 Super. A 14B model is also
+roughly twice the bytes to read per token of an 8B. Expect the second card to
+be the **bigger or longer-context lane, not the fast one**.
+
+**The plan, not yet decided:**
+
+- Keep the everyday 8B chat on the 2080 Super, where it is fastest.
+- Use the 2060 as the "second, larger-context lane" that
+  `backend/jarvis_browser_control.py` says it is waiting for, and for any
+  other long-context job. Browser control still stays switched off until that
+  lane is actually running and has been measured.
+- Do not split one model across both cards by default. It works, but it ties
+  up both cards and runs at the slower card's pace for its share.
+
+**Before and after installing:**
+
+1. Check the power supply's label. The two cards plus the 3900X draw a lot
+   together; a good 750 W unit is the comfortable size.
+2. Plug the monitors into the 2080 Super, so Windows' desktop drawing stays
+   off the 2060 and its full 12 GB is free for models.
+3. The second slot on many motherboards runs slower (x4 or x8). That only
+   slows loading a model, not answering, so it is fine.
+4. After installing, run `nvidia-smi` in a terminal. Both cards should be
+   listed, with the same driver version. Then redo "Then verify, before
+   trusting any of it" above for whatever runs on the new card.
 
 ---
 
