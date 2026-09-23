@@ -1413,12 +1413,20 @@ object Nucleus : Face {
 
     // Compiled once, like every other fixed per-face resource in this file -
     // only the uniforms change per frame.
-    private val shader = android.graphics.RuntimeShader(AGSL)
+    //
+    // And compiled LAZILY, on this face's first draw. It used to be a plain
+    // `val`, which runs when the `Nucleus` object is first touched - and
+    // `Faces.all` touches every face, so the very first `Faces.byId` at
+    // startup compiled this 72-step raymarch on the main thread whatever face
+    // was actually chosen. Now an owner who never picks Nucleus never pays
+    // for it. `draw` is only ever called on the main thread, so the default
+    // synchronized lazy costs one uncontended check per frame.
+    private val shader by lazy { android.graphics.RuntimeShader(AGSL) }
 
     // The brush is only a wrapper that hands `shader` back, and `shader` is
     // already a single reused instance - so building one per frame was a fresh
-    // object 120 times a second for nothing. Lazy rather than eager so it is
-    // still built on the same first-draw path the shader is.
+    // object 120 times a second for nothing. Lazy for the same reason the
+    // shader is: both are built on the same first-draw path.
     private val shaderBrush by lazy { androidx.compose.ui.graphics.ShaderBrush(shader) }
 
     override fun draw(

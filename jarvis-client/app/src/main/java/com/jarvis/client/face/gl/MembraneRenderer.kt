@@ -4,6 +4,7 @@ import android.opengl.GLES30
 import android.util.Log
 import androidx.compose.ui.graphics.Color
 import com.jarvis.client.FaceState
+import com.jarvis.client.face.CALM_MOTION_RATE
 import com.jarvis.client.face.FaceFrame
 import com.jarvis.client.face.Spec
 import java.nio.FloatBuffer
@@ -251,12 +252,14 @@ class MembraneRenderer : MeshRenderer {
     private var hot = Color(0xFF8AD8FF)
     private var cool = Color(0xFF2F5FA8)
     private var fit = 1f
+    private var background = Spec.BACKGROUND
 
-    override fun setFrame(f: FaceFrame, hot: Color, cool: Color, fit: Float) {
+    override fun setFrame(f: FaceFrame, hot: Color, cool: Color, fit: Float, background: Color) {
         this.frame = f
         this.hot = hot
         this.cool = cool
         this.fit = fit
+        this.background = background
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -383,12 +386,7 @@ class MembraneRenderer : MeshRenderer {
         // dark, still surface beats an uninitialised framebuffer - and beats
         // the process dying, which is what used to happen instead.
         if (program == 0) {
-            GLES30.glClearColor(
-                Spec.BACKGROUND.red,
-                Spec.BACKGROUND.green,
-                Spec.BACKGROUND.blue,
-                1f,
-            )
+            GLES30.glClearColor(background.red, background.green, background.blue, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
             return
         }
@@ -425,7 +423,13 @@ class MembraneRenderer : MeshRenderer {
         // after any resume spends the whole step budget on catch-up.
         val dt = if (elapsed > RESUME_GAP_S) 0f else elapsed
 
-        accumulator += dt * st.rate * tf.rate
+        // Calm motion slows the drum the way the shell slows every other
+        // face's clock. This face keeps its own clock, so the shell's slowing
+        // of `f.angle` and `f.t` never reaches it; this is the one place it
+        // has to be applied by hand. A factor below 1 only ever means fewer
+        // physics ticks per second - slower, never faster.
+        val calmK = if (f.calm) CALM_MOTION_RATE else 1f
+        accumulator += dt * st.rate * tf.rate * calmK
         // The only place time is discarded. See MAX_STEPS_PER_FRAME: the cap is
         // the worst legitimate frame, so this trims genuine stalls only, and
         // the loop below drains the whole of what is left - the physics runs at
@@ -574,7 +578,9 @@ class MembraneRenderer : MeshRenderer {
     }
 
     private fun draw(f: FaceFrame) {
-        GLES30.glClearColor(Spec.BACKGROUND.red, Spec.BACKGROUND.green, Spec.BACKGROUND.blue, 1f)
+        // The caller's ground (the theme's well), not a fixed Spec.BACKGROUND,
+        // so this face sits in the same black as the pane around it.
+        GLES30.glClearColor(background.red, background.green, background.blue, 1f)
         GLES30.glClearDepthf(1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         GLES30.glDisable(GLES30.GL_BLEND)
