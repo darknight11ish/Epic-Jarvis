@@ -545,18 +545,19 @@ private fun GLFaceSurface(
         // It is this face's glow, so the Glow setting scales it the same way
         // it scales the canvas faces' sprite - down only, `glow` is 0..1.
         //
-        // The kit's wash reaches half its canvas (`S * .5`), and its torus is
-        // `S * 1.05 / 4` per unit where this one is `radius` per unit - so
-        // half the kit's canvas is 1.9 radii here. It was 2.5, a wash a
-        // third wider than the kit's; narrowing it only ever takes light away.
+        // The kit's wash reaches half its canvas (`S * .5`), and its canvas
+        // is S = 4 radii here (TokamakRenderer draws the torus at the kit's
+        // `S * 1.05` on that same S) - so the wash is 2 radii. It was 2.5, a
+        // wash a quarter wider than the kit's; narrowing it only ever takes
+        // light away.
         if (face.id == "tokamak" && glow > 0f) {
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(hot.copy(alpha = 0.13f * glow), hot.copy(alpha = 0f)),
                     center = Offset(cx, cy),
-                    radius = radius * 1.9f,
+                    radius = radius * 2f,
                 ),
-                radius = radius * 1.9f,
+                radius = radius * 2f,
                 center = Offset(cx, cy),
             )
         }

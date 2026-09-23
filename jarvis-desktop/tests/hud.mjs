@@ -20,7 +20,8 @@
  *
  * The reactor is now the kit face: faces.html?mode=display in an iframe, fed
  * state and appearance by the page (see jarvis_hud.html's "Arc reactor" and
- * src/hud-face-bridge.js). So every other file under src/ is served too,
+ * FROM_PARENT in faces.html's bootDisplay). So every other file under src/
+ * is served too,
  * each HTML page under its own hashed header policy, and the face is checked
  * to load, draw, follow the page's state and the shell's appearance push,
  * stop behind the Galaxy view, and calm down under reduced motion.
@@ -81,8 +82,8 @@ const TYPES = {
 };
 
 /** Any other file under src/, served as Tauri serves the bundle. The HUD's
- *  reactor is faces.html in an iframe, which pulls faces-spec.js, the fonts
- *  and hud-face-bridge.js - every one a real request under the real policy,
+ *  reactor is faces.html in an iframe, which pulls faces-spec.js and the
+ *  fonts - every one a real request under the real policy,
  *  so a CSP or path mistake in any of them shows up here. HTML gets its own
  *  header CSP, hashed for ITS inline scripts, as every page does. */
 function serveStatic(route, url) {
@@ -185,8 +186,8 @@ await check("with nothing up, Send still answers - from sample replies, and says
 
 /* ── The reactor is the kit face ─────────────────────────────────────────── */
 
-/** The face's frame, once faces.html has booted in display mode and the
- *  bridge has attached. */
+/** The face's frame, once faces.html has booted in display mode and is
+ *  listening to this page (`&feed=parent`). */
 async function faceFrame(page) {
   const deadline = Date.now() + 8000;
   for (;;) {
@@ -195,7 +196,7 @@ async function faceFrame(page) {
       const ready = await frame.evaluate(() => document.documentElement.dataset.hudFace).catch(() => null);
       if (ready === "ready") return frame;
     }
-    if (Date.now() > deadline) throw new Error("faces.html?mode=display never loaded with the bridge attached");
+    if (Date.now() > deadline) throw new Error("faces.html?mode=display never loaded listening to the HUD");
     await page.waitForTimeout(100);
   }
 }
@@ -223,7 +224,11 @@ await check("the reactor is faces.html in display mode, and it draws", async () 
   await page.waitForTimeout(600);
   const px = await litPixels(frame);
   const box = await page.locator("#reactor").boundingBox();
+  const url = frame.url();
   await page.close();
+  // Fed by this page, not asking the shell: the HUD window has no app
+  // commands, so asking would only be refused (capabilities/hud.json).
+  assert.match(url, /[?&]feed=parent(&|$)/, url);
   assert.ok(px.w >= 232, `canvas backing store ${px.w}px - blurrier than the 232px box it fills`);
   assert.ok(px.lit > 150, `only ${px.lit} of 9216 sampled pixels lit - the face is not drawing`);
   assert.equal(Math.round(box.width), 232);
@@ -249,7 +254,7 @@ await check("the HUD's own state machine drives the face, offline included", asy
   await page.evaluate(() => { S.online = true; reactor.set("dancing"); });
   await page.waitForTimeout(80);
   seen.unknown = await frame.evaluate(() => LIVE_STATE);
-  // ...and the bridge itself ignores a state id the spec does not have,
+  // ...and the face itself ignores a state id the spec does not have,
   // rather than handing the renderer something it would draw as nothing.
   await page.evaluate(() => document.getElementById("reactor").contentWindow
     .postMessage({ type: "jarvis-hud-face", state: "dancing" }, "/"));
@@ -336,8 +341,8 @@ function redrawsPerSecond(frame) {
 
 await check("with the OS asking for less motion, the face redraws at most ~10 times a second", async () => {
   // The canvas this replaced slowed right down under reduced motion, and
-  // the editor paces faces to 10fps for it. Display mode on its own does
-  // not, so hud-face-bridge.js does - this is what holds it.
+  // the editor paces faces to 10fps for it. Display mode now does the same
+  // (CALM_HZ in bootDisplay's tick) - this is what holds it.
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
     { reducedMotion: "reduce" });
   const frame = await faceFrame(page);

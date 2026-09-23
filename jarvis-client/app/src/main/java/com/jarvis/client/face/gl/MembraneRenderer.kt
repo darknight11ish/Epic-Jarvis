@@ -676,12 +676,13 @@ class MembraneRenderer : MeshRenderer {
         GLES30.glUniform1f(uYawLoc, f.yaw)
         GLES30.glUniform1f(uPitLoc, -0.72f + f.pitch)
         GLES30.glUniform1f(uDistLoc, DIST)
-        // Same derivation as Tokamak's: r (the on-screen radius every face
-        // is handed) at this scale makes the skin's own object-space half
-        // extent (mid * step) fill roughly that radius.
+        // The kit's `scale = S * 1.35`, with S = 4r: the kit's canvas is the
+        // face's box scaled by `fit`, and the shell hands every face r = box
+        // / 4 x fit - the same S = 4r every canvas face in Faces.kt uses. This
+        // used to fit the skin's half-extent (mid * step) to r, which drew it
+        // at about 0.82 of the kit's size.
         val r = min(surfaceW, surfaceH) / 2f * 0.5f * fit
-        val halfExtent = mid * (1.9f / n)
-        GLES30.glUniform1f(uScaleLoc, r * DIST / halfExtent)
+        GLES30.glUniform1f(uScaleLoc, 4f * r * 1.35f)
         GLES30.glUniform3f(uColLoc, cool.red, cool.green, cool.blue)
         GLES30.glUniform3f(uHotLoc, hot.red, hot.green, hot.blue)
 

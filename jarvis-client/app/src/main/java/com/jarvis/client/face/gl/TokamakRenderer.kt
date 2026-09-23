@@ -71,10 +71,10 @@ interface MeshRenderer : GLSurfaceView.Renderer {
  * the colour picker. Geometry (flow/tightness/instability, which have no
  * user-facing control) keeps the reference's own per-state table.
  *
- * Size is NOT the kit's: this fills the radius `r` every face is handed
- * (`uScale = r * DIST`), where the kit draws the torus at about 0.27 of its
- * canvas. Kept, because how large every face sits in its well is the shell's
- * decision and applies to all twenty.
+ * Size is the kit's: `scale = S * 1.05`, where S is the kit's canvas - the
+ * face's box, scaled by `fit` - which is 4r for the radius r every face is
+ * handed. Every canvas face in Faces.kt uses the same S = 4r. This used
+ * `r * DIST` (4r), about 5% smaller than the kit.
  */
 class TokamakRenderer : MeshRenderer {
 
@@ -517,12 +517,11 @@ class TokamakRenderer : MeshRenderer {
         GLES30.glUniform1f(uYawLoc, yaw)
         GLES30.glUniform1f(uPitLoc, pitch)
         GLES30.glUniform1f(uDistLoc, DIST)
-        // r (the on-screen radius every other face is handed) at scale = r *
-        // DIST makes the torus - whose own object-space half-extent is ~1
-        // unit at a camera distance of 4 - fill roughly that same radius.
-        // See the class comment on why this is not the kit's own size.
+        // The kit's `scale = S * 1.05`, with S = 4r - see the class comment.
+        // `uScale` is in the surface's own pixels, as the kit's is in its
+        // backing store's (`scale * rw / w`).
         val r = min(surfaceW, surfaceH) / 2f * 0.5f * fit
-        GLES30.glUniform1f(uScaleLoc, r * DIST)
+        GLES30.glUniform1f(uScaleLoc, 4f * r * 1.05f)
         GLES30.glUniform3f(uPlateLoc, cool.red, cool.green, cool.blue)
         GLES30.glUniform3f(uALoc, hot.red, hot.green, hot.blue)
 

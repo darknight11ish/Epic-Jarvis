@@ -862,7 +862,8 @@ function demoGraph(){
  *   - WHICH STATE. This page's own state machine (`reactor.set` below,
  *     called by voice, send and status) stays the authority, so the label
  *     under the face and the face can never disagree. Posted to the frame,
- *     which hud-face-bridge.js applies.
+ *     which faces.html applies itself when loaded with `&feed=parent` (see
+ *     FROM_PARENT in its bootDisplay).
  *   - WHICH FACE, AND ITS COLOURS. This window has no app commands (see
  *     capabilities/hud.json), so it cannot ask for the owner's appearance
  *     document; the shell PUSHES it instead, the same one-way way it pushes
@@ -909,7 +910,9 @@ const reactor = (() => {
    * one would keep. It only happens on a save in the Faces window. */
   function sync(){
     const face = appearance && typeof appearance.face === "string" ? appearance.face : "";
-    const url = "faces.html?mode=display" + (face ? "&face=" + encodeURIComponent(face) : "");
+    // `feed=parent`: take state and colours from this page's posts instead
+    // of asking the shell, which would refuse this window anyway.
+    const url = "faces.html?mode=display&feed=parent" + (face ? "&face=" + encodeURIComponent(face) : "");
     const want = ready && visible ? url : "about:blank";
     const key = want === "about:blank" ? want
               : want + "\n" + JSON.stringify((appearance && appearance.bindings) || {});
@@ -918,20 +921,14 @@ const reactor = (() => {
     frame.src = want;
   }
 
-  // Every load of faces.html gets the bridge, then the current state. The
-  // bridge is a file, not inline code: the frame's own policy hashes
-  // faces.html's inline scripts, which switches 'unsafe-inline' off there,
-  // so only a same-origin src is allowed to run.
+  // Every load of faces.html gets the current state and colours straight
+  // away: display mode registers its message listener before the frame's
+  // load event fires, so this first post is never lost.
   frame.addEventListener("load", () => {
     let doc = null;
     try { doc = frame.contentDocument; } catch(e) { return; }
     if (!doc || !doc.documentElement.classList.contains("display-mode")) return;
-    if (doc.getElementById("hud-face-bridge")) { post(); return; }
-    const s = doc.createElement("script");
-    s.id = "hud-face-bridge";
-    s.src = "hud-face-bridge.js";
-    s.onload = post;
-    (doc.head || doc.documentElement).appendChild(s);
+    post();
   });
 
   function adopt(doc){

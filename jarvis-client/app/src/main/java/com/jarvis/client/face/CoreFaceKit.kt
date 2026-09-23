@@ -98,13 +98,26 @@ internal object CoreKit {
     /**
      * The reference's `detail()` (artifact 2412-2416): how many elements a
      * face builds at a given canvas width, rising from `lo` at 200 px to
-     * `hi` at 820 px. [canvasPx] is the width in the reference's own canvas
+     * `hi` at 820 px, times the kit's quality multiplier and capped at
+     * `hi * 2.4`. [canvasPx] is the width in the reference's own canvas
      * pixels, which is what its breakpoints are written in.
+     *
+     * The multiplier is [QUALITY], the kit's single-face value - so a result
+     * can reach `hi * 1.9`, and a caller sizes its arrays for that.
      */
     fun detail(canvasPx: Float, lo: Int, hi: Int): Int {
         val k = ((canvasPx - 200f) / 620f).coerceIn(0f, 1f)
-        return kotlin.math.round(lo + (hi - lo) * k).toInt().coerceIn(lo, hi)
+        val n = min((lo + (hi - lo) * k) * QUALITY, hi * 2.4f)
+        return kotlin.math.max(lo, kotlin.math.floor(n + 0.5f).toInt())
     }
+
+    /**
+     * The kit's `QUALITY` in its single-face view (`SOLO.detail =
+     * Math.max(1.9, Q.detail)`), the view the phone's face corresponds to.
+     * The same value as `KitParity.QUALITY` in Faces.kt (private there) and
+     * `GL.SOLO_DETAIL`; lower all three together if a phone cannot keep up.
+     */
+    const val QUALITY = 1.9f
 
     /** The reference's `shade()`: scale the RGB channels, clamped. Alpha kept. */
     fun shade(c: Color, m: Float): Color = Color(

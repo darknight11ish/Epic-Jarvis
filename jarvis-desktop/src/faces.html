@@ -5016,8 +5016,18 @@ async function bootDisplay() {
   document.body.appendChild(canvas);
 
   const params = new URLSearchParams(location.search);
+  // `&feed=parent`: this frame is inside the HUD, which drives it by
+  // postMessage rather than letting it ask the shell. Two reasons it cannot
+  // ask: the HUD window is granted no app commands (capabilities/hud.json),
+  // and capabilities are per window, frames included - so `get_appearance`
+  // and `get_link_state` would only be refused, each refusal a console
+  // error. And Tauri delivers events by evaluating a script in the window's
+  // top-level page, so a frame's own `listen()` never hears one. The HUD's
+  // own state machine is the authority on what the face shows, so the label
+  // under it and the face can never disagree.
+  const FROM_PARENT = params.get("feed") === "parent";
   let faceId = params.get("face");
-  if (!faceId && IS_TAURI) {
+  if (!faceId && IS_TAURI && !FROM_PARENT) {
     try {
       const loaded = await TAURI.core.invoke("get_appearance");
       mergeBindings(loaded);
@@ -5057,15 +5067,57 @@ async function bootDisplay() {
   window.addEventListener("resize", fit);
   fit();
 
+  // Under the OS "reduce motion" setting the editor paces itself to CALM_HZ
+  // (see applyTarget); this loop used to run at the display's full rate
+  // regardless, in the Widget and the HUD alike. Same rule as the editor:
+  // draw less often, never faster, and hand the skipped time to the next
+  // draw so the face keeps its speed and moves in fewer, larger steps.
+  // Read on every frame, so toggling the setting applies without a reload.
   let last = performance.now();
+  let owed = 0, lastDraw = -Infinity;
   function tick(now) {
-    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    owed += Math.max(0, (now - last) / 1000);
     last = now;
-    stepAmp(dt);
-    drawSurface(surface, dt, LIVE_STATE);
+    if (!CALM.matches || now - lastDraw >= 1000 / CALM_HZ) {
+      const dt = Math.min(0.1, owed);   // the same 0.1s cap as before
+      owed = 0;
+      lastDraw = now;
+      stepAmp(dt);
+      drawSurface(surface, dt, LIVE_STATE);
+    }
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
+
+  if (FROM_PARENT) {
+    // Registered before this function's first `await`, so it is listening
+    // before the frame's load event - which is when the HUD first posts.
+    const known = new Set(SPEC.states.map(st => st.id));
+    window.addEventListener("message", (event) => {
+      // Only the page that embeds this frame, on this origin.
+      if (event.source !== window.parent || event.origin !== location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== "jarvis-hud-face") return;
+      // A state id this build of the spec does not know is ignored, not
+      // guessed at: the face keeps showing the last state it was told.
+      if (typeof data.state === "string" && known.has(data.state)) LIVE_STATE = data.state;
+      if (data.appearance && typeof data.appearance === "object") {
+        try {
+          mergeBindings(data.appearance);
+          const next = data.appearance.face;
+          if (typeof next === "string" && next !== faceId && FACE[next]) {
+            faceId = next;
+            surface.theme = THEME[faceId];
+            surface.f = FACE[faceId];
+            fit();
+          }
+        } catch (error) { console.error("[faces] could not apply the HUD's appearance", error); }
+      }
+    });
+    // Marks the frame as driven, for tests/hud.mjs and anyone debugging.
+    document.documentElement.setAttribute("data-hud-face", "ready");
+    return;   // no jarvis-link and no appearance-changed: see FROM_PARENT
+  }
 
   // The same broadcast Brain and the Widget's own status bar already
   // subscribe to (see jarvis-link.js's module note: Rust fans one event

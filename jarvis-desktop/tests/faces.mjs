@@ -485,6 +485,29 @@ await check("the Widget's face draws at full sharpness, like the kit's solo view
   assert.ok(got.detail >= 1.9, `geometry detail ${got.detail}, the solo view uses 1.9`);
 });
 
+await check("the Widget's face slows to 10 redraws a second under reduced motion", async () => {
+  // The editor paces itself to CALM_HZ when the OS asks for less motion;
+  // display mode (the Widget's face, and the HUD's) used to run at the
+  // panel's full rate regardless. Counted at drawSurface, so a frame that
+  // happens to look like the last one still counts.
+  const page = await K.open(browser, base, "faces.html?mode=display&face=arc", {},
+                            { width: 120, height: 120 });
+  await page.waitForTimeout(500);
+  const rate = () => page.evaluate(() => new Promise((done) => {
+    let n = 0;
+    const real = drawSurface;
+    drawSurface = function (...a) { n++; return real.apply(this, a); };
+    setTimeout(() => { drawSurface = real; done(n / 1.5); }, 1500);
+  }));
+  const normal = await rate();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const calm = await rate();
+  await page.close();
+  assert.ok(normal > 20, `${normal} draws a second with no reduced-motion setting`);
+  assert.ok(calm > 0, "the face stopped drawing altogether - reduce means reduce, not remove");
+  assert.ok(calm <= 12, `${calm} draws a second under prefers-reduced-motion`);
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe faces window holds");

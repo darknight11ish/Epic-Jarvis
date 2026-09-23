@@ -24,7 +24,6 @@ import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -99,10 +98,14 @@ interface Face {
  * comment), a fixed per-element seed (`hash01` or a seeded `Random`), and `f.amp` — which
  * is already smoothed upstream by `FaceHost.advance()`, so there is no
  * envelope left to track locally. Nothing here is appended to, removed from,
- * or nudged by its own last frame; call `draw` with the same `(t, amp)` twice
- * and it draws the same picture twice. That makes these six exactly as
- * pinnable as Rime and Kirkwood, even though the spec's flag — describing the
- * *reference's* technique, not this port's — says otherwise. See
+ * or nudged by its own last frame; call `draw` with the same [FaceFrame]
+ * twice and it draws the same picture twice. (The whole frame, not just
+ * `(t, amp)`: Spectrum, Coreplate, Workbench, Swarm and Shoal ease a
+ * per-state target across a state change from `prevMotion` and
+ * `hitchPhase`, both fields of the frame - see `CoreKit.settle`.) That
+ * makes these six exactly as pinnable as Rime and Kirkwood, even though the
+ * spec's flag — describing the *reference's* technique, not this port's —
+ * says otherwise. See
  * `SpecDriftTest`'s `iris membrane and cascade are the only offered faces
  * that cannot be pinned` for where that distinction is enforced and argued in
  * more detail.
@@ -476,7 +479,8 @@ object Orbit : Face {
  *
  * A port of the artifact's `comb` draw() (identical to the desktop's). What
  * it replaced was 37 flat hexagon outlines. This is a hex lattice on an
- * axial grid - 37 or 61 cells depending on how big the face is drawn -
+ * axial grid - 37 to 217 cells depending on how big the face is drawn (at
+ * the kit's single-face quality, see FirstFiveKit.detail) -
  * seen from above at an angle through a real perspective camera, with each
  * cell's six inner walls filled and shaded by which way they face, honey
  * sitting in the bottom at a level that spreads outward from the centre, and
@@ -487,14 +491,18 @@ object Orbit : Face {
  * (on the raw clock) and the drag. That is kept - `speedFor` feeds nothing
  * here, and still carries the artifact's `sp` so the table is honest.
  *
- * Cost: at 61 cells, eight filled or stroked paths each - about 490 path
- * draws a frame, all from one reused Path. The heaviest of these five.
+ * Cost: at 217 cells, eight filled or stroked paths each - about 1,700 path
+ * draws a frame, all from one reused Path. The heaviest of these five, and
+ * not yet timed on a phone; [KitParity.QUALITY] is the knob if it struggles.
  */
 object Comb : Face {
     override val id = "comb"
     override val name = "Comb"
 
-    private const val MAX_CELLS = 61   // a 4-ring hex lattice: 3*4*5 + 1
+    // The kit's rings are `small_n(w, 3, 4)`, which at its solo quality
+    // (see FirstFiveKit.detail) reaches round(4 * 1.9) = 8 rings: 3*8*9 + 1.
+    private const val MAX_RINGS = 8
+    private const val MAX_CELLS = 3 * MAX_RINGS * (MAX_RINGS + 1) + 1
     private const val CELL_R = 0.135f
     private const val DEPTH = 0.20f
 
@@ -545,7 +553,7 @@ object Comb : Face {
         FirstFiveKit.view(f.yaw * 0.7f + f.yaw, -0.78f + f.pitch * 0.7f + f.pitch)
         val dist = 4.6f
         val scale = sz * 1.15f
-        val rings = FirstFiveKit.detail(sz / fit, 3, 4)
+        val rings = min(MAX_RINGS, FirstFiveKit.detail(sz / fit, 3, 4))
         val fill = fillFor(f.motion)
         val wave = waveFor(f.motion)
         val listening = f.motion == FaceState.LISTENING
@@ -645,7 +653,7 @@ object Comb : Face {
  *
  * A port of the artifact's `spiral` draw() (identical to the desktop's). What
  * it replaced was three rigid logarithmic arms of 90 dots each. Here, as in
- * the artifact, 600-1500 stars (more the bigger the face is drawn) each run
+ * the artifact, 600-2850 stars (more the bigger the face is drawn) each run
  * their own closed oval at their own Keplerian rate, and the ovals are turned
  * a little more the further out they are; nothing is drawn as an arm - the
  * arms are where the ovals crowd, and they persist while every star moves
@@ -657,15 +665,19 @@ object Comb : Face {
  * is picked. Only the star layout is fixed - every position is still a pure
  * function of the angle, as in the artifact.
  *
- * Cost: one `drawCircle` per star, up to 1500 a frame plus about 3% more for
- * the glows, all additive - the most draw calls of these five, about three
- * and a half times Kirkwood's 420 rocks, though each one is a small dot.
+ * Cost: one `drawCircle` per star, up to 2850 a frame at the kit's
+ * single-face quality plus about 3% more for the glows, all additive - the
+ * most draw calls of these five, though each one is a small dot. Not yet
+ * timed on a phone; [KitParity.QUALITY] is the knob if it struggles.
  */
 object Spiral : Face {
     override val id = "spiral"
     override val name = "Spiral"
 
-    private const val MAX_STARS = 1500
+    // The kit's `small_n(w, 600, 1500)`; at its solo quality that reaches
+    // 1500 * 1.9 = 2850 (see FirstFiveKit.detail).
+    private const val KIT_STARS = 1500
+    private const val MAX_STARS = 2850
 
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 0.25f
@@ -722,7 +734,7 @@ object Spiral : Face {
 
     private fun DrawScope.paint(cx: Float, cy: Float, r: Float, hot: Color, cool: Color, f: FaceFrame) {
         val sz = FirstFiveKit.sz(r)
-        val n = FirstFiveKit.detail(sz / fit, 600, MAX_STARS)
+        val n = min(MAX_STARS, FirstFiveKit.detail(sz / fit, 600, KIT_STARS))
         // As in the artifact, the view is passed in AND added again by the
         // projection, so a drag turns the disc twice as far as the drag.
         FirstFiveKit.view(f.yaw + f.yaw, -1.05f + f.pitch + f.pitch)
@@ -797,7 +809,7 @@ object Spiral : Face {
  *
  * A port of the artifact's `iris` draw() (identical to the desktop's). What
  * it replaced was nine straight lines and a dot. This is the artifact's
- * anatomy: 120-220 stromal fibres (more the bigger the face is drawn), each
+ * anatomy: 120-418 stromal fibres (more the bigger the face is drawn), each
  * a gently wandering seven-point curve from the pupil out to the limbus with
  * its own depth and brightness; the raised collarette ring; a black pupil
  * that dilates on the state - wide when listening, a pinhole when thinking -
@@ -816,15 +828,19 @@ object Spiral : Face {
  * eye sits in the theme's own well like every other face (see the single
  * ground in FaceView's drawFace) rather than in its own grey rectangle.
  *
- * Cost: up to 220 anti-aliased path strokes a frame, the most fill work of
- * these five after Comb. Worth watching on an old phone.
+ * Cost: up to 418 anti-aliased path strokes a frame at the kit's
+ * single-face quality, the most fill work of these five after Comb. Worth
+ * watching on an old phone; [KitParity.QUALITY] is the knob.
  */
 object Iris : Face {
     override val id = "iris"
     override val name = "Iris"
     override val fit = 0.86f
 
-    private const val MAX_FIBRES = 220
+    // The kit's `small_n(w, 120, 220)`; at its solo quality that reaches
+    // round(220 * 1.9) = 418 (see FirstFiveKit.detail).
+    private const val KIT_FIBRES = 220
+    private const val MAX_FIBRES = 418
 
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 1.4f
@@ -908,7 +924,7 @@ object Iris : Face {
         clipPath(disc) {
             drawCircle(FirstFiveKit.shade(cool, 0.45f), rim, centre)
 
-            val nf = FirstFiveKit.detail(sz / fit, 120, MAX_FIBRES)
+            val nf = min(MAX_FIBRES, FirstFiveKit.detail(sz / fit, 120, KIT_FIBRES))
             if (sz != strokesFor) {
                 for (i in 0 until MAX_FIBRES) {
                     fibreStrokes[i] = Stroke(width = max(0.6f, sz * 0.004f * (0.5f + fibreRnd[i])))
@@ -1025,13 +1041,16 @@ private object FirstFiveKit {
 
     /**
      * The artifact's `detail(w, lo, hi)`: more geometry the bigger the face is
-     * actually drawn, from `lo` at 200 px to `hi` at 820 px. Its quality
-     * multiplier is 1 on every surface this port has, so it is left out.
+     * actually drawn, from `lo` at 200 px to `hi` at 820 px, times the kit's
+     * quality multiplier. That multiplier is 1.9 in the kit's single-face
+     * view (`SOLO.detail = Math.max(1.9, Q.detail)`), which is the view the
+     * phone's face corresponds to - so a result can reach `hi * 1.9`, and the
+     * arrays below are sized for that. It was left at 1 here, which drew
+     * about half the kit's stars, fibres and cells; Fullerene to Kirkwood and
+     * Accretion already used 1.9. One shared implementation, [KitParity.detail],
+     * so there is one [KitParity.QUALITY] to turn down if a phone struggles.
      */
-    fun detail(px: Float, lo: Int, hi: Int): Int {
-        val k = ((px - 200f) / 620f).coerceIn(0f, 1f)
-        return max(lo, (lo + (hi - lo) * k).roundToInt())
-    }
+    fun detail(px: Float, lo: Int, hi: Int): Int = KitParity.detail(px, lo, hi)
 
     private var cyw = 1f
     private var syw = 0f
@@ -3214,7 +3233,8 @@ object Swarm : Face {
  * light, so the shoal flickers silver exactly when it turns.
  *
  * The drawing is the reference's line for line (artifact 4390-4447): up to
- * 190 fish by canvas size (the reference's `detail(w, 90, 190)`), the same
+ * 361 fish by canvas size (the reference's `detail(w, 90, 190)` at its
+ * single-face quality of 1.9, see CoreKit.detail), the same
  * camera (yaw t x 0.12, pitch -0.12, distance 3.2, scale 1.7 S), body length
  * 0.042 S x depth, a quadratic body and a triangular tail, colour from a
  * depth-shaded structural tone to the hot one by `flank^3`, and far-to-near
@@ -3243,7 +3263,10 @@ object Shoal : Face {
     // faces[].render.fit in the spec is 0.8; this was left at 1.0.
     override val fit = 0.8f
 
-    private const val N = 190
+    // The reference's `detail(w, 90, 190)`; at its single-face quality that
+    // reaches round(190 * 1.9) = 361 (see CoreKit.detail).
+    private const val KIT_N = 190
+    private const val N = 361
     private const val SPREAD_TAU_S = 0.6f
 
     private val seed = FloatArray(N) { hash01(it * 31 + 9) }
@@ -3275,7 +3298,7 @@ object Shoal : Face {
 
     // A unit fish, one body length long, pointing along +x: the reference's
     // quadratic body (width 0.32 of the length) and its triangular tail.
-    // Built once and scaled per fish, rather than rebuilt 190 times a frame;
+    // Built once and scaled per fish, rather than rebuilt per fish a frame;
     // lazily, on the first draw, like Nucleus's shader, so touching
     // `Faces.all` at startup builds nothing for a face never shown.
     private val body by lazy { androidx.compose.ui.graphics.Path().apply {
@@ -3321,7 +3344,7 @@ object Shoal : Face {
         val px1 = CoreKit.backingPx(density)
         CoreKit.clipToView(this)
         // detail() reads the canvas width before `fit` is applied.
-        val n = CoreKit.detail(s / (fit * px1), 90, N)
+        val n = min(N, CoreKit.detail(s / (fit * px1), 90, KIT_N))
         val yaw = f.t * 0.12f + f.yaw
         val pitch = -0.12f + f.pitch
         val dist = 3.2f
@@ -3572,13 +3595,16 @@ object Accretion : Face {
     ) = with(scope) {
         val g = growthAt((f.tableAngle * WALKERS_PER_UNIT).toLong().coerceAtLeast(0L))
 
-        // The kit's canvas is `min(w, h)` = S wide and its faces reach about
-        // 0.44 S; this app hands every face its radius r instead, so S = 2r -
-        // the same equivalence Nucleus's shader uses (p = 1 at r). The grid
-        // spans the whole of S, as the kit's does, so a cell is S / GW, and
-        // each is drawn 1.25 cells wide so neighbours overlap into a
-        // continuous branch rather than a lattice - the kit's own numbers.
-        val sz = r * 2f
+        // The kit's canvas is `min(w, h)` = S wide, and in its solo view that
+        // canvas IS the face's box. The shell hands a face r = box / 4 x fit,
+        // and the kit applies `fit` as a scale around the centre, so S = 4r -
+        // the same S every other face in this file now uses. (This was 2r,
+        // which kept the old phone size: the coral sat at half the kit's
+        // size, beside fifteen faces drawn at the kit's.) The grid spans the
+        // whole of S, as the kit's does, so a cell is S / GW, and each is
+        // drawn 1.25 cells wide so neighbours overlap into a continuous
+        // branch rather than a lattice - the kit's own numbers.
+        val sz = r * 4f
         val cell = sz / GW
         val ox = cx - sz / 2f
         val oy = cy - sz / 2f
@@ -3808,18 +3834,18 @@ object Cascade : Face {
         val flowK = if (f.motion == FaceState.LISTENING) 1f + f.amp * 1.4f else 1f
         val p = pour((f.tableAngle * TICKS_PER_UNIT).toLong().coerceAtLeast(0L), st, flowK)
 
-        // The kit's square canvas is S = 2r across (see Accretion), and
+        // The kit's square canvas is S = 4r across (see Accretion), and
         // everything below is in its 0..1 units: u across, v down.
-        val sz = r * 2f
-        val left = cx - r
-        val top = cy - r
+        val sz = r * 4f
+        val left = cx - sz / 2f
+        val top = cy - sz / 2f
         fun px(u: Float) = left + u * sz
         fun py(v: Float) = top + v * sz
 
         // The kit's canvas edge clips parcels that fly out sideways after
         // the bounce. `fit` shrinks the drawing, not the canvas, so the card
-        // edge is at r / fit from the centre, not at r.
-        val card = r / fit
+        // edge is at the box's own edge, 2r / fit from the centre, not at 2r.
+        val card = 2f * r / fit
         drawContext.canvas.save()
         drawContext.transform.clipRect(cx - card, cy - card, cx + card, cy + card)
 
@@ -3907,8 +3933,10 @@ object Cascade : Face {
  * `uPit` still feed from `f.angle`, `f.yaw` and `f.pitch` the same way every
  * other 3D face here does, and the screen-to-object-space mapping is redone
  * for a circle (`(fragCoord - uCenter) / uR`) rather than ported from the
- * reference's square canvas (`(fragCoord - 0.5*res) / min(res.x, res.y)`) -
- * the two are the same normalisation for the shape this app actually draws.
+ * reference's square canvas (`(fragCoord - 0.5*res) / min(res.x, res.y) * 2`).
+ * The reference's p = 1 is at half its canvas, and its canvas is the face's
+ * box scaled by `fit` - which is 2r here, so uR = 2r. (It was r, which drew
+ * the nucleus at half the kit's size, beside faces drawn at the kit's.)
  *
  * With one correction that port missed: the reference's `gl_FragCoord` - and
  * its CPU fallback, which says so explicitly (`v = -(py / R - .5) * 2`) -
@@ -4008,7 +4036,7 @@ object Nucleus : Face {
         val pitch = -0.52f + f.pitch
 
         shader.setFloatUniform("uCenter", cx, cy)
-        shader.setFloatUniform("uR", r)
+        shader.setFloatUniform("uR", 2f * r)
         shader.setFloatUniform("uT", f.angle)
         shader.setFloatUniform("uBlend", geo.blend)
         shader.setFloatUniform("uRing", geo.ring)
@@ -4020,14 +4048,19 @@ object Nucleus : Face {
         shader.setFloatUniform("uHot", hot.red, hot.green, hot.blue)
         // The kit marches 96 steps once its buffer is over 900 px across and
         // 72 below - more steps resolve the thin fillet where the ring meets
-        // the core. Its buffer is its whole canvas, which is 2r / fit here
-        // (see Accretion on S = 2r; `fit` scales the drawing, not the canvas).
-        shader.setIntUniform("uSteps", if (2f * r / fit > 900f) 96 else 72)
+        // the core. Its buffer is its whole canvas, which is 4r / fit here
+        // (see Accretion on S = 4r; `fit` scales the drawing, not the canvas).
+        shader.setIntUniform("uSteps", if (4f * r / fit > 900f) 96 else 72)
 
-        drawCircle(
+        // The reference's whole square canvas, |p.x| and |p.y| up to 1. Its
+        // bounding sphere projects to about p = 1.24, so a circle of p = 1
+        // could cut off something the kit draws in its corners. A ray that
+        // misses the bounding sphere returns transparent, so the corners cost
+        // one ray test a pixel and paint nothing.
+        drawRect(
             brush = shaderBrush,
-            radius = r,
-            center = Offset(cx, cy),
+            topLeft = Offset(cx - 2f * r, cy - 2f * r),
+            size = Size(4f * r, 4f * r),
         )
     }
 
