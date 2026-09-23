@@ -835,11 +835,23 @@ jobs:
         run: |
           set -euo pipefail
           short="${GITHUB_SHA::7}"
-          mv jarvis-client/artifacts/app-release.apk "jarvis-client/artifacts/jarvis-client-$short.apk"
-          size=$(du -h "jarvis-client/artifacts/jarvis-client-$short.apk" | cut -f1)
+          apk="jarvis-client-$short.apk"
+          mv jarvis-client/artifacts/app-release.apk "jarvis-client/artifacts/$apk"
+          size=$(du -h "jarvis-client/artifacts/$apk" | cut -f1)
+          commit_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+          built_at=$(date -u '+%Y-%m-%d %H:%M UTC')
 
+          # Any branch that touches jarvis-client publishes here - on purpose:
+          # the owner installs builds from the working branch, not only from
+          # main. So the notes say, first, exactly which branch and commit
+          # this APK is, and the release title carries the branch too.
           notes=$(printf '%s\n' \
-            "Release build of \`jarvis-client\` from commit \`$short\` on \`$GITHUB_REF_NAME\`. **$size.**" \
+            "**Branch:** \`$GITHUB_REF_NAME\`  " \
+            "**Commit:** [\`$short\`]($commit_url)  " \
+            "**Built:** $built_at  " \
+            "**File:** \`$apk\`, $size" \
+            "" \
+            "This tag is rolling: it always holds the newest build that passed the emulator check, from whichever branch built last. Check the branch above is the one you meant." \
             "" \
             "The only app. It speaks the real Jarvis API - SSE on \`/api/events\` plus REST, authenticated with \`X-Jarvis-Token\`." \
             "" \
@@ -859,14 +871,36 @@ jobs:
             "" \
             "Honest limit: that proves it starts and the first screen works. It does not walk every screen, so a shrinker fault on something only reachable several taps in would still get through. Report anything that crashes only on this build and not the previous debug one." \
             "" \
-            "Signed with the committed debug key, the same one every previous build used, so it installs over an existing copy in place with no uninstall and no loss of pairing. This tag is rolling.")
+            "### Signing" \
+            "" \
+            "Signed with the project's debug key, which CI restores from the \`DEBUG_KEYSTORE_B64\` repository secret; it is not in the repository. Builds signed with that same key install over each other in place, keeping the pairing. The key was replaced on 19 Sep 2026, because the old one had been committed to a public repository." \
+            "" \
+            "If \`adb install -r\` says \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`, the copy on the phone was signed with the OLD key. Uninstall it once (\`adb uninstall com.jarvis.client\`, or long-press the app, Uninstall), install this one, and pair again with the token from \`%USERPROFILE%\\.openjarvis\\token\` on the PC. Uninstalling deletes the pairing and anything still queued offline.")
+          title="Jarvis client - latest build ($GITHUB_REF_NAME @ $short)"
 
-          gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
-          gh release create "$TAG" jarvis-client/artifacts/*.apk \
-            --prerelease \
-            --target "$GITHUB_SHA" \
-            --title "Jarvis client - latest release build" \
-            --notes "$notes"
+          # Replace the old build WITHOUT a moment of having none. The old
+          # way deleted the release first and then created the new one, so a
+          # failed create (a network blip, a 5xx) left no release and no APK
+          # at all. Now: the new APK is uploaded first; only once that has
+          # worked does the tag move, the notes change and the old APK go.
+          # A failure anywhere leaves the previous build downloadable.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "jarvis-client/artifacts/$apk" --clobber
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release edit "$TAG" --prerelease --title "$title" --notes "$notes"
+            gh release view "$TAG" --json assets --jq '.assets[].name' | while IFS= read -r old; do
+              if [ "$old" != "$apk" ]; then
+                gh release delete-asset "$TAG" "$old" --yes
+              fi
+            done
+          else
+            gh release create "$TAG" "jarvis-client/artifacts/$apk" \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes "$notes"
+          fi
 
           echo "Published: $(gh release view "$TAG" --json url --jq .url)"
 

@@ -37,7 +37,8 @@ android {
         }
     }
 
-    // The shared debug key, committed at the repository root. Without it AGP mints
+    // The shared debug key, at keystore/debug.keystore - written there by CI from
+    // the DEBUG_KEYSTORE_B64 secret, never committed (keystore/README.md). Without it AGP mints
     // ~/.android/debug.keystore per machine, and a CI runner is a fresh machine
     // every run - so each build was signed with a different certificate and
     // `adb install -r` over the previous one failed with
@@ -88,26 +89,26 @@ android {
             // already made — which would leave a reader thinking the shipped
             // APK is debuggable when it is not.)
             //
-            // Signed with the same committed debug key, so `adb install -r`
-            // over an existing install still works: the certificate is what
-            // has to match, not the build type.
+            // Signed with the same shared debug key as the debug build, so
+            // `adb install -r` over an existing install still works: the
+            // certificate is what has to match, not the build type.
             //
             // THE TRIPWIRE ON THAT KEY, recorded here because this is where
-            // someone will be standing when it matters: `keystore/debug.keystore`
-            // is committed to this repository. Android decides whether an APK
-            // may replace an installed app by CERTIFICATE, and a same-signature
-            // update inherits the existing data directory and the Keystore
-            // alias — so anyone holding this key can build an app the phone
-            // accepts as an update to this one and simply ask the Keystore to
-            // decrypt the pairing token. No root, no `run-as`.
+            // someone will be standing when it matters. Android decides
+            // whether an APK may replace an installed app by CERTIFICATE, and
+            // a same-signature update inherits the existing data directory and
+            // the Keystore alias - so anyone holding this key can build an app
+            // the phone accepts as an update to this one and simply ask the
+            // Keystore to decrypt the pairing token. No root, no `run-as`.
             //
-            // That is survivable today only because the repository is PRIVATE.
-            // It is a one-way door: making the repo public exposes the key
-            // retroactively and for every commit in history, and no later
-            // rotation can un-publish it. So — rotate this key BEFORE the repo
-            // is ever made public or shared, never after. Rotating costs one
-            // uninstall/reinstall on the phone and re-pairing, because the new
-            // certificate will not match the installed one.
+            // That door was open once: the first shared key WAS committed
+            // here, in a repository that was public. It was replaced on
+            // 2026-09-19 and removed from history. The key now lives only in
+            // the DEBUG_KEYSTORE_B64 repository secret, and CI writes it to
+            // keystore/debug.keystore for the build (see keystore/README.md).
+            // Never commit it again. The replacement cost one uninstall and a
+            // re-pair on the phone, because the new certificate did not match
+            // the installed one - which is what any future rotation costs too.
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("debug")
