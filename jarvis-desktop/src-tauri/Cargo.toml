@@ -75,6 +75,10 @@ windows-sys = { version = "0.59", features = [
   # CreateJobObjectW takes a SECURITY_ATTRIBUTES pointer, so the job-object
   # bindings are gated on this even though the pointer we pass is null.
   "Win32_Security",
+  # CredReadW / CredWriteW / CredDeleteW: the pairing token lives in Windows
+  # Credential Manager, not the settings file (token_store.rs). A feature of
+  # a crate already here, not a new dependency.
+  "Win32_Security_Credentials",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
   "Win32_System_Diagnostics_ToolHelp",

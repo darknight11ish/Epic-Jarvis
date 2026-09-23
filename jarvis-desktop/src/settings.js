@@ -7,9 +7,15 @@
  * read-only by design, and `POST /api/config` answers 501 on purpose, so this
  * page is deliberately not the beginning of a control panel.
  *
- * The token is write-only from here. `get_api_settings` reports whether one is
- * set and never returns it, so a blank field means "keep what you have" and
- * the secret never comes back into THIS page.
+ * The token field is write-only. `get_api_settings` reports whether one is
+ * set, and where it came from, and never returns it, so a blank field means
+ * "keep what you have".
+ *
+ * One deliberate exception, on a click: "Show the token for my phone" asks
+ * `reveal_pairing_token` for it, because the phone has to be given the same
+ * token and before this the only way was to go and find a file. It is shown
+ * in a read-only box, hidden again after a minute, and never logged or
+ * stored by this page.
  *
  * Not into any page: the HUD window is the exception. `hud_bootstrap.js`
  * injects the live token so the vendored page can reach the backend, where a
@@ -52,6 +58,11 @@ const dom = {
   bindAddress: $("bind-address"),
   saveConnection: $("save-connection"),
   clearToken: $("clear-token"),
+  revealToken: $("reveal-token"),
+  pairingShown: $("pairing-shown"),
+  pairingToken: $("pairing-token"),
+  copyToken: $("copy-token"),
+  hideToken: $("hide-token"),
   connectionStatus: $("connection-status"),
   linkState: $("link-state"),
   linkText: $("link-text"),
@@ -140,11 +151,23 @@ async function act(button, target, work) {
    Connection
    ========================================================================== */
 
+/** Where the token in use came from, in words. Never the token. */
+const TOKEN_SOURCE = {
+  "credential-manager": "set here, kept in Windows Credential Manager",
+  "settings-file": "set here, kept in the settings file as plain text",
+  environment: "from the JARVIS_TOKEN / HUD_TOKEN environment variable",
+  "backend-file": "Jarvis's own, from its token file",
+};
+
 async function loadConnection() {
   const settings = await invoke("get_api_settings");
   dom.base.value = settings.base || "";
-  dom.tokenState.textContent = settings.hasToken ? "set" : "not set";
-  dom.clearToken.disabled = !settings.hasToken;
+  dom.tokenState.textContent = TOKEN_SOURCE[settings.tokenSource] ||
+    (settings.hasToken ? "set" : "not set");
+  // Only a token typed here can be cleared here. Clearing Jarvis's own, or
+  // one from the environment, is not something this button can do.
+  dom.clearToken.disabled =
+    !["credential-manager", "settings-file"].includes(settings.tokenSource);
   dom.bindAddress.value = settings.bindAddress || "";
   dom.storePath.textContent = settings.store || "";
   // Saved by an older version that checked less; the backend is not started
@@ -161,7 +184,7 @@ dom.saveConnection.addEventListener("click", () =>
     const token = dom.token.value;
     // An untouched token field means "keep the current one" — passing "" would
     // clear it, which is not what leaving a field alone should ever mean.
-    await invoke("set_api_settings", {
+    const note = await invoke("set_api_settings", {
       base,
       token: token.length ? token : null,
       bindAddress: dom.bindAddress.value.trim(),
@@ -170,18 +193,62 @@ dom.saveConnection.addEventListener("click", () =>
     await loadConnection();
     // The stream is pointed at the old base until it reconnects.
     reconnect();
-    return "Saved. Reconnecting the event stream.";
+    return note ? `Saved. ${note} Reconnecting the event stream.`
+      : "Saved. Reconnecting the event stream.";
   })
 );
 
 dom.clearToken.addEventListener("click", () =>
   act(dom.clearToken, dom.connectionStatus, async () => {
     await invoke("set_api_settings", { base: null, token: "" });
+    const after = await invoke("get_api_settings");
     await loadConnection();
     reconnect();
-    return "Token cleared.";
+    // Cleared means "forget the one typed here", not "use no token": the
+    // app goes back to Jarvis's own, and says so.
+    return after.hasToken
+      ? `Token cleared. Now using ${TOKEN_SOURCE[after.tokenSource] || "the token Jarvis made"}.`
+      : "Token cleared. No other token was found, so Jarvis may refuse this app until it has one.";
   })
 );
+
+/* Showing the token for the phone. Hidden again after a minute. */
+let hideTimer = null;
+
+function hidePairingToken() {
+  clearTimeout(hideTimer);
+  dom.pairingToken.value = "";
+  dom.pairingShown.hidden = true;
+  dom.revealToken.hidden = false;
+}
+
+dom.revealToken.addEventListener("click", () =>
+  act(dom.revealToken, dom.connectionStatus, async () => {
+    const token = await invoke("reveal_pairing_token");
+    dom.pairingToken.value = token;
+    dom.pairingShown.hidden = false;
+    dom.revealToken.hidden = true;
+    dom.pairingToken.focus();
+    dom.pairingToken.select();
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hidePairingToken, 60_000);
+    return "Shown below. Type it into the phone.";
+  })
+);
+
+dom.hideToken.addEventListener("click", hidePairingToken);
+
+dom.copyToken.addEventListener("click", async () => {
+  dom.pairingToken.select();
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(dom.pairingToken.value);
+    copied = true;
+  } catch {
+    try { copied = document.execCommand("copy"); } catch { copied = false; }
+  }
+  report(dom.connectionStatus, copied ? "Copied." : "Select it and press Ctrl+C.", copied ? "ok" : null);
+});
 
 dom.reconnect.addEventListener("click", () => {
   reconnect();

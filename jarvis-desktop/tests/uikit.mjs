@@ -382,11 +382,25 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "check_server_health":
             return { services: [{ name: "ollama", online: true },
                                 { name: "litellm", online: false }] };
-          case "get_api_settings":
-            return { base: window.__apiSettings.base, hasToken: window.__apiSettings.hasToken,
+          case "get_api_settings": {
+            // Mirrors commands.rs pick_token: typed (Credential Manager),
+            // then the environment, then the backend's own file; empty is
+            // "not set" at every step.
+            const s = window.__apiSettings;
+            const source = s.typedToken ? "credential-manager"
+              : s.envToken ? "environment" : s.backendFileToken ? "backend-file" : null;
+            return { base: s.base, hasToken: s.hasToken === false ? false : Boolean(source),
+                     tokenSource: s.hasToken === false ? null : source,
                      bindAddress: window.__apiSettings.bindAddress,
                      bindAddressProblem: window.__apiSettings.bindAddressProblem || null,
-                     store:"C:\\Users\\pcadmin\\AppData\\Roaming\\jarvis-desktop.json" };
+                     store: "C:\\Users\\pcadmin\\AppData\\Roaming\\jarvis-desktop.json" };
+          }
+          case "reveal_pairing_token": {
+            const s = window.__apiSettings;
+            const t = s.typedToken || s.envToken || s.backendFileToken;
+            if (!t) throw new Error("there is no token yet - start Jarvis once and it makes one for itself");
+            return t;
+          }
           case "set_api_settings": {
             window.__calls.push(["__savedApiSettings", args]);
             if (window.__bindAddressRefuses && "bindAddress" in args &&
@@ -394,10 +408,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               throw new Error(window.__bindAddressRefusalMessage || "refused");
             }
             if (args.base !== undefined) window.__apiSettings.base = args.base || "";
-            if (args.token) window.__apiSettings.hasToken = true;
-            if (args.token === "") window.__apiSettings.hasToken = false;
+            if (args.token) { window.__apiSettings.typedToken = args.token; delete window.__apiSettings.hasToken; }
+            if (args.token === "") window.__apiSettings.typedToken = null;
             if ("bindAddress" in args) window.__apiSettings.bindAddress = args.bindAddress || "";
-            return null;
+            return window.__apiSettings.saveNote || null;
           }
           case "supervisor_status":
             return { supervise: true, owned: true, configured: true, pid: 24188,
@@ -733,7 +747,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__installFails = installFails || null;
   window.__restartFails = restartFails || null;
   window.__refuse = refuse || [];
-  window.__apiSettings = { base: "http://127.0.0.1:4719", hasToken: true, bindAddress: "",
+  window.__apiSettings = { base: "http://127.0.0.1:4719", bindAddress: "",
+                            typedToken: null, envToken: null, backendFileToken: "backend-made-token",
                             ...(apiSettings || {}) };
   window.__bindAddressRefuses = bindAddressRefuses || null;
   window.__bindAddressRefusalMessage = bindAddressRefusalMessage || null;

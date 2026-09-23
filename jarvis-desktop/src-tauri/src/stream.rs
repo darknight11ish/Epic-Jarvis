@@ -973,6 +973,9 @@ pub(crate) fn publish_link<F: FnOnce(&mut LinkState)>(app: &AppHandle, edit: F) 
     };
     crate::emit_all(app, crate::events::JARVIS_LINK, next.clone());
     crate::push_to_hud(app, "link", &next);
+    // A first launch built the HUD before the backend wrote its token; the
+    // link changing is when that token certainly exists. No-op if unchanged.
+    crate::configure_hud(app);
     crate::tray::on_link_changed(app, &next);
 }
 

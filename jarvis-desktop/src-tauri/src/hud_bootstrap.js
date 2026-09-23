@@ -18,12 +18,15 @@
  * "a copy in this page's localStorage would be a second, staler source of the
  * token that outlives the shell's own storage".
  *
- * This comment used to say "the OS keystore". It is not in a keystore. It is
- * a bare JSON string in tauri-plugin-store's file under %APPDATA%, which the
- * uninstaller leaves behind. Saying otherwise made the storage look stronger
- * than it is to the next person reading this, which is the only audience a
- * comment has. Moving it to DPAPI is worth doing; claiming it already moved
- * was not.
+ * Where the shell holds it, precisely (this comment once claimed "the OS
+ * keystore" when it was a bare JSON string, and then had to be corrected):
+ * a token typed into Settings is in Windows Credential Manager, which is
+ * DPAPI-encrypted to the Windows user (token_store.rs, since 2026-09-23).
+ * Two exceptions, both named in Settings: if Credential Manager refuses it,
+ * it falls back to plain JSON in tauri-plugin-store's file under %APPDATA%;
+ * and a token nobody typed is the backend's own ~/.openjarvis/token, a plain
+ * file under the user profile that the backend itself reads. Once injected,
+ * the token is also in this page's memory, as below.
  *
  * So instead: intercept the assignment. The page does
  *

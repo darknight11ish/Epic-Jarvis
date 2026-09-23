@@ -88,6 +88,8 @@ fn main() {
             // Connection settings — settings window only
             "get_api_settings",
             "set_api_settings",
+            // Settings' "Show the token for my phone". Settings window only.
+            "reveal_pairing_token",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

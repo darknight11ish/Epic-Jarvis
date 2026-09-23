@@ -453,8 +453,11 @@ quickest way to do it once. Use the TOML if you want it to persist.
 
 **The token is now made for you.** On first run the backend writes a random one
 to `%USERPROFILE%\.openjarvis\token` and the desktop app reads it from there,
-so neither end needs configuring. Open that file to get the string for the
-phone.
+so neither end needs configuring. To get it for the phone, open the desktop
+app's **Settings → Connection → Show the token for my phone** and type what
+it shows into the phone's Token box (it hides itself again after a minute).
+Without the desktop app, this one line in PowerShell prints it:
+`Get-Content "$env:USERPROFILE\.openjarvis\token"`
 
 Setting `HUD_TOKEN` yourself still wins and nothing is written in that case —
 useful if you would rather choose it. Delete the file to get a new one; the
@@ -508,9 +511,11 @@ phone gets a 401 that looks like a token mismatch.
 
 ## Uninstalling
 
-The uninstaller leaves your settings behind, including **the pairing token, in
-plain text** — in the `.openjarvis` folder, and in `%APPDATA%` too if you ever
-typed a token into Settings. To remove everything:
+The uninstaller leaves your settings behind, including **the pairing token**:
+in plain text in the `.openjarvis` folder, and — if you ever typed a token into
+Settings — in Windows Credential Manager (Control Panel → Credential Manager →
+Windows Credentials → "Jarvis Desktop/pairing token"; select it and press
+Remove). To remove everything else:
 
 ```
 %APPDATA%\com.jarvis.desktop\
@@ -554,11 +559,19 @@ rather than your fault.
   them is scrambled or hidden**, so read one before sending it anywhere.
 - **The updater is off.** No signing key exists, so the in-app updater is inert
   and reports itself unsupported. Updating means building and installing again.
-- **The token is stored in plain text**, in two places: the one the backend
-  makes for itself at `%USERPROFILE%\.openjarvis\token`, and — only if you
-  typed one into Settings — the desktop app's store under `%APPDATA%`. Neither
-  is encrypted and neither is in the Windows credential manager. Anything
-  running as you can read them. On Linux and macOS the backend at least sets
-  the file to owner-only; Windows has no equivalent in that code path, so the
-  file inherits whatever the folder allows.
+- **Where the token is kept, honestly.** Two places.
+  - A token you **typed into Settings** is in **Windows Credential Manager**
+    (since 2026-09-23), encrypted to your Windows account — the same place
+    Windows keeps saved network passwords. An older version kept it in the
+    app's settings file under `%APPDATA%` as plain text; the first start of
+    this version moves it across, checks it arrived, and only then deletes
+    the plain-text copy. If Credential Manager ever refuses it, the app keeps
+    it in the settings file instead (so you are never unpaired) and Settings
+    says so next to the token.
+  - The token **the backend makes for itself** is still a plain file,
+    `%USERPROFILE%\.openjarvis\token`, because that file is how the backend
+    and the desktop agree on a token without you typing anything. It is
+    inside your user folder, which Windows already keeps readable only by
+    you, the system and administrators. Anything running as you can read it.
+    On Linux and macOS the backend also sets the file to owner-only.
 - **Do not run the OpenJarvis copy you downloaded.** It writes into the same `%USERPROFILE%\.openjarvis\` folder as Jarvis, including a `documents` table in `memory.db`; with `documents-owned.patch` applied Jarvis ignores that table, but nothing stops OpenJarvis changing the folder.

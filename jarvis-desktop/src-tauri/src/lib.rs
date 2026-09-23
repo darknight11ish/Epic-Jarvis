@@ -30,6 +30,7 @@ pub mod spec_drift;
 pub mod sse;
 pub mod stream;
 pub mod system_theme;
+pub mod token_store;
 pub mod tray;
 pub mod update;
 pub mod vision;
@@ -248,6 +249,42 @@ pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload:
         format!("if (window.__jarvisFeed) {{ window.__jarvisFeed({channel}, {payload}); }}");
     if let Err(err) = hud.eval(&script) {
         eprintln!("[jarvis] unable to push `{channel}` to the HUD: {err}");
+    }
+}
+
+/// Gives the HUD page the current base and token, if it holds different ones.
+///
+/// The initialisation script (`hud_bootstrap.js`) injects them once, when the
+/// window is built - and on a first launch that is BEFORE the backend has
+/// started and written its token file, so the page got an empty token and
+/// every request it made was refused (401) until the app was restarted. The
+/// page-load fallback that follows only re-sent when the page had no base,
+/// and it always has one. So this runs on every page load and on every link
+/// change (`stream::publish_link`) - the stream connecting is the moment the
+/// backend, and so its token file, certainly exists - and does nothing when
+/// the page already agrees. The token goes only into the page, as the
+/// bootstrap already puts it; it is not logged.
+pub fn configure_hud(app: &AppHandle) {
+    let Some(hud) = app.get_webview_window(HUD_LABEL) else {
+        return;
+    };
+    let base = commands::jarvis_base(app);
+    let token = commands::jarvis_token_for(app).unwrap_or_default();
+    let (Ok(base), Ok(token)) = (serde_json::to_string(&base), serde_json::to_string(&token))
+    else {
+        return;
+    };
+    // `typeof` guards the reference rather than `window.JARVIS`, because a
+    // top-level `const` is a global *lexical* binding and never a property of
+    // `window`.
+    let script = format!(
+        "if (typeof JARVIS !== 'undefined' && JARVIS && typeof JARVIS.set === 'function' \
+         && (JARVIS.base !== {base} || JARVIS.token !== {token})) {{ \
+         if (typeof JARVIS.forget === 'function') JARVIS.forget(); \
+         JARVIS.set({base}, {token}, false); }}"
+    );
+    if let Err(err) = hud.eval(&script) {
+        eprintln!("[jarvis] unable to configure the HUD page: {err}");
     }
 }
 
@@ -646,6 +683,7 @@ pub fn run() {
             commands::finish_onboarding,
             commands::get_api_settings,
             commands::set_api_settings,
+            commands::reveal_pairing_token,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,
@@ -759,17 +797,9 @@ pub fn run() {
             return;
         }
         let app = webview.app_handle();
-        let base = commands::jarvis_base(app);
-        let token = commands::jarvis_token_for(app).unwrap_or_default();
-        let script = format!(
-            "if (typeof JARVIS !== 'undefined' && JARVIS && typeof JARVIS.set === 'function' \
-             && !JARVIS.base) {{ JARVIS.forget(); JARVIS.set({}, {}, false); }}",
-            serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
-            serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".into()),
-        );
-        if let Err(err) = webview.eval(&script) {
-            eprintln!("[jarvis] unable to configure the HUD page: {err}");
-        }
+        // Re-sends the base and token whenever the page's differ - not only
+        // when it has no base, which it always has. See `configure_hud`.
+        configure_hud(app);
 
         // A HUD that loads (or reloads) mid-session has heard nothing yet: the
         // stream only speaks on change, and it may have connected minutes ago.
@@ -805,6 +835,12 @@ pub fn run() {
             if autostart::launched_at_login() {
                 logfile::log("[jarvis] started by Windows at login");
             }
+
+            // Before anything reads the token (the HUD bootstrap, the backend
+            // it may start): a token an older version kept in the settings
+            // file as plain text moves into Windows Credential Manager, once.
+            // Any failure leaves it where it was - see token_store.rs.
+            commands::migrate_plain_token(&handle);
 
             // Claims this process's AUMID before the first approval toast can
             // possibly fire - see winrt_toast.rs's own doc for why an

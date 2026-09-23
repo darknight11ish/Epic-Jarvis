@@ -115,14 +115,16 @@ pub struct HealthReport {
     pub services: Vec<ServiceStatus>,
 }
 
-/// Where the desktop shell keeps the API base URL and the pairing token.
+/// Largest chat line accepted before the stream is treated as broken.
+const MAX_CHAT_LINE_BYTES: usize = 4 * 1024 * 1024;
+
+/// Where the desktop shell keeps the API base URL and the bind address.
 ///
 /// A store file rather than the page's `localStorage`, per DESKTOP-BUILD §3.1:
 /// the port can change without a rebuild, and reading it from Rust means the
 /// token reaches the webview only as the `JARVIS.set()` call at page load.
-/// Largest chat line accepted before the stream is treated as broken.
-const MAX_CHAT_LINE_BYTES: usize = 4 * 1024 * 1024;
-
+/// The pairing token is NOT kept here any more - it is in Windows Credential
+/// Manager (`token_store.rs`) - except as a fallback when that refuses it.
 pub const SETTINGS_STORE: &str = "jarvis-desktop.json";
 
 /// Default API base. `JARVIS_HUD_PORT` defaults to 4719 in `jarvis_hud.py`;
@@ -140,24 +142,131 @@ pub fn jarvis_base(app: &AppHandle) -> String {
         .ok()
         .and_then(|store| store.get("base"))
         .and_then(|v| v.as_str().map(str::to_string))
+        .map(|b| b.trim().trim_end_matches('/').to_string())
+        .filter(|b| !b.is_empty())
         .or_else(|| std::env::var("JARVIS_HUD_BASE").ok())
         .map(|b| b.trim().trim_end_matches('/').to_string())
         .filter(|b| !b.is_empty())
         .unwrap_or_else(|| DEFAULT_BASE.to_string())
 }
 
-/// The pairing token: the store first, then the environment.
-pub fn jarvis_token_for(app: &AppHandle) -> Option<String> {
+/// Where the token in use came from. Reported to Settings by name - never
+/// the token itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenSource {
+    /// Typed into Settings, kept in Windows Credential Manager.
+    CredentialManager,
+    /// Typed into Settings, kept in the settings file as plain text: an
+    /// older version saved it there, or Credential Manager refused it.
+    SettingsFile,
+    /// `JARVIS_TOKEN` / `HUD_TOKEN` in the environment.
+    Environment,
+    /// The backend's own `~/.openjarvis/token`.
+    BackendFile,
+}
+
+impl TokenSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TokenSource::CredentialManager => "credential-manager",
+            TokenSource::SettingsFile => "settings-file",
+            TokenSource::Environment => "environment",
+            TokenSource::BackendFile => "backend-file",
+        }
+    }
+}
+
+/// Which token wins. Pure, so the order is tested without an app.
+///
+/// **An empty value means "not set" at every step, and falls through.** It
+/// used to be read as "the token is the empty string": Settings' "Clear
+/// token" saved `""`, this found it first and stopped, never reaching the
+/// environment or the backend's own file - so every request went out with
+/// no token and the backend answered 401 until the app was reconfigured.
+///
+/// The settings-file copy wins over Credential Manager because it only
+/// exists when it is the newest: left by an older version (moved at the
+/// next start, [`migrate_plain_token`]) or written because Credential
+/// Manager refused the newest one.
+pub(crate) fn pick_token(
+    settings_file: Option<String>,
+    credential_manager: Option<String>,
+    environment: Option<String>,
+    backend_file: impl FnOnce() -> Option<String>,
+) -> Option<(String, TokenSource)> {
+    let clean = |t: Option<String>| t.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    clean(settings_file)
+        .map(|t| (t, TokenSource::SettingsFile))
+        .or_else(|| clean(credential_manager).map(|t| (t, TokenSource::CredentialManager)))
+        .or_else(|| clean(environment).map(|t| (t, TokenSource::Environment)))
+        .or_else(|| clean(backend_file()).map(|t| (t, TokenSource::BackendFile)))
+}
+
+/// The pairing token and where it came from: typed into Settings first
+/// (see [`pick_token`] for the order), then the environment, then the file
+/// the backend made for itself.
+pub fn jarvis_token_with_source(app: &AppHandle) -> Option<(String, TokenSource)> {
     use tauri_plugin_store::StoreExt;
 
-    app.store(SETTINGS_STORE)
+    let settings_file = app
+        .store(SETTINGS_STORE)
         .ok()
         .and_then(|store| store.get("token"))
+        .and_then(|v| v.as_str().map(str::to_string));
+    // A failure to read Credential Manager is not a reason to send no token:
+    // fall through to the next source rather than stop.
+    let credential_manager = crate::token_store::read().ok().flatten();
+    pick_token(
+        settings_file,
+        credential_manager,
+        jarvis_token().cloned(),
+        || token_from_config_dir(app),
+    )
+}
+
+/// The pairing token, wherever it came from.
+pub fn jarvis_token_for(app: &AppHandle) -> Option<String> {
+    jarvis_token_with_source(app).map(|(token, _)| token)
+}
+
+/// Moves a token an older version saved in `jarvis-desktop.json` (plain
+/// text) into Windows Credential Manager, once, at startup - and deletes the
+/// plain-text copy only after reading it back from Credential Manager and
+/// finding it identical. Any failure leaves the settings file alone, so the
+/// pairing is never lost; the reason is logged, the token never is.
+pub fn migrate_plain_token(app: &AppHandle) {
+    use crate::token_store::{plan_migration, read_fresh, write, Migration};
+    use tauri_plugin_store::StoreExt;
+
+    let Ok(store) = app.store(SETTINGS_STORE) else {
+        return;
+    };
+    let Some(plain) = store
+        .get("token")
         .and_then(|v| v.as_str().map(str::to_string))
-        .or_else(|| jarvis_token().cloned())
-        .or_else(|| token_from_config_dir(app))
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
+    else {
+        return;
+    };
+    match plan_migration(Some(&plain), write, read_fresh) {
+        // An empty value is what the old "Clear token" saved. It holds no
+        // secret and it is what locked the app out, so it simply goes.
+        Migration::Nothing | Migration::RemovePlain => {
+            let moved = !plain.trim().is_empty();
+            store.delete("token");
+            match store.save() {
+                Ok(()) if moved => crate::logfile::log(
+                    "[jarvis] moved the pairing token out of the settings file into Windows Credential Manager",
+                ),
+                Ok(()) => {}
+                Err(e) => crate::logfile::log(&format!(
+                    "[jarvis] the pairing token is in Credential Manager, but the settings file could not be rewritten without it: {e}"
+                )),
+            }
+        }
+        Migration::KeepPlain(why) => crate::logfile::log(&format!(
+            "[jarvis] the pairing token stays in the settings file (plain text): {why}"
+        )),
+    }
 }
 
 /// The token the backend writes for itself on first run.
@@ -417,12 +526,30 @@ pub fn get_api_settings(app: AppHandle) -> serde_json::Value {
     serde_json::json!({
         "base": jarvis_base(&app),
         "hasToken": jarvis_token_for(&app).is_some(),
+        // Where it came from, by name - "credential-manager",
+        // "settings-file", "environment" or "backend-file" - never the token.
+        // Settings only offers "Clear" for the first two, the ones typed there.
+        "tokenSource": jarvis_token_with_source(&app).map(|(_, source)| source.as_str()),
         "bindAddress": supervised_bind_address(&app).unwrap_or_default(),
         // A value an older build saved that this one refuses; the backend is
         // not started with it (sidecar.rs), and Settings says why.
         "bindAddressProblem": supervised_bind_address(&app)
             .and_then(|b| validate_bind_address(&b).err()),
         "store": SETTINGS_STORE,
+    })
+}
+
+/// The token in use, for Settings' "Show the token for my phone" button -
+/// the settings window only (`permissions/surfaces.toml`).
+///
+/// The phone has to be given the same token, and before this the only way to
+/// see it was to find a file (and a token typed into Settings was in no file
+/// at all). Returned to that one page on a click; never logged, never
+/// written anywhere by this command.
+#[tauri::command]
+pub fn reveal_pairing_token(app: AppHandle) -> Result<String, String> {
+    jarvis_token_for(&app).ok_or_else(|| {
+        "there is no token yet - start Jarvis once and it makes one for itself".to_string()
     })
 }
 
@@ -588,34 +715,76 @@ fn inet_aton(s: &str) -> Option<u32> {
 
 /// Persists the base URL, the token and the supervised bind address —
 /// each optional, so a caller can change one without resending the others.
+///
+/// The token goes to Windows Credential Manager (`token_store.rs`), not the
+/// settings file. If Credential Manager refuses it, it is still saved - in
+/// the settings file, as before - and the returned note says so, so the
+/// owner is never left unpaired and never misled about where it is.
+///
+/// An empty token means **clear what was typed here**: it is removed from
+/// both places, and the app goes back to the environment or the backend's
+/// own token file. It is never saved as `""` - that value used to be read as
+/// "the token is empty" and lock the app out of its own backend.
+///
+/// Returns a note for Settings to show, or `None` when there is nothing to add.
 #[tauri::command]
 pub fn set_api_settings(
     app: AppHandle,
     base: Option<String>,
     token: Option<String>,
     bind_address: Option<String>,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
+    use crate::token_store::{self, StoreError};
     use tauri_plugin_store::StoreExt;
 
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("unable to open the settings store: {e}"))?;
+    // Everything that can be refused is checked before anything is written,
+    // so a refused bind address does not leave a half-saved token behind.
+    let base = base.map(|b| b.trim().trim_end_matches('/').to_string());
+    if let Some(base) = &base {
+        validate_base(base)?;
+    }
+    let bind_address = bind_address.map(|b| b.trim().to_string());
+    if let Some(bind_address) = &bind_address {
+        validate_bind_address(bind_address)?;
+    }
+
+    let mut note = None;
     if let Some(base) = base {
-        let base = base.trim().trim_end_matches('/').to_string();
-        validate_base(&base)?;
         store.set("base", serde_json::Value::String(base));
     }
-    if let Some(token) = token {
-        store.set("token", serde_json::Value::String(token.trim().to_string()));
+    if let Some(token) = token.map(|t| t.trim().to_string()) {
+        if token.is_empty() {
+            match token_store::delete() {
+                Ok(()) | Err(StoreError::Unavailable) => {}
+                // Still in Credential Manager means still in use: say so
+                // rather than report a clear that did not happen.
+                Err(e) => return Err(format!("could not clear the token: {e}")),
+            }
+            store.delete("token");
+        } else {
+            match token_store::write(&token) {
+                Ok(()) => {
+                    store.delete("token");
+                }
+                Err(e) => {
+                    store.set("token", serde_json::Value::String(token));
+                    note = Some(format!(
+                        "The token was saved in the settings file as plain text, because {e}."
+                    ));
+                }
+            }
+        }
     }
     if let Some(bind_address) = bind_address {
-        let bind_address = bind_address.trim().to_string();
-        validate_bind_address(&bind_address)?;
         store.set("bind_address", serde_json::Value::String(bind_address));
     }
     store
         .save()
-        .map_err(|e| format!("unable to write the settings store: {e}"))
+        .map_err(|e| format!("unable to write the settings store: {e}"))?;
+    Ok(note)
 }
 
 /// Checks a base URL before it is persisted.
@@ -2344,6 +2513,68 @@ pub fn quit_app(app: AppHandle) {
         let _ = hud.destroy();
     }
     app.exit(0);
+}
+
+#[cfg(test)]
+mod token_tests {
+    use super::{pick_token, TokenSource};
+
+    fn s(v: &str) -> Option<String> {
+        Some(v.to_string())
+    }
+
+    /// The lockout: "Clear token" saved "", and "" was taken as the token.
+    #[test]
+    fn an_empty_saved_token_falls_through_to_the_backend_file() {
+        let got = pick_token(s(""), None, None, || s("from-file"));
+        assert_eq!(
+            got,
+            Some(("from-file".to_string(), TokenSource::BackendFile))
+        );
+        let got = pick_token(s("   "), s(""), None, || s("from-file"));
+        assert_eq!(
+            got,
+            Some(("from-file".to_string(), TokenSource::BackendFile))
+        );
+    }
+
+    #[test]
+    fn an_empty_saved_token_falls_through_to_the_environment() {
+        let got = pick_token(s(""), None, s("from-env"), || panic!("not reached"));
+        assert_eq!(
+            got,
+            Some(("from-env".to_string(), TokenSource::Environment))
+        );
+    }
+
+    #[test]
+    fn a_typed_token_wins_and_credential_manager_is_where_it_normally_lives() {
+        let got = pick_token(None, s("typed"), s("env"), || s("file"));
+        assert_eq!(
+            got,
+            Some(("typed".to_string(), TokenSource::CredentialManager))
+        );
+    }
+
+    /// The settings-file copy exists only when it is the newest (left by an
+    /// older version, or Credential Manager refused the latest), so it wins.
+    #[test]
+    fn a_settings_file_copy_beats_an_older_credential_manager_one() {
+        let got = pick_token(s("newer"), s("older"), None, || None);
+        assert_eq!(got, Some(("newer".to_string(), TokenSource::SettingsFile)));
+    }
+
+    #[test]
+    fn nothing_anywhere_is_none_not_an_empty_token() {
+        assert_eq!(pick_token(s(""), s(""), s(""), || s("")), None);
+        assert_eq!(pick_token(None, None, None, || None), None);
+    }
+
+    #[test]
+    fn values_are_trimmed() {
+        let got = pick_token(None, None, None, || s("  tok\n"));
+        assert_eq!(got.map(|(t, _)| t), s("tok"));
+    }
 }
 
 #[cfg(test)]
