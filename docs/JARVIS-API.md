@@ -175,7 +175,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `model` | Fanned out verbatim | Re-reads the model list (`JarvisRuntime.kt:689`) |
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
-| `proposal` | Rendered in the Brain pane (`brain.js:1496`) | Ignored (`JarvisRuntime.kt:701`) |
+| `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
 | `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Falls through to "unhandled" |
 | `appearance` | — | Re-reads the shared document (`JarvisRuntime.kt:707`) |
 
@@ -486,10 +486,10 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/content-risk` | GET | `routes.rs:23` | **no** | Read-only by design. |
 | `/api/watch` | GET | `routes.rs:24` | **no** | |
 | `/api/watch/report` | GET | `routes.rs:27` | **no** | A peek. Marking read is a POST on purpose. |
-| `/api/memory/status` | GET | `routes.rs:28` | **no** | |
-| `/api/memory/pending` | GET | `routes.rs:29` | via `probe`, as `/api/memory/pending?retire_cards=1` (`MemoryCards.PENDING_PATH`, read by `JarvisRuntime.refreshBrain`/`refreshMemoryQueue`) | The review QUEUE, never the corpus. The phone asks for retire cards because it labels them correctly - see below. |
+| `/api/memory/status` | GET | `routes.rs:28` | **no** | `{available, db, facts, current, retired, embedder, semantic, vector_search, unembedded, sleep_time}` - `MemoryStore.status()` plus the route's own two. `facts` counts retired ones too; `current` is what is in use. |
+| `/api/memory/pending` | GET | `routes.rs` (`memory_pending`), as `?retire_cards=1&sleep_offer=1` | via `probe`, as `/api/memory/pending?retire_cards=1&sleep_offer=1` (`MemoryCards.PENDING_PATH`, read by `JarvisRuntime.refreshBrain`/`refreshMemoryQueue`) | The review QUEUE, never the corpus. Both apps ask for retire cards because they label them correctly, and for the overnight-tidy card because they show it - see below. The HUD page reads it plainly, for a count only. |
 | `/api/memory/facts` | GET | `routes.rs:32`, `brain.rs:413` | `JarvisApi.kt:429` | Takes `?known_at=<unix seconds>` — "what did I believe then?" |
-| `/api/memory/export` | GET | `brain.rs:382` | **no** | |
+| `/api/memory/export` | GET | `brain.rs` `brain_memory_export` | **no** | Everything, current and retired. The desktop saves it to a file the owner picks in the Windows "Save as" dialog - never the clipboard, which Windows can sync to other devices. |
 | `/api/initiative` | GET | `routes.rs:33` | via `probe` | The **only** list route that uses the key `items`. |
 | `/api/attention` | GET | `attention.rs:54`, `routes.rs:34` | `JarvisApi.kt:277` | Nests the budget; the phone flattens it (`ApiModels.kt:366`). |
 | `/api/digest` | GET | `attention.rs:81`, `routes.rs:35` | `JarvisApi.kt:280` | List key: `digest`. |
@@ -574,8 +574,9 @@ question and `text` as the reason; show no confidence; no "Both are true".
 **Android** labels accept "Stop using this fact" (the same action in plainer
 words) and discard "Keep using it", with the line "Stopping it does not delete
 it. The fact stays in the history - Jarvis just stops using it."
-The desktop's current Keep button, and its "Kept. Jarvis can recall it now."
-reply, would say the opposite of what happens on this card.
+The desktop labels it the same way as the phone (`brain.js` `proposalRow`);
+an older client's plain Keep button would say the opposite of what happens
+on this card, which is why it is hidden unless asked for:
 
 **So the card is hidden unless asked for.** `GET /api/memory/pending` leaves
 out every `source == "feedback_retire"` row. A client that shows the card
@@ -588,6 +589,20 @@ a client that asks shows it. Two things still count it, and a client should
 not be surprised by either: `setup.pending` (the queue size) and the
 `proposal` event's `count`/ids on the event stream. `/api/memory/export`
 lists it too - it is a backup, not a card list.
+
+**The overnight-tidy card, `setup.sleep_time_offer`, also only when asked
+for: `?sleep_offer=1`** (exactly `1`). `jarvis_sleep.reminder_card()` marks
+the day's offer as made the moment it is called, so the route calls it only
+for a client that shows the card - the Brain window and the phone. Without
+the flag the field is `null`. (The HUD page reads this route often and never
+showed the card, and used to use up the day's offer that way.) The card says
+the feature is not built, and carries `"implemented": false`.
+
+**Which card says "would replace".** Only a row with a non-null
+`replaces_id` replaces anything: `jarvis_extract._accept()` retires by that
+id and nothing else. `replaces` alone is the model's own description of
+some fact; a row with `replaces` but no `replaces_id` retires nothing, and
+neither app says it would.
 
 ### Writes
 
@@ -604,12 +619,12 @@ lists it too - it is a backup, not a card list.
 | `/api/models/switch` | POST | `{"ref": …}` | `brain.rs:435` | `JarvisApi.kt:310` | Allowed from the phone since the 2026-09-18 amendment: tier `ask`, so success means "a card was raised". |
 | `/api/models/rollback` | POST | `{}` | `brain.rs:436` | `JarvisApi.kt:314` | Tier `auto`; never waits. |
 | `/api/memory/decide` | POST | `{"id": <int>, "accept": bool}` | `brain.rs:283` | `JarvisApi.kt:417` | One id, one decision. **No list form anywhere** — a "keep all" would be an approve-all with another name. |
-| `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | **no** | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
-| `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | **no** | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
-| `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs:308` | **no** | Retires rather than deletes. No undo. |
-| `/api/memory/edit` | POST | object | `brain.rs:329` | **no** | |
-| `/api/memory/learning` | POST | object | `brain.rs:344` | **no** | |
-| `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}` | `brain.rs:369` | `JarvisApi.kt:447` | "Not now" sends nothing at all — the card tracks "already offered today" itself. |
+| `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | `brain.rs` `brain_memory_keep_both` | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
+| `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs:1017` (quickbar), `hud_bootstrap.js` (HUD page) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
+| `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | **no** | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. |
+| `/api/memory/edit` | POST | object | `brain.rs` `brain_memory_edit` | **no** | Refused while the stream is stale. |
+| `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | **no** | Switching on also starts the learner (no restart needed). A "Remember:" message makes a card even while it is off. Refused while the stream is stale. |
+| `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}` | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.kt:447` | The overnight tidy is **not built**: `enabled` only records the wish, and nothing runs. "Not now" sends nothing at all — the card tracks "already offered today" itself. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
 | `/api/attention/unmute` | POST | `{}` | `attention.rs:121` | `JarvisApi.kt:471` | Response is `budget()`, not `status()`, so the desktop re-reads rather than applying half an update. |
 | `/api/digest/seen` | POST | `{}` = all, or `{"ids": [...]}` | `attention.rs:102` | `JarvisApi.kt:481` | **Marking read is not approving.** Both clients say so in the same words. |
@@ -671,9 +686,9 @@ know which side the backend agrees with.
    the desktop's copy drifting. `docs/CROSS-CLIENT-CONTRACT.md` §3 asks whether
    the served spec should replace both vendored copies.
 
-7. **Event kinds each client ignores.** The phone ignores `finding`, `voice`
-   and `proposal`, and does not handle `job` at all; the desktop renders
-   `proposal` and fans the rest out verbatim. Deliberate on the phone's side
+7. **Event kinds each client ignores.** The phone ignores `finding` and
+   `voice`, and does not handle `job` at all; both re-read the review queue
+   on `proposal`; the desktop fans the rest out verbatim. Deliberate on the phone's side
    (see the reasoning at `JarvisRuntime.kt:683-705`), but worth knowing before
    assuming a feature works on both.
 

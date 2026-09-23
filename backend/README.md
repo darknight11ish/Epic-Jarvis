@@ -535,6 +535,10 @@ neighbour, with a prompt that shows the owner the note and says it will be read
 every time the skill runs; and `cards()` returns `notes`, so anything steering
 an answer is on a screen the owner can reach.
 
+That screen is the Brain window's Faculties view: each skill's notes are
+listed under it as "Jarvis's note: ..." (`brain.js` `renderSkills`, since
+2026-09-23 - before that, the notes were sent and nothing drew them).
+
 This is worth knowing before adopting anything from the self-improving-agent
 literature. ExpeL's "Insight Pool" is this, with a research paper behind it. The
 delta between a skill bank and an ungated one is approval, not storage — and we
@@ -1210,12 +1214,27 @@ for one thing should not need a second route for a related one. The card is
 `null` most of the time — it is once-a-day, server-side, and null whenever
 the pass is already on, reminders are off, or today already offered it once.
 
-**That "once" is per process, not per client.** `reminder_card()` marks
-itself seen the moment it is *called*, and now two clients call it: whichever
-of the desktop or the phone polls `/api/memory/pending` first on a given day
-gets the card, and the other does not, until tomorrow. Accepted rather than
-rewriting `jarvis_sleep.py`'s own tested once-a-day contract for two callers
-it was never asked to serve.
+**Only a client that shows the card gets it - `?sleep_offer=1`** (changed
+2026-09-23). `reminder_card()` marks the day's offer as made the moment it
+is *called*. It used to be called on every read of this route, and the HUD
+page reads the route at load, on every `proposal` event and every 30
+seconds - without ever showing the card. So the HUD usually used up the
+day's card before the Brain window or the phone looked. Now the route calls
+`reminder_card()` only when the request says `sleep_offer=1` (exactly `1`);
+the Brain window and the phone send it, the HUD does not. Of those two,
+whichever asks first on a given day still gets the card and the other does
+not, until tomorrow - the same once-a-day contract `jarvis_sleep.py` always
+had. The line lives in this patch; `feedback.patch` quotes it as context.
+
+**What the card says is now true.** The pass it offers is not built
+(`jarvis_sleep.status()` says `"implemented": false`), and the card used to
+say it would "merge duplicates and retire facts that newer ones replaced" -
+which, if it were ever built that way, would retire facts with nobody
+deciding each one. The rebuilt `jarvis_sleep.py` card now says it is not
+built, that switching it on only records the wish, and that no fact is ever
+changed or retired without the owner's yes on that one fact. That file is
+now copied in by `apply-patches.ps1` (`$SHIPPED`), because the owner's copy
+carries the old words.
 
 `POST /api/memory/sleep_time` answers the card's own three actions. "enable"
 and "stop asking" are one write each — `jarvis_sleep.set_enabled()` /
@@ -1238,6 +1257,17 @@ rather than reporting a success it did not achieve.
 A missing file reads as **on**, matching the shipped default. Inventing "off"
 from an absent file would silently disable a feature the boot banner says is
 running.
+
+**Switching it on starts the learner** (fixed 2026-09-23, in
+`extraction-wiring.patch`'s `set_learning()`). The learner thread is started
+at boot only when learning is already on, and the switch used to write
+`learning.json` and nothing else - so on a backend that booted with learning
+off, "Start learning" said "Learning is on." and nothing ran until a
+restart. Now `set_learning(True)` also calls `LEARNER.start()`, which does
+nothing if it is already running. And **switching it off drops a pass that
+was already waiting** for the conversation to go quiet: `_pass()` reads the
+switch again before it asks the model. `backend/test_memory_honesty.py`
+proves both, on the learner as the patch stack writes it.
 
 ## Ordering
 
@@ -2877,14 +2907,18 @@ conversation from the export's own timestamp, and a fact from a
 conversation more than two days old that has no date at all gets "(as of
 2023-05-03)" on the end. *Not changed:* the fact's `valid_from` column. The
 date lives in the text, as the research said it would.
-*A known limit:* a live chat is dated by the time its **newest** message
-arrived, because no message carries its own time. Today that is exact: both
-apps send one message per request (checked: `main.js:2196-2203` on the
-desktop, `JarvisApi.kt:686` on the phone). If an app ever sends the whole
-conversation instead, a "yesterday" from an earlier day would be dated by
-the newest message. The same sentence is still not queued twice: if the
-words (dates aside) are already a fact or a waiting or discarded card, the
-new copy is recognised as the same one.
+*A known limit, and it now applies:* a live chat is dated by the time its
+**newest** message arrived, because no message carries its own time. When
+this was written both apps sent one message per request, so that was exact.
+They no longer do: the quickbar (`chat-history.js`), the HUD page
+(`S.messages.slice(-12)`) and the phone (`ChatHistory.kt`,
+`JarvisApi.chatCall`) all send the recent conversation with each question
+(checked 2026-09-23). So in a chat that runs past midnight, a "yesterday"
+said before midnight is dated as if it were said after it - one day off.
+The words stay on the card next to the date, so the slip is visible before
+anything is kept. The same sentence is still not queued twice: if the words
+(dates aside) are already a fact or a waiting or discarded card, the new
+copy is recognised as the same one.
 
 **9. A warning on cards that look like planted instructions.** Each card is
 checked for text written to be obeyed: "ignore your previous instructions",
@@ -2924,17 +2958,39 @@ finds its context and the whole run stops before touching anything. Checked
 both ways with `git apply` on a rebuilt `jarvis_hud.py` when the two were
 merged.
 
-## What the apps need (not built here)
+## What the apps do with it
 
-Neither app is changed by this. The backend now sends, on every row of
-`GET /api/memory/pending`: `flags` (a list of `{"code", "why"}`),
-`flags_checked`, `keep_both_ok` and `verbatim`. A card should show each
-`why` as a warning when `flags` is not empty; show a third button, "Both are
-true", only when `keep_both_ok` is true, posting to `/api/memory/keep_both`;
-and label a `verbatim` card "your own words". `setup` in the same response
-may carry `near_duplicates_dropped` + `near_duplicates_note`,
-`near_duplicate_check`, and `remember_last` (how the last "Remember:" went,
-with a plain-words `note`). `docs/JARVIS-API.md` has the full shapes.
+When this patch was written neither app used any of it. Both do now
+(checked 2026-09-23): the backend sends, on every row of
+`GET /api/memory/pending`, `flags` (a list of `{"code", "why"}`),
+`flags_checked`, `keep_both_ok` and `verbatim`. The Brain window's Memory
+tab (`brain.js` `proposalRow`) and the phone (`Learning.kt`
+`MemoryCards.from`) show each `why` as a warning when `flags` is not empty,
+show a third button, "Both are true", only when `keep_both_ok` is true
+(posting to `/api/memory/keep_both`), and label a `verbatim` card "your own
+words". `setup` in the same response may carry `near_duplicates_dropped` +
+`near_duplicates_note`, `near_duplicate_check`, and `remember_last` (how the
+last "Remember:" went, with a plain-words `note`); both apps show the two
+notes. The HUD page does not decide memory cards at all - it says how many
+are waiting and points at the Brain. `docs/JARVIS-API.md` has the full
+shapes.
+
+**"Remember:" works with learning switched off** (2026-09-23). It used to
+be dropped silently when the learning switch was off, because `offer()`
+checked the switch first. It is the owner asking, and it uses no model, so
+it is now handled before the switch is read; the switch stops Jarvis
+*reading conversations for facts*, not the owner telling it one. It still
+only makes a card to keep or discard.
+
+**propose() refuses a model that is not on this machine** (2026-09-23).
+This patch also appends a check to the end of `jarvis_extract.py` that
+re-binds `propose` so it returns `[]` and sends nothing unless `OLLAMA`
+(from the `OLLAMA_URL` environment variable) is loopback. Before, only the
+live learner checked; `import_history.py` (a whole chat history) and the
+gate's "your no becomes a proposed rule" did not. Every caller reaches
+`propose()` as `jarvis_extract.propose`, looked up when called, so all of
+them get the checked version. `backend/test_memory_honesty.py` runs that
+code and reads every call site.
 
 ## How it was proven
 
@@ -3000,8 +3056,16 @@ This does not add anything to memory by itself. It calls the exact same
 `jarvis_extract.propose()` a live conversation triggers once it goes quiet -
 once per historical conversation found in the export - so every guarantee
 that function already has keeps holding for free: the model call is
-whatever `_local_llm` is (Ollama, on this machine, never a cloud lane), and
-nothing becomes a fact without a human accepting it in the Brain window.
+whatever `_local_llm` is (Ollama at `OLLAMA_URL`), and nothing becomes a
+fact without a human accepting it in the Brain window.
+
+**"On this machine" is checked, not assumed** (2026-09-23). `OLLAMA_URL` is
+an environment variable; pointed at another computer, it would have sent
+your whole history there, and nothing here used to check. Now the script
+refuses to start - before reading the export or marking anything done -
+unless `OLLAMA_URL` is this machine (`127.0.0.1`, `localhost` or `::1`), and
+tells you what to set. `memory-intake.patch` makes `propose()` itself refuse
+too, for every caller.
 
 **There is deliberately no bulk-approve here, and there will not be one.**
 Two full histories can be thousands of conversations, which is exactly the
@@ -3734,6 +3798,41 @@ only the three read-only paths are ever asked, all GET with no body, and never
   warns;
 - another machine's address is never contacted;
 - strange replies never crash it.
+
+---
+
+# The memory audit's fixes — `test_memory_honesty.py`
+
+From the 2026-09-23 memory audit. Each check feeds the real thing that
+produces a value into the real thing that reads it:
+
+- **"Start learning" starts the learner** and "Stop learning" drops a pass
+  already waiting - on `_Learner`/`set_learning()` as `extraction-wiring`,
+  `memory-pane` and `memory-intake` together write them.
+- **"Remember:" makes a card with learning switched off.**
+- **Nothing reads a conversation with a model that is not on this
+  machine** - the check `memory-intake.patch` appends to `jarvis_extract.py`
+  is run; `import_history.py` refuses before reading anything; and every
+  `propose()` call in the repository is read to prove it goes through the
+  checked function.
+- **The overnight-tidy card**: the HUD's plain read of
+  `/api/memory/pending` no longer uses it up (only `?sleep_offer=1` does,
+  which the Brain window and the phone send), and the card's words say the
+  feature is not built and nothing is retired without a yes on that fact.
+- **Field names**: the real `MemoryStore.status()`, fact rows and
+  `jarvis_intake.annotate()` rows against every field `brain.js` and the
+  phone's `Learning.kt` read - and against the desktop UI tests' own
+  fixture, so it cannot invent fields again.
+- **The same typed date means the same moment on both apps**: the numbers
+  the phone's `MemoryDatesTest.kt` pins are fed to the desktop's own
+  `asOfSeconds` under node, in the same time zones.
+
+```powershell
+python backend\test_memory_honesty.py
+```
+
+Needs `git` for the learner checks and `node` for the date check; without
+either, those parts say SKIP rather than pass.
 
 ---
 

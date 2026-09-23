@@ -444,10 +444,17 @@ they landed):
 - **The memory review pane.** The desktop has it (Brain → Memory: accept,
   reject, "both are true", edit, forget, and "what did you believe then?"),
   and so does the phone (Mind). Both read `/api/memory/pending`
-  (`memory-pane.patch`).
+  (`memory-pane.patch`). The HUD page decides no memory cards: it says how
+  many are waiting and points at the Brain, and `hud_bootstrap.js` refuses
+  any memory write from it.
 
 **Still missing:**
 
+- **Overnight memory tidying.** `jarvis_sleep.py` only offers it, once a
+  day, and the card says it is not built; switching it on records the wish
+  and runs nothing. If it is ever built it may only raise review cards: no
+  stored fact is retired or changed without the owner's yes on that one
+  fact.
 - **A wake word measured on real speech.** "Hey Jarvis" is built (openWakeWord's
   model, on the phone and through the PC; turning it on is an approval card),
   but it has only been tested on synthesised voices: 44/44 heard, and the
