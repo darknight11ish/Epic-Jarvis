@@ -1,117 +1,92 @@
 # Epic-Jarvis
 
-Epic Javis based on openjarvis and greatly enhanced.
+A personal assistant that runs on your own Windows PC, with an Android app to
+reach it from your phone. Built on OpenJarvis and heavily extended.
+Non-commercial, for one owner.
 
-A local-first personal assistant. A Python backend on a Windows 11 desktop, a
-Tauri 2 shell around it, an 8B model in Ollama on the same machine, and an
-Android companion reachable over Tailscale. Nothing private leaves the
-machine, there is no public tunnel, there are no API keys in the app, and
-there is no approve-all control anywhere. Non-commercial.
+## How it fits together
 
-## Where to start
+- **Backend.** A Python server on the PC. It does the work, and uses a local
+  model through Ollama on the PC's own graphics card.
+- **Desktop app** (`jarvis-desktop/`). A Windows 11 app built with Tauri. It
+  has a quick-ask bar (`Alt+Space`), a full HUD window, a desktop widget, and a
+  tray menu.
+- **Phone app** (`jarvis-client/`). An Android app that connects to the PC over
+  your private network, either Tailscale or NordVPN Meshnet.
 
-| document | what it is |
-|---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **The source of truth.** How the pieces fit, the invariants, and the one permission model everything must use. Read this before adding anything; where another document disagrees, this one wins. |
-| [`docs/INSTALL.md`](docs/INSTALL.md) | Getting it running, including the parts that are rough. |
-| [`docs/PEERS.md`](docs/PEERS.md) | What twenty comparable projects did about memory, approval gates, voice and packaging — read from their source. What to copy, what to refuse, where Jarvis is behind. |
-| [`docs/COMPARISON.md`](docs/COMPARISON.md) | Their files beside ours, both quoted. Where Jarvis is ahead, where it is behind, and the two recommendations that did not survive the comparison. |
-| [`docs/ASK-GEMINI.md`](docs/ASK-GEMINI.md) | Copy-paste prompts for a model with a working browser. GitHub's API is blocked from the dev container, so these are the lookups that cannot be done here. |
-| [`docs/MODEL-TOPOLOGY.md`](docs/MODEL-TOPOLOGY.md) | Which model, at what context length, and why — including what does not fit. |
-| [`backend/README.md`](backend/README.md) | The thirteen backend patches, what each fixes, and how to apply them. |
-| [`docs/AUDIT.md`](docs/AUDIT.md) | Findings from the audits, and which are fixed. |
+## What it can do
 
-## The Android app
+- **Chat** with the local model. Answers stream in as they are written.
+  Cloud models are optional, and never see anything private.
+- **Ask before acting.** Anything risky waits for your decision, and you can
+  approve or deny it on the PC or the phone. Nothing is ever auto-approved, and
+  there is no "approve all".
+- **Remember things.** Jarvis proposes facts, and you review them before they
+  are kept. Old facts are retired rather than deleted, so Jarvis knows both
+  what is true now and what was true before.
+- **Stay quiet.** Jarvis may speak up on its own only a few times a day.
+  Anything else waits in a daily digest.
+- **Show what it is doing.** An animated reactor face shows its state:
+  listening, thinking, speaking, or waiting on you. There are 20 face designs,
+  and the faces and colours match on the PC and the phone.
+- **Take voice**, by push-to-talk on the phone. It checks it is your voice
+  before anything is transcribed.
+- **Look how you like.** You choose the theme, the face, the colours and the
+  layout. Appearance settings on the phone never change the desktop's
+  configuration.
 
-**There is one app to install, and it is `jarvis-client`.** It talks to the
-backend over the real API (`JARVIS-API.md`): the event stream on
-`/api/events`, plus REST, with `X-Jarvis-Token`. It has pairing, chat,
-approvals, the reactor face and push-to-talk.
+## Ground rules
 
-## Getting the APK onto a phone
+1. Email, files, credentials and memory stay on the local model.
+2. No public tunnel. It is reachable only over your private network, and needs
+   a pairing token.
+3. API keys are allowed. They are never logged, and each one is sent only to
+   the service it belongs to.
+4. Nothing is auto-approved, and acting is blocked while the connection to the
+   PC is stale.
+5. The phone app is installed by hand (sideloaded), never through the Play
+   Store.
 
-**Easiest — the Releases page.** Every `jarvis-client` build publishes to a
-rolling prerelease:
+## Getting started
 
-> https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest
->
-> That is the only release. There is deliberately no second one to pick wrong.
-
-That is a plain `.apk` at a stable URL. Open it on the phone, tap the file, and
-allow your browser to install unknown apps — or download it on a computer and
-`adb install -r <file>.apk`.
-
-**The other way — run artifacts.** Actions → the workflow → a run → the
-**Artifacts** box at the bottom. This gives a `.zip` that has to be unpacked
-first, and note that **the GitHub mobile app cannot download run artifacts at
-all** — that path needs a browser.
-
-Builds are signed with a debug key restored in CI from the `DEBUG_KEYSTORE_B64`
-repository secret (see `keystore/README.md`), so a new build installs over an
-old one in place and the pairing secret survives.
-
-**Debug builds only, and deliberately.** The app is sideloaded over adb and is
-never listed on Play, so there is no channel a release build would serve.
-
-## Design
-
-`jarvis-client` reads the shared visual spec, which lives here as
-`jarvis-client/app/src/test/resources/jarvis-visual-spec.json` so that
-`SpecDriftTest` can assert against it — palette, pattern params, state
-defaults, flash limits and frame rates. A spec change is a build failure
-rather than a quiet re-colour on one client. `face/Palette.kt` is generated
-from it by `tools/gen_palette.py`; do not edit it by hand.
-
-- [`docs/UI-AUDIT-2026-09-14.md`](docs/UI-AUDIT-2026-09-14.md) — what six
-  reviewers found, what was fixed, what was priced and refused, the six
-  backend gaps, and the six places the spec disagrees with itself.
-- [`docs/UI-AUDIT-2026-09-18.md`](docs/UI-AUDIT-2026-09-18.md) — the follow-up
-  interface audit: where the chrome has not caught up with the face, ranked
-  by what it costs the user, with the design decisions left to the owner.
-- [`docs/SHARED-LOOK.md`](docs/SHARED-LOOK.md) — what the phone and the desktop
-  must agree on, written as a contract. For the desktop thread.
-
-Three themes ship — Reactor, Daylight and High Contrast — switchable in
-**Appearance**. Themes own the chrome and never a
-state colour; the accent is derived from the idle binding rather than chosen,
-so re-rolling the face's colours moves the whole interface with it.
-
-## Building the Android APK
-
-APKs are built in CI, since the Android SDK is not vendored in this repo. Unit
-tests gate the build, and the workflow asserts that the test task actually
-matched sources: Gradle reports `NO-SOURCE` and exits 0 for a module with no
-tests, so a green check is otherwise compatible with nothing having run. On a
-compile failure the workflow reprints the Kotlin diagnostics at the end of the
-log.
-
-**Sideloaded over adb, never listed on Play.** The published APK is the shrunk
-release build, signed with the debug key restored from the `DEBUG_KEYSTORE_B64`
-secret so it installs over any earlier build in place. It is published only
-after an emulator has installed and started that exact build, so a shrinker
-fault cannot ship green.
+- **Set it up:** [`docs/INSTALL.md`](docs/INSTALL.md).
+- **Install the phone app:** download the APK from the
+  [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest).
+  Open it on the phone to install it, or run `adb install -r <file>.apk` from a
+  PC. Each new build installs over the last one.
+- **The backend** lives on the PC, outside this repo. [`backend/`](backend/)
+  holds the patches applied to it, with a test for each one. Apply them with
+  `scripts/apply-patches.ps1`.
 
 ## Documents
 
-- `docs/AUDIT-2026-09-14.md` — the five-reviewer Android audit, and what was
-  done about each finding.
-- `docs/GEMINI-AUDIT-PROMPT.md` and `docs/SOURCE-BUNDLE.md` — for handing the
-  tree to an outside reviewer.
+| document | what it covers |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **Read first.** How the pieces fit, the rules, and the one permission model. |
+| [`docs/INSTALL.md`](docs/INSTALL.md) | Getting it running. |
+| [`docs/JARVIS-API.md`](docs/JARVIS-API.md) | The API the apps talk to. |
+| [`docs/MODEL-TOPOLOGY.md`](docs/MODEL-TOPOLOGY.md) | Which model runs on the graphics card, and why. |
+| [`backend/README.md`](backend/README.md) | The backend patches: what each one fixes. |
+| [`docs/UI-AUDIT-2026-09-23.md`](docs/UI-AUDIT-2026-09-23.md) | The latest review of the phone app's design. |
+
+## Building
+
+The phone app is built by GitHub Actions. There is no Android build tooling in
+this repo. A build is published only after an emulator has installed and
+started it.
+
+The desktop app builds on Windows with `npm install` and `npm run tauri build`
+in `jarvis-desktop/`. See its [README](jarvis-desktop/README.md) for details.
 
 ## Layout
 
-- `backend/` — patches against the OpenJarvis backend, one executable test
-  each, plus `jarvis_research.py`. The backend itself lives outside this repo;
-  `docs/ARCHITECTURE.md` §9 says where.
-- `jarvis-desktop/` — the Tauri 2 shell: Rust commands in `src-tauri/`, the
-  windows in `src/`.
-- `jarvis-client/` — the Android app that actually talks to the backend.
-- `server/` — a desktop-side WebSocket endpoint. `jarvis-client` does not use it.
-- `keystore/` — how the shared debug signing key is restored in CI; the key
-  itself is never committed.
-- `tools/` — build-time and verification scripts for the Android app.
-- `docs/` — everything above, plus the Android-side audits and protocol notes.
-- `scripts/` — build-time generators for the desktop app.
+| folder | what is in it |
+|---|---|
+| `jarvis-desktop/` | The desktop app. Rust is in `src-tauri/`, the windows are in `src/`. |
+| `jarvis-client/` | The Android app. |
+| `backend/` | Patches for the backend, and their tests. |
+| `docs/` | Design, install, API and audit documents. |
+| `scripts/`, `tools/` | Build and patch scripts. |
+| `keystore/` | How the app's signing key is restored in CI. The key itself is never committed. |
 
-Licence: see [`LICENSE`](LICENSE) and
-[`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
+Licence: [`LICENSE`](LICENSE) and [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
