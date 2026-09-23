@@ -26,7 +26,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Holds the SSE connection open.
@@ -143,6 +145,14 @@ class EventService : Service() {
     private fun denyFromNotification(id: String?) {
         if (id == null) return
         scope.launch {
+            // Wait - briefly - for the link to be live before looking. On a
+            // cold process the stream has only just been started, `stale` is
+            // still true, and `decide()` rightly refuses to act on a stale
+            // queue (rule 4). Deciding at once therefore always failed on a
+            // cold start; the toast said so, but the denial never went out.
+            // Waiting for the first successful re-read fixes that without
+            // loosening the rule: `decide()` still checks for itself.
+            val live = awaitLive()
             var item = JarvisRuntime.pending.value.firstOrNull { it.id == id }
             if (item == null) {
                 JarvisRuntime.refreshPending()
@@ -168,7 +178,7 @@ class EventService : Service() {
                 // saying "handled elsewhere" here would be exactly the false
                 // closure this whole rewrite exists to stop.
                 Log.w(TAG, "deny tapped for an approval that is not pending any more")
-                val message = if (JarvisRuntime.stale.value || JarvisRuntime.link.value != LinkState.CONNECTED) {
+                val message = if (!live || JarvisRuntime.stale.value || JarvisRuntime.link.value != LinkState.CONNECTED) {
                     "Could not reach the desktop to check - this may still be waiting. " +
                         "Open the app once it reconnects."
                 } else {
@@ -194,6 +204,17 @@ class EventService : Service() {
             }
         }
     }
+
+    /**
+     * True once the link is connected and not stale, false if that has not
+     * happened within [LIVE_WAIT_MS]. Returns at once when it already is.
+     */
+    private suspend fun awaitLive(): Boolean =
+        withTimeoutOrNull(LIVE_WAIT_MS) {
+            combine(JarvisRuntime.stale, JarvisRuntime.link) { stale, link ->
+                !stale && link == LinkState.CONNECTED
+            }.first { it }
+        } ?: false
 
     override fun onDestroy() {
         watcher?.cancel()
@@ -361,6 +382,14 @@ class EventService : Service() {
         const val ACTION_DENY = "com.jarvis.client.DENY_APPROVAL"
 
         /**
+         * How long a Deny from outside the app waits for the link to come up
+         * before answering "could not reach the desktop". Long enough for a
+         * cold start over Tailscale; short enough that the toast still reads
+         * as the answer to the tap.
+         */
+        private const val LIVE_WAIT_MS = 20_000L
+
+        /**
          * Set when the platform refused to let the service go foreground. Read by
          * the readiness screen; null while nothing has gone wrong.
          */
@@ -376,6 +405,30 @@ class EventService : Service() {
                 )
             }.onFailure { Log.e(TAG, "could not start", it) }
         }
+
+        /**
+         * Denies one approval from outside the app - the home-screen widget.
+         *
+         * Goes through this service, the same as the notification's Deny, so
+         * both get the same handling: the stream is started, the queue is
+         * re-read once the link is live, and the answer is said out loud
+         * either way. The widget used to decide on its own against whatever
+         * `pending` held in memory - empty after the process had been killed
+         * - so it said "handled elsewhere" about approvals still waiting.
+         *
+         * A tap on a widget is one of Android's allowed reasons to start a
+         * foreground service from the background. False if the start was
+         * refused anyway, so the caller can say so.
+         */
+        fun deny(context: Context, id: String): Boolean =
+            runCatching {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, EventService::class.java)
+                        .setAction(ACTION_DENY)
+                        .putExtra(ApprovalNotifier.EXTRA_APPROVAL_ID, id),
+                )
+            }.onFailure { Log.e(TAG, "could not start to deny", it) }.isSuccess
 
         fun stop(context: Context) {
             runCatching {
