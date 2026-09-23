@@ -223,11 +223,18 @@ fun PairingScreen(
                     Quiet("Help", color = chrome.textMid, onClick = onOpenHelp)
                 }
                 if (onCancel != null) {
-                    // Not disabled while busy: leaving is always allowed. An
-                    // attempt already in flight still finishes - if it
-                    // connects, the new desktop is kept; if not, the old one
-                    // is put back, the same as if the owner had stayed.
-                    Quiet("Keep current desktop", color = chrome.textMid, onClick = onCancel)
+                    // Disabled while busy. During an attempt the new address
+                    // and token are already the saved ones, and if the attempt
+                    // then connected, the new desktop would be kept - the
+                    // opposite of what this button says. Once the attempt
+                    // ends (at most the short call timeout), leaving works
+                    // again, with the old pair back in place if it failed.
+                    Quiet(
+                        "Keep current desktop",
+                        color = chrome.textMid,
+                        enabled = !busy,
+                        onClick = onCancel,
+                    )
                 }
             }
         }

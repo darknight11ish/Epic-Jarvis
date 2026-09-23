@@ -65,6 +65,7 @@ import com.jarvis.client.ui.theme.PlateEdges
 import com.jarvis.client.ui.theme.Themes
 import com.jarvis.client.ui.theme.systemPrefersDark
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -312,17 +313,9 @@ class MainActivity : FragmentActivity() {
         // token refusal, so "Keep current desktop" is not overruled a moment
         // later by the same refusal. Cleared when the refusal clears.
         var tokenRefusalHandled by rememberSaveable { mutableStateOf(false) }
-        // Deliberately NOT saveable, unlike `paired` above.
-        //
-        // `busy` is cleared in exactly one place: the handshake coroutine
-        // below, which runs in `rememberCoroutineScope()` and so dies with the
-        // composition. A rotation mid-pair killed that coroutine while a saved
-        // `busy = true` came back with the new one, and Connect stayed
-        // disabled behind a spinner until a force-stop. The window is wide,
-        // because `setToken` generates a hardware-backed key - hundreds of
-        // milliseconds to seconds. The flag and the work that clears it now
-        // have the same lifetime: if the work is gone, so is the flag.
-        var busy by remember { mutableStateOf(false) }
+        // Deliberately NOT saveable, unlike `paired` above - see
+        // [pairingBusy] for why it lives outside the composition instead.
+        var busy by pairingBusy
         var draft by rememberSaveable { mutableStateOf("") }
 
         // A share from another app's share sheet arrives as an Intent extra,
@@ -704,9 +697,19 @@ class MainActivity : FragmentActivity() {
                 // dropped with it: the old token was put back, and on Home the
                 // sentence would read as being about that one. If the old token
                 // really is refused, the stream still says so in the status.
+                //
+                // Ignored while an attempt is in flight. During it the NEW
+                // address and token are the saved ones, so leaving then would
+                // put Home's Approve and Deny on an unchecked desktop - and if
+                // the attempt then connected, "Keep current desktop" would have
+                // ended by keeping the new one. The button is greyed out for
+                // the same stretch; system back is swallowed rather than
+                // passed on. The attempt is bounded by the short call timeout.
                 val leaveRepair: () -> Unit = {
-                    repairing = false
-                    if (notice == badTokenNotice) JarvisRuntime.clearNotice()
+                    if (!busy) {
+                        repairing = false
+                        if (notice == badTokenNotice) JarvisRuntime.clearNotice()
+                    }
                 }
                 if (replacing) {
                     // System back does the same as the on-screen button.
@@ -730,65 +733,86 @@ class MainActivity : FragmentActivity() {
                             // never touched, so there is nothing to put back.
                             var oldHost = ""
                             var oldToken = ""
-                            // Off the main thread. `setToken` generates a
-                            // hardware-backed AES key on first pair, which is a
-                            // TEE/StrongBox round trip — several hundred
-                            // milliseconds to a couple of seconds, blocking the
-                            // UI so hard that the button could not even repaint
-                            // into its own busy state, and an ANR candidate on a
-                            // slow device.
-                            withContext(Dispatchers.IO) {
-                                if (replacing) {
-                                    oldHost = JarvisRuntime.settings.host.value
-                                    if (token.isNotBlank()) oldToken = JarvisRuntime.tokens.token()
+                            // `wrote`: the new address may already be saved, so
+                            // there is something to undo. `connected`: the new
+                            // pair answered and is being kept.
+                            var wrote = false
+                            var connected = false
+                            try {
+                                // Off the main thread. `setToken` generates a
+                                // hardware-backed AES key on first pair, which is
+                                // a TEE/StrongBox round trip — several hundred
+                                // milliseconds to a couple of seconds, blocking
+                                // the UI so hard that the button could not even
+                                // repaint into its own busy state, and an ANR
+                                // candidate on a slow device.
+                                withContext(Dispatchers.IO) {
+                                    if (replacing) {
+                                        oldHost = JarvisRuntime.settings.host.value
+                                        if (token.isNotBlank()) oldToken = JarvisRuntime.tokens.token()
+                                    }
+                                    wrote = true
+                                    JarvisRuntime.settings.setHost(host)
+                                    if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
                                 }
-                                JarvisRuntime.settings.setHost(host)
-                                if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
-                            }
-                            val result = JarvisRuntime.handshake()
-                            if (result is ApiResult.Ok) {
-                                busy = false
-                                paired = true
-                                repairing = false
-                                pairingHost = JarvisRuntime.settings.host.value
-                                // The stream lives in the service, not here: a
-                                // backgrounded activity's connection is
-                                // suspended within about a minute, which is
-                                // exactly how approvals silently stop arriving.
-                                EventService.start(this@MainActivity)
-                                if (replacing) {
-                                    // The running stream is still talking to the
-                                    // old desktop, or retrying the old token.
-                                    // Replaced the same way Home's Retry does it,
-                                    // so it picks up the new address and token
-                                    // now rather than at its next backoff.
-                                    JarvisRuntime.startStream(force = true)
-                                    scope.launch { JarvisRuntime.refreshAll() }
+                                val result = JarvisRuntime.handshake()
+                                if (result is ApiResult.Ok) {
+                                    connected = true
+                                    busy = false
+                                    paired = true
+                                    repairing = false
+                                    pairingHost = JarvisRuntime.settings.host.value
+                                    // The stream lives in the service, not here:
+                                    // a backgrounded activity's connection is
+                                    // suspended within about a minute, which is
+                                    // exactly how approvals silently stop
+                                    // arriving.
+                                    EventService.start(this@MainActivity)
+                                    if (replacing) {
+                                        // The running stream is still talking
+                                        // to the old desktop, or retrying the old
+                                        // token. Replaced the same way Home's
+                                        // Retry does it, so it picks up the new
+                                        // address and token now rather than at
+                                        // its next backoff.
+                                        JarvisRuntime.startStream(force = true)
+                                        scope.launch { JarvisRuntime.refreshAll() }
+                                    }
+                                    // Picks up whatever face the owner's other
+                                    // device already chose, the moment there is
+                                    // somewhere to ask. A no-op, silently, on a
+                                    // backend without the capability.
+                                    JarvisRuntime.refreshAppearance()
                                 }
-                                // Picks up whatever face the owner's other
-                                // device already chose, the moment there is
-                                // somewhere to ask. A no-op, silently, on a
-                                // backend without the capability.
-                                JarvisRuntime.refreshAppearance()
-                            } else {
+                            } finally {
                                 // A re-pair that did not connect changes
                                 // nothing: the desktop and token that were in
                                 // use go back. A typo must never be what
                                 // unpairs a phone that was working. The
                                 // handshake's own notice stays up to say why.
                                 //
+                                // In `finally`, and NonCancellable, because this
+                                // coroutine dies with the composition: a
+                                // rotation mid-handshake used to cancel it
+                                // before the put-back ran, leaving the new,
+                                // unchecked pair saved and in use - the
+                                // opposite of what the re-pair screen promises.
+                                //
                                 // `oldToken` is empty when it could not be read
                                 // (the Keystore is briefly unavailable) - then
                                 // there is nothing to restore, and clearing the
                                 // new one would unpair the phone outright, so
                                 // the new one is left.
-                                if (replacing) {
-                                    withContext(Dispatchers.IO) {
+                                if (replacing && wrote && !connected) {
+                                    withContext(NonCancellable + Dispatchers.IO) {
                                         JarvisRuntime.settings.setHost(oldHost)
                                         if (oldToken.isNotEmpty()) JarvisRuntime.tokens.setToken(oldToken)
                                     }
                                 }
-                                busy = false
+                                // Only after the put-back: re-enabling Connect
+                                // first would let a second tap read the failed
+                                // address as the "old" one to restore.
+                                if (!connected) busy = false
                             }
                         }
                     },
@@ -1399,6 +1423,31 @@ class MainActivity : FragmentActivity() {
         const val ACTION_START_VOICE = "com.jarvis.client.action.START_VOICE"
     }
 }
+
+/**
+ * Whether a pairing attempt is in flight. Read and written as `busy` in
+ * `App()`'s pairing branch.
+ *
+ * Neither saveable nor `remember`ed, on purpose. `busy` is cleared in
+ * exactly one place: the `finally` of the handshake coroutine, which runs in
+ * `rememberCoroutineScope()` and is cancelled with the composition.
+ *
+ * Saveable was tried first and was wrong: a rotation mid-pair killed the
+ * coroutine while a saved `busy = true` came back with the new one, and
+ * Connect stayed disabled behind a spinner until a force-stop.
+ *
+ * `remember` was wrong the other way. A cancelled attempt does not stop at
+ * once: the network call already under way finishes first (up to the short
+ * call timeout), and only then does the `finally` put the old desktop and
+ * token back. A remembered flag came back `false` with the new composition,
+ * so for that stretch Connect and "Keep current desktop" were live again
+ * while the new, unchecked pair was still the saved one.
+ *
+ * Here the flag has the same lifetime as the work that clears it: both live
+ * as long as the process, and the `finally` always runs. If the process dies,
+ * the work is gone and the flag starts `false` again.
+ */
+private val pairingBusy = mutableStateOf(false)
 
 /** How long to wait before re-offering a theme the dwell window refused. */
 private const val THEME_RETRY_MS = 600L
