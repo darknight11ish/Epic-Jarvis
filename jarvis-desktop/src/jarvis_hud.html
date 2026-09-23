@@ -215,6 +215,12 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .msg.system .body{
   background:none; border:1px dashed var(--line); color:var(--dim); font-size:13px;
 }
+/* A sample reply while offline: dashed and gold like the offline banner,
+   never the ice-blue of a real answer, and labelled as not from Jarvis. */
+.msg.sample .who{color:var(--gold);}
+.msg.sample .body{
+  background:none; border:1px dashed rgba(255,182,72,.45); color:var(--dim); font-size:13px;
+}
 .msg .body .cursor{
   display:inline-block; width:7px; height:1em; vertical-align:-2px;
   background:var(--ice); animation:blink 1s steps(2) infinite;
@@ -1493,7 +1499,8 @@ function attachRecall(node, trace){
 function addMessage(role, text){
   const el = document.createElement("div");
   el.className = "msg " + role;
-  const who = role === "user" ? "you" : role === "jarvis" ? "jarvis" : "system";
+  const who = role === "user" ? "you" : role === "jarvis" ? "jarvis"
+            : role === "sample" ? "sample reply \u00b7 not from jarvis" : "system";
   el.innerHTML = `<div class="who">${who}</div><div class="body"></div>`;
   el.querySelector(".body").textContent = text;
   $("log").appendChild(el);
@@ -1501,11 +1508,18 @@ function addMessage(role, text){
   return el.querySelector(".body");
 }
 
-const DEMO_REPLIES = [
-  "I am running in demo mode, sir — the assistant itself is not answering yet. Start Ollama and `python jarvis_hud.py`, reload this page, and I will route through the real model.",
-  "Not connected to the local model at the moment. The brain map beside this is live sample data, so you can still see how the view behaves.",
-  "Standing by. Once Ollama and the HUD server are both up, this panel talks to them directly — nothing else to configure."
-];
+// Offline, the page still answers Send - but with a SAMPLE, never in
+// Jarvis's voice. These used to be written as Jarvis ("I am running in
+// demo mode, sir"), rendered in the same box as a real answer and read
+// aloud, so a canned line looked and sounded like the assistant replying.
+// Now it is labelled "sample reply - not from jarvis", styled like the
+// offline banner rather than like an answer, and not spoken.
+function sampleReply(){
+  return "This is a sample reply, not an answer. Jarvis is not connected " +
+    "(the notice at the top of this window says what is missing), so " +
+    "nothing you type here reaches it. Once it is running, reload this " +
+    "window and your messages will get real answers.";
+}
 
 let SEND_INFLIGHT = null;
 async function send(){
@@ -1532,11 +1546,9 @@ async function send(){
 
   if(!S.online){
     await new Promise(r => setTimeout(r, 700));
-    const reply = DEMO_REPLIES[Math.floor(Math.random()*DEMO_REPLIES.length)];
-    addMessage("jarvis", reply);
+    addMessage("sample", sampleReply());
     reactor.set("idle");
     tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
-    voice.speak(reply);
     return;
   }
 

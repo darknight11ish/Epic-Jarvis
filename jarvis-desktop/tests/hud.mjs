@@ -200,11 +200,26 @@ await check("with Ollama up and no OpenJarvis, Send reaches /api/chat and shows 
 
 await check("with nothing up, Send still answers - from sample replies, and says why", async () => {
   const { page, chats } = await openHud(browser, { jarvis: false, ollama: false, proxy: false });
+  await page.evaluate(() => {
+    window.__spoken = 0;
+    if (window.speechSynthesis) window.speechSynthesis.speak = () => { window.__spoken++; };
+  });
   const banner = await page.locator("#banner-text").textContent();
   const log = await send(page, "hi");
+  const spoken = await page.evaluate(() => window.__spoken);
   await page.close();
+  assert.equal(spoken, 0, "the offline sample was read aloud as if Jarvis said it");
   assert.equal(chats.length, 0, "offline must not POST a turn that cannot be answered");
   assert.ok(log.some((m) => m.who === "you" && m.body === "hi"), JSON.stringify(log));
+  // The reply is a labelled sample, never an answer in Jarvis's voice.
+  const after = log.slice(log.findIndex((m) => m.who === "you"));
+  assert.ok(!after.some((m) => m.who === "jarvis"),
+    `an offline sample was shown as Jarvis answering: ${JSON.stringify(after)}`);
+  const sample = after.find((m) => /sample reply/.test(m.who || ""));
+  assert.ok(sample, `no reply labelled as a sample: ${JSON.stringify(after)}`);
+  assert.match(sample.who, /not from jarvis/i);
+  assert.match(sample.body, /^This is a sample reply, not an answer\./);
+  assert.doesNotMatch(sample.body, /\bsir\b|\bI am\b|\bI will\b/, "a sample written as Jarvis speaking");
   assert.match(banner, /Ollama/, "the banner should name what is actually missing");
   assert.doesNotMatch(banner, /jarvis serve/, "OpenJarvis is not part of this setup");
 });
