@@ -222,6 +222,45 @@ class VoiceSession(
         }
     }
 
+    /**
+     * One clip for "Train my voice", through the same [recorder] the talk
+     * button uses, so the PC gets exactly the format it checks every other
+     * utterance in (16 kHz, 16-bit mono WAV, resampled here).
+     *
+     * Not a voice turn: nothing is sent, nothing is transcribed, and the
+     * phase the face and the talk button read is left alone. Refused while a
+     * voice turn holds the microphone, rather than fighting it for the
+     * hardware. Capped at [VoiceTraining.MAX_SECONDS], the PC's own limit.
+     */
+    suspend fun recordTrainingClip(
+        stopWhen: () -> Boolean,
+        onLevel: (Float) -> Unit,
+    ): VoiceTraining.Take {
+        if (_phase.value != Phase.OFF || job?.isCompleted == false) {
+            return VoiceTraining.Take.Failed(
+                "The talk button is using the microphone. Try again in a moment.",
+            )
+        }
+        releasing?.join()
+        return when (
+            val r = recorder.record(
+                maxSeconds = VoiceTraining.MAX_SECONDS,
+                onLevel = onLevel,
+                stopWhen = stopWhen,
+            )
+        ) {
+            is Recorder.Result.Captured -> VoiceTraining.Take.Captured(r.wav, r.seconds)
+            is Recorder.Result.Refused -> VoiceTraining.Take.Failed(
+                if (r.why == Recorder.Failure.NoPermission) {
+                    "Jarvis needs the microphone for this. Tap Allow the microphone below."
+                } else {
+                    describe(r.why)
+                },
+                needsPermission = r.why == Recorder.Failure.NoPermission,
+            )
+        }
+    }
+
     fun clearNotice() { _notice.value = null }
 
     fun clearTranscript() { _transcript.value = null }

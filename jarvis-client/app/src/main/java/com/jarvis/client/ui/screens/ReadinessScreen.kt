@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
+import com.jarvis.client.net.VoiceStatus
 import com.jarvis.client.net.WakeWord
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.ReadinessItem
@@ -38,6 +39,7 @@ import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.delay
 
 /**
@@ -103,6 +105,12 @@ fun ReadinessScreen(
     onReconnect: (() -> Unit)? = null,
     /** Opens pairing again with the saved host filled in. Null hides it. */
     onChangeDesktop: (() -> Unit)? = null,
+    /** The desktop's voice status, for the "Your voice" card. Null hides the card. */
+    voiceStatus: VoiceStatus? = null,
+    /** Whether that status is a real answer rather than the refusing defaults. */
+    voiceAnswered: Boolean = false,
+    /** Opens "Train my voice". Null hides the button. */
+    onTrainVoice: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // Split rather than re-sorted, so within each group the order stays the
@@ -157,6 +165,11 @@ fun ReadinessScreen(
                 }
             }
             items(warnings, key = { it.title }) { ReadinessCard(it, fixFor(it)) }
+            if (voiceStatus != null) {
+                item(key = "your-voice") {
+                    YourVoiceCard(voiceStatus, voiceAnswered, onTrainVoice)
+                }
+            }
             item(key = "wake-word") {
                 WakeWordCard(
                     state = wakeWord,
@@ -303,6 +316,73 @@ private fun plainReason(detail: String): String = when {
     detail.startsWith("Server said ") ->
         "The desktop answered with an error (" + detail.removePrefix("Server said ") + ")."
     else -> "Last problem: $detail"
+}
+
+/**
+ * Whether Jarvis knows the owner's voice, and the way to teach it.
+ *
+ * Here rather than on Home because this is where the phone's other voice
+ * setting (the wake word) already lives, and because the talk button on Home
+ * is hidden until training is done - so Home cannot be where the reason is.
+ * The talk button's own reason (`listening.push_to_talk_why`) is shown too:
+ * after training it may still be hidden, for example because the PC has no
+ * speech-to-text set up, and that should be findable.
+ */
+@Composable
+private fun YourVoiceCard(status: VoiceStatus, answered: Boolean, onTrain: (() -> Unit)?) {
+    val chrome = LocalChrome.current
+    val trained = answered && status.available && status.gate.enrolled &&
+        !status.gate.needsRetraining
+    Plate {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Dot(if (trained) chrome.okInk else chrome.warnInk)
+            Spacer(Modifier.width(10.dp))
+            Text("Your voice", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Spacer(Modifier.weight(1f))
+            Text(
+                when {
+                    !answered -> "Unknown"
+                    trained -> "Trained"
+                    else -> "Not trained"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = if (trained) chrome.okInk else chrome.warnInk,
+            )
+        }
+        Gap(6)
+        Text(
+            VoiceTraining.stateLine(status, answered),
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+        VoiceTraining.lastLine(status.gate.training.last)?.let {
+            Gap(4)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        VoiceTraining.basicCheckLine(status, answered)?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
+        val why = status.listening.pushToTalkWhy
+        // Only once trained: before that the line above already says why, and
+        // the desktop's sentence points at this very card.
+        if (trained && !status.canPushToTalk && why.isNotBlank()) {
+            Gap(6)
+            Text(
+                "Talk button on Home: hidden. $why",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+        }
+        if (onTrain != null) {
+            Gap(12)
+            Primary(
+                text = if (trained) "Train my voice again" else "Train my voice",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onTrain,
+            )
+        }
+    }
 }
 
 /**

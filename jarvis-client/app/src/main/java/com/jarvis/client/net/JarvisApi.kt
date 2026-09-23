@@ -688,6 +688,53 @@ class JarvisApi(
     suspend fun setWakeWord(enabled: Boolean): ApiResult<Unit> =
         postJson("/api/voice/wake", """{"enabled":$enabled}""")
 
+    /**
+     * "Train my voice": sends the owner's recorded clips to the desktop.
+     *
+     * A 202 means **a card was raised**, not that anything was learned - the
+     * desktop enrols the voice only once that card is approved, and throws
+     * the clips away either way. So this never reports "trained"; re-read
+     * [voiceStatus] for that.
+     *
+     * A refusal the desktop explains (400 a bad clip, 409 a card already
+     * waiting, 503 not installed) comes back as `Ok` with [VoiceTrainingReply.error]
+     * set, because those sentences are written for the owner and are the
+     * most useful thing to show. 401/403/404 stay failures: a bad token and
+     * "this desktop has no such route" are not the desktop's words to relay.
+     *
+     * Uses the general [client]: a few megabytes over Tailscale is not a
+     * short call. Nothing here is logged - the body is the owner's voice.
+     */
+    suspend fun enrollVoice(clips: List<ByteArray>): ApiResult<VoiceTrainingReply> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/voice/enroll") ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = enrollRequestBody(clips).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                client.newCall(req).execute().use {
+                    when (it.code) {
+                        401, 403, 404 -> ApiResult.Failed(errorFor(it))
+                        else -> {
+                            val text = it.body?.string().orEmpty()
+                            val reply = runCatching {
+                                JarvisJson.decodeFromString(VoiceTrainingReply.serializer(), text)
+                            }.getOrNull()
+                            when {
+                                reply != null && (it.isSuccessful || reply.error.isNotBlank()) ->
+                                    ApiResult.Ok(reply)
+                                it.isSuccessful ->
+                                    ApiResult.Failed(ApiError.Malformed("unreadable training reply"))
+                                it.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                                else -> ApiResult.Failed(ApiError.Server(it.code, ""))
+                            }
+                        }
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
     // ------------------------------------------------------------- chat ----
 
     /**

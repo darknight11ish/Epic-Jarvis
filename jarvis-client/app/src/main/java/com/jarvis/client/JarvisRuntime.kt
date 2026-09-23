@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import com.jarvis.client.voice.VoiceSession
+import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -1045,6 +1046,43 @@ object JarvisRuntime {
             is ApiResult.Failed -> _notice.value = describeDraft(result.error)
         }
         return result
+    }
+
+    /**
+     * "Train my voice": sends the owner's recorded clips to the desktop.
+     *
+     * The same shape as [installModel]: a success means **an approval card
+     * was raised**, not that anything changed. The desktop learns the voice
+     * only once that card is approved (on the desktop or here, like any
+     * other card) and throws the clips away whatever the answer.
+     *
+     * Blocked while the link is down or stale ([actionBlocker]): sending
+     * raises a card, and a card raised against a stream this phone cannot
+     * confirm is live is the thing rule 4 is about. The clips are not logged
+     * and not kept here - the caller drops them once this says accepted.
+     */
+    suspend fun sendVoiceTraining(clips: List<ByteArray>): VoiceTraining.SendResult {
+        actionBlocker()?.let { return VoiceTraining.SendResult(false, it) }
+        return when (val result = api.enrollVoice(clips)) {
+            is ApiResult.Ok -> {
+                val accepted = VoiceTraining.accepted(result.value)
+                // The card should appear in this phone's approvals too.
+                if (accepted) refreshPending()
+                VoiceTraining.SendResult(accepted, VoiceTraining.replyLine(result.value))
+            }
+            is ApiResult.Failed -> VoiceTraining.SendResult(
+                false,
+                when (result.error) {
+                    // No such route: the PC has not had voice-enroll.patch yet.
+                    ApiError.NotFound ->
+                        "Your PC does not have voice training yet. Run the patch script on " +
+                            "the PC first (backend/README.md, \"Train my voice\")."
+                    ApiError.NotAvailable ->
+                        "Voice training is not installed on your PC yet."
+                    else -> describe(result.error)
+                },
+            )
+        }
     }
 
     // -------------------------------------------------------- appearance ----

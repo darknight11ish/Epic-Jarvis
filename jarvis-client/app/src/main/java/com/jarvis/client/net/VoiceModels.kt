@@ -17,12 +17,18 @@ data class VoiceStatus(
      * Present and false only when the module failed to load on the desktop.
      *
      * Defaulting this to `true` looks like it contradicts "the defaults are the
-     * refusing ones" two lines up, and it does not: `jarvis_speech.status()`
-     * **omits this key entirely** when the module is healthy — the real payload
-     * is `{listening, stt, tts, audio_in, gate}` and nothing else. Defaulting
-     * it to false would make `canPushToTalk` false on every good response and
-     * hide the microphone button permanently. The refusal is carried by
-     * `listening.pushToTalk`, which does default to false.
+     * refusing ones" two lines up, and it does not: a desktop older than
+     * 2026-09-23 **omits this key** when the module is healthy (the one in
+     * this repository's `backend/jarvis_speech.py` now sends `true`).
+     * Defaulting it to false would make `canPushToTalk` false on every good
+     * response from those and hide the microphone button permanently. The
+     * refusal is carried by `listening.pushToTalk`, which does default to
+     * false.
+     *
+     * Until 2026-09-23 `jarvis_speech.status()` sent none of the nested keys
+     * below - only flat ones - so `listening.pushToTalk` was always missing
+     * and the talk button never appeared. It now sends both shapes, and
+     * `backend/test_voice_contract.py` checks them against this file.
      */
     val available: Boolean = true,
     val error: String? = null,
@@ -30,6 +36,12 @@ data class VoiceStatus(
     val stt: VoiceEngine = VoiceEngine(),
     val tts: VoiceEngine = VoiceEngine(),
     @SerialName("audio_in") val audioIn: VoiceAudioIn = VoiceAudioIn(),
+    /**
+     * The owner-voice check: whether Jarvis knows the owner's voice yet, and
+     * with which check. Read by "Train my voice" on the Checks screen. The
+     * defaults say "not trained" - the refusing answer.
+     */
+    val gate: VoiceGate = VoiceGate(),
 ) {
     /**
      * Whether to show a microphone button.
@@ -99,8 +111,112 @@ enum class WakeWord {
 @Serializable
 data class VoiceListening(
     @SerialName("push_to_talk") val pushToTalk: Boolean = false,
+    /**
+     * Why [pushToTalk] is false, in the desktop's own plain words - "Jarvis
+     * has not learned your voice yet", "the PC has no speech-to-text set up".
+     * Blank when it is true. Shown on the Checks screen's voice card, so a
+     * missing talk button has a reason somewhere.
+     */
+    @SerialName("push_to_talk_why") val pushToTalkWhy: String = "",
     @SerialName("wake_word") val wakeWord: Boolean = false,
     @SerialName("wake_word_why") val wakeWordWhy: String = "",
+)
+
+/**
+ * The owner-voice check on the desktop (`jarvis_voice.status()`, nested under
+ * `gate` by `jarvis_speech.status()`).
+ *
+ * `backend/test_voice_contract.py` reads this file and fails if the desktop
+ * stops sending any field here, so a rename on either side is caught there
+ * rather than showing up as a card that quietly says "not trained".
+ */
+@Serializable
+data class VoiceGate(
+    /** "owner": only the trained voice is obeyed. "broad": anyone is. */
+    val mode: String = "owner",
+    val enabled: Boolean = false,
+    /** Whether a voice print exists. False means every voice is refused in owner mode. */
+    val enrolled: Boolean = false,
+    /** How many clips the voice print was made from. */
+    val samples: Int = 0,
+    val threshold: Double = 0.0,
+    /** "spectral-v1" (the basic check), "ecapa", or "sherpa-onnx:…". Shown, never branched on. */
+    val embedder: String = "",
+    /**
+     * True when a real speaker model is installed on the PC. False means the
+     * basic check, which cannot reliably tell two people apart.
+     */
+    @SerialName("speaker_model") val speakerModel: Boolean = false,
+    /**
+     * The voice print was made with a different check than the one installed
+     * now, so it will be refused until the owner trains again. Happens once,
+     * the day the better model is installed.
+     */
+    @SerialName("needs_retraining") val needsRetraining: Boolean = false,
+    val note: String = "",
+    val training: VoiceTrainingState = VoiceTrainingState(),
+)
+
+/** "Train my voice" on the desktop side: whether a card is waiting, and how the last one ended. */
+@Serializable
+data class VoiceTrainingState(
+    /** False when the desktop does not have voice training installed at all. */
+    val available: Boolean = false,
+    /** A training card is waiting for the owner's answer. */
+    val pending: Boolean = false,
+    /** How many clips the waiting card is about. Present only while [pending]. */
+    val clips: Int = 0,
+    /** Seconds until the waiting card expires. Present only while [pending]. */
+    @SerialName("expires_in") val expiresIn: Int = 0,
+    /** How the last training ended, since the desktop started. Null if none has. */
+    val last: VoiceTrainingLast? = null,
+    /** Why [available] is false. */
+    val why: String = "",
+)
+
+@Serializable
+data class VoiceTrainingLast(
+    /** "enrolled", "denied", "timed_out", "refused" or "failed". */
+    val outcome: String = "",
+    val at: Double = 0.0,
+    val samples: Int = 0,
+    val reason: String = "",
+)
+
+/**
+ * The answer to `POST /api/voice/enroll`. A 202 carries `ok`/`pending`; a
+ * refusal (400 bad clip, 409 already waiting or wrong tier, 503 not
+ * installed) carries `error`, a sentence meant for the owner.
+ */
+/**
+ * The body of `POST /api/voice/enroll`: `{"clips": ["<base64 WAV>", ...]}`.
+ *
+ * JSON with base64 rather than one raw WAV like `/api/voice/utterance`,
+ * because this carries several clips and each needs its own boundary; the
+ * desktop names a bad one by its number ("clip 3 is too short"). Built by
+ * hand rather than through a serializer: base64 never contains a character
+ * JSON needs escaped, so there is nothing to get wrong, and a multi-megabyte
+ * string is not copied through a JSON tree on the way.
+ *
+ * java.util.Base64 rather than android.util.Base64, so the unit test runs on
+ * a plain JVM; it has been on Android since API 26 and minSdk is 33.
+ */
+fun enrollRequestBody(clips: List<ByteArray>): String {
+    val enc = java.util.Base64.getEncoder()
+    return clips.joinToString(prefix = "{\"clips\":[", postfix = "]}", separator = ",") {
+        "\"" + enc.encodeToString(it) + "\""
+    }
+}
+
+@Serializable
+data class VoiceTrainingReply(
+    val ok: Boolean = false,
+    val pending: Boolean = false,
+    val clips: Int = 0,
+    val seconds: Double = 0.0,
+    val message: String = "",
+    val error: String = "",
+    @SerialName("expires_in") val expiresIn: Int = 0,
 )
 
 @Serializable

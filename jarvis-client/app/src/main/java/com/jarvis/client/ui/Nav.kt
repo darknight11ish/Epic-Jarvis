@@ -59,8 +59,11 @@ import kotlinx.coroutines.CancellationException
  * the fix for the one that mattered: the readiness checks used to be rendered
  * only inside the `link == CONNECTED` branch, so the screen that tells you why
  * you cannot connect was hidden exactly when you could not connect.
+ *
+ * `VOICE` is "Train my voice", opened from the voice card on `CHECKS`. Added
+ * last so a saved back stack from an older build still restores by name.
  */
-enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ }
+enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE }
 
 /**
  * A back stack, because there was not one.

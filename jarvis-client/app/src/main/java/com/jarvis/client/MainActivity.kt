@@ -64,6 +64,7 @@ import com.jarvis.client.ui.screens.HomeState
 import com.jarvis.client.ui.screens.InboxScreen
 import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
+import com.jarvis.client.ui.screens.VoiceTrainingScreen
 import com.jarvis.client.ui.theme.JarvisTheme
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
@@ -887,6 +888,7 @@ class MainActivity : FragmentActivity() {
                             )
                         }
                         val wakeWord by voice.wakeWord.collectAsState()
+                        val voiceAnswered by voice.answered.collectAsState()
                         var wakeBusy by remember { mutableStateOf(false) }
                         var wakeNotice by remember { mutableStateOf<String?>(null) }
                         // Asked on arrival, because this screen is where someone
@@ -972,6 +974,42 @@ class MainActivity : FragmentActivity() {
                             } else {
                                 null
                             },
+                            // "Train my voice". Only once paired: the clips go
+                            // to the desktop, so there has to be one.
+                            voiceStatus = voiceStatus,
+                            voiceAnswered = voiceAnswered,
+                            onTrainVoice = if (paired) {
+                                { nav.go(Screen.VOICE) }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+
+                    Screen.VOICE -> {
+                        val voiceAnswered by voice.answered.collectAsState()
+                        // Asked on arrival: the card says whether Jarvis knows
+                        // the owner's voice, and a stale answer would mislead.
+                        LaunchedEffect(Unit) { voice.refreshStatus() }
+                        VoiceTrainingScreen(
+                            status = voiceStatus,
+                            answered = voiceAnswered,
+                            // Keyed on `link` and `stale`, which are collected
+                            // above: actionBlocker() reads the runtime's flows
+                            // directly, and that alone subscribes to nothing.
+                            linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() },
+                            record = { stop, onLevel -> voice.recordTrainingClip(stop, onLevel) },
+                            send = { clips -> JarvisRuntime.sendVoiceTraining(clips) },
+                            onRefresh = { voice.refreshStatus() },
+                            onAskMicrophone = {
+                                // Never starts a recording on the grant - the
+                                // owner taps Record again, the same rule as
+                                // the talk button (see micGrantedCallback).
+                                micGrantedCallback = null
+                                micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                            },
+                            onBack = { nav.back() },
+                            modifier = root,
                         )
                     }
 

@@ -18,17 +18,28 @@ import kotlin.math.abs
  */
 class VoiceRulesTest {
 
-    /** Exactly what `jarvis_speech.status()` builds. */
+    /**
+     * The nested half of what `backend/jarvis_speech.py`'s status() builds,
+     * for a trained owner on a PC with speech-to-text set up. (Before
+     * 2026-09-23 this comment said "exactly what status() builds" and it was
+     * not: status() sent none of these keys. `backend/test_voice_contract.py`
+     * now checks the real output against VoiceModels.kt.)
+     */
     private val realStatus = """
-        {"listening": {"push_to_talk": true, "wake_word": false,
-                       "wake_word_why": "off by default: a phone's microphone travels"},
-         "stt": {"engine": "faster-whisper", "available": true, "status": "ok"},
-         "tts": {"engine": "none", "available": false, "status": "no engine",
-                 "client_fallback_ok": true, "why": "speaking text the client already has reveals nothing"},
+        {"available": true,
+         "listening": {"push_to_talk": true, "push_to_talk_why": "", "wake_word": false,
+                       "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"},
+         "stt": {"engine": "sherpa-onnx", "available": true, "status": "ready",
+                 "client_fallback_ok": false},
+         "tts": {"engine": "sherpa-onnx", "available": false,
+                 "status": "no Kokoro model files on disk yet", "client_fallback_ok": true},
          "audio_in": {"format": "WAV, 16-bit mono PCM", "sample_rate": 16000,
                       "max_seconds": 30.0, "client_stt_allowed": false,
-                      "why": "the gate can only check a voice if it is given the voice"},
-         "gate": {"mode": "owner"}}
+                      "why": "the voice check can only check a voice if it is given the voice"},
+         "gate": {"mode": "owner", "enabled": true, "enrolled": true, "samples": 5,
+                  "threshold": 0.31, "embedder": "spectral-v1", "speaker_model": false,
+                  "needs_retraining": false, "note": "",
+                  "training": {"available": true, "pending": false}}}
     """.trimIndent()
 
     private fun status(json: String) = JarvisJson.decodeFromString(VoiceStatus.serializer(), json)

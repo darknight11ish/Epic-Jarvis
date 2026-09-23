@@ -85,6 +85,16 @@ private val FAQS = listOf(
             "here, but turning it on is a desktop-side choice, on purpose.",
     ),
     Faq(
+        "How do I teach Jarvis my voice? Where is the talk button?",
+        "Open Platform checks and tap Train my voice on the Your voice card. " +
+            "Read the five sentences, send them, then approve the card that " +
+            "appears on your desktop or here - Jarvis learns your voice only " +
+            "when you approve it, and the recordings are deleted either way. " +
+            "The talk button on Home appears once your voice is trained and " +
+            "the desktop can turn speech into text; the same card says which " +
+            "of those is still missing.",
+    ),
+    Faq(
         "Why can't I approve everything waiting for me in one tap?",
         // Used to say the cards were in the Inbox and the buttons were
         // "Affirm" and "Refuse". The cards are on Home (Inbox only links to
