@@ -515,7 +515,7 @@ class JarvisApi(
         probe("/api/memory/facts?known_at=$knownAtEpochSeconds")
 
     /**
-     * Answers the daily "let Jarvis tidy its memory overnight?" card - see
+     * Answers the daily overnight-tidy card (not built yet) - see
      * `BrainSnapshot.memory`'s own `setup.sleep_time_offer`. This app's two
      * real actions ("enable" and "stop asking") each send exactly one of
      * [enabled]/[remind]; "not now" needs no call at all, since the card

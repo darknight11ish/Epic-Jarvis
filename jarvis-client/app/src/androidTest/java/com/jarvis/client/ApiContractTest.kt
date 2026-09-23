@@ -286,7 +286,7 @@ class ApiContractTest {
         routes["/api/memory/pending"] = ok("""{"available":true,"pending":[],"setup":{}}""")
         api.probe(MemoryCards.PENDING_PATH)
         val req = server.takeRequest(10, TimeUnit.SECONDS)!!
-        assertEquals("/api/memory/pending?retire_cards=1", req.path)
+        assertEquals("/api/memory/pending?retire_cards=1&sleep_offer=1", req.path)
     }
 
     /**

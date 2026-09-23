@@ -149,8 +149,10 @@ class LearningTest {
 
     @Test
     fun `the phone asks for the retire cards it labels correctly`() {
-        // Without exactly retire_cards=1 the backend hides them.
-        assertEquals("/api/memory/pending?retire_cards=1", MemoryCards.PENDING_PATH)
+        // Without exactly retire_cards=1 the backend hides them. And
+        // sleep_offer=1, because the phone shows the overnight-tidy card: the
+        // backend hands it only to a read that asks, once a day.
+        assertEquals("/api/memory/pending?retire_cards=1&sleep_offer=1", MemoryCards.PENDING_PATH)
     }
 
     @Test

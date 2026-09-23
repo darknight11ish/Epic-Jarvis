@@ -183,8 +183,14 @@ object MemoryCards {
      * `retire_cards=1` (exactly "1"), so an app still labelling every card
      * Keep / Discard can never retire a fact with a button that says Keep.
      * This app labels them for what they do - see [from] - so it asks.
+     *
+     * `sleep_offer=1` asks for the daily overnight-tidy card, which this app
+     * shows (BrainScreen's SleepOfferCard). The desktop hands that card out
+     * once a day, to the first read that asks for it; the desktop's HUD page
+     * never asks, so it no longer uses the day's card up before the phone or
+     * the Brain window can show it.
      */
-    const val PENDING_PATH = "/api/memory/pending?retire_cards=1"
+    const val PENDING_PATH = "/api/memory/pending?retire_cards=1&sleep_offer=1"
 
     const val KEEP_BOTH_PATH = "/api/memory/keep_both"
 
@@ -307,4 +313,37 @@ object MemoryCards {
 
     private fun JsonObject.bool(key: String): Boolean? =
         (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.booleanOrNull
+}
+
+/**
+ * "What did Jarvis know on this date?" - the one rule both apps use to turn
+ * a typed `YYYY-MM-DD` into the moment sent as `/api/memory/facts?known_at=`.
+ *
+ * The LAST second of that day (23:59:59) in the phone's own time zone, so the
+ * typed day includes everything learned on it. This used to be local
+ * MIDNIGHT - the start of the day - while the desktop used the end, so the
+ * same date left out a whole day of facts on the phone only, and a comment
+ * here claimed the two matched. The desktop's `asOfSeconds` (brain.js) is
+ * the same rule, and backend/test_memory_honesty.py runs it against the
+ * numbers MemoryDatesTest pins, so the two cannot drift apart again.
+ *
+ * Null for a date that cannot be asked: not `YYYY-MM-DD`, not a real date
+ * (31 February), before [EARLIEST_YEAR], or after [today]. The desktop's
+ * server answers a moment it cannot use with TODAY's facts and no
+ * `known_at`, which the screen would then have shown as the past.
+ */
+object MemoryDates {
+    /** The server ignores moments before September 2001; no Jarvis existed then. */
+    const val EARLIEST_YEAR = 2002
+
+    private val SHAPE = Regex("""\d{4}-\d{2}-\d{2}""")
+
+    fun knownAt(text: String, zone: java.time.ZoneId, today: java.time.LocalDate): Long? {
+        val typed = text.trim()
+        if (!SHAPE.matches(typed)) return null
+        // ISO_LOCAL_DATE is strict: 2026-02-31 does not parse, it is not rolled into March.
+        val date = runCatching { java.time.LocalDate.parse(typed) }.getOrNull() ?: return null
+        if (date.year < EARLIEST_YEAR || date.isAfter(today)) return null
+        return date.atTime(23, 59, 59).atZone(zone).toEpochSecond()
+    }
 }

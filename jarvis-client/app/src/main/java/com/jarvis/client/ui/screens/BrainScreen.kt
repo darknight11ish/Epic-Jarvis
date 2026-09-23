@@ -113,12 +113,13 @@ fun BrainScreen(
      */
     onKeepBothMemory: (id: Long) -> Unit = {},
     /**
-     * The daily "tidy memory overnight?" card, or null to show none.
+     * The daily overnight-tidy card ("not built yet"), or null to show none.
      *
      * Passed in already decided rather than read fresh from `brain.memory`
-     * every recomposition: the server marks itself as having offered the
-     * moment `/api/memory/pending` is polled at all, not when the owner
-     * acts on it, so a second read - which any OTHER write on this screen
+     * every recomposition: the server marks the day's offer as made the
+     * moment a read that asks for it (`sleep_offer=1`, see
+     * MemoryCards.PENDING_PATH) arrives, not when the owner acts on it, so
+     * a second read - which any OTHER write on this screen
      * triggers via its own refresh - comes back with the offer already
      * gone. The caller holds the sticky, once-seen copy; this composable
      * only ever renders what it is handed.
@@ -890,19 +891,21 @@ private fun JobPlate(job: JobRecord) {
  * deep config UI on the phone argues just as well against importing a whole
  * calendar picker for one field that is asked for rarely.
  *
- * `YYYY-MM-DD` is parsed as LOCAL midnight, not `ZoneOffset.UTC` - this used
- * to read `atStartOfDay(ZoneOffset.UTC)`, on the reasoning that the query's
- * own name, "known at" a moment rather than a day, only needed A moment and
- * UTC was as good as any. It is not: the desktop's own `promptValidTo` in
- * `brain.js` hit this exact trap first and documents it in its own comment -
- * "A bare YYYY-MM-DD is parsed as local midnight, not Date.parse's UTC
- * midnight - west of Greenwich that shift lands the timestamp on the
- * previous calendar day". A UTC choice here is not neutral; it is wrong for
- * everyone west of Greenwich, in the specific direction of silently dropping
- * every fact learned on the typed date itself. Matching the desktop's own
- * fix - local midnight, not UTC, and not end-of-day either, which would
- * have been a second, different disagreement with the one working
- * precedent in this repo.
+ * The typed date becomes a moment by [MemoryDates.knownAt]: the LAST second
+ * of that day, in the phone's own time zone - the same rule as the desktop's
+ * "What did you know on…" (`asOfSeconds` in brain.js). This used to be local
+ * MIDNIGHT, the start of the day, with a comment saying that matched the
+ * desktop. It did not: the desktop's as-of view has always used the end of
+ * the day (midnight is what its separate "when did this stop being true"
+ * prompt uses), so the phone left out everything learned on the typed day
+ * itself. backend/test_memory_honesty.py now holds both apps to the same
+ * numbers.
+ *
+ * A date after today, before [MemoryDates.EARLIEST_YEAR] or that does not
+ * exist is refused here, because the desktop answers a moment it cannot use
+ * with TODAY's facts - which this plate would have shown as the past. The
+ * answer is also checked for the `known_at` the desktop echoes, by
+ * [com.jarvis.client.JarvisRuntime.memoryAsOf].
  */
 @Composable
 private fun MemoryAsOfPlate(
@@ -913,11 +916,11 @@ private fun MemoryAsOfPlate(
     val chrome = LocalChrome.current
     var text by rememberSaveable { mutableStateOf("") }
     val epochSeconds = remember(text) {
-        runCatching {
-            java.time.LocalDate.parse(text)
-                .atStartOfDay(java.time.ZoneId.systemDefault())
-                .toEpochSecond()
-        }.getOrNull()
+        com.jarvis.client.net.MemoryDates.knownAt(
+            text,
+            java.time.ZoneId.systemDefault(),
+            java.time.LocalDate.now(),
+        )
     }
     val rows = remember(result) { result?.let { flatten(it) }.orEmpty() }
     Plate {
@@ -944,7 +947,11 @@ private fun MemoryAsOfPlate(
         }
         if (text.isNotBlank() && epochSeconds == null) {
             Gap(6)
-            Text("Use the form YYYY-MM-DD.", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Text(
+                "A real date, YYYY-MM-DD, from ${com.jarvis.client.net.MemoryDates.EARLIEST_YEAR} up to today.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
         }
         if (result != null) {
             Gap(12)
@@ -1177,7 +1184,7 @@ private fun SleepOfferCard(
     val canWrite = !busy && canAct
     Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Text(
-            offer.str("title") ?: "Let Jarvis tidy its memory overnight?",
+            offer.str("title") ?: "Overnight memory tidying - not built yet",
             style = MaterialTheme.typography.titleSmall,
             color = chrome.textHi,
         )

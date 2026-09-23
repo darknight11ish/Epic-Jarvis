@@ -871,18 +871,20 @@ object JarvisRuntime {
             // which model the phone's own picker marks as active.
             "model" -> refreshModels()
             "voice" -> Unit
-            // The memory extractor runs on its own once a conversation goes
-            // quiet, so the review queue fills without anyone asking. The
-            // event deliberately carries no fact text, and there is nothing
-            // here worth showing: reviewing memory is desk work, and a count
-            // on a phone invites a batch-accept control, which is precisely
-            // the shape rule 4 forbids.
             // Announced as Signal.Open, and EventStream then falls through and
             // emits it as a generic event too - so this arrives on every
             // connect and was logging "unhandled event kind 'hello'" each
             // time. The Open carries the payload; there is nothing to do here.
             "hello" -> Unit
-            "proposal" -> Unit
+            // The memory extractor runs on its own once a conversation goes
+            // quiet (and a "Remember:" makes a card at once), so the review
+            // queue fills without anyone asking. The event carries no fact
+            // text - it is a doorbell - so the queue itself is re-read, and
+            // the Brain screen's cards (one card, one decision, each) show
+            // what arrived. This used to be ignored, with a comment saying
+            // reviewing memory was desk work; the phone has had review cards
+            // since, and they sat stale until something else refreshed them.
+            "proposal" -> refreshMemoryQueue()
             // Face and bindings changed on another device. Each device renders
             // its own face and the server is only the sync channel, so this
             // just re-reads the shared document; nothing here redraws
@@ -1365,7 +1367,21 @@ object JarvisRuntime {
      */
     suspend fun memoryAsOf(epochSeconds: Long): ApiResult<JsonObject> {
         val result = api.memoryFacts(epochSeconds)
-        if (result is ApiResult.Failed) _notice.value = describe(result.error)
+        if (result is ApiResult.Failed) {
+            _notice.value = describe(result.error)
+            return result
+        }
+        // The desktop answers a moment it cannot use with TODAY's facts and
+        // no `known_at`. Shown under the typed date, that would be today's
+        // memory passed off as the past - so it is refused here instead.
+        val body = (result as ApiResult.Ok).value
+        val knownAt = (body["known_at"] as? JsonPrimitive)
+            ?.takeIf { !it.isString }?.content?.toDoubleOrNull()
+        if (knownAt == null) {
+            val why = "The desktop answered without using that date, so nothing is shown."
+            _notice.value = why
+            return ApiResult.Failed(ApiError.Malformed(why))
+        }
         return result
     }
 
@@ -1893,7 +1909,8 @@ object JarvisRuntime {
     }
 
     /**
-     * Answers the daily "let Jarvis tidy its memory overnight?" card. Same
+     * Answers the daily overnight-tidy card (not built yet: "enable" only
+     * records the wish, and nothing runs). Same
      * shape as [decideMemory]: a live link is required for the same reason -
      * the desktop's own `/api/memory/sleep_time` handler is behind the same
      * connection this queue is.

@@ -356,10 +356,10 @@ class MainActivity : FragmentActivity() {
         }
 
         var memoryDecideBusyId by remember { mutableStateOf<Long?>(null) }
-        // The daily "tidy memory overnight?" card, cached the first time it is
-        // seen. See BrainScreen.kt's own doc comment on `sleepOffer`: the
-        // server marks itself as having offered the moment the route is
-        // polled at all, so a second read - which refreshBrain() triggers
+        // The daily overnight-tidy card, cached the first time it is seen.
+        // See BrainScreen.kt's own doc comment on `sleepOffer`: the server
+        // marks the day's offer as made the moment a read asking for it
+        // (sleep_offer=1) arrives, so a second read - which refreshBrain() triggers
         // after every OTHER memory write - would otherwise make the card
         // vanish before the owner had a chance to read it. `dismissed` is a
         // separate flag from clearing the cache, so a later recomposition
@@ -1219,7 +1219,10 @@ class MainActivity : FragmentActivity() {
                                     memoryAsOfBusy = true
                                     scope.launch {
                                         val result = JarvisRuntime.memoryAsOf(epochSeconds)
-                                        if (result is ApiResult.Ok) memoryAsOfResult = result.value
+                                        // Cleared on a failure too: the plate does not
+                                        // print the date, so an earlier date's answer
+                                        // left on screen would read as this one's.
+                                        memoryAsOfResult = if (result is ApiResult.Ok) result.value else null
                                         memoryAsOfBusy = false
                                     }
                                 }
