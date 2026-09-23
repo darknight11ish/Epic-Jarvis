@@ -639,6 +639,36 @@ html[data-state="error"] .reactor-core {
   max-width: 420px;
 }
 
+/* The local model cannot see the attached picture: say so, and ask. Amber
+   like every other "this needs you" line, never the accent of an answer. */
+.picture-notice {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgb(var(--warn-rgb) / 0.45);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+}
+
+.picture-notice[hidden] {
+  display: none;
+}
+
+.picture-notice-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.picture-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 /* --------------------------------------------------------------------------
    Answer card
    -------------------------------------------------------------------------- */

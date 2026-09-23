@@ -192,6 +192,19 @@
             </button>
           </div>
 
+          <!-- Shown instead of sending, when the local model cannot see (or
+               could not be checked to see) the attached picture. main.js,
+               "A picture, and a model that may not see it". -->
+          <div class="picture-notice" id="picture-notice" role="group"
+               aria-labelledby="picture-notice-text" hidden>
+            <p class="picture-notice-text" id="picture-notice-text"></p>
+            <div class="picture-notice-actions">
+              <button class="text-button" type="button" id="picture-text-only">Send without the picture</button>
+              <button class="text-button" type="button" id="picture-anyway" hidden>Send it anyway</button>
+              <button class="text-button" type="button" id="picture-keep">Not now</button>
+            </div>
+          </div>
+
           <div class="attachment attachment-text" id="attachment-clipboard" hidden>
             <div class="attachment-body">
               <span class="attachment-title">Clipboard context</span>

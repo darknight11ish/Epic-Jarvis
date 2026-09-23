@@ -337,7 +337,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -603,6 +603,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }));
             return window.__hotkeys;
           }
+          // vision.rs: can the local model see the attached picture? A
+          // scenario sets `vision`; unset, the model is the text-only one
+          // this project actually runs.
+          case "local_model_vision": return window.__vision;
           case "set_theme": return args.theme;
           case "brain_read": {
             const out = {};
@@ -698,6 +702,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                             ...(apiSettings || {}) };
   window.__bindAddressRefuses = bindAddressRefuses || null;
   window.__bindAddressRefusalMessage = bindAddressRefusalMessage || null;
+  window.__vision = vision || { model: "qwen3:8b", vision: false,
+    reason: "Ollama lists what qwen3:8b can do, and pictures are not on the list." };
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;
@@ -732,6 +738,7 @@ export async function open(browser, base, file, data, viewport) {
     heard: null, captureFails: null, speakFails: null, autoListenFails: null, speakDelayMs: 0,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
+    vision: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,
   });

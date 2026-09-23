@@ -1019,6 +1019,33 @@ filter from the lane it is **about to call**, on every hop, and clears the
 route header's memory claims when it does. Stripping the recalled-facts block
 is free, because that block is a system message.
 
+## A picture stays local, always (`choose()`, 2026-09-23)
+
+A screen capture (Alt+Shift+S on the desktop) can show anything that was on
+screen - an email, a file, a password manager - and none of the text checks
+in `choose()` can read a picture. `choose()` used to escalate a turn with a
+picture like any other long question, and even picked a cloud lane with
+"vision" in its name. It now pins any turn with `has_image` to the local
+lane, gate `"image"`, right after the taint gate (`rebuilt/jarvis_router.py`,
+edited in place like the gate below). Test:
+`test_rebuilt.Router.test_a_picture_never_goes_to_a_cloud_lane`, which fails
+on the old router.
+
+The catch, said plainly: the local model today (`qwen3:8b`) cannot see
+pictures. The desktop now checks that with Ollama before sending one and
+offers to send the words alone (`jarvis-desktop/src-tauri/src/vision.rs`).
+A picture-capable local model, such as `qwen2.5vl`, would need more graphics
+memory than the current card has spare; the planned second card is the place
+for it (`docs/MODEL-TOPOLOGY.md`).
+
+To take this change, copy the rebuilt router over the one in your backend
+folder (it is not one of the files `apply-patches.ps1` copies for you), then
+restart the backend. One line, in PowerShell:
+
+```powershell
+Copy-Item -LiteralPath "C:\Users\pcadmin\Epic-Jarvis\backend\rebuilt\jarvis_router.py" -Destination "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\" -Force; Write-Host "Copied jarvis_router.py into the backend folder. Restart the backend to use it."
+```
+
 ## The other gate in `choose()`, added since: a pasted secret, not just the word for one
 
 `jarvis_router.is_private()` catches a *topic word* — "what's my api key" —

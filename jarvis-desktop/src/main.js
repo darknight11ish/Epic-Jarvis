@@ -227,6 +227,11 @@ const dom = {
   clipboardChip: $("attachment-clipboard"),
   clipboardMeta: $("clipboard-meta"),
   clipboardRemove: $("clipboard-remove"),
+  pictureNotice: $("picture-notice"),
+  pictureNoticeText: $("picture-notice-text"),
+  pictureTextOnly: $("picture-text-only"),
+  pictureAnyway: $("picture-anyway"),
+  pictureKeep: $("picture-keep"),
 
   card: $("card"),
   cardStatusText: $("card-status-text"),
@@ -287,6 +292,10 @@ const state = {
   capture: null,
   /** Pending clipboard context. */
   clipboard: null,
+  /** The owner chose "Send it anyway" for the attached picture, once. */
+  pictureCleared: false,
+  /** The words held back while the picture notice asks what to do. */
+  pictureHeld: null,
   /** `null`, `"logseq"` or `"joplin"` — set by a prompt prefix. */
   noteTarget: null,
   /** The approval gate awaiting a decision, if any. */
@@ -1003,6 +1012,7 @@ async function refreshHealth() {
    ========================================================================== */
 
 function syncAttachments() {
+  if (!state.capture) hidePictureNotice();
   dom.captureChip.hidden = !state.capture;
   dom.clipboardChip.hidden = !state.clipboard;
   dom.attachments.hidden = !state.capture && !state.clipboard;
@@ -1010,6 +1020,8 @@ function syncAttachments() {
 }
 
 function attachCapture(payload) {
+  hidePictureNotice();
+  state.pictureCleared = false;
   state.capture = payload.dataUri;
   dom.captureThumb.src = payload.dataUri;
   dom.captureMeta.textContent = `${payload.width}x${payload.height} · ${Math.round(
@@ -1027,6 +1039,98 @@ function attachClipboard(text) {
       : preview;
   syncAttachments();
 }
+
+/* ==========================================================================
+   A picture, and a model that may not see it
+   --------------------------------------------------------------------------
+   A screen capture goes to the LOCAL model and nowhere else: the backend
+   keeps any turn with a picture on this machine (jarvis_router.choose, gate
+   "image"), because a screenshot can show an email, a file or a password.
+   The local model today reads text only, and sent a picture it answers as if
+   there were none. So before sending, ask Ollama (vision.rs) and, unless the
+   answer is a clear yes, say so and let the owner choose. Nothing is sent
+   while the notice is up; the words go back into the box so none are lost.
+   ========================================================================== */
+
+async function pictureCanBeSeen() {
+  let check = null;
+  try {
+    check = await invokeStrict("local_model_vision");
+  } catch (error) {
+    check = { vision: null, model: null, reason: String((error && error.message) || error) };
+  }
+  if (check && check.vision === true) return { ok: true, check };
+  return { ok: false, check: check || { vision: null, model: null, reason: "" } };
+}
+
+function pictureNoticeWords(check) {
+  const model = check.model ? ` (${check.model})` : "";
+  if (check.vision === false) {
+    return (
+      `Your current model${model} can't see pictures, so it would answer as if ` +
+      `the picture were not there. A picture model such as qwen2.5vl can be ` +
+      `installed later - it needs more graphics memory; your planned second ` +
+      `graphics card would help. The picture is never sent to an online model ` +
+      `instead. Send your words without it?`
+    );
+  }
+  return (
+    `Jarvis could not check whether your current model${model} can see pictures` +
+    (check.reason ? ` (${check.reason.replace(/[.\s]+$/, "")})` : "") +
+    `. If it can't, it will answer as if the picture were not there. The ` +
+    `picture is never sent to an online model instead.`
+  );
+}
+
+function showPictureNotice(message, check) {
+  state.pictureHeld = message;
+  // The box was cleared on submit; put the words back so nothing is lost.
+  if (!dom.prompt.value.trim()) {
+    dom.prompt.value = message;
+    autoGrowPrompt();
+  }
+  dom.pictureNoticeText.textContent = pictureNoticeWords(check);
+  // "Send it anyway" only when the answer is "could not tell". A clear no
+  // gets no such button: sending a picture to a model known to be blind to
+  // it only produces an answer that ignores it.
+  dom.pictureAnyway.hidden = check.vision === false;
+  dom.pictureNotice.hidden = false;
+  syncWindowHeight();
+  announce(dom.pictureNoticeText.textContent, "assertive");
+  dom.pictureTextOnly.focus();
+}
+
+function hidePictureNotice() {
+  state.pictureHeld = null;
+  if (dom.pictureNotice) dom.pictureNotice.hidden = true;
+}
+
+/** Takes the held words back out of the box and sends them. */
+function sendHeldWords() {
+  const words = dom.prompt.value.trim() || state.pictureHeld || "";
+  hidePictureNotice();
+  if (!words) return;
+  pushPromptHistory(words);
+  dom.prompt.value = "";
+  autoGrowPrompt();
+  send(words);
+}
+
+dom.pictureTextOnly.addEventListener("click", () => {
+  state.capture = null;
+  dom.captureThumb.removeAttribute("src");
+  syncAttachments();
+  sendHeldWords();
+});
+dom.pictureAnyway.addEventListener("click", () => {
+  state.pictureCleared = true;
+  sendHeldWords();
+});
+dom.pictureKeep.addEventListener("click", () => {
+  hidePictureNotice();
+  syncWindowHeight();
+  focusInput({ selectAll: false });
+});
 
 /* ==========================================================================
    Quick capture — note prefixes
@@ -2211,6 +2315,19 @@ async function send(promptText) {
   // `finishStream`, which is the single funnel every ending passes through.
   if (state.abort || state.inFlight) return;
   state.inFlight = message;
+
+  // A picture goes only to a model that can see it - see "A picture, and a
+  // model that may not see it" above. A "no" leaves everything as it was.
+  if (state.capture && !state.pictureCleared) {
+    const { ok, check } = await pictureCanBeSeen();
+    if (!ok) {
+      state.inFlight = null;
+      showPictureNotice(message, check);
+      return;
+    }
+  }
+  state.pictureCleared = false;
+  hidePictureNotice();
 
   // An answered gate belongs to the turn that is ending, not the next one.
   if (state.approval) closeApproval();

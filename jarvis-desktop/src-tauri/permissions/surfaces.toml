@@ -147,6 +147,10 @@ permissions = [
   "allow-get-hotkeys",
   "allow-stream-chat",
   "allow-cancel-chat",
+  # Before a screen capture is sent: does the local model see pictures?
+  # Reads the model's name from Jarvis and its abilities from loopback
+  # Ollama. Sends nothing about the picture (vision.rs).
+  "allow-local-model-vision",
   "allow-set-route-lane",
   "allow-hide-quickbar",
   "allow-resize-quickbar",

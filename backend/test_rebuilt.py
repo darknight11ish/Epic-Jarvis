@@ -996,6 +996,27 @@ class Router(unittest.TestCase):
         self.assertEqual(d.lane, "local")
         self.assertEqual(d.gate, "taint")
 
+    def test_a_picture_never_goes_to_a_cloud_lane(self):
+        """Rule 1. A screen capture can show an email, a file or a password
+        manager, and none of the text checks can read it. choose() used to
+        escalate a turn with a picture like any other long question, and
+        even went looking for a lane with "vision" in its name. A fresh
+        Budget (in memory, nothing spent) so the budget gate cannot be what
+        keeps it local."""
+        long_q = ("explain in detail and compare the trade-offs, step by step, "
+                  "why this design was chosen " * 4)
+        lanes = ["jarvis-escalate", "jarvis-vision", "jarvis-bulk"]
+        fresh = RT.Budget(path=None)
+        # CONTROL: the same question with no picture does escalate, so the
+        # assertion below is about the picture and nothing else.
+        plain = RT.choose(long_q, local_model="local", lanes=lanes, budget=fresh)
+        self.assertIn(plain.lane, lanes, f"control did not escalate: {plain}")
+        d = RT.choose(long_q, local_model="local", lanes=lanes, has_image=True,
+                      budget=fresh)
+        self.assertEqual(d.lane, "local")
+        self.assertEqual(d.gate, "image")
+        self.assertIn("picture", d.reason)
+
     def test_the_private_backstop_pins_the_turn_local(self):
         d = RT.choose("what is the api key for my bank account and the cvv, "
                       "explain in detail step by step and compare " * 3,

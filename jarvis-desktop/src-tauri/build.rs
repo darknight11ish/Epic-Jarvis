@@ -143,6 +143,9 @@ fn main() {
             // The HUD's mic button. Shows the quickbar with push-to-talk
             // ready; records nothing. The one command the HUD holds.
             "summon_push_to_talk",
+            // Before a screen capture is sent: can the local model see it?
+            // Asks the Jarvis server and loopback Ollama; quickbar only.
+            "local_model_vision",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and

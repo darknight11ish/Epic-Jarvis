@@ -32,6 +32,7 @@ pub mod stream;
 pub mod system_theme;
 pub mod tray;
 pub mod update;
+pub mod vision;
 pub mod voice;
 pub mod windows;
 #[cfg(windows)]
@@ -681,6 +682,7 @@ pub fn run() {
             voice::stop_automatic_listening,
             voice::speak_reply,
             voice::summon_push_to_talk,
+            vision::local_model_vision,
         ]);
 
     // The global-shortcut plugin owns a single handler for every accelerator we

@@ -331,12 +331,13 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            **_extra) -> Decision:
     """Which lane answers this turn.
 
-    Six gates, in this order, and the order is the policy. Each one can only
+    Seven gates, in this order, and the order is the policy. Each one can only
     send the answer DOWNWARD toward local - none of them can escalate past a
     gate that already refused.
 
       0. no cloud lanes offered      -> local
       1. the conversation is tainted -> local, unconditionally
+     1b. the turn carries a picture  -> local, unconditionally
       2. private content matched     -> local
       3. a real secret was found     -> local, unconditionally
       4. not complex enough          -> local
@@ -400,6 +401,19 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         return local_decision(
             "taint",
             "this conversation has read outside text, so it stays on this machine")
+    # A PICTURE NEVER LEAVES. A screen capture can show anything that was on
+    # screen - an email, a document, a password manager, a bank statement -
+    # and none of the text checks below can read it. This used to escalate a
+    # picture like any other long question, and even went looking for a cloud
+    # lane with "vision" in its name. Rule 1: files, email and credentials
+    # stay on the local model. If the local model cannot see pictures, the
+    # desktop says so before sending (jarvis-desktop's vision.rs), rather
+    # than this routing around it.
+    if has_image:
+        return local_decision(
+            "image",
+            "the message carries a picture, which can show anything that was "
+            "on screen, so it stays on this machine")
     if is_private(query):
         return local_decision("private", "the question matches the private-topic backstop")
     secret = looks_like_a_secret(query)
@@ -416,10 +430,6 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         return local_decision("budget", f"the {which} cloud budget is spent")
 
     lane = lanes[0]
-    if has_image and len(lanes) > 1:
-        vision = next((l for l in lanes if re.search(r"vision|vl|image", l, re.I)), None)
-        if vision:
-            lane = vision
     return Decision(lane, f"complexity {c} and budget available", "escalate", c,
                     inject_memory=False, tainted=conversation_tainted)
 
