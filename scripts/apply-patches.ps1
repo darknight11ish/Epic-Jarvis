@@ -164,6 +164,11 @@ $PATCHES = @(
     # extraction-wiring's (_activity), so it goes after all of them. Needs
     # jarvis_task_control.py copied in; without it the routes answer 503.
     'task-control.patch'
+    # Logseq/Joplin notes that are really filed. Its jarvis_hud.py context is
+    # task-control's output (it sits right after those routes), and its
+    # jarvis_gate.py context is ui-control-wiring's. Needs
+    # jarvis_note_capture.py copied in; without it the route answers 503.
+    'note-capture.patch'
     # --- end task controls ---------------------------------------------------
 )
 
@@ -750,6 +755,8 @@ try {
         'rebuilt/jarvis_voice.py'   # forward slash: a path on Windows and on Linux alike
         # --- task controls, notes, power (2026-09-23) ---
         'jarvis_task_control.py'     # task-control.patch
+        'jarvis_note_capture.py'     # note-capture.patch
+        'jarvis_notes.py'            # notes_search; carries the token-in-an-error fix
         # --- end task controls ---
     )
     $copied = 0

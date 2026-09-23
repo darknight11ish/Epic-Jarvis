@@ -23,13 +23,14 @@ READ-ONLY, ON PURPOSE, WITH NO GROWTH PATH LEFT HALF-BUILT
 Search only. Both APIs can also create and edit notes - not implemented
 here, same reasoning `jarvis_email.py`'s docstring gives for leaving out
 SMTP: a write is a materially different, higher-consequence action (it
-changes the owner's actual notes) than a read, and this project already has
-a separate, existing capture path for filing new notes (the desktop
-quickbar's `#log`/`#joplin` prefixes, wired through OpenJarvis's own tool
-registry - see backend/README.md's `ui-control-wiring` section on what does
-and does not live in this repository). Adding a second, competing way to
-write notes from inside this module would be scope creep, not a read-only
-integration.
+changes the owner's actual notes) than a read.
+
+Correction, 2026-09-23: this paragraph used to say the desktop's `#log`/
+`#joplin` prefixes were an existing capture path "wired through OpenJarvis's
+own tool registry". They were not - they asked the model for tools that
+existed nowhere, so nothing was ever filed. Writing a note now lives in its
+own module, `jarvis_note_capture.py`, with its own plan/describe/gate/run
+and its own action names; this one stays a read.
 
 THE PERMISSION MODEL, WHICH IS THE POINT
     plan(query, limit)     Works out the ONE search request this would make -
@@ -230,6 +231,31 @@ class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
         )
 
 
+def _scrub_secrets(message: str) -> str:
+    """`message` with the Joplin token and the Obsidian key taken out.
+
+    THE LEAK THIS CLOSES (docs/EXTRACTION-RESEARCH-2026-09-23.md, reproduced
+    there): Joplin takes its token in the URL, and urllib quotes the whole URL
+    in some errors. Set JARVIS_JOPLIN_URL without its "http://" and every
+    search failed with `ValueError: unknown url type: '127.0.0.1:41184/search?
+    ...&token=<the real token>'` - and run() put that sentence in its result,
+    which reaches the model, the screen and the logs. A control character in
+    the address does the same through http.client's InvalidURL, and a
+    refused redirect's message carries the redirect target. So every error
+    passes through here, in every spelling the secret can take in a URL.
+    """
+    s = str(message)
+    for env in (JOPLIN_TOKEN_ENV, OBSIDIAN_KEY_ENV):
+        secret = os.environ.get(env, "")
+        if not secret.strip():
+            continue
+        for form in {secret, secret.strip(), urllib.parse.quote(secret, safe=""),
+                     urllib.parse.quote_plus(secret)}:
+            if form:
+                s = s.replace(form, "[secret hidden]")
+    return s
+
+
 def _default_fetch(p: Plan):
     """The real call. Adds the real credential fresh from the environment -
     never cached, never logged, never part of the `Plan` a card was shown
@@ -292,8 +318,11 @@ def run(p: Plan, *, fetch: Optional[Callable[[Plan], object]] = None,
     try:
         raw = getter(p)
     except Exception as exc:
+        # Scrubbed: this sentence goes back to the model, onto the screen and
+        # into logs, and urllib quotes the whole URL - Joplin's token is in
+        # its query string - in some of its errors. See _scrub_secrets().
         return {"ok": False,
-                "reason": f"the request failed: {type(exc).__name__}: {exc}",
+                "reason": _scrub_secrets(f"the request failed: {type(exc).__name__}: {exc}"),
                 "results": []}
 
     normalize = _normalize_joplin if p.backend == "joplin" else _normalize_obsidian

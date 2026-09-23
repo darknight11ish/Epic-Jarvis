@@ -665,6 +665,7 @@ pub fn run() {
             commands::get_widget_prefs,
             commands::prefill_quickbar,
             commands::capture_note,
+            commands::capture_note_status,
             commands::check_server_health,
             commands::hide_quickbar,
             commands::resize_quickbar,

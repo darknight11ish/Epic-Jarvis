@@ -87,6 +87,7 @@ on a throwaway copy instead.
 | `voice-enroll.patch` | `jarvis_hud.py` | **"Train my voice" from the phone.** `POST /api/voice/enroll` takes the owner's recorded sentences, holds them in memory and raises ONE approval card. Only approving it replaces the voice print; the recordings are deleted either way. Needs `voice-503.patch` and `appearance.patch` (textual), and `jarvis_voice_enroll.py` — see its own section at the end. |
 | `cloud-one-turn.patch` | `jarvis_hud.py` | The phone and quickbar now send the conversation so far with each question. This makes sure a **cloud** lane still gets only the newest question, never an earlier one. Needs `ollama-direct.patch` (textual) — see its own section at the end. |
 | `task-control.patch` | `jarvis_hud.py` | **The Pause, Resume, Stop and note buttons on both apps went nowhere.** Adds the routes they call. Resume raises an approval card; nothing else here approves anything. Needs `jarvis_task_control.py` and the updated `jarvis_agent.py` — see its own section, at the end. |
+| `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq or Joplin through the gate, and says honestly whether it landed. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -4091,5 +4092,99 @@ plan object; a denied, timed-out or broken gate runs nothing; a Stop pressed
 while the resume card waits beats approving it; a card note reaches the model
 whether the card was approved or denied; and the audit log never holds a
 note's words.
+
+
+---
+
+# `note-capture.patch` and `jarvis_note_capture.py` — notes that really get saved
+
+**What was wrong.** On the desktop, `#log`, `#joplin`, Alt+Shift+N and the
+widget's #log / #jop capture all asked the *model* to call two tools,
+`append_logseq_journal` and `create_joplin_note`. Neither tool existed
+anywhere. So **no note was ever filed** — and the widget could only say
+"Sent", because it had no way to know.
+
+**What this adds, in plain words.**
+
+1. **A route for your own words:** `POST /api/notes/capture` with
+   `{"target": "logseq" | "joplin", "text": "..."}`. No model is involved at
+   all — you typed it, so it is filed as you typed it. The desktop's #log /
+   #joplin / quick note / widget capture now use this.
+2. **The two tools, for real,** in `jarvis_agent.py`, for when you ask Jarvis
+   in chat ("add to my journal that ..."). Same code, same checks. Like every
+   tool they are only offered if `[tools].enabled` in your config names them.
+3. **Honest answers.** The desktop now says one of: *Filed in Logseq,
+   journals/2026_09_23.md* (only after the PC read the note back), *Waiting
+   for your approval…*, or *Not filed* and why (you said no, nobody answered,
+   no Logseq folder, no Joplin token, Joplin not running...).
+
+**Permission, the project's one way.** Every write goes through
+`jarvis_gate` under the action names **your own `jarvis-framework.toml`
+already lists**: `append_logseq_journal` and `create_joplin_note`. That file
+decides whether you see a card first. **As shipped, it says `auto` for the
+Logseq journal and `notify` for a new Joplin note — so, as shipped, no card
+is shown for either.** That is your file's existing choice ("An agent that
+must ask permission to write its own log will not keep a log"), not
+something this patch decided. To be asked every time, change those two lines
+to `"ask"`. Nothing here is a standing grant of its own.
+
+**What it will never do.**
+- **Overwrite.** Logseq: your journal file is only ever *added to* at the end
+  (opened in append mode — it cannot remove anything), and made only if it is
+  not there yet. Joplin: always a *new* note; no note is edited; a notebook is
+  looked up by name and never created.
+- **Leave this PC.** Logseq is a file on your disk. Joplin is its own service
+  on this PC; if the address is anything but this PC, it refuses.
+- **Show or save your Joplin token.** It is read from the environment only at
+  the moment it is sent, only to Joplin on this PC, and it is scrubbed out of
+  every error message.
+
+**Where things are.**
+- Logseq graph folder: `JARVIS_LOGSEQ_GRAPH`, else `[notes.logseq]
+  graph_directory` in jarvis-framework.toml, else `<config dir>\notes`. The
+  folder must already exist and look like a Logseq graph. Today's page is
+  `journals\YYYY_MM_DD.md` — Logseq's default. If you changed Logseq's journal
+  file name format, this will not follow it (say so and it can learn to).
+- Joplin token: `JARVIS_JOPLIN_TOKEN` (the same one note search uses), else
+  the variable named by `[notes.joplin] token_env`. Address:
+  `JARVIS_JOPLIN_URL`, else `http://127.0.0.1:<port from the config, 41184>`.
+
+## A token leak, fixed in `jarvis_notes.py` too
+
+The 2026-09-23 audit reproduced it: with `JARVIS_JOPLIN_URL` set without its
+`http://`, every note search failed with an error that **contained the Joplin
+token** (urllib quotes the whole address, and Joplin's token is part of the
+address). That error went back to the model, onto the screen and into logs.
+`jarvis_notes.py` now scrubs the token and the Obsidian key out of every error,
+in every spelling. The script now copies `jarvis_notes.py` in too, so the fix
+reaches your backend.
+
+## What it changes
+
+- `jarvis_hud.py`: `POST /api/notes/capture` and `GET /api/notes/capture?id=`,
+  right after `task-control.patch`'s routes (that is its context, so it goes
+  after it). Same origin check and token as every private route.
+- `jarvis_gate.py`: the risk lines for the two actions (both "stays on this
+  PC", both undoable by deleting what was added), and the two tool names in
+  `_TOOL_ACTIONS`. Context: `ui-control-wiring.patch`'s lines.
+- `jarvis_note_capture.py`, `jarvis_notes.py`, `jarvis_agent.py`: copy them in
+  (the script does).
+
+**Not checked against your real files** — nobody here has them, and there
+is no Logseq or Joplin here either. Logseq was tested against a folder shaped
+like a graph; Joplin against a stand-in that answers like Joplin's documented
+API. The first real run is the real test.
+
+## Test it
+
+```
+python backend\test_note_capture.py
+```
+
+70 checks. The ones that matter most: nothing is written without an allowed
+verdict (denied, timed out and a broken gate all write nothing and say why);
+the earlier text of a journal is byte-for-byte intact after an append; only
+`POST /notes` is ever sent to Joplin; the token is in no plan, card, result or
+error — including the exact `ValueError` the audit found in `jarvis_notes.py`.
 
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->

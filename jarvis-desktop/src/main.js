@@ -46,9 +46,9 @@ const JARVIS_CLIENT_HEADER = "hud";
 const CLIPBOARD_PREVIEW = 90;
 
 /**
- * Quick-capture prefixes. Typing one at the head of the prompt pre-routes the
- * turn to a note store and shows a chip; the prefix itself is stripped before
- * the text is sent.
+ * Quick-capture prefixes. Typing one at the head of the prompt files the rest
+ * as a note (see `fileFromBar`) instead of asking Jarvis anything, and shows a
+ * chip while typing; the prefix itself is not part of the note.
  */
 const NOTE_PREFIXES = {
   "#log": { target: "logseq", label: "Logseq Journal" },
@@ -58,18 +58,14 @@ const NOTE_PREFIXES = {
   "#vault": { target: "joplin", label: "Joplin Vault" },
 };
 
-/**
- * Routing instruction sent as a system turn alongside `note_target`, so a
- * server that reads either mechanism lands in the same place.
+/*
+ * There used to be a NOTE_INSTRUCTIONS table here: a system turn asking the
+ * model to call `append_logseq_journal` / `create_joplin_note`. Neither tool
+ * existed, so no note was ever filed. A prefixed prompt now goes straight to
+ * `/api/notes/capture` (backend note-capture.patch) - the owner's own words,
+ * no model, through the approval gate - and the card says how it ended.
+ * Searching notes is a question for Jarvis in chat (its notes_search tool).
  */
-const NOTE_INSTRUCTIONS = {
-  logseq:
-    "Route this turn to the Logseq daily journal via append_logseq_journal. " +
-    "Capture it verbatim unless asked to summarise.",
-  joplin:
-    "Route this turn to the Joplin personal vault via create_joplin_note, " +
-    "or search_joplin when the user is asking a question rather than filing one.",
-};
 
 /**
  * Smallest gap between native window resizes, in milliseconds. Each resize is a
@@ -108,6 +104,7 @@ import {
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode } from "./voice.js";
 import { commitExchange, historyMessages } from "./chat-history.js";
+import { fileNote } from "./note-capture.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -2295,10 +2292,62 @@ async function streamViaFetch(payload) {
   }
 }
 
+/**
+ * Files a `#log` / `#joplin` note (and Alt+Shift+N, which arms `#log`).
+ *
+ * No chat turn and no model: the owner's own words go to the backend, which
+ * writes them through the approval gate. The card shows the backend's answer
+ * - "Filed in Logseq, journals/…", "Waiting for your approval…", or why it
+ * was not filed - and never claims more than that answer says.
+ */
+async function fileFromBar(target, text) {
+  const place = target === "joplin" ? "Joplin" : "Logseq";
+  if (state.approval) closeApproval();
+  state.turnId = null;
+  paintAnswerMark();
+  setPhase("done");
+  openCard(`Filing in ${place}…`);
+  state.buffer = "";
+  paint({ immediate: true });
+  if (!text) {
+    dom.cardStatusText.textContent = "Nothing filed";
+    state.buffer = `Nothing to file — type the note after the prefix.`;
+    paint({ immediate: true });
+    return;
+  }
+  state.inFlight = text;
+  try {
+    await fileNote(invokeStrict, target, text, (said) => {
+      // The field is free again once the first answer is in.
+      state.inFlight = null;
+      dom.cardStatusText.textContent = !said.final
+        ? "Waiting for approval"
+        : said.tone === "ok"
+          ? "Filed"
+          : "Not filed";
+      state.buffer = said.text;
+      paint({ immediate: true });
+      announce(said.text);
+    });
+  } catch (error) {
+    showError(`The note was not filed. ${String((error && error.message) || error)}`);
+  } finally {
+    state.inFlight = null;
+    commitWindowHeight();
+  }
+}
+
 /** Sends the prompt and streams the answer into the card. */
 async function send(promptText) {
   const message = promptText.trim();
   if (!message) return;
+  // A note prefix files the rest instead of asking anything - see fileFromBar.
+  const prefixed = parseNotePrefix(message);
+  if (prefixed.target) {
+    if (state.abort || state.inFlight) return;
+    await fileFromBar(prefixed.target, prefixed.body.trim());
+    return;
+  }
   // Guard on the live stream handle, not on the phase. The phase is moved to
   // `approval` and then `done` by the approval flow while the stream is still
   // open, so a phase check let a second `stream_chat` start alongside the
@@ -2362,12 +2411,8 @@ async function send(promptText) {
   // Stay open while the answer streams, even if focus wanders.
   await setPinned(true, { silent: true });
 
-  // A `#log` / `#joplin` prefix pre-routes the turn: the prefix is stripped
-  // from the text and restated as a system turn. There used to be a
-  // `note_target` field alongside it — the server has never read one, so the
-  // system turn was always the only mechanism doing any work.
-  const { target: noteTarget, body } = parseNotePrefix(message);
-  const text = noteTarget ? body.trim() : message;
+  // Prefixed notes never get here (see the top of this function).
+  const text = message;
 
   // A capture rides INSIDE the user message, not as a sibling `images` array.
   // The server forwards `messages` verbatim to /v1/chat/completions and reads
@@ -2402,7 +2447,6 @@ async function send(promptText) {
   const payload = {
     messages: [
       ...historyMessages(state.conversation),
-      ...(noteTarget ? [{ role: "system", content: NOTE_INSTRUCTIONS[noteTarget] }] : []),
       ...(state.clipboard
         ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
         : []),

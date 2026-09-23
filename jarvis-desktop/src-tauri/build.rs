@@ -116,6 +116,8 @@ fn main() {
             "get_widget_prefs",
             "prefill_quickbar",
             "capture_note",
+            // How a filed note ended: waiting for approval, filed, or not.
+            "capture_note_status",
             // Quickbar
             "hide_quickbar",
             "resize_quickbar",

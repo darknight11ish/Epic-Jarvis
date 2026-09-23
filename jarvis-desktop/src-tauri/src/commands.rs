@@ -50,9 +50,9 @@ const JARVIS_CLIENT: &str = "hud";
 /// Approval decisions are a single small round trip, so they do get a total
 /// timeout — unlike the chat stream.
 const APPROVAL_TIMEOUT: Duration = Duration::from_secs(10);
-/// A widget quick-capture is not streamed, but the model still has to answer,
-/// so it gets a longer leash than an approval.
-const CAPTURE_TIMEOUT: Duration = Duration::from_secs(45);
+/// Filing a note waits up to a second and a half on the server for the
+/// approval gate (see jarvis_note_capture.capture), then answers.
+const CAPTURE_TIMEOUT: Duration = Duration::from_secs(15);
 
 // ---------------------------------------------------------------------------
 // Payload types
@@ -1675,13 +1675,25 @@ pub fn prefill_quickbar(app: AppHandle, target: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Files a note without opening the quickbar.
+/// Files a note in Logseq or Joplin - the owner's own words, no model.
 ///
-/// The widget's capture field is a one-shot: it posts the turn with
-/// `stream: false` and returns whatever the server replies, so the widget can
-/// flash a confirmation without standing up a stream it would only close.
+/// Posts to `/api/notes/capture` (`backend/note-capture.patch`). The backend
+/// writes through `jarvis_gate` under the owner's own action names
+/// (`append_logseq_journal`, `create_joplin_note`), so the tier in their
+/// `jarvis-framework.toml` decides whether an approval card comes first.
+///
+/// This used to post a chat turn asking the model to call two tools that
+/// existed nowhere, and could only report the model's own account of what it
+/// did. Now the answer is the backend's: `state` is `"filed"` (and it read
+/// the note back), `"waiting"` (a card is up - poll [`capture_note_status`]),
+/// `"not_filed"` (said no, nobody answered, refused - with the reason) or
+/// `"failed"`. The widget and the quickbar say exactly that.
 #[tauri::command]
-pub async fn capture_note(app: AppHandle, target: String, text: String) -> Result<String, String> {
+pub async fn capture_note(
+    app: AppHandle,
+    target: String,
+    text: String,
+) -> Result<serde_json::Value, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("nothing to capture".to_string());
@@ -1690,27 +1702,9 @@ pub async fn capture_note(app: AppHandle, target: String, text: String) -> Resul
         "joplin" | "vault" => "joplin",
         _ => "logseq",
     };
-    let instruction = if target == "joplin" {
-        "Route this turn to the Joplin personal vault via create_joplin_note."
-    } else {
-        "Route this turn to the Logseq daily journal via append_logseq_journal. \
-         Capture it verbatim unless asked to summarise."
-    };
-
-    let payload = serde_json::json!({
-        "messages": [
-            { "role": "system", "content": instruction },
-            { "role": "user", "content": text },
-        ],
-        "has_image": false,
-        "stream": false,
-        // No `note_target`: the server has never read one. The system message
-        // above is what actually routes the capture.
-        "auto": true,
-    });
-
+    let payload = serde_json::json!({ "target": target, "text": text });
     let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
-        .post(format!("{}/api/chat", jarvis_base(&app)))
+        .post(format!("{}/api/notes/capture", jarvis_base(&app)))
         .headers(jarvis_headers(&app)?)
         .json(&payload)
         .send()
@@ -1719,82 +1713,78 @@ pub async fn capture_note(app: AppHandle, target: String, text: String) -> Resul
             if e.is_connect() {
                 format!("could not reach the Jarvis server at {}", jarvis_base(&app))
             } else {
-                format!("capture failed: {e}")
+                format!("the note could not be sent: {e}")
             }
         })?;
-
-    let status = response.status();
-    let body = response.text().await.unwrap_or_default();
-    if !status.is_success() {
-        return Err(format!(
-            "the server answered HTTP {} to the capture: {}",
-            status.as_u16(),
-            body.trim()
-        ));
-    }
-    // HTTP 200 means the CHAT completed. It does not mean a note was written:
-    // this route asks a model to call `append_logseq_journal`, and a model can
-    // decline, lack the tool, or answer in prose. `/api/chat` returns no
-    // tool-execution receipt, so nothing here can honestly say "filed".
-    //
-    // What can be returned is the model's own account of what it did, which is
-    // the closest thing to evidence the API offers. The widget shows it instead
-    // of asserting a result.
-    Ok(assistant_reply(&body))
+    note_answer(response, "/api/notes/capture").await
 }
 
-/// Pulls the assistant's text out of whatever shape `/api/chat` answered with.
-///
-/// Non-streaming OpenAI puts it at `choices[0].message.content`; the streaming
-/// shape uses `delta`; some proxies flatten it to a bare `content` or
-/// `response`. Anything unrecognised comes back empty rather than as a slice of
-/// raw JSON — a caller that shows this to a person needs a sentence or nothing.
-fn assistant_reply(body: &str) -> String {
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(body) else {
-        return String::new();
-    };
-    let choice = json.get("choices").and_then(|c| c.get(0));
-    let text = choice
-        .and_then(|c| c.get("message"))
-        .and_then(|m| m.get("content"))
-        .or_else(|| {
-            choice
-                .and_then(|c| c.get("delta"))
-                .and_then(|d| d.get("content"))
-        })
-        .or_else(|| choice.and_then(|c| c.get("text")))
-        .or_else(|| json.get("content"))
-        .or_else(|| json.get("response"))
-        .and_then(|v| v.as_str())
-        .unwrap_or_default();
-    text.trim().to_string()
+/// How a note filed with [`capture_note`] ended. Never carries the note's text.
+#[tauri::command]
+pub async fn capture_note_status(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err("that note has no id to look up".to_string());
+    }
+    let path = format!("/api/notes/capture?id={}", encode_path_segment(id));
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{}{path}", jarvis_base(&app)))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {}", jarvis_base(&app))
+            } else {
+                format!("unable to reach `/api/notes/capture`: {e}")
+            }
+        })?;
+    note_answer(response, "/api/notes/capture").await
+}
+
+/// The capture routes answer 200 (finished) or 202 (waiting) with the job;
+/// anything else becomes a sentence.
+async fn note_answer(response: reqwest::Response, path: &str) -> Result<serde_json::Value, String> {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if status.is_success() {
+        return serde_json::from_str(&body)
+            .map_err(|_| "the server's answer about the note could not be read".to_string());
+    }
+    if status.as_u16() == 404 && !body.contains("\"state\"") {
+        return Err(
+            "this Jarvis backend cannot file notes yet - apply the backend \
+                    patches (note-capture.patch) to turn it on. Nothing was filed."
+                .to_string(),
+        );
+    }
+    // A refusal the server explained ("no Logseq graph folder at ...", "no
+    // Joplin token is set ...") carries a `message`; prefer it.
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+        if let Some(m) = v.get("message").and_then(|m| m.as_str()) {
+            return Err(m.to_string());
+        }
+    }
+    Err(server_sentence(status.as_u16(), path, &body))
 }
 
 #[cfg(test)]
 mod capture_tests {
-    use super::{assistant_reply, validate_bind_address, validate_external_url};
+    use super::{server_sentence, validate_bind_address, validate_external_url};
 
+    /// The capture routes' refusal wording reaches the person, not raw JSON.
     #[test]
-    fn reads_the_non_streaming_openai_shape() {
-        let body = r#"{"choices":[{"message":{"role":"assistant","content":" Added to today's journal. "}}]}"#;
-        assert_eq!(assistant_reply(body), "Added to today's journal.");
-    }
-
-    #[test]
-    fn reads_the_streaming_and_flattened_shapes() {
+    fn a_task_route_error_is_read_out_of_its_json() {
         assert_eq!(
-            assistant_reply(r#"{"choices":[{"delta":{"content":"ok"}}]}"#),
-            "ok"
+            server_sentence(
+                409,
+                "/api/task/stop",
+                r#"{"ok":false,"error":"nothing is running or paused"}"#
+            ),
+            "Nothing is running or paused"
         );
-        assert_eq!(assistant_reply(r#"{"response":"filed"}"#), "filed");
-    }
-
-    #[test]
-    fn an_unrecognised_shape_yields_nothing_rather_than_raw_json() {
-        // The caller puts this in front of a person. A slice of JSON in a
-        // 320px flash is worse than no sentence at all.
-        assert_eq!(assistant_reply(r#"{"weird":{"nested":1}}"#), "");
-        assert_eq!(assistant_reply("not json at all"), "");
+        // CONTROL: no `error` field - the raw body is still shown.
+        assert!(server_sentence(500, "/x", "boom").contains("HTTP 500"));
     }
 
     /// The trick this exists for: the visible text, the apparent host and the

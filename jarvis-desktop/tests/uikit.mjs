@@ -337,7 +337,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -461,6 +461,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__marks.push({ turnId: args.turnId, mark: args.mark });
             if (window.__markRoute === false) return { available: false, status: 404 };
             return { ok: true, turn_id: args.turnId, mark: args.mark };
+          case "capture_note":
+          case "capture_note_status": {
+            window.__noteCalls.push({ cmd, ...args });
+            if (window.__captureNoteFails) throw new Error(window.__captureNoteFails);
+            const jobs = window.__noteJobs;
+            return jobs.length > 1 ? jobs.shift() : jobs[0];
+          }
           case "brain_memory_keep_both":
             window.__memoryWrites.push({ cmd, ...args });
             return { ok: true };
@@ -681,6 +688,14 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__taskNoteFails = taskNoteFails || null;
   window.__taskActions = [];
   window.__taskNotes = [];
+  // note-capture.patch: each capture_note / capture_note_status call answers
+  // with the next job in this list (the last one repeats). Unset, a note is
+  // filed at once - the common case, a tier that does not ask.
+  window.__noteJobs = JSON.parse(JSON.stringify(noteJobs || [
+    { id: "note_t", state: "filed", target: "logseq",
+      message: "Filed in Logseq, journals/2026_09_23.md." },
+  ]));
+  window.__noteCalls = [];
   window.__appearanceFails = appearanceFails || null;
   window.__decides = [];
   window.__amends = [];
@@ -734,7 +749,7 @@ export async function open(browser, base, file, data, viewport) {
     telemetry: TELEMETRY, prefs: {}, answer: "", brain: BRAIN, theme: null,
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
-    taskActionFails: null, taskNoteFails: null,
+    taskActionFails: null, taskNoteFails: null, noteJobs: null,
     heard: null, captureFails: null, speakFails: null, autoListenFails: null, speakDelayMs: 0,
     memoryRefuses: null, learningFloor: false, apiSettings: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,

@@ -152,19 +152,25 @@ await check("the card says Thinking until a token actually arrives", async () =>
 
 /* ── The widget does not claim to have filed anything ────────────────────── */
 
-await check("a capture says it was sent, never that it was filed", async () => {
+await check("a capture says filed only when the PC says so", async () => {
+  // It used to ask a model to call a tool that did not exist, so the widget
+  // could only say "Sent". Now the words come from the backend's answer
+  // (note-capture.patch), and the widget has no sentence of its own that
+  // claims a note landed.
   const widget = read("src/widget.js");
-  assert.ok(!/Filed to Joplin|Appended to Logseq/.test(widget),
-    "the widget still claims a note landed, which it cannot know");
-  assert.match(widget, /Sent to \$\{where\}/, "the widget no longer says what it did");
+  assert.ok(!/Filed to Joplin|Appended to Logseq|Sent to \$\{where\}/.test(widget),
+    "the widget still writes its own claim about where the note went");
+  assert.match(widget, /fileNote\(invokeStrict/, "the widget no longer uses the shared filer");
+  const filer = read("src/note-capture.js");
+  assert.match(filer, /capture_note_status/, "a waiting card is never followed up");
 });
 
-await check("the capture shows Jarvis's own account of what it did", async () => {
+await check("the capture goes to the notes route, not a chat turn", async () => {
   const rust = read("src-tauri/src/commands.rs");
-  assert.match(rust, /fn assistant_reply/,
-    "capture_note returns a raw body rather than the model's answer");
-  assert.match(rust, /tool-execution receipt/,
-    "nothing records WHY a 200 is not a receipt");
+  const i = rust.indexOf("pub async fn capture_note(");
+  const body = rust.slice(i, rust.indexOf("\n}\n", i));
+  assert.match(body, /\/api\/notes\/capture/, "capture_note does not post to /api/notes/capture");
+  assert.ok(!/\/api\/chat/.test(body), "capture_note still runs a chat turn");
 });
 
 /* ── The tray ────────────────────────────────────────────────────────────── */

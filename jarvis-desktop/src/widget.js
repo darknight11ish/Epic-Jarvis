@@ -34,6 +34,7 @@ import {
   surfaceState,
   start as startLink,
 } from "./jarvis-link.js";
+import { fileNote } from "./note-capture.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -719,25 +720,23 @@ async function sendCapture() {
   flash("Filing…");
 
   try {
-    // What comes back is the model's own account of what it did, not a receipt.
-    // `/api/chat` runs a chat turn whose system message ASKS for
-    // `append_logseq_journal`; a model can decline it, not have it, or answer
-    // in prose, and HTTP 200 covers all three. This used to say "Appended to
-    // Logseq." on any 200 — a confident claim about a file the desktop has
-    // never seen and cannot check.
-    const reply = String((await invokeStrict("capture_note", {
-      target: state.captureTarget,
-      text,
-    })) || "").trim();
-    dom.captureInput.value = "";
-    const where = state.captureTarget === "joplin" ? "Joplin" : "Logseq";
-    const first = reply.split("\n").find((l) => l.trim()) || "";
-    flash(
-      first ? `Sent to ${where} — ${clip(first, 70)}` : `Sent to ${where}.`,
-      "ok",
-      `Jarvis was asked to file this in ${where}. What it says it did is above; ` +
-        `the desktop has no way to confirm the note landed.`
-    );
+    // The PC's own answer, not a model's account (note-capture.js): "Filed"
+    // only once the backend has written the note and read it back. This used
+    // to ask a model to call a tool that did not exist and could only say
+    // "Sent". While an approval card waits, the field is free again - the
+    // result arrives in the flash when the card is answered.
+    const target = state.captureTarget;
+    let first = true;
+    await fileNote(invokeStrict, target, text, (said) => {
+      if (first) {
+        dom.captureInput.value = "";
+        first = false;
+        state.busy = false;
+        dom.captureInput.disabled = false;
+        dom.btnCaptureSend.disabled = false;
+      }
+      flash(clip(said.text, 90), said.tone, said.text);
+    });
   } catch (error) {
     flash(String((error && error.message) || error), "bad");
   } finally {

@@ -672,7 +672,7 @@ guess someone wrote down honestly.
 | `GET /api/holds` | **Does not exist and was deliberately not invented.** `JarvisApi.kt:455-464` records that an earlier draft made it up to fill the gap, and that doing so "is the exact mistake that produced `jarvis-android`'s protocol". Removed rather than kept behind a 404. |
 | `/api/approvals` | **Does not exist.** Named once by mistake; `backend/extraction-wiring.patch:342-345` records the correction. The queue is `/api/pending`. |
 | A decide-with-option route | Needed for approvals carrying two or more options (`ApiModels.kt:294-302`). No name proposed. |
-| `POST /api/note` | Suggested, not proposed — it would let a client truthfully report that a note was filed (`API-DISAGREEMENTS.md` §10). |
+| `POST /api/note` | Suggested, not proposed (`API-DISAGREEMENTS.md` §10). **Superseded** by `POST /api/notes/capture` (§11), which does let a client truthfully report whether a note was filed. |
 
 ### The desktop task controls — fixed since this doc was first written
 
@@ -776,5 +776,21 @@ that report, never on their own click.
 
 Stale link (rule 4): both clients hold **Resume** on a stale stream and let
 Stop, Pause and notes through.
+
+### Notes — `backend/note-capture.patch`
+
+| Route | Body | Answers | What it does |
+|---|---|---|---|
+| `POST /api/notes/capture` | `{"target": "logseq"\|"joplin", "text": "…", "title"?: "…", "notebook"?: "…"}` | **200** job, finished; **202** job, `state: "waiting"` (an approval card is up); **400** empty / unknown target; **503** not set up (no graph folder, no token — `message` says which); **429** four notes already waiting | Files the owner's own words. No model. Written through `jarvis_gate` as `append_logseq_journal` / `create_joplin_note`, under the owner's own tier for those in `jarvis-framework.toml`. |
+| `GET /api/notes/capture?id=…` | — | 200/202 job; 404 unknown id | How that note ended. |
+
+A job is `{"id", "state", "target", "message", "created", "updated", "ok"}`
+with `state` one of `waiting`, `filed` (written and read back), `not_filed`
+(denied / timed out / refused — `message` says which) or `failed`. **It never
+carries the note's text.** Clients show `message` and nothing of their own.
+
+Replaces what `POST /api/note` in §8 suggested. The desktop's `#log` /
+`#joplin` / quick note / widget capture use it (`capture_note`,
+`capture_note_status`); the chat turn with a routing system message is gone.
 
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->

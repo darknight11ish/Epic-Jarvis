@@ -354,6 +354,26 @@ def _run_home_control(args: dict, plan_obj, **_) -> dict:
     return HOME.run(plan_obj, approved=True)
 
 
+def _prepare_note(kind: str):
+    """prepare() for the two note tools: jarvis_note_capture's plan + card."""
+    def prepare(args: dict):
+        try:
+            import jarvis_note_capture as NC
+        except Exception as exc:
+            return None, (f"File a note: {json.dumps(args, ensure_ascii=False)} "
+                          f"(unavailable: {exc})")
+        return (NC.prepare_logseq_tool(args) if kind == "logseq"
+                else NC.prepare_joplin_tool(args))
+    return prepare
+
+
+def _run_note(args: dict, plan_obj, **_) -> dict:
+    if plan_obj is None:
+        return {"ok": False, "error": "note filing is not available here"}
+    import jarvis_note_capture as NC
+    return NC.run(plan_obj, approved=True)
+
+
 class Tool:
     """One tool. The gate action is looked up against jarvis_gate's own
     tables (`action_for_tool`) rather than duplicated here, so the tier the
@@ -615,6 +635,33 @@ TOOLS: dict = {
         _prepare_home_control,
         lambda args, state, **_: _run_home_control(args, state),
         gate_lookup_name=lambda args: "jarvis_home_control_run"),
+    # The two note WRITES (jarvis_note_capture.py). Their action names are the
+    # ones the owner's jarvis-framework.toml already has tiers for, so that
+    # file - not this one - decides whether each asks first. Like every tool
+    # here they are offered only when [tools].enabled names them. The desktop's
+    # #log / #joplin / quick note do NOT go through these: they post the
+    # owner's own words to /api/notes/capture, with no model involved.
+    "append_logseq_journal": Tool(
+        "append_logseq_journal",
+        "Add one entry to the end of today's Logseq journal page on this PC. "
+        "Only ever adds; never changes or removes anything already written.",
+        {"type": "object", "properties": {
+            "text": {"type": "string", "description": "the entry, in the owner's words"}},
+         "required": ["text"]},
+        _prepare_note("logseq"), _run_note,
+        gate_lookup_name=lambda args: "append_logseq_journal"),
+    "create_joplin_note": Tool(
+        "create_joplin_note",
+        "Create one NEW note in Joplin on this PC. Never edits an existing note "
+        "and never creates a notebook.",
+        {"type": "object", "properties": {
+            "title": {"type": "string"},
+            "body": {"type": "string"},
+            "notebook": {"type": "string",
+                "description": "an existing notebook's exact name; omit for Joplin's default"}},
+         "required": ["title", "body"]},
+        _prepare_note("joplin"), _run_note,
+        gate_lookup_name=lambda args: "create_joplin_note"),
 }
 
 
