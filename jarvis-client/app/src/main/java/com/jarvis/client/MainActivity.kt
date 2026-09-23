@@ -1198,6 +1198,8 @@ class MainActivity : FragmentActivity() {
                                 if (id != null) focusApproval.value = id
                                 scope.launch { JarvisRuntime.refreshPending() }
                             },
+                            // backend/power-mode.patch: Active / Quiet / Standby.
+                            onSetPower = { mode -> scope.launch { JarvisRuntime.setPower(mode) } },
                         )
                     }
 

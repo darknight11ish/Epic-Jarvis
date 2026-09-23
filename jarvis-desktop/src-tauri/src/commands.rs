@@ -1364,6 +1364,37 @@ pub async fn inject_task_note(app: AppHandle, note: String) -> Result<serde_json
     post_task_control(&app, "/api/task/note", serde_json::json!({ "note": note })).await
 }
 
+/// Asks the backend to switch power mode - `POST /api/power`
+/// (`backend/power-mode.patch`). Returns the server's own sentence.
+///
+/// Going quieter always goes through; waking (`"active"`) is held while the
+/// event stream is stale - rule 4, "block acting when the event stream is
+/// stale" - since it is the direction that makes Jarvis do more. The server
+/// still decides through its gate (`power_manage`).
+pub async fn set_power_mode(app: &AppHandle, mode: &str) -> Result<String, String> {
+    if mode == "active" && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "the event stream is stale, so waking Jarvis is held until it \
+                    reconnects - going quieter still works"
+                .to_string(),
+        );
+    }
+    let out = post_task_control(app, "/api/power", serde_json::json!({ "mode": mode })).await;
+    match out {
+        Ok(v) => Ok(v
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("The power mode request was sent.")
+            .to_string()),
+        Err(e) if e.contains("has no `/api/power` route") => Err(
+            "this Jarvis backend cannot change power mode yet - apply the backend \
+             patches (power-mode.patch) to turn it on"
+                .to_string(),
+        ),
+        Err(e) => Err(e),
+    }
+}
+
 /// Percent-encodes one path segment.
 ///
 /// Hand-rolled rather than pulled from `url`, which is not a dependency of

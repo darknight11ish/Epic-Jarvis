@@ -165,6 +165,11 @@ fun BrainScreen(
      */
     onOpenApprovals: ((cardId: String?) -> Unit)? = null,
     /**
+     * Switch power mode - "active", "quiet" or "standby"
+     * ([com.jarvis.client.JarvisRuntime.setPower]). Null hides the buttons.
+     */
+    onSetPower: ((mode: String) -> Unit)? = null,
+    /**
      * Re-read the board every this many milliseconds while the screen is
      * open and the link is up. 0, the default, is off - the battery reasoning
      * in [com.jarvis.client.JarvisRuntime.refreshBrain] still holds, and the
@@ -269,6 +274,25 @@ fun BrainScreen(
                     Plate {
                         Field("Activity", activity.name.lowercase().replaceFirstChar { it.uppercase() })
                         Field("Power", power.replaceFirstChar { it.uppercase() })
+                        if (onSetPower != null) {
+                            // backend/power-mode.patch. The field above changes
+                            // when the desktop reports it, not on the tap.
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                for (mode in listOf("active", "quiet", "standby")) {
+                                    Quiet(
+                                        mode.replaceFirstChar { it.uppercase() },
+                                        enabled = !power.equals(mode, ignoreCase = true),
+                                        onClick = { onSetPower(mode) },
+                                    )
+                                }
+                            }
+                            Text(
+                                "Quiet still answers but starts nothing itself. Standby frees " +
+                                    "the graphics card; the next answer takes 5-15 seconds.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textLo,
+                            )
+                        }
                         val lane = status?.lane?.lowercase()
                         Field(
                             "Route",

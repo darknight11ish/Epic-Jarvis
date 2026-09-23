@@ -1412,6 +1412,41 @@ object JarvisRuntime {
         return result
     }
 
+    /**
+     * Switch the desktop to Active, Quiet or Standby (`backend/power-mode.patch`).
+     *
+     * Going quieter always goes through. Waking ("active") is held while the
+     * link is stale - rule 4 - because it is the direction that makes Jarvis
+     * do more. The desktop still decides through its gate (`power_manage`,
+     * "auto" in the owner's own config: the safe direction either way). The
+     * Power field changes when the desktop's `power` event says so, not here.
+     */
+    suspend fun setPower(mode: String): ApiResult<Unit> {
+        if (mode == "active") {
+            actionBlocker()?.let {
+                _notice.value = it
+                return ApiResult.Failed(ApiError.Unreachable(it))
+            }
+        }
+        return when (val result = api.setPower(mode)) {
+            is ApiResult.Ok -> {
+                val said = (result.value["message"] as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.content
+                _notice.value = said ?: "Power mode request sent."
+                refreshStatus()
+                ApiResult.Ok(Unit)
+            }
+            is ApiResult.Failed -> {
+                _notice.value = if (result.error == ApiError.NotFound) {
+                    "This desktop cannot change power mode yet - its backend needs the power-mode patch."
+                } else {
+                    describe(result.error)
+                }
+                ApiResult.Failed(result.error)
+            }
+        }
+    }
+
     suspend fun cancelJob(job: JobRecord): ApiResult<Unit> {
         actionBlocker()?.let {
             _notice.value = it

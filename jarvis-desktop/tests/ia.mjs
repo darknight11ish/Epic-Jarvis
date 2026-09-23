@@ -187,7 +187,10 @@ await check("the permanently dead power row is gone", async () => {
   const tray = read("src-tauri/src/tray.rs");
   assert.ok(!/the server exposes no route yet/.test(tray),
     "a row that can never do anything is still spending a line of the menu");
-  assert.match(tray, /read-only/, "the power row no longer says it cannot be set");
+  // Since backend/power-mode.patch the mode CAN be set, so the row no longer
+  // says read-only - and the three modes are live items instead.
+  assert.ok(!/format!\("Power: \{\}\{by\} · read-only"/.test(tray), "the power row still claims it cannot be set");
+  assert.match(tray, /ID_POWER_STANDBY/, "there is no way to choose a power mode");
 });
 
 await check("the menu is sentence case and grouped", async () => {

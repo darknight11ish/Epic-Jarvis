@@ -169,6 +169,10 @@ $PATCHES = @(
     # jarvis_gate.py context is ui-control-wiring's. Needs
     # jarvis_note_capture.py copied in; without it the route answers 503.
     'note-capture.patch'
+    # Active / Quiet / Standby from either app. Its context is note-capture's
+    # output (it sits right after that route). Needs jarvis_power_switch.py
+    # copied in; without it the route answers 503.
+    'power-mode.patch'
     # --- end task controls ---------------------------------------------------
 )
 
@@ -757,6 +761,7 @@ try {
         'jarvis_task_control.py'     # task-control.patch
         'jarvis_note_capture.py'     # note-capture.patch
         'jarvis_notes.py'            # notes_search; carries the token-in-an-error fix
+        'jarvis_power_switch.py'     # power-mode.patch
         # --- end task controls ---
     )
     $copied = 0

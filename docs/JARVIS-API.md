@@ -797,4 +797,15 @@ home-screen widget's Note button (`JarvisApi.captureNote`, `noteStatus`,
 `JarvisRuntime.fileNote`). The phone keeps asking while a card waits and
 shows the desktop's own sentence in its notice.
 
+### Power — `backend/power-mode.patch`
+
+| Route | Body | Answers | What it does |
+|---|---|---|---|
+| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model. |
+
+The mode clients show still comes from `/api/status` and the `power` event.
+Desktop: tray → Change power mode (`commands::set_power_mode`). Phone: Mind
+screen buttons (`JarvisRuntime.setPower`). Both hold **waking** on a stale
+link and let going quieter through.
+
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->

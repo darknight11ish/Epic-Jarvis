@@ -6,7 +6,8 @@
 //!
 //! ```text
 //! Jarvis — thinking                        (status, disabled)
-//! Power: quiet · set by hand · read-only   (status, disabled)
+//! Power: quiet · set by hand              (status, disabled)
+//! Change power mode ▸ Active / Quiet / Standby
 //! ─────────────────────────────
 //! 2 approvals waiting                      (opens the queue)
 //! 3 things waiting to be told · standby    (opens the brief)
@@ -32,22 +33,18 @@
 //! rows lead their group because a hotkey printed beside a row is the only way
 //! most people ever learn it exists.
 //!
-//! ## The power switch that is not here
+//! ## The power switch
 //!
-//! §6 asks for "a Quiet/Standby/Active switch" in the minimum menu. There is no
-//! route to build it on. `jarvis_hud.py`'s `do_POST` serves `/api/shutdown`,
-//! `/api/models/{install,switch,rollback}`, `/api/skills/decide`,
-//! `/api/memory/decide`, `/api/approve`, `/api/deny` and `/api/chat` — and
-//! nothing else. `jarvis_power` has `set_mode`, but the HTTP server does not
-//! expose it, and `GET /api/version` reports the mode read-only inside
-//! `capabilities.power`.
-//!
-//! This used to be a whole disabled row reading "Active · Quiet · Standby — the
-//! server exposes no route yet". That is a true sentence and a bad menu item:
-//! it spent a line, every single open, telling the owner about something that
-//! does not exist. The same fact now rides on the `Power:` row as
-//! `· read-only`, next to the value it qualifies. It becomes three live items
-//! the day the server grows the route.
+//! §6 asks for "a Quiet/Standby/Active switch" in the minimum menu. For a long
+//! time there was no route to build it on, and the `Power:` row said
+//! `· read-only`. `backend/power-mode.patch` adds `POST /api/power`, so the
+//! row is now followed by a "Change power mode" submenu with the three modes.
+//! The server sends the change through its approval gate as `power_manage`
+//! (the owner's toml says `auto`: the safe direction either way), and the
+//! `Power:` row changes only when the server's own `power` event says so -
+//! never on the click. Waking (Active) is held while the link is stale, like
+//! any other action; going quieter is not. A backend without the patch
+//! answers 404, and the tray says so in a notification.
 //!
 //! ## Colour
 //!
@@ -60,7 +57,7 @@ use std::sync::Mutex;
 
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager,
 };
@@ -96,6 +93,9 @@ const ID_STATUS_POWER: &str = "status-power";
 const ID_APPROVALS: &str = "approvals";
 const ID_WAITING: &str = "waiting";
 const ID_MUTE: &str = "mute";
+const ID_POWER_ACTIVE: &str = "power-active";
+const ID_POWER_QUIET: &str = "power-quiet";
+const ID_POWER_STANDBY: &str = "power-standby";
 const ID_BACKEND: &str = "backend";
 const ID_SHOW_HUD: &str = "show-hud";
 const ID_SHOW_BRAIN: &str = "show-brain";
@@ -169,6 +169,36 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         power_label(&link),
         false,
         None::<&str>,
+    )?;
+    // backend/power-mode.patch. One item per mode; the server decides, and
+    // the Power row above follows its event, not these clicks.
+    let power_modes = Submenu::with_items(
+        app,
+        "Change power mode",
+        true,
+        &[
+            &MenuItem::with_id(
+                app,
+                ID_POWER_ACTIVE,
+                "Active — answers, and may speak first",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app,
+                ID_POWER_QUIET,
+                "Quiet — answers, starts nothing itself",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app,
+                ID_POWER_STANDBY,
+                "Standby — frees the graphics card",
+                true,
+                None::<&str>,
+            )?,
+        ],
     )?;
     let approvals = MenuItem::with_id(
         app,
@@ -264,6 +294,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             // not offer.
             &activity,
             &power,
+            &power_modes,
             &PredefinedMenuItem::separator(app)?,
             // What is waiting on you, and your control over being interrupted.
             // `mute` belongs here rather than among the machinery: it is the
@@ -790,11 +821,9 @@ fn power_label(link: &LinkState) -> String {
         Some("idle") => " · idle timer",
         _ => "",
     };
-    // "read-only" replaces what used to be a whole disabled row beneath this
-    // one, naming three modes the server has no route to set. Saying it here
-    // costs no line in a menu the owner opens dozens of times a day, and it
-    // disappears the moment the row becomes settable.
-    format!("Power: {}{by} · read-only", link.power)
+    // The "· read-only" that used to end this row is gone: the submenu
+    // below it sets the mode now (backend/power-mode.patch).
+    format!("Power: {}{by}", link.power)
 }
 
 fn approvals_label(link: &LinkState) -> String {
@@ -1100,6 +1129,24 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 if let Err(err) = crate::attention::set_attention_muted(app.clone(), !muted).await {
                     eprintln!("[jarvis] tray: mute failed: {err}");
                     commands::notify(&app, "Jarvis", &first_sentence(&err));
+                }
+            });
+        }
+
+        ID_POWER_ACTIVE | ID_POWER_QUIET | ID_POWER_STANDBY => {
+            let mode = match event.id().as_ref() {
+                ID_POWER_ACTIVE => "active",
+                ID_POWER_QUIET => "quiet",
+                _ => "standby",
+            };
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                match commands::set_power_mode(&app, mode).await {
+                    Ok(message) => commands::notify(&app, "Jarvis", &first_sentence(&message)),
+                    Err(err) => {
+                        eprintln!("[jarvis] tray: power mode failed: {err}");
+                        commands::notify(&app, "Jarvis", &first_sentence(&err));
+                    }
                 }
             });
         }
@@ -1474,12 +1521,9 @@ mod tests {
         let mut quiet = link();
         quiet.power = "quiet".into();
         quiet.power_set_by = Some("override".into());
-        // `· read-only` replaced a whole disabled row that said the same
-        // thing. It is part of the label now, not decoration.
-        assert_eq!(
-            power_label(&quiet),
-            "Power: quiet · set by hand · read-only"
-        );
+        // No `· read-only` any more: the "Change power mode" submenu sets it
+        // (backend/power-mode.patch). Who set it is still said.
+        assert_eq!(power_label(&quiet), "Power: quiet · set by hand");
 
         // The mute row names its end date in both directions, because the API
         // has no mute without one.

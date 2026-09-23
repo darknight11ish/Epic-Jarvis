@@ -88,6 +88,7 @@ on a throwaway copy instead.
 | `cloud-one-turn.patch` | `jarvis_hud.py` | The phone and quickbar now send the conversation so far with each question. This makes sure a **cloud** lane still gets only the newest question, never an earlier one. Needs `ollama-direct.patch` (textual) — see its own section at the end. |
 | `task-control.patch` | `jarvis_hud.py` | **The Pause, Resume, Stop and note buttons on both apps went nowhere.** Adds the routes they call. Resume raises an approval card; nothing else here approves anything. Needs `jarvis_task_control.py` and the updated `jarvis_agent.py` — see its own section, at the end. |
 | `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq or Joplin through the gate, and says honestly whether it landed. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
+| `power-mode.patch` | `jarvis_hud.py` | **Nothing could change the power mode.** Adds `POST /api/power` (Active / Quiet / Standby) through the gate as `power_manage`. Needs `note-capture.patch` (textual) and `jarvis_power_switch.py` — see its own section, at the end. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -4186,5 +4187,54 @@ verdict (denied, timed out and a broken gate all write nothing and say why);
 the earlier text of a journal is byte-for-byte intact after an append; only
 `POST /notes` is ever sent to Joplin; the token is in no plan, card, result or
 error — including the exact `ValueError` the audit found in `jarvis_notes.py`.
+
+
+---
+
+# `power-mode.patch` and `jarvis_power_switch.py` — the Active / Quiet / Standby switch
+
+**What was wrong.** Both apps showed the power mode, and the desktop's FAQ
+explained Quiet and Standby — but nothing anywhere could change it. The phone
+tile and the desktop tray both said so in their own comments.
+`jarvis_power.set_mode()` existed with no route to it.
+
+**What this adds.** `POST /api/power` with `{"mode": "active" | "quiet" |
+"standby"}`. The desktop tray gets a **Change power mode** submenu; the
+phone's **Mind** screen gets Active / Quiet / Standby buttons under the Power
+line.
+
+- **Quiet**: Jarvis still answers you, but starts nothing on its own.
+- **Standby**: also unloads the model from the graphics card (what the FAQ
+  already promised), so the next answer takes 5–15 seconds. Refused while a
+  multi-step task is running — stop it first.
+- **Active**: back to normal.
+
+**Does it ask first?** It goes through the gate as `power_manage`, and your
+`jarvis-framework.toml` sets that to `auto`, with its own reason: "Putting
+Jarvis into quiet/standby, or waking it, is the safe direction either way, so
+it does not interrupt you for a yes." So by default, no card — both
+directions, because your file says both are safe. Set it to `"ask"` there and
+a card appears. Waking (Active) is held on a stale link on both apps (rule 4);
+going quieter is not. The rules that put Jarvis under by themselves (quiet
+hours, the idle timer) are **not** reachable from here.
+
+**The mode on screen only changes when the PC says so** (the `power` event),
+never on the click.
+
+**Not checked against your real files.** The route was rehearsed on a
+stand-in `jarvis_hud.py`; the test uses this repo's rebuilt `jarvis_power.py`.
+Unloading uses `jarvis_models.resident_models()` / `unload()` if your copy has
+them — if not, the answer says the model stayed loaded.
+
+## Test it
+
+```
+python backend\test_power_switch.py
+```
+
+26 checks: the mode changes only on an allowed verdict; denied, timed out and a
+broken gate change nothing; standby unloads and says which model; standby is
+refused while a task runs; only the three modes are accepted; the patch applies
+after `note-capture.patch` and reverts.
 
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->

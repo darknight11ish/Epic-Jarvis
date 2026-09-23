@@ -412,6 +412,19 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
         }
 
+    // ------------------------------------------------------------ power ----
+
+    /**
+     * Active, Quiet or Standby - the desktop's `POST /api/power`
+     * (`backend/power-mode.patch`). The desktop decides through its approval
+     * gate as `power_manage`; the answer carries its own sentence in
+     * `message`, and `waiting: true` while a card is up. The mode shown on
+     * screen still comes from `/api/status` and the `power` event, never
+     * from this call.
+     */
+    suspend fun setPower(mode: String): ApiResult<JsonObject> =
+        postForJob("/api/power", "{\"mode\":${quote(mode)}}")
+
     // ------------------------------------------------------- appearance ----
 
     /**

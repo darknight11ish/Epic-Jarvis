@@ -21,12 +21,12 @@ import kotlinx.coroutines.launch
  * A quick-settings tile carrying the link's real state, and muting spoken
  * interruptions.
  *
- * **Not a power tile, and that is a gap rather than a choice.** §5 asks for
- * "quick-settings tile for power mode", but `JARVIS-API.md` §4 has no endpoint
- * that *sets* power — `/api/status` reports it and nothing writes it. A tile
- * that appeared to switch Jarvis to Quiet and silently did nothing would be
- * worse than no tile, so this does the thing the API actually supports:
- * `/api/attention/mute`, which stops spoken interruptions until tomorrow.
+ * **Not a power tile.** A route to set power exists now
+ * (`POST /api/power`, the desktop's `backend/power-mode.patch`), and the
+ * Mind screen has Active / Quiet / Standby buttons for it. The tile stays a
+ * mute toggle on purpose: a tile has one tap, and cycling three modes blind
+ * from a pulled-down shade - Standby unloads the model - is easy to get
+ * wrong. Muting (`/api/attention/mute`, until tomorrow) is the one-tap job.
  *
  * The state is read from the event stream rather than inferred locally. That
  * matters for one specific reason: a Quiet the user set by hand survives being
