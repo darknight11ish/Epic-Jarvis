@@ -522,18 +522,21 @@ class AppearanceStore(context: Context) {
 }
 
 /**
- * How big the face is drawn on Home.
+ * How big the face is drawn on Home - or whether it is there at all.
  *
  * Large (260dp) is the size the face has always been and stays the default.
- * The two bigger ones are the owner's own choice, opt-in, and cost more to
- * draw on every frame than Large does:
  *  - [fill]: the face grows to fill its panel instead of stopping at 260dp.
+ *    Opt-in, and costs more to draw on every frame than Large does.
  *  - [voiceOnly]: Home becomes the face and a microphone - the chat and the
  *    typing box step aside. HomeScreen brings the normal layout back on its
  *    own whenever something needs reading or deciding (an approval, a task
  *    running), and the status line stays on screen in every size.
- * The fixed sizes are also capped by the pane they sit in, so a small pane
- * never squashes them.
+ *  - [hidden]: no face on Home at all; the conversation takes the room. The
+ *    status line carries what the face was saying - link, activity, lane.
+ *
+ * Small and Tiny were offered for a day and taken out at the owner's
+ * request; a phone that saved either lands on Medium, the nearest one left,
+ * rather than jumping back up to the default.
  */
 enum class FaceSize(
     val id: String,
@@ -541,19 +544,254 @@ enum class FaceSize(
     val sizeDp: Int,
     val fill: Boolean = false,
     val voiceOnly: Boolean = false,
+    val hidden: Boolean = false,
 ) {
     FULL_SCREEN("full_screen", "Full screen", 260, fill = true, voiceOnly = true),
     EXTRA_LARGE("extra_large", "Extra large", 260, fill = true),
     LARGE("large", "Large", 260),
     MEDIUM("medium", "Medium", 200),
-    SMALL("small", "Small", 150),
-    TINY("tiny", "Tiny", 110),
+    HIDDEN("hidden", "Hidden", 0, hidden = true),
     ;
 
     companion object {
         val DEFAULT = LARGE
 
+        /** Ids that were once offered and are not any more, and where they went. */
+        private val RETIRED = mapOf("small" to MEDIUM, "tiny" to MEDIUM)
+
         /** Anything unknown or missing is the default, never a crash. */
-        fun byId(id: String?): FaceSize = entries.firstOrNull { it.id == id } ?: DEFAULT
+        fun byId(id: String?): FaceSize =
+            entries.firstOrNull { it.id == id } ?: RETIRED[id] ?: DEFAULT
+    }
+}
+
+/**
+ * How the face should move, on top of what the phone itself asks for.
+ *
+ * [FOLLOW] leaves it to the phone's own "remove animations" setting, as the
+ * app always has. [CALM] slows the face's motion down whatever the phone
+ * says. Neither ever speeds anything up, and neither touches the flash
+ * limits in `face/Spec.kt`, which apply to every setting identically.
+ *
+ * [FULL] exists because the shared contract between the UI-audit slices
+ * names it, but the Appearance screen does NOT offer it and every reader
+ * should treat it exactly like [FOLLOW]. The audit's table has "Full" as a
+ * choice, and the only thing it could add over Follow is overriding the
+ * phone's own request for less motion - which is speeding motion up, and
+ * the rule for this work is that motion settings may only reduce. Offering
+ * it is the owner's decision to make, not a default to slip in.
+ */
+enum class MotionPref(val id: String, val label: String) {
+    FOLLOW("follow", "Follow phone"),
+    CALM("calm", "Calm"),
+    FULL("full", "Full"),
+    ;
+
+    companion object {
+        fun byId(id: String?): MotionPref = entries.firstOrNull { it.id == id } ?: FOLLOW
+    }
+}
+
+/**
+ * Whether the face should run in calm motion (FaceView's `calmMotion`).
+ *
+ * One rule, read by both places that draw a face - Home and the Appearance
+ * preview - so the preview never shows a speed Home will not. Calm when the
+ * owner picked Calm, or when they left it on Follow and the phone itself asks
+ * for less motion (animations off, the same flag `Motion.reduced` reads).
+ * [MotionPref.FULL] is treated as Follow, for the reason its KDoc gives: it
+ * may never override the phone's own request for less motion.
+ */
+fun MotionPref.calmFace(phoneAsksLessMotion: Boolean): Boolean = when (this) {
+    MotionPref.CALM -> true
+    MotionPref.FOLLOW, MotionPref.FULL -> phoneAsksLessMotion
+}
+
+/**
+ * The line around each panel. Stored here as the phone's own choice; the
+ * theme code draws it (`ui/theme`'s own edge enum is mapped from this by id,
+ * so the two can be renamed independently without a stored preference
+ * breaking).
+ */
+enum class EdgePref(val id: String, val label: String) {
+    HAIRLINE("hairline", "Hairline"),
+    BEVEL("bevel", "Bevel"),
+    NONE("none", "None"),
+    ;
+
+    companion object {
+        fun byId(id: String?): EdgePref = entries.firstOrNull { it.id == id } ?: HAIRLINE
+    }
+}
+
+/**
+ * Everything about how this phone looks that is not the theme, the face,
+ * the state colours or the face size - which each keep the key they always
+ * had, so nothing an existing install chose moves.
+ *
+ * Appearance only. Nothing here reaches the desktop or its settings: the
+ * phone's rule against deep config editing is about the backend, and this
+ * is a paint choice on one screen.
+ *
+ * The first nine fields are the "Adjust" controls a [LookPreset] sets. The
+ * four behaviour switches after them are NOT part of any preset: applying
+ * "Night" should not quietly change whether the face makes room for an
+ * approval, so [LookPreset.applyTo] leaves them where they are.
+ */
+data class Look(
+    /** The face's share of Home, 0.20..0.85. The rest is the conversation. */
+    val faceFraction: Float = DEFAULT_FACE_FRACTION,
+    /** The tabs row on Home: hidden until swiped (false) or always shown. */
+    val navAlwaysShown: Boolean = false,
+    /**
+     * Multiplier on the face's glow, 0.25..1. The caller multiplies it with
+     * the theme's own `Chrome.postScale`, so it can only ever dim the glow
+     * below the theme's level, never brighten it past that.
+     */
+    val glow: Float = 1f,
+    val motion: MotionPref = MotionPref.FOLLOW,
+    /** Tighter padding and list spacing. */
+    val compact: Boolean = false,
+    /** Square-ish corners instead of rounded ones. */
+    val sharp: Boolean = false,
+    /**
+     * Multiplier on top of the phone's own text size, 0.9..1.3. 1 means
+     * "follow the phone": the phone's font-scale setting still applies
+     * underneath whatever this is, so there is no separate "follow" value.
+     */
+    val textScale: Float = 1f,
+    val edges: EdgePref = EdgePref.HAIRLINE,
+    /**
+     * Screen changes fade and slide. Off when false - and also off whenever
+     * the phone asks for less motion, whatever this says.
+     */
+    val transitions: Boolean = true,
+
+    // Behaviour switches: not part of any preset -----------------------------
+    /**
+     * Shrink the face while an approval is waiting, so Approve and Deny are
+     * on screen. It only moves the layout; it never decides anything.
+     */
+    val makeRoomForApprovals: Boolean = true,
+    /** Shrink the face while the keyboard is open. */
+    val shrinkWhileTyping: Boolean = true,
+    /** Keep the newest words of a streaming reply in view. */
+    val followReply: Boolean = true,
+    /** Tapping the face opens Mind. False: it does nothing. */
+    val tapFaceOpensMind: Boolean = true,
+
+    /** The preset this look started from, for "Custom (from Focus)". */
+    val basedOn: LookPreset = LookPreset.FOCUS,
+) {
+    /** Every number pulled into its range, and NaN back to its default. */
+    fun clamped(): Look = copy(
+        faceFraction = faceFraction.orIfNotFinite(DEFAULT_FACE_FRACTION)
+            .coerceIn(MIN_FACE_FRACTION, MAX_FACE_FRACTION),
+        glow = glow.orIfNotFinite(1f).coerceIn(MIN_GLOW, 1f),
+        textScale = textScale.orIfNotFinite(1f).coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE),
+    )
+
+    /** True when a fine control has moved away from [basedOn], or its theme did. */
+    fun isCustom(themeId: String): Boolean = !basedOn.matches(this, themeId)
+
+    /** "Focus", or "Custom (from Focus)" once anything has been changed. */
+    fun label(themeId: String): String =
+        if (isCustom(themeId)) "Custom (from ${basedOn.label})" else basedOn.label
+
+    companion object {
+        /** Home's own limits: neither pane may be dragged away entirely. */
+        const val DEFAULT_FACE_FRACTION = 0.75f
+        const val MIN_FACE_FRACTION = 0.20f
+        const val MAX_FACE_FRACTION = 0.85f
+
+        /** Glow only ever dims, and never so far the face disappears. */
+        const val MIN_GLOW = 0.25f
+
+        const val MIN_TEXT_SCALE = 0.9f
+        const val MAX_TEXT_SCALE = 1.3f
+
+        private fun Float.orIfNotFinite(default: Float): Float = if (isFinite()) this else default
+    }
+}
+
+/**
+ * One-tap looks, per docs/UI-AUDIT-2026-09-23.md §4.
+ *
+ * Each preset is the default [Look] with a few fields changed, plus
+ * optionally a theme. Anything a preset does not mention is the default, so
+ * applying one is predictable: "Conversation" after a custom text size puts
+ * the text size back too. Only the behaviour switches are left alone.
+ */
+enum class LookPreset(
+    val id: String,
+    val label: String,
+    /** One line for the picker, in plain words. */
+    val blurb: String,
+    /** The theme this preset picks, or null to leave the theme alone. Checked by LookTest. */
+    val themeId: String?,
+) {
+    FOCUS(
+        "focus", "Focus",
+        "The face takes most of Home. Tabs hidden until you swipe. The default.",
+        null,
+    ),
+    CONVERSATION(
+        "conversation", "Conversation",
+        "A smaller face and more room to read. Tabs always shown, tighter spacing.",
+        null,
+    ),
+    NIGHT(
+        "night", "Night",
+        "Ember Dusk, a dimmer glow and calmer motion.",
+        "ember_dusk",
+    ),
+    OUTDOOR(
+        "outdoor", "Outdoor",
+        "Daylight, tabs always shown, and slightly larger text.",
+        "daylight",
+    ),
+    ;
+
+    /** The Adjust fields this preset sets. */
+    private fun adjustments(): Look {
+        val base = Look(basedOn = this)
+        return when (this) {
+            FOCUS -> base
+            CONVERSATION -> base.copy(faceFraction = 0.35f, navAlwaysShown = true, compact = true)
+            NIGHT -> base.copy(glow = 0.6f, motion = MotionPref.CALM)
+            OUTDOOR -> base.copy(navAlwaysShown = true, textScale = 1.1f)
+        }
+    }
+
+    /** [look] with this preset's Adjust fields, keeping its behaviour switches. */
+    fun applyTo(look: Look): Look {
+        val a = adjustments()
+        return look.copy(
+            faceFraction = a.faceFraction,
+            navAlwaysShown = a.navAlwaysShown,
+            glow = a.glow,
+            motion = a.motion,
+            compact = a.compact,
+            sharp = a.sharp,
+            textScale = a.textScale,
+            edges = a.edges,
+            transitions = a.transitions,
+            basedOn = this,
+        )
+    }
+
+    /**
+     * Whether [look] is still exactly this preset. Worked out rather than
+     * stored as a "customised" flag, so moving a control back to where the
+     * preset had it makes the label honest again by itself.
+     */
+    fun matches(look: Look, themeId: String): Boolean =
+        applyTo(look) == look && (this.themeId == null || this.themeId == themeId)
+
+    companion object {
+        val DEFAULT = FOCUS
+
+        /** Anything unknown or missing is the default, never a crash. */
+        fun byId(id: String?): LookPreset = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
 }

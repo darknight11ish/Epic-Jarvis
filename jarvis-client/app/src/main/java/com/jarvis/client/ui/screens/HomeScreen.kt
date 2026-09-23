@@ -615,76 +615,88 @@ fun HomeScreen(
             )
             VoiceBar(state, actions, reply, micLevel, onShowChat = { peekChat = true })
         } else {
-            Layout(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                content = {
-                    FaceBlock(
-                        state, actions, micLevel, speechLevel,
-                        // A face made small keeps what little room it has for
-                        // itself and the lane, not for a caption.
-                        showCaption = !shrunk,
-                        modifier = Modifier.layoutId(PANE_FACE),
-                    )
+            if (state.faceSize.hidden) {
+                // No face at all: the conversation takes the whole room, and
+                // there is no split, so no handle either. Nothing about the
+                // face is composed, so its frame loop does not run.
+                ConversationList(
+                    state = state,
+                    actions = actions,
+                    reply = reply,
+                    listState = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            } else {
+                Layout(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    content = {
+                        FaceBlock(
+                            state, actions, micLevel, speechLevel,
+                            // A face made small keeps what little room it has for
+                            // itself and the lane, not for a caption.
+                            showCaption = !shrunk,
+                            modifier = Modifier.layoutId(PANE_FACE),
+                        )
 
-                    ResizeHandle(
-                        stateWords = handleWords,
-                        tapLabel = if (shrunk) "Give the face its room back" else "Make the face small",
-                        dragState = dragState,
-                        onDragStart = {
-                            if (shrunk) takeOver()
-                            dragging = true
-                        },
-                        onDragEnd = {
-                            commit(live.floatValue)
-                            dragging = false
-                        },
-                        onTap = {
-                            if (shrunk) {
+                        ResizeHandle(
+                            stateWords = handleWords,
+                            tapLabel = if (shrunk) "Give the face its room back" else "Make the face small",
+                            dragState = dragState,
+                            onDragStart = {
+                                if (shrunk) takeOver()
+                                dragging = true
+                            },
+                            onDragEnd = {
+                                commit(live.floatValue)
+                                dragging = false
+                            },
+                            onTap = {
+                                if (shrunk) {
+                                    takeOver()
+                                } else {
+                                    fold = Fold.MANUAL
+                                }
+                            },
+                            onReset = {
                                 takeOver()
-                            } else {
-                                fold = Fold.MANUAL
-                            }
-                        },
-                        onReset = {
-                            takeOver()
-                            commit(DEFAULT_FACE_FRACTION)
-                        },
-                        onNudge = { step ->
-                            takeOver()
-                            commit(live.floatValue + step)
-                        },
-                        modifier = Modifier.layoutId(PANE_HANDLE).fillMaxWidth(),
-                    )
+                                commit(DEFAULT_FACE_FRACTION)
+                            },
+                            onNudge = { step ->
+                                takeOver()
+                                commit(live.floatValue + step)
+                            },
+                            modifier = Modifier.layoutId(PANE_HANDLE).fillMaxWidth(),
+                        )
 
-                    ConversationList(
-                        state = state,
-                        actions = actions,
-                        reply = reply,
-                        listState = listState,
-                        modifier = Modifier.layoutId(PANE_LIST),
-                    )
-                },
-            ) { measurables, constraints ->
-                val width = constraints.maxWidth
-                val height = if (constraints.hasBoundedHeight) constraints.maxHeight else 0
-                val handle = measurables.first { it.layoutId == PANE_HANDLE }
-                    .measure(Constraints(minWidth = width, maxWidth = width, minHeight = 0, maxHeight = height))
-                val room = (height - handle.height).coerceAtLeast(0)
-                paneHeight.px = room
-                // The one read of `live`, here in measure: a drag frame re-runs
-                // this block and nothing above it.
-                val faceHeight = (room * live.floatValue).roundToInt().coerceIn(0, room)
-                val face = measurables.first { it.layoutId == PANE_FACE }
-                    .measure(Constraints.fixed(width, faceHeight))
-                val list = measurables.first { it.layoutId == PANE_LIST }
-                    .measure(Constraints.fixed(width, room - faceHeight))
-                layout(width, height) {
-                    face.place(0, 0)
-                    handle.place(0, faceHeight)
-                    list.place(0, faceHeight + handle.height)
+                        ConversationList(
+                            state = state,
+                            actions = actions,
+                            reply = reply,
+                            listState = listState,
+                            modifier = Modifier.layoutId(PANE_LIST),
+                        )
+                    },
+                ) { measurables, constraints ->
+                    val width = constraints.maxWidth
+                    val height = if (constraints.hasBoundedHeight) constraints.maxHeight else 0
+                    val handle = measurables.first { it.layoutId == PANE_HANDLE }
+                        .measure(Constraints(minWidth = width, maxWidth = width, minHeight = 0, maxHeight = height))
+                    val room = (height - handle.height).coerceAtLeast(0)
+                    paneHeight.px = room
+                    // The one read of `live`, here in measure: a drag frame re-runs
+                    // this block and nothing above it.
+                    val faceHeight = (room * live.floatValue).roundToInt().coerceIn(0, room)
+                    val face = measurables.first { it.layoutId == PANE_FACE }
+                        .measure(Constraints.fixed(width, faceHeight))
+                    val list = measurables.first { it.layoutId == PANE_LIST }
+                        .measure(Constraints.fixed(width, room - faceHeight))
+                    layout(width, height) {
+                        face.place(0, 0)
+                        handle.place(0, faceHeight)
+                        list.place(0, faceHeight + handle.height)
+                    }
                 }
             }
-
             if (peekChat && state.faceSize.voiceOnly && state.voiceOffered) {
                 Box(
                     Modifier

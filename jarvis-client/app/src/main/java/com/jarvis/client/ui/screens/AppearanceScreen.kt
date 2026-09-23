@@ -430,11 +430,12 @@ fun AppearanceScreen(
                                 caption = "Extra large fills the face's panel. Full screen is for " +
                                     "talking: just Jarvis and the microphone, and the chat comes " +
                                     "back on its own when something needs you. Both use more " +
-                                    "battery than Large.",
+                                    "battery than Large. Hidden takes Jarvis off Home entirely " +
+                                    "and gives the chat the whole screen.",
                             ) {
-                                // Two rows of three: six options in one row leaves
-                                // too little room for "Extra large" at normal text
-                                // size, let alone at 200%.
+                                // Rows of three: five options in one row leaves too
+                                // little room for "Extra large" at normal text size,
+                                // let alone at 200%.
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     FaceSize.entries.chunked(3).forEach { row ->
                                         Choices(

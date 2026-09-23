@@ -37,4 +37,18 @@ class FaceSizeTest {
         assertEquals(listOf(FaceSize.FULL_SCREEN), FaceSize.entries.filter { it.voiceOnly })
         assertTrue(FaceSize.entries.filter { it.voiceOnly }.all { it.fill })
     }
+
+    /** Small and Tiny were removed; a phone that saved one gets Medium, not a crash or a jump. */
+    @Test
+    fun retiredSizesLandOnMedium() {
+        assertEquals(FaceSize.MEDIUM, FaceSize.byId("small"))
+        assertEquals(FaceSize.MEDIUM, FaceSize.byId("tiny"))
+    }
+
+    @Test
+    fun hiddenIsOnlyEverChosen() {
+        assertFalse(FaceSize.DEFAULT.hidden)
+        assertEquals(listOf(FaceSize.HIDDEN), FaceSize.entries.filter { it.hidden })
+        assertFalse(FaceSize.HIDDEN.voiceOnly)
+    }
 }
