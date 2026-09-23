@@ -62,6 +62,10 @@ except ImportError:
     sys.path.append(str(REPO / "backend" / "rebuilt"))
     import jarvis_memory as M
 
+# On a real install (JARVIS_BACKEND set), the backend's own copy must be
+# there and be this one - see _where.require_shipped.
+from _where import require_shipped  # noqa: E402
+require_shipped("jarvis_intake.py")
 import jarvis_intake as I
 
 try:
@@ -790,6 +794,22 @@ def t_the_learner_needs_the_backend_to_say_owner():
         check("the prompt carries the conversation's date",
               bool(fake.prompts) and "This conversation happened on" in fake.prompts[0],
               repr(fake.prompts[:1]))
+
+        # A marker on a message can only take it out - through offer(), the
+        # one real call site, not just owner_turns() on its own. offer() used
+        # to copy each message into a bare {role, content} before filtering,
+        # which threw the marker away, so this turn was learned.
+        fake = FakeX().install()
+        L = ns["_Learner"]()
+        L.offer([{"role": "user", "content": "I like green tea", "origin": "jarvis"},
+                 {"role": "user", "content": "I like oat milk"}], origin="owner")
+        _run(L, lambda: fake.calls)
+        said = [m["content"] for m in (fake.calls[0] if fake.calls else [])]
+        check("offer(): a message marked origin='jarvis' never reaches the model",
+              "I like green tea" not in said and not any("green tea" in p for p in fake.prompts),
+              repr(said))
+        check("offer(): the unmarked turn beside it is still learned",
+              said == ["I like oat milk"], repr(said))
     finally:
         if real_x is not None:
             sys.modules["jarvis_extract"] = real_x

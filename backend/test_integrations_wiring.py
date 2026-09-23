@@ -18,6 +18,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _where import BACKEND, REPO  # noqa: F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# On a real install (JARVIS_BACKEND set), the backend's own copy must be
+# there and be this one - see _where.require_shipped.
+from _where import require_shipped  # noqa: E402
+require_shipped("jarvis_agent.py")
 import jarvis_agent as AG
 
 FAILED, PASSED = [], []

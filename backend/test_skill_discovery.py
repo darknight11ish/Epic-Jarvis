@@ -41,6 +41,10 @@ os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "cfg")
 os.environ.pop("JARVIS_SKILLS_DIR", None)
 
 import jarvis_framework as FW  # noqa: E402
+# On a real install (JARVIS_BACKEND set), the backend's own copy must be
+# there and be this one - see _where.require_shipped.
+from _where import require_shipped  # noqa: E402
+require_shipped("jarvis_skill_discovery.py", "jarvis_agent.py")
 import jarvis_skill_discovery as SD  # noqa: E402
 
 LOGS = _TMP / "logs"

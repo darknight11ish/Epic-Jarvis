@@ -143,6 +143,34 @@ leaving you half-applied. Only if the rehearsal succeeds does it patch the
 backend for real and run the suites. Running it twice is safe: it checks
 whether the whole stack is already applied and says so instead of failing.
 
+**If an earlier run already put some of the patches on** (the usual case:
+your backend got the list as it was on 2026-09-16, and patches have been
+added since, one of them in the middle), the script now handles that too. It
+finds which patches are already on, takes those off newest first, and puts
+the whole list back on in the right order - rehearsed on a copy first, like
+everything else. Before 2026-09-23 it could not do this: it stopped with "N
+patch(es) will not apply. NOTHING HAS BEEN CHANGED" even though no patch was
+broken. If you have an older copy of the script, this one line does the same
+job by hand (take everything off, then put everything on):
+
+```powershell
+.\scripts\apply-patches.ps1 -Revert; .\scripts\apply-patches.ps1
+```
+
+**It also copies in the new modules the patches call** - `jarvis_intake.py`,
+`jarvis_feedback.py`, `jarvis_skill_discovery.py`, `jarvis_speed.py`,
+`jarvis_owned_tables.py` and the updated `jarvis_agent.py`. Each patch only
+adds a call into one of these, and the call quietly does nothing when the
+file is missing, so a backend without them would pass every test with the
+new features switched off. The script compares each file with the one in
+this repository's `backend\` folder; if yours is missing or different, it
+backs the old one up into the same `_jarvis-backup-...` folder and copies
+the new one in. `-Revert` leaves them where they are (nothing calls them
+once the patches are off). And when the tests run against your backend
+(`JARVIS_BACKEND` set), a suite for one of these modules now FAILS with
+"copy backend\<name> into the backend folder" if your copy is missing or
+out of date, instead of quietly testing this repository's copy.
+
 If a patch will not apply, it prints the reason and changes nothing. That
 output is worth sending back: it almost always means the backend file has
 moved on since the patch was written, and the patch gets regenerated.
@@ -3040,12 +3068,21 @@ wrong one here: it waits on a thread for an answer, and a "no" on it
 proposes a standing rule ("do not do this without asking") — the wrong lesson
 from "keep this fact".
 
-**One thing the apps must change before this is used.** Today both apps label
-every review card "Keep" / "Discard", and the desktop says "Kept. Jarvis can
-recall it now." after Keep. On a retire card, "Keep" (accept) *retires* the
-fact. The card's own sentence says so, but the buttons must be relabelled
-for `source == "feedback_retire"`. No card can appear before the mark button
-exists, so the two must ship together.
+**Hidden from any app that has not been changed for it.** Today both apps
+label every review card "Keep" / "Discard", and the desktop says "Kept.
+Jarvis can recall it now." after Keep. On a retire card, "Keep" (accept)
+*retires* the fact - the button would say the opposite of what it does. So
+`GET /api/memory/pending` leaves retire cards out, unless the app asks for
+them with `?retire_cards=1`. An app sends that only once it labels the two
+buttons "Retire it" (accept) and "Keep using it" (discard). Until then the
+card simply waits in the queue, undecided: nothing is retired and nothing is
+thrown away. (Chosen over a settings switch because it is per app: the
+desktop and the phone can each start showing the card when each is ready,
+and neither can show it with the wrong button.) Two places still count a
+hidden card: the queue size in `setup.pending`, and the `proposal` event on
+the event stream. So an unchanged app may briefly say "1 waiting" and then
+show an empty list. That is the price of keeping it safe, and it goes away
+when the app asks for the cards.
 
 ## Why the bar is so high
 
@@ -3056,7 +3093,7 @@ never be enough. The numbers are `RETIRE_MIN_WRONG = 5` and `RETIRE_RATIO =
 
 ## What the patch changes in `jarvis_hud.py`
 
-Three small additions, none of which change an existing line:
+Three small additions and one changed line:
 
 - `/api/chat`: right after the step-down (degrade) loop, one call to
   `jarvis_feedback.record_turn(route_header["injected_ids"])`, which adds
@@ -3068,8 +3105,11 @@ Three small additions, none of which change an existing line:
   "right" | "wrong" | "none"}`. One ID. A list is refused with a 400: a
   "mark all" would move every counter at once on one tap.
 - `GET /api/feedback/counts` and `GET /api/feedback/mark?turn_id=…`.
+- `GET /api/memory/pending`: the one existing line that changes. The list it
+  returns leaves out retire cards unless the request says `?retire_cards=1`
+  (above). This hunk's context is `memory-pane.patch`'s own output.
 
-All three routes check the token and the origin exactly like the memory
+All three new routes check the token and the origin exactly like the memory
 routes beside them. No new event kind: a new retire card rings the existing
 `proposal` doorbell, because it is an ordinary proposal.
 

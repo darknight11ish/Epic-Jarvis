@@ -52,6 +52,10 @@ import jarvis_memory as M
 # Ours: this directory first, so a stale copy in a backend folder cannot
 # shadow the one being tested.
 sys.path.insert(0, str(HERE))
+# On a real install (JARVIS_BACKEND set), the backend's own copy must be
+# there and be this one - see _where.require_shipped.
+from _where import require_shipped  # noqa: E402
+require_shipped("jarvis_intake.py", "jarvis_feedback.py")
 import jarvis_intake as I
 import jarvis_feedback as F
 

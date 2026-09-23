@@ -13,13 +13,19 @@
 
     1. Backs up every file that is about to be touched, into a timestamped
        folder, before anything is written.
-    2. DRY-RUNS all twenty first. If any one of them would fail, it stops
+    2. DRY-RUNS the whole list first, on a copy. If it would fail, it stops
        and changes nothing at all.
     3. Applies them in order.
-    4. Runs the test suites and prints a summary.
+    4. Copies in the new modules the patches call (jarvis_intake.py and the
+       rest), backing up any older copy first.
+    5. Runs the test suites and prints a summary.
 
-  Safe to run twice. A patch that is already applied is detected and skipped
-  rather than corrupting the file.
+  Safe to run again. Three starting points work:
+    - nothing applied yet: the whole list goes on;
+    - everything applied already: it says so and changes nothing;
+    - SOME applied, by an earlier run with an older list: those are taken
+      off, newest first, and the whole list is put back on in the current
+      order - rehearsed on a copy first like everything else.
 
 .PARAMETER BackendPath
   The folder holding jarvis_hud.py. Defaults to the path in backend/README.md.
@@ -461,6 +467,8 @@ try {
         }
         Say ""
         Say "Removed $removed." Cyan
+        Say "(Modules this script copied in, like jarvis_intake.py, are left where" Cyan
+        Say " they are. Nothing calls them once the patches are off.)" Cyan
         exit 0
     }
 
@@ -484,13 +492,18 @@ try {
     #
     #   Does the ENTIRE stack reverse cleanly?  -> already applied, nothing to do
     #   Does the ENTIRE stack apply cleanly?    -> go ahead for real
-    #   Neither                                 -> say so and touch nothing
+    #   Take off what IS applied, newest first,
+    #   then does the ENTIRE stack apply?       -> go ahead: undo those, then all
+    #   None of these                           -> say so and touch nothing
     #
     # Both rehearsals run on a throwaway copy, so the real files are not
     # opened until an answer is known.
     $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$Stamp"
     $broken    = @()
     $already   = $false
+    # Set only by (c): the patches an earlier run left on, newest first,
+    # which come off the real files before the whole list goes on.
+    $undoFirst = @()
 
     function Reset-Rehearsal {
         if (Test-Path -LiteralPath $rehearsal) {
@@ -534,10 +547,64 @@ try {
                 if ($r.Ok) { Say "  ok           $name" }
                 else {
                     $broken += @{ Name = $name; Why = $r.Output }
-                    Bad "$name - will not apply"
+                    # Not "FAIL" yet: on a backend an earlier run patched,
+                    # this is expected, and (c) below may still succeed.
+                    Say "  not onto the files as they are   $name" Yellow
                 }
             }
             Pop-Location
+
+            # (c) PART of the stack is already on. The usual case on a real
+            # machine: an earlier run applied the list as it was then, and
+            # since then patches were added - at the end, and at least one
+            # (decide-once) in the MIDDLE. (a) fails because the newest
+            # patches are not on; (b) fails because the old ones cannot go
+            # on twice. Neither is a broken patch.
+            #
+            # So: on a fresh copy, take off every patch that IS on, newest
+            # first, each one tested on its own the way -Revert does it; then
+            # put the whole list back on in order. Not a search for "the
+            # first N are applied": decide-once sits in the middle and is not
+            # on the owner's machine, so the applied ones are not an unbroken
+            # run from the top.
+            if ($broken.Count -gt 0) {
+                Reset-Rehearsal
+                Push-Location -LiteralPath $rehearsal
+                $found = @()
+                $backwards = @($PATCHES); [array]::Reverse($backwards)
+                foreach ($name in $backwards) {
+                    $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
+                    if (-not (Test-Path -LiteralPath $full)) { continue }
+                    if ((Invoke-Patch -File $full -Check -Reverse).Ok) {
+                        if ((Invoke-Patch -File $full -Reverse).Ok) { $found += $name }
+                    }
+                }
+                if ($found.Count -gt 0) {
+                    Say ""
+                    Say "$($found.Count) of these are already on your backend from an earlier run." Cyan
+                    Say "Rehearsing again: take those off, newest first, then put all" Cyan
+                    Say "$($PATCHES.Count) back on in order. Still on the copy." Cyan
+                    $again = @()
+                    foreach ($name in $PATCHES) {
+                        $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
+                        if (-not (Test-Path -LiteralPath $full)) {
+                            $again += @{ Name = $name; Why = "missing from $PatchDir" }
+                            continue
+                        }
+                        $r = Invoke-Patch -File $full
+                        if ($r.Ok) { Say "  ok           $name" }
+                        else {
+                            $again += @{ Name = $name; Why = $r.Output }
+                            Bad "$name - will not apply"
+                        }
+                    }
+                    # The second answer is the one that means something: the
+                    # first was measured against files half-way through.
+                    $broken = $again
+                    if ($broken.Count -eq 0) { $undoFirst = $found }
+                }
+                Pop-Location
+            }
         }
     } finally {
         Remove-Item -LiteralPath $rehearsal -Recurse -Force -ErrorAction SilentlyContinue
@@ -554,20 +621,23 @@ try {
         }
         Say ""
         Say "Usually this means the backend file has moved on since the patch was" Cyan
-        Say "written. Send the block above back and the patch gets regenerated." Cyan
+        Say "written, or that your backend has an OLDER version of a patch that" Cyan
+        Say "has since been changed. Send the block above back and the patch gets" Cyan
+        Say "regenerated." Cyan
         exit 1
     }
 
-    if ($already) {
-        if ($SkipTests) { exit 0 }
-        Say ""
-    }
+    # No early exit here even with -SkipTests: step 3 (the modules) still
+    # has to run on a backend whose patches are all on already.
+    if ($already) { Say "" }
 
     # --- 2. back up, then apply ----------------------------------------------
+    # One backup folder for the whole run: the patched files below, and any
+    # older copy of a module that step 3 replaces.
+    $backup = Join-Path $BackendPath "_jarvis-backup-$Stamp"
     if (-not $already) {
         $todo = @($PATCHES | ForEach-Object { Join-Path $PatchSrc (Split-Path -Leaf $_) })
-        $backup = Join-Path $BackendPath "_jarvis-backup-$Stamp"
-        New-Item -ItemType Directory -Path $backup | Out-Null
+        New-Item -ItemType Directory -Path $backup -Force | Out-Null
 
         # Every file named in any patch header, so a revert is always possible
         # even if this script is never run again.
@@ -593,6 +663,26 @@ try {
         }
         Say ""
         Ok "Backed up $($touched.Count) file(s) to $backup"
+
+        # From (c): what an earlier run left on, taken off newest first -
+        # exactly what the rehearsal did before the whole list applied.
+        if ($undoFirst.Count -gt 0) {
+            Say ""
+            Say "Taking off $($undoFirst.Count) patch(es) an earlier run applied, newest first." Cyan
+            foreach ($name in $undoFirst) {
+                $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
+                $r = Invoke-Patch -File $full -Reverse
+                if ($r.Ok) { Ok "off  $name" }
+                else {
+                    Bad "$name`n$($r.Output)"
+                    Say ""
+                    Bad "Stopped part-way. Your originals are in:"
+                    Say "  $backup" Yellow
+                    Say "  Copy them back, or run with -Revert." Yellow
+                    exit 1
+                }
+            }
+        }
         Say ""
         Say "Applying $($todo.Count)." Cyan
 
@@ -611,6 +701,45 @@ try {
         }
     }
 
+    # --- 3. the modules the patches call -------------------------------------
+    #
+    # Several patches only add a call into a NEW module that ships whole in
+    # backend\ (there is nothing on the PC to patch for it), and every one of
+    # those calls quietly falls back when the module is missing. So a run
+    # that stopped at step 2 could say "patched and proven" with every new
+    # feature switched off - and the tests could not tell, because they
+    # would import this repository's copy instead. Checked here, by content,
+    # every run - including the "already applied" one.
+    $SHIPPED = @(
+        'jarvis_intake.py'           # memory-intake.patch
+        'jarvis_feedback.py'         # feedback.patch
+        'jarvis_skill_discovery.py'  # skill-suggest.patch
+        'jarvis_speed.py'            # speed-record.patch
+        'jarvis_owned_tables.py'     # documents-owned.patch
+        'jarvis_agent.py'            # tool-calling-wiring.patch; updated for skill-suggest
+    )
+    $copied = 0
+    foreach ($m in $SHIPPED) {
+        $src = Join-Path $PatchDir $m
+        if (-not (Test-Path -LiteralPath $src)) { continue }
+        $dst = Join-Path $BackendPath $m
+        $had = Test-Path -LiteralPath $dst
+        if ($had -and (Get-FileHash -LiteralPath $dst).Hash -eq (Get-FileHash -LiteralPath $src).Hash) {
+            continue
+        }
+        if ($had) {
+            if (-not (Test-Path -LiteralPath $backup)) {
+                New-Item -ItemType Directory -Path $backup -Force | Out-Null
+            }
+            Copy-Item -LiteralPath $dst -Destination (Join-Path $backup $m) -Force
+        }
+        Copy-Item -LiteralPath $src -Destination $dst -Force
+        $copied++
+        if ($had) { Ok "$m - replaced an older copy (the old one is in $backup)" }
+        else      { Ok "$m - copied in (it was not there, so its feature was off)" }
+    }
+    if ($copied -eq 0) { Ok "The $($SHIPPED.Count) new modules the patches call are all there and up to date." }
+
 } finally {
     Pop-Location
     # The LF copies were only ever an intermediate. Leaving twenty patch files
@@ -619,7 +748,7 @@ try {
     Remove-Item -LiteralPath $LfDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# --- 3. prove it -------------------------------------------------------------
+# --- 4. prove it -------------------------------------------------------------
 
 if ($SkipTests) {
     Say ""

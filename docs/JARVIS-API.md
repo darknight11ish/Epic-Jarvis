@@ -425,6 +425,18 @@ question and `text` as the reason; show no confidence; no "Both are true".
 The desktop's current Keep button, and its "Kept. Jarvis can recall it now."
 reply, would say the opposite of what happens on this card.
 
+**So the card is hidden unless asked for.** `GET /api/memory/pending` leaves
+out every `source == "feedback_retire"` row. A client that shows the card
+with the labels above asks for it with `GET /api/memory/pending?retire_cards=1`
+(exactly `1`; anything else is the same as not asking), and gets those rows
+in the same `pending` list as every other card. A client that has not been
+changed never sees one, so its Keep button can never retire a fact. Hidden
+from the list is not removed from the queue: the card waits, undecided, until
+a client that asks shows it. Two things still count it, and a client should
+not be surprised by either: `setup.pending` (the queue size) and the
+`proposal` event's `count`/ids on the event stream. `/api/memory/export`
+lists it too - it is a backup, not a card list.
+
 ### Writes
 
 | Endpoint | Method | Body | Desktop | Android | Notes |

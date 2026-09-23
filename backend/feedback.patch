@@ -127,7 +127,38 @@
          if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
                      "/api/compute", "/api/memory/facts", "/api/memory/export"):
              if not _origin_ok(self):
-@@ -2079,6 +2105,32 @@
+@@ -1843,12 +1869,28 @@
+                 if path == "/api/memory/pending":
+                     setup = jarvis_extract.setup_status()
+                     # `reminder_card()` marks itself seen the moment it is
+                     # called (jarvis_sleep.py's own `_seen` dict), so the
+                     # first of the two clients to poll this route on a given
+                     # day gets the card and the other does not, until
+                     # tomorrow. Accepted rather than rewriting that
+                     # function's own tested once-a-day contract.
+                     setup["sleep_time_offer"] = jarvis_sleep.reminder_card()
+-                    return self._send(200, {"available": True, "pending": jarvis_extract.pending(),
+-                                            "setup": setup})
++                    # feedback.patch: a "retire this?" card is left out
++                    # unless the client asks for it with ?retire_cards=1.
++                    # Accepting that card RETIRES the fact it names, and a
++                    # client that does not know the card shows it with its
++                    # ordinary "Keep" button - which would then do the
++                    # opposite of what it says. Only a client that labels the
++                    # two answers "Retire it" / "Keep using it" sends the
++                    # flag. Left out of this list, not out of the queue: the
++                    # card keeps waiting and nothing is decided.
++                    rows = jarvis_extract.pending()
++                    from urllib.parse import parse_qs
++                    want = (parse_qs(self.path.split("?", 1)[1]).get("retire_cards")
++                            or [""])[0] if "?" in self.path else ""
++                    if want != "1":
++                        retire = getattr(jarvis_extract, "RETIRE_SOURCE", "feedback_retire")
++                        rows = [r for r in rows if r.get("source") != retire]
++                    return self._send(200, {"available": True, "pending": rows,
++                                            "setup": setup})
+                 if path == "/api/memory/facts":
+@@ -2079,6 +2121,32 @@
                  return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
              return self._send(code, out)
  
@@ -160,7 +191,7 @@
          if route in ("/api/memory/forget", "/api/memory/edit",
                       "/api/memory/learning", "/api/memory/sleep_time"):
              if not _origin_ok(self):
-@@ -2826,6 +2878,20 @@
+@@ -2826,6 +2894,20 @@
          try:
              if first_error is not None:
                  raise first_error

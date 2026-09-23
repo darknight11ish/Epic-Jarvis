@@ -52,6 +52,10 @@ import jarvis_memory as M
 # jarvis_feedback is OURS: this directory first, so a stale copy in a backend
 # folder cannot shadow the one being tested.
 sys.path.insert(0, str(HERE))
+# On a real install (JARVIS_BACKEND set), the backend's own copy must be
+# there and be this one - see _where.require_shipped.
+from _where import require_shipped  # noqa: E402
+require_shipped("jarvis_feedback.py")
 import jarvis_feedback as F
 
 FAILED, PASSED = [], []
@@ -502,6 +506,69 @@ def t_the_routes():
           src.rfind("for _hop in", 0, i) != -1 or "_degrade_hops" not in src)
 
 
+def _pending_route_from_patch():
+    """The GET /api/memory/pending block as feedback.patch leaves it - the
+    new side of the hunk that starts on that route's `if path ==` line.
+    Every line of that hunk's context is memory-pane.patch's own output, so
+    this is the real text, not a copy of it."""
+    lines = (REPO / "backend" / "feedback.patch").read_text(encoding="utf-8").splitlines()
+    out, on = [], False
+    for l in lines:
+        if l.startswith("@@"):
+            if on:
+                break
+            continue
+        if not on and l == '                 if path == "/api/memory/pending":':
+            on = True
+        if on and not l.startswith("-"):
+            out.append(l[1:])
+    # A newline first: _lift() finds the start of the line by looking back
+    # for one.
+    return "\n" + "\n".join(out) + "\n"
+
+
+def _check_pending_route(src, where):
+    """A "retire this?" card only reaches a client that asks for it."""
+    get = _lift(src, 'if path == "/api/memory/pending":',
+                'if path == "/api/memory/facts":', "self, path")
+    rows = [{"id": 1, "text": "I like oat milk", "source": "conversation"},
+            {"id": 2, "text": "Stop using this fact? ...", "source": "feedback_retire",
+             "replaces_id": 7}]
+    get["jarvis_extract"] = types.SimpleNamespace(
+        pending=lambda: [dict(r) for r in rows], setup_status=lambda: {},
+        RETIRE_SOURCE="feedback_retire")
+    get["jarvis_sleep"] = types.SimpleNamespace(reminder_card=lambda: None)
+
+    def ids(url):
+        h = _Handler(url)
+        get["_h"](h, "/api/memory/pending")
+        return [r["id"] for r in h.sent[1]["pending"]] if h.sent else None
+
+    check(f"{where}: a client that does not ask never sees a retire card "
+          "(its 'Keep' button would retire the fact)",
+          ids("/api/memory/pending") == [1], repr(ids("/api/memory/pending")))
+    check(f"{where}: ?retire_cards=0 or anything but 1 is the same as not asking",
+          ids("/api/memory/pending?retire_cards=0") == [1]
+          and ids("/api/memory/pending?retire_cards=yes") == [1])
+    check(f"{where}: ?retire_cards=1 shows it, beside the ordinary cards",
+          ids("/api/memory/pending?retire_cards=1") == [1, 2],
+          repr(ids("/api/memory/pending?retire_cards=1")))
+
+
+def t_retire_cards_only_for_a_client_that_asks():
+    _check_pending_route(_pending_route_from_patch(), "the patch")
+    if missing("jarvis_hud.py"):
+        return check("SKIP the same on jarvis_hud.py - " + explain(), True)
+    src = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
+    if 'if path == "/api/memory/pending":' not in src:
+        return check("SKIP the same on jarvis_hud.py - it has no memory pane route "
+                     "(memory-pane.patch is not applied)", True)
+    if "retire_cards" not in src:
+        return check("jarvis_hud.py hides retire cards - feedback.patch is applied",
+                     False, "the file is there without this part of the patch")
+    _check_pending_route(src, "jarvis_hud.py")
+
+
 def t_the_stack_lists_the_patch():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("apply-patches.ps1 applies feedback.patch", "'feedback.patch'" in ps1)
@@ -516,6 +583,7 @@ if __name__ == "__main__":
                t_the_threshold_is_high, t_one_card_never_a_retirement,
                t_no_card_when_it_cannot_be_asked, t_nothing_leaves_and_the_model_cannot_mark,
                t_the_card_goes_through_the_review_queue, t_the_routes,
+               t_retire_cards_only_for_a_client_that_asks,
                t_the_stack_lists_the_patch):
         print(f"\n--- {fn.__name__} ---")
         try:

@@ -31,6 +31,10 @@ from _where import BACKEND, missing, explain  # noqa: E402
 # jarvis_speed.py is OURS - it ships in this repository. This folder first
 # for it, so a stale copy in the backend folder cannot shadow it.
 sys.path.insert(0, str(HERE))
+# On a real install (JARVIS_BACKEND set), the backend's own copy must be
+# there and be this one - see _where.require_shipped.
+from _where import require_shipped  # noqa: E402
+require_shipped("jarvis_speed.py")
 import jarvis_speed as S  # noqa: E402
 import _skeleton  # noqa: E402
 

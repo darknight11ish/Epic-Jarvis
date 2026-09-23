@@ -87,3 +87,50 @@ def explain() -> str:
     where = "JARVIS_BACKEND" if os.environ.get("JARVIS_BACKEND") else "this folder"
     return (f"Backend modules were looked for in {BACKEND} ({where}). "
             f"Set JARVIS_BACKEND to the folder holding jarvis_hud.py.")
+
+
+#: Modules this repository ships WHOLE, in this folder, for the owner to copy
+#: beside jarvis_hud.py (apply-patches.ps1 does it). Each patch that needs
+#: one only adds a call into it, and that call quietly falls back when the
+#: import fails - so a backend without the file runs, with the feature off.
+SHIPPED = ("jarvis_intake.py", "jarvis_feedback.py", "jarvis_skill_discovery.py",
+           "jarvis_speed.py", "jarvis_owned_tables.py", "jarvis_agent.py")
+
+
+def _same_text(a: Path, b: Path) -> bool:
+    # Line endings do not count: a Windows clone may hold CRLF copies of
+    # files that are LF here, and Python reads both the same.
+    return (a.read_bytes().replace(b"\r\n", b"\n")
+            == b.read_bytes().replace(b"\r\n", b"\n"))
+
+
+def require_shipped(*names: str) -> None:
+    """Stop the suite, plainly, if the backend's copy of a shipped module is
+    missing or is not the one in this repository.
+
+    Only when JARVIS_BACKEND is set - that is, when the suite is being run
+    against a real install. Without this, the suite imported THIS folder's
+    copy whenever the backend had none (every suite also puts this folder on
+    sys.path), passed, and said nothing about the copy the backend actually
+    runs. In the dev container BACKEND is this folder, so there is nothing
+    to compare and nothing happens.
+    """
+    if not os.environ.get("JARVIS_BACKEND") or BACKEND == _HERE:
+        return
+    problems = []
+    for n in names:
+        theirs, ours = BACKEND / n, _HERE / n
+        if not theirs.is_file():
+            problems.append(f"{n} is not in {BACKEND}, so the feature it carries "
+                            f"is switched off there. Copy backend\\{n} into the "
+                            f"backend folder (apply-patches.ps1 does this for you).")
+        elif ours.is_file() and not _same_text(theirs, ours):
+            problems.append(f"{n} in {BACKEND} is not the copy in this repository "
+                            f"(an older one, most likely). Copy backend\\{n} into "
+                            f"the backend folder (apply-patches.ps1 does this for you).")
+    if problems:
+        for p in problems:
+            print("FAIL  " + p)
+        print("\nNot run: this suite would have tested this repository's copy "
+              "instead of the one your backend uses.")
+        sys.exit(1)
