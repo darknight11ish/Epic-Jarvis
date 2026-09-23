@@ -49,6 +49,7 @@ object Themes {
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
+        cloudInk = Palette.VIOLET_4, // 6.04:1 worst, 5.03:1 in a Pill
     )
 
     /**
@@ -81,6 +82,7 @@ object Themes {
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
+        cloudInk = Palette.VIOLET_4, // 6.28:1 worst, 5.26:1 in a Pill
     )
 
     /**
@@ -112,6 +114,9 @@ object Themes {
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
+        // Step 5, not 4: violet-4 is 5.27:1 as plain text on this lifted
+        // ground but 4.35:1 inside a Pill, which fails AA.
+        cloudInk = Palette.VIOLET_5, // 9.63:1 worst, 7.13:1 in a Pill
         postScale = 0.5f,
     )
 
@@ -145,6 +150,7 @@ object Themes {
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
+        cloudInk = Palette.VIOLET_4, // 6.07:1 worst, 5.08:1 in a Pill
     )
 
     /**
@@ -188,6 +194,10 @@ object Themes {
         okMark = Palette.VERDANT_2,
         warnMark = Palette.AMBER_2,
         badMark = Palette.ROSE_2,
+        // Step 2 for the Cloud label. Violet-4, which most dark themes use,
+        // is 2.52:1 here and 2.25:1 inside a Pill. Step 2 is still plainly
+        // violet, where step 1 reads as near-black.
+        cloudInk = Palette.VIOLET_2, // 8.66:1 worst, 6.90:1 in a Pill
     )
 
     /**
@@ -218,6 +228,7 @@ object Themes {
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
+        cloudInk = Palette.VIOLET_4, // 6.67:1 worst, 5.75:1 in a Pill
     )
 
     val ALL: List<Chrome> = listOf(REACTOR, VOID, GRAPHITE, EMBER_DUSK, DAYLIGHT, CONTRAST)

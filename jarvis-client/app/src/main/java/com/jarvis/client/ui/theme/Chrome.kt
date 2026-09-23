@@ -107,6 +107,23 @@ data class Chrome(
     val badMark: Color,
 
     /**
+     * The words that say "this is leaving your machine": the Cloud route
+     * label on Home and on Mind.
+     *
+     * Class B in spirit, like `ok`/`warn`/`bad`: the family is fixed - violet
+     * is the desktop's `--cloud` and means the same thing on both clients -
+     * and a theme picks only the step. It used to be the one colour hardcoded
+     * outside the theme (violet-4 at both call sites), which is fine on a dark
+     * ground and 2.3:1 on Daylight - the fact that matters most for privacy,
+     * least readable on the theme meant for reading outdoors.
+     *
+     * Every value clears 4.5:1 against all three surfaces AND inside a
+     * [com.jarvis.client.ui.parts.Pill], whose ground is this same colour at
+     * 13% over the surface, which costs up to a whole point of contrast.
+     */
+    val cloudInk: Color = Palette.VIOLET_4,
+
+    /**
      * Multiplier on the glow's intensity, 0..1. A renderer setting rather than a
      * colour, so a restrained theme can be restrained without touching the
      * palette.
@@ -148,7 +165,9 @@ fun contrastRatio(a: Color, b: Color): Float {
  * never disagree with the face about what colour Jarvis is. Re-roll idle to
  * violet and the caret, the focus ring and the streaming hairline all become
  * violet, on the phone and on the desktop, because both compute the same
- * function from the same bindings.
+ * function from the same bindings. (The focus ring is the 2dp border
+ * `TextInput` draws while it has focus; the streaming hairline is still
+ * HomeScreen's to draw.)
  *
  * The walk stays inside the family. Walking toward white would desaturate the
  * hue, and the hue is the thing the user bound; walking a step keeps it
