@@ -69,6 +69,11 @@ fun InboxScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /**
+     * Stop a message still inside its send window - [UndoEntry.holdHandle].
+     * Only offered on an entry that carries a handle.
+     */
+    onCancelHold: (UndoEntry) -> Unit = {},
+    /**
      * How each list's last read came back - `JarvisRuntime.inboxRead`. Null
      * keeps the old untimed "Live." line and treats every list as read, for
      * a caller that does not pass it yet.
@@ -322,7 +327,18 @@ fun InboxScreen(
                             style = MaterialTheme.typography.titleSmall,
                             color = chrome.textHi,
                         )
-                        if (entry.reversible) {
+                        if (entry.holdHandle != null) {
+                            // Not sent yet: neither undoable nor final. The
+                            // desktop's Brain window shows the same button.
+                            Gap(4)
+                            Text(
+                                entry.reason ?: "Still inside its send window - it can still be stopped.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.warnInk,
+                            )
+                            Gap(8)
+                            Action("Stop sending", chrome.badInk, enabled = canAct) { onCancelHold(entry) }
+                        } else if (entry.reversible) {
                             Gap(8)
                             Action("Undo", chrome.okInk, enabled = canAct) { onRevert(entry) }
                         } else {

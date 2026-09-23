@@ -290,7 +290,8 @@ fun BrainScreen(
                         if (status?.held == true) {
                             Gap(4)
                             Text(
-                                "Something is held — a message inside its send window.",
+                                "Something is held — a message inside its send window. " +
+                                    "If the Inbox's undo shelf lists it, Stop sending is there.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = chrome.warnInk,
                             )

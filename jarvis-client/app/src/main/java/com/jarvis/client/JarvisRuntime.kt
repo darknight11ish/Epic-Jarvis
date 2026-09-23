@@ -1382,6 +1382,36 @@ object JarvisRuntime {
         return result
     }
 
+    /**
+     * Stops a message still inside its send window - `/api/holds/cancel`.
+     * Always the safe direction (it only stops something), so no approval
+     * card; still held while the link is stale, like every other write here.
+     * A 409 means it already went, and there is no unsend - said as that,
+     * not as "already handled elsewhere".
+     */
+    suspend fun cancelHold(entry: UndoEntry): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        val handle = entry.holdHandle
+            ?: return ApiResult.Failed(ApiError.Malformed("not a held message"))
+        val result = api.cancelHold(handle)
+        when (result) {
+            is ApiResult.Ok -> {
+                _notice.value = "Stopped before it went."
+                refreshInbox()
+            }
+            is ApiResult.Failed -> _notice.value =
+                if (result.error == ApiError.AlreadyHandled) {
+                    "That one has already gone - there is no unsend."
+                } else {
+                    describe(result.error)
+                }
+        }
+        return result
+    }
+
     suspend fun cancelJob(job: JobRecord): ApiResult<Unit> {
         actionBlocker()?.let {
             _notice.value = it

@@ -527,13 +527,11 @@ class JarvisApi(
      * unsend after that, and a client that reported success anyway would be
      * telling exactly the lie this feature exists to avoid.
      *
-     * **Currently unreachable, and left here deliberately.** The contract has
-     * this route but nothing that *lists* holds, so a phone has no way to learn
-     * a handle. An earlier draft of this file invented `GET /api/holds` to fill
-     * the gap — which is the exact mistake that produced `jarvis-android`'s
-     * protocol, so it was removed rather than kept behind a 404. When something
-     * serves handles (a `hold` event, or a field on a pending item), this is
-     * ready.
+     * The handle comes from the undo shelf (`GET /api/undo`), the same list
+     * the desktop's Brain window takes it from: an entry with `category:
+     * "hold"` and `detail.handle` - see [UndoEntry.holdHandle]. No
+     * `GET /api/holds` was invented for it (an earlier draft did, and it was
+     * rightly removed).
      */
     suspend fun cancelHold(handle: String): ApiResult<Unit> =
         postJson("/api/holds/cancel", """{"handle":${quote(handle)}}""")

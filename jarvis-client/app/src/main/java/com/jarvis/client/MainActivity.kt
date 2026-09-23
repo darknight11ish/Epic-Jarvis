@@ -1055,6 +1055,7 @@ class MainActivity : FragmentActivity() {
                             },
                             onRevert = { scope.launch { JarvisRuntime.revert(it) } },
                             onCancelJob = { scope.launch { JarvisRuntime.cancelJob(it) } },
+                            onCancelHold = { scope.launch { JarvisRuntime.cancelHold(it) } },
                             onMarkSeen = { scope.launch { JarvisRuntime.markDigestSeen() } },
                             onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
                             onBack = { nav.back() },

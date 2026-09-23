@@ -576,7 +576,7 @@ lists it too - it is a backup, not a card list.
 |---|---|---|---|---|---|
 | `/api/undo/revert` | POST | `{"id": …}` | `brain.rs:158` | `JarvisApi.kt:403` | "The one state-changing thing a phone may drive" — it only moves toward a state the owner already had. |
 | `/api/jobs/cancel` | POST | `{"id": …}` | `brain.rs:169` | `JarvisApi.kt:450` | |
-| `/api/holds/cancel` | POST | `{"handle": …}` | `brain.rs:190` | `JarvisApi.kt:466` | **Unreachable from the phone** — nothing lists holds, so it has no way to learn a handle. Left in deliberately; see §9. |
+| `/api/holds/cancel` | POST | `{"handle": …}` | `brain.rs` `brain_cancel_hold` | `JarvisRuntime.cancelHold` | Both clients take the handle from the undo shelf (`GET /api/undo`): an entry with `category: "hold"` and `detail.handle` - the desktop's reading of that shape, which the phone now shares (2026-09-23). **Unconfirmed against the backend's `jarvis_undo.py`**, which is not in this repo; a shelf without those fields shows no Stop button. |
 | `/api/watch/add` | POST | object | `brain.rs:219` | **no** | |
 | `/api/watch/remove` | POST | object | `brain.rs:228` | **no** | |
 | `/api/watch/seen` | POST | object | `brain.rs:248` | **no** | The consume, vs the GET peek. |

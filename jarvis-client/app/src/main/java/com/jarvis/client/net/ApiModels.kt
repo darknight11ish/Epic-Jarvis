@@ -505,7 +505,26 @@ data class UndoEntry(
     /** Present when it cannot be undone. Listed anyway — see JARVIS-EXPLAINED §3. */
     val reason: String? = null,
     @SerialName("at_ms") val atMs: Long = 0,
-)
+    /**
+     * The shelf's own category. `"hold"` is a message still inside its send
+     * window - it has not gone yet and can be stopped. Read the same way the
+     * desktop's Brain window reads it (`brain.js` renderUndo: `category ===
+     * "hold"` with `detail.handle`). Neither client has seen the backend's
+     * `jarvis_undo.py`, so this is the desktop's reading, not a confirmed
+     * shape - absent fields simply mean no Stop button.
+     */
+    val category: String? = null,
+    val detail: JsonObject? = null,
+) {
+    /** The handle `/api/holds/cancel` takes, when this entry is a live hold. */
+    val holdHandle: String?
+        get() = if (category == "hold") {
+            (detail?.get("handle") as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+}
 
 @Serializable
 data class JobRecord(
