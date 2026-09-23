@@ -474,8 +474,12 @@ object FaceBudget {
      * software-graphics emulator crashed or froze at within seconds, in four
      * runs in a row. A real phone never has a software renderer, so this only
      * ever applies to emulators.
+     *
+     * LOW, not Medium: whether Medium (detail 1.0) also takes the emulator
+     * down is unknown, and the phone CI publishes nothing until it passes.
+     * Raise it only with a green run that shows the emulator surviving it.
      */
-    val SOFTWARE_AUTO_TOP = QualityTier.MEDIUM
+    val SOFTWARE_AUTO_TOP = QualityTier.LOW
 
     fun saverOn(t: FaceTuning, phoneSaver: Boolean): Boolean = t.batterySaver || phoneSaver
 

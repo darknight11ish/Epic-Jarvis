@@ -42,19 +42,18 @@ data class FaceTuning(
 
     companion object {
         /**
-         * Slower than the kit allows, and not as fast: the kit's slider runs
-         * from 0.05x to 3-6x depending on the face. Some faces pulse their own
-         * brightness on the face's clock, and the flash limits in `Spec` police
-         * the state COLOURS, not those pulses - so this stops at 2x rather than
-         * letting a pulse run three to six times faster than it was designed
-         * to. Nobody has measured the pulses at 2x either; this is caution,
-         * not a proof.
+         * Slow-down only, for now. The kit's slider runs from 0.05x to 3-6x,
+         * but some faces pulse their own brightness on the face's clock, and
+         * the flash limits in `Spec` police the state COLOURS, not those
+         * pulses. Faster than 1x stays off until those pulses are checked
+         * against the same limits - which keeps the audit's standing rule
+         * that motion settings only ever slow the face.
          */
         const val MIN_SPEED = 0.25f
-        const val MAX_SPEED = 2f
+        const val MAX_SPEED = 1f
 
         /** The choices the editor offers. 1x is the default. */
-        val SPEEDS: List<Float> = listOf(0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f)
+        val SPEEDS: List<Float> = listOf(0.25f, 0.5f, 0.75f, 1f)
 
         /**
          * Anything unreadable falls back to the default for that field, and a
