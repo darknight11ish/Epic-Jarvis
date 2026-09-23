@@ -566,7 +566,7 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
         }
 
         "activity" => {
-            if let Some(state) = event.data["state"].as_str() {
+            if let Some(state) = activity_state(&event.data) {
                 let state = state.to_string();
                 publish_link(app, |link| link.activity = state.clone());
             }
@@ -598,6 +598,16 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
     crate::emit_all(app, crate::events::JARVIS_EVENT, frame.clone());
     // The HUD gets the same frame by a different road; see `push_to_hud`.
     crate::push_to_hud(app, "event", &frame);
+}
+
+/// The state out of an `activity` event. Two shapes: the state at the top
+/// level, or the rebuilt bus's `note()` shape, `{key, value: {state,
+/// detail}}` (backend/rebuilt/jarvis_events.py `set_activity`). Reading only
+/// the first left the tray on "idle" through every turn on the second.
+fn activity_state(data: &serde_json::Value) -> Option<&str> {
+    data["state"]
+        .as_str()
+        .or_else(|| data["value"]["state"].as_str())
 }
 
 /// Reads `GET /api/version` for the activity state, which nothing else carries.
@@ -906,6 +916,16 @@ mod tests {
     /// The default must be stale: before the first hello nothing is known, and
     /// a UI that enables approve/deny on launch would be answering a queue it
     /// has not read.
+    #[test]
+    fn activity_state_reads_both_shapes() {
+        let flat = serde_json::json!({"state": "thinking"});
+        let noted = serde_json::json!({"key": "activity",
+            "value": {"state": "working", "detail": "Using calculator..."}});
+        assert_eq!(activity_state(&flat), Some("thinking"));
+        assert_eq!(activity_state(&noted), Some("working"));
+        assert_eq!(activity_state(&serde_json::json!({})), None);
+    }
+
     #[test]
     fn starts_stale() {
         let link = LinkState::default();

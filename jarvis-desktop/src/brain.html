@@ -237,17 +237,22 @@
                 </span>
               </h2>
               <!--
-                Every frame off the one event stream, in order. The API lists
-                discrete step events (memory lookup / tool call / model call)
-                as not yet built, so this shows what the bus actually carries
-                and says so, rather than implying a reasoning trace it cannot
-                see.
+                Every frame off the one event stream, in order, including the
+                `step` events jarvis_agent.py publishes while it answers:
+                asking the model, each tool starting, finishing or being
+                refused, and writing the answer. Tool NAMES only - never what
+                a tool read, and never the model's own reasoning, which can
+                quote email or files and would reach the phone's lock screen
+                through the same stream.
               -->
               <ol class="trace" id="trace" aria-live="polite" aria-relevant="additions"></ol>
-              <p class="note trace-note">
-                Frames from the event stream, newest last. Per-step reasoning
-                (memory lookup, tool call, model call) is not on the bus yet —
-                when the backend publishes it, it appears here.
+              <p class="note trace-note" id="trace-note">
+                What Jarvis is doing, newest last: asking the model, each tool
+                it uses and whether it worked, then writing the answer. Tools
+                show here only when they are switched on (<code>[tools]
+                enabled</code> in the config). The model's own step-by-step
+                thinking is not shown: it can quote your email or files, and
+                this stream also reaches your phone.
               </p>
             </div>
           </div>

@@ -176,10 +176,19 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Rendered in the Brain pane (`brain.js:1496`) | Ignored (`JarvisRuntime.kt:701`) |
+| `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Falls through to "unhandled" |
 | `appearance` | — | Re-reads the shared document (`JarvisRuntime.kt:707`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
 bell (`stream.rs:506-511`).
+
+`step` (`backend/jarvis_agent.py`, `_step_event`) is published by the tool
+loop while it answers: `{"phase": "model" | "tool_started" | "tool_finished"
+| "tool_refused" | "answer", "tool"?: <a name from jarvis_agent.TOOLS, or
+"unknown">, "ok"?: bool, "round"?: int}`. An allowlist: never a tool's
+arguments or result, never the model's text or reasoning. Only sent when
+tools are switched on (`[tools] enabled`). A client that does not show it
+can ignore it.
 
 Note: the `approval` event carries `count`, and `event-allowlist.patch` is
 explicit that the queue itself is fetched from `/api/pending` — **not**

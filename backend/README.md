@@ -1019,6 +1019,18 @@ filter from the lane it is **about to call**, on every hop, and clears the
 route header's memory claims when it does. Stripping the recalled-facts block
 is free, because that block is a system message.
 
+## Step events for Brain -> Live (`jarvis_agent.py`, 2026-09-23)
+
+While it answers with tools switched on, `jarvis_agent.run_local_turn` now
+publishes a `step` event on the one bus for each step: asking the model,
+each tool starting, finishing or being refused, and writing the answer.
+Brain -> Live on the desktop shows them. A step carries only names from
+Jarvis's own tool table and a yes/no - never a tool's arguments or result,
+and never the model's own reasoning, because the bus also reaches the
+phone's lock screen. `apply-patches.ps1` already copies `jarvis_agent.py`
+in, so there is nothing extra to do. Tests: the four `t_*step*` tests in
+`test_agent.py`.
+
 ## A picture stays local, always (`choose()`, 2026-09-23)
 
 A screen capture (Alt+Shift+S on the desktop) can show anything that was on

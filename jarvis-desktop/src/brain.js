@@ -1789,7 +1789,15 @@ function pushTrace(frame) {
   const kind = String((frame && frame.kind) || "event");
   let body = "";
   const data = (frame && frame.data) || {};
-  if (kind === "activity") body = String(data.state || "");
+  if (kind === "activity") {
+    // Two shapes are in the wild: the state at the top level, and the rebuilt
+    // bus's `note()` shape, `{key, value: {state, detail}}`. The detail is
+    // what the tool loop announces ("Using calculator..."), so show it.
+    const value = data.value && typeof data.value === "object" ? data.value : {};
+    const state = String(data.state || value.state || "");
+    const detail = String(data.detail || data.activity_detail || value.detail || "");
+    body = detail ? `${state} · ${detail}` : state;
+  } else if (kind === "step") body = stepText(data);
   else if (kind === "attention") {
     body = `remaining ${data.remaining ?? "?"} · pending ${data.pending ?? "?"}` +
       (data.banked ? " · banked" : "") +
@@ -1829,6 +1837,35 @@ function pushTrace(frame) {
   dom.trace.append(li);
   while (dom.trace.childElementCount > 300) dom.trace.firstElementChild.remove();
   dom.trace.scrollTop = dom.trace.scrollHeight;
+}
+
+/**
+ * One step of a turn (`step` events, jarvis_agent.py `_step_event`), in plain
+ * words. Every field is from the backend's own vocabulary - a tool NAME from
+ * its table, never an argument, a result or the model's text - so this can
+ * only ever say which tool, not what it saw.
+ */
+function stepText(data) {
+  const tool = typeof data.tool === "string" && data.tool ? data.tool : "a tool";
+  const shown = tool === "unknown" ? "a tool Jarvis does not have" : tool;
+  switch (data.phase) {
+    case "model":
+      return Number.isInteger(data.round) && data.round > 1
+        ? `asking the model again (round ${data.round})`
+        : "asking the model";
+    case "tool_started":
+      return `using ${shown}`;
+    case "tool_finished":
+      return data.ok === false ? `${shown} failed` : `${shown} done`;
+    case "tool_refused":
+      return tool === "unknown"
+        ? "the model asked for a tool Jarvis does not have"
+        : `${shown} not allowed`;
+    case "answer":
+      return "writing the answer";
+    default:
+      return "working";
+  }
 }
 
 function repaintTrace() {

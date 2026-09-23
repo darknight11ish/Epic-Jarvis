@@ -24,6 +24,12 @@ import jarvis_agent as AG
 # card on the owner's machine. Captured here instead, for every test.
 RECORDED = []
 AG._record_chain = RECORDED.append
+# Likewise the default step sink (the event bus, for Brain -> Live): the real
+# one is kept for the one test that checks it, and every other turn lands
+# here instead of on whatever jarvis_events this process can import.
+REAL_PUBLISH_STEP = AG._publish_step
+PUBLISHED_STEPS = []
+AG._publish_step = PUBLISHED_STEPS.append
 
 FAILED, PASSED = [], []
 
@@ -479,7 +485,7 @@ def t_a_prepare_time_failure_never_executes_the_tool():
         AG.TOOLS["calculator"].execute = real_execute
 
 
-def _two_tool_turn(gate_check, recorder=None, stream_fail=False):
+def _two_tool_turn(gate_check, recorder=None, stream_fail=False, on_step=None):
     """calculator then shell_exec, in one round. Returns (steps recorded,
     payloads sent to the model)."""
     real_calc = AG.TOOLS["calculator"].execute
@@ -509,7 +515,8 @@ def _two_tool_turn(gate_check, recorder=None, stream_fail=False):
                     [{"role": "user", "content": "PLEASE-DO-NOT-LOG-ME"}], "qwen3:8b",
                     ollama_url="http://x", stream_out=lambda b: None, post=post,
                     gate_check=gate_check, open_stream=opener,
-                    record_chain=recorder if recorder is not None else got.append)
+                    record_chain=recorder if recorder is not None else got.append,
+                    on_step=on_step)
             except ConnectionError:
                 pass
         return got, calls
@@ -542,6 +549,101 @@ def t_a_tool_turn_records_its_chain_by_tool_name_only():
     blob = json.dumps(got)
     for secret in ("PLEASE-DO-NOT-LOG-ME", "MY-PRIVATE-ARG", "diary", "SECRET-OUTPUT"):
         check(f"no conversation text reaches the record ({secret})", secret not in blob, blob)
+
+
+def _calc_only(action, detail, prompt):
+    class V:
+        allowed = "shell" not in prompt
+        outcome = "auto" if allowed else "denied"
+        reason = "x"
+    return V()
+
+
+def t_steps_say_what_happened_in_order():
+    """Brain -> Live: each step of the turn, as it happens. calculator runs,
+    shell_exec is refused by the gate, the model invents a third tool."""
+    steps = []
+    _two_tool_turn(_calc_only, recorder=lambda _s: None, on_step=steps.append)
+    got = [(s["phase"], s.get("tool"), s.get("ok"), s.get("round")) for s in steps]
+    want = [
+        ("model", None, None, 1),
+        ("tool_started", "calculator", None, None),
+        ("tool_finished", "calculator", True, None),
+        ("tool_refused", "shell_exec", None, None),
+        ("tool_refused", "unknown", None, None),
+        ("model", None, None, 2),
+        ("answer", None, None, None),
+    ]
+    check("the steps are model, tool started/finished/refused, model, answer",
+          got == want, repr(got))
+
+
+def t_a_step_carries_no_text_ever():
+    """The bus reaches a phone's lock screen. A step may carry only names
+    from our own table - no arguments, no results, no model text, and not
+    the model's own spelling of a tool it made up."""
+    steps = []
+    _two_tool_turn(allow, recorder=lambda _s: None, on_step=steps.append)
+    blob = json.dumps(steps)
+    for secret in ("PLEASE-DO-NOT-LOG-ME", "MY-PRIVATE-ARG", "diary", "SECRET-OUTPUT",
+                   "made_up_tool", "done"):
+        check(f"no conversation text reaches a step ({secret})", secret not in blob, blob)
+    allowed_keys = {"phase", "tool", "ok", "round"}
+    check("every step uses only the allowlisted fields",
+          all(set(s) <= allowed_keys for s in steps), blob)
+    check("every tool named in a step is one of ours",
+          all(s.get("tool") in (None, "unknown") or s["tool"] in AG.TOOLS for s in steps), blob)
+    # The allowlist itself, not just this turn: a phase or tool outside it
+    # is reduced, never passed through.
+    odd = AG._step_event("<think>my bank pin is 1234</think>", "rm -rf /", ok="yes", round_no="x")
+    check("an unknown phase or tool is reduced to 'unknown', and a bad round dropped",
+          odd == {"phase": "unknown", "tool": "unknown", "ok": True}, repr(odd))
+
+
+def t_a_step_sink_that_raises_never_breaks_the_turn():
+    def boom(_step):
+        raise RuntimeError("bus down")
+    streamed = []
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
+    post, _ = scripted_post(responses)
+    with NoRealIO():
+        AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
+                          ollama_url="http://x", stream_out=streamed.append, post=post,
+                          gate_check=allow, on_step=boom,
+                          open_stream=lambda u, p: FakeStream([b"hi"]))
+    check("the answer still streams when the step sink raises", streamed == [b"hi"],
+          repr(streamed))
+
+
+def t_the_default_step_sink_is_the_event_bus():
+    """No on_step passed: the module's own _publish_step gets every step, and
+    that publishes kind "step" on jarvis_events.BUS (a stand-in module here,
+    so this proves the call, not the owner's bus)."""
+    before = len(PUBLISHED_STEPS)
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
+    post, _ = scripted_post(responses)
+    with NoRealIO():
+        AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
+                          ollama_url="http://x", stream_out=lambda b: None, post=post,
+                          gate_check=allow, open_stream=lambda u, p: FakeStream([b"x"]))
+    new = [s["phase"] for s in PUBLISHED_STEPS[before:]]
+    check("the default sink received the turn's steps", new == ["model", "answer"], repr(new))
+
+    import types
+    published = []
+    fake = types.ModuleType("jarvis_events")
+    fake.BUS = types.SimpleNamespace(publish=lambda kind, data: published.append((kind, data)))
+    keep = sys.modules.get("jarvis_events")
+    sys.modules["jarvis_events"] = fake
+    try:
+        REAL_PUBLISH_STEP({"phase": "answer"})
+    finally:
+        if keep is None:
+            sys.modules.pop("jarvis_events", None)
+        else:
+            sys.modules["jarvis_events"] = keep
+    check("the real sink publishes kind 'step' on jarvis_events.BUS",
+          published == [("step", {"phase": "answer"})], repr(published))
 
 
 def t_a_turn_with_no_tool_records_nothing():
@@ -633,7 +735,11 @@ if __name__ == "__main__":
                t_a_turn_with_no_tool_records_nothing,
                t_the_recorder_failing_never_breaks_the_turn,
                t_the_chain_is_recorded_even_if_the_answer_fails_to_stream,
-               t_the_default_recorder_is_used_when_none_is_passed):
+               t_the_default_recorder_is_used_when_none_is_passed,
+               t_steps_say_what_happened_in_order,
+               t_a_step_carries_no_text_ever,
+               t_a_step_sink_that_raises_never_breaks_the_turn,
+               t_the_default_step_sink_is_the_event_bus):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

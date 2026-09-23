@@ -707,6 +707,58 @@ def _record_chain(steps: list) -> None:
         pass
 
 
+# --------------------------------------------------------------------------
+#   Steps, for Brain -> Live
+# --------------------------------------------------------------------------
+#
+# What Jarvis is doing inside one turn - asking the model, using a tool, a
+# tool finishing or being refused, writing the answer - published on the one
+# event bus as kind "step", so the desktop's Brain -> Live can show it as it
+# happens. Before this, Live said per-step reasoning "is not on the bus yet".
+#
+# THE BUS IS A DOORBELL (docs/ARCHITECTURE.md section 6) and it reaches a
+# phone that shows notifications with the screen off. So a step carries an
+# ALLOWLIST of fields, every value from our own vocabulary:
+#
+#   phase   one of _STEP_PHASES
+#   tool    a name from TOOLS - never the model's spelling of one, never an
+#           argument, never a result. A name the model made up is "unknown".
+#   ok      a boolean, on tool_finished
+#   round   an integer
+#
+# Deliberately NOT here: the model's own reasoning (Qwen3's thinking text),
+# tool arguments, tool results. Each can quote an email body, a file or a
+# secret, and none of that may ride a doorbell. Reading them stays inside
+# the authenticated app, where it already is.
+_STEP_PHASES = ("model", "tool_started", "tool_finished", "tool_refused", "answer")
+
+
+def _step_event(phase: str, tool: Optional[str] = None, *,
+                ok: Optional[bool] = None, round_no: Optional[int] = None) -> dict:
+    """One step, reduced to what the event bus may carry."""
+    out: dict = {"phase": phase if phase in _STEP_PHASES else "unknown"}
+    if tool is not None:
+        out["tool"] = tool if isinstance(tool, str) and tool in TOOLS else "unknown"
+    if ok is not None:
+        out["ok"] = bool(ok)
+    if round_no is not None:
+        try:
+            out["round"] = int(round_no)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _publish_step(step: dict) -> None:
+    """The default step sink: the one event bus, best-effort. A missing
+    module or a failed publish must never cost the owner their answer."""
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish("step", step)
+    except Exception:
+        pass
+
+
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     stream_out: Callable[[bytes], None],
                     enabled_tools: Optional[set] = None,
@@ -715,7 +767,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     gate_check: Optional[Callable[[str, dict, str], object]] = None,
                     open_stream: Optional[Callable[[str, dict], object]] = None,
                     max_rounds: int = 6,
-                    record_chain: Optional[Callable[[list], None]] = None) -> None:
+                    record_chain: Optional[Callable[[list], None]] = None,
+                    on_step: Optional[Callable[[dict], None]] = None) -> None:
     """Drives the tool loop, then streams the final answer to `stream_out`
     exactly as raw bytes - the same shape a plain relay would have produced,
     so the desktop app needs no changes to render it.
@@ -742,6 +795,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     `_record_chain`, which writes one audit line so repeated routines can be
     counted (jarvis_skill_discovery.py). A turn that used no tool records
     nothing, and a recorder that raises is ignored.
+
+    `on_step(step)` is told each step as it happens - see _step_event for
+    exactly what a step may contain (names from our own table, never text).
+    Omitted, it is `_publish_step`: the event bus, for Brain -> Live. A sink
+    that raises is ignored.
     """
     caller = post or (lambda url, payload: _post(url, payload))
     recorder = record_chain if record_chain is not None else _record_chain
@@ -751,8 +809,16 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     convo = list(messages)
     names = TOOLS.keys() if enabled_tools is None else (TOOLS.keys() & enabled_tools)
     tool_schemas = [TOOLS[n].schema() for n in names]
+    sink = on_step if on_step is not None else _publish_step
+
+    def say_step(phase: str, tool: Optional[str] = None, **kw) -> None:
+        try:
+            sink(_step_event(phase, tool, **kw))
+        except Exception:
+            pass
 
     for _round in range(max_rounds):
+        say_step("model", round_no=_round + 1)
         body = {"model": model, "messages": convo, "tools": tool_schemas, "stream": False}
         resp = caller(f"{ollama_url}/v1/chat/completions", body)
         choice = (resp.get("choices") or [{}])[0]
@@ -784,6 +850,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 args = {}
             tool = TOOLS.get(name) if name in names else None
             if tool is None:
+                say_step("tool_refused", name)
                 result = {"ok": False, "error": f"no such tool: {name!r}"}
             else:
                 lookup_name = tool.gate_lookup_name(args) if tool.gate_lookup_name else name
@@ -812,6 +879,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                                                  f"arguments: {type(exc).__name__}: {exc}"})})
                     steps.append({"tool": name, "ran": False, "ok": False,
                                   "outcome": "unknown"})
+                    say_step("tool_finished", name, ok=False)
                     continue
                 verdict = checker(action_name, {"text": plan_text},
                                    f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
@@ -822,9 +890,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                         "outcome": str(getattr(verdict, "outcome", None) or "unknown")}
                 steps.append(step)
                 if not getattr(verdict, "allowed", False):
+                    say_step("tool_refused", name)
                     result = {"ok": False,
                               "error": f"refused: {getattr(verdict, 'reason', 'not approved')}"}
                 else:
+                    say_step("tool_started", name)
                     if announce:
                         announce(f"Using {name}...")
                     kwargs = {"announce": announce} if tool.needs_announce else {}
@@ -834,6 +904,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     except Exception as exc:
                         result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
                     step["ok"] = isinstance(result, dict) and result.get("ok") is True
+                    say_step("tool_finished", name, ok=step["ok"])
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": _tool_content(result)})
     else:
@@ -851,6 +922,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # out of a streamed response. Dropping `tools` forces this call to be
     # what it was always meant to be: the answer, in prose.
     stream_body = {"model": model, "messages": convo, "stream": True}
+    say_step("answer")
     try:
         with streamer(f"{ollama_url}/v1/chat/completions", stream_body) as upstream:
             while True:
