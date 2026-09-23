@@ -21,34 +21,12 @@ there is no approve-all control anywhere. Non-commercial.
 | [`backend/README.md`](backend/README.md) | The thirteen backend patches, what each fixes, and how to apply them. |
 | [`docs/AUDIT.md`](docs/AUDIT.md) | Findings from the audits, and which are fixed. |
 
-## The two Android apps
+## The Android app
 
-| | `jarvis-client/` | `jarvis-android/` |
-| --- | --- | --- |
-| Speaks | **The real API** — SSE on `/api/events` plus REST, `X-Jarvis-Token` | A WebSocket protocol invented before `JARVIS-API.md` existed |
-| Talks to Jarvis | **Yes** | No — none of its endpoints exist on the backend |
-| Has | Pairing, event stream, chat, approvals with `risk`/`raised`, the reactor face, push-to-talk | Duplex audio, lock-screen approvals, Glance widgets, quick capture |
-| Release | `client-latest` | **none — deliberately** |
-
-**There is one app to install, and it is `jarvis-client`.**
-
-`jarvis-android` no longer publishes a release. That is not tidiness: it used to
-sit on the releases page beside `client-latest` under a nearly identical name,
-and only one of the two can reach the backend. Two similar links where one
-silently cannot work is a trap, and installing the wrong one reads as "my phone
-is broken" rather than "wrong app".
-
-The module itself stays, and CI still builds it. Its safe, self-contained
-parts have already been adapted into `jarvis-client` — the approval widget,
-and a quick-link widget for the home screen — see
-`jarvis-client/app/src/main/java/com/jarvis/client/widget/` for what was
-ported and why each one was changed rather than copied verbatim. Its duplex
-audio streaming was deliberately **not** ported: `jarvis-client`'s
-voice-print gate needs a complete recorded clip to check who is speaking, and
-a continuous stream would undermine that. A module that still compiles is far
-easier to port from than one that rotted quietly, so it stays rather than
-being deleted. Its APK is still produced as a run artifact for anyone who
-actually wants it.
+**There is one app to install, and it is `jarvis-client`.** It talks to the
+backend over the real API (`JARVIS-API.md`): the event stream on
+`/api/events`, plus REST, with `X-Jarvis-Token`. It has pairing, chat,
+approvals, the reactor face and push-to-talk.
 
 ## Getting the APK onto a phone
 
@@ -93,14 +71,15 @@ from it by `tools/gen_palette.py`; do not edit it by hand.
 - [`docs/SHARED-LOOK.md`](docs/SHARED-LOOK.md) — what the phone and the desktop
   must agree on, written as a contract. For the desktop thread.
 
-Six themes ship, switchable in **Look**. Themes own the chrome and never a
+Three themes ship — Reactor, Daylight and High Contrast — switchable in
+**Appearance**. Themes own the chrome and never a
 state colour; the accent is derived from the idle binding rather than chosen,
 so re-rolling the face's colours moves the whole interface with it.
 
-## Building the Android APKs
+## Building the Android APK
 
 APKs are built in CI, since the Android SDK is not vendored in this repo. Unit
-tests gate both builds, and the workflows assert that the test task actually
+tests gate the build, and the workflow asserts that the test task actually
 matched sources: Gradle reports `NO-SOURCE` and exits 0 for a module with no
 tests, so a green check is otherwise compatible with nothing having run. On a
 compile failure the workflow reprints the Kotlin diagnostics at the end of the
@@ -114,8 +93,8 @@ fault cannot ship green.
 
 ## Documents
 
-- `docs/AUDIT-2026-09-14.md` — the five-reviewer audit of both Android apps,
-  and what was done about each finding.
+- `docs/AUDIT-2026-09-14.md` — the five-reviewer Android audit, and what was
+  done about each finding.
 - `docs/GEMINI-AUDIT-PROMPT.md` and `docs/SOURCE-BUNDLE.md` — for handing the
   tree to an outside reviewer.
 
@@ -126,12 +105,11 @@ fault cannot ship green.
   `docs/ARCHITECTURE.md` §9 says where.
 - `jarvis-desktop/` — the Tauri 2 shell: Rust commands in `src-tauri/`, the
   windows in `src/`.
-- `jarvis-android/` — the older, retired Android companion app.
 - `jarvis-client/` — the Android app that actually talks to the backend.
-- `server/` — the desktop-side WebSocket endpoint the Android apps talk to.
+- `server/` — a desktop-side WebSocket endpoint. `jarvis-client` does not use it.
 - `keystore/` — how the shared debug signing key is restored in CI; the key
   itself is never committed.
-- `tools/` — build-time and verification scripts for the Android apps.
+- `tools/` — build-time and verification scripts for the Android app.
 - `docs/` — everything above, plus the Android-side audits and protocol notes.
 - `scripts/` — build-time generators for the desktop app.
 
