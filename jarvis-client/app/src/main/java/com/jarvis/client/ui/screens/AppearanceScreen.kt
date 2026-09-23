@@ -427,16 +427,24 @@ fun AppearanceScreen(
                             }
                             Setting(
                                 title = "Face size on Home",
-                                caption = "How big Jarvis is drawn inside that panel. The panel " +
-                                    "itself still follows the handle; this only changes the " +
-                                    "face inside it.",
+                                caption = "Extra large fills the face's panel. Full screen is for " +
+                                    "talking: just Jarvis and the microphone, and the chat comes " +
+                                    "back on its own when something needs you. Both use more " +
+                                    "battery than Large.",
                             ) {
-                                Choices(
-                                    options = FaceSize.entries,
-                                    isSelected = { it == faceSize },
-                                    label = { it.label },
-                                    onPick = onPickFaceSize,
-                                )
+                                // Two rows of three: six options in one row leaves
+                                // too little room for "Extra large" at normal text
+                                // size, let alone at 200%.
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FaceSize.entries.chunked(3).forEach { row ->
+                                        Choices(
+                                            options = row,
+                                            isSelected = { it == faceSize },
+                                            label = { it.label },
+                                            onPick = onPickFaceSize,
+                                        )
+                                    }
+                                }
                             }
                             Setting(title = "Tabs row") {
                                 Choices(

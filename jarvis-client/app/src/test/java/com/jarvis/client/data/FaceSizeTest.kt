@@ -1,6 +1,7 @@
 package com.jarvis.client.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -23,10 +24,17 @@ class FaceSizeTest {
         assertEquals(FaceSize.DEFAULT, FaceSize.byId("huge"))
     }
 
-    /** Only ever smaller than the original: larger costs frame time nobody has measured. */
+    /**
+     * The fixed sizes never exceed the original 260dp; only the two opt-in
+     * "fill" sizes grow past it, and the default is not one of them.
+     */
     @Test
-    fun nothingIsBiggerThanTheOriginal() {
+    fun onlyTheOptInSizesGrowPastTheOriginal() {
         assertEquals(260, FaceSize.DEFAULT.sizeDp)
-        assertTrue(FaceSize.entries.all { it.sizeDp <= 260 })
+        assertFalse(FaceSize.DEFAULT.fill)
+        assertFalse(FaceSize.DEFAULT.voiceOnly)
+        assertTrue(FaceSize.entries.filter { !it.fill }.all { it.sizeDp <= 260 })
+        assertEquals(listOf(FaceSize.FULL_SCREEN), FaceSize.entries.filter { it.voiceOnly })
+        assertTrue(FaceSize.entries.filter { it.voiceOnly }.all { it.fill })
     }
 }

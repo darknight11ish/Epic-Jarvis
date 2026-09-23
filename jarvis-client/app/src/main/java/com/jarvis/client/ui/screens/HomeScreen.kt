@@ -433,6 +433,24 @@ fun HomeScreen(
         }
     }
 
+    // ---- Full screen (FaceSize.FULL_SCREEN): the face and a microphone ----
+    //
+    // The chat and the typing box step aside, but never over something that
+    // needs the owner: an approval waiting, or a task running or paused,
+    // brings the normal layout straight back, because a card nobody can see
+    // is a decision nobody can make. So does a desktop that offers no voice -
+    // a microphone that cannot be used is not a way to talk to Jarvis. The
+    // status line stays on screen throughout; it is not something any size
+    // can hide.
+    //
+    // "Show chat" is a peek for this visit, not a setting: keyed on the size,
+    // so picking Full screen again starts in full screen, and saveable, so
+    // turning the phone mid-peek does not snap the chat away.
+    var peekChat by rememberSaveable(state.faceSize) { mutableStateOf(false) }
+    val taskShowing = state.activity == Activity.WORKING || state.activity == Activity.PAUSED
+    val voiceMode = state.faceSize.voiceOnly && state.voiceOffered &&
+        !hasPending && !taskShowing && !peekChat
+
     // Whether the keyboard is up. A derived boolean over the inset, so the
     // keyboard's own slide - a new inset every frame - flips this once
     // rather than recomposing the screen on every frame of it.
@@ -589,77 +607,97 @@ fun HomeScreen(
         // conversation below it, sharing whatever height is left once the
         // status line, the navigation row (when shown) and the composer have
         // taken theirs.
-        Layout(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            content = {
-                FaceBlock(
-                    state, actions, micLevel, speechLevel,
-                    // A face made small keeps what little room it has for
-                    // itself and the lane, not for a caption.
-                    showCaption = !shrunk,
-                    modifier = Modifier.layoutId(PANE_FACE),
-                )
+        if (voiceMode) {
+            FaceBlock(
+                state, actions, micLevel, speechLevel,
+                showCaption = true,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
+            VoiceBar(state, actions, reply, micLevel, onShowChat = { peekChat = true })
+        } else {
+            Layout(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                content = {
+                    FaceBlock(
+                        state, actions, micLevel, speechLevel,
+                        // A face made small keeps what little room it has for
+                        // itself and the lane, not for a caption.
+                        showCaption = !shrunk,
+                        modifier = Modifier.layoutId(PANE_FACE),
+                    )
 
-                ResizeHandle(
-                    stateWords = handleWords,
-                    tapLabel = if (shrunk) "Give the face its room back" else "Make the face small",
-                    dragState = dragState,
-                    onDragStart = {
-                        if (shrunk) takeOver()
-                        dragging = true
-                    },
-                    onDragEnd = {
-                        commit(live.floatValue)
-                        dragging = false
-                    },
-                    onTap = {
-                        if (shrunk) {
+                    ResizeHandle(
+                        stateWords = handleWords,
+                        tapLabel = if (shrunk) "Give the face its room back" else "Make the face small",
+                        dragState = dragState,
+                        onDragStart = {
+                            if (shrunk) takeOver()
+                            dragging = true
+                        },
+                        onDragEnd = {
+                            commit(live.floatValue)
+                            dragging = false
+                        },
+                        onTap = {
+                            if (shrunk) {
+                                takeOver()
+                            } else {
+                                fold = Fold.MANUAL
+                            }
+                        },
+                        onReset = {
                             takeOver()
-                        } else {
-                            fold = Fold.MANUAL
-                        }
-                    },
-                    onReset = {
-                        takeOver()
-                        commit(DEFAULT_FACE_FRACTION)
-                    },
-                    onNudge = { step ->
-                        takeOver()
-                        commit(live.floatValue + step)
-                    },
-                    modifier = Modifier.layoutId(PANE_HANDLE).fillMaxWidth(),
-                )
+                            commit(DEFAULT_FACE_FRACTION)
+                        },
+                        onNudge = { step ->
+                            takeOver()
+                            commit(live.floatValue + step)
+                        },
+                        modifier = Modifier.layoutId(PANE_HANDLE).fillMaxWidth(),
+                    )
 
-                ConversationList(
-                    state = state,
-                    actions = actions,
-                    reply = reply,
-                    listState = listState,
-                    modifier = Modifier.layoutId(PANE_LIST),
-                )
-            },
-        ) { measurables, constraints ->
-            val width = constraints.maxWidth
-            val height = if (constraints.hasBoundedHeight) constraints.maxHeight else 0
-            val handle = measurables.first { it.layoutId == PANE_HANDLE }
-                .measure(Constraints(minWidth = width, maxWidth = width, minHeight = 0, maxHeight = height))
-            val room = (height - handle.height).coerceAtLeast(0)
-            paneHeight.px = room
-            // The one read of `live`, here in measure: a drag frame re-runs
-            // this block and nothing above it.
-            val faceHeight = (room * live.floatValue).roundToInt().coerceIn(0, room)
-            val face = measurables.first { it.layoutId == PANE_FACE }
-                .measure(Constraints.fixed(width, faceHeight))
-            val list = measurables.first { it.layoutId == PANE_LIST }
-                .measure(Constraints.fixed(width, room - faceHeight))
-            layout(width, height) {
-                face.place(0, 0)
-                handle.place(0, faceHeight)
-                list.place(0, faceHeight + handle.height)
+                    ConversationList(
+                        state = state,
+                        actions = actions,
+                        reply = reply,
+                        listState = listState,
+                        modifier = Modifier.layoutId(PANE_LIST),
+                    )
+                },
+            ) { measurables, constraints ->
+                val width = constraints.maxWidth
+                val height = if (constraints.hasBoundedHeight) constraints.maxHeight else 0
+                val handle = measurables.first { it.layoutId == PANE_HANDLE }
+                    .measure(Constraints(minWidth = width, maxWidth = width, minHeight = 0, maxHeight = height))
+                val room = (height - handle.height).coerceAtLeast(0)
+                paneHeight.px = room
+                // The one read of `live`, here in measure: a drag frame re-runs
+                // this block and nothing above it.
+                val faceHeight = (room * live.floatValue).roundToInt().coerceIn(0, room)
+                val face = measurables.first { it.layoutId == PANE_FACE }
+                    .measure(Constraints.fixed(width, faceHeight))
+                val list = measurables.first { it.layoutId == PANE_LIST }
+                    .measure(Constraints.fixed(width, room - faceHeight))
+                layout(width, height) {
+                    face.place(0, 0)
+                    handle.place(0, faceHeight)
+                    list.place(0, faceHeight + handle.height)
+                }
             }
-        }
 
-        Composer(state, draft, actions, micLevel)
+            if (peekChat && state.faceSize.voiceOnly && state.voiceOffered) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(LocalChrome.current.surface1)
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    Quiet("Back to full screen", onClick = { peekChat = false })
+                }
+            }
+            Composer(state, draft, actions, micLevel)
+        }
     }
 }
 
@@ -1177,10 +1215,21 @@ private fun FaceBlock(
                 // caps the height, so a pane dragged small shrinks the face
                 // instead of pushing the caption out of the pane. FaceView
                 // draws from its smaller side, so a short box stays round.
+                //
+                // Extra large and Full screen take ALL of that room instead
+                // (weight with fill), so the face grows with the pane rather
+                // than stopping at 260dp. Still round for the same reason.
                 Box(
                     Modifier
-                        .weight(1f, fill = false)
-                        .size(state.faceSize.sizeDp.dp)
+                        .then(
+                            if (state.faceSize.fill) {
+                                Modifier.weight(1f).fillMaxWidth()
+                            } else {
+                                Modifier
+                                    .weight(1f, fill = false)
+                                    .size(state.faceSize.sizeDp.dp)
+                            },
+                        )
                         .then(
                             if (opensMind) {
                                 Modifier.tapThrough(label = "Open Mind", onTap = actions.onOpenBrain)
@@ -1545,24 +1594,7 @@ private fun Composer(
             .background(chrome.surface1)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-    when (state.voicePhase) {
-        VoiceSession.Phase.CAPTURING ->
-            VoiceStrip("Listening — release to send, slide up to cancel")
-        VoiceSession.Phase.VERIFYING ->
-            // Named for what it is. The desktop checks whose voice this is
-            // BEFORE transcribing, so that a voice that is not his is never
-            // turned into words at all.
-            VoiceStrip("Checking it's you…")
-        VoiceSession.Phase.THINKING -> VoiceStrip("Thinking…")
-        VoiceSession.Phase.SPEAKING -> VoiceStrip("Speaking")
-        VoiceSession.Phase.OFF -> Unit
-    }
-    if (state.transcript != null && state.voicePhase != VoiceSession.Phase.CAPTURING) {
-        VoiceStrip("“${state.transcript}”", tone = chrome.textMid)
-    }
-    if (state.voiceNotice != null) {
-        VoiceStrip(state.voiceNotice, tone = chrome.warnInk, onDismiss = actions.onDismissVoiceNotice)
-    }
+    VoiceStrips(state, actions)
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
@@ -1646,4 +1678,112 @@ private fun Composer(
         }
     }
     }
+}
+
+/**
+ * What a voice turn is doing, what the desktop heard, and why it refused -
+ * shared by the composer and Full screen's [VoiceBar], so the two can never
+ * disagree about a turn in progress.
+ */
+@Composable
+private fun VoiceStrips(state: HomeState, actions: HomeActions) {
+    val chrome = LocalChrome.current
+    when (state.voicePhase) {
+        VoiceSession.Phase.CAPTURING ->
+            VoiceStrip("Listening — release to send, slide up to cancel")
+        VoiceSession.Phase.VERIFYING ->
+            // Named for what it is. The desktop checks whose voice this is
+            // BEFORE transcribing, so that a voice that is not his is never
+            // turned into words at all.
+            VoiceStrip("Checking it's you…")
+        VoiceSession.Phase.THINKING -> VoiceStrip("Thinking…")
+        VoiceSession.Phase.SPEAKING -> VoiceStrip("Speaking")
+        VoiceSession.Phase.OFF -> Unit
+    }
+    if (state.transcript != null && state.voicePhase != VoiceSession.Phase.CAPTURING) {
+        VoiceStrip("“${state.transcript}”", tone = chrome.textMid)
+    }
+    if (state.voiceNotice != null) {
+        VoiceStrip(state.voiceNotice, tone = chrome.warnInk, onDismiss = actions.onDismissVoiceNotice)
+    }
+}
+
+/**
+ * Full screen's bottom edge: what the voice turn is doing, the start of the
+ * last answer, and the microphone - centred, and the one big control here.
+ *
+ * Notices still show. A refusal or an error said only in the chat would be
+ * said to nobody while the chat is out of the way.
+ */
+@Composable
+private fun VoiceBar(
+    state: HomeState,
+    actions: HomeActions,
+    reply: () -> String,
+    micLevel: State<Float>,
+    onShowChat: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(chrome.surface1)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        if (state.notice != null) {
+            Notice(state.notice, actions.onDismissNotice)
+            Gap(8)
+        }
+        if (state.approvalsOff) {
+            VoiceStrip("Approvals are off on the desktop", tone = chrome.warnInk)
+        }
+        VoiceStrips(state, actions)
+        ReplyPeek(reply, state.streaming)
+        Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+            Quiet(
+                "Show chat",
+                modifier = Modifier.align(Alignment.CenterStart),
+                onClick = onShowChat,
+            )
+            Box(Modifier.align(Alignment.Center)) {
+                VoiceButton(
+                    enabled = state.link == LinkState.CONNECTED && !state.streaming,
+                    capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
+                    micLevel = micLevel,
+                    onBegin = actions.onVoiceBegin,
+                    onRelease = actions.onVoiceRelease,
+                    onCancel = actions.onVoiceCancel,
+                )
+            }
+            // Stop is the same action the composer's Send button turns into
+            // while an answer streams: cancelling the call stops generation.
+            if (state.streaming) {
+                Quiet(
+                    "Stop",
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    color = chrome.badInk,
+                    onClick = actions.onInterrupt,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The first few lines of the answer, for Full screen. Read as a lambda and
+ * only in here, for the reason [HomeScreen]'s `reply` parameter gives: a
+ * streamed token redraws these lines and nothing else.
+ */
+@Composable
+private fun ReplyPeek(reply: () -> String, streaming: Boolean) {
+    val text = reply()
+    if (text.isBlank() && !streaming) return
+    Text(
+        text.ifBlank { "…" },
+        style = MaterialTheme.typography.bodyMedium,
+        color = LocalChrome.current.textMid,
+        maxLines = 3,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+    )
 }
