@@ -717,6 +717,7 @@ try {
         'jarvis_speed.py'            # speed-record.patch
         'jarvis_owned_tables.py'     # documents-owned.patch
         'jarvis_agent.py'            # tool-calling-wiring.patch; updated for skill-suggest
+        'jarvis_browser_control.py'  # jarvis_agent.py's "browser_control" tool; stays OFF until [tools].enabled names it
     )
     $copied = 0
     foreach ($m in $SHIPPED) {

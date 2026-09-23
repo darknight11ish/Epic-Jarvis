@@ -159,8 +159,9 @@ job by hand (take everything off, then put everything on):
 
 **It also copies in the new modules the patches call** - `jarvis_intake.py`,
 `jarvis_feedback.py`, `jarvis_skill_discovery.py`, `jarvis_speed.py`,
-`jarvis_owned_tables.py` and the updated `jarvis_agent.py`. Each patch only
-adds a call into one of these, and the call quietly does nothing when the
+`jarvis_owned_tables.py`, the updated `jarvis_agent.py`, and
+`jarvis_browser_control.py` (which stays switched off until `[tools].enabled`
+names `"browser_control"`). Each patch only adds a call into one of these, and the call quietly does nothing when the
 file is missing, so a backend without them would pass every test with the
 new features switched off. The script compares each file with the one in
 this repository's `backend\` folder; if yours is missing or different, it
