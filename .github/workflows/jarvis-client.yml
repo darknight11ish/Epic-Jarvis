@@ -381,6 +381,24 @@ jobs:
             # The emulator's own failures are at the end of its log anyway
             # (boot completed, panics, driver errors); the boot-property dump
             # that made up the bulk of it has never once been the answer.
+
+            # The face photographs FaceShotTest left on the device, pulled
+            # HERE - in the EXIT trap - so they are collected whether the
+            # step passed or failed, and before the emulator (and the files
+            # with it) is killed below. "Upload the face photographs"
+            # publishes them. /data/local/tmp because the app's own storage
+            # is wiped when the suite uninstalls it; see the test's comment.
+            #
+            # Every line here is `|| true` or cannot fail: these pictures are
+            # evidence, never a gate, and a command failing under -e inside
+            # this trap would also skip the `kill` at the bottom of it. Pulled
+            # into $RUNNER_TEMP itself, which adb turns into
+            # $RUNNER_TEMP/jarvis-face-shots.
+            timeout 120 adb pull /data/local/tmp/jarvis-face-shots "$RUNNER_TEMP" >/dev/null 2>&1 || true
+            shots=$( { find "$RUNNER_TEMP/jarvis-face-shots" -name '*.png' 2>/dev/null || true; } | wc -l )
+            echo "Face photographs pulled off the device: ${shots:-0} (artifact: jarvis-client-face-shots)"
+            [ "${shots:-0}" -gt 0 ] || echo "  none - FaceShotTest did not run, or saved nothing; its manifest.txt, if pulled, says why"
+
             echo "::group::Emulator log (tail)"
             tail -12 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
             echo "::endgroup::"
@@ -501,6 +519,14 @@ jobs:
             echo "::error::The instrumentation report contains zero tests."
             exit 1
           fi
+
+          # FaceShotTest overrides the display to phone size and density for
+          # its pictures and puts it back itself, in a `finally`. Reset once
+          # more here in case its process died before it could, so the
+          # release build below starts on the emulator's own display. A no-op
+          # otherwise, and not a check: nothing here can fail the step.
+          adb shell wm density reset >/dev/null 2>&1 || true
+          adb shell wm size reset >/dev/null 2>&1 || true
 
           # ---------------------------------------------------------------
           # The release build, started on the device, before it is published.
@@ -711,6 +737,27 @@ jobs:
           name: jarvis-client-emulator-log
           path: ${{ runner.temp }}/emulator.log
           if-no-files-found: ignore
+          retention-days: 7
+
+      # One PNG per face, taken by FaceShotTest on the emulator at phone
+      # density (see that test's comment for exactly how), plus a
+      # manifest.txt saying what was captured and anything that went wrong.
+      # This is the only way anyone not holding the phone can SEE what the
+      # Android faces draw. Pulled off the device by the trap in the step
+      # above.
+      #
+      # On success AND failure: a red run is when a picture of what the faces
+      # actually drew helps most. `continue-on-error` because this is
+      # evidence, not a gate - an upload hiccup must never be what stops the
+      # APK below from being published.
+      - name: Upload the face photographs
+        if: success() || failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: jarvis-client-face-shots
+          path: ${{ runner.temp }}/jarvis-face-shots
+          if-no-files-found: warn
           retention-days: 7
 
       # The RELEASE apk, which the step above has just started on a real
