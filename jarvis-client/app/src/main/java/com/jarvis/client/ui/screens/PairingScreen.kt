@@ -28,6 +28,7 @@ import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.TextInput
 
 /**
@@ -205,7 +206,9 @@ fun PairingScreen(
                 },
             )
 
-            Primary(
+            // Secondary, not Primary (visual-5): Connect is the one action
+            // this screen is for, so it is the only filled button on it.
+            Secondary(
                 text = "Platform checks",
                 color = chrome.textMid,
                 modifier = Modifier.weight(1f),

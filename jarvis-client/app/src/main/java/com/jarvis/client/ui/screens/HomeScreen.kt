@@ -290,11 +290,15 @@ data class HomeState(
     /** Tapping the face opens Mind. Off, the face does nothing when touched. */
     val tapFaceOpensMind: Boolean = true,
     /**
-     * Carried for FaceView's glow multiplier (0..1, only ever dimmer) and its
-     * calm-motion flag. Not read in this file yet: the FaceView parameters
-     * they feed are added on another branch and wired in by the integrator.
+     * The owner's Glow setting, 0..1 - only ever dimmer. FaceBlock multiplies
+     * it with the theme's `Chrome.postScale` and hands it to FaceView.
      */
     val glow: Float = 1f,
+    /**
+     * The face moves at its calm pace: the owner chose Calm, or left Motion
+     * on Follow and the phone asks for less animation. Worked out by
+     * MainActivity (`MotionPref.calmFace`), passed straight to FaceView.
+     */
     val calmMotion: Boolean = false,
     /**
      * The owner's last question, shown as a "You" line above the reply so an
@@ -714,10 +718,24 @@ private fun ConversationList(
 
         if (state.pending.isNotEmpty()) {
             item(key = "approvals-label") {
-                Kicker(
-                    if (state.pending.size == 1) "Waiting on you" else "${state.pending.size} waiting on you",
-                    color = chrome.warnInk,
-                )
+                Column {
+                    Kicker(
+                        if (state.pending.size == 1) "Waiting on you" else "${state.pending.size} waiting on you",
+                        color = chrome.warnInk,
+                    )
+                    // With several cards, said once here instead of under every
+                    // card, where the same line repeated down the list. A single
+                    // card keeps it in its own footer. Wording only: it gates
+                    // nothing.
+                    if (state.pending.size > 1) {
+                        Gap(4)
+                        Text(
+                            "Nothing runs until you decide.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid,
+                        )
+                    }
+                }
             }
             items(state.pending, key = { it.id }) { item ->
                 ApprovalCard(
@@ -731,6 +749,7 @@ private fun ConversationList(
                     onApprove = { actions.onApprove(item) },
                     onDeny = { actions.onDeny(item) },
                     onAmend = { note -> actions.onAmend(item.id, note) },
+                    showFooter = state.pending.size == 1,
                 )
             }
         }
@@ -1197,6 +1216,13 @@ private fun FaceBlock(
                         // system already carries for exactly this, just never read
                         // before now.
                         background = chrome.well,
+                        // The owner's Glow setting under the theme's own glow
+                        // budget. Both are 1 or less, and FaceView clamps to 0..1
+                        // again, so this can only ever dim the face.
+                        glow = chrome.postScale * state.glow,
+                        // Slower, never faster. MainActivity works it out from
+                        // the Motion setting and the phone's own animation scale.
+                        calmMotion = state.calmMotion,
                     )
                     TickRing(
                         minor = wellChrome.hairline,

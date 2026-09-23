@@ -572,6 +572,21 @@ enum class MotionPref(val id: String, val label: String) {
 }
 
 /**
+ * Whether the face should run in calm motion (FaceView's `calmMotion`).
+ *
+ * One rule, read by both places that draw a face - Home and the Appearance
+ * preview - so the preview never shows a speed Home will not. Calm when the
+ * owner picked Calm, or when they left it on Follow and the phone itself asks
+ * for less motion (animations off, the same flag `Motion.reduced` reads).
+ * [MotionPref.FULL] is treated as Follow, for the reason its KDoc gives: it
+ * may never override the phone's own request for less motion.
+ */
+fun MotionPref.calmFace(phoneAsksLessMotion: Boolean): Boolean = when (this) {
+    MotionPref.CALM -> true
+    MotionPref.FOLLOW, MotionPref.FULL -> phoneAsksLessMotion
+}
+
+/**
  * The line around each panel. Stored here as the phone's own choice; the
  * theme code draws it (`ui/theme`'s own edge enum is mapped from this by id,
  * so the two can be renamed independently without a stored preference

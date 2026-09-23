@@ -31,8 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import com.jarvis.client.data.calmFace
 import com.jarvis.client.face.Faces
-import com.jarvis.client.face.Spec
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.platform.CrashLog
@@ -42,6 +42,7 @@ import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
 import com.jarvis.client.ui.NavBackHandler
+import com.jarvis.client.ui.NavScreens
 import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.approval.BiometricGate
 import com.jarvis.client.ui.rememberNavState
@@ -49,6 +50,7 @@ import com.jarvis.client.ui.screens.AppearanceScreen
 import com.jarvis.client.ui.screens.BrainScreen
 import com.jarvis.client.ui.screens.ConnectionInfo
 import com.jarvis.client.ui.screens.CrashScreen
+import com.jarvis.client.ui.screens.FaceSpecimen
 import com.jarvis.client.ui.screens.FaqScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
@@ -57,6 +59,9 @@ import com.jarvis.client.ui.screens.InboxScreen
 import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
 import com.jarvis.client.ui.theme.JarvisTheme
+import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.theme.LocalMotion
+import com.jarvis.client.ui.theme.PlateEdges
 import com.jarvis.client.ui.theme.Themes
 import com.jarvis.client.ui.theme.systemPrefersDark
 import kotlinx.coroutines.Dispatchers
@@ -379,6 +384,11 @@ class MainActivity : FragmentActivity() {
         val faceId by appearance.faceId.collectAsState()
         val bindings by appearance.bindings.collectAsState()
         val faceSize by appearance.faceSize.collectAsState()
+        // Everything else about how this phone looks, as one record - see
+        // AppearanceStore.look. Read below by the theme, Home and Appearance.
+        val look by appearance.look.collectAsState()
+        // The dark theme Follow the system returns to at dusk (custom-8).
+        val preferredDark by appearance.preferredDark.collectAsState()
 
         val link by JarvisRuntime.link.collectAsState()
         val linkDetail by JarvisRuntime.linkDetail.collectAsState()
@@ -410,6 +420,9 @@ class MainActivity : FragmentActivity() {
         val digest by JarvisRuntime.digest.collectAsState()
         val undo by JarvisRuntime.undo.collectAsState()
         val jobs by JarvisRuntime.jobs.collectAsState()
+        // How each Inbox list's last read came back, so the screen can tell
+        // "nothing waiting" apart from "could not read" (screens-3).
+        val inboxRead by JarvisRuntime.inboxRead.collectAsState()
         val brain by JarvisRuntime.brain.collectAsState()
         val models by JarvisRuntime.models.collectAsState()
         val activityDetail by JarvisRuntime.activityDetail.collectAsState()
@@ -444,6 +457,9 @@ class MainActivity : FragmentActivity() {
         // lands there: a token recomposes the reply and nothing else, which is
         // what the lambda was reaching for in the first place.
         val replyState = chat.reply.collectAsState()
+        // The owner's last question, for Home's "You" line above the reply.
+        // In memory only - ChatSession never writes it to disk.
+        val lastQuestion by chat.question.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
         val idleColour = bindings.of(FaceState.IDLE).tint ?: com.jarvis.client.face.Palette.ICE_3
@@ -539,9 +555,15 @@ class MainActivity : FragmentActivity() {
         // finds `want.id == chrome.id` and does nothing. The `while` below is
         // untouched - a refused theme change does not alter `chrome`, so the
         // dwell window is still waited out by the loop, not by a restart.
-        LaunchedEffect(followSystem, systemDark, resting, chrome) {
+        //
+        // `preferredDark` is a key too: picking a different "theme for dark
+        // mode" while the phone is already dark should apply it now, not at
+        // the next dusk. It used to be worked out from the current theme,
+        // which is Daylight all day while following, so dusk always brought
+        // back Reactor whatever the owner had picked (custom-8).
+        LaunchedEffect(followSystem, systemDark, resting, chrome, preferredDark) {
             if (!followSystem || !resting) return@LaunchedEffect
-            val want = Themes.forSystem(systemDark, preferredDark = Themes.byId(lastDarkId(chrome.id)))
+            val want = Themes.forSystem(systemDark, preferredDark = preferredDark)
             // Retried, not dropped. `setTheme` refuses inside the dwell window
             // and returns false; that answer was discarded, and since none of
             // this effect's keys change again the theme simply stayed wrong
@@ -640,11 +662,30 @@ class MainActivity : FragmentActivity() {
             nav.resetTo(Screen.HOME)
         }
 
-        JarvisTheme(chrome = chrome, idleColor = idleColour) {
+        JarvisTheme(
+            chrome = chrome,
+            idleColor = idleColour,
+            compact = look.compact,
+            sharp = look.sharp,
+            textScale = look.textScale,
+            // Mapped by name: the store keeps its own enum so a stored choice
+            // survives a rename in the theme code, and the two are kept in
+            // step by having the same three names.
+            edges = PlateEdges.valueOf(look.edges.name),
+            transitions = look.transitions,
+        ) {
             val root = Modifier
                 .fillMaxSize()
-                .background(chrome.surface0)
+                // The theme's faded colour, not `chrome` from outside the
+                // theme: `chrome` is where a theme change is going, and it
+                // jumps there at once, so the page behind every screen would
+                // cut while everything drawn on it faded.
+                .background(LocalChrome.current.surface0)
                 .windowInsetsPadding(WindowInsets.systemBars)
+            // Calm motion for the face: the owner's Motion choice, or the
+            // phone's own "remove animations", read from the same flag the
+            // theme's Motion already reads. Only ever slows the face.
+            val calmMotion = look.motion.calmFace(LocalMotion.current.reduced)
 
             // Pairing outranks the stack: there is nothing to show until there
             // is somewhere to talk to. Two screens are the exception. Checks,
@@ -760,437 +801,492 @@ class MainActivity : FragmentActivity() {
                 return@JarvisTheme
             }
 
-            when (nav.current) {
-                Screen.CHECKS -> {
-                    val host by JarvisRuntime.settings.host.collectAsState()
-                    // Before pairing, or while re-pairing, the address to judge
-                    // is the one being typed, not the saved one: that is the
-                    // question the owner came here to ask.
-                    val judgedHost = if (!paired || repairing) pairingHost else host
-                    // `pending` is a key because the Notifications item reports
-                    // how many approvals are currently going unannounced, and
-                    // that number moves with the pending list. Without it the
-                    // report would be cached from whenever the permission last
-                    // changed and quietly go stale.
-                    val items = remember(tick, judgedHost, pending) {
-                        PlatformReadiness.report(
-                            this@MainActivity,
-                            judgedHost,
-                        )
-                    }
-                    val wakeWord by voice.wakeWord.collectAsState()
-                    var wakeBusy by remember { mutableStateOf(false) }
-                    var wakeNotice by remember { mutableStateOf<String?>(null) }
-                    // Asked on arrival, because this screen is where someone
-                    // goes to find out what is listening, and a stale answer is
-                    // the wrong thing to be reassured by.
-                    LaunchedEffect(Unit) { voice.refreshStatus() }
-
-                    ReadinessScreen(
-                        items = items,
-                        onRequestNotifications = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        },
-                        onRequestBatteryExemption = ::requestBatteryExemption,
-                        onStartService = { EventService.start(this@MainActivity) },
-                        onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
-                        // remember(tick), like `items` above: both of these
-                        // are RoleManager binder calls, and unkeyed they ran
-                        // on every recomposition of this branch - which
-                        // recomposes on link, activity and pending changes.
-                        // `tick` is what already drives the permission
-                        // re-read, so keying on it keeps the answer as fresh
-                        // as every other check on this screen.
-                        onRequestAssistantRole = remember(tick) {
-                            if (
-                                PlatformReadiness.assistantRoleAvailable(this@MainActivity) &&
-                                !PlatformReadiness.assistantRoleHeld(this@MainActivity)
-                            ) {
-                                { requestAssistantRole() }
-                            } else {
-                                null
-                            }
-                        },
-                        wakeWord = wakeWord,
-                        wakeWordBusy = wakeBusy,
-                        wakeWordNotice = wakeNotice,
-                        onWakeWordOff = {
-                            if (!wakeBusy) {
-                                wakeBusy = true
-                                wakeNotice = null
-                                lifecycleScope.launch {
-                                    wakeNotice = voice.setWakeWord(false)
-                                    wakeBusy = false
-                                }
-                            }
-                        },
-                        onRecheckWakeWord = {
-                            if (!wakeBusy) {
-                                wakeBusy = true
-                                lifecycleScope.launch {
-                                    voice.refreshStatus()
-                                    wakeBusy = false
-                                }
-                            }
-                        },
-                        modifier = root,
-                        // The saved host, not the typed one: this card is about
-                        // the link that is actually running.
-                        connection = ConnectionInfo(
-                            host = host,
-                            paired = paired,
-                            link = link,
-                            stale = stale,
-                            detail = linkDetail,
-                        ),
-                        // The same call as Home's Retry, `force` and all - see
-                        // the comment on onReconnect in HomeActions below.
-                        onReconnect = {
-                            EventService.start(this@MainActivity)
-                            JarvisRuntime.startStream(force = true)
-                            scope.launch { JarvisRuntime.refreshAll() }
-                        },
-                        onChangeDesktop = if (paired) {
-                            {
-                                // Filled in with the saved address, unless a
-                                // re-pair is already under way - then the
-                                // address being typed is kept.
-                                if (!repairing) pairingHost = host
-                                repairing = true
-                                nav.resetTo(Screen.HOME)
-                            }
-                        } else {
-                            null
-                        },
-                    )
-                }
-
-                Screen.INBOX -> {
-                    LaunchedEffect(Unit) { JarvisRuntime.refreshInbox() }
-                    InboxScreen(
-                        link = link,
-                        stale = stale,
-                        attention = attention,
-                        digest = digest,
-                        undo = undo,
-                        jobs = jobs,
-                        onOpenApproval = { id ->
-                            // Carries the id now. It used to be dropped, so a
-                            // digest row with three approvals waiting took you
-                            // to a list and left you to find the right one.
-                            nav.resetTo(Screen.HOME)
-                            focusApproval.value = id
-                            scope.launch { JarvisRuntime.refreshPending() }
-                        },
-                        onRevert = { scope.launch { JarvisRuntime.revert(it) } },
-                        onCancelJob = { scope.launch { JarvisRuntime.cancelJob(it) } },
-                        onMarkSeen = { scope.launch { JarvisRuntime.markDigestSeen() } },
-                        onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
-                        onBack = { nav.back() },
-                        modifier = root,
-                    )
-                }
-
-                Screen.BRAIN -> {
-                    LaunchedEffect(Unit) { JarvisRuntime.refreshBrain() }
-                    BrainScreen(
-                        link = link,
-                        stale = stale,
-                        activity = activity,
-                        power = power,
-                        status = status,
-                        version = version,
-                        attention = attention,
-                        jobs = jobs,
-                        brain = brain,
-                        onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
-                        onBack = { nav.back() },
-                        memoryDecideBusyId = memoryDecideBusyId,
-                        onDecideMemory = { id, accept ->
-                            if (memoryDecideBusyId == null) {
-                                memoryDecideBusyId = id
-                                scope.launch {
-                                    JarvisRuntime.decideMemory(id, accept)
-                                    memoryDecideBusyId = null
-                                }
-                            }
-                        },
-                        sleepOffer = cachedSleepOffer,
-                        sleepOfferBusy = sleepOfferBusy,
-                        onSleepTimeAction = { enabled, remind ->
-                            if (!sleepOfferBusy) {
-                                val answered = cachedSleepOffer
-                                sleepOfferBusy = true
-                                // Suppressed BEFORE the write, not after: a
-                                // successful setSleepTime() calls
-                                // refreshBrain() internally before it returns,
-                                // and that recomposition has to see the flag
-                                // already set or the LaunchedEffect above
-                                // re-adopts the very offer this click is
-                                // answering, from whatever brain.memory still
-                                // holds. Rolled back below on failure, so a
-                                // network hiccup never costs the owner their
-                                // only way to act on this until tomorrow. It
-                                // is `answering` and not `dismissed` that is
-                                // set here, so a rotation that cancels this
-                                // coroutine cannot leave the offer suppressed
-                                // by a rollback that will never run.
-                                cachedSleepOffer = null
-                                sleepOfferAnswering = true
-                                scope.launch {
-                                    val result = JarvisRuntime.setSleepTime(enabled, remind)
-                                    sleepOfferBusy = false
-                                    sleepOfferAnswering = false
-                                    if (result is ApiResult.Ok) {
-                                        // Durable: the answer reached the
-                                        // desktop, so now it is safe to let it
-                                        // survive a rotation. Dated, not just
-                                        // true - a fresh offer tomorrow is a
-                                        // different question, not the one just
-                                        // answered.
-                                        sleepOfferDismissedOn = todayLocal()
-                                    } else {
-                                        cachedSleepOffer = answered
-                                    }
-                                }
-                            }
-                        },
-                        onDismissSleepOffer = {
-                            cachedSleepOffer = null
-                            sleepOfferDismissedOn = todayLocal()
-                        },
-                        notice = notice,
-                        onDismissNotice = { JarvisRuntime.clearNotice() },
-                        models = models,
-                        modelBusy = modelBusy,
-                        onSwitchModel = { ref ->
-                            if (!modelBusy) {
-                                modelBusy = true
-                                scope.launch {
-                                    JarvisRuntime.switchModel(ref)
-                                    modelBusy = false
-                                }
-                            }
-                        },
-                        onRollbackModel = {
-                            if (!modelBusy) {
-                                modelBusy = true
-                                scope.launch {
-                                    JarvisRuntime.rollbackModel()
-                                    modelBusy = false
-                                }
-                            }
-                        },
-                        onInstallModel = { ref ->
-                            if (!modelBusy) {
-                                modelBusy = true
-                                scope.launch {
-                                    JarvisRuntime.installModel(ref)
-                                    modelBusy = false
-                                }
-                            }
-                        },
-                        memoryAsOf = memoryAsOfResult,
-                        memoryAsOfBusy = memoryAsOfBusy,
-                        onQueryMemoryAsOf = { epochSeconds ->
-                            if (!memoryAsOfBusy) {
-                                memoryAsOfBusy = true
-                                scope.launch {
-                                    val result = JarvisRuntime.memoryAsOf(epochSeconds)
-                                    if (result is ApiResult.Ok) memoryAsOfResult = result.value
-                                    memoryAsOfBusy = false
-                                }
-                            }
-                        },
-                        modifier = root,
-                    )
-                }
-
-                Screen.FAQ -> FaqScreen(
-                    onBack = { nav.back() },
-                    modifier = root,
-                )
-
-                Screen.APPEARANCE -> AppearanceScreen(
-                    current = chrome,
-                    followSystem = followSystem,
-                    face = face,
-                    bindings = bindings,
-                    onPickTheme = {
-                        // Picking a theme by hand turns following OFF, and that
-                        // is half of one fix rather than a preference.
-                        //
-                        // The audit found that following silently stopped
-                        // working after a manual pick: the effect that applies
-                        // the system's choice did not re-run on a theme change,
-                        // so the app sat on the hand-picked theme while the
-                        // switch still claimed to follow a system set the other
-                        // way. Adding `chrome` to that effect's keys makes the
-                        // switch honest again — but on its own it makes the
-                        // manual pick futile instead, because the effect now
-                        // immediately snaps the theme back, which is a worse
-                        // answer than the bug was.
-                        //
-                        // Both halves together are the behaviour that is
-                        // actually coherent: a deliberate pick wins AND the
-                        // switch tells the truth about what it is doing.
-                        //
-                        // Only when the change was accepted. A pick refused by
-                        // the photosensitivity dwell governor did not change
-                        // the theme, so it must not change the switch either.
-                        if (appearance.setTheme(it)) {
-                            appearance.setFollowSystem(false)
-                        } else {
-                            JarvisRuntime.setNotice("One theme change at a time — give it a moment.")
+            // A short fade between screens (screens-13), or an instant cut when
+            // the owner turned transitions off or the phone asks for less
+            // motion. Each screen draws from `screen`, not `nav.current`:
+            // during the fade the old and the new screen are both on the glass.
+            NavScreens(nav, transitions = look.transitions) { screen ->
+                when (screen) {
+                    Screen.CHECKS -> {
+                        val host by JarvisRuntime.settings.host.collectAsState()
+                        // Before pairing, or while re-pairing, the address to judge
+                        // is the one being typed, not the saved one: that is the
+                        // question the owner came here to ask.
+                        val judgedHost = if (!paired || repairing) pairingHost else host
+                        // `pending` is a key because the Notifications item reports
+                        // how many approvals are currently going unannounced, and
+                        // that number moves with the pending list. Without it the
+                        // report would be cached from whenever the permission last
+                        // changed and quietly go stale.
+                        val items = remember(tick, judgedHost, pending) {
+                            PlatformReadiness.report(
+                                this@MainActivity,
+                                judgedHost,
+                            )
                         }
-                    },
-                    onFollowSystem = appearance::setFollowSystem,
-                    // Each pushes the shared document afterward - a no-op,
-                    // silently, on a backend without the `appearance`
-                    // capability. The theme itself is never pushed; only the
-                    // face and its bindings are the shared vocabulary.
-                    onPickFace = {
-                        appearance.setFace(it.id)
-                        scope.launch { JarvisRuntime.pushAppearance() }
-                    },
-                    onRandomise = {
-                        appearance.randomise()
-                        scope.launch { JarvisRuntime.pushAppearance() }
-                    },
-                    onResetBindings = {
-                        appearance.resetBindings()
-                        scope.launch { JarvisRuntime.pushAppearance() }
-                    },
-                    // Not pushed: the face's size on Home is this phone's
-                    // taste, not part of the vocabulary shared with the desktop.
-                    faceSize = faceSize,
-                    onPickFaceSize = appearance::setFaceSize,
-                    onBack = { nav.back() },
-                    notice = notice,
-                    onDismissNotice = { JarvisRuntime.clearNotice() },
-                    modifier = root,
-                )
+                        val wakeWord by voice.wakeWord.collectAsState()
+                        var wakeBusy by remember { mutableStateOf(false) }
+                        var wakeNotice by remember { mutableStateOf<String?>(null) }
+                        // Asked on arrival, because this screen is where someone
+                        // goes to find out what is listening, and a stale answer is
+                        // the wrong thing to be reassured by.
+                        LaunchedEffect(Unit) { voice.refreshStatus() }
 
-                Screen.HOME -> HomeScreen(
-                    state = HomeState(
-                        link = link,
-                        linkDetail = linkDetail,
-                        stale = stale,
-                        activity = activity,
-                        faceState = faceState,
-                        power = power,
-                        status = status,
-                        pending = pending,
-                        attention = attention,
-                        notice = notice,
-                        streaming = streaming,
-                        face = face,
-                        bindings = bindings,
-                        voicePhase = voicePhase,
-                        voiceOffered = voiceStatus.canPushToTalk,
-                        transcript = transcript,
-                        voiceNotice = voiceNotice,
-                        approvalsOff = "approvals" in absent,
-                        deciding = deciding,
-                        focusApproval = focusApproval.value,
-                        activityDetail = activityDetail,
-                        faceSize = faceSize,
-                    ),
-                    // A lambda, so a streamed token redraws the reply and
-                    // nothing else. Passing the string rebuilt HomeState on
-                    // every chunk and recomposed the bar, the list and the
-                    // composer while the face drew at 60fps on the same thread.
-                    reply = { replyState.value },
-                    // Same treatment as `reply`, for the same reason. `draft`
-                    // was read here while building HomeState, so one keystroke
-                    // invalidated App(), rebuilt the whole state and recomposed
-                    // the link bar, the face block, every visible approval card
-                    // and the reply - on the thread already drawing the reactor
-                    // at 120fps. As a lambda the snapshot read happens inside
-                    // the composer, and a keystroke recomposes the composer
-                    // alone.
-                    draft = { draft },
-                    micLevel = micLevel,
-                    speechLevel = speechLevel,
-                    actions = remember {
-                        HomeActions(
-                            onDraftChange = { draft = it },
-                            onSend = {
-                                val text = draft
-                                draft = ""
-                                scope.launch { chat.send(text) }
+                        ReadinessScreen(
+                            items = items,
+                            onRequestNotifications = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
                             },
-                            onInterrupt = { chat.cancel() },
-                            // A fingerprint instead of a tap for anything that
-                            // leaves the machine, cannot be undone, or arrived
-                            // with a rush latch on it. The phone is the surface
-                            // most likely to be handed to someone or left
-                            // unlocked, and this is the class of action where
-                            // "whoever is holding it" and "the owner" need to
-                            // be different answers.
-                            onApprove = { item ->
-                                // The fingerprint prompt belongs to this
-                                // activity, so it stays on this scope; the
-                                // decision itself does not, and is handed to
-                                // the runtime the moment the prompt clears.
-                                // A rotation mid-request used to cancel the
-                                // coroutine after the POST had landed, drop
-                                // the result, and leave the card on screen
-                                // for a second tap to send again.
-                                scope.launch {
-                                    if (confirmed(item)) {
-                                        JarvisRuntime.decideDetached(item, approve = true)
+                            onRequestBatteryExemption = ::requestBatteryExemption,
+                            onStartService = { EventService.start(this@MainActivity) },
+                            onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
+                            // remember(tick), like `items` above: both of these
+                            // are RoleManager binder calls, and unkeyed they ran
+                            // on every recomposition of this branch - which
+                            // recomposes on link, activity and pending changes.
+                            // `tick` is what already drives the permission
+                            // re-read, so keying on it keeps the answer as fresh
+                            // as every other check on this screen.
+                            onRequestAssistantRole = remember(tick) {
+                                if (
+                                    PlatformReadiness.assistantRoleAvailable(this@MainActivity) &&
+                                    !PlatformReadiness.assistantRoleHeld(this@MainActivity)
+                                ) {
+                                    { requestAssistantRole() }
+                                } else {
+                                    null
+                                }
+                            },
+                            wakeWord = wakeWord,
+                            wakeWordBusy = wakeBusy,
+                            wakeWordNotice = wakeNotice,
+                            onWakeWordOff = {
+                                if (!wakeBusy) {
+                                    wakeBusy = true
+                                    wakeNotice = null
+                                    lifecycleScope.launch {
+                                        wakeNotice = voice.setWakeWord(false)
+                                        wakeBusy = false
                                     }
                                 }
                             },
-                            // Denying is the safe direction and is never gated:
-                            // a gate on refusing would make the cautious answer
-                            // the slow one.
-                            onDeny = { item -> JarvisRuntime.decideDetached(item, approve = false) },
+                            onRecheckWakeWord = {
+                                if (!wakeBusy) {
+                                    wakeBusy = true
+                                    lifecycleScope.launch {
+                                        voice.refreshStatus()
+                                        wakeBusy = false
+                                    }
+                                }
+                            },
+                            modifier = root,
+                            // The saved host, not the typed one: this card is about
+                            // the link that is actually running.
+                            connection = ConnectionInfo(
+                                host = host,
+                                paired = paired,
+                                link = link,
+                                stale = stale,
+                                detail = linkDetail,
+                            ),
+                            // The same call as Home's Retry, `force` and all - see
+                            // the comment on onReconnect in HomeActions below.
                             onReconnect = {
-                                // `force = true`, and only because a person
-                                // asked. startStream() returns early whenever
-                                // its job is still "active" - which a half-open
-                                // socket is, right up until OkHttp's 90 second
-                                // read timeout recycles it. So the one control
-                                // offered for a dead link did nothing at all
-                                // for up to a minute and a half, while every
-                                // approval stayed refused for being stale.
-                                // Automatic callers keep the unforced path, so
-                                // nothing else can storm the desktop with
-                                // reconnects.
                                 EventService.start(this@MainActivity)
                                 JarvisRuntime.startStream(force = true)
                                 scope.launch { JarvisRuntime.refreshAll() }
                             },
-                            onDismissNotice = { JarvisRuntime.clearNotice() },
-                            onOpenChecks = { nav.go(Screen.CHECKS) },
-                            onOpenInbox = { nav.go(Screen.INBOX) },
-                            onOpenBrain = { nav.go(Screen.BRAIN) },
-                            onOpenAppearance = { nav.go(Screen.APPEARANCE) },
-                            onOpenFaq = { nav.go(Screen.FAQ) },
-                            blockerFor = { item: PendingItem ->
-                                JarvisRuntime.decisionBlocker(item)
+                            onChangeDesktop = if (paired) {
+                                {
+                                    // Filled in with the saved address, unless a
+                                    // re-pair is already under way - then the
+                                    // address being typed is kept.
+                                    if (!repairing) pairingHost = host
+                                    repairing = true
+                                    nav.resetTo(Screen.HOME)
+                                }
+                            } else {
+                                null
                             },
-                            onVoiceBegin = ::beginVoice,
-                            onVoiceRelease = ::releaseVoice,
-                            onVoiceCancel = ::cancelVoice,
-                            onDismissVoiceNotice = { JarvisRuntime.voice.clearNotice() },
-                            // AUTONOMY-PROPOSALS.md §3b/§3d, all DRAFT: see
-                            // JarvisRuntime's own doc comments on each of
-                            // these for why a failure here is expected
-                            // until the backend has the route.
-                            onAmend = { id, note -> JarvisRuntime.amendPending(id, note) },
-                            onPauseTask = { JarvisRuntime.pauseTask() },
-                            onResumeTask = { JarvisRuntime.resumeTask() },
-                            onStopTask = { JarvisRuntime.stopTask() },
-                            onInjectTaskNote = { note -> JarvisRuntime.injectTaskNote(note) },
                         )
-                    },
-                    modifier = root,
-                )
+                    }
+
+                    Screen.INBOX -> {
+                        LaunchedEffect(Unit) { JarvisRuntime.refreshInbox() }
+                        InboxScreen(
+                            link = link,
+                            stale = stale,
+                            attention = attention,
+                            digest = digest,
+                            undo = undo,
+                            jobs = jobs,
+                            onOpenApproval = { id ->
+                                // Carries the id now. It used to be dropped, so a
+                                // digest row with three approvals waiting took you
+                                // to a list and left you to find the right one.
+                                nav.resetTo(Screen.HOME)
+                                focusApproval.value = id
+                                scope.launch { JarvisRuntime.refreshPending() }
+                            },
+                            onRevert = { scope.launch { JarvisRuntime.revert(it) } },
+                            onCancelJob = { scope.launch { JarvisRuntime.cancelJob(it) } },
+                            onMarkSeen = { scope.launch { JarvisRuntime.markDigestSeen() } },
+                            onSetMuted = { m -> scope.launch { JarvisRuntime.setMuted(m) } },
+                            onBack = { nav.back() },
+                            modifier = root,
+                            read = inboxRead,
+                            // A Revert, Cancel, mute or Mark read that failed used
+                            // to say so only on Home, where nobody was looking.
+                            notice = notice,
+                            onDismissNotice = { JarvisRuntime.clearNotice() },
+                            onRetry = { scope.launch { JarvisRuntime.refreshInbox() } },
+                        )
+                    }
+
+                    Screen.BRAIN -> {
+                        LaunchedEffect(Unit) { JarvisRuntime.refreshBrain() }
+                        BrainScreen(
+                            link = link,
+                            stale = stale,
+                            activity = activity,
+                            power = power,
+                            status = status,
+                            version = version,
+                            attention = attention,
+                            jobs = jobs,
+                            brain = brain,
+                            onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
+                            onBack = { nav.back() },
+                            memoryDecideBusyId = memoryDecideBusyId,
+                            onDecideMemory = { id, accept ->
+                                if (memoryDecideBusyId == null) {
+                                    memoryDecideBusyId = id
+                                    scope.launch {
+                                        JarvisRuntime.decideMemory(id, accept)
+                                        memoryDecideBusyId = null
+                                    }
+                                }
+                            },
+                            sleepOffer = cachedSleepOffer,
+                            sleepOfferBusy = sleepOfferBusy,
+                            onSleepTimeAction = { enabled, remind ->
+                                if (!sleepOfferBusy) {
+                                    val answered = cachedSleepOffer
+                                    sleepOfferBusy = true
+                                    // Suppressed BEFORE the write, not after: a
+                                    // successful setSleepTime() calls
+                                    // refreshBrain() internally before it returns,
+                                    // and that recomposition has to see the flag
+                                    // already set or the LaunchedEffect above
+                                    // re-adopts the very offer this click is
+                                    // answering, from whatever brain.memory still
+                                    // holds. Rolled back below on failure, so a
+                                    // network hiccup never costs the owner their
+                                    // only way to act on this until tomorrow. It
+                                    // is `answering` and not `dismissed` that is
+                                    // set here, so a rotation that cancels this
+                                    // coroutine cannot leave the offer suppressed
+                                    // by a rollback that will never run.
+                                    cachedSleepOffer = null
+                                    sleepOfferAnswering = true
+                                    scope.launch {
+                                        val result = JarvisRuntime.setSleepTime(enabled, remind)
+                                        sleepOfferBusy = false
+                                        sleepOfferAnswering = false
+                                        if (result is ApiResult.Ok) {
+                                            // Durable: the answer reached the
+                                            // desktop, so now it is safe to let it
+                                            // survive a rotation. Dated, not just
+                                            // true - a fresh offer tomorrow is a
+                                            // different question, not the one just
+                                            // answered.
+                                            sleepOfferDismissedOn = todayLocal()
+                                        } else {
+                                            cachedSleepOffer = answered
+                                        }
+                                    }
+                                }
+                            },
+                            onDismissSleepOffer = {
+                                cachedSleepOffer = null
+                                sleepOfferDismissedOn = todayLocal()
+                            },
+                            notice = notice,
+                            onDismissNotice = { JarvisRuntime.clearNotice() },
+                            models = models,
+                            modelBusy = modelBusy,
+                            onSwitchModel = { ref ->
+                                if (!modelBusy) {
+                                    modelBusy = true
+                                    scope.launch {
+                                        JarvisRuntime.switchModel(ref)
+                                        modelBusy = false
+                                    }
+                                }
+                            },
+                            onRollbackModel = {
+                                if (!modelBusy) {
+                                    modelBusy = true
+                                    scope.launch {
+                                        JarvisRuntime.rollbackModel()
+                                        modelBusy = false
+                                    }
+                                }
+                            },
+                            onInstallModel = { ref ->
+                                if (!modelBusy) {
+                                    modelBusy = true
+                                    scope.launch {
+                                        JarvisRuntime.installModel(ref)
+                                        modelBusy = false
+                                    }
+                                }
+                            },
+                            memoryAsOf = memoryAsOfResult,
+                            memoryAsOfBusy = memoryAsOfBusy,
+                            onQueryMemoryAsOf = { epochSeconds ->
+                                if (!memoryAsOfBusy) {
+                                    memoryAsOfBusy = true
+                                    scope.launch {
+                                        val result = JarvisRuntime.memoryAsOf(epochSeconds)
+                                        if (result is ApiResult.Ok) memoryAsOfResult = result.value
+                                        memoryAsOfBusy = false
+                                    }
+                                }
+                            },
+                            modifier = root,
+                            // "Open the card →" after Use or Install: the same path
+                            // as Inbox's onOpenApproval. It only opens Home on the
+                            // card - approving it is still a deliberate tap there.
+                            onOpenApprovals = { id ->
+                                nav.resetTo(Screen.HOME)
+                                if (id != null) focusApproval.value = id
+                                scope.launch { JarvisRuntime.refreshPending() }
+                            },
+                        )
+                    }
+
+                    Screen.FAQ -> FaqScreen(
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+
+                    Screen.APPEARANCE -> AppearanceScreen(
+                        current = chrome,
+                        followSystem = followSystem,
+                        face = face,
+                        bindings = bindings,
+                        onPickTheme = {
+                            // Picking a theme by hand turns following OFF, and that
+                            // is half of one fix rather than a preference.
+                            //
+                            // The audit found that following silently stopped
+                            // working after a manual pick: the effect that applies
+                            // the system's choice did not re-run on a theme change,
+                            // so the app sat on the hand-picked theme while the
+                            // switch still claimed to follow a system set the other
+                            // way. Adding `chrome` to that effect's keys makes the
+                            // switch honest again — but on its own it makes the
+                            // manual pick futile instead, because the effect now
+                            // immediately snaps the theme back, which is a worse
+                            // answer than the bug was.
+                            //
+                            // Both halves together are the behaviour that is
+                            // actually coherent: a deliberate pick wins AND the
+                            // switch tells the truth about what it is doing.
+                            //
+                            // Only when the change was accepted. A pick refused by
+                            // the photosensitivity dwell governor did not change
+                            // the theme, so it must not change the switch either.
+                            if (appearance.setTheme(it)) {
+                                appearance.setFollowSystem(false)
+                            } else {
+                                JarvisRuntime.setNotice("One theme change at a time — give it a moment.")
+                            }
+                        },
+                        onFollowSystem = appearance::setFollowSystem,
+                        // Each pushes the shared document afterward - a no-op,
+                        // silently, on a backend without the `appearance`
+                        // capability. The theme itself is never pushed; only the
+                        // face and its bindings are the shared vocabulary.
+                        onPickFace = {
+                            appearance.setFace(it.id)
+                            scope.launch { JarvisRuntime.pushAppearance() }
+                        },
+                        // Randomise and Reset do NOT push straight away any more.
+                        // The screen offers ten seconds of Undo, and the desktop
+                        // is sent the colours once that window closes - through
+                        // onBindingsSettled below - so a roll the owner undid
+                        // never reaches the desktop at all (custom-10).
+                        onRandomise = { appearance.randomise() },
+                        onResetBindings = { appearance.resetBindings() },
+                        // Not pushed: the face's size on Home is this phone's
+                        // taste, not part of the vocabulary shared with the desktop.
+                        faceSize = faceSize,
+                        onPickFaceSize = appearance::setFaceSize,
+                        onBack = { nav.back() },
+                        notice = notice,
+                        onDismissNotice = { JarvisRuntime.clearNotice() },
+                        modifier = root,
+                        look = look,
+                        onLookChange = appearance::setLook,
+                        onApplyPreset = {
+                            if (!appearance.applyPreset(it)) {
+                                JarvisRuntime.setNotice("One theme change at a time — give it a moment.")
+                            }
+                        },
+                        preferredDark = preferredDark,
+                        // Sets the dark theme and leaves Follow the system on,
+                        // unlike a normal theme pick, which turns it off.
+                        onPickDarkTheme = appearance::setPreferredDark,
+                        desktopSyncs = version?.can("appearance") == true,
+                        onUndoBindings = { appearance.setBindings(it) },
+                        // On the runtime's scope, not a composition one: this can
+                        // fire from the screen's onDispose as it leaves, and on a
+                        // rotation every composition scope is being cancelled at
+                        // that same moment.
+                        onBindingsSettled = { JarvisRuntime.pushAppearanceDetached() },
+                        // Still pictures, one per face, instead of name-only chips.
+                        faceTile = { f, selected, onClick ->
+                            FaceSpecimen(face = f, bindings = bindings, isSelected = selected, onClick = onClick)
+                        },
+                    )
+
+                    Screen.HOME -> HomeScreen(
+                        state = HomeState(
+                            link = link,
+                            linkDetail = linkDetail,
+                            stale = stale,
+                            activity = activity,
+                            faceState = faceState,
+                            power = power,
+                            status = status,
+                            pending = pending,
+                            attention = attention,
+                            notice = notice,
+                            streaming = streaming,
+                            face = face,
+                            bindings = bindings,
+                            voicePhase = voicePhase,
+                            voiceOffered = voiceStatus.canPushToTalk,
+                            transcript = transcript,
+                            voiceNotice = voiceNotice,
+                            approvalsOff = "approvals" in absent,
+                            deciding = deciding,
+                            focusApproval = focusApproval.value,
+                            activityDetail = activityDetail,
+                            faceSize = faceSize,
+                            faceFraction = look.faceFraction,
+                            navAlwaysShown = look.navAlwaysShown,
+                            makeRoomForApprovals = look.makeRoomForApprovals,
+                            shrinkWhileTyping = look.shrinkWhileTyping,
+                            followReply = look.followReply,
+                            tapFaceOpensMind = look.tapFaceOpensMind,
+                            glow = look.glow,
+                            calmMotion = calmMotion,
+                            lastUserText = lastQuestion,
+                        ),
+                        // A lambda, so a streamed token redraws the reply and
+                        // nothing else. Passing the string rebuilt HomeState on
+                        // every chunk and recomposed the bar, the list and the
+                        // composer while the face drew at 60fps on the same thread.
+                        reply = { replyState.value },
+                        // Same treatment as `reply`, for the same reason. `draft`
+                        // was read here while building HomeState, so one keystroke
+                        // invalidated App(), rebuilt the whole state and recomposed
+                        // the link bar, the face block, every visible approval card
+                        // and the reply - on the thread already drawing the reactor
+                        // at 120fps. As a lambda the snapshot read happens inside
+                        // the composer, and a keystroke recomposes the composer
+                        // alone.
+                        draft = { draft },
+                        micLevel = micLevel,
+                        speechLevel = speechLevel,
+                        actions = remember {
+                            HomeActions(
+                                onDraftChange = { draft = it },
+                                onSend = {
+                                    val text = draft
+                                    draft = ""
+                                    scope.launch { chat.send(text) }
+                                },
+                                onInterrupt = { chat.cancel() },
+                                // A fingerprint instead of a tap for anything that
+                                // leaves the machine, cannot be undone, or arrived
+                                // with a rush latch on it. The phone is the surface
+                                // most likely to be handed to someone or left
+                                // unlocked, and this is the class of action where
+                                // "whoever is holding it" and "the owner" need to
+                                // be different answers.
+                                onApprove = { item ->
+                                    // The fingerprint prompt belongs to this
+                                    // activity, so it stays on this scope; the
+                                    // decision itself does not, and is handed to
+                                    // the runtime the moment the prompt clears.
+                                    // A rotation mid-request used to cancel the
+                                    // coroutine after the POST had landed, drop
+                                    // the result, and leave the card on screen
+                                    // for a second tap to send again.
+                                    scope.launch {
+                                        if (confirmed(item)) {
+                                            JarvisRuntime.decideDetached(item, approve = true)
+                                        }
+                                    }
+                                },
+                                // Denying is the safe direction and is never gated:
+                                // a gate on refusing would make the cautious answer
+                                // the slow one.
+                                onDeny = { item -> JarvisRuntime.decideDetached(item, approve = false) },
+                                onReconnect = {
+                                    // `force = true`, and only because a person
+                                    // asked. startStream() returns early whenever
+                                    // its job is still "active" - which a half-open
+                                    // socket is, right up until OkHttp's 90 second
+                                    // read timeout recycles it. So the one control
+                                    // offered for a dead link did nothing at all
+                                    // for up to a minute and a half, while every
+                                    // approval stayed refused for being stale.
+                                    // Automatic callers keep the unforced path, so
+                                    // nothing else can storm the desktop with
+                                    // reconnects.
+                                    EventService.start(this@MainActivity)
+                                    JarvisRuntime.startStream(force = true)
+                                    scope.launch { JarvisRuntime.refreshAll() }
+                                },
+                                onDismissNotice = { JarvisRuntime.clearNotice() },
+                                onOpenChecks = { nav.go(Screen.CHECKS) },
+                                onOpenInbox = { nav.go(Screen.INBOX) },
+                                onOpenBrain = { nav.go(Screen.BRAIN) },
+                                onOpenAppearance = { nav.go(Screen.APPEARANCE) },
+                                onOpenFaq = { nav.go(Screen.FAQ) },
+                                blockerFor = { item: PendingItem ->
+                                    JarvisRuntime.decisionBlocker(item)
+                                },
+                                onVoiceBegin = ::beginVoice,
+                                onVoiceRelease = ::releaseVoice,
+                                onVoiceCancel = ::cancelVoice,
+                                onDismissVoiceNotice = { JarvisRuntime.voice.clearNotice() },
+                                // AUTONOMY-PROPOSALS.md §3b/§3d, all DRAFT: see
+                                // JarvisRuntime's own doc comments on each of
+                                // these for why a failure here is expected
+                                // until the backend has the route.
+                                onAmend = { id, note -> JarvisRuntime.amendPending(id, note) },
+                                onPauseTask = { JarvisRuntime.pauseTask() },
+                                onResumeTask = { JarvisRuntime.resumeTask() },
+                                onStopTask = { JarvisRuntime.stopTask() },
+                                onInjectTaskNote = { note -> JarvisRuntime.injectTaskNote(note) },
+                                // Saved only when the owner's own drag (or a
+                                // screen reader's Bigger/Smaller) finishes - never
+                                // Home's temporary shrink for an approval or the
+                                // keyboard, which would overwrite their layout.
+                                onFaceFractionCommitted = appearance::setFaceFraction,
+                            )
+                        },
+                        modifier = root,
+                    )
+                }
             }
         }
     }
@@ -1239,10 +1335,6 @@ class MainActivity : FragmentActivity() {
         micGrantedCallback = null
         JarvisRuntime.voice.cancel()
     }
-
-    /** The dark theme to come back to when the system leaves light mode. */
-    private fun lastDarkId(currentId: String): String =
-        if (currentId == Themes.DAYLIGHT.id) Themes.REACTOR.id else currentId
 
     /**
      * @return true when the decision may proceed.

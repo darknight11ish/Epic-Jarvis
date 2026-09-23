@@ -36,6 +36,7 @@ import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.delay
 
@@ -264,7 +265,9 @@ private fun ConnectionCard(
         }
         if (onChangeDesktop != null) {
             Gap(8)
-            Primary(
+            // Secondary (visual-5): Reconnect above is the usual answer, and
+            // this is the second choice beside it.
+            Secondary(
                 text = "Change desktop or token",
                 color = chrome.textMid,
                 modifier = Modifier.fillMaxWidth(),
@@ -393,7 +396,7 @@ private fun WakeWordCard(
 
         if (state == WakeWord.UNKNOWN && onRecheck != null) {
             Gap(12)
-            Primary(
+            Secondary(
                 text = if (busy) "Asking…" else "Ask the desktop again",
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),

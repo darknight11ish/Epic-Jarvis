@@ -533,7 +533,7 @@ object JarvisRuntime {
         ApiError.NotAvailable ->
             "That part of Jarvis is not running on the desktop right now."
         is ApiError.Unreachable ->
-            "Cannot reach the desktop: ${e.detail}. Check Tailscale is up on both ends."
+            "Cannot reach the desktop: ${e.detail}. Check your private network (Tailscale or NordVPN Meshnet) is up on both ends."
         is ApiError.Server -> "The desktop answered ${e.code}."
         is ApiError.Malformed -> "The desktop sent something this app could not read."
     }
@@ -1061,6 +1061,18 @@ object JarvisRuntime {
     suspend fun pushAppearance() {
         if (!can("appearance")) return
         api.postAppearance(appearance.toSyncDocument().toString())
+    }
+
+    /**
+     * [pushAppearance] on the runtime's own scope, for a push that must not
+     * die with a screen. The Appearance screen sends the state colours once
+     * its Undo window closes, and one way it closes is the screen leaving -
+     * including a rotation, which also cancels every scope the activity's
+     * composition owns, so a push launched there could be cancelled before
+     * it was sent and leave the desktop silently out of step.
+     */
+    fun pushAppearanceDetached() {
+        scope.launch { pushAppearance() }
     }
 
     suspend fun refreshPending() {

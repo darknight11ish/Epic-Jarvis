@@ -12,13 +12,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -34,6 +33,7 @@ import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Toggle
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalChrome
 
@@ -184,17 +184,19 @@ fun InboxScreen(
                                 color = chrome.textMid,
                             )
                         }
-                        Switch(
+                        Toggle(
                             // `muted` is its own field on the budget. `blocked_by` says why the
                             // budget is zero — "quiet", "standby", a locked session — and is
                             // null most of the time, so a switch reading it was a switch that
                             // could never be on.
                             checked = attention.muted,
                             onCheckedChange = onSetMuted,
-                            colors = SwitchDefaults.colors(
-                                checkedTrackColor = chrome.warnInk.copy(alpha = 0.4f),
-                                checkedThumbColor = chrome.warnInk,
-                            ),
+                            // This app's own switch now (visual-11), and named: the stock
+                            // one was read by TalkBack as just "switch, off", with the
+                            // words beside it a separate stop it had no link to.
+                            modifier = Modifier.semantics {
+                                contentDescription = "Mute spoken interruptions until tomorrow"
+                            },
                         )
                     }
                 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,8 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -43,12 +42,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.FaceState
 import com.jarvis.client.data.EdgePref
@@ -56,8 +57,10 @@ import com.jarvis.client.data.FaceSize
 import com.jarvis.client.data.Look
 import com.jarvis.client.data.LookPreset
 import com.jarvis.client.data.MotionPref
+import com.jarvis.client.data.calmFace
 import com.jarvis.client.face.Bindings
 import com.jarvis.client.face.Face
+import com.jarvis.client.face.FaceThumbnail
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.face.Faces
 import com.jarvis.client.face.Pattern
@@ -67,10 +70,12 @@ import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.Toggle
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.Chrome
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.LocalRadii
 import com.jarvis.client.ui.theme.Themes
 import kotlinx.coroutines.delay
@@ -613,6 +618,12 @@ fun AppearanceScreen(
                                 // shows for the theme being looked at right
                                 // now, rather than always the same near-black.
                                 background = chrome.well,
+                                // The same glow and pace Home uses, so moving
+                                // the Glow or Motion control shows its effect
+                                // here instead of only after going back to
+                                // Home. Both can only dim and slow the face.
+                                glow = chrome.postScale * look.glow,
+                                calmMotion = look.motion.calmFace(LocalMotion.current.reduced),
                             )
                         }
                         Gap(8)
@@ -942,15 +953,14 @@ private fun OptionChip(
  * a11y-8: the switch used to be a separate focus stop with no name - TalkBack
  * read "Switch, off" and then, separately, the words beside it. Now the row
  * is one toggleable with the Switch role, so it is read as "Follow the
- * system, switch, on", and a tap anywhere on the words flips it. The Switch
- * itself takes no clicks of its own (`onCheckedChange = null`) so there are
- * not two controls for one setting.
+ * system, switch, on", and a tap anywhere on the words flips it.
  *
- * visual-11: the stock Material Switch is the one widget left here that is
- * not one of this app's own parts. It is kept in this ONE place so that
- * swapping it for `Parts.Toggle` is a single edit - pass the Toggle a no-op
- * `onCheckedChange` and keep the row's `toggleable`, or its screen-reader
- * name is lost again.
+ * visual-11: the drawn switch is this app's own `Toggle` now, not the stock
+ * Material one. It is hidden from TalkBack (the row already is the switch)
+ * but still answers a finger with the same [onChange]. It is NOT given a
+ * no-op callback: the Toggle's own touch area takes the tap before the row
+ * sees it, so a no-op there would make the one part that looks like a switch
+ * the one part that does nothing.
  */
 @Composable
 private fun SwitchRow(
@@ -960,7 +970,6 @@ private fun SwitchRow(
     onChange: (Boolean) -> Unit,
 ) {
     val chrome = LocalChrome.current
-    val accent = LocalAccent.current
     Row(
         Modifier
             .fillMaxWidth()
@@ -992,15 +1001,15 @@ private fun SwitchRow(
             }
         }
         Spacer(Modifier.width(12.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = null,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = accent.copy(alpha = 0.45f),
-                checkedThumbColor = accent,
-                uncheckedBorderColor = chrome.hairlineFocus,
-            ),
-        )
+        // This app's own Toggle, in a box that hides it from TalkBack: the
+        // row above is already the one switch a screen reader hears, with
+        // its name, so the Toggle's own switch node would be a second, nameless
+        // stop for the same setting. A finger on the Toggle itself still flips
+        // it - semantics are only what TalkBack reads, not what takes touches -
+        // and it calls the same `onChange` the row does.
+        Box(Modifier.clearAndSetSemantics { }) {
+            Toggle(checked = checked, onCheckedChange = onChange)
+        }
     }
 }
 
@@ -1112,6 +1121,68 @@ private fun Swatch(theme: Chrome) {
             Box(Modifier.weight(1f).fillMaxWidth().background(theme.warnMark))
             Box(Modifier.weight(1f).fillMaxWidth().background(theme.badMark))
         }
+    }
+}
+
+/**
+ * One face in the still-picture picker (visual-11's "specimen cards"): a
+ * still frame of the face on the theme's well, with its name under it. Handed
+ * to [AppearanceScreen] as its `faceTile` by MainActivity.
+ *
+ * Still, never live - see the ONE-live-preview note on the preview above.
+ * [FaceThumbnail] draws a single frame and runs no animation loop, so twenty
+ * of these are twenty drawings made once, not twenty clocks and twenty flash
+ * governors.
+ *
+ * The chosen face is marked without relying on colour alone: a thicker border
+ * (2dp against 1dp) in the accent, the name in the main text colour, and the
+ * selected state a screen reader announces (a11y-8). The picture has no
+ * description of its own; the name under it is the tile's label.
+ */
+@Composable
+fun FaceSpecimen(
+    face: Face,
+    bindings: Bindings,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val radii = LocalRadii.current
+    Column(
+        modifier
+            .fillMaxWidth()
+            .semantics { selected = isSelected }
+            .clip(radii.controlShape)
+            .border(
+                if (isSelected) 2.dp else 1.dp,
+                if (isSelected) accent else chrome.hairline,
+                radii.controlShape,
+            )
+            .pressable(role = Role.RadioButton, onClick = onClick)
+            .padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        FaceThumbnail(
+            face = face,
+            bindings = bindings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(radii.insetShape)
+                .background(chrome.well),
+            // The same ground Home and the live preview use.
+            background = chrome.well,
+        )
+        Gap(4)
+        Text(
+            face.name,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (isSelected) chrome.textHi else chrome.textMid,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

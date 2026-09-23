@@ -41,6 +41,7 @@ import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.ui.BackButton
 import com.jarvis.client.ui.parts.Affirm
 import com.jarvis.client.ui.parts.Field
 import com.jarvis.client.ui.parts.Freshness
@@ -57,7 +58,6 @@ import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
-import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonArray
@@ -185,7 +185,9 @@ fun BrainScreen(
     }
 
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
-        TopBar("State of mind", onBack) {
+        // Titled "Mind", the word on Home's button that opens it, with the
+        // old title kept underneath (screens-15) - the same as Help does.
+        TopBar("Mind", onBack, subtitle = "State of mind") {
             Quiet(
                 if (brain.refreshing) "Refreshing…" else "Refresh",
                 enabled = !brain.refreshing,
@@ -1220,7 +1222,10 @@ fun TopBar(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Quiet("← Back", color = LocalAccent.current, onClick = onBack)
+        // A drawn chevron and the word, instead of a typed "←" - the same
+        // drawn language as Home's nav icons (screens-15). Shared by every
+        // sub-screen, because they all use this bar.
+        BackButton(onBack)
         Spacer(Modifier.width(4.dp))
         Column(Modifier.weight(1f)) {
             // A heading, so TalkBack's "navigate by headings" lands on it. No
