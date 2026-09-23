@@ -122,7 +122,7 @@ def t_it_reads_only_what_you_typed():
     ns = _learner_ns()
     fake = FakeExtract().install()
     L = ns["_Learner"]()
-    L.offer(list(CONVO))
+    L.offer(list(CONVO), origin="owner")
     _run(L, 1.2, until=lambda: fake.calls)
 
     check("a pass actually ran", len(fake.calls) >= 1,
@@ -148,7 +148,7 @@ def t_it_waits_for_you_to_stop_talking():
     L.start()
     # Four turns in quick succession, each well inside the idle window.
     for i in range(4):
-        L.offer([{"role": "user", "content": f"turn {i}"}])
+        L.offer([{"role": "user", "content": f"turn {i}"}], origin="owner")
         time.sleep(0.03)
     time.sleep(0.5)
     L.stop()
@@ -165,9 +165,9 @@ def t_nothing_new_said_is_not_a_pass():
     L = ns["_Learner"]()
     L.start()
     same = [{"role": "user", "content": "I use a Ryzen 9 3900X"}]
-    L.offer(list(same))
+    L.offer(list(same), origin="owner")
     time.sleep(0.4)
-    L.offer(list(same))
+    L.offer(list(same), origin="owner")
     time.sleep(0.4)
     L.stop()
     check("an unchanged transcript is not sent to the model again",
@@ -179,7 +179,7 @@ def t_a_dead_model_does_not_kill_the_thread():
     fake = FakeExtract(raises=True).install()
     L = ns["_Learner"]()
     L.start()
-    L.offer([{"role": "user", "content": "first thing"}])
+    L.offer([{"role": "user", "content": "first thing"}], origin="owner")
     for _ in range(80):
         if fake.calls:
             break
@@ -190,7 +190,7 @@ def t_a_dead_model_does_not_kill_the_thread():
     # the same from outside. The property that matters is that the NEXT thing
     # you say still gets learned from.
     fake.raises = False
-    L.offer([{"role": "user", "content": "a second, different thing"}])
+    L.offer([{"role": "user", "content": "a second, different thing"}], origin="owner")
     for _ in range(80):
         if len(fake.calls) > 1:
             break
@@ -209,7 +209,7 @@ def t_nothing_to_learn_from():
     L = ns["_Learner"]()
     for junk in ([], [{"role": "assistant", "content": "hello"}],
                  [{"role": "user", "content": "   "}], [{"role": "user"}], ["not a dict"]):
-        L.offer(junk)
+        L.offer(junk, origin="owner")
     _run(L, 0.4)
     check("a transcript with nothing you typed in it does not wake the model",
           fake.calls == [], repr(fake.calls))
@@ -220,7 +220,7 @@ def t_it_can_be_switched_off():
     ns["EXTRACT_ENABLED"] = False
     fake = FakeExtract().install()
     L = ns["_Learner"]()
-    L.offer(list(CONVO))
+    L.offer(list(CONVO), origin="owner")
     _run(L, 0.4)
     check("JARVIS_EXTRACT=0 means no pass ever runs", fake.calls == [], repr(fake.calls))
 
@@ -238,7 +238,7 @@ def t_it_refuses_a_non_loopback_ollama():
                 "http://ollama.internal:11434", "", "not a url at all"):
         fake = FakeExtract(ollama=url).install()
         L = ns["_Learner"]()
-        L.offer([{"role": "user", "content": "the safe combination is 11-22-33"}])
+        L.offer([{"role": "user", "content": "the safe combination is 11-22-33"}], origin="owner")
         _run(L, 0.5)
         check(f"refuses {url!r}", fake.calls == [] and fake.asked == [],
               f"sent {len(fake.calls)} transcript(s) to {url}")
@@ -248,7 +248,7 @@ def t_it_refuses_a_non_loopback_ollama():
                 "http://[::1]:11434"):
         fake = FakeExtract(ollama=url).install()
         L = ns["_Learner"]()
-        L.offer([{"role": "user", "content": "I use a Ryzen 9 3900X"}])
+        L.offer([{"role": "user", "content": "I use a Ryzen 9 3900X"}], origin="owner")
         _run(L, 1.0, until=lambda: fake.calls)
         check(f"CONTROL: allows {url!r}", len(fake.calls) == 1,
               "loopback was refused - the check is too strict to be useful")
@@ -261,7 +261,7 @@ def t_it_asks_for_the_chat_lanes_model():
     try:
         fake = FakeExtract().install()
         L = ns["_Learner"]()
-        L.offer([{"role": "user", "content": "something worth keeping here"}])
+        L.offer([{"role": "user", "content": "something worth keeping here"}], origin="owner")
         _run(L, 1.0, until=lambda: fake.asked)
         check("the model is passed explicitly, not left to the default",
               bool(fake.asked) and fake.asked[0][1] == "qwen3:8b-from-env",
@@ -276,7 +276,7 @@ def t_a_model_that_never_answers_is_not_silent():
     ns = _learner_ns()
     fake = FakeExtract(answers=False).install()
     L = ns["_Learner"]()
-    L.offer([{"role": "user", "content": "I moved to Berlin in June"}])
+    L.offer([{"role": "user", "content": "I moved to Berlin in June"}], origin="owner")
     _run(L, 1.0, until=lambda: fake.asked)
     check("the model was asked", len(fake.asked) == 1, f"{fake.asked}")
     # _pass must not mark the transcript as seen, or the same unanswered text
@@ -374,6 +374,11 @@ def t_the_call_site():
           "recalled-facts block on a local one")
     check("and only when memory is this side",
           "MEMORY and not jarvis_side_memory" in src)
+    # memory-intake.patch: offer() learns nothing unless the CALLER says the
+    # turn came from the owner, so this one call site has to say it.
+    check("and it says the turn came from the owner",
+          'LEARNER.offer(body.get("messages") or [], origin="owner")' in src,
+          "without origin=\"owner\" the learner reads nothing at all")
     tree = ast.parse(src)
     started = any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                   and n.func.attr == "start"

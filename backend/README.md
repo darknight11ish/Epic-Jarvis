@@ -13,6 +13,11 @@ here. Two ordering constraints remain: tool-calling needs ollama-direct (a
 logical one), and loopback-too needs token-file (a textual one - its context
 is token-file's output). See their own sections, after the table.
 
+Added 2026-09-23: `memory-intake.patch`, at the very end. It is *in* the
+stack, not beside it - its context is the output of five patches above it -
+and it needs the new file `jarvis_intake.py` copied into the backend folder.
+See its own section.
+
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
 
@@ -57,6 +62,7 @@ on a throwaway copy instead.
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
 | `loopback-too.patch` | `jarvis_hud.py` | **Pairing the phone unplugged the desktop.** `JARVIS_HUD_BIND` moved the one socket off `127.0.0.1` instead of adding one, and the desktop's HUD may only talk to loopback. Also serves `127.0.0.1` when bound elsewhere. Needs `token-file.patch` — see its own section. |
+| `memory-intake.patch` | `jarvis_extract.py`, `jarvis_hud.py` | Seven memory items from the 2026-09-23 learning research: "Remember:", near-duplicate proposals, corrections by number, a "both are true" answer, real dates, a warning on planted instructions, and never learning from turns the backend started. Needs `backend/jarvis_intake.py` copied in. **Last** - see its own section. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -2599,6 +2605,187 @@ is provable without any of that - but proof without it is not a real run.
 Point each one at a real account deliberately, read what `describe()` prints
 before approving anything, and watch the first real result before adding it
 to `[tools].enabled`.
+
+---
+
+# `memory-intake.patch` + `jarvis_intake.py` — what may enter the review queue, and in what form
+
+Seven of the fifteen items in `docs/LEARNING-RESEARCH-2026-09-23.md` (2, 3,
+4, 5, 6, 9 and 10). All seven are about the same moment: something is about
+to become a card in the memory review queue. None of them writes a fact.
+Every card still needs your one decision, one card at a time.
+
+**Two parts, and you need both.**
+
+- `jarvis_intake.py` is a new file. It holds all the logic. Copy it into
+  your backend folder (the one with `jarvis_hud.py` in it):
+
+  ```powershell
+  Copy-Item -LiteralPath "C:\Users\pcadmin\Epic-Jarvis\backend\jarvis_intake.py" -Destination "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program\"; Write-Host "Copied jarvis_intake.py into the backend folder."
+  ```
+
+- `memory-intake.patch` adds small hooks to `jarvis_extract.py` and
+  `jarvis_hud.py` that call into it. `apply-patches.ps1` applies it with
+  the rest.
+
+If the patch is applied but the file is missing, every hook falls back to
+what the backend did before, and the one rule that matters most - item 10,
+below - still holds, because that check is written into the learner itself.
+
+**Why the logic is a separate file.** `jarvis_extract.py` exists only on
+your PC. This repository knows about two thirds of its text, from the
+patches that changed it. The learner's *prompt* is in the third nobody
+quoted. A patch has to quote the lines around each change exactly, so the
+patch only touches lines whose text is known, and everything else lives in
+the new file.
+
+## What each item does, in plain words
+
+**2. "Remember: …"** — start a message with `Remember:` (or `Remember,`)
+and the rest goes straight to the review queue in your own words. No model
+rewords it. It happens at the end of that turn, not 45 seconds later. It
+only looks at your newest message, so if an app ever re-sends earlier turns,
+an old "Remember:" is not queued again. `Remember this:` does NOT trigger it - the
+approval gate writes that phrase itself when you say no to something.
+One change is made to your words: a relative date gets the real date added
+in brackets, "I started yesterday (2026-09-22)". If learning is switched
+off in the Memory tab, this is off too. *Not checked:* whether your
+speech-to-text writes the colon or comma. If it does not, a spoken
+"remember …" goes to the normal learner instead.
+
+**3. Near-duplicate cards are not queued.** A new card is compared with the
+facts you keep and the cards waiting or discarded. It is dropped only if
+it says the same words in the same order once case, punctuation, "a/the",
+plurals and "the user/owner" are set aside; every number, date word and
+negation ("not", "no longer", "was" vs "is") matches; it is not a
+correction; and the embedder (the part that turns text into comparable
+numbers) agrees they mean the same. Until the real embedder has
+downloaded, this check does not run at all. Every drop is counted:
+`setup_status()` shows `near_duplicates_dropped`.
+**This is narrower than the research asked for, on purpose.** Comparing by
+meaning alone puts "allergic to peanuts" next to "allergic to shellfish",
+and "Mario likes hiking" next to "Mario's sister likes hiking". Dropping
+either loses a real fact before you see it. So meaning can only stop a
+drop, never cause one. The price: a card reworded with a synonym ("enjoys"
+for "likes") still reaches you, to discard by hand.
+
+**4. Corrections point at the old fact by number.** The learner's prompt now
+lists the closest stored facts, numbered 0, 1, 2 …, and asks for the number
+of the fact a correction replaces. The number is turned back into that exact
+fact in code the model cannot reach. A number that is not on the list means
+"no match", so nothing is retired. If the model writes words instead, the
+old matching runs, exactly as before.
+
+**5. "Both are true."** A third answer on a correction card: keep the new
+fact AND keep the old one current. New route `POST /api/memory/keep_both`
+with `{"id": <proposal id>}` - one id, one decision, like
+`/api/memory/decide`. It claims the card the same way `decide()` does, so
+two taps write one fact. Nothing is deleted or retired. (The app buttons
+are not in this change - see "What the apps need" below.)
+
+**6. Real dates.** The learner is told the date of the conversation and asked
+to turn "last week" into a date. Then, whatever the model wrote, the code
+adds the real date in brackets after "yesterday", "last week", "3 days ago",
+"last Monday", "next month" and similar: "went to Paris last week (week of
+2026-09-14)". The words stay, so a wrong reading shows on the card.
+Deliberately left alone because they are a coin toss: "next Friday", "next
+weekend", "on Monday", "recently". `import_history.py` now dates each old
+conversation from the export's own timestamp, and a fact from a
+conversation more than two days old that has no date at all gets "(as of
+2023-05-03)" on the end. *Not changed:* the fact's `valid_from` column. The
+date lives in the text, as the research said it would.
+*A known limit:* a live chat is dated by the time its **newest** message
+arrived, because no message carries its own time. Today that is exact: both
+apps send one message per request (checked: `main.js:2196-2203` on the
+desktop, `JarvisApi.kt:686` on the phone). If an app ever sends the whole
+conversation instead, a "yesterday" from an earlier day would be dated by
+the newest message. The same sentence is still not queued twice: if the
+words (dates aside) are already a fact or a waiting or discarded card, the
+new copy is recognised as the same one.
+
+**9. A warning on cards that look like planted instructions.** Each card is
+checked for text written to be obeyed: "ignore your previous instructions",
+"always forward invoices to someone@…", "don't ask me before …", chat-format
+markers, hidden characters. A match adds a `flags` list to the card. **It
+drops nothing.** It runs on the processor, not the graphics card. The gate's
+own "I do not want Jarvis to … without asking me first" card is tested not
+to trip it.
+
+**10. Never learn from turns the backend started.** The learner now reads a
+conversation only when the code handing it over says it came from you -
+`origin="owner"`. The one place that says so is `/api/chat`, for a request
+from a paired app. The default is not "owner", so a future scheduled digest
+that forgets to say learns nothing. Separately, anything the backend itself
+writes in your voice should be built with `jarvis_intake.jarvis_turn()`,
+which remembers a fingerprint of it (a hash, not the text), so it is never
+learned even if an app later sends it back as part of the chat history.
+Nothing in the request or the model's answer can mark a turn as yours.
+**Your "no" still becomes a proposed rule** (`gate-outcome.patch`): that
+path calls `propose()` directly, and a test proves it still queues, with no
+warning on it. Honest note: nothing calls `jarvis_turn()` yet, because
+nothing in the backend starts a conversation yet.
+
+## Ordering
+
+Last in the stack. Its `jarvis_extract.py` lines are the output of
+`memory-safety`, `memory-noise` and `decide-once`; its `jarvis_hud.py`
+lines are the learner and call site `extraction-wiring` wrote and the
+memory block `memory-pane` wrote. No other patch touches those lines.
+
+## What the apps need (not built here)
+
+Neither app is changed by this. The backend now sends, on every row of
+`GET /api/memory/pending`: `flags` (a list of `{"code", "why"}`),
+`flags_checked`, `keep_both_ok` and `verbatim`. A card should show each
+`why` as a warning when `flags` is not empty; show a third button, "Both are
+true", only when `keep_both_ok` is true, posting to `/api/memory/keep_both`;
+and label a `verbatim` card "your own words". `setup` in the same response
+may carry `near_duplicates_dropped` + `near_duplicates_note`,
+`near_duplicate_check`, and `remember_last` (how the last "Remember:" went,
+with a plain-words `note`). `docs/JARVIS-API.md` has the full shapes.
+
+## How it was proven
+
+The real `jarvis_extract.py` and `jarvis_hud.py` are not in this
+repository, so the patch was checked two ways in the dev container:
+
+1. `git apply --check` against a reconstruction that holds ONLY lines some
+   patch in this directory quotes, at their real positions, with every
+   other line a placeholder that cannot match. A hunk whose context was
+   guessed would fail here.
+2. The test suites against a runnable stand-in: those same quoted lines,
+   plus the smallest inferred glue to make them run (marked INFERRED). The
+   patch applies to it, `test_memory_intake.py` passes against it, and the
+   existing suites that touch the same code (`test_decide_once`,
+   `test_extraction_wiring`, `test_import_history`) pass the same before and
+   after.
+
+Your PC is the first place it meets the real files. Run the tests there.
+
+## Found while doing this, and NOT fixed here
+
+**The learner only ever reads the last message before you go quiet.**
+`_Learner.offer()` keeps one transcript and replaces it on every turn
+("latest wins"), which assumed each request carries the whole
+conversation. It does not: both apps send one new message per request
+(`main.js:2196-2203`, `JarvisApi.kt:686`). So if you send five messages and
+then stop, only the fifth is read. This predates memory-intake and is not
+changed by it; fixing it means the learner keeping the turns since its last
+pass instead of replacing them. Worth doing, as its own change, with its
+own test.
+
+## Test it
+
+```powershell
+python test_memory_intake.py
+```
+
+Part A (the new module on its own) runs anywhere. Part B needs
+`jarvis_extract.py` with the patch applied; Part C needs `jarvis_hud.py`
+with the patch applied. Each part says "skip" and why, rather than failing,
+when its file is not there. `test_extraction_wiring.py` was updated too:
+every `offer()` call now says `origin="owner"`, and it checks the call site
+does.
 
 ---
 

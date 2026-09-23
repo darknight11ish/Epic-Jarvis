@@ -103,6 +103,14 @@ $PATCHES = @(
     # line above HUD_TOKEN), which nothing after token-file touches. Last so
     # a backend that already has everything above takes only this.
     'loopback-too.patch'
+    # After all of them. Its jarvis_extract.py context is the output of
+    # memory-safety, memory-noise and decide-once (the dedupe lines, the
+    # full-queue counter, setup_status's dropped_full block and the file's
+    # last function), and its jarvis_hud.py context is the learner and call
+    # site extraction-wiring wrote and the memory block memory-pane wrote.
+    # It needs backend\jarvis_intake.py copied into the backend folder too;
+    # without it every hook falls back to the old behaviour.
+    'memory-intake.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
