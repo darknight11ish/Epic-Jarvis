@@ -35,6 +35,12 @@ they are the reason the project exists:
 3. No approve-all anywhere. One action, one decision.
 4. One owner, one Windows desktop, one Android phone. Non-commercial.
 
+Constraint 2 used to end "No API keys in the app." The owner lifted that on
+2026-09-17: keys are allowed, handled like the pairing token (never logged,
+sent only to the service they belong to, never written to disk in plain
+text). The "no keys" column below records the comparison as it was made
+under the old rule.
+
 | | local-only | no keys | reviewed memory | one-action gate | Windows desktop |
 |---|---|---|---|---|---|
 | **Jarvis** | yes | yes | **yes** | **yes** | yes |

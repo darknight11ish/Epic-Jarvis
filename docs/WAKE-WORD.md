@@ -13,12 +13,12 @@ Push-to-talk needs no model — the phone records and the desktop decides. A wak
 word must decide *on the device*, continuously, that a phrase was spoken, and
 that means a small neural model in the APK.
 
-Three options, and two of them are out for reasons that are rules rather than
-taste:
+Three options. Android's own recogniser is out for a reason that is a rule
+rather than taste; Porcupine was too, until the API-key rule changed:
 
 | | Cost | Verdict |
 |---|---|---|
-| **Porcupine** (Picovoice) | Best accuracy, smallest model — and it requires an **AccessKey at runtime**. | **Refused.** Rule 3 is "No API keys in the app. The phone never holds one. The only secret it stores is the pairing token." An AccessKey is exactly that. I will not add it without you overriding that rule explicitly, and I would argue against it. |
+| **Porcupine** (Picovoice) | Best accuracy, smallest model — and it requires an **AccessKey at runtime**. | **Reopened — your decision.** It was refused under the old rule 3, "No API keys in the app". You lifted that on 2026-09-17, so the AccessKey is no longer disqualifying: it would be stored like the pairing token (encrypted, never logged, sent only to Picovoice). What is still true: the key ties the wake word to a Picovoice account, and its licence terms for personal use should be read before choosing it. Not yet checked here: whether and how often the key is validated over the network. |
 | **openWakeWord** (TFLite or ONNX) | Three model files — a mel-spectrogram front end, an embedding model, and one per wake phrase. A few MB total. Models are **CC BY-NC-SA**. | **The intended path.** Rule 5 already says "One dependency chain (the wake-word models) is CC BY-NC-SA. It stays non-commercial until that changes" — so the brief was written with this, or something like it, in mind. |
 | **Android `SpeechRecognizer` in continuous mode** | No model to ship. | **Refused.** That is on-device speech-to-text, which §4.1 forbids, and it is a network service unless on-device recognition happens to be installed — so it would move the privacy boundary without anyone being told. |
 
