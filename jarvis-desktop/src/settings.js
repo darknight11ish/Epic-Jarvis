@@ -21,13 +21,24 @@
 import {
   announce,
   applyTheme,
+  currentZoom,
   followTheme,
   followZoom,
+  linkWords,
   onLink,
   reconnect,
+  setZoom,
   start as startLink,
+  THEME_INFO,
   THEMES,
 } from "./jarvis-link.js";
+import {
+  FRAME_RATES,
+  loadFaceTuning,
+  QUALITIES,
+  saveFaceTuning,
+  SPEEDS,
+} from "./face-tuning.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -44,6 +55,8 @@ const dom = {
   connectionStatus: $("connection-status"),
   linkState: $("link-state"),
   linkText: $("link-text"),
+  linkTech: $("link-tech"),
+  linkDetail: $("link-detail"),
   reconnect: $("reconnect"),
 
   supervise: $("supervise"),
@@ -55,6 +68,8 @@ const dom = {
   stopBackend: $("stop-backend"),
   backendStatus: $("backend-status"),
   backendState: $("backend-state"),
+  backendTech: $("backend-tech"),
+  backendDetail: $("backend-detail"),
 
   autostart: $("autostart"),
   autostartNote: $("autostart-note"),
@@ -199,22 +214,28 @@ async function paintBackend({ fields = false } = {}) {
     dom.stopBackend.disabled = !status.owned;
   }
 
+  // Plain words first; the process id and the address sit behind
+  // "Technical detail", the way the phone's checks do it.
+  const detail = [];
   if (status.owned) {
     const up = Number(status.uptime_seconds || 0);
-    const handedOff = status.launcher_exited
-      ? " · launcher exited, tree still supervised"
-      : "";
     dom.backendState.textContent =
-      `started by Jarvis Desktop · pid ${status.pid} · up ${formatUptime(up)}${handedOff} · ${status.base}`;
+      `Jarvis Desktop started Jarvis, and it has been running for ${formatUptime(up)}.`;
+    detail.push(`pid ${status.pid}`);
+    if (status.launcher_exited) detail.push("launcher exited, process tree still supervised");
   } else if (!status.supervise) {
     dom.backendState.textContent =
-      `supervision off · Jarvis Desktop will not start or stop anything · ${status.base}`;
+      "Jarvis Desktop is not managing Jarvis. It will not start or stop it.";
   } else if (!status.configured) {
-    dom.backendState.textContent = "supervision on, but no program is configured";
+    dom.backendState.textContent =
+      "Turned on, but no program is set, so there is nothing to start yet.";
   } else {
     dom.backendState.textContent =
-      `supervision on · not started by Jarvis Desktop · ${status.base}`;
+      "Turned on. Jarvis is not running from here right now — it was not started by Jarvis Desktop.";
   }
+  if (status.base) detail.push(status.base);
+  dom.backendTech.hidden = !detail.length;
+  dom.backendDetail.textContent = detail.join(" · ");
 }
 
 function formatUptime(seconds) {
@@ -262,39 +283,283 @@ dom.stopBackend.addEventListener("click", () =>
    listeners, so the select stays correct when the change came from the Brain.
    ========================================================================== */
 
-const themePicker = $("theme");
-if (themePicker) {
-  themePicker.addEventListener("change", async () => {
-    // Paint immediately so the control feels connected, then persist. If the
-    // write fails the fan-out below puts it back.
-    applyTheme(themePicker.value);
+/*
+ * Three rows, the phone's ThemeRow: a swatch, the phone's name for it and its
+ * one-line description. Radios rather than the old <select>, so a screen
+ * reader says which is chosen with no extra wiring, and the descriptions are
+ * on screen rather than squeezed into an option label.
+ *
+ * "Match Windows light or dark mode" is the phone's "Follow the system": with
+ * it on, Windows picks between Daylight and the dark theme chosen here, and
+ * the list becomes "Theme for dark mode" (dark themes only). Rust reads
+ * Windows' setting and holds a switch while an approval is waiting - see
+ * system_theme.rs for why the pages cannot ask for it themselves.
+ */
+const themeList = $("theme-list");
+const themeLegend = $("theme-legend");
+const followSystem = $("follow-system");
+const followDetail = $("follow-system-detail");
+const FOLLOW_DETAIL = followDetail ? followDetail.textContent.trim() : "";
+let themePrefs = null;
+
+function buildThemeRows() {
+  for (const id of THEMES) {
+    const info = THEME_INFO[id];
+    const row = document.createElement("label");
+    row.className = "theme-row";
+    // `data-choice`, not `data-theme`: theme.css keys every palette on
+    // `[data-theme="..."]`, so a row carrying that attribute would repaint
+    // itself in the theme it names.
+    row.dataset.choice = id;
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "theme";
+    radio.value = id;
+    const swatch = document.createElement("span");
+    swatch.className = "swatch";
+    swatch.dataset.swatch = id;
+    swatch.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    text.className = "theme-text";
+    const name = document.createElement("span");
+    name.className = "theme-name";
+    name.textContent = info.label;
+    const blurb = document.createElement("span");
+    blurb.className = "theme-blurb";
+    blurb.textContent = info.blurb;
+    text.append(name, blurb);
+    const check = document.createElement("span");
+    check.className = "theme-check";
+    check.setAttribute("aria-hidden", "true");
+    check.textContent = "✓";
+    row.append(radio, swatch, text, check);
+    radio.addEventListener("change", () => pickTheme(id));
+    themeList.append(row);
+  }
+}
+
+/** Ticks the row for the theme the owner chose (not what Windows forced). */
+function paintThemeRows(current) {
+  const following = Boolean(themePrefs && themePrefs.follow_system);
+  const chosen = themePrefs
+    ? following ? themePrefs.dark_theme : themePrefs.theme
+    : current;
+  themeLegend.textContent = following ? "Theme for dark mode" : "Theme";
+  for (const row of themeList.querySelectorAll(".theme-row")) {
+    const id = row.dataset.choice;
+    // Daylight is never "the theme for dark mode".
+    row.hidden = following && !THEME_INFO[id].dark;
+    row.querySelector("input").checked = id === chosen;
+  }
+  if (followSystem) followSystem.checked = following;
+  if (followDetail) {
+    followDetail.textContent =
+      following && themePrefs && themePrefs.system_light === null
+        ? "Windows' light or dark setting could not be read, so the theme below is used."
+        : FOLLOW_DETAIL;
+  }
+}
+
+async function readThemePrefs() {
+  try {
+    const prefs = await invoke("get_theme_prefs");
+    if (prefs && typeof prefs === "object") themePrefs = prefs;
+  } catch (error) {
+    /* an older shell: the rows still work from the theme alone */
+  }
+  paintThemeRows(document.documentElement.getAttribute("data-theme"));
+}
+
+async function pickTheme(id) {
+  // Paint at once when it will show, so the control feels connected; the
+  // fan-out from set_theme corrects it either way.
+  if (!themePrefs || !themePrefs.follow_system) applyTheme(id);
+  try {
+    const shown = await invoke("set_theme", { theme: id });
+    if (typeof shown === "string") applyTheme(shown);
+  } catch (error) {
+    console.error("[settings] could not save the theme:", error);
+  }
+  await readThemePrefs();
+}
+
+if (themeList) buildThemeRows();
+
+if (followSystem) {
+  followSystem.addEventListener("change", async () => {
     try {
-      await invoke("set_theme", { theme: themePicker.value });
+      const prefs = await invoke("set_theme_follow_system", { follow: followSystem.checked });
+      if (prefs && typeof prefs === "object") {
+        themePrefs = prefs;
+        applyTheme(prefs.effective);
+      }
     } catch (error) {
-      console.error("[settings] could not save the theme:", error);
+      followSystem.checked = !followSystem.checked;
+      console.error("[settings] could not save Match Windows:", error);
     }
+    paintThemeRows(document.documentElement.getAttribute("data-theme"));
   });
 }
 
 followTheme((theme) => {
-  if (themePicker) themePicker.value = theme;
+  paintThemeRows(theme);
+  readThemePrefs();
+});
+readThemePrefs();
+
+/* Text size: the phone's control, for the zoom Ctrl+= / Ctrl+- already walk.
+   Five sizes as buttons; the keyboard reaches the rest. */
+const TEXT_SIZES = [0.9, 1, 1.15, 1.3, 1.5];
+const textSize = $("text-size");
+const textSizeNote = $("text-size-note");
+const TEXT_SIZE_NOTE = textSizeNote ? textSizeNote.textContent.trim() : "";
+
+function paintTextSize() {
+  if (!textSize) return;
+  const now = currentZoom();
+  for (const b of textSize.querySelectorAll("button")) {
+    b.setAttribute("aria-pressed", String(Number(b.dataset.zoom) === now));
+  }
+  textSizeNote.textContent = TEXT_SIZES.includes(now)
+    ? TEXT_SIZE_NOTE
+    : `Now ${Math.round(now * 100)}%. ${TEXT_SIZE_NOTE}`;
+}
+
+if (textSize) {
+  for (const z of TEXT_SIZES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "choice";
+    b.dataset.zoom = String(z);
+    b.textContent = `${Math.round(z * 100)}%`;
+    b.addEventListener("click", () => {
+      setZoom(z);
+      paintTextSize();
+      announce(`Text size ${Math.round(z * 100)} percent.`);
+    });
+    textSize.append(b);
+  }
+}
+
+// This window is user-resizable, so nothing needs to re-measure after a step
+// - only the buttons need to show the new size.
+followZoom(() => paintTextSize());
+paintTextSize();
+
+/* The face on THIS computer (face-tuning.js). Per computer, never sent to the
+   phone. The face frames in the widget and the HUD read the same key. */
+let faceTuning = loadFaceTuning();
+const faceAuto = $("face-auto");
+const faceStatus = $("face-status");
+
+function choiceRow(box, options, label, onPick) {
+  if (!box) return;
+  for (const option of options) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "choice";
+    b.dataset.value = String(option.id ?? option);
+    b.textContent = label(option);
+    b.addEventListener("click", () => onPick(option));
+    box.append(b);
+  }
+}
+
+function paintFaceTuning() {
+  if (faceAuto) faceAuto.checked = faceTuning.autoAdjust;
+  const mark = (id, value) => {
+    const box = $(id);
+    if (!box) return;
+    for (const b of box.querySelectorAll("button")) {
+      b.setAttribute("aria-pressed", String(b.dataset.value === String(value)));
+    }
+  };
+  // While Auto is on, it is picking these; neither row claims a choice.
+  mark("face-quality", faceTuning.autoAdjust ? "" : faceTuning.quality);
+  mark("face-fps", faceTuning.autoAdjust ? "auto" : faceTuning.frameRate);
+  mark("face-speed", faceTuning.speed);
+  const note = $("face-quality-note");
+  if (note) {
+    note.textContent = faceTuning.autoAdjust
+      ? "Auto adjust is choosing. Picking one turns Auto adjust off."
+      : "High matches the reactor kit. Low is easiest on the graphics card.";
+  }
+}
+
+function setFaceTuning(next, said) {
+  faceTuning = saveFaceTuning(next);
+  paintFaceTuning();
+  if (faceStatus) report(faceStatus, said || "Saved on this computer.", "ok");
+}
+
+choiceRow($("face-quality"), QUALITIES, (q) => q.label, (q) =>
+  // An explicit choice is not overridden: Auto goes off, as on the phone.
+  setFaceTuning({ ...faceTuning, quality: q.id, autoAdjust: false }));
+choiceRow($("face-fps"), FRAME_RATES, (f) => f.label, (f) =>
+  setFaceTuning({ ...faceTuning, frameRate: f.id, autoAdjust: false }));
+choiceRow($("face-speed"), SPEEDS, (s) => `${s}×`, (s) =>
+  setFaceTuning({ ...faceTuning, speed: s }));
+if (faceAuto) {
+  faceAuto.addEventListener("change", () =>
+    setFaceTuning({ ...faceTuning, autoAdjust: faceAuto.checked }));
+}
+paintFaceTuning();
+
+/* Shared with your phone: whether the face and state colours actually reach
+   the phone, from get_appearance's own answer. Read on open and when the
+   window comes back into view - never from an `appearance-changed` listener,
+   because get_appearance broadcasts that event itself. */
+const appearanceShared = $("appearance-shared");
+
+async function paintShared() {
+  if (!appearanceShared || !IS_TAURI) return;
+  try {
+    const loaded = await invoke("get_appearance");
+    appearanceShared.dataset.tone = loaded && loaded.shared ? "ok" : "";
+    appearanceShared.textContent = loaded && loaded.shared
+      ? "Shared with your phone."
+      : `Not shared yet: ${String((loaded && loaded.note) || "Jarvis could not be asked.")} For now they stay on this computer.`;
+  } catch (error) {
+    appearanceShared.textContent =
+      `Could not check whether they are shared: ${String((error && error.message) || error)}`;
+  }
+}
+paintShared();
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) paintShared();
 });
 
-// This window is user-resizable, so nothing needs to re-measure after a step.
-followZoom();
+$("open-faces").addEventListener("click", async () => {
+  try {
+    await invoke("open_faces");
+    report($("faces-status"), "Opened.", "ok");
+  } catch (error) {
+    report($("faces-status"), String((error && error.message) || error), "bad");
+  }
+});
 
 startLink();
 
 onLink((link) => {
+  // The same words every other window uses (jarvis-link.js linkWords), plus
+  // what the quickbar cannot fit: where it is connected, and - behind
+  // "Technical detail" - the whole reason when it is not.
+  const words = linkWords(link);
   dom.linkState.dataset.connected = String(link.connected);
-  if (link.connected) {
-    const bits = [`event stream live on ${link.base}`, link.power];
-    if (link.activity !== "idle") bits.push(link.activity);
-    if (link.approvals > 0) bits.push(`${link.approvals} waiting`);
-    dom.linkText.textContent = bits.join(" · ");
+  dom.linkState.dataset.tone = words.tone;
+  if (words.canAct) {
+    const bits = ["Connected, and updates are arriving."];
+    if (link.approvals === 1) bits.push("1 approval waiting.");
+    else if (link.approvals > 1) bits.push(`${link.approvals} approvals waiting.`);
+    dom.linkText.textContent = bits.join(" ");
   } else {
-    dom.linkText.textContent = link.error || "no event stream";
+    dom.linkText.textContent = words.text;
   }
+  const detail = [link.base ? `Address: ${link.base}` : "", link.error || ""]
+    .filter(Boolean)
+    .join(" · ");
+  dom.linkTech.hidden = !detail;
+  dom.linkDetail.textContent = detail;
 });
 
 /* ==========================================================================

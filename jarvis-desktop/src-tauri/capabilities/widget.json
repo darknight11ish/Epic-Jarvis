@@ -13,6 +13,7 @@
     "jarvis-link",
     "approvals",
     "task-control",
-    "widget-surface"
+    "widget-surface",
+    "appearance-read"
   ]
 }

@@ -18,7 +18,7 @@
     <script>
       try {
         var t = localStorage.getItem("jarvis.theme");
-        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+        if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
           document.documentElement.setAttribute("data-theme", t);
         }
       } catch (e) {
@@ -130,7 +130,10 @@
                 d="M4 7.25a.75.75 0 0 0-1.5 0 5.5 5.5 0 0 0 4.75 5.451V14.5H6a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5H8.75v-1.799A5.5 5.5 0 0 0 13.5 7.25a.75.75 0 0 0-1.5 0 4 4 0 0 1-8 0Z"
               />
             </svg>
-            <span class="sr-only">Hold to talk to Jarvis</span>
+            <!-- The button's name. main.js setAutoListening rewrites it, so a
+                 screen reader is not told to hold a button that no longer
+                 responds to being held. -->
+            <span class="sr-only" id="mic-label">Hold to talk to Jarvis - hold Space or Enter, speak, then let go</span>
           </button>
 
           <!-- Switches #mic between push-to-talk and automatic listening.
@@ -309,7 +312,10 @@
              the way out, on the one surface that is visible before anything has
              ever been typed — which also means a first run against a backend
              that is not up says so, instead of showing an empty box. -->
-        <div class="offline" id="offline" hidden>
+        <!-- Also shown while connected but stale: nothing can be approved in
+             either, and stale used to show no words at all. `data-tone` is
+             red for offline, amber for stale or connecting. -->
+        <div class="offline" id="offline" data-tone="bad" hidden>
           <span id="offline-text">Jarvis is not answering.</span>
           <span class="offline-actions">
             <button class="text-button" type="button" id="offline-retry">Reconnect</button>
@@ -460,6 +466,9 @@
             role="group"
             aria-label="Choose which version to approve"
           ></div>
+          <!-- Why Approve is missing, in words on the card. It used to be only
+               a tooltip on disabled buttons, which the keyboard cannot reach. -->
+          <p class="approval-options-why" id="approval-options-why" hidden></p>
 
           <!-- A note before the first decision - §3b. Submitting sends it
                back for a NEW proposal; it never edits the one on screen. -->
@@ -488,7 +497,13 @@
                  overlay must not be wired to a decision. Esc now puts the gate
                  aside and the hint says so. Enter still works on whichever
                  button has focus, which is simply what a button does. -->
-            <span class="approval-hint" id="approval-hint">Nothing runs until you decide.</span>
+            <!-- Two lines: the risk line (rewritten for every card) and the
+                 promise, which the risk line used to overwrite, so it never
+                 actually showed. -->
+            <span class="approval-hints">
+              <span class="approval-hint" id="approval-hint"></span>
+              <span class="approval-reassure">Nothing runs until you decide.</span>
+            </span>
             <button class="approval-button approval-deny" type="button" id="approval-deny"
                   aria-describedby="approval-hint">
               Deny

@@ -18,7 +18,7 @@
     <script>
       try {
         var t = localStorage.getItem("jarvis.theme");
-        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+        if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
           document.documentElement.setAttribute("data-theme", t);
         }
       } catch (e) {
@@ -32,10 +32,11 @@
     <!--
       Jarvis Desktop — settings.
 
-      Deliberately the only place in this app that writes anything, and it writes
-      exactly two things: where the backend is, and whether Jarvis Desktop may
-      start one. Build order step 5 adds the read-only panes — models, memory,
-      config, skills — as sections alongside these.
+      The only window here that can change where Jarvis is and whether this
+      app may start it. Laid out the way the phone's Appearance screen was
+      reworked after the owner found it too long: the things someone opens
+      Settings for stay open (Connection, Appearance, Updates, Shortcuts),
+      and what is rarely touched sits behind a closed "More options".
     -->
     <main class="page">
       <header class="page-head">
@@ -46,13 +47,12 @@
       <section class="card">
         <h2>Connection</h2>
         <p class="note">
-          Where the backend is. The token is held here and injected into the HUD at
-          load; it is never written to that page's storage and never shown again
-          once saved.
+          Where Jarvis is running. Your token is kept here and never shown
+          again once saved.
         </p>
 
         <label class="field">
-          <span class="label">Base URL</span>
+          <span class="label">Jarvis's address on this computer</span>
           <input id="base" type="text" spellcheck="false" autocomplete="off"
                  placeholder="http://127.0.0.1:4719" />
         </label>
@@ -62,20 +62,34 @@
           <input id="token" type="password" spellcheck="false" autocomplete="off"
                  placeholder="leave blank to keep the current one" />
         </label>
+        <p class="note">
+          Jarvis makes its own token the first time it runs, in the file
+          <code>.openjarvis\token</code> in your user folder
+          (<code>%USERPROFILE%\.openjarvis\token</code>). This app reads it
+          from there, so you only need to paste one here if you changed it.
+          Your phone needs the same token.
+        </p>
 
         <label class="field">
-          <span class="label">Let my phone reach this over Tailscale</span>
+          <span class="label">Let my phone reach this (Tailscale or NordVPN Meshnet)</span>
           <input id="bind-address" type="text" spellcheck="false" autocomplete="off"
                  placeholder="leave blank to keep this on this machine only" />
         </label>
         <p class="note">
-          Only fill this in if you use Tailscale and want your phone to talk to
-          Jarvis too. Type this computer's own Tailscale address here — it looks
-          like <code>100.x.x.x</code>, and you can find it in the Tailscale app.
-          Leave it blank and nothing changes: Jarvis stays reachable from this
-          computer alone, which is the default and the safe choice. This never
-          opens Jarvis to the whole internet, or even to your home Wi-Fi — only
-          to devices on your own Tailscale network.
+          Only fill this in if you use Tailscale or NordVPN Meshnet and want
+          your phone to talk to Jarvis too. Type this computer's own address
+          on that private network here — it looks like
+          <code>100.x.x.x</code>, and the Tailscale or NordVPN app shows it.
+          Leave it blank and nothing changes: Jarvis stays reachable from
+          this computer alone, which is the default and the safe choice. This
+          never opens Jarvis to the whole internet, or even to your home
+          Wi-Fi — only to your own devices on that private network.
+        </p>
+        <p class="note" id="phone-address-note">
+          <strong>On the phone, type this computer's name, not the number.</strong>
+          That is the Tailscale name ending in <code>.ts.net</code>, or the
+          Meshnet name ending in <code>.nord</code> (for example
+          <code>marioirelan11-alps.nord</code>), followed by <code>:4719</code>.
         </p>
 
         <div class="row">
@@ -84,43 +98,125 @@
           <span class="status" id="connection-status" role="status"></span>
         </div>
 
-        <div class="link" id="link-state" data-connected="false">
+        <!-- Always on screen: whether the event stream is live is what decides
+             whether anything can be approved, so it never moves into a
+             closed section. -->
+        <div class="link" id="link-state" data-connected="false" data-tone="warn">
           <span class="dot"></span>
-          <span id="link-text">checking the event stream…</span>
+          <span class="link-words">
+            <span id="link-text">Connecting to Jarvis…</span>
+            <details class="tech" id="link-tech" hidden>
+              <summary>Technical detail</summary>
+              <span id="link-detail"></span>
+            </details>
+          </span>
           <button class="btn ghost small" id="reconnect" type="button">Reconnect</button>
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="appearance-card">
         <h2>Appearance</h2>
+
+        <h3 class="subhead">On this computer</h3>
         <p class="note">
-          The theme applies to every window at once — the spotlight, the
-          widget, the Brain and this one. High contrast is held to a stricter
-          standard than the others: every text pair in it clears 7:1 against
-          both a dark and a light desktop, which matters because these windows
-          are transparent and the wallpaper behind them is not ours to choose.
+          Changes every Jarvis window on this computer at once. The HUD always
+          stays dark. Your phone picks its own theme.
         </p>
-        <label class="row">
-          <span class="label">Theme</span>
-          <select id="theme">
-            <option value="deep-space">Deep space — near-black, cool</option>
-            <option value="ember">Ember — near-black, warm</option>
-            <option value="paper">Paper — light, opaque</option>
-            <option value="high-contrast">High contrast — AAA</option>
-          </select>
+
+        <label class="toggle">
+          <input id="follow-system" type="checkbox" />
+          <span>
+            Match Windows light or dark mode
+            <span class="toggle-detail" id="follow-system-detail">
+              Daylight when Windows is light, your dark theme when it is dark.
+              A switch waits until Jarvis is idle, never mid-approval.
+            </span>
+          </span>
         </label>
+
+        <fieldset class="theme-list" id="theme-list">
+          <legend class="label" id="theme-legend">Theme</legend>
+          <!-- Rows, built from THEME_INFO in jarvis-link.js so the names and
+               the one-line descriptions are the phone's own. Radios, because a
+               screen reader then says which is chosen without any extra
+               wiring. -->
+        </fieldset>
+
+        <div class="field">
+          <span class="label" id="text-size-label">Text size</span>
+          <div class="choices" id="text-size" role="group" aria-labelledby="text-size-label"></div>
+          <p class="note" id="text-size-note">
+            Or press Ctrl and + or − in any Jarvis window. Ctrl and 0 goes back
+            to 100%.
+          </p>
+        </div>
+
+        <!-- The face on THIS computer: the widget's and the HUD's. Closed
+             every visit, like the phone's Face editor. Per computer and never
+             sent to the phone - what one machine's graphics card can draw
+             says nothing about another's. -->
+        <details class="more" id="face-tuning">
+          <summary>
+            <span class="more-title">Face on this computer</span>
+            <span class="more-detail">Quality, frame rate and speed.</span>
+          </summary>
+          <p class="note">
+            For the face in the widget and the HUD on this computer only. The
+            phone has its own.
+          </p>
+
+          <label class="toggle">
+            <input id="face-auto" type="checkbox" />
+            <span>
+              Auto adjust
+              <span class="toggle-detail">
+                Picks quality and frame rate for this computer, and steps down
+                if the face runs slow.
+              </span>
+            </span>
+          </label>
+
+          <div class="field">
+            <span class="label" id="face-quality-label">Quality</span>
+            <div class="choices" id="face-quality" role="group" aria-labelledby="face-quality-label"></div>
+            <p class="note" id="face-quality-note">High matches the reactor kit. Low is easiest on the graphics card.</p>
+          </div>
+
+          <div class="field">
+            <span class="label" id="face-fps-label">Frame rate</span>
+            <div class="choices" id="face-fps" role="group" aria-labelledby="face-fps-label"></div>
+            <p class="note">How many times a second the face is drawn. Auto uses the screen's own rate.</p>
+          </div>
+
+          <div class="field">
+            <span class="label" id="face-speed-label">All speeds</span>
+            <div class="choices" id="face-speed" role="group" aria-labelledby="face-speed-label"></div>
+            <p class="note">How fast the face moves. It never goes above 1×.</p>
+          </div>
+          <span class="status" id="face-status" role="status"></span>
+        </details>
+
+        <h3 class="subhead">Shared with your phone</h3>
+        <p class="note">
+          The face and the state colours — which face Jarvis wears, and the
+          colour and pattern for each thing it can be doing — are shared with
+          your phone. A change made there shows up here too. Nothing else on
+          this page leaves this computer.
+        </p>
+        <p class="state" id="appearance-shared">Checking whether they are shared…</p>
+        <div class="row">
+          <button class="btn" id="open-faces" type="button">Open Faces</button>
+          <span class="status" id="faces-status" role="status"></span>
+        </div>
       </section>
 
       <section class="card">
         <h2>Updates</h2>
         <p class="note">
-          Jarvis Desktop can look at its GitHub releases and tell you when a
-          newer build exists. It will not install one. Checking sends a single
-          request carrying nothing but the request itself — no identifier, no
-          telemetry, no account — and installing is the button below, pressed
-          by you. An update replaces the program, which is the largest single
-          change anything here can make to this machine, and nothing in Jarvis
-          does that on a timer.
+          Jarvis Desktop can check its download page on GitHub and tell you
+          when a newer version exists. It never installs one by itself:
+          installing is the button below, pressed by you. Checking sends one
+          request with nothing about you in it.
         </p>
 
         <label class="row">
@@ -150,17 +246,15 @@
       <section class="card">
         <h2>Shortcuts</h2>
         <p class="note">
-          Global accelerators: they work whatever window has focus, which also
-          means only one application on the machine can hold each combination.
-          If one shows as <em>in use</em>, something else claimed it first —
-          <code>Alt+Space</code> in particular is taken by PowerToys Run and,
-          on recent Windows 11 builds, by the Copilot app. Everything here is
-          also reachable from the tray icon, always.
+          Keyboard shortcuts that work in any program. Only one program can
+          hold each one, so if a shortcut says <em>in use</em>, another
+          program took it first — <code>Alt+Space</code> is often taken by
+          PowerToys Run or the Copilot app. Pick a different one and press
+          Save shortcuts. Everything here is also in the tray menu.
         </p>
         <p class="note">
-          Every shortcut needs a modifier. A bare key bound globally would
-          swallow that key everywhere on the machine, including in the box you
-          would use to change it back.
+          Each shortcut needs Ctrl, Alt, Shift or Win. A single key on its own
+          would stop working everywhere else on the computer.
         </p>
 
         <div id="hotkey-rows"></div>
@@ -170,79 +264,6 @@
           <button class="btn ghost" id="reset-hotkeys" type="button">Reset to defaults</button>
           <span class="status" id="hotkey-status" role="status"></span>
         </div>
-      </section>
-
-      <section class="card">
-        <h2>Backend</h2>
-        <p class="note">
-          Off by default, and it stays off unless you switch it on here. With it on,
-          Jarvis Desktop starts the backend when it launches — unless something is
-          already listening, in which case it attaches to that instead of running a
-          second one against the same approval queue. Quitting asks the backend to
-          stop, so the model comes off the GPU, and terminates the process tree only
-          if asking did not work. A backend you started yourself is never adopted
-          and never stopped.
-        </p>
-
-        <label class="toggle">
-          <input id="supervise" type="checkbox" />
-          <span>Let Jarvis Desktop start and stop the backend</span>
-        </label>
-
-        <label class="field">
-          <span class="label">Program</span>
-          <input id="program" type="text" spellcheck="false" autocomplete="off"
-                 placeholder="python" />
-        </label>
-
-        <label class="field">
-          <span class="label">Arguments <span class="hint">one per line</span></span>
-          <textarea id="args" rows="2" spellcheck="false"
-                    placeholder="C:\jarvis\jarvis_hud.py"></textarea>
-        </label>
-
-        <label class="field">
-          <span class="label">Working directory <span class="hint">optional</span></span>
-          <input id="cwd" type="text" spellcheck="false" autocomplete="off"
-                 placeholder="defaults to the folder holding the script" />
-        </label>
-
-        <div class="row">
-          <button class="btn" id="save-backend" type="button">Save backend</button>
-          <button class="btn ghost" id="start-backend" type="button">Start</button>
-          <button class="btn ghost" id="stop-backend" type="button">Stop</button>
-          <span class="status" id="backend-status" role="status"></span>
-        </div>
-
-        <p class="state" id="backend-state">—</p>
-      </section>
-
-      <section class="card">
-        <h2>Startup and logs</h2>
-        <p class="note">
-          Jarvis writes what it is doing to a file. If the backend refuses to start,
-          the reason is in <code>backend.log</code> — before this existed there was
-          nowhere for it to go, because a released Windows app has no console.
-          Both files are plain text and <strong>nothing in them is hidden or
-          scrambled</strong>, so read one before you send it to anybody.
-        </p>
-
-        <label class="toggle">
-          <input id="autostart" type="checkbox" />
-          <span>Start Jarvis when Windows starts</span>
-        </label>
-        <p class="note" id="autostart-note">
-          Jarvis will be running after a restart. It does not promise to be
-          <em>first</em> — other startup programs are racing it for the
-          <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and whoever asks first wins.
-        </p>
-
-        <div class="row">
-          <button class="btn ghost" id="open-logs" type="button">Open the log folder</button>
-          <span class="status" id="logs-status" role="status"></span>
-        </div>
-
-        <p class="state" id="logs-state">—</p>
       </section>
 
       <section class="card">
@@ -263,6 +284,19 @@
               and you say yes — there is no standing permission to go
               online, and this program never opens a public tunnel to
               itself.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">Where do I approve or deny what Jarvis wants to do?</summary>
+            <p class="faq-a">
+              On a card. When Jarvis wants to do something that is not
+              completely safe, it stops, and a card waits for you in the
+              Jarvis bar (<kbd>Alt</kbd>+<kbd>Space</kbd> opens it) and on the
+              widget. For anything important Windows also shows a
+              notification. Press Approve or Deny on the card; the
+              notification can only Deny. Nothing runs until you decide, one
+              thing at a time.
             </p>
           </details>
 
@@ -291,26 +325,33 @@
           <details class="faq-item">
             <summary class="faq-q">Can my phone talk to Jarvis?</summary>
             <p class="faq-a">
-              Yes, over Tailscale — a private network between only the
-              devices you own, never the open internet. Turn it on above,
-              in Connection, under "Let my phone reach this over
-              Tailscale," by typing this computer's own Tailscale address.
-              Leave that box blank and nothing changes: Jarvis stays
-              reachable from this computer alone.
+              Yes, over Tailscale or NordVPN Meshnet — a private network
+              between only the devices you own, never the open internet.
+              Turn it on above, in Connection, under "Let my phone reach
+              this", by typing this computer's own address on that network
+              (the <code>100.x.x.x</code> number). Then, on the phone, type
+              this computer's <em>name</em>, not the number: the Tailscale
+              name ending in <code>.ts.net</code>, or the Meshnet name ending
+              in <code>.nord</code> (like
+              <code>marioirelan11-alps.nord</code>), followed by
+              <code>:4719</code>. The phone also needs the token, which is in
+              the file <code>.openjarvis\token</code> in your user folder.
+              Leave the box blank and nothing changes: Jarvis stays reachable
+              from this computer alone.
             </p>
           </details>
 
           <details class="faq-item">
-            <summary class="faq-q">Why does the microphone button do nothing?</summary>
+            <summary class="faq-q">How does talking to Jarvis work?</summary>
             <p class="faq-a">
-              Windows dictation and browser speech recognition both send
-              your voice to a company's servers to turn it into text, which
-              breaks the rule that nothing private leaves this machine — so
-              this program switches that off rather than use it. An
-              offline replacement that never leaves the computer is being
-              built; until it is finished, dictation stays off rather than
-              quietly sending your voice somewhere you did not ask it to
-              go.
+              Hold the microphone button in the Jarvis bar and speak, then
+              let go to send. With the button selected, holding Space or
+              Enter works too. The recording is made on this computer and
+              goes only to Jarvis on this computer — never to Microsoft,
+              Google or anyone else. Automatic listening, the button next to
+              the microphone, is off until you turn it on. Windows dictation
+              is not used, because it sends your voice to a company's
+              servers to turn it into text.
             </p>
           </details>
 
@@ -365,14 +406,100 @@
             <p class="faq-a">
               It is stored on this computer only, it is never shown again
               once you save it here, and this page never sends it anywhere
-              except the backend address you configured above. It is
-              stored as plain text on disk, not scrambled, so treat this
-              computer's own user account the way you would treat any
-              other place a password lives.
+              except the Jarvis address set above. It is stored as plain
+              text on disk, not scrambled, so treat this computer's own user
+              account the way you would treat any other place a password
+              lives.
             </p>
           </details>
         </div>
       </section>
+
+      <!-- ── More options ──────────────────────────────────────────────────
+           Closed every visit, the phone's pattern. Nothing here is needed
+           day to day, and none of it hides whether Jarvis is connected -
+           that line stays in Connection above. -->
+      <details class="more more-options" id="more-options">
+        <summary>
+          <span class="more-title">More options</span>
+          <span class="more-detail">Letting this app start Jarvis, starting with Windows, and the log files.</span>
+        </summary>
+
+        <section class="card">
+          <h2>Starting Jarvis for you</h2>
+          <p class="note">
+            Off unless you turn it on here. With it on, this app starts Jarvis
+            when it opens — unless Jarvis is already running, in which case
+            it uses that one instead of starting a second. Quitting asks
+            Jarvis to stop, so the model leaves the graphics card, and forces
+            it to close only if asking did not work. A Jarvis you started
+            yourself is never taken over and never stopped.
+          </p>
+
+          <label class="toggle">
+            <input id="supervise" type="checkbox" />
+            <span>Let Jarvis Desktop start and stop Jarvis</span>
+          </label>
+
+          <label class="field">
+            <span class="label">Program</span>
+            <input id="program" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="python" />
+          </label>
+
+          <label class="field">
+            <span class="label">Arguments <span class="hint">one per line</span></span>
+            <textarea id="args" rows="2" spellcheck="false"
+                      placeholder="C:\jarvis\jarvis_hud.py"></textarea>
+          </label>
+
+          <label class="field">
+            <span class="label">Working folder <span class="hint">optional</span></span>
+            <input id="cwd" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="defaults to the folder holding the script" />
+          </label>
+
+          <div class="row">
+            <button class="btn" id="save-backend" type="button">Save</button>
+            <button class="btn ghost" id="start-backend" type="button">Start</button>
+            <button class="btn ghost" id="stop-backend" type="button">Stop</button>
+            <span class="status" id="backend-status" role="status"></span>
+          </div>
+
+          <p class="state" id="backend-state">—</p>
+          <details class="tech" id="backend-tech" hidden>
+            <summary>Technical detail</summary>
+            <span id="backend-detail"></span>
+          </details>
+        </section>
+
+        <section class="card">
+          <h2>Startup and logs</h2>
+          <p class="note">
+            Jarvis writes what it is doing to a file. If Jarvis refuses to
+            start, the reason is in <code>backend.log</code>. Both files are
+            plain text and <strong>nothing in them is hidden or
+            scrambled</strong>, so read one before you send it to anybody.
+          </p>
+
+          <label class="toggle">
+            <input id="autostart" type="checkbox" />
+            <span>Start Jarvis when Windows starts</span>
+          </label>
+          <p class="note" id="autostart-note">
+            Jarvis will be running after a restart. It does not promise to be
+            <em>first</em> — other startup programs are racing it for the
+            <kbd>Alt</kbd>+<kbd>Space</kbd> shortcut, and whoever asks first wins.
+          </p>
+
+          <div class="row">
+            <button class="btn ghost" id="open-logs" type="button">Open the log folder</button>
+            <span class="status" id="logs-status" role="status"></span>
+          </div>
+
+          <p class="state" id="logs-state">—</p>
+        </section>
+      </details>
 
       <!-- ── About ─────────────────────────────────────────────────────────
            Identity, not instructions - the FAQ above already answers "how

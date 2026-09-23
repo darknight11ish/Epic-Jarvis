@@ -22,7 +22,7 @@ const check = async (name, fn) => {
   catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
 };
 
-const THEMES = ["deep-space", "ember", "paper", "high-contrast"];
+const THEMES = ["deep-space", "paper", "high-contrast"];
 
 /**
  * In the page: disable a control, then read what it actually renders as.

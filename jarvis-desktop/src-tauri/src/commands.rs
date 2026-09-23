@@ -183,20 +183,123 @@ fn token_from_config_dir(app: &AppHandle) -> Option<String> {
 /// Every theme `theme.css` defines. Validated here rather than trusted from
 /// the window, so a page cannot persist a value that resolves to no palette
 /// and leaves every surface on the fallback colours.
-pub const THEMES: &[&str] = &["deep-space", "ember", "paper", "high-contrast"];
+///
+/// The same three the phone ships (`Themes.kt`'s `ALL`), under the same
+/// names: `deep-space` is Reactor, `paper` is Daylight, `high-contrast` is
+/// High Contrast. The ids stay as they were so no saved choice breaks.
+/// Ember was the fourth and is gone, matching the phone - see
+/// [`normalise_theme`] for where an owner who had it lands.
+pub const THEMES: &[&str] = &["deep-space", "paper", "high-contrast"];
 
-/// The chosen theme, or the default when nothing has been chosen or the stored
-/// value is one this build no longer ships.
-#[tauri::command]
-pub fn get_theme(app: AppHandle) -> String {
+/// The light theme "Follow the system" uses when Windows is in light mode.
+const LIGHT_THEME: &str = "paper";
+
+/// A stored theme id as this build reads it.
+///
+/// Anything this build does not ship - `ember`, removed to match the phone, or
+/// a hand-edited value - is Reactor, which is where the phone sends a removed
+/// theme too (`Themes.byId`).
+pub fn normalise_theme(stored: Option<&str>) -> &'static str {
+    let wanted = stored.unwrap_or("").trim();
+    THEMES
+        .iter()
+        .copied()
+        .find(|t| *t == wanted)
+        .unwrap_or(THEMES[0])
+}
+
+fn is_dark_theme(theme: &str) -> bool {
+    theme != LIGHT_THEME
+}
+
+/// The owner's theme choices, as stored.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ThemePrefs {
+    /// The theme picked by hand.
+    pub theme: String,
+    /// "Match Windows light or dark mode".
+    pub follow_system: bool,
+    /// The dark theme following returns to when Windows goes dark: the last
+    /// dark theme picked, so an owner on High Contrast does not get Reactor
+    /// at every dusk (the phone's `preferredDark`, audit custom-8).
+    pub dark_theme: String,
+    /// Windows' own app mode right now: `Some(true)` light, `Some(false)`
+    /// dark, `None` when it cannot be read (not Windows, or the value is
+    /// missing).
+    pub system_light: Option<bool>,
+    /// What every window should be wearing, given all of the above.
+    pub effective: String,
+}
+
+/// Pure: which theme the windows wear.
+///
+/// Following the system with Windows in light mode is Daylight; in dark mode
+/// it is the remembered dark theme. When Windows' mode cannot be read,
+/// following falls back to the theme picked by hand rather than guessing.
+pub fn effective_theme(
+    theme: &str,
+    follow_system: bool,
+    dark_theme: &str,
+    system_light: Option<bool>,
+) -> String {
+    match (follow_system, system_light) {
+        (true, Some(true)) => LIGHT_THEME.to_string(),
+        (true, Some(false)) => dark_theme.to_string(),
+        _ => theme.to_string(),
+    }
+}
+
+/// Reads the stored choices and Windows' mode, and works out the answer.
+pub fn theme_prefs(app: &AppHandle) -> ThemePrefs {
     use tauri_plugin_store::StoreExt;
 
-    app.store(SETTINGS_STORE)
-        .ok()
-        .and_then(|store| store.get("theme"))
-        .and_then(|v| v.as_str().map(str::to_string))
-        .filter(|t| THEMES.contains(&t.as_str()))
-        .unwrap_or_else(|| THEMES[0].to_string())
+    let store = app.store(SETTINGS_STORE).ok();
+    let text = |key: &str| -> Option<String> {
+        store
+            .as_ref()
+            .and_then(|s| s.get(key))
+            .and_then(|v| v.as_str().map(str::to_string))
+    };
+    let theme = normalise_theme(text("theme").as_deref()).to_string();
+    let follow_system = store
+        .as_ref()
+        .and_then(|s| s.get("theme_follow_system"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let dark_theme = {
+        let stored = normalise_theme(text("theme_dark").as_deref());
+        if text("theme_dark").is_some() && is_dark_theme(stored) {
+            stored.to_string()
+        } else if is_dark_theme(&theme) {
+            theme.clone()
+        } else {
+            THEMES[0].to_string()
+        }
+    };
+    let system_light = crate::system_theme::apps_use_light_theme();
+    let effective = effective_theme(&theme, follow_system, &dark_theme, system_light);
+    ThemePrefs {
+        theme,
+        follow_system,
+        dark_theme,
+        system_light,
+        effective,
+    }
+}
+
+/// The theme every window should be wearing right now - the picked one, or
+/// what "Match Windows" makes of it. A stored `ember` reads as Reactor.
+#[tauri::command]
+pub fn get_theme(app: AppHandle) -> String {
+    crate::system_theme::applied_or(&app, theme_prefs(&app).effective)
+}
+
+/// The owner's theme choices, for the Settings picker. Read-only.
+#[tauri::command]
+pub fn get_theme_prefs(app: AppHandle) -> ThemePrefs {
+    let mut prefs = theme_prefs(&app);
+    prefs.effective = crate::system_theme::applied_or(&app, prefs.effective);
+    prefs
 }
 
 /// Persists the theme and tells every open window at once.
@@ -204,6 +307,9 @@ pub fn get_theme(app: AppHandle) -> String {
 /// The fan-out is the point. Four surfaces can be on screen together, and a
 /// theme that changed in the window you clicked while the widget stayed cyan
 /// would look like a bug rather than a setting.
+///
+/// A dark theme is also remembered as the one "Match Windows" returns to when
+/// Windows goes dark.
 #[tauri::command]
 pub fn set_theme(app: AppHandle, theme: String) -> Result<String, String> {
     use tauri_plugin_store::StoreExt;
@@ -219,12 +325,43 @@ pub fn set_theme(app: AppHandle, theme: String) -> Result<String, String> {
         .store(SETTINGS_STORE)
         .map_err(|e| format!("settings store unavailable: {e}"))?;
     store.set("theme", serde_json::Value::String(theme.clone()));
+    if is_dark_theme(&theme) {
+        store.set("theme_dark", serde_json::Value::String(theme.clone()));
+    }
     store
         .save()
         .map_err(|e| format!("could not save the theme: {e}"))?;
 
-    crate::emit_all(&app, crate::events::THEME_CHANGED, theme.clone());
-    Ok(theme)
+    // A choice made by hand applies now, even mid-approval: the owner is the
+    // one changing it. Only a switch Windows makes on its own is held.
+    let effective = theme_prefs(&app).effective;
+    crate::system_theme::apply_now(&app, &effective);
+    Ok(effective)
+}
+
+/// Turns "Match Windows light or dark mode" on or off.
+#[tauri::command]
+pub fn set_theme_follow_system(app: AppHandle, follow: bool) -> Result<ThemePrefs, String> {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("settings store unavailable: {e}"))?;
+    store.set("theme_follow_system", serde_json::Value::Bool(follow));
+    store
+        .save()
+        .map_err(|e| format!("could not save the setting: {e}"))?;
+    let prefs = theme_prefs(&app);
+    crate::system_theme::apply_now(&app, &prefs.effective);
+    Ok(prefs)
+}
+
+/// Opens the Faces window from a page. Settings has an "Open Faces" button
+/// because the face and the state colours - the part of the look shared
+/// with the phone - were reachable only from the tray menu before.
+#[tauri::command]
+pub fn open_faces(app: AppHandle) -> Result<(), String> {
+    crate::windows::show_faces(&app)
 }
 
 /// True once the owner has closed the first-run walkthrough.
@@ -321,9 +458,9 @@ fn validate_bind_address(addr: &str) -> Result<(), String> {
     }
     if addr == "0.0.0.0" || addr == "::" {
         return Err(
-            "refusing to bind every network interface (0.0.0.0) — set the \
-             machine's own Tailscale address instead, so this is reachable \
-             from the tailnet and nowhere else"
+            "refusing to bind every network interface (0.0.0.0) — set this \
+             computer's own Tailscale or NordVPN Meshnet address instead, so \
+             Jarvis is reachable from your private network and nowhere else"
                 .to_string(),
         );
     }
@@ -1921,4 +2058,43 @@ pub fn quit_app(app: AppHandle) {
         let _ = hud.destroy();
     }
     app.exit(0);
+}
+
+#[cfg(test)]
+mod theme_tests {
+    use super::{effective_theme, normalise_theme, THEMES};
+
+    /// The phone dropped Ember and sends anyone who had it to Reactor; so
+    /// does the desktop. An unknown or missing value lands there too.
+    #[test]
+    fn ember_and_unknown_themes_land_on_reactor() {
+        assert!(!THEMES.contains(&"ember"));
+        assert_eq!(normalise_theme(Some("ember")), "deep-space");
+        assert_eq!(normalise_theme(Some("nonsense")), "deep-space");
+        assert_eq!(normalise_theme(None), "deep-space");
+        assert_eq!(normalise_theme(Some("paper")), "paper");
+        assert_eq!(normalise_theme(Some("high-contrast")), "high-contrast");
+    }
+
+    /// Light Windows is Daylight, dark Windows is the remembered dark theme,
+    /// and an unreadable Windows mode keeps the theme picked by hand.
+    #[test]
+    fn following_the_system_picks_daylight_or_the_dark_theme() {
+        assert_eq!(
+            effective_theme("high-contrast", true, "high-contrast", Some(true)),
+            "paper"
+        );
+        assert_eq!(
+            effective_theme("paper", true, "high-contrast", Some(false)),
+            "high-contrast"
+        );
+        assert_eq!(
+            effective_theme("high-contrast", true, "deep-space", None),
+            "high-contrast"
+        );
+        assert_eq!(
+            effective_theme("deep-space", false, "deep-space", Some(true)),
+            "deep-space"
+        );
+    }
 }

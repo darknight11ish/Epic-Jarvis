@@ -5067,6 +5067,77 @@ async function bootDisplay() {
   window.addEventListener("resize", fit);
   fit();
 
+  // ---- This computer's face settings --------------------------------------
+  // Settings → Appearance → "Face on this computer" (face-tuning.js): the
+  // phone's face editor controls, for the desktop's own face. The defaults -
+  // High, Auto frame rate, 1x, Auto adjust on - draw exactly what this frame
+  // drew before the setting existed. Read without `await`: in the HUD the
+  // message listener below has to be registered before this function's first
+  // await, and a face that starts on the defaults for one frame is harmless.
+  let TUNE = { quality: "high", frameRate: "auto", speed: 1, autoAdjust: true };
+  let tier = "high";          // what is being drawn now (Auto may lower it)
+  let hz = 60, stride = 1, baseStride = 1;
+  const gaps = [];
+  let costAvg = 0, lastStep = 0;
+  function useTier(name) {
+    const t = TIERS[name] || TIERS.high;
+    tier = TIERS[name] ? name : "high";
+    Q.ss = t.ss; Q.detail = t.detail; Q.gpu = t.gpu; Q.post = t.post; QNAME = tier;
+    // High and Max keep the kit's solo floor and full pixel density - what
+    // this frame always drew. Low and Medium deliberately do not: with the
+    // floor they would cost the same as High and save nothing (FaceBudget.kt).
+    surface.ss = tier === "low" ? 1 : tier === "medium" ? 1.5 : 2;
+    surface.detail = tier === "high" || tier === "max" ? Math.max(1.9, t.detail) : t.detail;
+    document.documentElement.setAttribute("data-face-quality", tier);
+    fit();
+  }
+  function applyTune(next) {
+    TUNE = next;
+    // Slow-down only; face-tuning.js clamps too, this is the second lock.
+    surface.speed = Math.min(1, Math.max(0.25, Number(TUNE.speed) || 1));
+    document.documentElement.setAttribute("data-face-speed", String(surface.speed));
+    baseStride = TUNE.autoAdjust ? 1 : strideForRate(TUNE.frameRate);
+    stride = baseStride;
+    useTier(TUNE.autoAdjust ? "high" : TUNE.quality);
+  }
+  // The kit's divisor rule (face-tuning.js strideFor), inlined so the pacing
+  // does not wait on the module.
+  function strideForRate(rate) {
+    const want = rate === "60" ? 60 : rate === "120" ? 120 : hz;
+    return Math.max(1, Math.round(hz / Math.min(want, hz)));
+  }
+  import("./face-tuning.js").then((m) => {
+    applyTune(m.loadFaceTuning());
+    // A change made in Settings, which is another window on the same origin.
+    window.addEventListener("storage", (event) => {
+      if (event.key === m.FACE_TUNING_KEY) applyTune(m.loadFaceTuning());
+    });
+  }).catch(() => { /* keep the defaults */ });
+  // Auto adjust: the editor's budget() rule for one surface. Over budget,
+  // step the quality down, then the frame rate; comfortably under, step back
+  // up - to High at most, as far as budget() itself ever climbs. At most one
+  // change every two seconds, because each quality change resizes the canvas.
+  function govern(cost, now) {
+    if (!TUNE.autoAdjust) return;
+    costAvg = costAvg * 0.9 + cost * 0.1;
+    if (now - lastStep < 2000) return;
+    const order = ["low", "medium", "high"];
+    const i = Math.max(0, order.indexOf(tier));
+    const budgetMs = 1000 / (hz / stride);
+    if (costAvg > budgetMs * 1.45) {
+      if (i > 0) useTier(order[i - 1]);
+      else if (hz / (stride + 1) >= 30) stride++;
+      else return;
+    } else if (costAvg < budgetMs * 0.55 && i < 2) {
+      useTier(order[i + 1]);
+    } else if (costAvg < budgetMs * 0.33 && stride > baseStride) {
+      stride--;
+    } else {
+      return;
+    }
+    lastStep = now;
+  }
+
   // Under the OS "reduce motion" setting the editor paces itself to CALM_HZ
   // (see applyTarget); this loop used to run at the display's full rate
   // regardless, in the Widget and the HUD alike. Same rule as the editor:
@@ -5074,16 +5145,31 @@ async function bootDisplay() {
   // draw so the face keeps its speed and moves in fewer, larger steps.
   // Read on every frame, so toggling the setting applies without a reload.
   let last = performance.now();
-  let owed = 0, lastDraw = -Infinity;
+  let owed = 0, lastDraw = -Infinity, vsync = 0;
   function tick(now) {
-    owed += Math.max(0, (now - last) / 1000);
+    const gap = now - last;
+    owed += Math.max(0, gap / 1000);
     last = now;
-    if (!CALM.matches || now - lastDraw >= 1000 / CALM_HZ) {
+    // Learn the display's rate from the first second of frames, as the
+    // editor's probe does, so a 60 or 120 target lands on whole vsyncs.
+    if (gaps.length < 60) {
+      gaps.push(gap);
+      if (gaps.length === 60) {
+        hz = hzFrom(gaps) || 60;
+        baseStride = TUNE.autoAdjust ? 1 : strideForRate(TUNE.frameRate);
+        stride = Math.max(stride, baseStride);
+      }
+    }
+    vsync++;
+    const paced = stride <= 1 || vsync % stride === 0;
+    if (paced && (!CALM.matches || now - lastDraw >= 1000 / CALM_HZ)) {
       const dt = Math.min(0.1, owed);   // the same 0.1s cap as before
       owed = 0;
       lastDraw = now;
+      const t0 = performance.now();
       stepAmp(dt);
       drawSurface(surface, dt, LIVE_STATE);
+      govern(performance.now() - t0, now);
     }
     requestAnimationFrame(tick);
   }

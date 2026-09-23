@@ -347,10 +347,20 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
         .send()
         .await
         .map_err(|e| {
+            // Plain words first, the technical part after: the tray and the
+            // quickbar show only the first sentence (tray.rs first_sentence,
+            // jarvis-link.js linkWords), and Settings shows the whole thing.
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}. Is it running?")
+                format!(
+                    "Jarvis is not running at {base}. Start it, or check the \
+                     address in Settings. Technical detail: could not reach the \
+                     Jarvis server at {base}."
+                )
             } else {
-                format!("the event stream could not be opened: {e}")
+                format!(
+                    "Could not connect to Jarvis. Technical detail: the event \
+                     stream could not be opened: {e}"
+                )
             }
         })?;
 
@@ -361,15 +371,23 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
         return Err(match status.as_u16() {
             // The server's own words for these two, so the message names the
             // fix rather than the symptom.
-            401 => "the server refused the event stream: bad or missing token. \
-                    Set it in Jarvis Desktop's settings."
+            401 => "Jarvis refused this app's token. Open Settings, then \
+                    Connection, and paste the token again. Technical detail: the \
+                    server refused the event stream (HTTP 401, bad or missing token)."
                 .to_string(),
-            403 => "the server refused the event stream as cross-origin. The \
-                    desktop client sends X-Jarvis-Client: hud, so this means \
-                    JARVIS_HUD_ORIGINS does not cover this client."
+            403 => "Jarvis refused this app. Technical detail: the server refused \
+                    the event stream as cross-origin. The desktop client sends \
+                    X-Jarvis-Client: hud, so this means JARVIS_HUD_ORIGINS does \
+                    not cover this client."
                 .to_string(),
-            code if body.is_empty() => format!("the event stream answered HTTP {code}"),
-            code => format!("the event stream answered HTTP {code}: {body}"),
+            code if body.is_empty() => format!(
+                "Jarvis answered with an error. Technical detail: the event \
+                 stream answered HTTP {code}."
+            ),
+            code => format!(
+                "Jarvis answered with an error. Technical detail: the event \
+                 stream answered HTTP {code}: {body}"
+            ),
         });
     }
 
@@ -403,10 +421,18 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
                     // The server ends the stream after an hour by design.
                     return Ok("the server closed the stream; reconnecting".to_string());
                 }
-                Ok(Err(e)) => return Err(format!("the event stream broke: {e}")),
+                Ok(Err(e)) => {
+                    return Err(format!(
+                        "The connection to Jarvis dropped. Technical detail: the \
+                         event stream broke: {e}"
+                    ))
+                }
                 Err(_) => {
                     return Err(format!(
-                        "no keepalive for {}s; treating the event stream as dead",
+                        "Jarvis went quiet: nothing heard for {} seconds. \
+                         Technical detail: no keepalive for {}s, so the event \
+                         stream is treated as dead.",
+                        SILENCE_TIMEOUT.as_secs(),
                         SILENCE_TIMEOUT.as_secs()
                     ))
                 }

@@ -251,6 +251,61 @@ export function currentLink() {
   return link;
 }
 
+/**
+ * The one sentence every window uses to say what state the link is in.
+ *
+ * Four states, the phone's (HomeScreen's link line) plus the one before the
+ * first answer:
+ *
+ * - not connected, with a reason: **Offline**, red, and the first sentence of
+ *   the reason - which stream.rs now writes in plain words first.
+ * - not connected, no reason yet: **Connecting…**. Before the first hello
+ *   nothing has failed; the quickbar used to say "Jarvis is not answering on
+ *   127.0.0.1:4719" here, naming an address that may not even be the one set.
+ * - connected but stale: **Stale - reconnecting**, amber. The stream is up
+ *   and `/api/pending` could not be read, so nothing can be approved; the
+ *   quickbar and widget used to show no words at all for this, only two grey
+ *   buttons.
+ * - otherwise **Linked**.
+ *
+ * `canAct` is rule 4 in one boolean: false whenever the queue cannot be
+ * confirmed live. `short` is for a pill or a tray-sized slot.
+ */
+export function linkWords(state = link) {
+  const s = state || {};
+  if (!s.connected) {
+    if (s.error) {
+      const first = String(s.error).trim().split(/(?<=[.!?])\s/)[0].replace(/[.;]$/, "");
+      return {
+        tone: "bad",
+        short: "Offline",
+        // stream.rs now starts its reasons with a plain sentence that names
+        // Jarvis ("Jarvis is not running at ..."); an older or raw reason
+        // gets the words around it.
+        text: /^Jarvis\b/.test(first)
+          ? `Offline — ${first}. Approving is blocked until it reconnects.`
+          : `Offline — Jarvis is not answering: ${first}. Approving is blocked until it reconnects.`,
+        canAct: false,
+      };
+    }
+    return {
+      tone: "warn",
+      short: "Connecting…",
+      text: "Connecting to Jarvis… Approving is blocked until it connects.",
+      canAct: false,
+    };
+  }
+  if (s.stale !== false) {
+    return {
+      tone: "warn",
+      short: "Stale — reconnecting",
+      text: "Stale — reconnecting. Nothing can be approved until it catches up.",
+      canAct: false,
+    };
+  }
+  return { tone: "ok", short: "Linked", text: "Linked", canAct: true };
+}
+
 /** The interruption budget as last reported. */
 export function currentAttention() {
   return link.attention;
@@ -480,8 +535,47 @@ export function reconnect() {
   });
 }
 
-/** Every theme `theme.css` defines, in the order the picker lists them. */
-export const THEMES = ["deep-space", "ember", "paper", "high-contrast"];
+/**
+ * Every theme `theme.css` defines, in the order the picker lists them.
+ *
+ * The phone's three (`Themes.kt`'s `ALL`), under the phone's names - the ids
+ * are the desktop's old ones so a saved choice keeps working. Ember was a
+ * fourth and is gone, as it went on the phone; see `normaliseTheme`.
+ */
+export const THEMES = ["deep-space", "paper", "high-contrast"];
+
+/**
+ * What the pickers say about each theme. Names and one-line descriptions are
+ * the phone's own (Themes.kt `label` / `blurb`), so the two apps read the
+ * same. `dark` decides which way the accent walks and which themes can be
+ * "the theme for dark mode".
+ */
+export const THEME_INFO = {
+  "deep-space": {
+    label: "Reactor",
+    blurb: "The default. Cool near-black, built around the reactor's own light.",
+    dark: true,
+  },
+  paper: {
+    label: "Daylight",
+    blurb: "Light chrome for reading outdoors. The reactor keeps its dark well.",
+    dark: false,
+  },
+  "high-contrast": {
+    label: "High Contrast",
+    blurb: "Maximum legibility. Flat surfaces, strong borders, two text weights.",
+    dark: true,
+  },
+};
+
+/**
+ * A stored theme id as this build reads it. Ember, removed to match the
+ * phone, and anything else this build does not ship is Reactor - the phone's
+ * `Themes.byId` does the same. commands.rs `normalise_theme` is the Rust twin.
+ */
+export function normaliseTheme(name) {
+  return THEMES.includes(name) ? name : THEMES[0];
+}
 
 /**
  * Applies a theme to this window and remembers it for the next paint.
@@ -493,13 +587,16 @@ export const THEMES = ["deep-space", "ember", "paper", "high-contrast"];
  * high-contrast because they need it, the surface they use most ignored them.
  */
 export function applyTheme(name) {
-  const theme = THEMES.includes(name) ? name : THEMES[0];
+  const theme = normaliseTheme(name);
   document.documentElement.setAttribute("data-theme", theme);
   try {
     localStorage.setItem("jarvis.theme", theme);
   } catch (error) {
     /* the store is the source of truth; this is only the anti-flash cache */
   }
+  // The accent is worked out against this theme's own surfaces, so it has to
+  // be worked out again for the new one.
+  paintAppearance();
   return theme;
 }
 
@@ -507,7 +604,8 @@ export function applyTheme(name) {
  * Subscribes this window to the theme, and reads the current one once.
  *
  * Safe to call from any surface. The inline bootstrap in each page has already
- * painted from localStorage, so this only corrects a disagreement.
+ * painted from localStorage, so this only corrects a disagreement. Also
+ * subscribes the window to the owner's state colours - see followAppearance.
  */
 export function followTheme(onChange) {
   if (!IS_TAURI) return;
@@ -522,6 +620,210 @@ export function followTheme(onChange) {
       if (onChange) onChange(theme);
     })
     .catch((error) => console.error("[jarvis] could not read the theme:", error));
+  followAppearance();
+}
+
+/* ==========================================================================
+   The owner's state colours in the chrome
+   --------------------------------------------------------------------------
+   The phone derives its accent from the idle state's bound colour
+   (Chrome.kt `accentFor`), so re-rolling idle to violet turns the caret, the
+   focus ring and the selected tab violet. Chrome.kt says the desktop does the
+   same; until now it did not - `--accent` and every `--state-*` were fixed per
+   theme, and only the tray icon followed the bindings. This is the port.
+
+   Only states the owner has bound are applied (appearance_colours returns
+   nothing for the rest), so an untouched install keeps the colours theme.css
+   measured. `--state-standby` is never overridden: theme.css declares it as a
+   deliberate divergence from the spec, for contrast.
+   ========================================================================== */
+
+/** WCAG relative luminance of `[r, g, b]` (0-255). */
+function luminance([r, g, b]) {
+  const lin = (c) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** WCAG contrast ratio, 1..21. */
+export function contrast(a, b) {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** `#rrggbb` to `[r, g, b]`, or null. */
+export function hexRgb(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** `rgb(...)`/`rgba(...)`/`#hex` to `[r, g, b, a]`, or null. */
+function parseColour(text) {
+  const hex = hexRgb(text);
+  if (hex) return [...hex, 1];
+  const m = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)/i.exec(
+    String(text || "")
+  );
+  if (!m) return null;
+  let a = m[4] === undefined ? 1 : parseFloat(m[4]);
+  if (String(m[4] || "").endsWith("%")) a /= 100;
+  return [Number(m[1]), Number(m[2]), Number(m[3]), a];
+}
+
+/** A translucent surface as it lands over a solid backdrop. */
+function over([r, g, b, a], [br, bg, bb]) {
+  return [r * a + br * (1 - a), g * a + bg * (1 - a), b * a + bb * (1 - a)];
+}
+
+/**
+ * Walks a colour along its own palette family until it is legible.
+ *
+ * `grounds` are the surface as it composites over black AND over white,
+ * because these windows are transparent (theme.css's contrast rule): a colour
+ * has to clear `floor` against both. Dark themes walk toward the pale end,
+ * light ones toward the deep end, exactly as Chrome.kt `accentFor` does, and
+ * the walk never leaves the family - the hue is what the owner chose. A
+ * colour outside the palette is nudged toward white or black instead.
+ * Pure, so tests/theme-follow.mjs can check it without a browser.
+ */
+export function legibleColour(entry, grounds, { dark = true, floor = 4.5 } = {}) {
+  const worst = (rgb) => Math.min(...grounds.map((g) => contrast(rgb, g)));
+  const ramp = Array.isArray(entry && entry.ramp) ? entry.ramp.map(hexRgb).filter(Boolean) : [];
+  const own = hexRgb(entry && entry.hex);
+  if (ramp.length && Number.isInteger(entry.step)) {
+    const start = Math.max(0, Math.min(ramp.length - 1, entry.step));
+    const up = [];
+    const down = [];
+    for (let i = start; i < ramp.length; i += 1) up.push(i);
+    for (let i = start - 1; i >= 0; i -= 1) down.push(i);
+    const order = dark ? [...up, ...down] : [start, ...down, ...up.slice(1)];
+    for (const i of order) {
+      if (worst(ramp[i]) >= floor) return { rgb: ramp[i], index: i, ramp };
+    }
+    let best = start;
+    for (let i = 0; i < ramp.length; i += 1) if (worst(ramp[i]) > worst(ramp[best])) best = i;
+    return { rgb: ramp[best], index: best, ramp };
+  }
+  if (!own) return null;
+  const toward = dark ? [255, 255, 255] : [0, 0, 0];
+  let out = own;
+  for (let k = 0; k <= 1.0001; k += 0.05) {
+    out = own.map((c, i) => Math.round(c + (toward[i] - c) * k));
+    if (worst(out) >= floor) break;
+  }
+  return { rgb: out, index: null, ramp: [] };
+}
+
+const css = ([r, g, b]) => `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+const cssA = ([r, g, b], a) => `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
+
+/**
+ * The custom properties the owner's colours set on this window, given the
+ * theme's surfaces. Pure: `colours` is appearance_colours' answer.
+ */
+export function appearanceProperties(colours, { grounds, dark = true, strict = false, textOnAccent = [] }) {
+  const props = {};
+  if (!colours || typeof colours !== "object") return props;
+  for (const [state, entry] of Object.entries(colours)) {
+    // The one declared divergence in theme.css - see its note.
+    if (state === "standby") continue;
+    // A status dot is non-text: 3:1, the same floor theme.css holds them to.
+    const dot = legibleColour(entry, grounds, { dark, floor: 3 });
+    if (dot) props[`--state-${state}`] = css(dot.rgb);
+  }
+  const idle = colours.idle;
+  if (idle) {
+    // High Contrast holds every text pair to 7:1, the others to 4.5:1.
+    const accent = legibleColour(idle, grounds, { dark, floor: strict ? 7 : 4.5 });
+    if (accent) {
+      const a = accent.rgb;
+      // One step further from the surface than the accent itself, for text.
+      let bright = a;
+      if (accent.ramp.length && accent.index !== null) {
+        const next = dark ? accent.index + 1 : accent.index - 1;
+        if (next >= 0 && next < accent.ramp.length) bright = accent.ramp[next];
+      }
+      props["--accent"] = css(a);
+      props["--accent-rgb"] = `${Math.round(a[0])} ${Math.round(a[1])} ${Math.round(a[2])}`;
+      props["--accent-bright"] = css(bright);
+      props["--accent-text"] = css(bright);
+      props["--accent-dim"] = cssA(a, 0.32);
+      props["--accent-faint"] = cssA(a, dark ? 0.12 : 0.1);
+      props["--border-accent"] = cssA(a, 0.34);
+      props["--edge-active"] = cssA(a, 0.65);
+      props["--focus-ring"] = css(bright);
+      props["--glow-accent"] = `0 0 0 1px ${cssA(a, 0.32)}, 0 0 22px ${cssA(a, 0.18)}`;
+      // Whichever reads best ON the accent: the theme's own ink, or plain
+      // near-black / white.
+      const inks = [...textOnAccent, [4, 7, 12], [255, 255, 255]];
+      let ink = inks[0];
+      for (const c of inks) if (contrast(c, a) > contrast(ink, a)) ink = c;
+      props["--text-on-accent"] = css(ink);
+    }
+  }
+  return props;
+}
+
+let appearanceColours = null;
+let appearanceProps = [];
+let appearanceFollowed = false;
+
+/** Re-applies the last colours read, against the theme now showing. */
+function paintAppearance() {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  // Back to the theme's own values first, so what theme.css says for THIS
+  // theme is what gets measured.
+  for (const name of appearanceProps) root.style.removeProperty(name);
+  appearanceProps = [];
+  if (!appearanceColours || !Object.keys(appearanceColours).length) return;
+  const style = getComputedStyle(root);
+  const surface = parseColour(style.getPropertyValue("--surface-1")) || [10, 17, 25, 1];
+  const theme = root.getAttribute("data-theme") || THEMES[0];
+  const info = THEME_INFO[theme] || THEME_INFO[THEMES[0]];
+  const ink = parseColour(style.getPropertyValue("--text-on-accent"));
+  const props = appearanceProperties(appearanceColours, {
+    grounds: [over(surface, [0, 0, 0]), over(surface, [255, 255, 255])],
+    dark: info.dark,
+    strict: theme === "high-contrast",
+    textOnAccent: ink ? [ink.slice(0, 3)] : [],
+  });
+  for (const [name, value] of Object.entries(props)) {
+    root.style.setProperty(name, value);
+    appearanceProps.push(name);
+  }
+}
+
+function readAppearanceColours() {
+  if (!IS_TAURI) return;
+  TAURI.core
+    .invoke("appearance_colours")
+    .then((colours) => {
+      appearanceColours = colours && typeof colours === "object" ? colours : null;
+      paintAppearance();
+    })
+    .catch(() => {
+      /* an older shell without the command: keep the theme's own colours */
+    });
+}
+
+/**
+ * Makes this window's accent and state dots follow the owner's state colours,
+ * and keeps them following. Called by followTheme, so every window that
+ * follows the theme follows these too. Reads from memory
+ * (`appearance_colours`), never the network, so it is safe to re-read on every
+ * `appearance-changed`.
+ */
+export function followAppearance() {
+  if (!IS_TAURI || appearanceFollowed) return;
+  appearanceFollowed = true;
+  TAURI.event.listen("appearance-changed", () => readAppearanceColours());
+  readAppearanceColours();
 }
 
 /* ==========================================================================
@@ -529,7 +831,7 @@ export function followTheme(onChange) {
    ========================================================================== */
 
 /** The steps Ctrl+= and Ctrl+- walk, and the one Ctrl+0 returns to. */
-const ZOOM_STEPS = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
+export const ZOOM_STEPS = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
 const ZOOM_KEY = "jarvis.zoom";
 
 function storedZoom() {
@@ -593,6 +895,16 @@ export function followZoom(onChange) {
     if (onChange) requestAnimationFrame(() => requestAnimationFrame(() => onChange(zoom)));
   };
   apply(storedZoom());
+
+  // Settings' Text size buttons write the same key from another window. The
+  // `storage` event fires in every OTHER same-origin document when that
+  // happens, which is exactly the set of windows that need to follow - the
+  // one that wrote it has already applied it. (A browser-standard event; not
+  // yet seen on the owner's machine, so the key is also re-read on load.)
+  window.addEventListener("storage", (event) => {
+    if (event.key !== ZOOM_KEY) return;
+    apply(storedZoom());
+  });
 
   window.addEventListener("keydown", (event) => {
     if (!event.ctrlKey || event.altKey || event.metaKey) return;

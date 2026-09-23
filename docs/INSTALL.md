@@ -239,9 +239,11 @@ switch cannot lift.
 
 ### 3.1 What works
 
-Tailscale, on both devices, on the same tailnet, with MagicDNS on. The backend
-already expects this — its own comments say so. A private mesh between two
-devices you own is not a public tunnel; nothing is exposed to the internet.
+A private network between your own devices: **Tailscale** (both devices on the
+same tailnet, with MagicDNS on) or **NordVPN Meshnet** (both devices on your
+Meshnet). The owner's setup uses Meshnet, with names like
+`marioirelan11-alps.nord`. A private mesh between two devices you own is not a
+public tunnel; nothing is exposed to the internet.
 
 ### 3.2 Reaching a supervised backend from the phone
 
@@ -250,9 +252,10 @@ to listen anywhere but loopback — it passed three environment variables to a
 supervised backend and the bind address was not one of them, so that backend
 was unreachable from the phone no matter what you did on the phone's side.
 
-It is now a setting: **Settings → Connection → "Let my phone reach this over
-Tailscale."** Type this machine's own Tailscale address there (it looks like
-`100.x.x.x`; find it in the Tailscale app) and save. The desktop sets
+It is now a setting: **Settings → Connection → "Let my phone reach this
+(Tailscale or NordVPN Meshnet)."** Type this machine's own address on that
+network there (it looks like `100.x.x.x`; the Tailscale or NordVPN app shows
+it) and save. The desktop sets
 `JARVIS_HUD_BIND` on the supervised backend from that value every time it
 starts it. Leave the field blank — the default — and nothing changes: the
 backend stays loopback-only.
@@ -264,9 +267,10 @@ makes it listen on `127.0.0.1` as well. Do not point the desktop at the
 mesh address instead: its HUD window is only allowed to talk to `127.0.0.1`
 and `localhost`, and every request it makes to anything else is refused.
 
-NordVPN Meshnet works in place of Tailscale: put this machine's Meshnet
-address in the field above, and on the phone pair with its Meshnet name
-(`something.nord:4719`), not the address.
+**On the phone, type the computer's NAME, not that number.** The desktop box
+takes the `100.x` address; the phone takes the name, followed by `:4719` — the
+Tailscale name ending in `.ts.net`, or the Meshnet name ending in `.nord`
+(for example `marioirelan11-alps.nord:4719`).
 
 That field refuses `0.0.0.0` outright, on either side: the setting will not
 save it, and if it somehow reached the backend, `jarvis_hud._bind_address()`
@@ -322,14 +326,17 @@ without one, but the phone cannot pair.
 ### 3.3 Pair
 
 1. Sideload the APK: `adb install -r client-latest.apk`
-2. Open it → Pairing → host `yourpc.tailnet.ts.net:4719`, then the token.
+2. Open it → Pairing → host `yourpc.tailnet.ts.net:4719` (Tailscale) or
+   `yourpc.nord:4719` (Meshnet, e.g. `marioirelan11-alps.nord:4719`), then the
+   token from `%USERPROFILE%\.openjarvis\token`.
 3. Connect.
 
 ### 3.4 When it fails
 
-The phone says: *"Cannot reach the desktop… Check Tailscale is up on both
-ends."* **This message is usually wrong.** A loopback-bound backend refuses the
-connection identically to an absent Tailscale. Check the bind first — it is the
+The phone says: *"Cannot reach the desktop… Check your private network
+(Tailscale or NordVPN Meshnet) is up on both ends."* **This message is usually
+wrong.** A loopback-bound backend refuses the connection identically to an
+absent private network. Check the bind first — it is the
 more likely cause.
 
 *"The desktop refused that token"* can also mean the **server has no token at

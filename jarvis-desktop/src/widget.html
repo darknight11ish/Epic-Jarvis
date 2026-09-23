@@ -18,7 +18,7 @@
     <script>
       try {
         var t = localStorage.getItem("jarvis.theme");
-        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+        if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
           document.documentElement.setAttribute("data-theme", t);
         }
       } catch (e) {
@@ -100,7 +100,11 @@
              bar reports it but sits inside the drag region, where a click is a
              drag; this row is the action, in the half of the window that has
              room for a sentence. -->
-        <div class="widget-offline" id="widget-offline" hidden>
+        <!-- Shown while the link is down OR connected-but-stale: in both,
+             nothing can be approved, and the second used to show no words at
+             all. `data-tone` is red for offline, amber for stale or
+             connecting (jarvis-link.js linkWords). -->
+        <div class="widget-offline" id="widget-offline" data-tone="bad" hidden>
           <span id="widget-offline-text">Jarvis is not answering.</span>
           <button class="btn btn-quiet" type="button" id="widget-offline-retry">Reconnect</button>
         </div>
@@ -201,6 +205,11 @@
           <div class="approval-header">
             <span class="warn-badge">APPROVAL REQUIRED</span>
             <span class="action-name mono" id="appr-action">--</span>
+            <!-- Which of how many, as in the quickbar. The next card replacing
+                 the answered one under the cursor, with no sign more were
+                 waiting, is how a click lands on a card nobody read. Display
+                 only: there is no control here that acts on more than one. -->
+            <span class="appr-count mono" id="appr-count" hidden></span>
           </div>
           <!-- Outside text tried to rush the reader and the tier went up.
                The chip and the quote; the surrounding context stays on the
@@ -229,6 +238,9 @@
             role="group"
             aria-label="Choose which version to approve"
           ></div>
+          <!-- Why Approve is missing, in words on the card - it used to be a
+               tooltip on a disabled button, which the keyboard cannot reach. -->
+          <p class="appr-options-why" id="appr-options-why" hidden></p>
 
           <!-- A note before the first decision - §3b. Submitting sends it
                back for a NEW proposal; it never edits the one on screen,
@@ -251,10 +263,14 @@
             >↵</button>
           </div>
 
+          <!-- Why the two buttons are grey, when they are: the queue cannot be
+               confirmed, or a decision is already on its way. -->
+          <p class="appr-why" id="appr-why" role="status" hidden></p>
           <div class="approval-actions">
             <button class="btn btn-approve" id="btn-appr-yes">Approve</button>
             <button class="btn btn-deny" id="btn-appr-no">Deny</button>
           </div>
+          <p class="appr-hint">Nothing runs until you decide.</p>
         </section>
 
         <!-- One-shot capture -->

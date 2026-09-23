@@ -44,7 +44,7 @@ const SETS = [
     cvd: 5,
   },
 ];
-const THEMES = ["default", "ember", "paper", "high-contrast"];
+const THEMES = ["default", "paper", "high-contrast"];
 
 const srgb = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
 const gamma = (v) => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);

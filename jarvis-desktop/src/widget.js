@@ -30,6 +30,8 @@ import {
   stopTask,
   followTheme,
   followZoom,
+  linkWords,
+  surfaceState,
   start as startLink,
 } from "./jarvis-link.js";
 
@@ -110,6 +112,9 @@ const dom = {
   apprAction: $("appr-action"),
   apprDetail: $("appr-detail"),
   apprOptions: $("appr-options"),
+  apprOptionsWhy: $("appr-options-why"),
+  apprWhy: $("appr-why"),
+  apprCount: $("appr-count"),
   apprNoteInput: $("appr-note"),
   btnApprNoteSend: $("btn-appr-note-send"),
   btnApprYes: $("btn-appr-yes"),
@@ -243,7 +248,48 @@ if (typeof ResizeObserver !== "undefined") {
 function applyFaceVisibility() {
   const show = state.expanded && !state.approval;
   if (dom.faceWrap) dom.faceWrap.hidden = !show;
-  if (dom.faceFrame) dom.faceFrame.src = show ? "faces.html?mode=display" : "";
+  // `feed=parent`: this window tells the face what to wear and what state to
+  // show, the way the HUD does. The frame used to ask for the owner's face
+  // itself and was refused - the widget's capability had no appearance
+  // permission at all - so the widget always wore the default face in the
+  // default colours. And an event sent to this window is delivered to its
+  // top-level page, never to a frame inside it, so the frame could not have
+  // followed a change anyway. See `postFace`.
+  if (dom.faceFrame) dom.faceFrame.src = show ? "faces.html?mode=display&feed=parent" : "";
+}
+
+/** The owner's appearance document, as this window last read it. */
+let faceAppearance = null;
+
+/** Hands the face frame the state to show and the face to wear. */
+function postFace() {
+  const frame = dom.faceFrame;
+  if (!frame || !frame.contentWindow || !frame.getAttribute("src")) return;
+  const message = { type: "jarvis-hud-face", state: surfaceState(currentLink()) };
+  if (faceAppearance) message.appearance = faceAppearance;
+  try {
+    frame.contentWindow.postMessage(message, location.origin);
+  } catch (error) {
+    /* the frame is mid-navigation; its load event posts again */
+  }
+}
+
+/**
+ * Reads the owner's face. `fromServer` once at boot - `get_appearance` asks
+ * Jarvis, so a face or colour changed on the phone arrives - and from memory
+ * (`appearance_snapshot`) after that. Never `get_appearance` from inside the
+ * `appearance-changed` listener: that command broadcasts the same event, and
+ * listening to your own echo is a loop.
+ */
+async function readFaceAppearance(fromServer) {
+  if (!IS_TAURI) return;
+  try {
+    const doc = await TAURI.core.invoke(fromServer ? "get_appearance" : "appearance_snapshot");
+    if (doc && typeof doc === "object") faceAppearance = { face: doc.face || null, bindings: doc.bindings || {} };
+  } catch (error) {
+    if (fromServer) return readFaceAppearance(false);
+  }
+  postFace();
 }
 
 function applyExpanded(expanded) {
@@ -491,6 +537,10 @@ function renderOptions(approval) {
   const multiple = options.length > 1;
   dom.apprOptions.hidden = !multiple;
   dom.btnApprYes.hidden = multiple;
+  dom.apprOptionsWhy.hidden = !multiple;
+  dom.apprOptionsWhy.textContent = multiple
+    ? `Jarvis offered ${options.length} ways to do this. The desktop can't yet tell it which one you picked, so approving is off here. Deny still works.`
+    : "";
   if (!multiple) return;
   for (const option of options) {
     const btn = document.createElement("button");
@@ -498,7 +548,7 @@ function renderOptions(approval) {
     btn.className = "appr-option";
     btn.dataset.optionId = option.id;
     btn.disabled = true;
-    btn.title = "This desktop can't tell the server which option was picked yet — see docs/JARVIS-API.md §8. Deny still works.";
+    btn.title = "Approving one option is not possible from the desktop yet. Deny still works.";
     const label = document.createElement("span");
     label.className = "opt-label";
     label.textContent = option.label; // textContent: model-authored text.
@@ -518,6 +568,8 @@ function closeApproval() {
   dom.apprCard.hidden = true;
   dom.apprOptions.replaceChildren();
   dom.apprOptions.hidden = true;
+  dom.apprOptionsWhy.hidden = true;
+  dom.apprCount.hidden = true;
   dom.btnApprYes.hidden = false;
   dom.apprNoteInput.value = "";
   applyFaceVisibility();
@@ -530,9 +582,25 @@ function closeApproval() {
  * twice, from two surfaces, seconds apart.
  */
 function syncApprovalButtons() {
-  const blocked = currentLink().stale || state.busy;
+  // `deciding`, not `busy`: `busy` is the capture box's flag (see its own
+  // note), so the old `stale || busy` left Approve and Deny live-looking while
+  // a decision was on its way - a second click silently swallowed by the
+  // latch - and greyed them for no reason while a note was being filed. The
+  // quickbar has always used `stale || deciding`.
+  const link = currentLink();
+  const blocked = link.stale || state.deciding;
   dom.btnApprYes.disabled = blocked;
   dom.btnApprNo.disabled = blocked;
+  // And say why, on the card. Two grey buttons and nothing else was all the
+  // widget showed while the queue could not be confirmed.
+  const why = link.stale
+    ? `${linkWords(link).short} — the approval queue cannot be confirmed, so nothing can be answered from here.`
+    : state.deciding
+      ? "That decision is on its way."
+      : "";
+  dom.apprWhy.hidden = !why;
+  dom.apprWhy.textContent = why;
+  dom.apprWhy.dataset.tone = link.stale ? "bad" : "";
   // Not `= blocked`: `renderOptions` leaves these permanently disabled (see
   // its own comment), and `= blocked` would re-enable them once the stream
   // stopped being stale.
@@ -563,6 +631,8 @@ async function decide(approved, optionId = null) {
   // in-flight decision silently swallowed Enter in the capture field.
   state.deciding = true;
   syncApprovalButtons();
+  // The same words the quickbar uses, so the grey buttons have a reason.
+  flash(approved ? "Approving…" : "Denying…");
 
   try {
     await decideOnBackend(state.approval.id, approved, optionId);
@@ -941,13 +1011,17 @@ startLink();
 
     // Offline used to be reported and never acted on: the dot went red, the
     // pill said OFFLINE, and there was nothing anywhere in this window to do
-    // about it.
-    dom.offline.hidden = link.connected;
-    if (!link.connected) {
-      dom.offlineText.textContent = link.error
-        ? clip(`Not answering: ${link.error}`, 90)
-        : "Jarvis is not answering.";
+    // about it. And connected-but-stale showed nothing at all, while Approve
+    // and Deny quietly went grey. Both now say what is wrong, in the same
+    // words every window uses (linkWords), red for offline, amber for stale.
+    const words = linkWords(link);
+    dom.offline.hidden = words.canAct;
+    if (!words.canAct) {
+      dom.offlineText.textContent = clip(words.text, 110);
+      dom.offlineText.title = link.error || "";
+      dom.offline.dataset.tone = words.tone;
     }
+    postFace();
 
     // Live progress — docs/AUTONOMY-PROPOSALS.md §3c. Only shown while
     // something is actually reported in progress; offline already has its
@@ -977,7 +1051,20 @@ startLink();
     const open = queue.items[0] || null;
     if (open) openApproval(open);
     else if (state.approval) closeApproval();
+    // "1 of 3", the quickbar's wording. A number only - nothing here acts on
+    // more than the one card on screen.
+    const total = queue.items.length;
+    dom.apprCount.hidden = !open || total < 2;
+    dom.apprCount.textContent = open && total > 1 ? `1 of ${total}` : "";
+    postFace();
   });
+
+  // The face frame: posted to when it loads and whenever what it shows
+  // changes. Read once from Jarvis (so a phone change arrives), then from
+  // memory on every change.
+  if (dom.faceFrame) dom.faceFrame.addEventListener("load", postFace);
+  listen("appearance-changed", () => readFaceAppearance(false));
+  readFaceAppearance(true);
 
   // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
   // one probe. Once, at boot — there is no timer here any more.

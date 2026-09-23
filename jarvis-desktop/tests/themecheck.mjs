@@ -44,7 +44,7 @@ const PAIRS = [
   ["--text-faint", "--surface-sunken", 4.5, "placeholder text in a field"],
 ];
 
-const THEMES = ["default", "ember", "paper", "high-contrast"];
+const THEMES = ["default", "paper", "high-contrast"];
 // The high-contrast theme claims AAA, so it is held to it rather than to AA.
 const AAA = { "high-contrast": true };
 

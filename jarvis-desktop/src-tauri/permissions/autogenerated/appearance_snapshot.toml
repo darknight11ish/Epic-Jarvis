@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-appearance-snapshot"
+description = "Enables the appearance_snapshot command without any pre-configured scope."
+commands.allow = ["appearance_snapshot"]
+
+[[permission]]
+identifier = "deny-appearance-snapshot"
+description = "Denies the appearance_snapshot command without any pre-configured scope."
+commands.deny = ["appearance_snapshot"]

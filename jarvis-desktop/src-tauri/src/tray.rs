@@ -767,6 +767,13 @@ fn activity_label(link: &LinkState) -> String {
             None => "Jarvis — connecting…".to_string(),
         };
     }
+    // Connected but stale: the stream is up and `/api/pending` could not be
+    // read, so the activity below is last known, not current. The phone says
+    // "Stale — reconnecting" in amber for exactly this; the tray used to say
+    // "idle" as though nothing were wrong.
+    if link.stale {
+        return "Jarvis — stale, reconnecting".to_string();
+    }
     match link.activity.as_str() {
         "idle" => "Jarvis — idle".to_string(),
         other => format!("Jarvis — {other}"),
@@ -792,7 +799,12 @@ fn power_label(link: &LinkState) -> String {
 
 fn approvals_label(link: &LinkState) -> String {
     match link.approvals {
-        0 if link.stale => "Approvals: unknown while offline".to_string(),
+        0 if link.stale && !link.connected => "Approvals: unknown while offline".to_string(),
+        // "offline" was the wrong word here: the stream is connected, it is
+        // the queue that could not be confirmed.
+        0 if link.stale => "Approvals: unknown until the link catches up".to_string(),
+        1 if link.stale => "1 approval waiting (last known)".to_string(),
+        n if link.stale => format!("{n} approvals waiting (last known)"),
         0 => "No approvals waiting".to_string(),
         1 => "1 approval waiting".to_string(),
         n => format!("{n} approvals waiting"),
@@ -872,7 +884,9 @@ fn backend_row(app: &AppHandle) -> (String, bool) {
 
 fn tooltip(app: &AppHandle, link: &LinkState) -> String {
     let mut parts = vec![activity_label(link)];
-    if link.connected {
+    // Not while stale: power, approvals and the brief would be last-known
+    // facts presented as current ones - the phone drops the same extras.
+    if link.connected && !link.stale {
         parts.push(power_label(link));
         if link.approvals > 0 {
             parts.push(approvals_label(link));
@@ -1444,6 +1458,18 @@ mod tests {
         };
         assert!(activity_label(&down).starts_with("Jarvis — offline: could not reach"));
         assert!(activity_label(&down).chars().count() < 90);
+
+        // Connected, but the queue could not be confirmed: not "idle", and
+        // not "offline" either, and any count is marked as last known.
+        let mut stale = link();
+        stale.stale = true;
+        assert_eq!(activity_label(&stale), "Jarvis — stale, reconnecting");
+        assert_eq!(
+            approvals_label(&stale),
+            "Approvals: unknown until the link catches up"
+        );
+        stale.approvals = 2;
+        assert_eq!(approvals_label(&stale), "2 approvals waiting (last known)");
 
         let mut quiet = link();
         quiet.power = "quiet".into();

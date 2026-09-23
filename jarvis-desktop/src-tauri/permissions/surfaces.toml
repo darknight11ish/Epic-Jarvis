@@ -21,6 +21,12 @@ permissions = [
   # Reading the theme is not privileged and every window needs it on load, or
   # it paints the wrong palette until something tells it otherwise.
   "allow-get-theme",
+  "allow-get-theme-prefs",
+  # The owner's face and state colours, read from memory - never the network,
+  # never a broadcast. Cosmetic: the accent and state dots follow them
+  # (jarvis-link.js followAppearance), and the widget's live face wears them.
+  "allow-appearance-snapshot",
+  "allow-appearance-colours",
 ]
 
 # Choosing the theme. Two windows offer a picker — settings and the Brain — and
@@ -29,7 +35,7 @@ permissions = [
 [[set]]
 identifier = "theme-write"
 description = "Change the theme for every window."
-permissions = ["allow-set-theme"]
+permissions = ["allow-set-theme", "allow-set-theme-follow-system"]
 
 # Answering a gate is a decision with consequences, so it is separate from
 # reading the stream. The quickbar and the widget both render approvals and
@@ -293,6 +299,21 @@ permissions = [
 identifier = "appearance"
 description = "Read and write which face Jarvis wears and how each state looks. Cosmetic; approves nothing."
 permissions = ["allow-get-appearance", "allow-set-appearance"]
+
+# Reading it, and nothing else. The widget wears the owner's face (it used to
+# fall back to the default face because its capability had no appearance
+# permission at all), and Settings says whether the face and colours are
+# shared with the phone. Neither may change them: that is the Faces window.
+[[set]]
+identifier = "appearance-read"
+description = "Read which face Jarvis wears and whether that choice is shared with the phone. Cosmetic and read-only."
+permissions = ["allow-get-appearance"]
+
+# Settings' "Open Faces" button. Opens a window; changes nothing by itself.
+[[set]]
+identifier = "faces-open"
+description = "Open the Faces window."
+permissions = ["allow-open-faces"]
 
 # ---------------------------------------------------------------------------
 # The first-run walkthrough: closes itself, and nothing else.

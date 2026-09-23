@@ -140,6 +140,14 @@ body {
   color: var(--text-muted);
 }
 
+/* Connected but stale, or still connecting: amber, not red. Nothing can be
+   approved in either, but neither is "Jarvis is down". The words carry the
+   difference too (jarvis-link.js linkWords), so it is never hue alone. */
+.widget-offline[data-tone="warn"] {
+  border-left-color: var(--warn);
+  background: var(--warn-faint);
+}
+
 /* A button that is an offer, not an emphasis: the emphatic control in this
    window is Approve, and nothing else may compete with it. */
 .btn-quiet {
@@ -474,6 +482,32 @@ body {
 .appr-risk[data-reversible="hard"] { color: var(--gold); }
 .appr-risk[data-reversible="no"] { color: var(--bad); }
 
+/* "1 of 3". Muted: it is a count, not a warning. */
+.appr-count {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+/* Why Approve is missing for a multi-option plan, and why the two buttons are
+   grey. Words on the card, where the keyboard and a screen reader reach them. */
+.appr-options-why,
+.appr-why {
+  margin: 0 0 6px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.appr-why[data-tone="bad"] { color: var(--bad-text); }
+
+.appr-hint {
+  margin: 5px 0 0;
+  font-size: 9.5px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 
 /* Multiple-choice options - docs/AUTONOMY-PROPOSALS.md §3a. Stacked, not a
    row: a label long enough to distinguish two plans does not fit three
@@ -565,6 +599,13 @@ body {
   outline: none;
   border-color: rgb(var(--accent-rgb) / 0.45);
   box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.12);
+}
+
+/* A real focus ring for the keyboard, the same one every other control gets.
+   The 12% glow above was the only sign of focus and is nearly invisible. */
+.appr-note-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .appr-note-input:disabled {
@@ -736,6 +777,11 @@ body {
   outline: none;
   border-color: rgb(var(--accent-rgb) / 0.45);
   box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.12);
+}
+
+.capture-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .capture-input:disabled {

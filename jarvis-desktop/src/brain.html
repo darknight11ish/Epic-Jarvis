@@ -19,7 +19,7 @@
         // Validated here and not only in applyTheme: a stale or hand-edited
         // value would otherwise paint an unmatched [data-theme] and then flip
         // 80ms later, which is the flash this exists to prevent.
-        if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+        if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
           document.documentElement.setAttribute("data-theme", t);
         }
       } catch (e) {
@@ -120,10 +120,9 @@
           <label class="rail-theme">
             <span class="sr-only">Theme</span>
             <select id="theme-picker">
-              <option value="deep-space">Deep space</option>
-              <option value="ember">Ember</option>
-              <option value="paper">Paper</option>
-              <option value="high-contrast">High contrast</option>
+              <option value="deep-space">Reactor</option>
+              <option value="paper">Daylight</option>
+              <option value="high-contrast">High Contrast</option>
             </select>
           </label>
         </div>
@@ -138,13 +137,27 @@
           <div class="topbar-right">
             <!-- Live link state. The same struct the tray and the quickbar
                  read; this window subscribes, it does not poll. -->
-            <span class="link-pill" id="link-pill" data-connected="false">
+            <span class="link-pill" id="link-pill" data-connected="false" data-tone="warn">
               <i aria-hidden="true"></i>
-              <span id="link-text">connecting…</span>
+              <span id="link-text">Connecting…</span>
             </span>
+            <!-- Only while the link is down: asks the stream to reconnect now
+                 rather than wait out its backoff, as the quickbar's does. -->
+            <button class="btn ghost" type="button" id="reconnect-link" hidden>Reconnect</button>
             <button class="btn ghost" type="button" id="refresh">Refresh</button>
           </div>
         </header>
+
+        <!-- How old what is on screen is. The panes are read when they open
+             and on a few events, so "live" over a pane read an hour ago was
+             a claim about the link, not about the numbers under it. -->
+        <p class="freshness" id="freshness" role="status">Reading…</p>
+
+        <!-- The rush latch, on every view. It used to be read only when
+             Advanced > Trust was opened, and to vanish when its check
+             failed. It never offers to clear anything: a latch expires on
+             its own, and Retry only reads again. -->
+        <div class="rush-strip" id="rush-strip" hidden role="status"></div>
 
         <!-- One banner for the whole window: a read that failed says so here
              rather than each pane inventing its own empty state. -->

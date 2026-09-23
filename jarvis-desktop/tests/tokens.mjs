@@ -121,7 +121,7 @@ await check("the widget's Approve label survives its new colour", async () => {
     const ch = (v) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
     return 0.2126 * ch(c[0]) + 0.7152 * ch(c[1]) + 0.0722 * ch(c[2]);
   };
-  for (const theme of ["deep-space", "ember", "paper", "high-contrast"]) {
+  for (const theme of ["deep-space", "paper", "high-contrast"]) {
     const page = await K.open(browser, base, "widget.html",
       { theme, pending: [K.APPROVAL_PLAIN] }, { width: 320, height: 460 });
     const pair = await page.evaluate(() => {

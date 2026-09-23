@@ -11,6 +11,8 @@
     "theme-write",
     "settings-surface",
     "external-links",
+    "appearance-read",
+    "faces-open",
     "core:webview:allow-set-webview-zoom"
   ]
 }

@@ -73,6 +73,12 @@ fn main() {
             // that offer a picker.
             "get_theme",
             "set_theme",
+            // "Match Windows light or dark mode": the read is everywhere the
+            // theme is, the switch is with the two pickers.
+            "get_theme_prefs",
+            "set_theme_follow_system",
+            // Settings' "Open Faces" button.
+            "open_faces",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
             // Connection settings — settings window only
@@ -81,6 +87,10 @@ fn main() {
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",
+            // The in-memory appearance, for windows that only draw it: no
+            // network call and no broadcast, so safe inside a listener.
+            "appearance_snapshot",
+            "appearance_colours",
             "update_status",
             "check_for_update",
             "set_update_check_on_start",

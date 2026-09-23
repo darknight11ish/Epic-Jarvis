@@ -290,6 +290,75 @@ pub async fn get_appearance(app: AppHandle) -> Loaded {
     }
 }
 
+/// The appearance document this process is already wearing, from memory.
+///
+/// For a window that only needs to DRAW the owner's face - the Widget's live
+/// face - rather than show where it came from. Unlike [`get_appearance`] it
+/// makes no network call and broadcasts nothing, so a window may call it
+/// from its own `appearance-changed` listener without starting a loop (that
+/// command re-broadcasts the event every time it is called).
+#[tauri::command]
+pub fn appearance_snapshot(app: AppHandle) -> Appearance {
+    app.state::<AppearanceState>().snapshot()
+}
+
+/// One state's colour for the window chrome - see [`appearance_colours`].
+#[derive(Debug, Clone, Serialize)]
+pub struct ChromeColour {
+    /// `#rrggbb`.
+    pub hex: String,
+    /// The colour's palette family, deep to mist, when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ramp: Option<Vec<String>>,
+    /// This colour's index in `ramp`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<usize>,
+}
+
+/// The owner's state colours, as fixed values the window chrome can use: the
+/// Brain's state dots and the accent (jarvis-link.js `followAppearance`).
+///
+/// Only the states the owner has bound. An unbound state keeps the colour
+/// theme.css tuned for it, because those were measured against every theme's
+/// surfaces and a spec default re-derived here would undo that. From memory,
+/// like [`appearance_snapshot`]: no network, no broadcast.
+#[tauri::command]
+pub fn appearance_colours(app: AppHandle) -> BTreeMap<String, ChromeColour> {
+    let state = app.state::<AppearanceState>();
+    let mut out = BTreeMap::new();
+    for id in [
+        "idle",
+        "listening",
+        "thinking",
+        "speaking",
+        "approval",
+        "standby",
+        "error",
+        "banked",
+    ] {
+        let Some(bind) = state.binding(id) else {
+            continue;
+        };
+        let rgb = crate::spec::static_colour(&bind);
+        let (ramp, step) = match crate::spec::family_ramp_of(rgb) {
+            Some((ramp, i)) => (
+                Some(ramp.into_iter().map(crate::spec::rgb_hex).collect()),
+                Some(i),
+            ),
+            None => (None, None),
+        };
+        out.insert(
+            id.to_string(),
+            ChromeColour {
+                hex: crate::spec::rgb_hex(rgb),
+                ramp,
+                step,
+            },
+        );
+    }
+    out
+}
+
 /// Saves. Always locally; to the server too when there is one.
 ///
 /// The local write happens FIRST and unconditionally. A save that only

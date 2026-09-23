@@ -31,15 +31,22 @@
      `--bg-window` is what the frameless native window actually paints. The
      rest layer on top of it. Translucency is deliberate and is why the
      contrast check runs twice. */
-  --bg-window: rgba(8, 9, 12, 0.86);
-  --surface-1: rgba(18, 20, 26, 0.9);
-  --surface-2: rgba(26, 30, 38, 0.92);
+  /* Reactor's blue-black - the HUD's --void / --plate / --plate-2 and the
+     phone's Themes.REACTOR surface0-2 (#04070c, #0a1119, #0e1822) - at the
+     alphas these see-through windows always had. They were a neutral
+     grey-black before, so the spotlight, widget, Brain and Settings matched
+     neither the HUD beside them nor the phone. Only the surfaces moved: the
+     text colours below are tuned for transparent windows over any wallpaper
+     and stay as they are. */
+  --bg-window: rgba(4, 7, 12, 0.86);
+  --surface-1: rgba(10, 17, 25, 0.9);
+  --surface-2: rgba(14, 24, 34, 0.92);
   /* Opaque, not translucent black. A sunken well at rgba(0,0,0,0.55) composites
      to light grey over a white desktop, and muted text on it measured 2.21:1 —
      the original CSS had exactly this bug. Making it solid means its contrast
      no longer depends on how many translucent parents it happens to sit
      inside, which is a property worth having when a component gets moved. */
-  --surface-sunken: #05070a;
+  --surface-sunken: #04070c;
   --surface-hover: rgba(255, 255, 255, 0.045);
   --surface-active: rgba(255, 255, 255, 0.08);
 
@@ -176,6 +183,17 @@
   --node-h4: #6cd3f9; /* capability */
   --node-h5: #f73b3b; /* agents */
   --edge: rgba(140, 165, 190, 0.22);
+
+  /* ---- Theme swatches ----------------------------------------------------
+     The little preview beside each theme in Settings. Each shows THAT
+     theme's ground and accent, whatever theme is showing, so these are the
+     same in every theme block - which is why they live only here. */
+  --swatch-reactor-ground: #0a1119;
+  --swatch-reactor-ink: #38f0ff;
+  --swatch-daylight-ground: #ffffff;
+  --swatch-daylight-ink: #00697f;
+  --swatch-contrast-ground: #000000;
+  --swatch-contrast-ink: #ffffff;
   --edge-active: rgba(56, 240, 255, 0.65);
 
   /* ---- Shape ------------------------------------------------------------
@@ -222,52 +240,23 @@
 /* ==========================================================================
    Themes
    --------------------------------------------------------------------------
-   Provisional set. The art-direction pass will replace the palettes; the
-   token NAMES above are the contract and are meant to outlive them.
+   The phone's three, under the phone's names (Themes.kt): Reactor, Daylight
+   and High Contrast. The ids are the desktop's older ones - `deep-space`,
+   `paper`, `high-contrast` - so a saved choice keeps working. Ember was a
+   fourth and was removed to match the phone, where the owner cut the dark
+   themes that looked alike; a saved `ember` now reads as Reactor
+   (jarvis-link.js normaliseTheme, commands.rs normalise_theme). The token
+   NAMES above are the contract and are meant to outlive the palettes.
    ========================================================================== */
 
-/* Deep space — the default, unchanged in intent from the original AMOLED look:
-   near-black so an OLED panel draws no power for the background, one cyan
-   accent, everything else grey. */
+/* Reactor (`deep-space`) — the default: near-black so an OLED panel draws no
+   power for the background, one cyan accent, everything else grey. */
 :root,
 [data-theme="deep-space"] {
   color-scheme: dark;
 }
 
-/* Ember — the same structure on a warm axis. Proves the contract works for a
-   hue rotation without touching a component rule. */
-[data-theme="ember"] {
-  color-scheme: dark;
-  --accent-rgb: 255 150 74;
-  --prose: #efe3d9;
-  --prose-strong: #fffaf5;
-  --prose-em: #f8ede3;
-  --bg-window: rgba(14, 10, 8, 0.88);
-  --surface-1: rgba(28, 21, 17, 0.92);
-  --surface-2: rgba(38, 28, 22, 0.93);
-  --border-accent: rgba(255, 150, 74, 0.34);
-  --surface-sunken: #0d0906;
-  --text: #f8f2ec;
-  --text-muted: #c2b0a2;
-  --text-faint: #a69382;
-  --text-on-accent: #2a1405;
-  --accent: #ff964a;
-  --accent-bright: #ffd0a8;
-  --accent-dim: rgba(255, 150, 74, 0.32);
-  --accent-faint: rgba(255, 150, 74, 0.12);
-  --focus-ring: #ffb877;
-  --accent-text: #ffd0a8;
-  --edge-active: rgba(255, 150, 74, 0.65);
-  --glow-accent: 0 0 0 1px var(--accent-dim), 0 0 22px rgba(255, 150, 74, 0.18);
-  --node-h1: #66ccaa; /* structure */
-  --node-h2: #3b7af7; /* provenance */
-  --node-h3: #f7f73b; /* knowledge */
-  --node-h4: #6cd3f9; /* capability */
-  --node-h5: #f73b3b; /* agents */
-
-}
-
-/* Paper — genuinely light, not an inversion. The surfaces are opaque here on
+/* Daylight (`paper`) — genuinely light, not an inversion. The surfaces are opaque here on
    purpose: a translucent light pane over a dark wallpaper is unreadable, and
    the contrast check over black is what catches that. */
 [data-theme="paper"] {
@@ -336,7 +325,7 @@
 
 }
 
-/* High contrast — for reading across a room, and for anyone the other themes
+/* High Contrast (`high-contrast`) — for reading across a room, and for anyone the other themes
    do not serve. Pure black, pure white text, saturated semantics, and a focus
    ring that cannot be missed. Not a "dark theme with more punch": every pair
    here clears 7:1, which is the AAA floor. */

@@ -99,7 +99,7 @@ pub async fn brain_read(
             } else {
                 READ_TIMEOUT
             };
-            (section, get_json(&base, path, headers, budget).await)
+            (section, get_json_status(&base, path, headers, budget).await)
         });
     }
 
@@ -117,7 +117,17 @@ pub async fn brain_read(
             section,
             match result {
                 Ok(body) => body,
-                Err(err) => serde_json::json!({ "available": false, "error": err }),
+                // `read` tells the window which of two very different things
+                // happened, because they need different words and only one
+                // of them is worth a Retry: `absent` is a 404 or 503 - this
+                // backend does not have the module, a fact about the machine
+                // - and `failed` is everything else, a fault that may pass.
+                // Before this both arrived as the same grey "not available".
+                Err((status, err)) => serde_json::json!({
+                    "available": false,
+                    "error": err,
+                    "read": read_kind(status),
+                }),
             },
         );
     }
@@ -359,6 +369,10 @@ pub async fn brain_memory_sleep_time(
     enabled: Option<bool>,
     remind: Option<bool>,
 ) -> Result<serde_json::Value, String> {
+    // Gated like brain_memory_decide above: this answers a card the Brain
+    // drew from a read that may be stale, and the phone refuses the same
+    // answer while its link is stale (JarvisRuntime.setSleepTime).
+    require_link_live(&app)?;
     let mut body = serde_json::json!({});
     if let Some(e) = enabled {
         body["enabled"] = serde_json::json!(e);
@@ -430,6 +444,11 @@ pub async fn brain_model(
     action: String,
     reference: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    // Rule 4: nothing acts on a stale link. Switch and install only raise a
+    // card, but they raise it against a model list this window read from a
+    // link that has stopped updating; rollback is tier `auto` and acts at
+    // once, which is the stronger reason. The phone's canAct gate is the same.
+    require_link_live(&app)?;
     let path = match action.as_str() {
         "install" => "/api/models/install",
         "switch" => "/api/models/switch",
@@ -448,6 +467,62 @@ pub async fn brain_model(
 // Plumbing
 // ---------------------------------------------------------------------------
 
+/// `"absent"` for a 404 or a 503 (the backend does not have this module),
+/// `"failed"` for anything else, including no answer at all.
+fn read_kind(status: Option<u16>) -> &'static str {
+    match status {
+        Some(404) | Some(503) => "absent",
+        _ => "failed",
+    }
+}
+
+/// [`get_json`], keeping the HTTP status of a refusal so [`brain_read`] can
+/// tell a missing module from a fault. `None` when there was no answer.
+async fn get_json_status(
+    base: &str,
+    path: &str,
+    headers: reqwest::header::HeaderMap,
+    budget: Duration,
+) -> Result<serde_json::Value, (Option<u16>, String)> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(READ_TIMEOUT)
+        .timeout(budget)
+        .no_proxy()
+        .build()
+        .map_err(|e| (None, format!("could not build an HTTP client: {e}")))?;
+    let response = client
+        .get(format!("{base}{path}"))
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| {
+            let why = if e.is_connect() {
+                format!("could not reach the Jarvis server at {base}")
+            } else if e.is_timeout() {
+                format!("{path} did not answer within {}s", budget.as_secs())
+            } else {
+                format!("{path}: {e}")
+            };
+            (None, why)
+        })?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err((
+            Some(status.as_u16()),
+            format!(
+                "{path} answered HTTP {}{}",
+                status.as_u16(),
+                first_line(&body)
+            ),
+        ));
+    }
+    response
+        .json()
+        .await
+        .map_err(|e| (None, format!("{path} returned something unreadable: {e}")))
+}
+
 /// A GET that refuses to treat an error body as data.
 ///
 /// The status is checked before the body is parsed, because this server answers
@@ -460,39 +535,9 @@ async fn get_json(
     headers: reqwest::header::HeaderMap,
     budget: Duration,
 ) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(READ_TIMEOUT)
-        .timeout(budget)
-        .no_proxy()
-        .build()
-        .map_err(|e| format!("could not build an HTTP client: {e}"))?;
-    let response = client
-        .get(format!("{base}{path}"))
-        .headers(headers)
-        .send()
+    get_json_status(base, path, headers, budget)
         .await
-        .map_err(|e| {
-            if e.is_connect() {
-                format!("could not reach the Jarvis server at {base}")
-            } else if e.is_timeout() {
-                format!("{path} did not answer within {}s", budget.as_secs())
-            } else {
-                format!("{path}: {e}")
-            }
-        })?;
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "{path} answered HTTP {}{}",
-            status.as_u16(),
-            first_line(&body)
-        ));
-    }
-    response
-        .json()
-        .await
-        .map_err(|e| format!("{path} returned something unreadable: {e}"))
+        .map_err(|(_, why)| why)
 }
 
 /// A POST that hands the server's own words back on failure.
@@ -532,4 +577,19 @@ async fn post(
     }
     Ok(serde_json::from_str(&text)
         .unwrap_or_else(|_| serde_json::json!({ "ok": true, "status": status.as_u16() })))
+}
+
+#[cfg(test)]
+mod read_kind_tests {
+    use super::read_kind;
+
+    /// A missing module is a fact, not a fault: no Retry for it.
+    #[test]
+    fn a_404_or_503_is_absent_and_anything_else_failed() {
+        assert_eq!(read_kind(Some(404)), "absent");
+        assert_eq!(read_kind(Some(503)), "absent");
+        assert_eq!(read_kind(Some(500)), "failed");
+        assert_eq!(read_kind(Some(401)), "failed");
+        assert_eq!(read_kind(None), "failed");
+    }
 }

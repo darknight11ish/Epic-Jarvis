@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-theme-prefs"
+description = "Enables the get_theme_prefs command without any pre-configured scope."
+commands.allow = ["get_theme_prefs"]
+
+[[permission]]
+identifier = "deny-get-theme-prefs"
+description = "Denies the get_theme_prefs command without any pre-configured scope."
+commands.deny = ["get_theme_prefs"]

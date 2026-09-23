@@ -29,6 +29,7 @@ pub mod spec;
 pub mod spec_drift;
 pub mod sse;
 pub mod stream;
+pub mod system_theme;
 pub mod tray;
 pub mod update;
 pub mod voice;
@@ -578,6 +579,7 @@ pub fn run() {
         .manage(hotkeys::HotkeyState::default())
         .manage(update::UpdateState::default())
         .manage(appearance::AppearanceState::default())
+        .manage(system_theme::AppliedTheme::default())
         .manage(voice::VoiceCaptureState::default())
         .manage(voice::AutoListenState::default())
         .invoke_handler(tauri::generate_handler![
@@ -631,11 +633,16 @@ pub fn run() {
             sidecar::stop_backend,
             commands::get_theme,
             commands::set_theme,
+            commands::get_theme_prefs,
+            commands::set_theme_follow_system,
+            commands::open_faces,
             commands::finish_onboarding,
             commands::get_api_settings,
             commands::set_api_settings,
             appearance::get_appearance,
             appearance::set_appearance,
+            appearance::appearance_snapshot,
+            appearance::appearance_colours,
             update::update_status,
             update::check_for_update,
             update::set_update_check_on_start,
@@ -880,6 +887,12 @@ pub fn run() {
             // The owner's face, before the tray's first paint. Local read only:
             // a network fetch here would hold the icon behind a socket timeout.
             appearance::adopt_at_startup(&handle);
+
+            // "Match Windows light or dark mode". Reads Windows' own setting
+            // every couple of seconds and holds a switch while Jarvis is busy
+            // or an approval is waiting - see system_theme.rs for why this
+            // is not `prefers-color-scheme` in the pages.
+            system_theme::start(&handle);
 
             // Bind the accelerators. A failure here is not fatal: another
             // application may already own a combination, and Jarvis still works

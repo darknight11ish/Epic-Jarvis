@@ -267,6 +267,52 @@ body {
   color: var(--text);
 }
 
+/* Connected but stale, or connecting: amber, with a square dot, so "not
+   live" never rests on hue alone. Offline keeps the red round dot above. */
+.link-pill[data-tone="warn"] {
+  border-color: var(--warn);
+  color: var(--text);
+}
+
+.link-pill[data-tone="warn"] i {
+  background: var(--warn);
+  border-radius: 1px;
+}
+
+/* How old the numbers on screen are. */
+.freshness {
+  margin: 6px 18px 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.freshness[data-tone="warn"] { color: var(--text); }
+
+/* The rush latch, on every view. Red when one is set, amber when the check
+   could not be made - never silently absent. */
+.rush-strip {
+  margin: 10px 18px 0;
+  padding: 8px 12px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-left-width: 2px;
+  border-left-color: var(--bad);
+  border-radius: var(--radius-control);
+  background: var(--bad-faint);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.rush-strip[data-tone="warn"] {
+  border-left-color: var(--warn);
+  background: var(--warn-faint);
+}
+
+.rush-quote { font-style: italic; }
+.rush-age { color: var(--text-muted); }
+
+.banner-item { display: block; }
+.banner-item + .banner-item { margin-top: 4px; }
+
 .banner {
   margin: 10px 18px 0;
   padding: 8px 12px;
@@ -657,6 +703,14 @@ body {
   color: var(--text-faint);
   font-size: 12px;
   padding: 6px 0;
+}
+
+/* A read that failed, as opposed to a module this backend does not have:
+   amber and with a Retry, where "Not on this backend." stays grey. */
+.empty.failed {
+  color: var(--text);
+  border-left: 2px solid var(--warn);
+  padding-left: 8px;
 }
 
 /* ---- Buttons ------------------------------------------------------------ */

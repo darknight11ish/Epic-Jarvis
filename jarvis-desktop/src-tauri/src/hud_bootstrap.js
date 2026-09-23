@@ -222,10 +222,60 @@
     });
   }
 
+  /* What the link is doing, in the words every other window uses
+   * (jarvis-link.js linkWords). The page's own #brand-sub is written once,
+   * at boot, from an Ollama probe, and then never changes - so the HUD said
+   * "online" for as long as it was open, whatever the stream did. The page
+   * is vendored and not ours to edit, and its boot() may write #brand-sub
+   * after this runs, so the link gets its own line directly under it rather
+   * than fighting over that one: the Ollama hint stays, and this is live. */
+  var lastLink = null;
+
+  function linkLine(link) {
+    var l = link || {};
+    if (!l.connected) {
+      if (!l.error) return "connecting…";
+      var first = String(l.error).trim().split(/[.!?]\s/)[0];
+      return "offline · " + first;
+    }
+    if (l.stale !== false) return "stale — reconnecting";
+    return "linked · local first";
+  }
+
+  function paintLink() {
+    var link = lastLink;
+    var root = document.documentElement;
+    if (root) {
+      // Section 5's stylesheet greys the page's Approve and Deny with this,
+      // and the capture listener below refuses the click itself.
+      if (linkStale) root.classList.add("jarvis-stale");
+      else root.classList.remove("jarvis-stale");
+    }
+    var sub = document.getElementById("brand-sub");
+    if (!sub || !sub.parentNode) return;
+    var line = document.getElementById("jarvis-link-line");
+    if (!line) {
+      line = document.createElement("div");
+      line.id = "jarvis-link-line";
+      line.className = "sub";
+      line.setAttribute("role", "status");
+      sub.parentNode.insertBefore(line, sub.nextSibling);
+    }
+    line.textContent = linkLine(link);
+    line.setAttribute("data-tone", !link || !link.connected ? "bad" : linkStale ? "warn" : "ok");
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", paintLink, { once: true });
+  }
+
   function linkChanged(link) {
     // Read before the early return below, so a payload that only flips
     // `stale` (not `connected`) still updates the gate in section 4.
     linkStale = !!(link && link.stale);
+    lastLink = link || null;
+    // Every call, not only when `connected` flips: stale comes and goes
+    // while connected stays true.
+    paintLink();
     var up = !!(link && link.connected);
     if (up === linkUp) return;
     linkUp = up;
@@ -407,6 +457,44 @@
   }
   if (document.head) localFonts();
   else document.addEventListener("DOMContentLoaded", localFonts, { once: true });
+
+  /* ---------------------------------------------------------------- *
+   * 5. The approval cards, while the link is stale
+   *
+   * The fetch intercept above already refuses approve/deny while stale -
+   * that is the real block and it stays. But the page then printed "This
+   * request is no longer waiting", which was false (it was still waiting),
+   * and removed the card, which stayed gone until the next poll. And the
+   * buttons looked live before the click. So: a stylesheet (a file, not an
+   * inline style, so neither CSP has anything to say about it) greys the
+   * buttons and says why under them while `jarvis-stale` is on the root,
+   * and a capture-phase listener stops the click before the page's own
+   * handler ever runs. It never decides anything; it only stops a click.
+   * ---------------------------------------------------------------- */
+  function staleSheet() {
+    if (document.getElementById("jarvis-hud-link-css")) return;
+    var link = document.createElement("link");
+    link.id = "jarvis-hud-link-css";
+    link.rel = "stylesheet";
+    link.href = "hud-link.css";
+    (document.head || document.documentElement).appendChild(link);
+  }
+  if (document.head) staleSheet();
+  else document.addEventListener("DOMContentLoaded", staleSheet, { once: true });
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      if (!linkStale) return;
+      var target = event.target;
+      if (!target || !target.closest) return;
+      if (!target.closest("#approvals .appr .btns button")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    },
+    true
+  );
 
   /* ---------------------------------------------------------------- *
    * 4. Relabel the "Brain" tab to "Galaxy"

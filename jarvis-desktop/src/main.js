@@ -98,6 +98,7 @@ import {
   onQueue,
   pauseTask,
   resumeTask,
+  linkWords,
   riskLine,
   setMuted,
   stopTask,
@@ -164,6 +165,8 @@ const dom = {
   routeSep: $("route-sep"),
   offline: $("offline"),
   offlineText: $("offline-text"),
+  micLabel: $("mic-label"),
+  approvalOptionsWhy: $("approval-options-why"),
   offlineRetry: $("offline-retry"),
   primer: $("primer"),
   mic: $("mic"),
@@ -946,7 +949,7 @@ function applyHealth(report) {
       model: null,
       why: core.detail
         ? `Jarvis is not answering: ${core.detail}`
-        : "Jarvis is not answering on 127.0.0.1:4719.",
+        : `Jarvis is not answering at ${currentLink().base || "the address set in Settings"}.`,
     });
   } else if (state.route.tier === "offline") {
     applyRoute(DEFAULT_ROUTE);
@@ -1138,6 +1141,12 @@ function renderOptions(approval) {
   const multiple = options.length > 1;
   dom.approvalOptions.hidden = !multiple;
   dom.approvalApprove.hidden = multiple;
+  if (dom.approvalOptionsWhy) {
+    dom.approvalOptionsWhy.hidden = !multiple;
+    dom.approvalOptionsWhy.textContent = multiple
+      ? `Jarvis offered ${options.length} ways to do this. The desktop can't yet tell it which one you picked, so approving is off here. Deny still works.`
+      : "";
+  }
   if (!multiple) return;
   for (const option of options) {
     const btn = document.createElement("button");
@@ -1145,7 +1154,7 @@ function renderOptions(approval) {
     btn.className = "approval-option";
     btn.dataset.optionId = option.id;
     btn.disabled = true;
-    btn.title = "This desktop can't tell the server which option was picked yet — see docs/JARVIS-API.md §8. Deny still works.";
+    btn.title = "Approving one option is not possible from the desktop yet. Deny still works.";
     const label = document.createElement("span");
     label.className = "opt-label";
     label.textContent = option.label; // textContent: model-authored text.
@@ -1357,6 +1366,7 @@ function renderDigest() {
   dom.digest.replaceChildren();
 
   if (!brief || brief.unavailable) {
+    delete dom.attentionNote.dataset.tone;
     dom.attentionNote.textContent = brief
       ? "The digest is not available on this backend."
       : "Reading the brief…";
@@ -1365,11 +1375,25 @@ function renderDigest() {
     return;
   }
   if (brief.error) {
-    dom.attentionNote.textContent = brief.error;
+    // Amber, and with a way to try again: a failed read used to be plain
+    // text with nothing to do about it short of closing the panel.
+    dom.attentionNote.textContent = `${brief.error} `;
+    dom.attentionNote.dataset.tone = "warn";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "text-button";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      state.digest = null;
+      renderDigest();
+      loadDigest();
+    });
+    dom.attentionNote.append(retry);
     dom.digestSeen.hidden = true;
     syncWindowHeight();
     return;
   }
+  delete dom.attentionNote.dataset.tone;
 
   const items = Array.isArray(brief.items) ? brief.items : [];
   for (const item of items) {
@@ -1645,8 +1669,16 @@ function syncApprovalButtons() {
   // stale.
   if (blocked) for (const opt of dom.approvalOptions.children) opt.disabled = true;
   if (link.stale && state.approval) {
+    // "Offline" was wrong when the stream is connected and only the queue
+    // could not be read; linkWords says which it is.
     dom.approvalHint.textContent =
-      "Offline — the approval queue cannot be confirmed, so nothing can be answered from here.";
+      `${linkWords(link).short} — the approval queue cannot be confirmed, so nothing can be answered from here.`;
+    state.hintIsStale = true;
+  } else if (state.hintIsStale && state.approval && !state.deciding) {
+    // Back to the risk line once the link catches up: it used to keep saying
+    // the queue could not be confirmed after it had been.
+    state.hintIsStale = false;
+    dom.approvalHint.textContent = `${riskLine(state.approval.risk)} · Esc puts it aside`;
   }
   // The note is a separate action from deciding (see `state.noteBusy`'s own
   // comment) but it still needs the stream live to mean anything, and it
@@ -2455,12 +2487,22 @@ async function setAutoListening(enabled) {
     dom.voiceAuto.setAttribute("aria-pressed", "true");
     dom.mic.dataset.auto = "true";
     dom.mic.title = "Listening automatically";
+    // The name a screen reader reads, not only the tooltip: "Hold to talk"
+    // on a button that no longer responds to being held was wrong.
+    if (dom.micLabel) {
+      dom.micLabel.textContent =
+        "Listening automatically - turn it off with the button next to this";
+    }
     announce("Listening automatically.");
   } else {
     state.autoListening = false;
     dom.voiceAuto.setAttribute("aria-pressed", "false");
     delete dom.mic.dataset.auto;
     dom.mic.title = "Hold to talk to Jarvis";
+    if (dom.micLabel) {
+      dom.micLabel.textContent =
+        "Hold to talk to Jarvis - hold Space or Enter, speak, then let go";
+    }
     await invoke("stop_automatic_listening");
   }
 }
@@ -2901,17 +2943,27 @@ onLink((link) => {
       ? `Jarvis: event stream live${link.activity === "idle" ? "" : ` · ${link.activity}`}`
       : `Jarvis: ${link.error || "no event stream"}`;
   }
-  // The offline bar, and the one thing there is to do about it.
+  // The offline bar, and the one thing there is to do about it. Also shown
+  // while connected but stale - the stream is up and the queue could not be
+  // read, so nothing can be approved - which used to show no words at all
+  // while Approve and Deny quietly went grey. The words are the shared ones
+  // (linkWords); before the first hello it says "Connecting…" rather than
+  // naming an address that failed, because nothing has failed yet.
+  const words = linkWords(link);
   const wasOffline = !dom.offline.hidden;
-  dom.offline.hidden = link.connected;
-  if (!link.connected) {
-    dom.offlineText.textContent = link.error
-      ? `Jarvis is not answering: ${String(link.error).split(/(?<=[.!?])\s/)[0]}`
-      : "Jarvis is not answering on 127.0.0.1:4719.";
+  dom.offline.hidden = words.canAct;
+  if (!words.canAct) {
+    dom.offlineText.textContent = words.text;
+    dom.offline.dataset.tone = words.tone;
     // Once, on the transition. A live region that repeated this on every
     // reconnect attempt would talk over everything else in the window.
     if (!wasOffline) announce(dom.offlineText.textContent, "assertive");
   }
+  // The model and lane in the route chip are last known while stale; the
+  // phone drops the same extras.
+  const showModel = !link.stale && Boolean(dom.routeModel.textContent);
+  dom.routeModel.hidden = !showModel;
+  dom.routeSep.hidden = !showModel;
   syncWindowHeight();
 
   if (!link.connected && state.route.tier !== "offline") {
@@ -2923,7 +2975,7 @@ onLink((link) => {
       model: null,
       why: link.error
         ? `No event stream: ${link.error}`
-        : "No event stream. Jarvis is not answering on 127.0.0.1:4719.",
+        : `No event stream yet. Connecting to ${link.base || "the address set in Settings"}.`,
     });
   } else if (link.connected && state.route.tier === "offline") {
     applyRoute(DEFAULT_ROUTE);

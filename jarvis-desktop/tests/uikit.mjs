@@ -426,6 +426,28 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return null;
           }
           case "get_theme": return theme || "deep-space";
+          // "Match Windows light or dark mode" (commands.rs ThemePrefs). A
+          // scenario sets window.__themePrefs; unset, the shell is treated as
+          // not following, on the theme above.
+          case "get_theme_prefs":
+            return window.__themePrefs || {
+              theme: theme || "deep-space", follow_system: false,
+              dark_theme: "deep-space", system_light: false, effective: theme || "deep-space",
+            };
+          case "set_theme_follow_system": {
+            const p = window.__themePrefs || { theme: theme || "deep-space", dark_theme: "deep-space", system_light: true };
+            const follow = Boolean(args.follow);
+            window.__themePrefs = { ...p, follow_system: follow,
+              effective: follow && p.system_light ? "paper" : follow ? p.dark_theme : p.theme };
+            return window.__themePrefs;
+          }
+          // From memory, never the network: what the widget's face and the
+          // chrome colours read.
+          case "appearance_snapshot":
+            return { face: (window.__appearance || {}).face || null,
+                     bindings: (window.__appearance || {}).bindings || {}, updated: 0 };
+          case "appearance_colours": return window.__appearanceColours || {};
+          case "open_faces": window.__calls.push(["__openedFaces"]); return null;
           case "get_hotkeys": return window.__hotkeys;
           // Matches commands.rs's get_autostart/set_autostart shape - falling
           // through to the bare `default: return null` below made

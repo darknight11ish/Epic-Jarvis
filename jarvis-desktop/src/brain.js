@@ -24,6 +24,10 @@ import {
   currentLink,
   followTheme,
   followZoom,
+  linkWords,
+  normaliseTheme,
+  reconnect,
+  THEMES,
   surfaceState,
   onEvent,
   onLink,
@@ -65,7 +69,7 @@ const VIEW_SECTIONS = {
   watch: ["watch", "watch_report"],
 };
 
-const THEMES = ["deep-space", "ember", "paper", "high-contrast"];
+// The theme ids come from jarvis-link.js, the one list every window shares.
 
 const $ = (id) => document.getElementById(id);
 
@@ -77,6 +81,9 @@ const dom = {
   linkPill: $("link-pill"),
   linkText: $("link-text"),
   refresh: $("refresh"),
+  reconnectLink: $("reconnect-link"),
+  freshness: $("freshness"),
+  rushStrip: $("rush-strip"),
   toast: $("toast"),
   themePicker: $("theme-picker"),
   rail: $("rail-nav"),
@@ -137,6 +144,14 @@ const state = {
   data: {},
   /** True while a read is in flight, so a repaint cannot stack them. */
   loading: false,
+  /** Section name → `{ why, at }` for a read that failed while an older good
+   *  read is still being shown. The phone keeps the last read that worked,
+   *  and so does this: a failed re-read used to overwrite it. */
+  failed: {},
+  /** Section name → when it last read successfully (ms). */
+  readAt: {},
+  /** A model switch or install sent and waiting on its approval card. */
+  modelAsk: null,
   graph: null,
   trace: [],
 };
@@ -179,7 +194,8 @@ function el(tag, className, text) {
 function rows(container, items, render, emptyText) {
   container.replaceChildren();
   if (!items || !items.length) {
-    container.append(el("p", "empty", emptyText));
+    // A node (whyNode) goes in as it is: it may carry a Retry button.
+    container.append(emptyText instanceof Node ? emptyText : el("p", "empty", emptyText));
     return;
   }
   const list = el("div", "rows");
@@ -207,16 +223,50 @@ function row({ tag, state: tagState, title, meta, actions }) {
   return item;
 }
 
-function button(label, onClick, { danger = false, title = "" } = {}) {
+/** Buttons that act on the server, re-synced whenever the link changes. */
+const liveButtons = new Set();
+
+const STALE_TITLE = "Waiting for the link to catch up. Nothing can be sent until it does.";
+
+/** Greys a `live` button while the link cannot be confirmed (rule 4). */
+function syncLiveButton(b) {
+  const blocked = !linkWords(currentLink()).canAct;
+  b.disabled = blocked || b.dataset.busy === "true";
+  b.title = blocked ? STALE_TITLE : b.dataset.title || "";
+}
+
+function syncLiveButtons() {
+  for (const b of liveButtons) {
+    if (!b.isConnected) liveButtons.delete(b);
+    else syncLiveButton(b);
+  }
+}
+
+/**
+ * `live: true` for anything that sends a decision or a change: it is greyed,
+ * with the reason as its title, while the link is stale or down - the
+ * phone's `canAct`. Before this every Brain button stayed clickable on a stale
+ * link and failed afterwards with a toast. Rust refuses the same calls too
+ * (brain.rs require_link_live); this only stops the click being offered.
+ */
+function button(label, onClick, { danger = false, title = "", live = false } = {}) {
   const b = el("button", `btn small${danger ? " danger" : ""}`, label);
   b.type = "button";
   if (title) b.title = title;
+  b.dataset.title = title;
+  if (live) {
+    liveButtons.add(b);
+    syncLiveButton(b);
+  }
   b.addEventListener("click", async () => {
     b.disabled = true;
+    b.dataset.busy = "true";
     try {
       await onClick();
     } finally {
-      b.disabled = false;
+      b.dataset.busy = "false";
+      if (live) syncLiveButton(b);
+      else b.disabled = false;
     }
   });
   return b;
@@ -241,12 +291,67 @@ function ago(epochSeconds) {
   return `${Math.round(s / 86400)}d ago`;
 }
 
-/** `{available:false}` means the module is absent, which is not an error. */
-function unavailable(section) {
+/**
+ * What is known about one section, in the phone's four states (SectionRead):
+ *
+ * - `reading`: nothing has come back yet.
+ * - `absent`: a 404 or 503, or the backend's own `{available: false}` - this
+ *   machine does not have the module. A fact, not a fault, so no Retry.
+ * - `failed`: the read failed and there is nothing older to show. Amber, with
+ *   a Retry.
+ * - `stale`: the read failed, and the last read that worked is still shown.
+ * - `data`: the last read worked.
+ *
+ * All four used to be one faint grey line.
+ */
+function sectionState(section) {
   const body = state.data[section];
-  if (!body) return "not read yet";
-  if (body.available === false) return body.error || "not available on this backend";
+  const failure = state.failed[section];
+  if (!body) return failure ? { kind: "failed", why: failure.why } : { kind: "reading" };
+  if (body.available === false) {
+    return body.read === "failed"
+      ? { kind: "failed", why: String(body.error || "no reason given") }
+      : { kind: "absent" };
+  }
+  return failure ? { kind: "stale", why: failure.why, at: failure.at } : { kind: "data" };
+}
+
+/** The line a pane shows instead of its content, or null when it has some. */
+function unavailable(section) {
+  const s = sectionState(section);
+  if (s.kind === "reading") return "Reading…";
+  if (s.kind === "absent") return "Not on this backend.";
+  if (s.kind === "failed") return `Could not read this: ${s.why}`;
   return null;
+}
+
+/** Reads one section again. Changes nothing on the server. */
+function retryButton(section) {
+  const b = el("button", "btn small", "Retry");
+  b.type = "button";
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    await load([section], { quiet: true });
+    render(state.view);
+  });
+  return b;
+}
+
+/** `unavailable`, as a node: amber with a Retry for a failure, grey otherwise. */
+function whyNode(section, tag = "p") {
+  const s = sectionState(section);
+  const node = el(tag, "empty", unavailable(section) || "");
+  if (s.kind === "failed") {
+    node.classList.add("failed");
+    node.append(" ", retryButton(section));
+  }
+  return node;
+}
+
+/** Every view also reads the rush latch, so it is never out of sight. */
+function sectionsFor(view) {
+  const sections = VIEW_SECTIONS[view] || [];
+  return sections.includes("content_risk") ? sections : [...sections, "content_risk"];
 }
 
 /* ==========================================================================
@@ -265,16 +370,46 @@ async function load(sections, { quiet = false } = {}) {
   dom.refresh.disabled = true;
   try {
     const body = await invoke("brain_read", { sections });
-    Object.assign(state.data, body || {});
-    // One banner for the window rather than an invented empty state per pane:
-    // a pane that failed and a pane that is genuinely empty look identical
-    // otherwise, and only one of them is worth the user's attention.
-    const failed = sections.filter((s) => unavailable(s));
+    const now = Date.now();
+    for (const [section, value] of Object.entries(body || {})) {
+      const failedRead = value && value.available === false && value.read === "failed";
+      const had = state.data[section];
+      const hadGood = had && had.available !== false;
+      if (failedRead && hadGood) {
+        // Keep what worked last time on screen, and say it is old. The rush
+        // latch above all: a latch seen a minute ago must not vanish because
+        // the next check failed.
+        state.failed[section] = { why: String(value.error || "no reason given"), at: now };
+      } else {
+        state.data[section] = value;
+        if (failedRead) {
+          state.failed[section] = { why: String(value.error || "no reason given"), at: now };
+        } else {
+          delete state.failed[section];
+          state.readAt[section] = now;
+        }
+      }
+    }
+    // One banner for the window, for FAILURES only - a module this backend
+    // does not have is said in its own pane, in grey, and is not a fault.
+    // Each failure gets its own Retry, which only reads again.
+    const failed = sections.filter((s) => {
+      const k = sectionState(s).kind;
+      return k === "failed" || k === "stale";
+    });
     dom.banner.hidden = failed.length === 0;
-    if (failed.length) {
-      dom.banner.textContent = failed
-        .map((s) => `${s.replace(/_/g, " ")}: ${unavailable(s)}`)
-        .join(" · ");
+    dom.banner.replaceChildren();
+    for (const s of failed) {
+      const st = sectionState(s);
+      const line = el(
+        "span",
+        "banner-item",
+        st.kind === "stale"
+          ? `Could not read ${s.replace(/_/g, " ")}: ${st.why}. What is shown is from the last read that worked.`
+          : `Could not read ${s.replace(/_/g, " ")}: ${st.why}.`
+      );
+      line.append(" ", retryButton(s));
+      dom.banner.append(line);
     }
   } catch (error) {
     dom.banner.hidden = false;
@@ -283,6 +418,7 @@ async function load(sections, { quiet = false } = {}) {
   } finally {
     state.loading = false;
     dom.refresh.disabled = false;
+    paintFreshness();
   }
 }
 
@@ -305,7 +441,7 @@ async function showView(name, { reload = true } = {}) {
     if (view) view.hidden = key !== name;
   }
 
-  if (reload) await load(VIEW_SECTIONS[name]);
+  if (reload) await load(sectionsFor(name));
   render(name);
   if (name === "galaxy") fitCanvas();
 }
@@ -343,8 +479,90 @@ function render(name) {
       renderWatchReport();
       break;
   }
+  renderRushStrip();
   renderCounts();
+  paintFreshness();
 }
+
+/**
+ * The rush latch, at the top of every view. The phone puts it first on Mind
+ * and keeps the last latch it saw when a check fails (BrainScreen.kt); this
+ * does the same. Nothing here clears a latch - Retry only reads again.
+ */
+function renderRushStrip() {
+  const s = sectionState("content_risk");
+  const risk = state.data.content_risk;
+  const rush = risk && risk.available !== false ? risk.rush : null;
+  dom.rushStrip.replaceChildren();
+  dom.rushStrip.dataset.tone = "";
+  if (rush) {
+    dom.rushStrip.dataset.tone = "bad";
+    const line = el(
+      "span",
+      "",
+      "A rush latch is active: outside text tried to hurry a decision. It expires on its own."
+    );
+    dom.rushStrip.append(line);
+    if (rush.phrase) dom.rushStrip.append(" ", el("span", "rush-quote", `“${rush.phrase}”`));
+    if (s.kind === "stale") {
+      const mins = Math.max(0, Math.round((Date.now() - (state.readAt.content_risk || Date.now())) / 60000));
+      dom.rushStrip.append(
+        " ",
+        el("span", "rush-age", `Last seen ${mins} min ago — the newest check failed: ${s.why}.`),
+        " ",
+        retryButton("content_risk")
+      );
+    }
+    dom.rushStrip.hidden = false;
+    return;
+  }
+  if (s.kind === "failed" || s.kind === "stale") {
+    dom.rushStrip.dataset.tone = "warn";
+    dom.rushStrip.append(
+      el("span", "", `Could not check for a rush latch: ${s.why}.`),
+      " ",
+      retryButton("content_risk")
+    );
+    dom.rushStrip.hidden = false;
+    return;
+  }
+  dom.rushStrip.hidden = true;
+}
+
+/** "3 min ago" from a millisecond time. */
+function agoMs(ms) {
+  if (!ms) return "";
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  return `${Math.round(s / 3600)} h ago`;
+}
+
+/**
+ * How old the numbers on screen are - the phone's Freshness line. Reads
+ * "Refreshing…" while a read runs, and says everything is last known while
+ * the link is stale or down.
+ */
+function paintFreshness() {
+  if (!dom.freshness) return;
+  const sections = (VIEW_SECTIONS[state.view] || []).filter((s) => state.readAt[s]);
+  const oldest = sections.length ? Math.min(...sections.map((s) => state.readAt[s])) : 0;
+  const what = (VIEWS[state.view] && VIEWS[state.view].title.toLowerCase()) || "this";
+  const words = linkWords(currentLink());
+  dom.freshness.dataset.tone = words.canAct ? "" : "warn";
+  if (!words.canAct) {
+    dom.freshness.textContent = oldest
+      ? `${words.short}. Everything below is last known, read ${agoMs(oldest)}.`
+      : `${words.short}. Nothing has been read yet.`;
+  } else if (state.loading) {
+    dom.freshness.textContent = "Refreshing…";
+  } else if (oldest) {
+    dom.freshness.textContent = `Link live · ${what} read ${agoMs(oldest)}`;
+  } else {
+    dom.freshness.textContent = "Link live · reading…";
+  }
+}
+setInterval(paintFreshness, 15000);
 
 function renderCounts() {
   const set = (node, n) => {
@@ -356,8 +574,10 @@ function renderCounts() {
     dom.countWork,
     jobs.filter((j) => j.state === "running" || j.state === "queued").length
   );
+  // Kept at 1 while the last latch seen is still on screen, even if the
+  // newest check failed - a failed read is not an all-clear.
   const risk = state.data.content_risk;
-  const trustCount = risk && risk.rush ? 1 : 0;
+  const trustCount = risk && risk.available !== false && risk.rush ? 1 : 0;
   set(dom.countTrust, trustCount);
   const watch = state.data.watch;
   const watchCount = (watch && watch.waiting_for_you) || 0;
@@ -386,7 +606,7 @@ function renderCounts() {
 function renderModels() {
   const body = state.data.models || {};
   const why = unavailable("models");
-  if (why) return rows(dom.models, [], null, why);
+  if (why) return rows(dom.models, [], null, whyNode("models"));
 
   const current = body.current || body.active || "";
   const previous = body.previous || "";
@@ -408,7 +628,8 @@ function renderModels() {
       if (ref && !isCurrent) {
         actions.push(
           button("Use", () => modelAction("switch", ref), {
-            title: "Switch the active model. Rollback is one tap and never waits.",
+            title: "Ask to switch to this model. You approve it in the Jarvis bar.",
+            live: true,
           })
         );
       }
@@ -447,24 +668,47 @@ function renderModels() {
     back.style.paddingTop = "10px";
     back.append(
       button(`Roll back to ${previous}`, () => modelAction("rollback"), {
-        title: "Tier auto on the server — rollback never waits for approval.",
+        title: "Goes back to the previous model at once. Rollback never waits for approval.",
+        live: true,
       })
     );
     dom.models.append(back);
+  }
+
+  // A switch or install that raised a card and is waiting on it. Said here
+  // until the next `model` event, because the toast is gone in seconds and
+  // "switched" was never true - the server only raised an approval card
+  // (JARVIS-API: tier `ask`, "success means a card was raised").
+  if (state.modelAsk) {
+    dom.models.append(
+      el(
+        "p",
+        "banner model-ask",
+        state.modelAsk.action === "install"
+          ? `Waiting for your approval: installing ${state.modelAsk.ref}. The card is in the Jarvis bar and on the widget — nothing downloads until you approve it there.`
+          : `Waiting for your approval: switching to ${state.modelAsk.ref}. The card is in the Jarvis bar and on the widget — nothing changes until you approve it there.`
+      )
+    );
   }
 }
 
 async function modelAction(action, reference) {
   try {
     const out = await invoke("brain_model", { action, reference: reference || null });
-    // Install answers 202 and reports progress as `model` events — "started",
-    // not "done", and saying otherwise would be a lie the user acts on.
-    toast(
-      action === "install"
-        ? "Download started — progress arrives on the event stream."
-        : `Model ${action === "rollback" ? "rolled back" : "switched"}.`,
-      "ok"
-    );
+    // Switch and install are tier `ask`: success means an approval card was
+    // raised, not that anything changed. This used to toast "Model
+    // switched." Rollback is tier `auto` and really has happened.
+    if (action === "rollback") {
+      toast("Rolled back.", "ok");
+    } else {
+      state.modelAsk = { action, ref: String(reference || "") };
+      toast(
+        action === "install"
+          ? "Waiting for your approval. The card is in the Jarvis bar — nothing downloads until you approve it there."
+          : "Waiting for your approval. The card is in the Jarvis bar — nothing changes until you approve it there.",
+        "ok"
+      );
+    }
     if (out) await load(["models"], { quiet: true });
     render("faculties");
   } catch (error) {
@@ -476,7 +720,7 @@ function renderCompute() {
   const body = state.data.compute || {};
   const why = unavailable("compute");
   dom.compute.replaceChildren();
-  if (why) return dom.compute.append(el("p", "empty", why));
+  if (why) return dom.compute.append(whyNode("compute"));
 
   const dl = el("dl", "kv");
   const add = (k, v) => {
@@ -503,7 +747,7 @@ function renderCompute() {
 function renderSkills() {
   const body = state.data.skills || {};
   const why = unavailable("skills");
-  if (why) return rows(dom.skills, [], null, why);
+  if (why) return rows(dom.skills, [], null, whyNode("skills"));
   const list = Array.isArray(body.skills) ? body.skills : Array.isArray(body) ? body : [];
 
   rows(
@@ -559,7 +803,7 @@ function renderMemory() {
   const pending = state.data.memory_pending || {};
   dom.memory.replaceChildren();
   const why = unavailable("memory");
-  if (why) return dom.memory.append(el("p", "empty", why));
+  if (why) return dom.memory.append(whyNode("memory"));
 
   const dl = el("dl", "kv");
   const add = (k, v) => {
@@ -736,7 +980,7 @@ function renderLearning() {
   const pending = state.data.memory_pending || {};
   dom.memoryLearning.replaceChildren();
   const why = unavailable("memory_facts");
-  if (why) return dom.memoryLearning.append(el("p", "empty", why));
+  if (why) return dom.memoryLearning.append(whyNode("memory_facts"));
 
   const on = facts.learning === true;
   const setup = pending.setup || {};
@@ -776,7 +1020,7 @@ function renderLearning() {
               render("memory");
             }
           }, { title: "Once a night, re-read what was learned that day, merge "
-                     + "duplicates and retire facts newer ones replaced." }),
+                     + "duplicates and retire facts newer ones replaced.", live: true }),
           button("Not now", () => {
             dismissSleepOffer();
             render("memory");
@@ -792,7 +1036,7 @@ function renderLearning() {
               sleepOfferDismissed = false;
               render("memory");
             }
-          }, { title: "Never offer this again. You can still turn it on yourself." }),
+          }, { title: "Never offer this again. You can still turn it on yourself.", live: true }),
         ],
       })
     );
@@ -893,7 +1137,7 @@ function renderProposals() {
   const body = state.data.memory_pending || {};
   const why = unavailable("memory_pending");
   if (why) {
-    dom.memoryProposals.replaceChildren(el("p", "empty", why));
+    dom.memoryProposals.replaceChildren(whyNode("memory_pending"));
     return;
   }
   const items = Array.isArray(body.pending) ? body.pending : [];
@@ -915,11 +1159,11 @@ function renderProposals() {
           button("Keep", async () => {
             await memoryWrite("brain_memory_decide", { id: Number(p.id), accept: true },
               "Kept. Jarvis can recall it now.");
-          }, { title: "Add it to memory. It can be reworded or forgotten later." }),
+          }, { title: "Add it to memory. It can be reworded or forgotten later.", live: true }),
           button("Discard", async () => {
             await memoryWrite("brain_memory_decide", { id: Number(p.id), accept: false },
               "Discarded. It was never in memory.");
-          }, { title: "Throw the proposal away. Nothing is removed from memory, because it was never there." }),
+          }, { title: "Throw the proposal away. Nothing is removed from memory, because it was never there.", live: true }),
         ],
       }),
     "Nothing is waiting. Either Jarvis has not heard anything worth keeping, or learning is off."
@@ -930,7 +1174,7 @@ function renderFacts() {
   const body = state.data.memory_facts || {};
   const why = unavailable("memory_facts");
   if (why) {
-    dom.memoryFacts.replaceChildren(el("p", "empty", why));
+    dom.memoryFacts.replaceChildren(whyNode("memory_facts"));
     return;
   }
   const past = memoryAsOf !== null;
@@ -1079,7 +1323,7 @@ function whenNoticed(f) {
 function renderJobs() {
   const body = state.data.jobs || {};
   const why = unavailable("jobs");
-  if (why) return rows(dom.jobs, [], null, why);
+  if (why) return rows(dom.jobs, [], null, whyNode("jobs"));
   const list = Array.isArray(body.jobs) ? body.jobs : [];
 
   rows(
@@ -1136,7 +1380,7 @@ function renderJobs() {
 function renderUndo() {
   const body = state.data.undo || {};
   const why = unavailable("undo");
-  if (why) return rows(dom.undo, [], null, why);
+  if (why) return rows(dom.undo, [], null, whyNode("undo"));
   const shelf = Array.isArray(body.shelf) ? body.shelf : [];
 
   rows(
@@ -1219,7 +1463,7 @@ function renderContentRisk() {
   const body = state.data.content_risk || {};
   const why = unavailable("content_risk");
   dom.contentRisk.replaceChildren();
-  if (why) return dom.contentRisk.append(el("p", "empty", why));
+  if (why) return dom.contentRisk.append(whyNode("content_risk"));
 
   const rush = body.rush;
   const banner = el(
@@ -1281,7 +1525,7 @@ function renderLedger() {
   const body = state.data.ledger || {};
   const why = unavailable("ledger");
   dom.ledger.replaceChildren();
-  if (why) return dom.ledger.append(el("p", "empty", why));
+  if (why) return dom.ledger.append(whyNode("ledger"));
 
   const dl = el("dl", "kv");
   const add = (k, v) => {
@@ -1324,7 +1568,7 @@ function renderLedger() {
 function renderWatch() {
   const body = state.data.watch || {};
   const why = unavailable("watch");
-  if (why) return rows(dom.watch, [], null, why);
+  if (why) return rows(dom.watch, [], null, whyNode("watch"));
 
   const head = el("p", "note");
   head.textContent = [
@@ -1384,7 +1628,7 @@ function renderWatch() {
 function renderWatchReport() {
   const body = state.data.watch_report || {};
   const why = unavailable("watch_report");
-  if (why) return rows(dom.watchReport, [], null, why);
+  if (why) return rows(dom.watchReport, [], null, whyNode("watch_report"));
   const findings = Array.isArray(body.findings)
     ? body.findings
     : Array.isArray(body.items)
@@ -2323,7 +2567,7 @@ dom.canvas.addEventListener("keydown", (e) => {
    ========================================================================== */
 
 function applyTheme(name, { persist = true } = {}) {
-  const theme = THEMES.includes(name) ? name : THEMES[0];
+  const theme = normaliseTheme(name);
   dom.root.setAttribute("data-theme", theme);
   dom.themePicker.value = theme;
   try {
@@ -2420,7 +2664,7 @@ dom.refresh.addEventListener("click", async () => {
   // `render` calls `startLayout` itself, so calling it again here started the
   // simulation twice and cancelled the first one mid-flight.
   if (state.view === "galaxy") state.graph = null;
-  await load(VIEW_SECTIONS[state.view]);
+  await load(sectionsFor(state.view));
   render(state.view);
 });
 
@@ -2509,7 +2753,8 @@ matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", () => 
 // boot path, so it passed while claiming "every window follows the theme".
 // The cached ink has to die with the old palette, or the graph keeps painting
 // the previous theme's edges until something else forces a reload.
-followTheme(() => {
+followTheme((theme) => {
+  dom.themePicker.value = theme;
   _ink = null;
   if (state.view === "galaxy" && state.graph) invalidate();
 });
@@ -2525,17 +2770,24 @@ followZoom(() => {
 startLink();
 
 onLink((link) => {
+  // The same words as every other window. "stream live · stale" used to sit
+  // in the same green pill as "stream live", so stale looked fully live.
+  const words = linkWords(link);
   dom.linkPill.dataset.connected = String(link.connected);
-  dom.linkText.textContent = link.connected
-    ? link.stale
-      ? "stream live · stale"
-      : "stream live"
-    : link.error
-      ? "offline"
-      : "connecting…";
+  dom.linkPill.dataset.tone = words.tone;
+  dom.linkText.textContent = words.short;
   dom.linkPill.title = link.error || `${link.base} · last event ${link.lastId}`;
+  dom.reconnectLink.hidden = link.connected;
+  syncLiveButtons();
+  paintFreshness();
   if (state.view === "live") renderLive();
   renderCounts();
+});
+
+dom.reconnectLink.addEventListener("click", () => {
+  reconnect();
+  dom.linkText.textContent = "Reconnecting…";
+  announce("Reconnecting.");
 });
 
 onEvent((frame) => {
@@ -2543,6 +2795,12 @@ onEvent((frame) => {
   // A doorbell for the pane that is open. Reading everything on every frame
   // would put the graph's multi-second walk on the event path.
   const kind = String((frame && frame.kind) || "");
+  // The next `model` event is the card being answered (or the download
+  // moving), so the "waiting for your approval" line has done its job.
+  if (kind === "model" && state.modelAsk) {
+    state.modelAsk = null;
+    if (state.view === "faculties") renderModels();
+  }
   const refreshes = {
     model: ["models"],
     finding: ["watch", "watch_report"],

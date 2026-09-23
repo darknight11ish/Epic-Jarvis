@@ -354,6 +354,55 @@ await check("with the OS asking for less motion, the face redraws at most ~10 ti
   assert.deepEqual(problems, []);
 });
 
+await check("the HUD says what the link is doing, live, under the brand", async () => {
+  // #brand-sub was written once at boot from an Ollama probe and never again.
+  // The bootstrap now keeps its own line under it, from every link push.
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const line = () => page.locator("#jarvis-link-line").textContent();
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+  assert.match(await line(), /linked/);
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: true }));
+  assert.match(await line(), /stale/, "a stale-but-connected link still read as linked");
+  await page.evaluate(() => window.__jarvisFeed("link",
+    { connected: false, stale: true, error: "Jarvis is not running at http://127.0.0.1:4719. Start it." }));
+  assert.match(await line(), /^offline · Jarvis is not running/);
+  // The page's own Ollama hint is left alone.
+  assert.ok((await page.locator("#brand-sub").textContent()).length > 0);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("while stale, a HUD approval card cannot be clicked, and is not removed", async () => {
+  // The fetch refusal was already there; what happened next was the page
+  // printing "no longer waiting" over a card that WAS still waiting, and
+  // removing it. The click is now stopped before the page's handler runs.
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.evaluate(() => {
+    const box = document.getElementById("approvals");
+    box.hidden = false;
+    box.innerHTML = '<div class="appr" data-id="7"><div class="det">send it</div>'
+      + '<div class="btns"><button class="yes">Approve</button><button class="no">Deny</button></div></div>';
+    window.__clicked = 0;
+    box.querySelector(".yes").onclick = () => { window.__clicked++; };
+    window.__jarvisFeed("link", { connected: true, stale: true });
+  });
+  await page.locator("#approvals .yes").click({ force: true });
+  const out = await page.evaluate(() => ({
+    clicked: window.__clicked,
+    stale: document.documentElement.classList.contains("jarvis-stale"),
+    opacity: getComputedStyle(document.querySelector("#approvals .yes")).opacity,
+  }));
+  assert.equal(out.clicked, 0, "the page's own Approve handler ran on a stale link");
+  assert.equal(out.stale, true);
+  assert.ok(Number(out.opacity) < 0.6, `the stale Approve button still looked live (opacity ${out.opacity})`);
+  // Live again: the same click reaches the page.
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+  await page.locator("#approvals .yes").click();
+  assert.equal(await page.evaluate(() => window.__clicked), 1);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
 await browser.close();
 if (fails.length) {
   console.log(`\n${fails.length} failed: ${fails.join(", ")}`);

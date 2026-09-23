@@ -10,7 +10,7 @@
 <script>
   try {
     var t = localStorage.getItem("jarvis.theme");
-    if (["deep-space", "ember", "paper", "high-contrast"].indexOf(t) >= 0) {
+    if (["deep-space", "paper", "high-contrast"].indexOf(t) >= 0) {
       document.documentElement.setAttribute("data-theme", t);
     }
   } catch (e) { /* private mode, cleared site data — the default theme is correct */ }
@@ -135,7 +135,7 @@
       </p>
       <div class="demo"><span class="dot resting"></span> Resting — nothing to do right now</div>
       <div class="demo"><span class="dot thinking"></span> Thinking, or in the middle of answering you</div>
-      <div class="demo"><span class="dot waiting"></span> Waiting on you for something below</div>
+      <div class="demo"><span class="dot waiting"></span> Waiting on you to approve or deny something</div>
       <p>
         Click it any time to open Jarvis's other windows, or to quit.
       </p>
@@ -147,7 +147,10 @@
       <p>
         If Jarvis wants to do something it isn't sure is safe — like sending
         a message, or changing a file — it <strong>stops and shows you a
-        card first</strong>. Nothing like that happens without you saying yes.
+        card first</strong>. The card waits for you in the Jarvis bar (the one
+        <kbd>Alt</kbd>+<kbd>Space</kbd> opens) and on the widget, with two
+        buttons: <strong>Approve</strong> and <strong>Deny</strong>. Nothing
+        like that happens without you saying yes.
       </p>
       <p>
         You can always say no, and nothing bad happens if you do. There is

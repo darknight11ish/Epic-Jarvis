@@ -1,0 +1,28 @@
+/* Loaded into the HUD by src-tauri/src/hud_bootstrap.js (section 5), never by
+   the page itself: jarvis_hud.html is vendored byte-identical from the backend
+   and not ours to edit.
+
+   While the event stream is stale the approval queue cannot be confirmed, so
+   nothing may be answered (rule 4). The bootstrap refuses the click itself;
+   this makes the buttons look refused before anyone clicks, and says why.
+   No colours of its own - it only dims and inherits - so the HUD's palette
+   stays the HUD's. */
+
+.jarvis-stale #approvals .appr .btns button {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.jarvis-stale #approvals .appr .btns::after {
+  content: "Not connected — nothing can be answered until it reconnects.";
+  align-self: center;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* The live link line under the brand. */
+#jarvis-link-line[data-tone="warn"],
+#jarvis-link-line[data-tone="bad"] {
+  opacity: 1;
+  font-weight: 600;
+}
