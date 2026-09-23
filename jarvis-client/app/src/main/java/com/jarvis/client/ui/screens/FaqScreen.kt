@@ -3,6 +3,7 @@ package com.jarvis.client.ui.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,12 +26,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.BuildConfig
+import com.jarvis.client.ui.Chevron
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.LocalRadii
 
 /**
@@ -39,8 +45,8 @@ import com.jarvis.client.ui.theme.LocalRadii
  * Answers specific to THIS app — the one on the phone. The desktop program has
  * its own FAQ, in its own Settings window, because the two run into different
  * problems: this one is a thin client with no model of its own, reached over
- * Tailscale, gated by the phone's fingerprint sensor rather than its keyboard.
- * A phone owner asking "does this run anything on my phone" needs a different
+ * a private mesh network (Tailscale or Meshnet), gated by the phone's
+ * fingerprint sensor rather than its keyboard. A phone owner asking "does this run anything on my phone" needs a different
  * answer than a desktop owner asking the same question about their graphics
  * card.
  */
@@ -80,10 +86,14 @@ private val FAQS = listOf(
     ),
     Faq(
         "Why can't I approve everything waiting for me in one tap?",
+        // Used to say the cards were in the Inbox and the buttons were
+        // "Affirm" and "Refuse". The cards are on Home (Inbox only links to
+        // them), and "Affirm"/"Refuse" are the names of the components in
+        // the code, not the words on the buttons (screens-11).
         "On purpose, the same as on the desktop: there is no approve-all " +
-            "anywhere in Jarvis. Each card in your Inbox is answered on its " +
-            "own, by a swipe for the ones the desktop has already flagged as " +
-            "safe to swipe, or by tapping Affirm or Refuse otherwise. " +
+            "anywhere in Jarvis. Each card waiting for you on Home is answered " +
+            "on its own, by a swipe for the ones the desktop has already flagged " +
+            "as safe to swipe, or by tapping Approve or Deny otherwise. " +
             "Nothing runs until you decide, one thing at a time.",
     ),
     Faq(
@@ -119,8 +129,9 @@ private val FAQS = listOf(
     ),
     Faq(
         "It says \"Cannot reach the desktop.\" Now what?",
-        "Check that Tailscale is actually running on both the phone and the " +
-            "desktop first — that is the most common cause by far. Open " +
+        "Check that your private network (Tailscale, or NordVPN's Meshnet) " +
+            "is actually running on both the phone and the desktop first — " +
+            "that is the most common cause by far. Open " +
             "Platform checks from Home to see exactly what this phone thinks " +
             "is wrong. One known rough edge worth knowing about: a desktop " +
             "that is simply asleep or has its lid closed currently looks " +
@@ -148,14 +159,23 @@ private val FAQS = listOf(
     ),
     Faq(
         "Is it a problem that I installed this from a file instead of the Play Store?",
-        "Not for a phone only you use, which is what this build is for. " +
-            "Worth knowing plainly rather than not mentioning: this is " +
-            "currently a debug build, which is slightly less locked down " +
-            "than a store release — specifically, a computer connected to " +
-            "the phone with developer tools can still reach into this app's " +
-            "own storage. Fine for a phone that stays in your own hands; " +
-            "worth remembering if that phone is ever going to be someone " +
-            "else's.",
+        // Used to say "this is currently a debug build". It is not: the
+        // workflow publishes the RELEASE build to the client-latest page
+        // (build.gradle.kts, the long comment on `release`), and the risk
+        // that is actually on record - the shared signing key - went
+        // unmentioned (screens-11). Kept to what the build files show.
+        "Not for a phone only you use, which is what this app is for. The " +
+            "copy on your GitHub release page is a release build, the " +
+            "finished and locked-down kind: developer tools on a computer " +
+            "plugged into the phone cannot reach into this app's storage. " +
+            "The one thing worth knowing: every build is signed with the same " +
+            "key, which is what lets an update install over the old copy " +
+            "without wiping your pairing. Anyone holding that key could build " +
+            "an app your phone accepts as an update to this one, and that app " +
+            "could read your pairing token. The key is kept as a hidden secret " +
+            "in the project's GitHub settings, not in the code. So install " +
+            "Jarvis updates only from your own release page, never from a " +
+            "file someone sends you.",
     ),
 )
 
@@ -166,10 +186,14 @@ fun FaqScreen(
 ) {
     val chrome = LocalChrome.current
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
+        // Titled with the word on the button that opened it. Home's nav says
+        // "Help", and a beginner who taps "Help" and lands on "Frequently
+        // asked questions" has to work out that they are the same place
+        // (screens-15). The old title moves into the subtitle.
         TopBar(
-            "Frequently asked questions",
+            "Help",
             onBack,
-            subtitle = "Answers specific to this phone. The desktop has its own.",
+            subtitle = "Frequently asked questions, for this phone. The desktop has its own.",
         )
 
         LazyColumn(
@@ -190,17 +214,35 @@ fun FaqScreen(
     }
 }
 
-/** One question. Closed by default, so the list is scannable rather than a wall of text. */
+/**
+ * One question. Closed by default, so the list is scannable rather than a wall of text.
+ *
+ * The open/closed mark is a drawn chevron that turns over, not a typed "+"
+ * and "−" (screens-14): those were whatever the phone's font made of them,
+ * and a bare "+" reads as "add". The chevron is decoration only. A screen
+ * reader is told the state in words instead - "Expanded" or "Collapsed" -
+ * which it had no way to know before (a11y-8), because "+" was read out as
+ * "plus".
+ *
+ * The answer is bodyMedium (15sp), not bodySmall (13sp): these are
+ * paragraphs meant to be read, and 13sp is the size for captions.
+ */
 @Composable
 private fun FaqCard(faq: Faq) {
     val chrome = LocalChrome.current
     var open by rememberSaveable { mutableStateOf(false) }
+    val turn by animateFloatAsState(
+        targetValue = if (open) 180f else 0f,
+        animationSpec = LocalMotion.current.micro(),
+        label = "faq-chevron",
+    )
     Column(
         Modifier
             .fillMaxWidth()
             .animateContentSize()
             .clip(LocalRadii.current.cardShape)
             .background(chrome.surface1)
+            .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
             .pressable(onClick = { open = !open })
             .padding(14.dp),
     ) {
@@ -211,15 +253,17 @@ private fun FaqCard(faq: Faq) {
                 color = chrome.textHi,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                if (open) "−" else "+",
-                style = MaterialTheme.typography.titleSmall,
-                color = chrome.textMid,
+            Spacer(Modifier.width(8.dp))
+            // Turned in the draw phase, so the 120ms turn redraws one small
+            // box and recomposes nothing.
+            Chevron(
+                tint = chrome.textMid,
+                modifier = Modifier.graphicsLayer { rotationZ = turn },
             )
         }
         if (open) {
             Spacer(Modifier.height(8.dp))
-            Text(faq.a, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Text(faq.a, style = MaterialTheme.typography.bodyMedium, color = chrome.textMid)
         }
     }
 }
@@ -252,8 +296,9 @@ private fun AboutCard() {
         Spacer(Modifier.height(8.dp))
         Text(
             "A thin client to the Jarvis brain running on your own desktop, " +
-                "reached only over Tailscale - a private network between only " +
-                "the devices you own, never the open internet. No AI runs on " +
+                "reached only over a private network between only the devices " +
+                "you own (Tailscale, or NordVPN's Meshnet), never the open " +
+                "internet. No AI runs on " +
                 "this phone; there is no approve-all anywhere in this app, and " +
                 "every action still stops and asks first, one at a time.",
             style = MaterialTheme.typography.bodySmall,

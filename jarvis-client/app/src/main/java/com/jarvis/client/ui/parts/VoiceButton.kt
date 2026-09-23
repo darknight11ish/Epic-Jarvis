@@ -30,7 +30,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.ui.theme.LocalAccent
@@ -165,9 +168,34 @@ fun VoiceButton(
                     }
                 }
             }
+            // What TalkBack says (a11y-10).
+            //
+            // The node used to carry "Hold to talk" and nothing else: no
+            // role, and no word about how a screen-reader user actually
+            // holds something. With TalkBack on, the way to hold is
+            // double-tap-and-hold, so the description now says exactly that,
+            // and the button role makes it announce as a control. A
+            // disabled button says so rather than going silent.
+            //
+            // Words only - no accessibility ACTION is added, deliberately.
+            // The audit suggested `onLongClick(label = "talk") { false }`,
+            // which would make TalkBack speak its own "double-tap and hold"
+            // hint. Whether TalkBack then passes the real press through to
+            // the pointerInput above, or performs that do-nothing action
+            // INSTEAD of passing it through, has not been checked on a
+            // phone, and the second outcome would break voice input under
+            // TalkBack. A sentence cannot change what the gesture does.
+            // There is no onClick either: a tap-to-start toggle is what the
+            // hold design exists to avoid (a press with no release once
+            // uploaded up to two minutes of audio - see MainActivity).
             .semantics {
-                contentDescription =
-                    if (capturing) "Recording. Release to send, slide up to cancel." else "Hold to talk"
+                contentDescription = if (capturing) {
+                    "Recording. Lift your finger to send, or slide up to cancel."
+                } else {
+                    "Talk to Jarvis. Double-tap and hold, speak, then lift your finger to send."
+                }
+                role = Role.Button
+                if (!enabled) disabled()
             },
         contentAlignment = Alignment.Center,
     ) {
