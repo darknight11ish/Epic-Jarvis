@@ -672,6 +672,28 @@ def _gate_check(action: str, detail: dict, prompt: str):
         return _Refused(f"the approval gate raised {type(exc).__name__}: {exc}; refusing")
 
 
+def _record_chain(steps: list) -> None:
+    """The default end-of-turn recorder: one audit line naming the tools this
+    turn asked for, in order, and whether each ran - then, at most, a
+    background check for a routine worth offering as a skill. See
+    jarvis_skill_discovery.py for what is written and why.
+
+    Tool NAMES only. `steps` has no field for an argument or a result, so no
+    conversation text can reach the log through here. Best-effort: a missing
+    module or a failed write must never cost the owner their answer."""
+    if not steps:
+        return
+    try:
+        import jarvis_skill_discovery
+    except Exception:
+        return
+    try:
+        if jarvis_skill_discovery.record_turn(steps):
+            jarvis_skill_discovery.maybe_offer_async()
+    except Exception:
+        pass
+
+
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     stream_out: Callable[[bytes], None],
                     enabled_tools: Optional[set] = None,
@@ -679,7 +701,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     post: Optional[Callable[[str, dict], dict]] = None,
                     gate_check: Optional[Callable[[str, dict, str], object]] = None,
                     open_stream: Optional[Callable[[str, dict], object]] = None,
-                    max_rounds: int = 6) -> None:
+                    max_rounds: int = 6,
+                    record_chain: Optional[Callable[[list], None]] = None) -> None:
     """Drives the tool loop, then streams the final answer to `stream_out`
     exactly as raw bytes - the same shape a plain relay would have produced,
     so the desktop app needs no changes to render it.
@@ -699,8 +722,17 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     response is re-requested with stream=True and relayed live - so a plain
     question that needs no tool still ends up streamed, at the cost of one
     extra non-streamed round trip to find that out.
+
+    When the turn is over - after the answer has streamed, or failed to -
+    `record_chain(steps)` gets the list of tools this turn asked for, as
+    `{"tool", "ran", "ok", "outcome"}` dicts in order. Omitted, it is
+    `_record_chain`, which writes one audit line so repeated routines can be
+    counted (jarvis_skill_discovery.py). A turn that used no tool records
+    nothing, and a recorder that raises is ignored.
     """
     caller = post or (lambda url, payload: _post(url, payload))
+    recorder = record_chain if record_chain is not None else _record_chain
+    steps: list = []
     checker = gate_check or _gate_check
     streamer = open_stream or (lambda url, payload: _open_stream(url, payload))
     convo = list(messages)
@@ -765,9 +797,17 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                                        {"ok": False,
                                         "error": f"{name} could not accept those "
                                                  f"arguments: {type(exc).__name__}: {exc}"})})
+                    steps.append({"tool": name, "ran": False, "ok": False,
+                                  "outcome": "unknown"})
                     continue
                 verdict = checker(action_name, {"text": plan_text},
                                    f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+                # What the GATE said, never what the model said: the outcome
+                # is read off the verdict (gate-outcome.patch), and a verdict
+                # without one is recorded as "unknown" rather than guessed at.
+                step = {"tool": name, "ran": False, "ok": False,
+                        "outcome": str(getattr(verdict, "outcome", None) or "unknown")}
+                steps.append(step)
                 if not getattr(verdict, "allowed", False):
                     result = {"ok": False,
                               "error": f"refused: {getattr(verdict, 'reason', 'not approved')}"}
@@ -775,10 +815,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     if announce:
                         announce(f"Using {name}...")
                     kwargs = {"announce": announce} if tool.needs_announce else {}
+                    step["ran"] = True
                     try:
                         result = tool.execute(args, state, **kwargs)
                     except Exception as exc:
                         result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+                    step["ok"] = isinstance(result, dict) and result.get("ok") is True
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": _tool_content(result)})
     else:
@@ -796,9 +838,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # out of a streamed response. Dropping `tools` forces this call to be
     # what it was always meant to be: the answer, in prose.
     stream_body = {"model": model, "messages": convo, "stream": True}
-    with streamer(f"{ollama_url}/v1/chat/completions", stream_body) as upstream:
-        while True:
-            chunk = upstream.read(1024)
-            if not chunk:
-                break
-            stream_out(chunk)
+    try:
+        with streamer(f"{ollama_url}/v1/chat/completions", stream_body) as upstream:
+            while True:
+                chunk = upstream.read(1024)
+                if not chunk:
+                    break
+                stream_out(chunk)
+    finally:
+        # After the answer, so counting can never delay it, and in a
+        # `finally` because the tools above ran whether or not the answer
+        # made it to the client. Only the tools are recorded - see
+        # _record_chain. A failing recorder must not replace a real error
+        # from the stream, or turn a delivered answer into a failed turn.
+        if steps:
+            try:
+                recorder(steps)
+            except Exception:
+                pass

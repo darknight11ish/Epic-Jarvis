@@ -15,6 +15,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import jarvis_agent as AG
 
+# Every turn in this file would otherwise reach the default end-of-turn
+# recorder, which writes to the real audit log and may raise a real skill
+# card on the owner's machine. Captured here instead, for every test.
+RECORDED = []
+AG._record_chain = RECORDED.append
+
 FAILED, PASSED = [], []
 
 
@@ -469,6 +475,140 @@ def t_a_prepare_time_failure_never_executes_the_tool():
         AG.TOOLS["calculator"].execute = real_execute
 
 
+def _two_tool_turn(gate_check, recorder=None, stream_fail=False):
+    """calculator then shell_exec, in one round. Returns (steps recorded,
+    payloads sent to the model)."""
+    real_calc = AG.TOOLS["calculator"].execute
+    real_shell = AG.TOOLS["shell_exec"].execute
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True, "value": 4}
+    AG.TOOLS["shell_exec"].execute = lambda args, state, **kw: {"ok": True, "stdout": "SECRET-OUTPUT"}
+    got = []
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator",
+                 "arguments": json.dumps({"expression": "2+2 MY-PRIVATE-ARG"})}},
+                {"id": "2", "function": {"name": "shell_exec",
+                 "arguments": json.dumps({"command": "type C:\\diary.txt"})}},
+                {"id": "3", "function": {"name": "made_up_tool", "arguments": "{}"}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "done"}}]},
+        ]
+        post, calls = scripted_post(responses)
+
+        def opener(url, payload):
+            if stream_fail:
+                raise ConnectionError("client went away")
+            return FakeStream([b'{"done":true}\n'])
+        with NoRealIO():
+            try:
+                AG.run_local_turn(
+                    [{"role": "user", "content": "PLEASE-DO-NOT-LOG-ME"}], "qwen3:8b",
+                    ollama_url="http://x", stream_out=lambda b: None, post=post,
+                    gate_check=gate_check, open_stream=opener,
+                    record_chain=recorder if recorder is not None else got.append)
+            except ConnectionError:
+                pass
+        return got, calls
+    finally:
+        AG.TOOLS["calculator"].execute = real_calc
+        AG.TOOLS["shell_exec"].execute = real_shell
+
+
+def t_a_tool_turn_records_its_chain_by_tool_name_only():
+    """Item 7's record: which tools one turn used, in order, and whether each
+    ran - so repeated chains can be counted. Nothing else."""
+    def calc_only(action, detail, prompt):
+        class V:
+            allowed = "shell" not in prompt
+            outcome = "auto" if allowed else "denied"
+            reason = "x"
+            tier = "auto" if allowed else "ask"
+        return V()
+    got, _ = _two_tool_turn(calc_only)
+    check("one record for the turn", len(got) == 1, repr(got))
+    steps = got[0] if got else []
+    check("both real tools recorded, in order; the invented one is not",
+          [s["tool"] for s in steps] == ["calculator", "shell_exec"], repr(steps))
+    check("the tool that ran without asking is recorded as ran, with the gate's outcome",
+          steps and steps[0] == {"tool": "calculator", "ran": True, "ok": True,
+                                 "outcome": "auto"}, repr(steps))
+    check("the denied tool is recorded as NOT ran",
+          len(steps) > 1 and steps[1]["ran"] is False and steps[1]["outcome"] == "denied",
+          repr(steps))
+    blob = json.dumps(got)
+    for secret in ("PLEASE-DO-NOT-LOG-ME", "MY-PRIVATE-ARG", "diary", "SECRET-OUTPUT"):
+        check(f"no conversation text reaches the record ({secret})", secret not in blob, blob)
+
+
+def t_a_turn_with_no_tool_records_nothing():
+    got = []
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
+    post, _ = scripted_post(responses)
+    with NoRealIO():
+        AG.run_local_turn([{"role": "user", "content": "hi"}], "qwen3:8b",
+                          ollama_url="http://x", stream_out=lambda b: None, post=post,
+                          gate_check=allow, record_chain=got.append,
+                          open_stream=lambda u, p: FakeStream([b"x"]))
+    check("a plain answer writes no chain record", got == [], repr(got))
+
+
+def t_the_recorder_failing_never_breaks_the_turn():
+    def boom(_steps):
+        raise RuntimeError("disk full")
+    streamed = []
+    real = AG.TOOLS["calculator"].execute
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True, "value": 4}
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator",
+                 "arguments": json.dumps({"expression": "2+2"})}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "4"}}]},
+        ]
+        post, _ = scripted_post(responses)
+        with NoRealIO():
+            AG.run_local_turn([{"role": "user", "content": "2+2"}], "qwen3:8b",
+                              ollama_url="http://x", stream_out=streamed.append, post=post,
+                              gate_check=allow, record_chain=boom,
+                              open_stream=lambda u, p: FakeStream([b"four"]))
+        check("the answer still streams when the recorder raises", streamed == [b"four"],
+              repr(streamed))
+    finally:
+        AG.TOOLS["calculator"].execute = real
+
+
+def t_the_chain_is_recorded_even_if_the_answer_fails_to_stream():
+    """The tools RAN. Losing the client afterwards does not undo that."""
+    got, _ = _two_tool_turn(allow, stream_fail=True)
+    check("recorded despite the stream failing", len(got) == 1, repr(got))
+    check("a gate with no outcome field is recorded as 'unknown', not guessed",
+          got and got[0][0]["outcome"] == "unknown", repr(got))
+
+
+def t_the_default_recorder_is_used_when_none_is_passed():
+    """No record_chain passed: the module's own _record_chain gets the turn.
+    (Stubbed at the top of this file, so nothing real is written.)"""
+    before = len(RECORDED)
+    real = AG.TOOLS["calculator"].execute
+    AG.TOOLS["calculator"].execute = lambda args, state, **kw: {"ok": True}
+    try:
+        responses = [
+            {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "calculator", "arguments": "{}"}}]}}]},
+            {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
+        ]
+        post, _ = scripted_post(responses)
+        with NoRealIO():
+            AG.run_local_turn([{"role": "user", "content": "x"}], "qwen3:8b",
+                              ollama_url="http://x", stream_out=lambda b: None, post=post,
+                              gate_check=allow,
+                              open_stream=lambda u, p: FakeStream([b"x"]))
+    finally:
+        AG.TOOLS["calculator"].execute = real
+    check("the module-level recorder received the turn",
+          len(RECORDED) == before + 1, f"{before} -> {len(RECORDED)}")
+
+
 if __name__ == "__main__":
     for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
@@ -484,7 +624,12 @@ if __name__ == "__main__":
                t_empty_enabled_tools_offers_nothing,
                t_max_rounds_stops_an_infinite_tool_loop,
                t_a_prepare_time_failure_is_a_tool_result_not_a_dead_turn,
-               t_a_prepare_time_failure_never_executes_the_tool):
+               t_a_prepare_time_failure_never_executes_the_tool,
+               t_a_tool_turn_records_its_chain_by_tool_name_only,
+               t_a_turn_with_no_tool_records_nothing,
+               t_the_recorder_failing_never_breaks_the_turn,
+               t_the_chain_is_recorded_even_if_the_answer_fails_to_stream,
+               t_the_default_recorder_is_used_when_none_is_passed):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

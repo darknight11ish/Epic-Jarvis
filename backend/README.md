@@ -57,6 +57,7 @@ on a throwaway copy instead.
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
 | `loopback-too.patch` | `jarvis_hud.py` | **Pairing the phone unplugged the desktop.** `JARVIS_HUD_BIND` moved the one socket off `127.0.0.1` instead of adding one, and the desktop's HUD may only talk to loopback. Also serves `127.0.0.1` when bound elsewhere. Needs `token-file.patch` — see its own section. |
+| `skill-suggest.patch` | `jarvis_hud.py` | `GET /api/skills/suggestions`: a read-only view of the routines Jarvis has noticed and the skill offers it made. Needs `appearance.patch` (textual) and `jarvis_skill_discovery.py` copied beside `jarvis_hud.py` — see its own section at the end. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -2763,3 +2764,158 @@ was written). Against the pre-patch `run()` in any of the three, the new
 `checkpoint`-passing cases fail with a `TypeError` for an unexpected
 keyword - which is the correct failure for a parameter that does not
 exist yet, not a false pass.
+
+---
+
+# `jarvis_skill_discovery.py` and `skill-suggest.patch` — Jarvis offers a routine as a skill, once, and only writes it if you say yes
+
+Item 7 of `docs/LEARNING-RESEARCH-2026-09-23.md`. When you keep asking Jarvis
+for the same chain of tools (for example: search notes, then read the
+calendar), it now notices, and offers to save that chain as a skill. The
+offer is an ordinary approval card. Nothing is written until you tap yes.
+
+**In plain words, what happens:**
+
+1. At the end of every chat turn that used a tool, `jarvis_agent.py` writes
+   **one line** to the audit log Jarvis already keeps
+   (`~/.openjarvis/logs/jarvis-<date>.jsonl`): a random turn id and the tool
+   names in order, each with "did it run" and "did it work". No arguments, no
+   results, no words from the conversation. There is no field for them.
+2. `jarvis_skill_discovery.py` counts chains of 2 to 4 tools that ran in
+   several separate turns. Tools that ran **without asking** (tiers `auto`
+   and `notify`, which is every read-only tool) count, the same as approved
+   ones. Denied, timed-out, refused and failed steps do not.
+3. When one chain has run in **3 separate turns in 30 days**, it raises
+   **one** card through the approval Jarvis already needs to change itself
+   (`modify_own_code`, the same gate `jarvis_skills.write_skill()` uses). The
+   card shows the whole file it would write and where.
+4. **Yes** writes that one file. **No** writes nothing, and that routine (and
+   any piece of it) is never offered again. **Nobody answering** writes
+   nothing, and it can be offered again another day. At most one card a day,
+   one routine per card. There is no "save all".
+
+## What was checked first, and why a new log line was needed
+
+The research doc listed this as unknown: does the approval log record which
+turn each action belonged to? **It does not.** Checked against the files in
+this repo:
+
+- `approvals.db` (`SELECT id,action,tier,detail,prompt,created,raised FROM
+  approvals`, quoted in `test_gate_egress.py`) only gets a row for `ask`-tier
+  actions, so the read-only tools never appear in it, and it has no turn
+  column.
+- The audit log's gate lines are `{"t", "iso", "event", "detail"}`
+  (`rebuilt/jarvis_framework.py`, `audit_log`) with `detail` =
+  `{"action", "detail"}` or `{"id", "action", "by"}` (`gate-outcome.patch`).
+  A time and an action name. No turn.
+
+Guessing turns from timestamps would merge two turns a minute apart. The tool
+loop is the only code that knows where a turn starts and ends, so it writes
+the record - one `agent.chain` line per tool-using turn, into the **same**
+audit log, through the same writer. Still one log.
+
+## Rules it keeps (each has a test)
+
+- Counting only. Nothing in the module opens a network connection; the test
+  replaces `socket.connect` with an error for the whole run.
+- The skill text is built from tool **names** and the tool descriptions in
+  `jarvis_agent.TOOLS`, which this project wrote. None of your messages are
+  copied into it (OpenJarvis's version copies your past questions in as
+  examples; that part was deliberately not taken).
+- A skill is only written after a **person** said yes: the gate's tier must
+  be `ask` and its outcome `approved`. If `modify_own_code` is ever set to
+  `auto` or `notify`, the gate would say "allowed" with nobody asked - so no
+  card is raised and nothing is written (the same rule as
+  `skill-notes.patch`).
+- `run()` needs `approved=True` spelled out, writes exactly the text that was
+  on the card to exactly the path that was on the card, and never writes over
+  an existing folder.
+- Nothing is deleted. Every offer and every answer is appended, with its
+  date, to `~/.openjarvis/skill-offers.json`. If that file cannot be read,
+  offers stop - not knowing what you declined must not become asking again -
+  and the file is left untouched.
+- The model decides nothing: not which chain, not the name, not the text,
+  not the tier, and not where a turn came from. A record can carry an
+  `origin` set by the backend; a turn whose origin is anything other than
+  `"owner"` is not counted, so a future scheduled job cannot teach itself a
+  routine. (Nothing sets `origin` yet - item 10 is where that belongs.)
+
+## What is NOT verified, said plainly
+
+- **Where `jarvis_skills.py` loads skills from.** That module is not in this
+  repo. The file is written to `JARVIS_SKILLS_DIR` if you set it, otherwise
+  `~/.openjarvis/skills/<name>/SKILL.md`. Right after writing, the module asks
+  `jarvis_skills.cards()` whether the new skill is listed and records the
+  answer as `listed` (true / false / null if it could not ask). If
+  `/api/skills/suggestions` shows `"listed": false` on a written offer, set
+  `JARVIS_SKILLS_DIR` to the folder `jarvis_skills` reads.
+- **`write_skill()` is not called**, on purpose: its signature is not in this
+  repo, and it raises its own `modify_own_code` card, so you would be asked
+  twice about one file. Its scanner still runs when the skill is loaded
+  (`jarvis-framework.toml` section 12 says the scanner runs on the raw bytes
+  before any skill reaches the model).
+- **Saying no also proposes a memory rule.** `gate-outcome.patch` turns every
+  denial into a memory proposal - here, "I do not want Jarvis to modify own
+  code without asking me first". That is the gate's own behaviour. It is only
+  a proposal in the review queue; Discard it if you only meant "not this
+  skill".
+- `notice_for()` words the card's lock-screen line from `jarvis_gate._RISK`.
+  Whether `_RISK` has an entry for `modify_own_code` is not visible here; if
+  it does not, the notice uses the unknown-action wording.
+- `[self_modification].required_checks` (shadow copy, critic review) are not
+  built (`pipeline_implemented = false` in the config). A skill is a text file
+  of instructions, not code, and goes through the same card `write_skill()`
+  uses today.
+
+## Settings (all optional, in `[skills]` of `jarvis-framework.toml`)
+
+| key | default | meaning |
+|---|---|---|
+| `suggest_skills` | `true` | `false` turns offers off. `enabled = false` does too. |
+| `suggest_after_repeats` | `3` | separate turns before an offer. Never below 2. |
+| `suggest_window_days` | `30` | how far back to count (1-90). |
+| `suggest_every_hours` | `24` | at most one card per this many hours. |
+
+Setting `modify_own_code = "never"` under `[autonomy.tiers]` also stops
+offers - and every other self-change - outright. If `[logging] enabled =
+false`, nothing is recorded, so nothing is ever offered.
+
+## `skill-suggest.patch` — the read-only route
+
+Adds `GET /api/skills/suggestions` next to `GET /api/skills`, inside the same
+branch and therefore behind the same checks (that branch's origin/token lines
+are not visible in this repo, so "the same checks as `/api/skills`" is the
+exact claim). It returns `jarvis_skill_discovery.view()`: which chains are
+counted, their status, the offer history, and why offers are off if they are.
+It cannot approve, write or trigger anything. If the module is missing it
+answers `{"available": false, "reason": ...}` instead of failing.
+
+**Ordering:** needs `appearance.patch` - both hunks sit inside lines that
+patch wrote (the `/api/visual-spec` entry in the GET list and the end of that
+branch). Nothing else touches them. Listed last in `apply-patches.ps1`.
+
+**Install:** copy `backend/jarvis_skill_discovery.py` beside `jarvis_hud.py`,
+the same as `jarvis_agent.py`, then run `apply-patches.ps1` as usual. The
+updated `jarvis_agent.py` must be copied too - it is what writes the
+`agent.chain` line.
+
+## Test it
+
+```
+python3 backend/test_skill_discovery.py
+python3 backend/test_skill_suggest.py
+python3 backend/test_agent.py
+```
+
+`test_skill_discovery.py` (108 checks) writes through the real
+`rebuilt/jarvis_framework.audit_log` into a temp folder and uses a fake gate,
+so no real log, approval or skills folder is touched. Ten deliberate
+mutations of the module (drop the tier check, count failed steps, count per
+appearance instead of per turn, overwrite folders, accept `approved=1`, skip
+the cooldown, ...) each made it fail before this was committed.
+`test_skill_suggest.py` checks every context line of the patch against
+`appearance.patch`'s own output, and, once `jarvis_hud.py` is present, that
+the route is wired and only reads. `test_agent.py` gained five tests: the
+record holds tool names and nothing else, a turn with no tool records
+nothing, a failing recorder never costs the answer, and the record is still
+written when the answer fails to stream.

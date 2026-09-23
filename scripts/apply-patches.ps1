@@ -103,6 +103,12 @@ $PATCHES = @(
     # line above HUD_TOKEN), which nothing after token-file touches. Last so
     # a backend that already has everything above takes only this.
     'loopback-too.patch'
+    # Needs appearance.patch: both of its hunks sit inside lines appearance
+    # wrote (the /api/visual-spec entry in the GET list, and the end of the
+    # /api/visual-spec branch). Nothing else here touches those lines. It
+    # also needs jarvis_skill_discovery.py copied beside jarvis_hud.py, or
+    # the route answers "available": false - it never fails the request.
+    'skill-suggest.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
