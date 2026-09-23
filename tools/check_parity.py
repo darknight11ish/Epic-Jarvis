@@ -2,154 +2,200 @@
 """Compare what the desktop can do against what the phone can do, and fail
 when the answer has changed without anyone deciding about it.
 
+    python3 tools/check_parity.py
+
 The two apps are both clients of the same Python backend, so the set of
 `/api/...` routes each one calls is a fair, machine-readable proxy for its
 feature surface. That is the whole idea here: parity as a check rather than a
 promise. A document saying "the phone is up to date" is worth nothing a week
-later; this fails the build.
+later; this fails the build. CI runs it on every push (.github/workflows/ci.yml).
 
-Two failure modes, and the second is the one that keeps the first honest:
+What it reads - all from THIS checkout:
 
-  1. The desktop calls a route that is not classified below. Somebody added a
-     feature and nobody decided whether the phone should have it.
-  2. A route classified `ported` is not actually called by the phone. The
-     classification has drifted from the code and is now a lie.
+  desktop  jarvis-desktop/src-tauri/src/**/*.rs   the Rust side
+           jarvis-desktop/src/**/*.{js,mjs,html}   the windows, which call
+                                                   routes themselves too
+  phone    jarvis-client/app/src/main/java/**/*.kt
 
-The desktop lives on its own branch, so this fetches it. That is deliberate:
-pinning a copy of the desktop's route list into this repo would be one more
-thing to go stale, which is the exact failure being guarded against.
+Comments are stripped before routes are collected, so a route a file only
+TALKS about (a KDoc line, a "// /api/graph is desktop-only" note) does not
+count as a call.
+
+It used to read the desktop from a separate branch (claude/jarvis-desktop-
+tauri-vey6bc, last touched 19 Sep) and only its Rust, so it checked a desktop
+that no longer existed, missed every route the JavaScript calls, and still
+called the model routes out of scope after the owner allowed them on the
+phone (18 and 20 Sep).
+
+Failures - each one means a decision is missing or has gone stale:
+
+  1. The desktop calls a route that is not classified below.
+  2. A route classified `ported` is not called by the phone.
+  3. A route classified `deliberate` (kept OFF the phone) IS called by the
+     phone. Either a rule was broken or the decision changed; say which.
+  4. A classified route the desktop no longer calls.
+
+A route marked `todo` that the phone has started calling is a warning, not
+a failure: it means "reclassify as ported", which is good news.
 """
-import json
 import os
 import re
-import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DESKTOP_BRANCH = os.environ.get("JARVIS_DESKTOP_REF", "origin/claude/jarvis-desktop-tauri-vey6bc")
-DESKTOP_PATH = "jarvis-desktop/src-tauri/src"
-PHONE_PATH = "jarvis-client/app/src/main/java/com/jarvis/client"
+DESKTOP_DIRS = [
+    ("jarvis-desktop/src-tauri/src", (".rs",)),
+    ("jarvis-desktop/src", (".js", ".mjs", ".html")),
+]
+PHONE_DIRS = [("jarvis-client/app/src/main/java", (".kt",))]
 
 ROUTE = re.compile(r"/api/[a-zA-Z0-9/_-]+")
 
-# Every route the desktop MENTIONS, and what the phone does about it.
+# Every route the desktop calls, and what the phone does about it.
 #
-# Mentions, not calls. The extractor is a regex over the desktop's Rust source,
-# so it cannot tell a live request from a string constant naming a route that
-# does not exist yet. Read a "todo" here as "this name appears on the desktop
-# side" and check the call site before concluding the backend serves it. That
-# distinction is not pedantic: this table asserted that /api/appearance already
-# existed, on the strength of a `const ROUTE` in a module whose own first
-# heading is "The route does not exist yet".
-#
-# "ported"       - the phone calls it too; the check verifies that is still true
-# "deliberate"   - a decision was made NOT to port it; the reason is the point
+# "ported"       - the phone calls it too; checked
+# "deliberate"   - a decision was made NOT to port it; the reason is the
+#                  point, and the phone calling it is a failure
 # "todo"         - portable and wanted, nobody has done it yet
+# "not-backend"  - not a Jarvis route at all: the desktop calls Ollama's own
+#                  API on loopback under the same /api/ prefix
 CLASSIFICATION = {
-    "/api/appearance": ("todo", "Sync the face, theme and state bindings. GET/POST now EXIST and publish an `appearance` event (desktop thread, 15 Sep). No client handles that event yet. Agreed design: each device renders its face locally and the server is only the sync channel."),
+    "/api/appearance": ("ported", ""),
     "/api/approve": ("ported", ""),
     "/api/attention": ("ported", ""),
     "/api/attention/mute": ("ported", ""),
     "/api/attention/unmute": ("ported", ""),
     "/api/chat": ("ported", ""),
-    "/api/compute": ("todo", "Compute/resource telemetry. Read-only and small; would suit the brain screen."),
-    "/api/config": ("deliberate", "Deep config editing on the phone is explicitly out of scope."),
-    "/api/content-risk": ("todo", "Risk classification for content. Relevant to how approvals are presented."),
+    "/api/compute": ("ported", "Brain screen, read-only."),
+    "/api/config": ("deliberate", "Deep config editing on the phone is explicitly out of scope (CLAUDE.md)."),
+    "/api/content-risk": ("ported", "Brain screen, read-only."),
     "/api/deny": ("ported", ""),
     "/api/digest": ("ported", ""),
     "/api/digest/seen": ("ported", ""),
     "/api/events": ("ported", ""),
-    "/api/graph": ("deliberate", "The memory graph is explicitly out of scope on the phone."),
+    "/api/feedback/mark": ("ported", ""),
+    "/api/graph": ("deliberate", "The memory graph is explicitly out of scope on the phone (CLAUDE.md)."),
     "/api/holds/cancel": ("ported", ""),
-    "/api/initiative": ("todo", "What Jarvis proposes on its own. Arguably belongs next to approvals."),
+    "/api/initiative": ("ported", "Brain screen, read-only."),
     "/api/jobs": ("ported", ""),
     "/api/jobs/cancel": ("ported", ""),
-    "/api/ledger": ("todo", "The record of what Jarvis has done. A natural phone screen."),
-    "/api/memory/decide": ("deliberate", "Memory graph, out of scope."),
-    "/api/memory/pending": ("deliberate", "Memory graph, out of scope."),
-    "/api/memory/status": ("deliberate", "Memory graph, out of scope."),
-    "/api/models": ("deliberate", "The model catalogue is explicitly out of scope on the phone."),
-    "/api/models/install": ("deliberate", "Model catalogue, out of scope."),
-    "/api/models/rollback": ("deliberate", "Model catalogue, out of scope."),
-    "/api/models/switch": ("deliberate", "Model catalogue, out of scope."),
+    "/api/ledger": ("ported", "Brain screen, read-only."),
+    "/api/memory/decide": ("ported", "The review queue: one card, one decision."),
+    "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
+    "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
+    "/api/memory/facts": ("ported", ""),
+    "/api/memory/forget": ("deliberate", "Deep memory editing; it stays on the desktop's Memory tab."),
+    "/api/memory/keep_both": ("ported", ""),
+    "/api/memory/learning": ("todo", "The learning on/off switch. Small and read/write; whether the phone gets it is being decided in the memory work."),
+    "/api/memory/pending": ("ported", "The review queue."),
+    "/api/memory/sleep_time": ("ported", ""),
+    "/api/memory/status": ("todo", "Memory counts and whether search-by-meaning is on. Read-only; would suit the Brain screen."),
+    "/api/models": ("ported", "Allowed by the owner 2026-09-18: the installed list, not a catalogue."),
+    "/api/models/install": ("ported", "Allowed by the owner 2026-09-20: a typed name, raising an approval card."),
+    "/api/models/rollback": ("ported", ""),
+    "/api/models/switch": ("ported", "Allowed by the owner 2026-09-18, raising an approval card."),
+    "/api/notes/capture": ("ported", ""),
     "/api/pending": ("ported", ""),
+    "/api/power": ("ported", ""),
+    "/api/retrieve": ("todo", "The HUD's retrieval trace (which facts an answer reached for). Not in JARVIS-API.md yet; decide what it should show before porting."),
+    "/api/show": ("not-backend", "Ollama's /api/show on loopback: does the model take pictures (vision.rs)."),
     "/api/shutdown": ("deliberate", "Shutting the backend down from a phone is a foot-gun: the phone would then have nothing to reach and no way to undo it."),
-    "/api/skills": ("todo", "Which skills are installed. Read-only view is portable; installing is not."),
-    "/api/skills/decide": ("todo", "Approving a skill. Same gate as an approval, so it fits the existing inbox."),
+    "/api/skills": ("ported", "Brain screen, read-only."),
+    "/api/skills/decide": ("todo", "Removing a skill. Same gate as an approval, so it fits the existing inbox."),
     "/api/status": ("ported", ""),
-    "/api/tags": ("todo", "Tag vocabulary. Small, and makes the digest more legible."),
+    "/api/tags": ("not-backend", "Ollama's /api/tags on loopback: the installed model list (commands.rs). Not a Jarvis route."),
+    "/api/task/note": ("ported", ""),
+    "/api/task/pause": ("ported", ""),
+    "/api/task/resume": ("ported", ""),
+    "/api/task/stop": ("ported", ""),
     "/api/undo": ("ported", ""),
     "/api/undo/revert": ("ported", ""),
     "/api/version": ("ported", ""),
+    "/api/visual-spec": ("deliberate", "The phone bundles its own copy of the spec and checks it in a unit test (SpecDriftTest); JARVIS-API.md: the phone never fetches it."),
+    "/api/voice/say": ("ported", ""),
+    "/api/voice/utterance": ("ported", ""),
     "/api/watch": ("todo", "Watches - what Jarvis is keeping an eye on. Probably the single most useful unported feature."),
     "/api/watch/add": ("todo", "Creating a watch from the phone."),
     "/api/watch/remove": ("todo", "Removing a watch."),
     "/api/watch/report": ("todo", "A watch's findings."),
     "/api/watch/seen": ("todo", "Marking a watch report read."),
 }
+STATUSES = {"ported", "deliberate", "todo", "not-backend"}
+
+_BLOCK = re.compile(r"/\*.*?\*/", re.S)
+_HTML = re.compile(r"<!--.*?-->", re.S)
+# `//` at the start of a line, or after whitespace - never the `//` inside
+# "http://", which has a colon before it.
+_LINE = re.compile(r"(^|\s)//.*$", re.M)
+
+
+def strip_comments(text: str, ext: str) -> str:
+    if ext == ".html":
+        text = _HTML.sub("", text)
+    return _LINE.sub(r"\1", _BLOCK.sub("", text))
 
 
 def routes_in(text):
     return {m.rstrip("/") for m in ROUTE.findall(text)}
 
 
-def desktop_routes():
-    try:
-        listing = subprocess.run(
-            ["git", "ls-tree", "-r", "--name-only", DESKTOP_BRANCH, "--", DESKTOP_PATH],
-            cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
-    except subprocess.CalledProcessError:
-        print(f"::error::cannot read {DESKTOP_BRANCH}. Fetch it, or set JARVIS_DESKTOP_REF.")
-        sys.exit(2)
-    if not listing:
-        print(f"::error::{DESKTOP_BRANCH} has no files under {DESKTOP_PATH}; has the desktop moved?")
-        sys.exit(2)
-    found = set()
-    for f in listing:
-        blob = subprocess.run(["git", "show", f"{DESKTOP_BRANCH}:{f}"],
-                              cwd=ROOT, capture_output=True, text=True)
-        if blob.returncode == 0:
-            found |= routes_in(blob.stdout)
-    return found
-
-
-def phone_routes():
-    found = set()
-    for dirpath, _, names in os.walk(os.path.join(ROOT, PHONE_PATH)):
-        for n in names:
-            if n.endswith(".kt"):
-                with open(os.path.join(dirpath, n), encoding="utf-8") as fh:
-                    found |= routes_in(fh.read())
+def scan(dirs):
+    found = {}
+    for rel, exts in dirs:
+        base = os.path.join(ROOT, rel)
+        if not os.path.isdir(base):
+            print(f"::error::{rel} is not in this checkout; has it moved?")
+            sys.exit(2)
+        for dirpath, _, names in os.walk(base):
+            if "node_modules" in dirpath:
+                continue
+            for n in names:
+                ext = os.path.splitext(n)[1]
+                if ext not in exts:
+                    continue
+                path = os.path.join(dirpath, n)
+                with open(path, encoding="utf-8", errors="replace") as fh:
+                    for r in routes_in(strip_comments(fh.read(), ext)):
+                        found.setdefault(r, set()).add(os.path.relpath(path, ROOT))
     return found
 
 
 def main():
-    desk = desktop_routes()
-    phone = phone_routes()
-    problems = []
+    desk_at = scan(DESKTOP_DIRS)
+    phone_at = scan(PHONE_DIRS)
+    desk, phone = set(desk_at), set(phone_at)
+    problems, warnings = [], []
 
-    unclassified = sorted(desk - set(CLASSIFICATION))
-    for r in unclassified:
+    for r, (s, _) in CLASSIFICATION.items():
+        if s not in STATUSES:
+            problems.append(f"{r} has an unknown status {s!r}.")
+
+    for r in sorted(desk - set(CLASSIFICATION)):
         problems.append(
-            f"{r} is called by the desktop and is not classified in tools/check_parity.py. "
-            "Someone added a feature; decide whether the phone should have it.")
+            f"{r} is called by the desktop ({', '.join(sorted(desk_at[r]))}) and is not "
+            "classified in tools/check_parity.py. Someone added a feature; decide whether "
+            "the phone should have it.")
 
-    claimed = {r for r, (s, _) in CLASSIFICATION.items() if s == "ported"}
-    for r in sorted(claimed - phone):
+    by = lambda st: {r for r, (s, _) in CLASSIFICATION.items() if s == st}  # noqa: E731
+    for r in sorted(by("ported") - phone):
         problems.append(
             f"{r} is classified 'ported' but the phone does not call it. "
             "The classification has drifted from the code.")
-
-    stale = sorted(set(CLASSIFICATION) - desk)
-    for r in stale:
+    for r in sorted(by("deliberate") & phone):
+        problems.append(
+            f"{r} is classified 'deliberate' (kept off the phone: {CLASSIFICATION[r][1]}) "
+            f"but the phone calls it ({', '.join(sorted(phone_at[r]))}).")
+    for r in sorted(by("todo") & phone):
+        warnings.append(f"{r} is 'todo' but the phone now calls it - reclassify it as 'ported'.")
+    for r in sorted(set(CLASSIFICATION) - desk):
         problems.append(
             f"{r} is classified here but the desktop no longer calls it. "
             "Remove it, or find out where it went.")
 
-    todo = sorted(r for r, (s, _) in CLASSIFICATION.items() if s == "todo")
-    no = sorted(r for r, (s, _) in CLASSIFICATION.items() if s == "deliberate")
+    todo, no = sorted(by("todo")), sorted(by("deliberate"))
     print(f"desktop: {len(desk)} routes   phone: {len(phone)}   "
-          f"ported: {len(claimed)}   not porting: {len(no)}   still to port: {len(todo)}")
+          f"ported: {len(by('ported'))}   not porting: {len(no)}   still to port: {len(todo)}   "
+          f"not the backend's: {len(by('not-backend'))}")
     if todo:
         print("\nStill to port:")
         for r in todo:
@@ -159,7 +205,8 @@ def main():
         print("\nOn the phone and not the desktop (parity runs both ways):")
         for r in ahead:
             print(f"  {r}")
-
+    for w in warnings:
+        print(f"::warning::{w}")
     if problems:
         print("\n" + "=" * 60)
         for p in problems:

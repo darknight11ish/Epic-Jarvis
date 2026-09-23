@@ -50,19 +50,152 @@ jobs:
       - run: for f in src/*.js; do node --check "$f"; done
         shell: bash
       - run: node scripts/markdown-test.mjs
-      # Two of the ten frontend suites need no browser at all — they parse and
-      # compute rather than render — so they belong here rather than only on a
-      # machine where someone has installed Playwright. The other eight open
-      # real pages and stay out of CI for the reason in tests/README.md.
       - run: python3 scripts/check-tokens.py
-      - run: node tests/voicecheck.mjs
-      # The chat history limits, and that the phone uses the same numbers.
-      # Pure computation, no browser.
-      - run: node tests/chat-history.mjs
-      # The updater's latest.json, as desktop-release.yml writes it. No
-      # browser needed, and a wrong key or URL fails silently on the owner's
-      # machine, so it is checked on every push.
-      - run: node tests/updater-manifest.mjs
+      # EVERY suite in tests/, not a hand-picked few. Most of them open the
+      # real pages in a headless Chromium (tests/uikit.mjs), which is why only
+      # three used to run here. Playwright is not a dependency of the app
+      # (tests/README.md says why), so it is installed for this job only.
+      # uikit.mjs is the harness, not a suite; shots.mjs only writes
+      # screenshots. Every suite runs even after one fails, so one red run
+      # lists every failure at once.
+      - name: Install Playwright's Chromium (for the page tests only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund playwright
+          npx playwright install --with-deps chromium
+      - name: Every desktop test suite
+        shell: bash
+        run: |
+          set -uo pipefail
+          failed=()
+          for f in tests/*.mjs; do
+            name=$(basename "$f")
+            case "$name" in uikit.mjs|shots.mjs) continue ;; esac
+            echo "::group::$name"
+            if node "$f"; then echo "ok  $name"; else failed+=("$name"); fi
+            echo "::endgroup::"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::${#failed[@]} desktop suite(s) failed: ${failed[*]}"
+            exit 1
+          fi
+          echo "Every desktop suite passed."
+
+  backend:
+    # The backend suites, including every contract test (the ones that read
+    # the phone's Kotlin and the desktop's Rust and JS and check them against
+    # the real Python). About twenty suites test a patch against the owner's
+    # own jarvis_hud.py / jarvis_gate.py / jarvis_extract.py, which are not in
+    # this repository - backend/run_suites.py SKIPS those by name, with the
+    # files each is waiting for, and fails on anything else. numpy is the one
+    # package the voice suites need.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check numpy
+      - name: Backend suites (the ones that need no file from the owner's PC)
+        run: python backend/run_suites.py
+      # Desktop and phone call the same backend; a route one calls and the
+      # other does not has to be a recorded decision (tools/check_parity.py).
+      - name: Desktop / phone parity
+        run: python tools/check_parity.py
+
+  powershell-5:
+    # The owner runs these scripts in Windows PowerShell 5.1, not 7. 5.1 does
+    # not know `??`, `?:`, `&&` or `||`, and reads a script file that has no
+    # BOM as ANSI (Windows-1252), not UTF-8 - so a non-ASCII character in
+    # code can become a quote mark and end a string early. Caught here, by
+    # 5.1 itself, before the owner has to paste an error back. Then
+    # apply-patches.ps1 is actually RUN, in 5.1, against a stand-in backend,
+    # to prove it copies what it ships and never overwrites a settings file.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse every .ps1 with Windows PowerShell 5.1
+        run: |
+          "PowerShell $($PSVersionTable.PSVersion)"
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw "expected Windows PowerShell 5.x" }
+          $bad = 0
+          $files = @(Get-ChildItem -Recurse -File -Filter *.ps1 | Where-Object { $_.FullName -notmatch '\\node_modules\\' })
+          foreach ($f in $files) {
+            # Get-Content with no -Encoding reads the way 5.1 reads a
+            # script: ANSI, unless the file starts with a BOM.
+            $text = Get-Content -LiteralPath $f.FullName -Raw
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors)
+            foreach ($e in $errors) {
+              $bad++
+              "::error file=$($f.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"
+            }
+            foreach ($t in $tokens) {
+              if ($t.Kind -ne 'Comment' -and $t.Text -match '[^\x00-\x7F]') {
+                $bad++
+                "::error file=$($f.FullName),line=$($t.Extent.StartLineNumber)::non-ASCII outside a comment ($($t.Kind)); 5.1 reads this file as ANSI"
+              }
+            }
+            "parsed  $($f.FullName)"
+          }
+          "$($files.Count) script(s), $bad problem(s)"
+          if ($bad -gt 0) { exit 1 }
+      - name: Run apply-patches.ps1 in 5.1 against a stand-in backend
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # A copy of the repository's scripts and backend with the patch
+          # list emptied: the stand-in has no real jarvis_hud.py for a patch
+          # to apply to. What is under test is everything after patching:
+          # the modules, the backups, the settings file.
+          $repo = Join-Path $env:RUNNER_TEMP 'repo'
+          $be = Join-Path $env:RUNNER_TEMP 'backend'
+          $cfg = Join-Path $env:RUNNER_TEMP 'cfg'
+          New-Item -ItemType Directory -Force -Path $repo, $be, $cfg | Out-Null
+          Copy-Item -Recurse scripts, backend -Destination $repo
+          Remove-Item (Join-Path $repo 'backend\*.patch')
+          $ps1 = Join-Path $repo 'scripts\apply-patches.ps1'
+          $t = [IO.File]::ReadAllText($ps1)
+          $t2 = [regex]::Replace($t, '(?s)\$PATCHES = @\(.*?\n\)', '$$PATCHES = @()')
+          if ($t2 -eq $t) { throw "could not empty the patch list" }
+          [IO.File]::WriteAllText($ps1, $t2)
+          Set-Content -LiteralPath (Join-Path $be 'jarvis_hud.py') -Value 'print("stand-in")'
+          Set-Content -LiteralPath (Join-Path $be 'jarvis_notes.py') -Value '# an older copy'
+          $env:OPENJARVIS_CONFIG_DIR = $cfg
+
+          powershell -NoProfile -ExecutionPolicy Bypass -File $ps1 -BackendPath $be -SkipPackages -SkipTests
+          if ($LASTEXITCODE -ne 0) { throw "first run exited $LASTEXITCODE" }
+
+          # Every shipped module is there, and is this repository's copy.
+          $where = [IO.File]::ReadAllText((Join-Path $repo 'backend\_where.py'))
+          $shipped = @([regex]::Matches($where, '"((?:rebuilt/)?jarvis_\w+\.py)"') | ForEach-Object { $_.Groups[1].Value })
+          if ($shipped.Count -lt 20) { throw "read only $($shipped.Count) names from _where.SHIPPED" }
+          foreach ($m in $shipped) {
+            $leaf = Split-Path -Leaf $m
+            $got = Join-Path $be $leaf
+            if (-not (Test-Path -LiteralPath $got)) { throw "$leaf was not copied in" }
+            $want = Join-Path (Join-Path $repo 'backend') $m
+            if ((Get-FileHash $got).Hash -ne (Get-FileHash $want).Hash) { throw "$leaf is not the repository's copy" }
+          }
+          "all $($shipped.Count) shipped modules were copied in"
+          $backups = @(Get-ChildItem -Directory -LiteralPath $be -Filter '_jarvis-backup-*')
+          if ($backups.Count -eq 0 -or -not (Test-Path -LiteralPath (Join-Path $backups[0].FullName 'jarvis_notes.py'))) { throw "the older jarvis_notes.py was not backed up" }
+          "the older jarvis_notes.py was backed up"
+
+          # There was no settings file anywhere, so one went beside jarvis_hud.py.
+          $toml = Join-Path $be 'jarvis-framework.toml'
+          if (-not (Test-Path -LiteralPath $toml)) { throw "no jarvis-framework.toml was installed" }
+
+          # The owner edits it; a second run must leave it exactly as it is.
+          Add-Content -LiteralPath $toml -Value "`n[ci_owner_edit]`nkept = true"
+          $before = (Get-FileHash $toml).Hash
+          powershell -NoProfile -ExecutionPolicy Bypass -File $ps1 -BackendPath $be -SkipPackages -SkipTests
+          if ($LASTEXITCODE -ne 0) { throw "second run exited $LASTEXITCODE" }
+          if ((Get-FileHash $toml).Hash -ne $before) { throw "the second run changed the owner's jarvis-framework.toml" }
+          "the owner's settings file was left alone"
 
   audit:
     runs-on: ubuntu-latest
