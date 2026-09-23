@@ -172,13 +172,21 @@ class Env:
 def t_the_client_files_are_readable():
     classes = kotlin_classes(KT)
     for c in ("VoiceStatus", "VoiceListening", "VoiceEngine", "VoiceAudioIn", "VoiceGate",
-              "VoiceTrainingState", "VoiceTrainingLast", "VoiceTrainingReply", "Heard"):
+              "VoiceTrainingState", "VoiceTrainingLast", "VoiceTrainingReply", "Heard",
+              "VoiceWake", "VoiceSpotter"):
         check(f"VoiceModels.kt declares {c}", c in classes and classes[c], f"{sorted(classes)}")
     check("VoiceListening reads push_to_talk (the field that hid the button)",
           ("push_to_talk", "Boolean") in classes.get("VoiceListening", []))
     raw = rust_struct(RS, "HeardRaw")
     check("voice.rs declares HeardRaw, with is_owner required",
           ("is_owner", "bool", True) in raw, f"{raw}")
+    check("both clients read wake_heard and awake (the wake word's two answers)",
+          ("wake_heard", "Boolean") in classes.get("Heard", [])
+          and ("awake", "Boolean") in classes.get("Heard", [])
+          and ("wake_heard", "bool", False) in raw and ("awake", "bool", False) in raw,
+          f"{classes.get('Heard')} / {raw}")
+    check("the phone reads listening.wake_word_pending (a card is waiting)",
+          ("wake_word_pending", "Boolean") in classes.get("VoiceListening", []))
 
 
 def t_status_has_every_field_the_phone_reads():
@@ -305,6 +313,25 @@ def t_the_utterance_reply_serves_both_clients():
         with mock.patch.object(S, "_stt_engine", return_value=object()), \
                 mock.patch.object(S, "_transcribe", return_value="what is waiting for me"):
             cases["the owner, transcribed"] = S.hear(tone(220.0))
+        # The wake word's shapes: on (through its card), a clip with the
+        # phrase, one without, and "hey Jarvis." alone.
+        import jarvis_wakeword as W
+        S.set_wake_enabled(True, gate=lambda *a: type("V", (), {
+            "allowed": True, "tier": "ask", "outcome": "approved", "request_id": "r"})(),
+            tier_of=lambda a: "ask", spawn=lambda fn: fn())
+        with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=False, score=0.01)):
+            cases["wake word, not addressed to Jarvis"] = S.hear(tone(220.0), source="wake_word")
+        with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.98)), \
+                mock.patch.object(S, "_stt_engine", return_value=object()), \
+                mock.patch.object(S, "_transcribe", return_value="Hey Jarvis, what time is it?"):
+            cases["wake word, the owner"] = S.hear(tone(220.0), source="wake_word")
+        with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.98)), \
+                mock.patch.object(S, "_stt_engine", return_value=object()), \
+                mock.patch.object(S, "_transcribe", return_value="Hey Jarvis."):
+            cases["wake word, awake"] = S.hear(tone(220.0), source="wake_word")
+        S.set_wake_enabled(False)
+        cases["wake word, switched off"] = S.hear(tone(220.0), source="wake_word")
+        S._reset_wake_for_tests()
 
     for label, heard in cases.items():
         wire = json.loads(json.dumps(heard.as_dict()))
@@ -337,6 +364,24 @@ def t_the_utterance_reply_serves_both_clients():
           and wires["the owner, transcribed"]["text"] == "what is waiting for me",
           wires["the owner, transcribed"])
     check("a stranger's reply carries no words", wires["a stranger"]["text"] == "")
+
+    def phone_wake(w):
+        """The phone's own WakeRules.verdict, restated (voice/WakeRules.kt)."""
+        if not w["available"]:
+            return "STOP"
+        if w["awake"] and w["owner"]:
+            return "AWAKE"
+        if w["wake_heard"] and w["owner"]:
+            return "ANSWER"
+        return "IGNORE"
+    for label, want in (("wake word, not addressed to Jarvis", "IGNORE"),
+                        ("wake word, the owner", "ANSWER"),
+                        ("wake word, awake", "AWAKE"),
+                        ("wake word, switched off", "STOP")):
+        check(f"{label} reads as {want} on the phone", phone_wake(wires[label]) == want,
+              wires[label])
+    check("the owner's wake-word text has the phrase taken off",
+          wires["wake word, the owner"]["text"] == "what time is it?", wires["wake word, the owner"])
     check("seconds is the clip's real length", abs(wires["a stranger"]["seconds"] - 1.0) < 0.01)
 
 

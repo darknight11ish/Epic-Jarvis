@@ -1,0 +1,16 @@
+The three .onnx files in this folder are openWakeWord's pre-trained models,
+release v0.5.1, by David Scripka: https://github.com/dscripka/openWakeWord
+
+  melspectrogram.onnx   SHA-256 BA2B0E0F8B7B875369A2C89CB13360FF53BAC436F2895CCED9F479FA65EB176F
+  embedding_model.onnx  SHA-256 70D164290C1D095D1D4EE149BC5E00543250A7316B59F31D056CFF7BD3075C1F
+  hey_jarvis_v0.1.onnx  SHA-256 94A13CFE60075B132F6A472E7E462E8123EE70861BC3FB58434A73712EE0D2CB
+
+They are unmodified and licensed under Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International:
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+NON-COMMERCIAL. This app is a non-commercial, sideloaded build (rule 5), and
+these files are the reason it has to stay that way while they are in it.
+
+The same three files are what the PC uses (voice-models\wakeword), so the
+phone and the PC give the same score for the same sound.

@@ -725,7 +725,9 @@ class JarvisApi(
     }
 
     /**
-     * Asks the desktop to turn the wake word on or off.
+     * Asks the desktop to turn the wake word on or off. ON raises an
+     * approval card on the desktop and changes nothing until it is approved;
+     * OFF is immediate (backend/jarvis_speech.py `set_wake_enabled`).
      *
      * Gated as a config change server-side, and **approval means approved, not
      * already live** — the value lives in the TOML. So a success here does not

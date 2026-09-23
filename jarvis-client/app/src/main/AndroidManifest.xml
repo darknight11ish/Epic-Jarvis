@@ -16,10 +16,14 @@
 
     <!-- Push-to-talk. Requested at the moment the microphone is first held,
          never at launch: a permission dialog on first run, before the app has
-         shown what it is for, is the one most people refuse. Capture only ever
-         happens with the app in the foreground and the button held, so no
-         microphone foreground-service type is needed or asked for. -->
+         shown what it is for, is the one most people refuse. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- "Hey Jarvis" on this phone (WakeWordService). Listening with the
+         screen off or the app in the background needs a foreground service
+         of type microphone, and on Android 14+ this permission with it.
+         Only ever started from the app's own Checks screen, never at boot;
+         Android shows the microphone indicator for as long as it runs. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!-- The service returns START_STICKY, and a sticky restart happens with the app
          in the background - which is not on the FGS background-start exemption list,
@@ -86,8 +90,10 @@
 
         <!-- The newer path: RoleManager.ROLE_ASSISTANT, which some launchers
              offer the assist gesture to exclusively rather than to anything
-             with a plain ACTION_ASSIST intent-filter. This app still has no
-             listening of its own - JarvisRecognitionServiceStub recognises
+             with a plain ACTION_ASSIST intent-filter. The assistant role adds
+             no listening of its own (the only always-on listening is
+             WakeWordService, switched on separately, and it spots one phrase
+             and recognises no words) - JarvisRecognitionServiceStub recognises
              nothing and JarvisVoiceInteractionSession does nothing but open
              MainActivity - so "rule: no client-side speech-to-text" still
              holds exactly as it did with the plain intent-filter alone.
@@ -177,6 +183,14 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="@string/fgs_special_use_reason" />
         </service>
+        <!-- Its own service and its own type, not "specialUse|microphone" on
+             the link: the event stream must keep running when listening is
+             switched off, and listening must be stoppable on its own
+             (docs/WAKE-WORD.md §4 step 1). -->
+        <service
+            android:name=".service.WakeWordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!-- exported="true" is what every app-widget provider needs - the
              launcher itself is what sends APPWIDGET_UPDATE, from outside this

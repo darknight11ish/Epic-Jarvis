@@ -190,36 +190,67 @@ class VoiceSession(
     }
 
     /**
-     * Turns the desktop's wake word off (or on), then asks what actually
-     * happened.
+     * Turns the desktop's wake word off, or asks for it to be turned on, then
+     * asks what actually happened.
      *
-     * The re-read is not belt and braces. `/api/voice/wake` is a **config
-     * write**: the value lands in the desktop's TOML and a 200 means the change
-     * was accepted, not that the wake word has stopped listening. Flipping a
-     * switch in the UI on the strength of that response would show "off" over a
-     * microphone that is still open, which is the one lie this control must not
-     * tell. So the response is discarded and [refreshStatus] decides.
+     * The re-read is not belt and braces. Turning it ON raises an approval
+     * card on the desktop (`change_own_config`) and changes nothing until the
+     * card is approved, so a 200 means "a card is up", never "it is on".
+     * Turning it OFF is immediate. Either way the response is discarded and
+     * [refreshStatus] decides - a switch flipped on the strength of the reply
+     * would show "off" over a microphone that is still open, or "on" over a
+     * card nobody has approved.
      *
-     * @return null on success, or a sentence to show the owner.
+     * @return null when the desktop now says what was asked for, or a sentence
+     *   to show the owner (including "approve the card").
      */
     suspend fun setWakeWord(enabled: Boolean): String? {
         val sent = api.setWakeWord(enabled)
-        if (sent is ApiResult.Failed) {
-            refreshStatus()
-            return "Could not reach the desktop to change that."
-        }
         refreshStatus()
         if (!_answered.value) {
-            return "The change was sent, but the desktop did not say what it is doing now."
+            return if (sent is ApiResult.Failed) {
+                "Could not reach the desktop to change that."
+            } else {
+                "The change was sent, but the desktop did not say what it is doing now."
+            }
         }
-        if (_status.value.wakeWordOn == enabled) return null
-        return if (enabled) {
-            "The desktop accepted that but still reports the wake word off."
-        } else {
-            // The honest version of the failure this whole re-read exists for.
-            "The desktop accepted the change but still reports the wake word ON. " +
-                "It may need restarting before it takes effect."
+        val now = _status.value
+        return WakeRules.afterRequest(enabled, now.wakeWordOn, now.listening.wakeWordPending)
+    }
+
+    /**
+     * One clip the wake-word listener already recorded ([com.jarvis.client.service.WakeWordService]),
+     * sent as `source=wake_word` and taken through the same path as a
+     * push-to-talk turn from VERIFYING on: the desktop checks the phrase and
+     * the voice, transcribes, and the answer is spoken.
+     *
+     * Returns the desktop's verdict once the whole turn is over (spoken, or
+     * refused), so the listener does not hear Jarvis's own reply as a new
+     * wake word. Null when it was not sent: a push-to-talk turn is running,
+     * or the desktop could not be reached.
+     */
+    suspend fun deliverWakeClip(wav: ByteArray): Heard? {
+        val previous = job
+        if (previous != null && !previous.isCompleted) return null
+        if (_phase.value != Phase.OFF) return null
+        val turn = Turn()
+        current = turn
+        _notice.value = null
+        _transcript.value = null
+        var verdict: Heard? = null
+        val running = scope.launch {
+            try {
+                verdict = deliver(turn, wav, JarvisApi.SOURCE_WAKE_WORD)
+            } finally {
+                if (current === turn) {
+                    _micLevel.value = null
+                    if (_phase.value != Phase.OFF) _phase.value = Phase.OFF
+                }
+            }
         }
+        job = running
+        running.join()
+        return verdict
     }
 
     /**
@@ -392,15 +423,42 @@ class VoiceSession(
         running.cancel()
     }
 
-    private suspend fun deliver(turn: Turn, wav: ByteArray, source: String) {
+    private suspend fun deliver(turn: Turn, wav: ByteArray, source: String): Heard? {
         setPhase(turn, Phase.VERIFYING)
         val result = api.utterance(wav, source)
         if (result is ApiResult.Failed) {
             setPhase(turn, Phase.OFF)
             setNotice(turn, "Could not reach the desktop to check that.")
-            return
+            return null
         }
         val heard = (result as ApiResult.Ok).value
+
+        if (source == JarvisApi.SOURCE_WAKE_WORD) {
+            when (WakeRules.verdict(heard)) {
+                // Not addressed to Jarvis (the desktop did not hear "hey
+                // Jarvis" in it, or not from the owner): dropped without a
+                // word, the way the desktop dropped it.
+                WakeRules.Verdict.IGNORE -> {
+                    setPhase(turn, Phase.OFF)
+                    return heard
+                }
+                // "Hey Jarvis." and nothing after it: the listener records
+                // the next sentence and sends that.
+                WakeRules.Verdict.AWAKE -> {
+                    setPhase(turn, Phase.OFF)
+                    setNotice(turn, "Listening…")
+                    return heard
+                }
+                // The desktop cannot do this at all right now; the listener
+                // stops and shows [Heard.reason].
+                WakeRules.Verdict.STOP -> {
+                    setPhase(turn, Phase.OFF)
+                    setNotice(turn, heard.reason.ifBlank { "The desktop cannot take \"hey Jarvis\" right now." })
+                    return heard
+                }
+                WakeRules.Verdict.ANSWER -> Unit
+            }
+        }
 
         when (heard.outcome) {
             // All three of these arrive as HTTP 200. A voice that did not match
@@ -413,7 +471,7 @@ class VoiceSession(
             -> {
                 setPhase(turn, Phase.OFF)
                 setNotice(turn, heard.message())
-                return
+                return heard
             }
             Heard.Outcome.TRANSCRIBED -> Unit
         }
@@ -425,7 +483,7 @@ class VoiceSession(
             // nothing at all.
             setPhase(turn, Phase.OFF)
             setNotice(turn, "Nothing came back to send.")
-            return
+            return heard
         }
 
         setTranscript(turn, text)
@@ -437,6 +495,7 @@ class VoiceSession(
         speaker.arm()
         speakStreamed(turn, text)
         setPhase(turn, Phase.OFF)
+        return heard
     }
 
     /**

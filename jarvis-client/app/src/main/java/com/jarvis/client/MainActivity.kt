@@ -47,6 +47,9 @@ import com.jarvis.client.platform.PowerWatch
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.service.ApprovalNotifier
 import com.jarvis.client.service.EventService
+import com.jarvis.client.service.WakeWordService
+import com.jarvis.client.net.WakeWord
+import com.jarvis.client.voice.WakeRules
 import com.jarvis.client.ui.NavBackHandler
 import com.jarvis.client.ui.NavScreens
 import com.jarvis.client.ui.Screen
@@ -912,8 +915,17 @@ class MainActivity : FragmentActivity() {
                         }
                         val wakeWord by voice.wakeWord.collectAsState()
                         val voiceAnswered by voice.answered.collectAsState()
+                        val phoneListening by WakeWordService.state.collectAsState()
                         var wakeBusy by remember { mutableStateOf(false) }
                         var wakeNotice by remember { mutableStateOf<String?>(null) }
+                        // The desktop's switch went off (from here, the
+                        // desktop, or a restart): this phone stops too. The
+                        // listener also checks for itself every few minutes.
+                        LaunchedEffect(wakeWord) {
+                            if (wakeWord == WakeWord.OFF && WakeWordService.state.value.on) {
+                                WakeWordService.stop(this@MainActivity)
+                            }
+                        }
                         // Asked on arrival, because this screen is where someone
                         // goes to find out what is listening, and a stale answer is
                         // the wrong thing to be reassured by.
@@ -953,10 +965,33 @@ class MainActivity : FragmentActivity() {
                                 if (!wakeBusy) {
                                     wakeBusy = true
                                     wakeNotice = null
+                                    // This phone first: off must never wait on
+                                    // the network to close a microphone.
+                                    WakeWordService.stop(this@MainActivity)
                                     lifecycleScope.launch {
                                         wakeNotice = voice.setWakeWord(false)
                                         wakeBusy = false
                                     }
+                                }
+                            },
+                            // Raises the approval card; turns nothing on.
+                            onWakeWordOn = {
+                                if (!wakeBusy) {
+                                    wakeBusy = true
+                                    wakeNotice = null
+                                    lifecycleScope.launch {
+                                        wakeNotice = voice.setWakeWord(true)
+                                        wakeBusy = false
+                                    }
+                                }
+                            },
+                            wakeWordPending = voiceStatus.listening.wakeWordPending,
+                            phoneListening = phoneListening,
+                            onPhoneListening = { on ->
+                                if (on) {
+                                    wakeNotice = startPhoneListening()
+                                } else {
+                                    WakeWordService.stop(this@MainActivity)
                                 }
                             },
                             onRecheckWakeWord = {
@@ -1441,6 +1476,37 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * "Listen on this phone" on the Checks screen. Starts [WakeWordService]
+     * only when the desktop's wake word is on and both permissions are held;
+     * otherwise asks for what is missing and says so. Never starts listening
+     * on a permission grant - the owner taps again, the same rule as the
+     * talk button (see [micGrantedCallback]).
+     *
+     * @return null when listening was started, or the sentence to show.
+     */
+    private fun startPhoneListening(): String? {
+        val voice = JarvisRuntime.voice
+        WakeRules.mayListen(voice.answered.value, voice.status.value)?.let { return it }
+        if (!voice.recorder.hasPermission()) {
+            micGrantedCallback = null
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            return "Allow the microphone, then tap Listen on this phone again."
+        }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            // Jarvis listens only with a notification saying it is.
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return "Allow notifications first - Jarvis only listens with a notification " +
+                "showing that it is. Then tap Listen on this phone again."
+        }
+        WakeWordService.start(this)
+        return null
     }
 
     /**

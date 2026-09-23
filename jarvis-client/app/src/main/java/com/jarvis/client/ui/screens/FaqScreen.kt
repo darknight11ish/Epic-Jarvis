@@ -76,13 +76,17 @@ private val FAQS = listOf(
             "nothing left for that check to examine.",
     ),
     Faq(
-        "Why doesn't saying \"hey Jarvis\" wake anything on my phone?",
-        "This phone never listens for a wake phrase — no wake-word model is " +
-            "bundled in the app at all, so its microphone only opens while " +
-            "you are holding the talk button down. A wake word can run on " +
-            "the desktop instead; Platform checks shows whether the desktop " +
-            "currently has one turned on, and lets you turn it off from " +
-            "here, but turning it on is a desktop-side choice, on purpose.",
+        "How do I use \"hey Jarvis\"?",
+        "It is off until you turn it on, in two steps. First, on Platform " +
+            "checks, tap Turn on \"hey Jarvis\" and approve the card that " +
+            "appears - that lets your desktop accept it. Then tap Listen on " +
+            "this phone. While that is on, the microphone stays open (Android " +
+            "shows its microphone dot and a notification), a small model on " +
+            "the phone listens for the phrase and nothing else, and nothing " +
+            "leaves the phone until it hears it. Then what you say next goes " +
+            "to your desktop, which checks it is your voice before it writes " +
+            "down a word. It stops when you stop it, restart the phone, or " +
+            "Android closes Jarvis, and it uses some battery while on.",
     ),
     Faq(
         "How do I teach Jarvis my voice? Where is the talk button?",

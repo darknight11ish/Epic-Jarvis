@@ -26,6 +26,15 @@ android {
         // in onCreate ship green: the suite compiled the APK and ran unit
         // tests, and never once launched it.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The only native code in the app is ONNX Runtime (the "hey Jarvis"
+        // spotter). Two of its four ABIs: arm64 for the phone, x86_64 for the
+        // CI emulator that starts the release APK. 32-bit ARM and x86 would
+        // add ~13 MB for devices this app will never be installed on
+        // (minSdk 33 phones are 64-bit).
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     // The shared debug key, committed at the repository root. Without it AGP mints
@@ -130,6 +139,12 @@ android {
 
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        // Compressed in the APK and unpacked at install, rather than stored
+        // uncompressed: ONNX Runtime's library is ~15 MB per ABI raw and
+        // ~7 MB compressed, and a sideloaded APK's download size is the one
+        // the owner waits for. Its .so files are 16 KB page-aligned
+        // (checked), so either way loads on Android 15's 16 KB devices.
+        jniLibs { useLegacyPackaging = true }
     }
 }
 
@@ -209,6 +224,17 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okio:okio:3.6.0")
+
+    // Runs the "hey Jarvis" spotter (voice/OrtWakeModels.kt) on the phone.
+    // Microsoft's official build, from Maven Central. PINNED to 1.22.0 and
+    // not to be bumped without unzipping the new AAR first: 1.30.0's
+    // AndroidManifest adds INTERNET, ACCESS_NETWORK_STATE and a
+    // TelemetryInitializer content provider that starts at app launch, with
+    // an HTTP client under ai.onnxruntime.telemetry - a phone-home this app
+    // must not carry. 1.22.0, 1.24.3, 1.26.0 and 1.28.0 have none of it
+    // (checked 2026-09-23); 1.22.0 is also the smallest (6.5 MB arm64).
+    // Its AAR ships no R8 rules; proguard-rules.pro keeps ai.onnxruntime.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 
     testImplementation("junit:junit:4.13.2")
 

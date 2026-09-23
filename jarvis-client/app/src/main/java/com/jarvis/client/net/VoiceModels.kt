@@ -42,6 +42,13 @@ data class VoiceStatus(
      * defaults say "not trained" - the refusing answer.
      */
     val gate: VoiceGate = VoiceGate(),
+    /**
+     * "Hey Jarvis" on the desktop: the switch (turned on only by approving a
+     * card), a card waiting, and whether the PC itself can hear the phrase.
+     * Defaults say "off, no card". Read by the Checks screen's wake-word card
+     * and by the phone's own listener (its threshold).
+     */
+    val wake: VoiceWake = VoiceWake(),
 ) {
     /**
      * Whether to show a microphone button.
@@ -120,6 +127,35 @@ data class VoiceListening(
     @SerialName("push_to_talk_why") val pushToTalkWhy: String = "",
     @SerialName("wake_word") val wakeWord: Boolean = false,
     @SerialName("wake_word_why") val wakeWordWhy: String = "",
+    /**
+     * A card to turn the wake word ON is waiting for the owner. Asking for it
+     * does not turn it on; approving the card does. False on a desktop from
+     * before 2026-09-23.
+     */
+    @SerialName("wake_word_pending") val wakeWordPending: Boolean = false,
+)
+
+/** `/api/voice/status` -> `wake`. See [VoiceStatus.wake]. */
+@Serializable
+data class VoiceWake(
+    val enabled: Boolean = false,
+    val pending: Boolean = false,
+    /** openWakeWord's model name, "hey_jarvis". */
+    val phrase: String = "hey_jarvis",
+    /** The spotter's bar, 0..1. The phone uses the desktop's so one number means one thing. */
+    val threshold: Double = 0.5,
+    /** After "hey Jarvis." on its own, how long the desktop waits for the next sentence. */
+    @SerialName("awake_seconds") val awakeSeconds: Double = 8.0,
+    /** Whether the PC can hear "hey Jarvis" in a clip (it checks every one the phone sends). */
+    val spotter: VoiceSpotter = VoiceSpotter(),
+)
+
+@Serializable
+data class VoiceSpotter(
+    val available: Boolean = false,
+    val engine: String = "",
+    /** Why [available] is false, in the desktop's words. */
+    val why: String = "",
 )
 
 /**
@@ -268,6 +304,18 @@ data class Heard(
     val reason: String = "",
     val seconds: Float = 0f,
     val engine: String = "",
+    /**
+     * False when the desktop could not do this at all (no speech engine; for
+     * a wake-word clip, the wake word switched off or its model missing).
+     * Defaults to true, like the desktop's own `voice.rs`, so an older desktop
+     * that omits it is not read as broken.
+     */
+    val available: Boolean = true,
+    /** `source=wake_word` only: "hey Jarvis" was heard in the clip, from the owner. */
+    @SerialName("wake_heard") val wakeHeard: Boolean = false,
+    /** The clip was "hey Jarvis" and nothing else: send the next sentence. */
+    val awake: Boolean = false,
+    @SerialName("awake_seconds") val awakeSeconds: Float = 0f,
 ) {
     enum class Outcome {
         /** Verified, transcribed. Feed [text] to the chat. */
