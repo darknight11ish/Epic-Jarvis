@@ -323,6 +323,11 @@ data class HomeState(
      * offers "New conversation". Memory only; nothing writes it to disk.
      */
     val conversationTurns: Int = 0,
+    /**
+     * Whether the quick-note field is open - the home-screen widget's Note
+     * button opens it. See [QuickNotePlate].
+     */
+    val quickNoteOpen: Boolean = false,
 )
 
 @Immutable
@@ -373,6 +378,15 @@ data class HomeActions(
      * screen. Touches nothing the desktop has learned.
      */
     val onNewConversation: () -> Unit = {},
+    /**
+     * File the owner's own words in Logseq ("logseq") or Joplin ("joplin")
+     * through the desktop - [com.jarvis.client.JarvisRuntime.fileNote].
+     * True once the desktop accepted it (filed, or waiting for approval);
+     * false leaves the typed text where it is.
+     */
+    val onFileNote: suspend (target: String, text: String) -> Boolean = { _, _ -> false },
+    /** Open or close the quick-note field. */
+    val onQuickNoteOpenChange: (Boolean) -> Unit = {},
 )
 
 @Composable
@@ -775,6 +789,8 @@ private fun ConversationList(
                 TaskControlsPlate(paused = state.activity == Activity.PAUSED, actions = actions)
             }
         }
+
+        item(key = "quick-note") { QuickNotePlate(open = state.quickNoteOpen, actions = actions) }
 
         if (state.notice != null) {
             item(key = "notice") { Notice(state.notice, actions.onDismissNotice) }
@@ -1507,6 +1523,65 @@ private fun TaskControlsPlate(paused: Boolean, actions: HomeActions) {
                     }
                 },
             )
+        }
+    }
+}
+
+/**
+ * A note filed on the desktop, in today's Logseq journal or as a new Joplin
+ * note - the desktop's `POST /api/notes/capture` (`backend/note-capture.patch`).
+ *
+ * Closed, it is one small button. Open, a field and two destinations. What
+ * happens next is reported in the shared notice, in the desktop's own words
+ * ("Filed in Logseq, …", "Waiting for your approval…", or why not) - this
+ * plate never says "filed" itself. The typed text is kept if sending fails.
+ */
+@Composable
+private fun QuickNotePlate(open: Boolean, actions: HomeActions) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var noteText by rememberSaveable { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+
+    if (!open) {
+        Quiet("Quick note…", color = chrome.textMid, onClick = { actions.onQuickNoteOpenChange(true) })
+        return
+    }
+    Plate {
+        Text("Quick note", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Filed on the desktop exactly as you type it. The desktop's own rules decide " +
+                "whether it asks you first.",
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
+        Spacer(Modifier.height(10.dp))
+        TextInput(
+            value = noteText,
+            onValueChange = { noteText = it },
+            placeholder = "Your note…",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            fun send(target: String) {
+                if (sending || noteText.isBlank()) return
+                val note = noteText
+                sending = true
+                scope.launch {
+                    val accepted = actions.onFileNote(target, note)
+                    sending = false
+                    if (accepted) {
+                        noteText = ""
+                        actions.onQuickNoteOpenChange(false)
+                    }
+                }
+            }
+            Quiet("To Logseq", enabled = !sending && noteText.isNotBlank(), onClick = { send("logseq") })
+            Quiet("To Joplin", enabled = !sending && noteText.isNotBlank(), onClick = { send("joplin") })
+            Quiet("Close", color = chrome.textMid, enabled = !sending,
+                onClick = { actions.onQuickNoteOpenChange(false) })
         }
     }
 }

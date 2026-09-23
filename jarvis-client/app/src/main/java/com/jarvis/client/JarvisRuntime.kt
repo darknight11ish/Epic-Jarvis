@@ -1642,6 +1642,59 @@ object JarvisRuntime {
     suspend fun injectTaskNote(note: String): ApiResult<Unit> =
         runTaskAction { api.injectTaskNote(note) }
 
+    /**
+     * Files a note in Logseq or Joplin through the desktop - the owner's own
+     * words, no model - and reports how it ended in the shared notice, in the
+     * desktop's own words (see [com.jarvis.client.net.NoteCapture]).
+     *
+     * Not gated on [decisionBlocker]: filing a note is not an answer to
+     * anything Jarvis is holding, and the write itself goes through the
+     * desktop's approval gate under the owner's own rules. If a card is up,
+     * this keeps asking on the runtime's own scope - so leaving the screen
+     * does not lose the answer - until it is final or [NoteCapture.GIVE_UP_MS]
+     * passes, and never says "Filed" before the desktop does.
+     */
+    suspend fun fileNote(target: String, text: String): ApiResult<Unit> {
+        val first = api.captureNote(target, text)
+        val job = when (first) {
+            is ApiResult.Failed -> {
+                _notice.value = com.jarvis.client.net.NoteCapture.failure(first.error)
+                    ?: describe(first.error)
+                return ApiResult.Failed(first.error)
+            }
+            is ApiResult.Ok -> first.value
+        }
+        val said = com.jarvis.client.net.NoteCapture.describe(job, target)
+        _notice.value = said.text
+        val id = com.jarvis.client.net.NoteCapture.jobId(job)
+        if (!said.final && id != null) {
+            scope.launch {
+                val started = SystemClock.elapsedRealtime()
+                while (true) {
+                    delay(com.jarvis.client.net.NoteCapture.POLL_MS)
+                    if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.NoteCapture.GIVE_UP_MS) {
+                        _notice.value = com.jarvis.client.net.NoteCapture.GAVE_UP
+                        break
+                    }
+                    val next = api.noteStatus(id)
+                    if (next is ApiResult.Failed) {
+                        _notice.value = "Lost track of the note (${describe(next.error)}). " +
+                            "Check the approval card on the desktop and your notes app."
+                        break
+                    }
+                    val now = com.jarvis.client.net.NoteCapture.describe(
+                        (next as ApiResult.Ok).value, target,
+                    )
+                    if (now.final) {
+                        _notice.value = now.text
+                        break
+                    }
+                }
+            }
+        }
+        return ApiResult.Ok(Unit)
+    }
+
     private suspend fun runTaskAction(call: suspend () -> ApiResult<Unit>): ApiResult<Unit> {
         val result = call()
         if (result is ApiResult.Failed) _notice.value = describeDraft(result.error)

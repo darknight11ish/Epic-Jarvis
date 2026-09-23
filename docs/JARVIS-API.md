@@ -792,5 +792,9 @@ carries the note's text.** Clients show `message` and nothing of their own.
 Replaces what `POST /api/note` in §8 suggested. The desktop's `#log` /
 `#joplin` / quick note / widget capture use it (`capture_note`,
 `capture_note_status`); the chat turn with a routing system message is gone.
+The phone uses it too: Home's "Quick note…" field, opened directly or by the
+home-screen widget's Note button (`JarvisApi.captureNote`, `noteStatus`,
+`JarvisRuntime.fileNote`). The phone keeps asking while a card waits and
+shows the desktop's own sentence in its notice.
 
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->

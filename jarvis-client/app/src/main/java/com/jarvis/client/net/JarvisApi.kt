@@ -367,6 +367,51 @@ class JarvisApi(
     suspend fun injectTaskNote(note: String): ApiResult<Unit> =
         postJson("/api/task/note", """{"note":${quote(note)}}""")
 
+    // ------------------------------------------------------------ notes ----
+
+    /**
+     * Files the owner's own words in Logseq or Joplin - [NoteCapture]. The
+     * answer is the desktop's job record, 200 when finished and 202 while an
+     * approval card waits. A refusal the desktop explained (no Logseq
+     * folder, no Joplin token, "you said no") also comes back as a job, with
+     * `state: "not_filed"` and the reason, so the phone can show that
+     * sentence rather than a status code.
+     */
+    suspend fun captureNote(target: String, text: String): ApiResult<JsonObject> {
+        val body = NoteCapture.body(target, text)
+            ?: return ApiResult.Failed(ApiError.Malformed("the note is empty"))
+        return postForJob(NoteCapture.PATH, body)
+    }
+
+    /** How a note filed with [captureNote] ended. Never carries its text. */
+    suspend fun noteStatus(id: String): ApiResult<JsonObject> = probe(NoteCapture.statusPath(id))
+
+    private suspend fun postForJob(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when {
+                        resp.isSuccessful && obj != null -> ApiResult.Ok(obj)
+                        resp.isSuccessful -> ApiResult.Failed(ApiError.Malformed("not a job record"))
+                        // An explained refusal is an answer, not a transport error.
+                        obj != null && obj.containsKey("state") -> ApiResult.Ok(obj)
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
     // ------------------------------------------------------- appearance ----
 
     /**

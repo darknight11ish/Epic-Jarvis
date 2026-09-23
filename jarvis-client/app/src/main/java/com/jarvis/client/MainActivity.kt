@@ -111,6 +111,9 @@ class MainActivity : FragmentActivity() {
      */
     private val startVoiceRequested = mutableStateOf(false)
 
+    /** The quick-note field on Home is open - see [readQuickNoteIntent]. */
+    private val quickNoteOpen = mutableStateOf(false)
+
     /** Set when the runtime itself failed to start. Shown instead of the app. */
     private val startupError = mutableStateOf<String?>(null)
 
@@ -185,6 +188,7 @@ class MainActivity : FragmentActivity() {
         readApprovalIntent(intent)
         readShareIntent(intent)
         readVoiceIntent(intent)
+        readQuickNoteIntent(intent)
 
         setContent { App() }
 
@@ -208,6 +212,17 @@ class MainActivity : FragmentActivity() {
         readApprovalIntent(intent)
         readShareIntent(intent)
         readVoiceIntent(intent)
+        readQuickNoteIntent(intent)
+    }
+
+    /**
+     * The home-screen widget's Note button: open the app on Home with the
+     * quick-note field open. `singleTask`, so the `onNewIntent` half is
+     * needed too, same as [readVoiceIntent].
+     */
+    private fun readQuickNoteIntent(intent: Intent?) {
+        if (intent?.action != ACTION_QUICK_NOTE) return
+        quickNoteOpen.value = true
     }
 
     private fun readApprovalIntent(intent: Intent?) {
@@ -695,6 +710,11 @@ class MainActivity : FragmentActivity() {
             if (!startVoiceRequested.value) return@LaunchedEffect
             startVoiceRequested.value = false
             nav.resetTo(Screen.HOME)
+        }
+
+        // The widget's Note button: Home, with the quick-note field open.
+        LaunchedEffect(quickNoteOpen.value) {
+            if (quickNoteOpen.value) nav.resetTo(Screen.HOME)
         }
 
         JarvisTheme(
@@ -1304,6 +1324,7 @@ class MainActivity : FragmentActivity() {
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,
+                            quickNoteOpen = quickNoteOpen.value,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1404,6 +1425,12 @@ class MainActivity : FragmentActivity() {
                                 onMarkAnswer = { turnId, mark ->
                                     JarvisRuntime.markAnswerDetached(turnId, mark)
                                 },
+                                // backend/note-capture.patch. The runtime reports
+                                // how it ended, in the desktop's own words.
+                                onFileNote = { target, text ->
+                                    JarvisRuntime.fileNote(target, text) is ApiResult.Ok
+                                },
+                                onQuickNoteOpenChange = { open -> quickNoteOpen.value = open },
                             )
                         },
                         modifier = root,
@@ -1519,6 +1546,9 @@ class MainActivity : FragmentActivity() {
     companion object {
         /** Fired by [com.jarvis.client.widget.QuickLinkWidget]'s Mic action. */
         const val ACTION_START_VOICE = "com.jarvis.client.action.START_VOICE"
+
+        /** Fired by [com.jarvis.client.widget.QuickLinkWidget]'s Note action. */
+        const val ACTION_QUICK_NOTE = "com.jarvis.client.action.QUICK_NOTE"
     }
 }
 
