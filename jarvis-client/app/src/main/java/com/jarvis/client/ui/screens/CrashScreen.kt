@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,18 +37,33 @@ import androidx.compose.material3.Text
  * might be diagnosing — if the theme system or the design tokens are what
  * failed, a screen that reads `LocalChrome` fails with them and the owner is
  * back to "it closed".
+ *
+ * It is shown before the app's own root modifier, which is what normally
+ * keeps content clear of the status and navigation bars, so it clears them
+ * itself with [safeDrawingPadding]. That is a plain layout modifier with no
+ * theme behind it, so the "built out of nothing" rule above still holds.
+ * Without it, the app draws edge to edge and the Copy button could sit under
+ * a three-button navigation bar.
+ *
+ * @param dismissLabel what the second button says. "Close app" when
+ *   [onDismiss] ends the app (the startup failures, where there is nothing to
+ *   continue to); "Continue" only when the app really does carry on.
  */
 @Composable
 fun CrashScreen(
     title: String,
     detail: String,
     onDismiss: () -> Unit,
+    dismissLabel: String = "Continue",
 ) {
     val clipboard = LocalClipboardManager.current
     Column(
         Modifier
             .fillMaxSize()
+            // Background first, so the dark fills behind the system bars too;
+            // the insets then move only the content.
             .background(Color(0xFF04070C))
+            .safeDrawingPadding()
             .padding(20.dp),
     ) {
         Spacer(Modifier.height(24.dp))
@@ -61,7 +76,7 @@ fun CrashScreen(
         Spacer(Modifier.height(6.dp))
         Text(
             "This is the app telling you what happened instead of vanishing. " +
-                "Copy it into the thread and it can be fixed.",
+                "Tap Copy and send it to whoever is fixing Jarvis.",
             color = Color(0xFF8FA3B8),
             fontSize = 14.sp,
         )
@@ -87,7 +102,7 @@ fun CrashScreen(
             Action("Copy", Color(0xFF6FE3FF)) {
                 clipboard.setText(AnnotatedString(detail))
             }
-            Action("Continue", Color(0xFF8FA3B8), onDismiss)
+            Action(dismissLabel, Color(0xFF8FA3B8), onDismiss)
         }
         Spacer(Modifier.height(20.dp))
     }

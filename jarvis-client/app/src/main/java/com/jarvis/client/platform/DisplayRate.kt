@@ -1,10 +1,15 @@
 package com.jarvis.client.platform
 
 import android.app.Activity
+import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import android.view.Display
 import android.view.View
+import androidx.core.content.ContextCompat
+import com.jarvis.client.FaceState
+import com.jarvis.client.face.Spec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -92,11 +97,9 @@ object DisplayRate {
      * Asks for the panel's fastest rate while [high] and lets go of it
      * otherwise.
      *
-     * Called from the face's state: only listening, thinking, speaking and
-     * error want every frame the display can give. Everything else draws at
-     * 30 or less, and a panel running at 120 for a 30-frame face is heat and
-     * battery spent on nothing. Repeated calls with the same answer are
-     * free; the request is only re-sent when it changes.
+     * Whether to ask is [wantsHigh]'s decision, not this function's: this one
+     * only carries the answer to the platform. Repeated calls with the same
+     * answer are free; the request is only re-sent when it changes.
      */
     fun setHigh(activity: Activity, view: View?, high: Boolean) {
         val best = bestHz
@@ -125,6 +128,84 @@ object DisplayRate {
         }.onFailure { Log.w(TAG, "preferredRefreshRate refused", it) }
     }
 
+    /**
+     * Whether the panel should be asked for its fastest rate right now.
+     *
+     * This used to be "whenever the face wants every frame" and nothing else,
+     * which asked for 120 or 144 Hz in three places it bought nothing:
+     *
+     * - **On screens with no face.** The request followed the face's STATE,
+     *   not whether the face was on screen, so reading the Inbox during a long
+     *   THINKING task held the panel at its top rate for a screen of still text.
+     * - **In ERROR.** ERROR lasts until someone fixes whatever is wrong, and
+     *   after its short hitch it is a slow crawl that 60 Hz draws just as well.
+     * - **In battery saver, or when the phone is hot.** The owner (or Android)
+     *   has already said "spend less", and a request for more frames argues
+     *   with that. On API 33/34 the request pins the whole window, so it is
+     *   not a polite vote there.
+     *
+     * So now: only with the face on screen, only while it is listening or
+     * speaking, THINKING for its first [THINKING_HIGH_MS] (the part where the
+     * motion is changing; after that it settles into a steady loop), and never
+     * when [constrained]. [Spec.fpsFor] is still consulted, but only as a
+     * floor - a state the spec draws at 30 or less never asks - and it is not
+     * edited: it is transcribed from the shared spec and drift-tested.
+     *
+     * Pure, so it is unit-testable without a phone.
+     *
+     * @param faceOnScreen true only while Home is showing. Appearance draws a
+     *   small preview of the face too, but a preview does not need 120 Hz.
+     * @param msInState how long [state] has been the face's state.
+     * @param constrained [constrained] of the current context, passed in so
+     *   this stays pure.
+     * @param pref the owner's Smooth motion choice. Defaults to AUTO, which is
+     *   the behaviour above; nothing wires a setting to it yet.
+     */
+    fun wantsHigh(
+        state: FaceState,
+        faceOnScreen: Boolean,
+        msInState: Long,
+        constrained: Boolean,
+        pref: SmoothMotion = SmoothMotion.AUTO,
+    ): Boolean {
+        if (!faceOnScreen || constrained || pref == SmoothMotion.OFF) return false
+        if (Spec.fpsFor(state) != 0) return false
+        return when (state) {
+            FaceState.LISTENING, FaceState.SPEAKING -> true
+            // ALWAYS lifts the time limit on THINKING and nothing else. ERROR
+            // stays out even then: a slow crawl gains nothing from 120 Hz.
+            FaceState.THINKING -> pref == SmoothMotion.ALWAYS || msInState < THINKING_HIGH_MS
+            else -> false
+        }
+    }
+
+    /**
+     * Whether [wantsHigh] could ever say yes for this state and screen, with
+     * time passing. False means the caller can stop re-checking until one of
+     * them changes; true means the answer can still flip on its own (the
+     * THINKING time limit, battery saver, heat), so it is worth polling.
+     */
+    fun couldWantHigh(state: FaceState, faceOnScreen: Boolean, pref: SmoothMotion = SmoothMotion.AUTO): Boolean =
+        faceOnScreen && pref != SmoothMotion.OFF && Spec.fpsFor(state) == 0 &&
+            (state == FaceState.LISTENING || state == FaceState.SPEAKING || state == FaceState.THINKING)
+
+    /**
+     * True when the phone has asked apps to spend less: battery saver is on,
+     * or the phone is at least moderately hot.
+     *
+     * Read fresh each time rather than listened for. Both are one binder call,
+     * and the only caller asks every couple of seconds while the face is in a
+     * state that might want a high rate - so a change is picked up within that,
+     * without a listener to register and remember to remove.
+     */
+    fun constrained(context: Context): Boolean {
+        val pm = ContextCompat.getSystemService(context, PowerManager::class.java) ?: return false
+        if (runCatching { pm.isPowerSaveMode }.getOrDefault(false)) return true
+        val thermal = runCatching { pm.currentThermalStatus }
+            .getOrDefault(PowerManager.THERMAL_STATUS_NONE)
+        return thermal >= PowerManager.THERMAL_STATUS_MODERATE
+    }
+
     /** Re-reads what the display settled on. Cheap; call on resume. */
     fun refresh(activity: Activity) {
         runCatching { activity.display?.refreshRate }.getOrNull()?.let { _panelHz.value = it }
@@ -146,6 +227,7 @@ object DisplayRate {
      */
     fun sample(deltaNanos: Long) {
         if (deltaNanos <= 0) return
+        lastSampleNanos = System.nanoTime()
         val hz = 1_000_000_000f / deltaNanos
         if (hz < 5f || hz > 400f) return
         val prev = estimate
@@ -194,9 +276,29 @@ object DisplayRate {
     private var estimate = 0f
     private var lastPublishNanos = 0L
 
+    /**
+     * When the face last drew a frame, or 0 if it never has in this process.
+     *
+     * The face runs on Home (and as a preview in Appearance), never on the
+     * Checks screen that shows [achievedHz] - so that screen is always
+     * looking at a number measured somewhere else, some time ago.
+     * Without a time beside it, that number looked like a live measurement.
+     * Volatile because the Checks screen reads it from its own ticker, while
+     * [sample] writes it from the frame loop.
+     */
+    @Volatile private var lastSampleNanos = 0L
+
+    /** Milliseconds since the face last drew a frame, or null if it never has. */
+    fun msSinceLastSample(): Long? {
+        val at = lastSampleNanos
+        if (at == 0L) return null
+        return (System.nanoTime() - at) / 1_000_000L
+    }
+
     fun reset() {
         estimate = 0f
         lastPublishNanos = 0L
+        lastSampleNanos = 0L
         _achievedHz.value = 0f
     }
 
@@ -208,7 +310,23 @@ object DisplayRate {
 
     private val KNOWN = listOf(60f, 75f, 90f, 100f, 120f, 144f, 165f, 240f)
 
+    /**
+     * How long THINKING keeps the high rate under AUTO. The first seconds are
+     * where the face's motion is changing; a long task after that is a steady
+     * loop, and 60 Hz draws a steady loop just as well for less battery.
+     */
+    const val THINKING_HIGH_MS = 10_000L
+
     /** Four publishes a second at most. Faster than a person can read anyway. */
     private const val MIN_PUBLISH_NANOS = 250_000_000L
     private const val TAG = "JarvisDisplayRate"
 }
+
+/**
+ * The owner's choice for how hard to drive the screen. Only AUTO is used
+ * today; OFF and ALWAYS exist so a "Smooth motion" setting can be wired to
+ * [DisplayRate.wantsHigh] without changing its shape. Neither choice can
+ * speed the face itself up - this is the panel's refresh rate, not the
+ * face's motion - and ALWAYS still never asks in battery saver or when hot.
+ */
+enum class SmoothMotion { OFF, AUTO, ALWAYS }
