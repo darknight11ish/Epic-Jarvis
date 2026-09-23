@@ -249,23 +249,65 @@ decide-with-option route exists on the server (see §8's own note on this).
 
 | Endpoint | Method | Body | Desktop | Android | Notes |
 |---|---|---|---|---|---|
-| `/api/chat` | POST | **different on each client** | `commands.rs:836` (streaming), `commands.rs:1293` (quick capture) | `JarvisApi.kt:661` | See below. |
+| `/api/chat` | POST | `{"messages": [...], "has_image", "stream", "auto"}` | `commands.rs:942` `stream_chat` (body built in `main.js` `send()`), quick capture in `commands.rs` | `JarvisApi.kt:719` `chatCall` (body built by `net/ChatHistory.kt`) | See below. |
 
-**This is the biggest client-vs-client difference in the whole API.**
+**Both clients now send the same shape, with the conversation so far.**
+(Updated 2026-09-23. Earlier versions of this page said the phone sent
+`{"message": "<text>"}`; it has sent the `messages` shape for a while, and
+until now only ever one user turn.)
 
 ```
-Desktop  →  {"messages": [{"role": …, "content": …}, …],
-             "has_image": false, "stream": true, "auto": true}     commands.rs:801-806
-Android  →  {"message": "<text>"}                                  JarvisApi.kt:662-663
+{"messages": [
+   {"role": "user",      "content": "<an earlier question>"},    ┐ the conversation so far,
+   {"role": "assistant", "content": "<Jarvis's answer to it>"},  ┘ oldest first, 0 to 10 pairs
+   … the quickbar's per-turn system turns (#log / #joplin note, clipboard) …
+   {"role": "user",      "content": "<the new question>"}],     ← always last
+ "has_image": false, "stream": true, "auto": true}
 ```
 
-The desktop sends an OpenAI-style message array; the phone sends a single
-string under a different key. Both cannot be right. The desktop's note at
-`commands.rs:778-781` says the backend's `_build_payload` forwards only
-`model / messages / stream / temperature / …`, which suggests the desktop's
-shape is the real one — but that is the desktop session reading the backend,
-reported here as evidence, not as a verdict. Do not change the phone on the
-strength of this page alone; check `jarvis_hud.py`.
+**Why the conversation is sent.** Nothing in this repository shows the
+backend keeping one: requests carry no conversation id, and every patch
+that touches `/api/chat` works on the `messages` array the client sent (the
+degrade loop's local rebuild restores `body["messages"]`; the learner reads
+it). So a client that sends only the newest question gets follow-ups
+answered with nothing before them - which is what the phone and the quickbar
+did until 2026-09-23. The HUD page (`jarvis_hud.html`) already sent its own
+last 12 messages.
+
+**How much.** Pairs of (question as sent, whole answer), plain text only, no
+system turns, tool output, images or ids. At most **10 pairs and 18,000
+characters**; past either, the oldest go until it is back to **6 pairs and
+12,000 characters**, so the start of the prompt changes rarely and Ollama's
+prompt cache survives. The budget, against `num_ctx 16384`
+(`jarvis-primary.Modelfile`): 2,048 answer + 250 system prompt and template +
+400 recalled facts + 2,600 tool list (13 tools, 7,851 characters of JSON) +
+3,000 new question = 8,298, leaving ~8,000; 18,000 characters is 6,000
+tokens at a pessimistic 3 characters per token (~4,500 at English's ~4).
+Same numbers on both clients: `net/ChatHistory.kt` and
+`jarvis-desktop/src/chat-history.js`, held together by
+`jarvis-desktop/tests/chat-history.mjs`.
+
+**Only finished answers are kept.** Not an error, not one the owner stopped,
+not an empty one, and not an SSE answer that ended without `[DONE]` or a
+`finish_reason` (cut off) - the same line `jarvis_hud.html` draws.
+
+**Memory only, and a way out.** Neither client writes the conversation to
+disk. The phone clears it on "New conversation" (under the answer on Home)
+and when the app process ends. The quickbar clears it on "New conversation"
+(in the answer card's header) and on Esc, together with the card; hiding on
+focus loss keeps it. Nothing the backend has learned is touched by either.
+
+**Cloud lanes get the newest question alone.** The backend's cloud cut keeps
+every `role == "user"` turn, which with a conversation attached includes the
+earlier questions. `backend/cloud-one-turn.patch` cuts any request to a lane
+that is not the local model down to the newest user turn, inside `_open`, so
+an earlier private question cannot ride along on a later one that was sent
+to the cloud. Until that patch is applied, that protection is not there - see
+its section in `backend/README.md`.
+
+**A past answer grants nothing.** An assistant turn saying "I have proposed
+that" or "approved" is text in a transcript; approvals are decided by id on
+`/api/approve` and nowhere else.
 
 **Framing.** Android treats the reply as a chunked HTTP body, "**not** SSE,
 whatever the shape suggests" (`JarvisApi.kt:653-659`). The desktop handles
@@ -552,14 +594,12 @@ lists it too - it is a backup, not a card list.
 These are differences I verified by reading both call sites. I have no way to
 know which side the backend agrees with.
 
-1. **`/api/chat` body — the serious one.** Desktop sends
-   `{"messages": [...], "has_image", "stream", "auto"}` (`commands.rs:801-806`);
-   Android sends `{"message": "<text>"}` (`JarvisApi.kt:661-663`). These are
-   not variations on a theme; they are different protocols. Related: the
-   desktop handles both chunked-text and SSE framing on the reply
-   (`API-DISAGREEMENTS.md` §4), the phone handles only chunked text
-   (`JarvisApi.kt:653-659`), so an SSE-framed reply would arrive at the phone
-   as `data:` noise.
+1. **`/api/chat` body — settled.** Both send
+   `{"messages": [...], "has_image", "stream", "auto"}` with the conversation
+   so far; see §4. (This item used to say the phone sent `{"message": ...}`,
+   and that it could not read an SSE-framed reply. Both are out of date: the
+   phone reads both framings through `net/ChatChunkParser.kt`, as the
+   desktop does - `API-DISAGREEMENTS.md` §4.)
 
 2. **Approve/deny attribution.** Desktop sends `"by": "desktop_spotlight"`
    (`commands.rs:914-916`); Android sends only `{"id": …}` (`JarvisApi.kt:395`).

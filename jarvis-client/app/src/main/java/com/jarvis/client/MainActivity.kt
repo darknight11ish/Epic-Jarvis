@@ -487,6 +487,9 @@ class MainActivity : FragmentActivity() {
         // The answer's id (`turn_id`) and the owner's mark on it, for the
         // Right / Wrong buttons under the answer. Ids only, memory only.
         val answerTurnId by chat.turnId.collectAsState()
+        // The conversation the next question carries (ChatHistory). Only its
+        // size is shown; memory only, like the question itself.
+        val conversation by chat.history.collectAsState()
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
@@ -1300,6 +1303,7 @@ class MainActivity : FragmentActivity() {
                             calmMotion = calmMotion,
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
+                            conversationTurns = conversation.size,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1326,6 +1330,7 @@ class MainActivity : FragmentActivity() {
                                     scope.launch { chat.send(text) }
                                 },
                                 onInterrupt = { chat.cancel() },
+                                onNewConversation = { chat.newConversation() },
                                 // A fingerprint instead of a tap for anything that
                                 // leaves the machine, cannot be undone, or arrived
                                 // with a rush latch on it. The phone is the surface

@@ -9,6 +9,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -19,7 +20,8 @@ import okhttp3.Call
 import okhttp3.Response
 
 /**
- * One turn of conversation.
+ * One turn of conversation at a time, sent with the conversation so far
+ * ([history]; see [ChatHistory]).
  *
  * `POST /api/chat` streams its reply as a **chunked HTTP body** whose framing
  * depends on the upstream model in use: the server copies the upstream
@@ -76,6 +78,28 @@ class ChatSession(private val api: JarvisApi) {
      */
     val turnId: StateFlow<String?> = _turnId.asStateFlow()
 
+    private val _history = MutableStateFlow<List<ChatHistory.Exchange>>(emptyList())
+
+    /**
+     * The conversation so far - finished questions and their answers, oldest
+     * first, already trimmed to what the desktop's model has room for. Sent
+     * ahead of every new question, so a follow-up is understood; see
+     * [ChatHistory] for the limits and why.
+     *
+     * Memory only, like [question]: never written anywhere, gone with the
+     * process or on [newConversation]. A question that failed, was stopped,
+     * or came back empty is not added - replaying half an answer as if it
+     * were the whole one would mislead the model on every later turn.
+     */
+    val history: StateFlow<List<ChatHistory.Exchange>> = _history.asStateFlow()
+
+    /**
+     * Which conversation a [send] belongs to. [newConversation] moves it on,
+     * so an answer that finishes AFTER the owner started afresh is not
+     * written into the new, empty conversation.
+     */
+    @Volatile private var conversation = 0
+
     @Volatile private var call: Call? = null
 
     /**
@@ -112,7 +136,11 @@ class ChatSession(private val api: JarvisApi) {
         // tapped now must never land on the answer that is being replaced.
         _turnId.value = null
 
-        val c = api.chatCall(message)
+        // Captured before the request goes, and the same list that is sent:
+        // what this question was asked in the light of.
+        val earlier = _history.value
+        val askedIn = conversation
+        val c = api.chatCall(message, earlier)
         if (c == null) {
             _error.value = "No desktop address set"
             return null
@@ -121,6 +149,13 @@ class ChatSession(private val api: JarvisApi) {
         _streaming.value = true
 
         var mine: String? = null
+        // An SSE-framed answer (`data:` lines) says when it has finished -
+        // `[DONE]` or a `finish_reason`. One that stops without saying so was
+        // cut off: shown as it is, returned as it is, but not added to the
+        // conversation, where it would be replayed as a whole answer on every
+        // later turn. The HUD page draws the same line. A plain-text upstream
+        // has no end marker, so for it the end of the body is the end.
+        var cutShort = false
         withContext(Dispatchers.IO) {
             // Cancelling this coroutine has to cancel the HTTP call, and only a
             // coroutine that is NOT parked on the socket can do it.
@@ -250,10 +285,13 @@ class ChatSession(private val api: JarvisApi) {
                     }
 
                     var failed = false
+                    var framed = false
+                    var ended = false
 
                     /** @return true when the caller should stop reading. */
-                    fun handle(line: String): Boolean =
-                        when (val result = ChatChunkParser.consume(line)) {
+                    fun handle(line: String): Boolean {
+                        if (line.trimStart().startsWith("data:")) framed = true
+                        return when (val result = ChatChunkParser.consume(line)) {
                             is ChatChunkParser.Result.Text -> {
                                 acc.append(result.delta)
                                 // Published as it arrives - the whole reason
@@ -265,9 +303,13 @@ class ChatSession(private val api: JarvisApi) {
                                 // longer costs one full string copy and one
                                 // recomposition each.
                                 publish(force = false)
+                                if (result.terminal) ended = true
                                 result.terminal
                             }
-                            ChatChunkParser.Result.Terminal -> true
+                            ChatChunkParser.Result.Terminal -> {
+                                ended = true
+                                true
+                            }
                             is ChatChunkParser.Result.Failed -> {
                                 failWith(result.message)
                                 failed = true
@@ -275,6 +317,7 @@ class ChatSession(private val api: JarvisApi) {
                             }
                             ChatChunkParser.Result.Ignored -> false
                         }
+                    }
 
                     readLoop@ while (true) {
                         // Blocking reads never suspend, so nothing here would
@@ -324,6 +367,7 @@ class ChatSession(private val api: JarvisApi) {
                     // 401/403/404 branch above reports by leaving `mine` null.
                     if (!failed) {
                         mine = acc.toString()
+                        cutShort = framed && !ended
                     }
                 }
             } catch (ce: CancellationException) {
@@ -355,6 +399,14 @@ class ChatSession(private val api: JarvisApi) {
                 }
             }
         }
+        // Only a finished, non-empty answer joins the conversation, and only
+        // the conversation it was asked in. `update` rather than building
+        // on `earlier`: a call that finished in the meantime has already
+        // added its own pair, and this one goes after it.
+        val answer = mine
+        if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn) {
+            _history.update { ChatHistory.commit(it, message, answer) }
+        }
         return mine
     }
 
@@ -363,6 +415,26 @@ class ChatSession(private val api: JarvisApi) {
         call?.cancel()
         call = null
         _streaming.value = false
+    }
+
+    /**
+     * Starts afresh: stops any answer still arriving, forgets the
+     * conversation, and clears the question and answer on screen. The next
+     * question goes to the desktop on its own, as the very first one did.
+     *
+     * Only the phone's copy is forgotten. Nothing in this repository shows
+     * the desktop keeping a copy of its own between requests; what it has
+     * LEARNED (memory, and cards waiting for review) is a different thing,
+     * kept on the desktop, and this does not touch it.
+     */
+    fun newConversation() {
+        conversation++
+        cancel()
+        _history.value = emptyList()
+        _reply.value = ""
+        _question.value = null
+        _turnId.value = null
+        _error.value = null
     }
 
     private companion object {

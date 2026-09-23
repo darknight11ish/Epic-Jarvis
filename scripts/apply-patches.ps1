@@ -152,6 +152,11 @@ $PATCHES = @(
     # jarvis_voice_enroll.py copied in; without it the new route answers 503
     # "voice training is not installed on this PC".
     'voice-enroll.patch'
+    # Its context is ollama-direct's `_completions_url(lane),` line inside
+    # `_open`, so it must come after that one; nothing else touches `_open`.
+    # A cloud lane then gets the newest question alone, never the
+    # conversation the clients now send with it.
+    'cloud-one-turn.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------

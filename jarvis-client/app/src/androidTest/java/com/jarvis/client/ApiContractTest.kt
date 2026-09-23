@@ -314,6 +314,53 @@ class ApiContractTest {
         assertEquals(null, chat.turnId.value)
     }
 
+    /**
+     * A follow-up carries the conversation so far (net/ChatHistory.kt). The
+     * phone used to send the newest question alone, so every follow-up
+     * reached the desktop with nothing before it. Read off the wire, from
+     * the real ChatSession, not from the body builder alone.
+     */
+    @Test
+    fun aFollowUpCarriesTheConversationAndNewConversationDropsIt() = runBlocking {
+        // "role:content" for each message in the request body, in order.
+        fun roles(req: RecordedRequest): List<String> {
+            val msgs = org.json.JSONObject(req.body.readUtf8()).getJSONArray("messages")
+            return (0 until msgs.length()).map {
+                val o = msgs.getJSONObject(it)
+                "${o.getString("role")}:${o.getString("content")}"
+            }
+        }
+        fun answer(text: String) = MockResponse().setResponseCode(200)
+            .setHeader("Content-Type", "text/plain").setBody(text)
+        val chat = ChatSession(api)
+
+        routes["/api/chat"] = answer("Tuesday at 3.")
+        chat.send("when is the dentist?")
+        assertEquals(listOf("user:when is the dentist?"),
+            roles(server.takeRequest(10, TimeUnit.SECONDS)!!))
+
+        routes["/api/chat"] = answer("Yes, Wednesday is free.")
+        chat.send("can I move it?")
+        assertEquals(
+            listOf("user:when is the dentist?", "assistant:Tuesday at 3.", "user:can I move it?"),
+            roles(server.takeRequest(10, TimeUnit.SECONDS)!!),
+        )
+        assertEquals(2, chat.history.value.size)
+
+        // A failed answer is not added: nothing half-said gets replayed.
+        routes["/api/chat"] = MockResponse().setResponseCode(503).setBody("""{"error":"loading"}""")
+        chat.send("and the vet?")
+        server.takeRequest(10, TimeUnit.SECONDS)
+        assertEquals(2, chat.history.value.size)
+
+        chat.newConversation()
+        assertEquals(0, chat.history.value.size)
+        assertEquals(null, chat.question.value)
+        routes["/api/chat"] = answer("Hello.")
+        chat.send("hi")
+        assertEquals(listOf("user:hi"), roles(server.takeRequest(10, TimeUnit.SECONDS)!!))
+    }
+
     // ------------------------------------------------------------- voice ---
 
     /**

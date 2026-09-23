@@ -56,6 +56,9 @@ jobs:
       # real pages and stay out of CI for the reason in tests/README.md.
       - run: python3 scripts/check-tokens.py
       - run: node tests/voicecheck.mjs
+      # The chat history limits, and that the phone uses the same numbers.
+      # Pure computation, no browser.
+      - run: node tests/chat-history.mjs
 
   audit:
     runs-on: ubuntu-latest

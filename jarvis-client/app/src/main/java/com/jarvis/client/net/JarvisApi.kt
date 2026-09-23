@@ -756,10 +756,16 @@ class JarvisApi(
      * mirrors the desktop's own `true` - matched rather than guessed,
      * because the desktop side is the one already confirmed against the
      * backend.
+     *
+     * [history] is the conversation so far - earlier questions and the
+     * answers to them, already trimmed to fit - sent ahead of [message] so a
+     * follow-up is understood. Only one user turn used to go, and every
+     * follow-up started from nothing. See [ChatHistory] for what is kept,
+     * how much, and why.
      */
-    fun chatCall(message: String): Call? {
+    fun chatCall(message: String, history: List<ChatHistory.Exchange> = emptyList()): Call? {
         val target = url("/api/chat") ?: return null
-        val body = """{"messages":[{"role":"user","content":${quote(message)}}],"has_image":false,"stream":true,"auto":true}"""
+        val body = ChatHistory.requestBody(history, message)
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
         return client.newCall(req)

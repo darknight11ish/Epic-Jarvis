@@ -107,6 +107,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode } from "./voice.js";
+import { commitExchange, historyMessages } from "./chat-history.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -235,6 +236,7 @@ const dom = {
   cursor: $("cursor"),
   copy: $("copy"),
   stop: $("stop"),
+  newConversation: $("new-conversation"),
   services: $("services"),
 
   previousAnswer: $("previous-answer"),
@@ -261,6 +263,21 @@ const state = {
   buffer: "",
   /** Prompt currently in flight, kept for the retry path. */
   inFlight: null,
+  /**
+   * The conversation so far: finished `{ question, answer }` pairs, oldest
+   * first, trimmed to fit the model (chat-history.js). Sent ahead of every
+   * new question so a follow-up is understood. This window's memory only,
+   * never written to disk; cleared by "New conversation" and by Esc.
+   */
+  conversation: [],
+  /** The question of the turn now streaming, exactly as sent, until it
+   *  finishes. Null when nothing is in flight or the turn was abandoned. */
+  turnQuestion: null,
+  /** The turn's reply came as `data:` lines (SSE), and whether one of them
+   *  said it had finished. SSE that stops without saying so was cut off,
+   *  and is not added to the conversation. */
+  turnFramed: false,
+  turnEnded: false,
   /** Cancels whichever transport is streaming; null when idle. */
   abort: null,
   startedAt: 0,
@@ -836,11 +853,18 @@ function closeCard() {
   state.buffer = "";
   state.lastPrompt = "";
   state.previousAnswer = null;
+  // The conversation goes with the card it was shown in: Esc, which ends
+  // up here, has always meant "done with this", and a question asked next
+  // time the window opens should not silently follow on from one that is no
+  // longer on screen. Hiding on focus loss does not come here.
+  state.conversation = [];
+  state.turnQuestion = null;
   paintedBlocks = 0;
   spokenUpTo = 0;
   stopSpeaking();
   setPhase("idle");
   renderPreviousAnswer();
+  syncNewConversation();
   paint({ immediate: true });
 }
 
@@ -1964,9 +1988,13 @@ function consumeLine(rawLine) {
 
   if (line.toLowerCase().startsWith("data:")) {
     line = line.slice(5).trim();
+    state.turnFramed = true;
   }
 
-  if (line === "[DONE]") return true;
+  if (line === "[DONE]") {
+    state.turnEnded = true;
+    return true;
+  }
 
   let chunk;
   try {
@@ -1988,7 +2016,9 @@ function consumeLine(rawLine) {
 
   appendDelta(deltaFromChunk(chunk));
 
-  return isTerminal(chunk);
+  const ended = isTerminal(chunk);
+  if (ended) state.turnEnded = true;
+  return ended;
 }
 
 /** Appends text to the buffer and schedules a repaint. */
@@ -2240,8 +2270,26 @@ async function send(promptText) {
 
   // Clipboard context rides as a system turn; the server validates an
   // OpenAI-shaped `messages` array and routes on `has_image`.
+  //
+  // The conversation so far goes FIRST, then this turn's own system turns,
+  // then the question. Two reasons for that order. Ollama reuses what it has
+  // already read only up to the first thing that changed, so the earlier
+  // turns - identical from one request to the next - must lead, and the
+  // per-turn note or clipboard block must come after them. And a system
+  // message at position 0 makes Ollama drop the Modelfile's own SYSTEM
+  // prompt, where the persona's rules live (memory-prefix.patch quotes the
+  // line); with history in front, a follow-up keeps them. The very first
+  // turn with a note or clipboard still puts a system message first, as it
+  // always has.
+  //
+  // Screenshots are not kept in the conversation - only the words.
+  state.turnQuestion = text;
+  state.turnFramed = false;
+  state.turnEnded = false;
+  syncNewConversation();
   const payload = {
     messages: [
+      ...historyMessages(state.conversation),
       ...(noteTarget ? [{ role: "system", content: NOTE_INSTRUCTIONS[noteTarget] }] : []),
       ...(state.clipboard
         ? [{ role: "system", content: `Context:\n${state.clipboard}` }]
@@ -2327,6 +2375,23 @@ function finishStream(phase, statusText) {
   dom.cursor.hidden = true;
   dom.stop.hidden = true;
 
+  // Into the conversation only when the answer really finished: not an
+  // error, not Stopped (statusText), not empty, and not SSE that stopped
+  // without its end marker. Read BEFORE the empty-answer placeholder below
+  // is written into the buffer - that placeholder is not something Jarvis
+  // said.
+  const question = state.turnQuestion;
+  state.turnQuestion = null;
+  if (
+    question &&
+    phase !== "error" &&
+    !statusText &&
+    state.buffer.trim() &&
+    !(state.turnFramed && !state.turnEnded)
+  ) {
+    state.conversation = commitExchange(state.conversation, question, state.buffer);
+  }
+
   if (phase !== "error") {
     setPhase("done");
     dom.cardStatusText.textContent =
@@ -2376,8 +2441,38 @@ function finishStream(phase, statusText) {
     if (remainder) enqueueSpeech(remainder);
   }
 
+  syncNewConversation();
+
   // Release the pin so clicking away dismisses the bar again.
   setPinned(false, { silent: true });
+}
+
+/**
+ * "New conversation" shows once there is a conversation to forget, and not
+ * while an answer is arriving (Stop is the control for that).
+ */
+function syncNewConversation() {
+  if (!dom.newConversation) return;
+  const n = state.conversation.length;
+  dom.newConversation.hidden = n === 0 || Boolean(state.inFlight);
+  dom.newConversation.title =
+    n === 1
+      ? "Your next question follows on from the last one. Start afresh instead."
+      : `Your next question follows on from the last ${n}. Start afresh instead.`;
+}
+
+/**
+ * Forgets the conversation and clears the card, leaving the window open for
+ * a fresh question. Only this window's copy exists to forget; what Jarvis
+ * has learned is kept on the backend and is not touched.
+ */
+function newConversation() {
+  abortStream();
+  state.turnQuestion = null;
+  state.conversation = [];
+  closeCard();
+  announce("New conversation. Your next question starts fresh.");
+  focusInput();
 }
 
 /* ==========================================================================
@@ -2815,6 +2910,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 dom.stop.addEventListener("click", abortStream);
+
+if (dom.newConversation) dom.newConversation.addEventListener("click", newConversation);
 
 dom.copy.addEventListener("click", async () => {
   const text = state.buffer.trim();

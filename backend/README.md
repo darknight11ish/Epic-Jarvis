@@ -85,6 +85,7 @@ on a throwaway copy instead.
 | `documents-owned.patch` | `jarvis_hud.py` | **If you ever ran the OpenJarvis copy you downloaded, what it indexed would reach Jarvis's prompts.** Its indexer makes a `documents` table in the same `memory.db`. Now only a table Epic-Jarvis recorded creating is read. Needs `documents-honesty.patch` and `jarvis_owned_tables.py` — see its own section. |
 | `speed-record.patch` | `jarvis_hud.py` | Records how fast each answer was — numbers only, to a file on this PC — and shows it on the Models screen. Needs `gpu-offload.patch`, `tool-calling-wiring.patch` and `jarvis_speed.py` — see its own section. |
 | `voice-enroll.patch` | `jarvis_hud.py` | **"Train my voice" from the phone.** `POST /api/voice/enroll` takes the owner's recorded sentences, holds them in memory and raises ONE approval card. Only approving it replaces the voice print; the recordings are deleted either way. Needs `voice-503.patch` and `appearance.patch` (textual), and `jarvis_voice_enroll.py` — see its own section at the end. |
+| `cloud-one-turn.patch` | `jarvis_hud.py` | The phone and quickbar now send the conversation so far with each question. This makes sure a **cloud** lane still gets only the newest question, never an earlier one. Needs `ollama-direct.patch` (textual) — see its own section at the end. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -3906,3 +3907,50 @@ a `409`; no audio or token in the audit, the card, stdout or the status; the
 patch applies to what `voice-503` and `appearance` wrote (GNU `patch`, the script's fallback, was also tried by hand: no fuzz) and leaves `test_voice_503.py`'s
 four `_no_speech` call sites at four. `test_voice_contract.py`: the status
 and utterance JSON against the phone's and the desktop's own field lists.
+
+---
+
+# `cloud-one-turn.patch` — a cloud lane gets your newest question, alone
+
+**What changed around it.** The phone and the desktop quickbar used to send
+only your newest question to `/api/chat`, so every follow-up ("and on
+Tuesday?") reached the model with nothing before it. They now send the
+conversation so far too - at most 10 earlier questions and answers and
+18,000 characters, kept in memory only (`net/ChatHistory.kt`,
+`src/chat-history.js`, and `docs/JARVIS-API.md` §4 for the numbers). The HUD
+page always sent its own.
+
+**Why this patch.** The cloud cut in `/api/chat` keeps every `role ==
+"user"` message. With a conversation attached, that means your *earlier*
+questions too. If a question like "my salary is ..." was kept local when you
+asked it, it must not ride along later on a question that happened to go to
+a cloud lane. Whether `jarvis_router.choose()` is shown the whole
+conversation or only the newest question is decided in `jarvis_hud.py`,
+which is not in this repository, so this was not checked - the patch makes
+it not matter.
+
+**What it does.** Inside `_open`, which every attempt of the degrade loop
+goes through with the lane it is about to call: if that lane is not the
+local model, the request is cut down to the newest user message. Nothing
+else goes - not earlier questions, not answers, not the recalled-facts
+block. A screenshot turn goes whole. The local model is untouched and still
+gets the whole conversation.
+
+**The cost.** A cloud answer to a follow-up does not see the conversation.
+`ollama-direct.patch`'s own note says no machine has had a cloud lane set up
+so far; if that is still true, this changes nothing you can see today. It is
+here for the day one is.
+
+**Order.** After `ollama-direct.patch`, whose `_completions_url(lane),` line
+is its context. Listed last in `apply-patches.ps1`.
+
+## Test it
+
+```
+python backend\test_cloud_one_turn.py
+```
+
+Runs the patch's own lines on a request carrying a private earlier question
+(only the newest question comes out), checks the local lane is untouched,
+rehearses the patch with `git apply` against what the earlier patches wrote,
+and - with `JARVIS_BACKEND` set - checks `_open` in your real file.

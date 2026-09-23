@@ -525,6 +525,11 @@
             <div class="card-actions">
               <span class="card-stat" id="card-stat" title="Tokens received / elapsed"></span>
               <button class="text-button" type="button" id="copy" title="Copy the answer">Copy</button>
+              <!-- Follow-ups carry the conversation so far (chat-history.js),
+                   so there is a plain way to start again without it. Shown
+                   only once there is one, and not while an answer is
+                   arriving. Esc clears it too, with the card. -->
+              <button class="text-button" type="button" id="new-conversation" hidden>New conversation</button>
               <button class="text-button" type="button" id="stop" title="Stop generating" hidden>Stop</button>
             </div>
           </header>

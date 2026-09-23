@@ -184,7 +184,7 @@ Three lanes leave the machine. Nothing else may.
 
 | lane | what may go | enforced by |
 |---|---|---|
-| **cloud model** | user-role turns only | a role filter, re-derived on **every** hop of the degrade loop |
+| **cloud model** | user-role turns only - and, with `cloud-one-turn.patch`, only the **newest** one, because the clients now send the conversation so far | a role filter, re-derived on **every** hop of the degrade loop; the newest-turn cut in `_open` |
 | **ntfy push** | text generated from our own tables, never payload, never while tainted | `notice_for` (`_safe_detail` where there is no action name) + `taint_active()` |
 | **research** | enumerated search terms, per approved plan | `jarvis_research.plan/run` |
 

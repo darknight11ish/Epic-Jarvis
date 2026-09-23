@@ -267,10 +267,11 @@ def remember_command(text) -> Optional[str]:
 def remember_from_turn(messages, *, extract=None, when: Optional[float] = None) -> Optional[dict]:
     """If the NEWEST turn is "Remember: ...", queue it verbatim. Else None.
 
-    Only the last message. Both apps send one new message per request today
-    (main.js builds `messages` from the new turn plus system context;
-    JarvisApi.chatCall sends one user turn), but a client that ever re-sends
-    earlier turns must not re-queue a "Remember:" that was handled when new.
+    Only the last message. The clients send the conversation so far with
+    each question (the phone's ChatHistory.kt, the quickbar's
+    chat-history.js, the HUD page's own), so earlier turns come back on every
+    request - and a "Remember:" that was handled when new must not be
+    re-queued each time it is re-sent.
     Re-sending the same turn (a retry, a regenerate) is harmless - the exact
     wording is already pending, and propose_verbatim() says so.
 

@@ -317,6 +317,12 @@ data class HomeState(
      * mark against. See [com.jarvis.client.net.Feedback.viewFor].
      */
     val answerFeedback: AnswerFeedback? = null,
+    /**
+     * How many finished questions and answers the next question will carry
+     * with it - see [com.jarvis.client.net.ChatHistory]. Above zero, Home
+     * offers "New conversation". Memory only; nothing writes it to disk.
+     */
+    val conversationTurns: Int = 0,
 )
 
 @Immutable
@@ -361,6 +367,12 @@ data class HomeActions(
      * nothing while the link is stale.
      */
     val onMarkAnswer: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
+    /**
+     * Forget the conversation and start afresh: the next question goes on
+     * its own, with nothing before it. Clears the question and answer on
+     * screen. Touches nothing the desktop has learned.
+     */
+    val onNewConversation: () -> Unit = {},
 )
 
 @Composable
@@ -833,6 +845,8 @@ private fun ConversationList(
                 // nothing is sent over a link that cannot be confirmed live.
                 canMark = state.link == LinkState.CONNECTED && !state.stale,
                 onMark = actions.onMarkAnswer,
+                conversationTurns = state.conversationTurns,
+                onNewConversation = actions.onNewConversation,
             )
         }
     }
@@ -1546,6 +1560,8 @@ private fun Reply(
     feedback: AnswerFeedback? = null,
     canMark: Boolean = false,
     onMark: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
+    conversationTurns: Int = 0,
+    onNewConversation: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
@@ -1622,6 +1638,23 @@ private fun Reply(
                     Gap(4)
                     AnswerMarks(feedback, canMark, onMark)
                 }
+            }
+            // Follow-ups carry the conversation so far, so there has to be a
+            // plain way to start again without it. Not while an answer is
+            // arriving - Stop is the control for that. Shown after a failed
+            // question too, when there is no answer to put Copy beside.
+            if (!streaming && conversationTurns > 0) {
+                Gap(4)
+                Text(
+                    if (conversationTurns == 1) {
+                        "Your next question follows on from this one."
+                    } else {
+                        "Your next question follows on from the last $conversationTurns."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo,
+                )
+                Quiet("New conversation", color = chrome.textMid, onClick = onNewConversation)
             }
         }
     }
