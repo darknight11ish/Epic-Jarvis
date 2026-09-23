@@ -37,7 +37,9 @@ not whether a comment claims it does.
    local model. The app sends none of it anywhere.**
 2. **The app never opens a public tunnel.** No ngrok, no Cloudflare Tunnel, no
    Tailscale Funnel, no "share my Jarvis".
-3. **No API keys in the app. The only secret it stores is the pairing token.**
+3. **API keys are allowed (since 2026-09-17), with the same care the pairing
+   token gets: never logged, sent only to the one service they authenticate
+   against, and never written to disk in plain text.**
 4. **The app never auto-approves anything, and blocks acting when the event
    stream is stale.**
 5. **Non-commercial build, sideloaded, never on Play.**
