@@ -1,0 +1,183 @@
+--- a/jarvis_extract.py
++++ b/jarvis_extract.py
+@@ -236,7 +236,91 @@
+     return out
+ 
+ 
++#: The `source` of a "retire this?" card. jarvis_feedback raises these when a
++#: fact keeps turning up in answers the owner marked wrong. The clients read
++#: this value to label the card's two buttons for what they really do - see
++#: backend/README.md's feedback section.
++RETIRE_SOURCE = "feedback_retire"
++
++
++def propose_retire(fact_id: int, *, helpful: int, harmful: int) -> Optional[int]:
++    """Queue ONE card asking whether to retire one fact. Retires nothing.
++
++    Added by feedback.patch, for jarvis_feedback. It goes in THIS queue - the
++    one every fact Jarvis ever learns already passes through, one id and one
++    decision at a time - rather than a new approval flow of its own, because
++    docs/ARCHITECTURE.md is right that a feature needing its own approval
++    flow is a design mistake.
++
++    The card carries the fact in `replaces_id`/`replaces_text`, which is
++    where every card already names the fact it would retire, so a client
++    that shows "would replace: ..." shows the right thing without changing.
++    Accepting it retires that fact (an end date - it stays in the history)
++    and adds nothing: see _accept_retire(). Discarding it changes nothing.
++
++    Returns the proposal id, or None when there is nothing to ask: the fact
++    is gone or already retired, a card for it is already waiting, or the
++    queue is full (counted in _dropped_full, like any other dropped
++    proposal). No text from the conversation is involved - only the fact's
++    own words and the two counts.
++    """
++    store = M.store()
++    fact = store.get(int(fact_id))
++    if not fact:
++        return None
++    vt = fact.get("valid_to")
++    if vt is not None and float(vt) <= time.time():
++        return None
++    with closing(store._connect()) as c:
++        _init(c)
++        if c.execute("SELECT 1 FROM proposals WHERE state='pending' AND source=?"
++                     " AND replaces_id=?", (RETIRE_SOURCE, int(fact_id))).fetchone():
++            return None
++        cap = int(_cfg("review_queue_max", 200))
++        if c.execute("SELECT COUNT(*) FROM proposals WHERE state='pending'").fetchone()[0] >= cap:
++            global _dropped_full
++            _dropped_full += 1
++            return None
++        text = (f"Stop using this fact? It was part of {int(harmful)} "
++                f"answer{'s' if int(harmful) != 1 else ''} you marked wrong and "
++                f"{int(helpful)} you marked right. Accepting this card retires "
++                f"the fact (it stays in the history); discarding it keeps the "
++                f"fact exactly as it is.")
++        cur = c.execute(
++            "INSERT INTO proposals (text, replaces, confidence, source, created,"
++            " replaces_id, replaces_text) VALUES (?,?,?,?,?,?,?)",
++            (text, fact.get("text"), None, RETIRE_SOURCE, time.time(),
++             int(fact_id), fact.get("text")))
++        try:
++            c.commit()
++        except Exception:
++            pass
++        return cur.lastrowid
++
++
++def _accept_retire(c, store, row) -> int:
++    """Accepting a "retire this?" card: retire the fact it names, add nothing.
++
++    Returns the retired fact's id, so decide() still reads as "accepted" to
++    every caller. If something else already retired the fact since the card
++    was queued, there is nothing left to do and nothing is done.
++    """
++    fid = row.get("replaces_id")
++    if fid:
++        still = store.get(int(fid))
++        if still and (still.get("valid_to") is None
++                      or float(still["valid_to"]) > time.time()):
++            store.retire(int(fid))
++    c.execute("UPDATE proposals SET state='accepted', decided=?, fact_id=? WHERE id=?",
++              (time.time(), fid, row["id"]))
++    return int(fid or 0)
++
++
+ def _accept(c, store, row) -> int:
++    # A "retire this?" card has no new fact in it. Without this branch its
++    # sentence would be stored as a fact and the named fact superseded by it.
++    if row.get("source") == RETIRE_SOURCE:
++        return _accept_retire(c, store, row)
+     # Only the target recorded when the proposal was queued, which is the one
+     # the approval card showed. The old code re-ran `store.search(replaces,
+     # k=1)` here and retired the top hit - and search has no floor, so it
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1831,6 +1831,32 @@
+             except Exception as exc:
+                 return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
+ 
++        if path in ("/api/feedback/counts", "/api/feedback/mark"):
++            # feedback.patch - the right/wrong mark on an answer and the
++            # helpful/harmful counts it feeds (items 1 and 8 of
++            # docs/LEARNING-RESEARCH-2026-09-23.md). Ids and numbers only;
++            # see jarvis_feedback.py. Behind the token like every memory
++            # route, because "which facts went into wrong answers" is about
++            # the owner's memory.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_feedback
++                if path == "/api/feedback/counts":
++                    return self._send(200, jarvis_feedback.counts())
++                from urllib.parse import parse_qs
++                tid = (parse_qs(self.path.split("?", 1)[1]).get("turn_id") or [""])[0] \
++                    if "?" in self.path else ""
++                got = jarvis_feedback.mark_of(tid)
++                if got is None:
++                    return self._send(404, {"error": "no answer with that id on this machine"})
++                return self._send(200, {"turn_id": tid, "mark": got})
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++
+         if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
+                     "/api/compute", "/api/memory/facts", "/api/memory/export"):
+             if not _origin_ok(self):
+@@ -2079,6 +2105,32 @@
+                 return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
+             return self._send(code, out)
+ 
++        if route == "/api/feedback/mark":
++            # One turn id, one mark. There is deliberately no list form -
++            # jarvis_feedback.mark() refuses anything but a single id - so no
++            # client can build a "mark all": that would move every counter at
++            # once on one tap. A mark never changes memory; at most it raises
++            # ONE "retire this?" card in the ordinary review queue.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            if not isinstance(body, dict):
++                return self._send(400, {"error": "need an object"})
++            try:
++                import jarvis_feedback
++                out = jarvis_feedback.mark(body.get("turn_id"), body.get("mark"))
++            except Exception as exc:
++                return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
++            code = int(out.pop("status", 200))
++            if not out.get("ok"):
++                return self._send(code, {"error": out.get("reason", "refused")})
++            return self._send(code, out)
++
+         if route in ("/api/memory/forget", "/api/memory/edit",
+                      "/api/memory/learning", "/api/memory/sleep_time"):
+             if not _origin_ok(self):
+@@ -2826,6 +2878,20 @@
+         try:
+             if first_error is not None:
+                 raise first_error
++            # feedback.patch: give this answer an id the owner can mark right
++            # or wrong, and note which remembered facts went into it - ids
++            # only, never text. Here, AFTER the degrade loop, because
++            # degrade-filter empties injected_ids when a turn leaves the local
++            # lane, and what is recorded must be what this answer really used.
++            # The id rides out in X-Jarvis-Route as `turn_id`, on both
++            # branches below. Off a try: bookkeeping must never be the reason
++            # an answer fails.
++            try:
++                import jarvis_feedback
++                route_header["turn_id"] = jarvis_feedback.record_turn(
++                    route_header.get("injected_ids") or [])
++            except Exception:
++                pass
+             if use_tools:
+                 # No `upstream` exists in this branch - jarvis_agent makes
+                 # its own request(s) to Ollama entirely on its own, so there

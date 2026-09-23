@@ -103,7 +103,17 @@ $PATCHES = @(
     # line above HUD_TOKEN), which nothing after token-file touches. Last so
     # a backend that already has everything above takes only this.
     'loopback-too.patch'
-    # After all of them. Its jarvis_extract.py context is the output of
+    # After all of these. Its context lines are other patches' output:
+    # memory-safety's _accept() and the end of propose() in jarvis_extract.py
+    # (with memory-noise and decide-once already above it), memory-pane's
+    # GET and POST memory routes, and tool-calling-wiring's `if use_tools:`
+    # split in /api/chat. So it cannot go earlier than tool-calling-wiring.
+    'feedback.patch'
+    # After feedback.patch, and it MUST stay after it: feedback's POST hunk
+    # ends on the memory-route tuple line ("/api/memory/learning",
+    # "/api/memory/sleep_time"):) that this patch rewrites to add keep_both,
+    # so the other way round feedback fails to apply (checked with git apply
+    # on a rebuilt jarvis_hud.py). Its jarvis_extract.py context is the output of
     # memory-safety, memory-noise and decide-once (the dedupe lines, the
     # full-queue counter, setup_status's dropped_full block and the file's
     # last function), and its jarvis_hud.py context is the learner and call
