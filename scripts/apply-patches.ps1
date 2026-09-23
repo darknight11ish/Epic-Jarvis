@@ -1,24 +1,32 @@
 <#
 .SYNOPSIS
-  Apply every backend patch to your OpenJarvis folder, then run the tests.
+  Bring your backend folder fully up to date: patches, the modules this
+  repository ships, the settings file if you have none, Python packages -
+  then run the tests.
 
 .DESCRIPTION
   backend/README.md used to say "git apply this, then this, ... and so on, in
-  table order" — twenty patches, in a required order, with a backup step you
+  table order" - twenty patches, in a required order, with a backup step you
   had to remember. That is a bad thing to ask of anyone, and the failure mode
   is the worst kind: patch eleven fails and you are left half-applied, with no
   record of which half.
 
   This does the whole thing, and it will not leave you half-applied:
 
-    1. Backs up every file that is about to be touched, into a timestamped
-       folder, before anything is written.
-    2. DRY-RUNS the whole list first, on a copy. If it would fail, it stops
-       and changes nothing at all.
-    3. Applies them in order.
-    4. Copies in the new modules the patches call (jarvis_intake.py and the
-       rest), backing up any older copy first.
-    5. Runs the test suites and prints a summary.
+    1. DRY-RUNS the whole list of patches first, on a copy. If it would fail,
+       it stops and changes nothing at all.
+    2. Backs up every file that is about to be touched, into a timestamped
+       folder (_jarvis-backup-<date> inside the backend folder), then applies
+       the patches in order.
+    3. Copies in every module this repository ships whole - the ten rebuilt
+       ones (backend/rebuilt/), the tools jarvis_agent.py offers, and the new
+       modules the patches call - backing up any older copy first.
+    4. Puts jarvis-framework.toml (the settings file) in place ONLY if there
+       is none yet. Yours is never overwritten; if it differs from this
+       repository's copy, the differences are listed for you to decide on.
+    5. Installs the Python packages in backend/requirements.txt into the real
+       Python (not the Microsoft Store shortcut that is also called `python`).
+    6. Runs the test suites and prints a summary.
 
   Safe to run again. Three starting points work:
     - nothing applied yet: the whole list goes on;
@@ -36,6 +44,10 @@
 .PARAMETER SkipTests
   Apply, but do not run the test suites afterwards.
 
+.PARAMETER SkipPackages
+  Do not run pip. The packages in backend/requirements.txt are then yours to
+  install; the features that need them stay off until you do.
+
 .PARAMETER SkipMissing
   Leave out any patch that needs a backend file which is not there, and apply
   the rest. A PARTIAL install: the features those patches carry will not be
@@ -43,10 +55,13 @@
   really are gone - the script prints the command to search for them.
 
 .EXAMPLE
-  .\scripts\apply-patches.ps1
-  .\scripts\apply-patches.ps1 -BackendPath "D:\jarvis"
-  .\scripts\apply-patches.ps1 -SkipMissing
-  .\scripts\apply-patches.ps1 -Revert
+  From the folder this repository is cloned into. -ExecutionPolicy Bypass
+  lets Windows run a script file for this one command, without changing any
+  setting:
+
+  powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1
+  powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "D:\jarvis"
+  powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -Revert
 #>
 
 [CmdletBinding()]
@@ -54,7 +69,8 @@ param(
     [string] $BackendPath = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program",
     [switch] $Revert,
     [switch] $SkipTests,
-    [switch] $SkipMissing
+    [switch] $SkipMissing,
+    [switch] $SkipPackages
 )
 
 $ErrorActionPreference = 'Stop'
@@ -181,6 +197,70 @@ $PATCHES = @(
     'approval-expiry.patch'
 )
 
+# --- every module this repository ships WHOLE ------------------------------
+#
+# Copied beside jarvis_hud.py by step 3 below, every run, by content: a copy
+# that already matches is left alone, an older one is backed up and replaced.
+# backend\_where.py has the same list (SHIPPED) and
+# backend\test_shipped_modules.py fails if the two differ, or if any module a
+# shipped file or a patch imports is neither here nor explicitly accounted
+# for. That test exists because this list fell behind twice: jarvis_agent.py
+# was shipped while the seven tool modules it imports were not, so every tool
+# quietly said "unavailable"; and the rebuilt modules were shipped by nothing
+# at all, so fixes made to them here never reached the PC.
+#
+# No patch touches any file in this list (the test checks that too), so the
+# order of copying and patching does not matter.
+$SHIPPED = @(
+    # --- the ten rebuilt modules (backend\rebuilt\) ---
+    # The originals were lost; these were rebuilt from the patches, the API
+    # document and the config. Forward slashes: a path on Windows and Linux
+    # alike. Each lands beside jarvis_hud.py, never in a "rebuilt" folder.
+    'rebuilt/jarvis_compute.py'
+    'rebuilt/jarvis_events.py'
+    'rebuilt/jarvis_framework.py'
+    'rebuilt/jarvis_initiative.py'
+    'rebuilt/jarvis_memory.py'
+    'rebuilt/jarvis_power.py'
+    'rebuilt/jarvis_recall.py'
+    'rebuilt/jarvis_router.py'
+    'rebuilt/jarvis_sleep.py'
+    'rebuilt/jarvis_voice.py'    # also needed by "Train my voice" (voice-enroll.patch)
+    # --- modules the patches call ---
+    'jarvis_intake.py'           # memory-intake.patch
+    'jarvis_feedback.py'         # feedback.patch
+    'jarvis_skill_discovery.py'  # skill-suggest.patch
+    'jarvis_speed.py'            # speed-record.patch
+    'jarvis_owned_tables.py'     # documents-owned.patch
+    'jarvis_agent.py'            # tool-calling-wiring.patch; updated for skill-suggest
+    'jarvis_voice_enroll.py'     # voice-enroll.patch ("Train my voice")
+    'jarvis_speech.py'           # voice-503.patch; sends the status shape the phone reads
+    # --- task controls, notes, power (2026-09-23) ---
+    'jarvis_task_control.py'     # task-control.patch
+    'jarvis_note_capture.py'     # note-capture.patch
+    'jarvis_power_switch.py'     # power-mode.patch
+    # --- end task controls ---
+    'jarvis_wakeword.py'         # "hey Jarvis": jarvis_speech.py calls it for wake-word clips
+    # --- the tools jarvis_agent.py offers the model ---
+    # Each is imported inside a try, so a missing one never stops anything:
+    # the tool just answers "unavailable". Copying one in does not switch it
+    # on: the model is offered a tool only when [tools].enabled in
+    # jarvis-framework.toml names it, and every action it takes still goes
+    # through the approval gate.
+    'jarvis_research.py'         # "research": web search and reading pages
+    'jarvis_ui_control.py'       # "ui_control": reading and clicking other windows
+    'jarvis_android_control.py'  # "android_control": the phone over adb
+    'jarvis_browser_control.py'  # "browser_control": a real browser, via Playwright
+    'jarvis_calendar.py'         # "calendar"
+    'jarvis_email.py'            # "email"
+    'jarvis_notes.py'            # "notes_search"; carries the token-in-an-error fix
+    'jarvis_home.py'             # "home": Home Assistant
+)
+
+# The settings file. Installed only where none exists; never overwritten.
+$CONFIG_SRC  = 'rebuilt/jarvis-framework.toml'
+$CONFIG_NAME = 'jarvis-framework.toml'
+
 # --- the six patches whose fixes are already IN the rebuilt modules --------
 #
 # Ten of the backend's twenty-six modules were rebuilt after the originals were
@@ -214,14 +294,29 @@ $Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
 # documented in backend/README.md, and never added here, so it silently did
 # not get applied. A missing patch produces no error anywhere; it just is not
 # there. Checked on every run.
-# Is this backend carrying the rebuilt modules? Detected by a marker the
-# rebuild puts in its own docstring, not by a version number nobody maintains.
+#
+# Which list applies: the full patches, or the split halves for a backend
+# carrying the rebuilt jarvis_memory.py and jarvis_events.py?
+#
+# Applying: ALWAYS the split halves, because step 3 below copies the rebuilt
+# modules in on every run. This used to be decided by looking at the
+# backend's jarvis_memory.py, which went wrong two ways: nothing ever copied
+# the rebuilt modules in, so a backend without them got the full list and
+# patches aimed at a jarvis_memory.py it did not have; and only jarvis_memory
+# was looked at, while two of the six skipped patches are about
+# jarvis_events.py.
+#
+# Reverting: whatever is actually there, told by a marker the rebuild puts in
+# its own docstring - in either of the two files, not just one.
 $SplitDir = Join-Path $PatchDir 'rebuilt-patches'
-$UsingRebuilt = $false
-$memPath = Join-Path $BackendPath 'jarvis_memory.py'
-if (Test-Path -LiteralPath $memPath) {
-    $head = Get-Content -LiteralPath $memPath -TotalCount 12 -ErrorAction SilentlyContinue
-    if ($head -join "`n" -match 'PART RECOVERED, PART REBUILT') { $UsingRebuilt = $true }
+$UsingRebuilt = -not $Revert
+if ($Revert) {
+    foreach ($probeName in @('jarvis_memory.py', 'jarvis_events.py')) {
+        $probePath = Join-Path $BackendPath $probeName
+        if (-not (Test-Path -LiteralPath $probePath)) { continue }
+        $head = Get-Content -LiteralPath $probePath -TotalCount 12 -ErrorAction SilentlyContinue
+        if ($head -join "`n" -match 'PART RECOVERED, PART REBUILT') { $UsingRebuilt = $true }
+    }
 }
 
 $onDisk = @(Get-ChildItem -LiteralPath $PatchDir -Filter '*.patch' -ErrorAction SilentlyContinue |
@@ -240,13 +335,69 @@ function Ok($msg)   { Write-Host "  ok    $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "  skip  $msg" -ForegroundColor Yellow }
 function Bad($msg)  { Write-Host "  FAIL  $msg" -ForegroundColor Red }
 
+# --- which Python ------------------------------------------------------------
+#
+# NOT simply `python`. On a fresh Windows 11 that name is a Microsoft Store
+# shortcut (an "App Execution Alias" in ...\WindowsApps\) that does not run
+# Python at all: it prints "Python was not found" and exits 9009. This script
+# used to run the tests with whatever `python` was, so on such a PC every
+# suite would have "failed", and the summary said a failure is a real
+# finding - when all it meant was "Python is not installed".
+#
+# So each candidate is actually RUN, and must print its own real path. `py -3`
+# first: the launcher the python.org installer puts in C:\Windows is never the
+# Store shortcut. Returns $null when there is no working Python.
+function Find-Python {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        foreach ($cand in @('py -3', 'python', 'python3')) {
+            $parts = $cand -split ' '
+            $cmd = Get-Command $parts[0] -CommandType Application -ErrorAction SilentlyContinue |
+                   Select-Object -First 1
+            if (-not $cmd) { continue }
+            $pre = @()
+            if ($parts.Count -gt 1) { $pre = @($parts[1..($parts.Count - 1)]) }
+            $out = @(& $cmd.Source @pre -c "import sys; print(sys.executable); print('%d.%d' % sys.version_info[:2])" 2>$null)
+            if ($LASTEXITCODE -ne 0 -or $out.Count -lt 2) {
+                if ($cmd.Source -match '\\WindowsApps\\') {
+                    $script:PythonStubSeen = $cmd.Source
+                }
+                continue
+            }
+            $exe = "$($out[0])".Trim()
+            if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { continue }
+            return @{ Exe = $exe; Version = "$($out[1])".Trim(); Via = $cand }
+        }
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+    return $null
+}
+
+# Why there is no Python, in words a person can act on.
+function Explain-NoPython {
+    if ($script:PythonStubSeen) {
+        Say "  The only 'python' on this PC is the Microsoft Store shortcut:" Yellow
+        Say "    $($script:PythonStubSeen)" Yellow
+        Say "  It is not Python. Install the real one (one line, then open a NEW" Cyan
+        Say "  PowerShell window so it is found):" Cyan
+    } else {
+        Say "  No Python was found on this PC. Install it (one line, then open a" Cyan
+        Say "  NEW PowerShell window so it is found):" Cyan
+    }
+    Say "    winget install Python.Python.3.12" Cyan
+    Say "  Then run this script again." Cyan
+}
+$script:PythonStubSeen = $null
+
 # --- where is everything -----------------------------------------------------
 
 if (-not (Test-Path -LiteralPath $BackendPath)) {
     Bad "No folder at: $BackendPath"
     Say ""
     Say "Point it at the folder holding jarvis_hud.py:" Cyan
-    Say "    .\scripts\apply-patches.ps1 -BackendPath `"D:\your\path`"" Cyan
+    Say "    powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath `"D:\your\path`"" Cyan
     exit 1
 }
 if (-not (Test-Path -LiteralPath (Join-Path $BackendPath 'jarvis_hud.py'))) {
@@ -454,7 +605,7 @@ if ($absent.Count -gt 0) {
     Say "If they turn up somewhere else, that folder is your backend - pass it" Cyan
     Say "with -BackendPath. If they are genuinely gone, you can apply the" Cyan
     Say "$($clear.Count) that do not need them:" Cyan
-    Say "    .\scripts\apply-patches.ps1 -SkipMissing" Cyan
+    Say "    powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath `"$BackendPath`" -SkipMissing" Cyan
 
     if (-not $SkipMissing) {
         Say ""
@@ -501,8 +652,10 @@ try {
         }
         Say ""
         Say "Removed $removed." Cyan
-        Say "(Modules this script copied in, like jarvis_intake.py, are left where" Cyan
-        Say " they are. Nothing calls them once the patches are off.)" Cyan
+        Say "(Modules this script copied in - jarvis_intake.py, the rebuilt modules" Cyan
+        Say " and the rest - and your jarvis-framework.toml are left where they are." Cyan
+        Say " Any older copy a run replaced is in a _jarvis-backup-<date> folder in" Cyan
+        Say " the backend folder.)" Cyan
         exit 0
     }
 
@@ -735,49 +888,21 @@ try {
         }
     }
 
-    # --- 3. the modules the patches call -------------------------------------
+    # --- 3. every module this repository ships whole -------------------------
     #
-    # Several patches only add a call into a NEW module that ships whole in
-    # backend\ (there is nothing on the PC to patch for it), and every one of
-    # those calls quietly falls back when the module is missing. So a run
-    # that stopped at step 2 could say "patched and proven" with every new
-    # feature switched off - and the tests could not tell, because they
-    # would import this repository's copy instead. Checked here, by content,
-    # every run - including the "already applied" one.
-    $SHIPPED = @(
-        'jarvis_intake.py'           # memory-intake.patch
-        'jarvis_feedback.py'         # feedback.patch
-        'jarvis_skill_discovery.py'  # skill-suggest.patch
-        'jarvis_speed.py'            # speed-record.patch
-        'jarvis_owned_tables.py'     # documents-owned.patch
-        'jarvis_agent.py'            # tool-calling-wiring.patch; updated for skill-suggest
-        'jarvis_browser_control.py'  # jarvis_agent.py's "browser_control" tool; stays OFF until [tools].enabled names it
-        'jarvis_voice_enroll.py'     # voice-enroll.patch ("Train my voice")
-        # The two below are needed by "Train my voice" too. jarvis_speech.py
-        # now sends the status shape the phone reads (without it the phone's
-        # talk button never appears), and the rebuilt jarvis_voice.py learned
-        # to use a sherpa-onnx speaker model file. The new jarvis_speech.py
-        # still works with an older jarvis_voice.py, but not the other way
-        # round, so both are copied. An older copy of either is backed up
-        # first, like every file here.
-        'jarvis_speech.py'
-        'rebuilt/jarvis_voice.py'   # forward slash: a path on Windows and on Linux alike
-        # --- task controls, notes, power (2026-09-23) ---
-        'jarvis_task_control.py'     # task-control.patch
-        'jarvis_note_capture.py'     # note-capture.patch
-        'jarvis_notes.py'            # notes_search; carries the token-in-an-error fix
-        'jarvis_power_switch.py'     # power-mode.patch
-        # --- end task controls ---
-        'jarvis_wakeword.py'        # "hey Jarvis": jarvis_speech.py calls it for wake-word clips
-        # The overnight-tidy card's words. The old copy promised a pass that
-        # "retires facts"; nothing does, and nothing may retire a fact
-        # without the owner's yes on that one fact. (2026-09-23 memory audit)
-        'rebuilt/jarvis_sleep.py'
-    )
+    # $SHIPPED, at the top of this file. Several patches only add a call into
+    # a module that ships whole in backend\ (there is nothing on the PC to
+    # patch for it), jarvis_agent.py's tools are whole modules, and the ten
+    # rebuilt modules are fixed HERE and have to reach the PC somehow. Every
+    # one of those imports quietly falls back when the module is missing. So
+    # a run that stopped at step 2 could say "patched and proven" with every
+    # new feature switched off. Checked here, by content, every run -
+    # including the "already applied" one.
     $copied = 0
+    $absentSrc = @()
     foreach ($m in $SHIPPED) {
         $src = Join-Path $PatchDir $m
-        if (-not (Test-Path -LiteralPath $src)) { continue }
+        if (-not (Test-Path -LiteralPath $src)) { $absentSrc += $m; continue }
         # By file name: 'rebuilt/jarvis_voice.py' lands beside jarvis_hud.py,
         # not in a rebuilt folder the backend never looks in.
         $leaf = Split-Path -Leaf $m
@@ -794,10 +919,19 @@ try {
         }
         Copy-Item -LiteralPath $src -Destination $dst -Force
         $copied++
-        if ($had) { Ok "$m - replaced an older copy (the old one is in $backup)" }
-        else      { Ok "$m - copied in (it was not there, so its feature was off)" }
+        if ($had) { Ok "$leaf - replaced an older copy (the old one is in $backup)" }
+        else      { Ok "$leaf - copied in (it was not there, so what it does was off)" }
     }
-    if ($copied -eq 0) { Ok "The $($SHIPPED.Count) new modules the patches call are all there and up to date." }
+    if ($absentSrc.Count -gt 0) {
+        # Not silently skipped: this is a broken checkout of this repository,
+        # not a problem with the backend.
+        Bad "$($absentSrc.Count) module(s) this script ships are missing from this repository's backend folder:"
+        foreach ($a in $absentSrc) { Say "          $a" Red }
+        Say "        Get a fresh copy of the repository (git pull) and run this again." Cyan
+    }
+    if ($copied -eq 0 -and $absentSrc.Count -eq 0) {
+        Ok "All $($SHIPPED.Count) modules this repository ships are there and up to date."
+    }
 
 } finally {
     Pop-Location
@@ -807,7 +941,115 @@ try {
     Remove-Item -LiteralPath $LfDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# --- 4. prove it -------------------------------------------------------------
+# The real Python, or $null. Needed by steps 4 to 6.
+$py = Find-Python
+if ($py) {
+    Say ""
+    Say "Python  : $($py.Exe)  ($($py.Version), found as '$($py.Via)')"
+    $pyVer = [version]$py.Version
+    if ($pyVer -lt [version]'3.11') {
+        Warn "Python $($py.Version) is older than 3.11. The backend is written for 3.11 or"
+        Say "        newer; install 3.12 with: winget install Python.Python.3.12" Cyan
+    }
+}
+
+# --- 4. the settings file: put in place if absent, NEVER overwritten -----------
+#
+# jarvis-framework.toml holds decisions only the owner makes - which actions
+# ask first, which tools are on, where the notes live. Overwriting it would
+# undo them without a word. So: if the backend would find no settings file
+# at all, this repository's copy is put beside jarvis_hud.py. If there is
+# one, it is left exactly as it is and the differences are printed.
+#
+# Looked for where rebuilt\jarvis_framework.py's config_path() looks, in the
+# same order, so "the one in use" here is the one the backend reads.
+Say ""
+$cfgSrc = Join-Path $PatchDir $CONFIG_SRC
+$cfgDir = $env:OPENJARVIS_CONFIG_DIR
+if (-not $cfgDir) { $cfgDir = $env:JARVIS_CONFIG_DIR }
+if (-not $cfgDir) { $cfgDir = Join-Path $HOME '.openjarvis' }
+$cfgCandidates = @()
+if ($env:JARVIS_FRAMEWORK_TOML) { $cfgCandidates += $env:JARVIS_FRAMEWORK_TOML }
+$cfgCandidates += (Join-Path $cfgDir $CONFIG_NAME)
+$cfgCandidates += (Join-Path $BackendPath $CONFIG_NAME)
+$cfgParent = Split-Path -Parent $BackendPath
+if ($cfgParent) { $cfgCandidates += (Join-Path (Split-Path -Parent $BackendPath) $CONFIG_NAME) }
+$cfgInUse = $null
+foreach ($c in $cfgCandidates) {
+    if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { $cfgInUse = $c; break }
+}
+if (-not (Test-Path -LiteralPath $cfgSrc)) {
+    Bad "This repository has no $CONFIG_SRC - get a fresh copy (git pull)."
+} elseif (-not $cfgInUse) {
+    $cfgDst = Join-Path $BackendPath $CONFIG_NAME
+    Copy-Item -LiteralPath $cfgSrc -Destination $cfgDst
+    Ok "$CONFIG_NAME - you had none, so this repository's copy is now at $cfgDst"
+    Say "        It is yours from now on: this script will never overwrite it." Cyan
+} else {
+    $mine = [IO.File]::ReadAllText($cfgInUse) -replace "`r`n", "`n"
+    $ours = [IO.File]::ReadAllText($cfgSrc) -replace "`r`n", "`n"
+    if ($mine -eq $ours) {
+        Ok "$CONFIG_NAME - yours ($cfgInUse) is the same as this repository's."
+    } else {
+        Say "  note  $CONFIG_NAME - yours is kept, untouched: $cfgInUse" Cyan
+        Say "        It differs from this repository's copy ($cfgSrc)." Cyan
+        if ($py) {
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $diffOut = @(& $py.Exe (Join-Path $PatchDir '_config_diff.py') $cfgInUse $cfgSrc 2>&1)
+            } finally {
+                $ErrorActionPreference = $prevEap
+            }
+            $shown = 0
+            foreach ($line in $diffOut) {
+                if ($shown -ge 60) { Say "        ... and more. Run it yourself for the whole list:" Cyan; break }
+                Say "        $line"
+                $shown++
+            }
+        }
+        Say "        Nothing is changed for you. To see the whole difference any time:" Cyan
+        Say "          py -3 `"$(Join-Path $PatchDir '_config_diff.py')`" `"$cfgInUse`" `"$cfgSrc`"" Cyan
+    }
+}
+
+# --- 5. Python packages ---------------------------------------------------------
+#
+# The backend starts without any of these - every import is guarded - but
+# memory search by meaning, the voice features and the window-reading tool
+# are off until they are installed. backend\requirements.txt says which
+# package carries what. pip leaves a package that is already installed alone.
+$reqs = Join-Path $PatchDir 'requirements.txt'
+if ($SkipPackages) {
+    Say ""
+    Warn "Python packages (-SkipPackages). To install them yourself:"
+    Say "          py -3 -m pip install -r `"$reqs`"" Cyan
+} elseif (-not $py) {
+    Say ""
+    Bad "Python packages were not installed, because there is no working Python."
+    Explain-NoPython
+} else {
+    Say ""
+    Say "Installing the Python packages in backend\requirements.txt (a minute or two the first time)." Cyan
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $pipOut = @(& $py.Exe -m pip install --disable-pip-version-check -r $reqs 2>&1)
+        $pipOk = ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    if ($pipOk) {
+        Ok "Python packages are installed."
+    } else {
+        Bad "pip could not install everything. The last lines it printed:"
+        Say (($pipOut | Select-Object -Last 15 | ForEach-Object { "        $_" }) -join "`n")
+        Say "        The backend still starts; the features those packages carry stay off." Cyan
+        Say "        Send the lines above back if the reason is not clear." Cyan
+    }
+}
+
+# --- 6. prove it -----------------------------------------------------------------
 
 if ($SkipTests) {
     Say ""
@@ -815,14 +1057,11 @@ if ($SkipTests) {
     exit 0
 }
 
-# Not `??` - that is PowerShell 7, and Windows ships 5.1, where it is a
-# SYNTAX error: the whole script fails to parse before a line of it runs.
-$python = Get-Command python -ErrorAction SilentlyContinue
-if (-not $python) { $python = Get-Command python3 -ErrorAction SilentlyContinue }
-if (-not $python) {
+if (-not $py) {
     Say ""
-    Warn "Python is not on PATH, so the tests were not run."
-    exit 0
+    Bad "The patches and modules are in place, but the tests were NOT run: there is no working Python."
+    if ($SkipPackages) { Explain-NoPython } else { Say "  (What to do about it is just above.)" Cyan }
+    exit 1
 }
 
 Say ""
@@ -851,7 +1090,7 @@ $prev = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 
 foreach ($t in $tests) {
-    $out = & $python.Source $t.FullName 2>&1
+    $out = & $py.Exe $t.FullName 2>&1
     if ($LASTEXITCODE -eq 0) { Ok $t.Name; $pass++ }
     else {
         Bad $t.Name
@@ -861,12 +1100,13 @@ foreach ($t in $tests) {
 
 $ErrorActionPreference = $prev
 
+$hudPath = Join-Path $env:JARVIS_BACKEND 'jarvis_hud.py'
 Say ""
 if ($fail.Count -eq 0) {
     Ok "$pass suites passed. The backend is patched and proven."
     Say ""
-    Say "Start it, and watch the banner for the token path:" Cyan
-    Say "    python jarvis_hud.py" Cyan
+    Say "Start it (one line), and watch what it prints for the token file:" Cyan
+    Say "    & `"$($py.Exe)`" `"$hudPath`"" Cyan
 } else {
     Bad "$pass passed, $($fail.Count) failed."
     Say ""
@@ -875,12 +1115,12 @@ if ($fail.Count -eq 0) {
         Say ($f.Output -split "`n" | Select-Object -Last 25 | Out-String)
     }
     Say "Send the block above back. A failing suite here is a real finding." Cyan
-    Say "" 
-    Say "These suites do NOT run in CI - CI builds the desktop app, and the" Cyan
-    Say "Python backend is not in the repository, so there is nothing there" Cyan
-    Say "for them to run against. Your machine is the first place they meet" Cyan
-    Say "the real modules. A failure means the backend here differs from the" Cyan
-    Say "one the patches were written against, or that a rebuilt module is" Cyan
-    Say "wrong - and the second one has happened." Cyan
+    Say ""
+    Say "CI runs these suites too, but only against this repository: about" Cyan
+    Say "twenty of them need your jarvis_hud.py, jarvis_gate.py and the other" Cyan
+    Say "files that live only on your PC, so CI skips those. Your machine is" Cyan
+    Say "the first place they meet the real modules. A failure means the" Cyan
+    Say "backend here differs from the one the patches were written against," Cyan
+    Say "or that a rebuilt module is wrong - and the second one has happened." Cyan
     exit 1
 }

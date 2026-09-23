@@ -54,6 +54,14 @@ def _words_of(text):
 
 REBUILT = Path(__file__).resolve().parent / "rebuilt"
 
+# This suite imports THIS folder's rebuilt/ copies (below), so on the owner's
+# PC a green run would say nothing about the copies the backend actually runs
+# - which, until apply-patches.ps1 learned to copy them in, could be any age.
+# With JARVIS_BACKEND set, stop plainly unless the backend's copy of every
+# rebuilt module IS this one. (Nothing happens in the dev container or CI.)
+from _where import require_shipped  # noqa: E402
+require_shipped(*[f"rebuilt/{p.name}" for p in sorted(REBUILT.glob("jarvis_*.py"))])
+
 # The rebuilt modules are the ones under test, so they come FIRST on the path -
 # ahead of any copy that may be sitting in the backend folder. Testing whichever
 # copy happened to be found first is how you get a green suite for code nobody

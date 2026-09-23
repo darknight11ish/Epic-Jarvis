@@ -89,16 +89,34 @@ def explain() -> str:
             f"Set JARVIS_BACKEND to the folder holding jarvis_hud.py.")
 
 
-#: Modules this repository ships WHOLE, in this folder, for the owner to copy
-#: beside jarvis_hud.py (apply-patches.ps1 does it). Each patch that needs
-#: one only adds a call into it, and that call quietly falls back when the
-#: import fails - so a backend without the file runs, with the feature off.
-SHIPPED = ("jarvis_intake.py", "jarvis_feedback.py", "jarvis_skill_discovery.py",
-           "jarvis_speed.py", "jarvis_owned_tables.py", "jarvis_agent.py",
-           "jarvis_voice_enroll.py", "jarvis_speech.py",
-           # Copied from rebuilt/ (apply-patches.ps1 lists it as
-           # 'rebuilt/jarvis_sleep.py'): the overnight-tidy card's true words.
-           "rebuilt/jarvis_sleep.py")
+#: Modules this repository ships WHOLE, for the owner's backend folder:
+#: apply-patches.ps1 copies each one beside jarvis_hud.py (a "rebuilt/" entry
+#: lands there too, by file name). Every import of one of these is wrapped,
+#: so a backend without the file runs - with that feature quietly off.
+#:
+#: The SAME list, in the same order, as `$SHIPPED` in scripts/apply-patches.ps1.
+#: test_shipped_modules.py fails if they differ, and if any module a shipped
+#: file or a patch imports is in neither this list nor its exemptions. This
+#: tuple once lagged the script by seven modules and the script once lagged
+#: jarvis_agent.py by seven more.
+SHIPPED = (
+    # the ten rebuilt modules
+    "rebuilt/jarvis_compute.py", "rebuilt/jarvis_events.py",
+    "rebuilt/jarvis_framework.py", "rebuilt/jarvis_initiative.py",
+    "rebuilt/jarvis_memory.py", "rebuilt/jarvis_power.py",
+    "rebuilt/jarvis_recall.py", "rebuilt/jarvis_router.py",
+    "rebuilt/jarvis_sleep.py", "rebuilt/jarvis_voice.py",
+    # modules the patches call
+    "jarvis_intake.py", "jarvis_feedback.py", "jarvis_skill_discovery.py",
+    "jarvis_speed.py", "jarvis_owned_tables.py", "jarvis_agent.py",
+    "jarvis_voice_enroll.py", "jarvis_speech.py",
+    "jarvis_task_control.py", "jarvis_note_capture.py", "jarvis_power_switch.py",
+    "jarvis_wakeword.py",
+    # the tools jarvis_agent.py offers
+    "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
+    "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",
+    "jarvis_notes.py", "jarvis_home.py",
+)
 
 
 def _same_text(a: Path, b: Path) -> bool:
@@ -123,14 +141,18 @@ def require_shipped(*names: str) -> None:
         return
     problems = []
     for n in names:
-        theirs, ours = BACKEND / n, _HERE / n
+        # "rebuilt/jarvis_memory.py" is this repository's path; on the PC the
+        # file sits beside jarvis_hud.py under its own name.
+        leaf = n.rsplit("/", 1)[-1]
+        theirs, ours = BACKEND / leaf, _HERE / n
+        shown = "backend\\" + n.replace("/", "\\")
         if not theirs.is_file():
-            problems.append(f"{n} is not in {BACKEND}, so the feature it carries "
-                            f"is switched off there. Copy backend\\{n} into the "
+            problems.append(f"{leaf} is not in {BACKEND}, so the feature it carries "
+                            f"is switched off there. Copy {shown} into the "
                             f"backend folder (apply-patches.ps1 does this for you).")
         elif ours.is_file() and not _same_text(theirs, ours):
-            problems.append(f"{n} in {BACKEND} is not the copy in this repository "
-                            f"(an older one, most likely). Copy backend\\{n} into "
+            problems.append(f"{leaf} in {BACKEND} is not the copy in this repository "
+                            f"(an older one, most likely). Copy {shown} into "
                             f"the backend folder (apply-patches.ps1 does this for you).")
     if problems:
         for p in problems:

@@ -1,0 +1,34 @@
+# Python packages the Jarvis backend uses beyond the standard library.
+#
+# scripts\apply-patches.ps1 installs these for you. By hand, from the folder
+# this repository is cloned into (one line):
+#
+#     py -3 -m pip install -r backend\requirements.txt
+#
+# The backend STARTS without any of them - every one is imported inside a
+# `try` - but what each one carries is switched off until it is installed,
+# and nothing on screen says so. Next to each: what it is for, and the
+# module that imports it.
+#
+# backend\test_shipped_modules.py fails if a shipped module or patch imports a
+# package that is neither listed here nor named in the "not installed" list at
+# the bottom.
+
+numpy                                  # voice: reading and checking recorded audio (jarvis_speech.py, rebuilt jarvis_voice.py)
+sherpa-onnx                            # voice: speech-to-text on the PC, and the better "is it your voice" check (jarvis_speech.py, rebuilt jarvis_voice.py)
+onnxruntime                            # voice: the "hey Jarvis" wake-word spotter (jarvis_wakeword.py). The voice MODEL files are a separate download: backend\README.md, "Voice that works".
+fastembed                              # memory: finding facts by MEANING, not only by matching words (rebuilt jarvis_memory.py). Downloads its model the first time it runs.
+sqlite-vec                             # memory: the search index fastembed's numbers are kept in (rebuilt jarvis_memory.py)
+uiautomation; sys_platform == "win32"  # the "ui_control" tool: reading and clicking other apps' windows (jarvis_ui_control.py). Windows only.
+tomli; python_version < "3.11"         # reading jarvis-framework.toml on Python 3.10 or older; 3.11 and newer have it built in (rebuilt jarvis_framework.py)
+
+# NOT installed by the script - large, or for something that is off by default:
+#
+#   playwright   the "browser_control" tool (jarvis_browser_control.py), which
+#                stays OFF until [tools].enabled in jarvis-framework.toml names
+#                it. Also needs a browser downloaded. One line:
+#                    py -3 -m pip install playwright; py -3 -m playwright install chromium
+#   speechbrain  an older, much heavier voice check (rebuilt jarvis_voice.py),
+#   torch        used only if sherpa-onnx's speaker model is not set up. The
+#                sherpa-onnx route above does the same job without PyTorch;
+#                backend\README.md "Install the better voice check" has it.
