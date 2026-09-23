@@ -479,30 +479,43 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "jarvis_android_control_run"),
     "browser_control": Tool(
         "browser_control",
-        "Drive one browser tab (navigate, click, type, select, read, or "
-        "read_new) by naming its on-screen elements. Reads the current page "
-        "first; an element that cannot be found is reported, not guessed "
-        "at. read_new follows a chat conversation of any length - it takes "
+        "Drive one browser tab (navigate, click, type, select, read, "
+        "read_new, or read_page) by naming its on-screen elements. Reads the "
+        "current page first; an element that cannot be found - or that "
+        "matches more than one element - is reported, not guessed at (add "
+        "'within' with the name of the section it is in to say which). "
+        "read_new follows a chat conversation of any length - it takes "
         "the transcript CONTAINER and a cursor, and returns only messages "
         "since that cursor, so a long-running conversation never costs more "
-        "per turn than the newest messages in it. Only offered when the "
+        "per turn than the newest messages in it. read_page returns the "
+        "page's main text in capped pieces. The run stops if the page leaves "
+        "the allowed sites, asks a question, opens a tab, or starts a "
+        "download. Only offered when the "
         "owner has explicitly enabled it - see jarvis_browser_control.py's "
         "own docstring for why it ships off.",
         {"type": "object", "properties": {
             "goal": {"type": "string"},
             "session": {"type": "string", "description": "a label for which browser tab"},
             "allowed_domains": {"type": "array", "items": {"type": "string"},
-                "description": "optional hostname allowlist for navigate steps"},
+                "description": "optional hostname allowlist - for navigate steps, and for "
+                    "anywhere a click or redirect takes the tab while the plan runs "
+                    "(omitted: only the sites the plan itself names)"},
             "requests": {"type": "array", "items": {"type": "object", "properties": {
                 "action": {"type": "string",
-                    "enum": ["navigate", "click", "type", "select", "read", "read_new"]},
+                    "enum": ["navigate", "click", "type", "select", "read", "read_new",
+                             "read_page"]},
                 "role": {"type": "string", "description": "accessibility role, e.g. button, "
                     "textbox - for read_new, the role of the message-list CONTAINER"},
                 "name": {"type": "string", "description": "the element's accessible name - "
                     "for read_new, the container's accessible name"},
+                "within": {"type": "string", "description": "optional: the name of the "
+                    "section, dialog, row or list item the element is inside, when two "
+                    "elements share a role and name"},
                 "value": {"type": "string", "description": "URL for navigate, text for "
-                    "type/select, or for read_new the highest message index already seen "
-                    "(omit or \"0\" to read from the start)"},
+                    "type/select (a type may write a saved secret as <secret>name</secret>; "
+                    "its real value is never shown to you), for read_new the highest "
+                    "message index already seen, for read_page the character offset to "
+                    "read from (omit or \"0\" to read from the start)"},
                 "why": {"type": "string"},
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean",

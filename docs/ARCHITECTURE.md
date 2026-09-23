@@ -456,7 +456,10 @@ captures keystrokes and the a11y tree, telemetry on by default) · moshi
 the consent rule — demonstrated on the real binary) · llm-guard (archived
 2026-07-09, models abandoned) · cognee and graphrag (~40 deps / three
 mandatory Azure SDKs) · LLMLingua (negation-blind) · browser-use (dies at 8k
-context by step 2–3) · Phi-4-mini (8B KV cost at 3.8B capability) · kokoro-onnx
+context by step 2–3; the framework and its loop stay rejected, though some
+of its MIT code - page reading, watchdogs, secret placeholders - was adapted
+into `jarvis_browser_control.py` on 2026-09-23, loop left out) · Phi-4-mini
+(8B KV cost at 3.8B capability) · kokoro-onnx
 the package, though Kokoro the model is adopted via sherpa-onnx.
 
 ---

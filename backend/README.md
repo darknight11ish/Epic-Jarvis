@@ -2408,10 +2408,11 @@ before each one, never a live loop. `jarvis_browser_control.py` (new file,
 ships whole like `jarvis_ui_control.py` and `jarvis_android_control.py`) is
 that same shape, aimed at a browser tab instead of a native window.
 
-**What it is.** `plan(goal, session, requests)` reads the current page's
-accessibility tree (Playwright's `page.accessibility.snapshot()`, capped at
-300 elements and 12 levels deep) and binds each requested step to a concrete
-`(role, name)` pair actually on that page - a `navigate` request is checked
+**What it is.** `plan(goal, session, requests)` reads the current page
+(through Chrome's DevTools Protocol since 2026-09-23 - see "What was ported
+from browser-use" below; capped at 300 elements) and binds each requested
+step to exactly one `(role, name)` element actually on that page - a
+`navigate` request is checked
 against an `http`/`https`-only scheme filter and an optional
 `allowed_domains` list instead, since there is no page yet to search.
 `run(plan, approved=True)` executes only the enumerated steps, re-reading
@@ -2465,7 +2466,9 @@ reasons, both real, neither a formality:
    at 16K context, arithmetic'd out in `jarvis-primary.Modelfile` to
    6.48 of 6.90 GiB - sized tight on purpose, with nothing to spare for
    several rounds of page-plus-history. This tool belongs on the second,
-   larger-context lane once it exists, not the primary one.
+   larger-context lane - planned as the RTX 2060 12 GB second graphics
+   card - once that lane is actually running and has been measured with
+   real page reads, not when the card is merely installed.
 
 **Do not add `"browser_control"` to `[tools].enabled` until both of those are
 actually true on your machine.** Nothing else in this patch turns it on by
@@ -2501,32 +2504,99 @@ says so" property is checked directly rather than trusted.
 The result: turn 40 of an hour-long conversation costs the same as turn 2 -
 the size of what's new, never the size of everything said so far.
 
+### What was ported from browser-use (2026-09-23)
+
+**First, a bug this fixed.** The page reader used Playwright's
+`page.accessibility.snapshot()`. That function no longer exists: on
+Playwright 1.63.0, `'accessibility' in dir(playwright.sync_api.Page)` is
+`False`, and calling it on a real page raises `AttributeError: 'Page' object
+has no attribute 'accessibility'`. So on any current Playwright, the old
+`plan()` could never have read a page at all.
+
+`browser-use` (MIT licence) is still rejected as a framework - its
+"look, decide, click, repeat" loop is the thing this project never does. But
+several of its parts make ONE approved step safer, and those were copied or
+adapted into `jarvis_browser_control.py` (each piece says which browser-use
+file it came from; the licence is in `THIRD-PARTY-NOTICES.txt`). browser-use
+itself is **not** a dependency.
+
+- **A better page reader.** It asks Chrome directly (the DevTools Protocol,
+  the same way browser-use does) and keeps only elements a person could
+  actually see: not hidden, not see-through, and not covered by something
+  drawn on top - a cookie banner or a pop-up's dark backdrop. Each element
+  also says whether it can be clicked or typed into, whether it is a
+  password/payment field, and which named section it sits in.
+- **Never click a guess.** If two elements have the same role and name (two
+  "Reply" buttons), the request is reported as ambiguous instead of picking
+  the first. Adding `"within": "Order 2"` (the name of the section it is in)
+  says which one; the card prints it and `run()` re-checks it.
+- **A fence on every move, not only `navigate`.** If a click, a redirect, or
+  a new tab takes the page to a site outside `allowed_domains` - or, when
+  that is not given, outside the sites the plan itself names - the run
+  stops and says where. Where the browser allows it, the move is blocked
+  before the other site even loads.
+- **Dialogs, pop-ups, downloads, crashes.** A pop-up question
+  (`confirm`/`prompt`) is **always answered Cancel, never OK**, and the run
+  stops and shows the question. (browser-use answers OK - that would be
+  Jarvis approving something for you.) A plain `alert` with only an OK
+  button is closed and noted. Downloads are always blocked. A new tab, a
+  crash or a frozen page stops the run.
+- **Waiting for the page to settle** after each click or navigation, with a
+  time limit, so the next step sees the page as it ended up.
+- **`read_page`** - a new action that returns the page's main text as tidy
+  plain text, 1500 characters at a time, with a line saying how much is left
+  and where to continue. Never raw HTML, never a screenshot.
+- **Secrets the model never sees.** A `type` step may say
+  `<secret>shop_password</secret>` instead of a password. The real value is
+  fetched only at the moment of typing and is never on the card, in the
+  result, or in any log. A password field refuses a typed-out password.
+  **There is no secret store in this project yet**, so today such a step
+  simply stops and types nothing (`jarvis_agent.py` passes none) - a store
+  is a separate decision.
+
+Not ported: the agent loop, AI-provider code, cloud, telemetry, video
+recording, MCP server, and screenshots to the model.
+
+**Known gaps.** Elements inside an iframe are not read - and many
+third-party chat widgets live in an iframe, so for those this cannot target
+anything yet. An element only *partly* covered (say, half under a cookie
+banner) is still offered. Playwright's documentation says its click first
+checks that nothing covers the exact point it will click, and waits (here,
+at most 8 seconds) and then fails rather than clicking the cover - that
+case has not been tested here.
+
 ### Test it
 
 ```powershell
 python test_browser_control.py
+python test_browser_control_live.py
 ```
 
-Seventeen scenarios, fifty-two individual checks, no real browser, no
-network - the same technique `test_ui_control.py` uses (`read`/`act`
-injected, the real Playwright-backed defaults proven unreachable via
-`NoRealAction`). The ones that matter most: `plan()` performs no real
-action; a `navigate` request is rejected outright for a non-`http(s)` scheme
-or a domain outside `allowed_domains`, never attempted; `run()` refuses
-without `approved=True`; `run()` re-verifies every non-`navigate` step and
-stops rather than guessing when the page has changed; a `read` step's value
-is capped at `_MAX_READ_VALUE_CHARS` regardless of how much text the real
-page actually has; and `_format_new_messages` only ever returns what's after
-the cursor, capped, with a truthful count of anything left out.
+`test_browser_control.py`: forty-nine scenarios, 185 checks, no real browser,
+no network - `read`/`act`/`observe`/`secrets` injected, the real
+Playwright-backed defaults proven unreachable via `NoRealAction`, and the
+page reader and page-to-text converter tested on hand-built data. Beyond the
+original checks (no input during `plan()`, no run without `approved=True`,
+stop on any mismatch, capped reads) it proves: an ambiguous element never
+becomes a step; a step that lands off the fence - or passes through a
+foreign site on the way - stops the run; a confirm dialog stops it and the
+real dialog handler only ever dismisses; downloads, pop-ups and crashes stop
+it; a secret's real value reaches `act()` and nowhere else, and fails closed
+with no store; `read_page` is capped and says so.
 
-**Not run against a real page, a real customer-service widget, or a real
-Playwright install.** Same caveat `ui-control-wiring.patch`'s own section
-gives for its three modules: the injectable seam (`read`/`act`) is the only
-place real I/O happens, specifically so the logic above it is provable
-without any of that - but proof without it is not a real run. The first
-real session - on a page you control, with `allowed_domains` set, watching
-the actual (non-headless) browser window it opens - is worth doing once
-deliberately before this is ever added to `[tools].enabled`.
+`test_browser_control_live.py`: nineteen scenarios, 66 checks, against a real
+headless Chromium on small pages served from this machine only (two names
+for the same local server stand in for "our site" and "a foreign site").
+**It skips cleanly** (and counts as passing) when Playwright or its Chromium
+is not installed, which is the normal state on your PC today.
+
+**Where this has and has not run.** Both suites passed in the Linux dev
+container with Playwright 1.63.0 and Chromium 141, headless. Not yet run on
+Windows, not with the visible browser window the module really uses, and
+not against a real customer-service widget. The first real session - on a
+page you control, with `allowed_domains` set, watching the actual browser
+window it opens - is still worth doing once, deliberately, before this is
+ever added to `[tools].enabled`.
 
 ---
 
