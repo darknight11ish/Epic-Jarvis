@@ -147,6 +147,12 @@ async function loadConnection() {
   dom.clearToken.disabled = !settings.hasToken;
   dom.bindAddress.value = settings.bindAddress || "";
   dom.storePath.textContent = settings.store || "";
+  // Saved by an older version that checked less; the backend is not started
+  // with it, so say so instead of letting the field look like it works.
+  if (settings.bindAddressProblem) {
+    report(dom.connectionStatus,
+      `The phone address above is not being used: ${settings.bindAddressProblem}`, "bad");
+  }
 }
 
 dom.saveConnection.addEventListener("click", () =>

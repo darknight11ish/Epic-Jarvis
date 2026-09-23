@@ -1,9 +1,57 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -183,6 +183,39 @@
+@@ -183,6 +183,87 @@
          return ""
  
  
++def _binds_every_interface(bind):
++    """True when listening on `bind` would listen on every network interface.
++
++    Asked of the resolver socket.bind itself uses, not of a list of strings:
++    "0", "0x0", "0.0" and "000.000.000.000" all bind 0.0.0.0, and a check for
++    the exact text "0.0.0.0" walked straight past them. "" binds every
++    interface too. A name that does not resolve is not a wildcard - the bind
++    fails on its own. The cases are in the desktop's
++    tests/bind-address-cases.json, shared with its own check.
++    """
++    import ipaddress
++    import socket
++    if not bind.strip():
++        return True
++    try:
++        infos = socket.getaddrinfo(bind, None, 0, socket.SOCK_STREAM)
++    except (OSError, UnicodeError, ValueError):
++        return False
++    for info in infos:
++        try:
++            if ipaddress.ip_address(str(info[4][0]).split("%")[0]).is_unspecified:
++                return True
++        except ValueError:
++            continue
++    return False
++
++
++def _refuse_every_interface(bind):
++    """Stop before listening on every network interface.
++
++    JARVIS_HUD_BIND and [security].bind_address exist so a phone can reach
++    this over a private mesh (Tailscale, NordVPN Meshnet). Every interface
++    also means the home Wi-Fi, the cafe Wi-Fi and whatever else this machine
++    is plugged into. The desktop app refuses to save such an address; this is
++    the same refusal for a backend started by hand.
++    """
++    if not _binds_every_interface(bind):
++        return
++    print()
++    print(f"  bind       {bind!r} means EVERY network interface on this machine -")
++    print("             the home or cafe Wi-Fi too, not just your private mesh.")
++    print("  Refusing to start. Set JARVIS_HUD_BIND (or [security].bind_address)")
++    print("  to this computer's own Tailscale or Meshnet address (100.x.x.x),")
++    print("  or leave it at 127.0.0.1 for this machine only.")
++    print()
++    raise SystemExit(2)
++
++
 +def _loopback_companion(bind, port, handler):
 +    """Also answer on 127.0.0.1 when the main listener is bound elsewhere.
 +
@@ -22,7 +70,7 @@
 +    loopback or the port is taken - the phone still works then, so say so
 +    rather than fail the whole boot over it.
 +    """
-+    if bind in ("127.0.0.1", "::1", "localhost", "0.0.0.0", "::", ""):
++    if bind in ("127.0.0.1", "::1", "localhost") or _binds_every_interface(bind):
 +        return None
 +    import threading
 +    try:
@@ -40,10 +88,12 @@
  HUD_TOKEN = _resolve_token()
  
  
-@@ -2324,6 +2357,8 @@
+@@ -2324,6 +2405,10 @@
      if not os.environ.get("HUD_TOKEN", "").strip() and HUD_TOKEN:
          print(f"  token      {TOKEN_FILE}")
          print("             (pair the phone with this; it was made on first run)")
++    # Before anything listens: every interface is not a private mesh.
++    _refuse_every_interface(bind)
 +    # Before the main socket, so the banner lists every address together.
 +    _loopback_companion(bind, HUD_PORT, Handler)
      print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

@@ -418,6 +418,10 @@ pub fn get_api_settings(app: AppHandle) -> serde_json::Value {
         "base": jarvis_base(&app),
         "hasToken": jarvis_token_for(&app).is_some(),
         "bindAddress": supervised_bind_address(&app).unwrap_or_default(),
+        // A value an older build saved that this one refuses; the backend is
+        // not started with it (sidecar.rs), and Settings says why.
+        "bindAddressProblem": supervised_bind_address(&app)
+            .and_then(|b| validate_bind_address(&b).err()),
         "store": SETTINGS_STORE,
     })
 }
@@ -443,33 +447,52 @@ pub fn supervised_bind_address(app: &AppHandle) -> Option<String> {
         .filter(|b| !b.is_empty())
 }
 
-/// Checks a bind address before it is persisted.
+/// Checks a bind address before it is persisted, and again before a
+/// supervised backend is started with it (`sidecar.rs`).
 ///
-/// This is not `validate_base`: a bind address is a bare host (an IP, a
-/// Tailscale `100.x` address, a hostname) with no scheme, path or port — the
-/// backend derives the port itself from `JARVIS_HUD_PORT`. Empty is always
-/// accepted; it means "clear this and let the backend bind loopback only",
-/// the safe default.
+/// This is not `validate_base`: a bind address is a bare host with no scheme,
+/// path or port — the backend derives the port itself from `JARVIS_HUD_PORT`.
+/// Empty is always accepted; it means "clear this and let the backend bind
+/// loopback only", the safe default.
 ///
-/// `0.0.0.0` is refused outright rather than merely discouraged.
-/// `docs/INSTALL.md` is explicit that this setting exists to reach a
-/// specific tailnet address, never the whole network: "Bind to the specific
+/// **What is accepted is a short list, not "anything but 0.0.0.0".** The
+/// Settings note promises this "never opens Jarvis to the whole internet, or
+/// even to your home Wi-Fi — only to your own devices on that private
+/// network", and `docs/INSTALL.md` says the same: "Bind to the specific
 /// Tailscale address, not 0.0.0.0. Then the port is not reachable from the
-/// café Wi-Fi at all." Typing the wildcard here would quietly turn a
-/// same-tailnet feature into a same-network one — every device on whatever
-/// Wi-Fi the machine is on, not just the owner's own tailnet — which is
-/// exactly the "no public tunnel" line this project does not cross.
-fn validate_bind_address(addr: &str) -> Result<(), String> {
+/// café Wi-Fi at all." Only three things keep that promise:
+///
+/// - an address in `100.64.0.0/10`, the range Tailscale and NordVPN Meshnet
+///   hand out;
+/// - a loopback address (`127.x`), which opens nothing;
+/// - `localhost`, the same.
+///
+/// A home-network address (`192.168.x`) would reach every device on that
+/// Wi-Fi, and a public one the internet, so both are refused.
+///
+/// **It used to refuse only the exact strings `0.0.0.0` and `::`.** The
+/// operating system's address parser is far looser than that: `0`, `0x0`,
+/// `0.0` and `000.000.000.000` all bind every interface (checked with a real
+/// `socket.bind`), and `100.64.012.3` binds `100.64.10.3`, because a leading
+/// zero means octal. So the check is now "parse it strictly as four plain
+/// numbers, or it is refused" — and anything the OS would read as the
+/// wildcard gets the wildcard's own explanation. The cases live in
+/// `jarvis-desktop/tests/bind-address-cases.json`, which this file's tests,
+/// the backend's `test_loopback_too.py` and `tests/tailscale.mjs` all read.
+pub(crate) fn validate_bind_address(addr: &str) -> Result<(), String> {
     if addr.is_empty() {
         return Ok(()); // clearing it falls back to loopback-only
     }
-    if addr == "0.0.0.0" || addr == "::" {
+    if binds_every_interface(addr) {
         return Err(
             "refusing to bind every network interface (0.0.0.0) — set this \
              computer's own Tailscale or NordVPN Meshnet address instead, so \
              Jarvis is reachable from your private network and nowhere else"
                 .to_string(),
         );
+    }
+    if addr.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("the bind address contains whitespace or control characters".to_string());
     }
     if addr.contains('/') || addr.contains('?') || addr.contains('#') || addr.contains('@') {
         return Err(
@@ -485,10 +508,82 @@ fn validate_bind_address(addr: &str) -> Result<(), String> {
                 .to_string(),
         );
     }
-    if addr.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err("the bind address contains whitespace or control characters".to_string());
+    if addr.eq_ignore_ascii_case("localhost") {
+        return Ok(());
     }
-    Ok(())
+    // Strict: exactly four decimal numbers, no leading zeros. Anything looser
+    // is refused rather than guessed at, because the OS would guess
+    // differently (see above).
+    let ip: std::net::Ipv4Addr = addr.parse().map_err(|_| {
+        format!(
+            "\"{addr}\" is not an address this can use — type this computer's \
+             own Tailscale or NordVPN Meshnet address as four plain numbers, \
+             like 100.64.1.5 (the Tailscale or NordVPN app shows it)"
+        )
+    })?;
+    if ip.is_loopback() {
+        return Ok(());
+    }
+    let [a, b, _, _] = ip.octets();
+    if a == 100 && (64..=127).contains(&b) {
+        return Ok(());
+    }
+    Err(format!(
+        "{addr} is not a Tailscale or NordVPN Meshnet address (those start \
+         with 100.64 up to 100.127). Binding it could open Jarvis to your \
+         home Wi-Fi or the internet, so it is refused"
+    ))
+}
+
+/// True when the operating system would read `addr` as "every interface".
+///
+/// A strict parse catches `0.0.0.0`, `::` and the other IPv6 spellings. The
+/// rest is `inet_aton`, the lenient parser `socket.bind` falls back to, which
+/// reads `0`, `0x0`, `0.0` and `000.000.000.000` as `0.0.0.0` too.
+fn binds_every_interface(addr: &str) -> bool {
+    if let Ok(ip) = addr.parse::<std::net::IpAddr>() {
+        return ip.is_unspecified();
+    }
+    inet_aton(addr) == Some(0)
+}
+
+/// The classic BSD `inet_aton` reading of a numeric host: one to four parts
+/// separated by dots, each decimal, `0x` hex or leading-zero octal, the last
+/// part filling whatever bytes are left. `None` when it is not numeric.
+fn inet_aton(s: &str) -> Option<u32> {
+    let parts: Vec<&str> = s.split('.').collect();
+    if parts.is_empty() || parts.len() > 4 {
+        return None;
+    }
+    let mut values = Vec::with_capacity(parts.len());
+    for part in &parts {
+        let (digits, radix) =
+            if let Some(hex) = part.strip_prefix("0x").or_else(|| part.strip_prefix("0X")) {
+                (hex, 16)
+            } else if part.len() > 1 && part.starts_with('0') {
+                (&part[1..], 8)
+            } else {
+                (*part, 10)
+            };
+        if digits.is_empty() {
+            // "0x" alone is not a number; a lone "0" was handled as decimal.
+            return None;
+        }
+        values.push(u64::from_str_radix(digits, radix).ok()?);
+    }
+    let (last, head) = values.split_last()?;
+    if head.iter().any(|&v| v > 0xff) {
+        return None;
+    }
+    let tail_bits = 8 * (4 - head.len() as u32);
+    if tail_bits < 64 && *last >= (1u64 << tail_bits) {
+        return None;
+    }
+    let mut out: u64 = 0;
+    for (i, &v) in head.iter().enumerate() {
+        out |= v << (24 - 8 * i as u32);
+    }
+    Some((out | *last) as u32)
 }
 
 /// Persists the base URL, the token and the supervised bind address —
@@ -1844,12 +1939,57 @@ mod capture_tests {
         assert!(validate_bind_address("").is_ok());
     }
 
-    /// The one input this exists to stop: the wildcard would turn a
-    /// same-tailnet feature into a same-network one.
+    /// The shared table: `jarvis-desktop/tests/bind-address-cases.json`.
+    /// The backend's `test_loopback_too.py` binds a real socket to every
+    /// `every_interface` entry to prove the OS really reads it as 0.0.0.0, so
+    /// this list is checked against the operating system, not against itself.
+    fn bind_cases(key: &str) -> Vec<String> {
+        let table: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/bind-address-cases.json"))
+                .expect("bind-address-cases.json is valid JSON");
+        table[key]
+            .as_array()
+            .unwrap_or_else(|| panic!("bind-address-cases.json has no {key} list"))
+            .iter()
+            .map(|v| v.as_str().expect("every case is a string").to_string())
+            .collect()
+    }
+
+    /// The one input this exists to stop, in every spelling the OS accepts:
+    /// the wildcard would turn a same-tailnet feature into a same-network one.
     #[test]
-    fn the_wildcard_addresses_are_refused() {
-        assert!(validate_bind_address("0.0.0.0").is_err());
-        assert!(validate_bind_address("::").is_err());
+    fn every_spelling_of_the_wildcard_is_refused_as_the_wildcard() {
+        let cases = bind_cases("every_interface");
+        assert!(
+            cases.iter().any(|c| c == "0"),
+            "the table lost the short forms"
+        );
+        for case in cases {
+            let err = validate_bind_address(&case)
+                .expect_err(&format!("{case:?} binds every interface and was accepted"));
+            assert!(err.contains("every network interface"), "{case:?}: {err}");
+        }
+    }
+
+    /// Non-canonical numbers, home-network and public addresses, and
+    /// anything that is not a bare host.
+    #[test]
+    fn everything_else_the_table_refuses_is_refused() {
+        for case in bind_cases("refused") {
+            assert!(
+                validate_bind_address(&case).is_err(),
+                "{case:?} should have been refused"
+            );
+        }
+    }
+
+    /// CONTROL: the ordinary cases still save, or this is just a deny-all.
+    #[test]
+    fn the_tables_good_addresses_are_accepted() {
+        for case in bind_cases("accepted") {
+            let got = validate_bind_address(&case);
+            assert!(got.is_ok(), "{case:?} should have been accepted: {got:?}");
+        }
     }
 
     #[test]

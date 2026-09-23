@@ -2569,6 +2569,20 @@ through the same handler for a mesh bind, a warning instead of a crash when
 `127.0.0.1` is taken, and (installed file only) `main()` calling it before the
 main socket opens.
 
+**Every spelling of "every interface" is now refused at startup** (added
+2026-09-23). The desktop's Settings refused only the exact text `0.0.0.0`,
+and this patch's own "is it a wildcard?" test was a list of strings - but
+`0`, `0x0`, `0.0` and `000.000.000.000` all bind every interface too
+(checked with a real `socket.bind`). `_binds_every_interface` now asks the
+same resolver `socket.bind` uses, and `main()` calls
+`_refuse_every_interface(bind)` before anything listens: it prints why and
+exits with code 2. The spellings live in
+`jarvis-desktop/tests/bind-address-cases.json`, shared with the desktop's own
+check; the test binds a real socket to each one first, so the list is proven
+against the operating system rather than against itself. **If you start the
+backend by hand with `JARVIS_HUD_BIND=0.0.0.0`, it will now refuse** - use the
+computer's own Tailscale or Meshnet address instead.
+
 ---
 
 # `browser-control-wiring` — Jarvis can drive a browser, but the switch stays off

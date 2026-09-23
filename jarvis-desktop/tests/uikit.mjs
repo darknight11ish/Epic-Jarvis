@@ -385,7 +385,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "get_api_settings":
             return { base: window.__apiSettings.base, hasToken: window.__apiSettings.hasToken,
                      bindAddress: window.__apiSettings.bindAddress,
-                     store: "C:\\Users\\pcadmin\\AppData\\Roaming\\jarvis-desktop.json" };
+                     bindAddressProblem: window.__apiSettings.bindAddressProblem || null,
+                     store:"C:\\Users\\pcadmin\\AppData\\Roaming\\jarvis-desktop.json" };
           case "set_api_settings": {
             window.__calls.push(["__savedApiSettings", args]);
             if (window.__bindAddressRefuses && "bindAddress" in args &&

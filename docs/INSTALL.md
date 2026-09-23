@@ -378,11 +378,23 @@ takes the `100.x` address; the phone takes the name, followed by `:4719` — the
 Tailscale name ending in `.ts.net`, or the Meshnet name ending in `.nord`
 (for example `marioirelan11-alps.nord:4719`).
 
-That field refuses `0.0.0.0` outright, on either side: the setting will not
-save it, and if it somehow reached the backend, `jarvis_hud._bind_address()`
-would still be binding every interface on the machine, not just the tailnet.
-Type the specific Tailscale or Meshnet address, never the wildcard — that is
-what keeps the port unreachable from the café Wi-Fi.
+That field only takes an address that starts with `100.64` up to `100.127`
+(the range Tailscale and NordVPN Meshnet hand out), `127.0.0.1` or
+`localhost`. It refuses `0.0.0.0` — "every network interface", which
+includes the café Wi-Fi — in every spelling, including the short ones such as
+`0` and `0x0` that Windows reads the same way (an older version only caught
+the exact text `0.0.0.0`). It also refuses a home-network address such as
+`192.168.x.x`, because that would open Jarvis to everything on your Wi-Fi,
+and a name such as `mypc.nord`, because it cannot tell what a name points
+at. A value an older version saved that is refused now is not passed to the
+backend at all; Settings says so in red.
+
+With `bind-wildcard.patch` the backend refuses too: started with
+`JARVIS_HUD_BIND` (or `bind_address`) set to any spelling of "every
+interface", it prints why and stops instead of listening. Type the specific
+Tailscale address, never the wildcard — that is what keeps the port
+unreachable from the café Wi-Fi. (The Windows Firewall still asks about
+`python.exe` the first time; see the firewall step.)
 
 **It does NOT keep Windows Firewall out of the picture.** This page used to
 say it did, and that was wrong. The first time the backend listens on the

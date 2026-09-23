@@ -468,8 +468,22 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
     // backend to listen anywhere but loopback" (docs/INSTALL.md §3.2) meant
     // a backend this app started was unreachable from the phone no matter
     // what was set on the phone's side.
+    //
+    // Checked again here, not only when Settings saves it: a value saved by
+    // an older build, which refused only the exact strings "0.0.0.0" and
+    // "::", could be "0" or "0x0" - both of which bind every interface.
+    // Such a value is dropped (the backend stays loopback-only) and the
+    // reason is logged; the address itself is not secret.
     if let Some(bind) = commands::supervised_bind_address(app) {
-        command.env("JARVIS_HUD_BIND", bind);
+        match commands::validate_bind_address(&bind) {
+            Ok(()) => {
+                command.env("JARVIS_HUD_BIND", bind);
+            }
+            Err(why) => logfile::log(&format!(
+                "[jarvis] not passing the saved bind address {bind:?} to the backend: {why}. \
+                 It stays on this computer only until Settings holds a valid address."
+            )),
+        }
     }
 
     // The whole reason the backend's failures were invisible. A release build
