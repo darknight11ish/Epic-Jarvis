@@ -26,8 +26,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -197,24 +201,83 @@ fun Dot(color: Color, modifier: Modifier = Modifier, size: Int = 8) {
  * stop a screen showing what it last knew - but a screen that shows last-known
  * data and does not say so is the one thing that rule cannot tolerate, because
  * the owner cannot tell "nothing is waiting" from "I stopped being told".
+ *
+ * "Live." on its own describes the event stream, not the data under it. Mind
+ * and Inbox are read once when they open, so ten minutes later a bare "Live."
+ * sat over ten-minute-old numbers. Given [readWhat], the line splits into its
+ * two halves - "Link live · board read 2 min ago" - and the age ticks on a
+ * slow timer (see [rememberTickingNow]), not every frame.
+ *
+ * @param fetchedAtMs when the data below was read. 0 means not yet, and reads
+ *   "Reading…". The default, 1, means the caller does not time its data, and
+ *   keeps the old bare "Live.".
+ * @param readWhat what was read, e.g. "Board" or "Inbox". Null keeps the old
+ *   wording.
+ * @param refreshing true while a re-read is in flight.
  */
 @Composable
-fun Freshness(link: LinkState, stale: Boolean, fetchedAtMs: Long = 1L) {
+fun Freshness(
+    link: LinkState,
+    stale: Boolean,
+    fetchedAtMs: Long = 1L,
+    readWhat: String? = null,
+    refreshing: Boolean = false,
+) {
     val chrome = LocalChrome.current
     val bad = stale || link != LinkState.CONNECTED
+    val timed = readWhat != null && fetchedAtMs > 1L
+    // Only a line that shows an age needs a clock. Called conditionally on
+    // purpose: an untimed line should not wake up every few seconds.
+    val age = if (timed) ageText(rememberTickingNow(fetchedAtMs) - fetchedAtMs) else null
+    val what = readWhat?.lowercase()
     Row(verticalAlignment = Alignment.CenterVertically) {
         Dot(if (bad) chrome.warnMark else chrome.okMark)
         Spacer(Modifier.width(10.dp))
         Text(
             when {
+                link != LinkState.CONNECTED && age != null ->
+                    "Not connected. Everything below is last known, read $age."
                 link != LinkState.CONNECTED -> "Not connected. Everything below is last known."
+                stale && age != null ->
+                    "The stream is stale. Everything below is last known, read $age."
                 stale -> "The stream is stale. Everything below is last known."
                 fetchedAtMs == 0L -> "Reading…"
+                age != null && refreshing -> "Link live · $what read $age · refreshing…"
+                age != null -> "Link live · $what read $age"
                 else -> "Live."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = if (bad) chrome.warnInk else chrome.textMid,
         )
+    }
+}
+
+/**
+ * The wall clock, re-read every [periodMs] rather than every frame - for
+ * "read 2 min ago" lines, which only need to move once a minute. Restarts
+ * (and so re-reads at once) whenever [key] changes, so a fresh read never
+ * shows an age worked out from a clock that is still up to a period behind.
+ */
+@Composable
+fun rememberTickingNow(key: Any? = null, periodMs: Long = 15_000L): Long {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(key, periodMs) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(periodMs)
+        }
+    }
+    return now
+}
+
+/** "just now", "4 min ago", "2 h ago" - coarse on purpose, and never negative. */
+fun ageText(elapsedMs: Long): String {
+    val s = elapsedMs.coerceAtLeast(0L) / 1000L
+    return when {
+        s < 60L -> "just now"
+        s < 3_600L -> "${s / 60L} min ago"
+        s < 86_400L -> "${s / 3_600L} h ago"
+        else -> "${s / 86_400L} d ago"
     }
 }
 

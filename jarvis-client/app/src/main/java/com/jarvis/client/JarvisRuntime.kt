@@ -51,9 +51,16 @@ import kotlinx.serialization.json.JsonPrimitive
  *
  * Deliberately untyped. §4 documents that these routes exist and what they are
  * for, and does not document their fields — so a data class here would be
- * invented keys, and invented keys fail silently as an empty panel. Null means
- * the route was not reachable or not present, which the screen says plainly
- * rather than rendering as zero.
+ * invented keys, and invented keys fail silently as an empty panel.
+ *
+ * A null payload on its own no longer says WHY it is null. It used to be the
+ * only signal, and it meant three different things at once: not read yet, the
+ * read failed, and this backend does not have the route. The screen showed
+ * all three as "Not available on this backend", which was wrong in two cases
+ * out of three - and for `/api/content-risk` the wrong case was the dangerous
+ * one, because a timed-out read made the rush-latch banner simply vanish
+ * under a line that said "Live.". Each payload now has a [SectionRead] beside
+ * it that says which of the four it is.
  */
 data class BrainSnapshot(
     val compute: kotlinx.serialization.json.JsonObject? = null,
@@ -61,8 +68,90 @@ data class BrainSnapshot(
     val ledger: kotlinx.serialization.json.JsonObject? = null,
     val skills: kotlinx.serialization.json.JsonObject? = null,
     val initiative: kotlinx.serialization.json.JsonObject? = null,
+    /**
+     * Unlike the others, NOT cleared by a failed read: it keeps the last
+     * answer that did come back, with [contentRiskAtMs] saying how old that
+     * is. A rush latch that disappears because the check failed reads as
+     * "nothing is raising the tier", which the phone does not know.
+     */
     val contentRisk: kotlinx.serialization.json.JsonObject? = null,
+    /** When the whole board was last read. 0 means never, on this run of the app. */
     val fetchedAtMs: Long = 0L,
+    val computeRead: SectionRead = SectionRead.Reading,
+    val memoryRead: SectionRead = SectionRead.Reading,
+    val ledgerRead: SectionRead = SectionRead.Reading,
+    val skillsRead: SectionRead = SectionRead.Reading,
+    val initiativeRead: SectionRead = SectionRead.Reading,
+    val contentRiskRead: SectionRead = SectionRead.Reading,
+    /** When [contentRisk] was last read successfully. 0 means never. */
+    val contentRiskAtMs: Long = 0L,
+    /**
+     * True while a re-read is in flight, so Refresh can say "Refreshing…".
+     * Without it, a tap that brought back identical data looked exactly like
+     * a tap that did nothing.
+     */
+    val refreshing: Boolean = false,
+    /**
+     * The last model switch or install asked for from the phone, while its
+     * approval card may still be waiting. Carried here, rather than in a flow
+     * of its own, because it is shown on the same screen as the rest of this
+     * snapshot and nowhere else.
+     */
+    val modelRequest: ModelRequest? = null,
+)
+
+/**
+ * How one section's last read came back. Four states, drawn four ways:
+ * "Reading…", "Not on this backend", "Could not read this: <reason>" with a
+ * Retry, or the data itself.
+ */
+sealed interface SectionRead {
+    /** Not answered yet on this run of the app. */
+    data object Reading : SectionRead
+
+    /** The route answered. The payload sits in the matching field. */
+    data object Read : SectionRead
+
+    /**
+     * 404 or 503: the route or the subsystem behind it is not on this
+     * backend. A fact about the desktop, not a fault, so it gets no Retry.
+     */
+    data object Absent : SectionRead
+
+    /** Anything else - a timeout, a 500, a body that would not parse. */
+    data class Failed(val reason: String) : SectionRead
+}
+
+/**
+ * A model switch or install the phone asked for. Asking raises an approval
+ * card on Home (tier `ask` on the server); nothing about the model changes
+ * until that card is approved.
+ */
+data class ModelRequest(
+    /** True for an install (a download), false for a switch. */
+    val install: Boolean,
+    val ref: String,
+    /**
+     * The card this request raised, when it could be told apart from the
+     * cards already waiting; null when it could not. Only ever used to
+     * scroll Home to the card - never to decide it.
+     */
+    val cardId: String?,
+    val atMs: Long,
+)
+
+/**
+ * The Inbox's own read state. The screen used to take none, so it said
+ * "Live. Nothing waiting." before its first read had come back, and again
+ * after a read that failed.
+ */
+data class InboxRead(
+    val digest: SectionRead = SectionRead.Reading,
+    val undo: SectionRead = SectionRead.Reading,
+    val jobs: SectionRead = SectionRead.Reading,
+    /** When the last read finished. 0 means never, on this run of the app. */
+    val fetchedAtMs: Long = 0L,
+    val refreshing: Boolean = false,
 )
 
 /** Whether the event stream is up. Separate from whether Jarvis is busy. */
@@ -202,9 +291,10 @@ object JarvisRuntime {
 
     /**
      * `/api/models`, or null when this backend does not offer the capability
-     * or has not been asked yet. Switching is the one config change the owner
-     * allowed onto the phone (CLAUDE.md, 2026-09-18) - between models the
-     * desktop already has, never installing one.
+     * or has not been asked yet. Switching between models the desktop already
+     * has was allowed onto the phone on 2026-09-18, and installing a typed
+     * model name on 2026-09-20 (CLAUDE.md) - both only ever ASK, through an
+     * approval card. Browsing what could be installed is still off the phone.
      */
     private val _models = MutableStateFlow<ModelsInfo?>(null)
     val models: StateFlow<ModelsInfo?> = _models.asStateFlow()
@@ -236,12 +326,21 @@ object JarvisRuntime {
     private val _undo = MutableStateFlow<List<UndoEntry>>(emptyList())
     val undo: StateFlow<List<UndoEntry>> = _undo.asStateFlow()
 
+    private val _inboxRead = MutableStateFlow(InboxRead())
+
+    /** Whether each Inbox list has been read, failed, or is not on this backend. */
+    val inboxRead: StateFlow<InboxRead> = _inboxRead.asStateFlow()
+
     private val _jobs = MutableStateFlow<List<JobRecord>>(emptyList())
     val jobs: StateFlow<List<JobRecord>> = _jobs.asStateFlow()
 
     private val _brain = MutableStateFlow(BrainSnapshot())
 
-    /** What the brain screen shows. Fetched on demand, never polled. */
+    /**
+     * What the brain screen shows. Fetched on demand - when the screen opens,
+     * on Refresh or Retry - and polled only if the screen is given an
+     * auto-refresh interval, which is off unless the owner turns it on.
+     */
     val brain: StateFlow<BrainSnapshot> = _brain.asStateFlow()
 
     private val _absent = MutableStateFlow<Set<String>>(emptySet())
@@ -829,15 +928,43 @@ object JarvisRuntime {
             _notice.value = it
             return ApiResult.Failed(ApiError.Unreachable(it))
         }
+        val waitingBefore = _pending.value.map { it.id }.toSet()
         val result = api.switchModel(ref)
         when (result) {
             is ApiResult.Ok -> {
                 refreshPending()
                 refreshModels()
+                // Said on the Mind screen, where the tap was. It used to say
+                // nothing at all: the button showed "…" for a moment and then
+                // looked exactly as before, which reads as broken and invites
+                // a second tap.
+                noteModelRequest(install = false, ref = ref, waitingBefore = waitingBefore)
             }
             is ApiResult.Failed -> _notice.value = describe(result.error)
         }
         return result
+    }
+
+    /**
+     * Records a switch or install that raised a card, for the Mind screen's
+     * "Waiting for your approval" line.
+     *
+     * The POST answers with no id, so the card is found by difference: the
+     * one waiting now that was not waiting before the ask. If that is not
+     * exactly one card - the re-read failed, or something else arrived at
+     * the same moment - [ModelRequest.cardId] is null and Home is opened
+     * without scrolling to a particular card. Either way the id is only
+     * used to scroll; nothing is ever decided from here.
+     */
+    private fun noteModelRequest(install: Boolean, ref: String, waitingBefore: Set<String>) {
+        val fresh = _pending.value.filter { it.id !in waitingBefore }
+        val request = ModelRequest(
+            install = install,
+            ref = ref.trim(),
+            cardId = fresh.singleOrNull()?.id,
+            atMs = System.currentTimeMillis(),
+        )
+        _brain.update { it.copy(modelRequest = request) }
     }
 
     /** Back to the previous model. Tier `auto` on the server - never waits. */
@@ -883,12 +1010,16 @@ object JarvisRuntime {
         // typed, the same way it already disables Use/Roll back. Trimmed
         // rather than validated further: what counts as a real model name
         // is the desktop's call, not this app's to second-guess.
+        val waitingBefore = _pending.value.map { it.id }.toSet()
         val result = api.installModel(ref.trim())
         when (result) {
             is ApiResult.Ok -> {
-                _notice.value = "Install requested — approve it like any other " +
-                    "change to start the download."
                 refreshPending()
+                // In the Model plate, with a way to reach the card, rather than
+                // the shared notice it used to set. That notice said "approve
+                // it" without saying where, and the card is on Home, not on
+                // the screen the owner was looking at.
+                noteModelRequest(install = true, ref = ref, waitingBefore = waitingBefore)
             }
             // describeDraft, not describe: a 404 here almost certainly means a
             // desktop old enough to predate this route, and describe's own
@@ -936,6 +1067,16 @@ object JarvisRuntime {
         when (val r = api.pending()) {
             is ApiResult.Ok -> {
                 _pending.value = r.value
+                // A model request whose card has been answered - approved,
+                // denied or expired - is no longer waiting, so the Mind
+                // screen stops saying it is. One whose card could not be
+                // identified is dropped by the next refreshBrain instead.
+                val waitingOn = _brain.value.modelRequest?.cardId
+                if (waitingOn != null && r.value.none { it.id == waitingOn }) {
+                    _brain.update { b ->
+                        if (b.modelRequest?.cardId == waitingOn) b.copy(modelRequest = null) else b
+                    }
+                }
                 _absent.value = _absent.value - "approvals"
                 // What is on screen is now what the desktop holds. This is the
                 // only thing that earns the gate the right to open.
@@ -982,23 +1123,72 @@ object JarvisRuntime {
      * every event would undo the battery saving the single stream bought.
      */
     suspend fun refreshInbox() {
-        val missing = mutableSetOf<String>()
-        fun <T> note(key: String, result: ApiResult<T>, apply: (T) -> Unit) {
-            when (result) {
-                is ApiResult.Ok -> apply(result.value)
-                is ApiResult.Failed ->
-                    if (result.error == ApiError.NotAvailable) missing += key
+        inboxReadsInFlight.incrementAndGet()
+        _inboxRead.update { it.copy(refreshing = true) }
+        try {
+            val missing = mutableSetOf<String>()
+            // Every failure used to be dropped here except NotAvailable, so a
+            // timed-out read left the old list on screen - or, on the first
+            // read, an empty one under "Live. Nothing waiting." A failed list
+            // keeps its last contents (they are still true as of when they
+            // were read) and now says it could not be re-read.
+            fun <T> note(key: String, result: ApiResult<T>, apply: (T) -> Unit): SectionRead =
+                when (result) {
+                    is ApiResult.Ok -> {
+                        apply(result.value)
+                        SectionRead.Read
+                    }
+                    is ApiResult.Failed -> {
+                        if (result.error == ApiError.NotAvailable) missing += key
+                        readOf(result.error)
+                    }
+                }
+            val digest = note("digest", api.digest()) { _digest.value = it }
+            val undo = note("undo", api.undo()) { _undo.value = it }
+            val jobs = note("jobs", api.jobs()) { _jobs.value = it }
+            // Only this function's own three keys. It used to assign the whole set,
+            // so opening the inbox erased the "approvals" flag that refreshPending
+            // had set — and the approvals screen went from "there is no approval
+            // queue here" to an empty list with no explanation, which the comment
+            // in refreshPending calls true and deeply misleading.
+            _absent.value = _absent.value - INBOX_KEYS + missing
+            _inboxRead.update {
+                it.copy(
+                    digest = digest,
+                    undo = undo,
+                    jobs = jobs,
+                    fetchedAtMs = System.currentTimeMillis(),
+                )
             }
+        } finally {
+            // In a finally, so leaving the screen mid-read (which cancels the
+            // LaunchedEffect that started it) cannot strand "Refreshing…".
+            val left = inboxReadsInFlight.decrementAndGet()
+            _inboxRead.update { it.copy(refreshing = left > 0) }
         }
-        note("digest", api.digest()) { _digest.value = it }
-        note("undo", api.undo()) { _undo.value = it }
-        note("jobs", api.jobs()) { _jobs.value = it }
-        // Only this function's own three keys. It used to assign the whole set,
-        // so opening the inbox erased the "approvals" flag that refreshPending
-        // had set — and the approvals screen went from "there is no approval
-        // queue here" to an empty list with no explanation, which the comment
-        // in refreshPending calls true and deeply misleading.
-        _absent.value = _absent.value - INBOX_KEYS + missing
+    }
+
+    /** Overlapping refreshInbox calls, so the first to finish does not clear "refreshing" early. */
+    private val inboxReadsInFlight = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** Overlapping refreshBrain calls; same reason as [inboxReadsInFlight]. */
+    private val brainReadsInFlight = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
+     * 404 and 503 mean "not on this backend"; everything else is a failure
+     * worth a Retry. Worded by [describe], the same sentences every notice
+     * uses - except NotFound, whose notice wording ("not a Jarvis server")
+     * is about the address as a whole and would be wrong for one route.
+     */
+    private fun readOf(e: ApiError): SectionRead = when (e) {
+        ApiError.NotFound, ApiError.NotAvailable -> SectionRead.Absent
+        else -> SectionRead.Failed(describe(e))
+    }
+
+    /** The payload and how it came back, from one probe. */
+    private fun ApiResult<JsonObject>.asSection(): Pair<JsonObject?, SectionRead> = when (this) {
+        is ApiResult.Ok -> value to SectionRead.Read
+        is ApiResult.Failed -> null to readOf(error)
     }
 
     /**
@@ -1011,47 +1201,98 @@ object JarvisRuntime {
      * the battery saving the single stream bought, to animate numbers that are
      * not moving.
      *
-     * Each probe is independent and a 404 simply means that route is absent on
-     * this backend — the screen renders the sections it got and says nothing
-     * about the ones it did not, rather than showing an empty panel that looks
-     * broken.
+     * Each probe is independent. A 404 or 503 means that route is absent on
+     * this backend, and any other failure means the read did not work; the
+     * snapshot records which, per section ([SectionRead]), so the screen can
+     * tell "not here" from "could not read" from "still reading".
      */
     suspend fun refreshBrain() {
-        // Together, not one after another. This was nine serial round trips
-        // - and it ran again after EVERY memory decision, so keeping ten facts
-        // cost ninety requests. Each read is independent of the others, so
-        // they overlap; the screen still gets one snapshot, stamped once.
-        coroutineScope {
-            val status = async { refreshStatus() }
-            val attention = async { refreshAttention() }
-            val jobs = async { api.jobs().onOk { _jobs.value = it } }
-            val models = async { refreshModels() }
-            val compute = async { api.probe("/api/compute").orNull() }
-            val memory = async { api.probe("/api/memory/pending").orNull() }
-            val ledger = async { api.probe("/api/ledger").orNull() }
-            val skills = async { api.probe("/api/skills").orNull() }
-            val initiative = async { api.probe("/api/initiative").orNull() }
-            val contentRisk = async { api.probe("/api/content-risk").orNull() }
-            _brain.value = BrainSnapshot(
-                compute = compute.await(),
-                memory = memory.await(),
-                ledger = ledger.await(),
-                skills = skills.await(),
-                initiative = initiative.await(),
-                contentRisk = contentRisk.await(),
-                fetchedAtMs = System.currentTimeMillis(),
-            )
-            status.await()
-            attention.await()
-            jobs.await()
-            models.await()
+        brainReadsInFlight.incrementAndGet()
+        _brain.update { it.copy(refreshing = true) }
+        try {
+            // Together, not one after another. This was nine serial round trips
+            // - and it ran again after EVERY memory decision, so keeping ten facts
+            // cost ninety requests. Each read is independent of the others, so
+            // they overlap; the screen still gets one snapshot, stamped once.
+            coroutineScope {
+                val status = async { refreshStatus() }
+                val attention = async { refreshAttention() }
+                val jobs = async { api.jobs().onOk { _jobs.value = it } }
+                val models = async { refreshModels() }
+                val compute = async { api.probe("/api/compute").asSection() }
+                val memory = async { api.probe("/api/memory/pending").asSection() }
+                val ledger = async { api.probe("/api/ledger").asSection() }
+                val skills = async { api.probe("/api/skills").asSection() }
+                val initiative = async { api.probe("/api/initiative").asSection() }
+                val contentRisk = async { api.probe("/api/content-risk").asSection() }
+                val (computeData, computeRead) = compute.await()
+                val (memoryData, memoryRead) = memory.await()
+                val (ledgerData, ledgerRead) = ledger.await()
+                val (skillsData, skillsRead) = skills.await()
+                val (initiativeData, initiativeRead) = initiative.await()
+                val (riskData, riskRead) = contentRisk.await()
+                val now = System.currentTimeMillis()
+                _brain.update { prev ->
+                    BrainSnapshot(
+                        compute = computeData,
+                        memory = memoryData,
+                        ledger = ledgerData,
+                        skills = skillsData,
+                        initiative = initiativeData,
+                        // The one section that keeps its last answer through a
+                        // failed read - see BrainSnapshot.contentRisk. Absent
+                        // clears it: a backend with no scanner has no latch.
+                        contentRisk = when (riskRead) {
+                            is SectionRead.Failed -> prev.contentRisk
+                            else -> riskData
+                        },
+                        contentRiskAtMs = when (riskRead) {
+                            SectionRead.Read -> now
+                            is SectionRead.Failed -> prev.contentRiskAtMs
+                            else -> 0L
+                        },
+                        fetchedAtMs = now,
+                        computeRead = computeRead,
+                        memoryRead = memoryRead,
+                        ledgerRead = ledgerRead,
+                        skillsRead = skillsRead,
+                        initiativeRead = initiativeRead,
+                        contentRiskRead = riskRead,
+                        refreshing = prev.refreshing,
+                        // Kept only while its card is known to still be
+                        // waiting. One whose card could not be identified
+                        // lasts until this next read of the board, and no
+                        // longer - better to drop the line than to keep
+                        // claiming a card is waiting after it was answered.
+                        // `_pending` is read here, inside the update, so a
+                        // request noted while these reads were out is checked
+                        // against the queue as it is now, not as it was.
+                        modelRequest = prev.modelRequest?.takeIf { req ->
+                            req.cardId != null && _pending.value.any { it.id == req.cardId }
+                        },
+                    )
+                }
+                status.await()
+                attention.await()
+                jobs.await()
+                models.await()
+            }
+        } finally {
+            val left = brainReadsInFlight.decrementAndGet()
+            _brain.update { it.copy(refreshing = left > 0) }
         }
     }
 
-    /** Just the review queue - all a memory decision can have changed. */
+    /**
+     * Just the review queue - all a memory decision can have changed.
+     *
+     * Leaves [BrainSnapshot.fetchedAtMs] alone. It used to stamp it, which
+     * made the screen claim the whole board had just been read when only
+     * this one section had.
+     */
     suspend fun refreshMemoryQueue() {
-        val memory = api.probe("/api/memory/pending").orNull()
-        _brain.update { it.copy(memory = memory, fetchedAtMs = System.currentTimeMillis()) }
+        val (memory, read) = api.probe("/api/memory/pending").asSection()
+        _brain.update { it.copy(memory = memory, memoryRead = read) }
     }
 
     /**
@@ -1066,8 +1307,6 @@ object JarvisRuntime {
         if (result is ApiResult.Failed) _notice.value = describe(result.error)
         return result
     }
-
-    private fun <T> ApiResult<T>.orNull(): T? = (this as? ApiResult.Ok)?.value
 
     suspend fun revert(entry: UndoEntry): ApiResult<Unit> {
         actionBlocker()?.let {
@@ -1127,9 +1366,18 @@ object JarvisRuntime {
         return result
     }
 
-    /** Marks the brief read. Marking read is not approving anything in it. */
+    /**
+     * Marks the brief read. Marking read is not approving anything in it.
+     *
+     * A failure is reported like every other call's. It used to be dropped
+     * whole - `onOk` with no other branch - so a "Mark read" that did not
+     * reach the desktop left the brief exactly as it was, with no word why.
+     */
     suspend fun markDigestSeen() {
-        api.digestSeen().onOk { refreshInbox() }
+        when (val result = api.digestSeen()) {
+            is ApiResult.Ok -> refreshInbox()
+            is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
     }
 
     suspend fun setMuted(muted: Boolean) {
