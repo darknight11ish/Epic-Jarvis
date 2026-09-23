@@ -1563,7 +1563,9 @@ class MainActivity : FragmentActivity() {
      * An unavailable biometric is not a refusal: declining to let the owner
      * answer their own desktop because no fingerprint is enrolled would be a
      * lock on the wrong door, and the pairing token already authorises the
-     * request. A *dismissed* prompt is a refusal, and nothing is sent.
+     * request. A *dismissed* prompt is a refusal, and nothing is sent. A check
+     * that exists but could not be shown just now (even after a retry) holds
+     * the decision and says so - it is not waved through.
      */
     private suspend fun confirmed(item: PendingItem): Boolean {
         if (!BiometricGate.required(item)) return true
@@ -1571,6 +1573,13 @@ class MainActivity : FragmentActivity() {
             BiometricGate.Outcome.CONFIRMED -> true
             BiometricGate.Outcome.UNAVAILABLE -> true
             BiometricGate.Outcome.CANCELLED -> false
+            BiometricGate.Outcome.FAILED -> {
+                JarvisRuntime.setNotice(
+                    "The fingerprint or PIN check could not be shown just now, so nothing was sent. " +
+                        "Try again in a moment.",
+                )
+                false
+            }
         }
     }
 

@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.jarvis.client.net.PendingItem
 import kotlin.coroutines.resume
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
@@ -46,22 +47,68 @@ object BiometricGate {
         CANCELLED,
 
         /**
-         * No enrolled biometric, or the hardware is unavailable. The decision
+         * This phone has no way to check at all: nothing enrolled - no
+         * fingerprint and no screen-lock PIN - or no hardware. The decision
          * proceeds: refusing to let the owner answer their own desktop because
          * they have no fingerprint enrolled would be a lock on the wrong door,
-         * and the token already authorises the request.
+         * and the token already authorises the request. (The owner's decision.)
          */
         UNAVAILABLE,
+
+        /**
+         * The check exists but could not be shown just now - the sensor was
+         * busy or reported itself unavailable, or the prompt failed to open -
+         * even after one retry. Nothing is sent.
+         *
+         * This used to be folded into [UNAVAILABLE], which lets the decision
+         * through. `ERROR_HW_UNAVAILABLE` is often temporary (another app
+         * holding the sensor, a moment after unlocking), so a passing glitch
+         * waved a heavy approval through with no check at all.
+         */
+        FAILED,
+    }
+
+    /** One attempt's result: an [Outcome], or "try once more". */
+    private sealed interface Attempt {
+        data class Done(val outcome: Outcome) : Attempt
+        data object Transient : Attempt
     }
 
     fun available(activity: FragmentActivity): Boolean =
         BiometricManager.from(activity).canAuthenticate(ALLOWED) ==
             BiometricManager.BIOMETRIC_SUCCESS
 
-    suspend fun confirm(activity: FragmentActivity, item: PendingItem): Outcome {
-        if (!available(activity)) return Outcome.UNAVAILABLE
+    /**
+     * What `canAuthenticate` says before any prompt, or null when the prompt
+     * should be shown. Only "nothing enrolled" and "no hardware at all" pass
+     * without a check; every other not-now answer is treated as temporary.
+     */
+    private fun beforePrompt(status: Int): Attempt? = when (status) {
+        BiometricManager.BIOMETRIC_SUCCESS -> null
+        BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED,
+        BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE,
+        // This Android cannot offer this kind of check at all - permanent,
+        // like having no hardware.
+        BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED,
+        -> Attempt.Done(Outcome.UNAVAILABLE)
+        else -> Attempt.Transient
+    }
 
-        return suspendCancellableCoroutine { cont ->
+    suspend fun confirm(activity: FragmentActivity, item: PendingItem): Outcome {
+        // At most two tries, and only for the temporary failures: a person
+        // dismissing the prompt is an answer and is never asked again.
+        for (attempt in 0 until 2) {
+            if (attempt > 0) delay(RETRY_DELAY_MS)
+            val status = BiometricManager.from(activity).canAuthenticate(ALLOWED)
+            val result = beforePrompt(status) ?: promptOnce(activity, item)
+            if (result is Attempt.Done) return result.outcome
+            Log.w(TAG, "biometric check not available right now (attempt ${attempt + 1}, status $status)")
+        }
+        return Outcome.FAILED
+    }
+
+    private suspend fun promptOnce(activity: FragmentActivity, item: PendingItem): Attempt =
+        suspendCancellableCoroutine { cont ->
             val prompt = BiometricPrompt(
                 activity,
                 ContextCompat.getMainExecutor(activity),
@@ -69,7 +116,7 @@ object BiometricGate {
                     override fun onAuthenticationSucceeded(
                         result: BiometricPrompt.AuthenticationResult,
                     ) {
-                        if (cont.isActive) cont.resume(Outcome.CONFIRMED)
+                        if (cont.isActive) cont.resume(Attempt.Done(Outcome.CONFIRMED))
                     }
 
                     override fun onAuthenticationError(code: Int, msg: CharSequence) {
@@ -77,13 +124,16 @@ object BiometricGate {
                         if (!cont.isActive) return
                         // A device that cannot offer the prompt at all is
                         // "unavailable", not "refused" — the difference decides
-                        // whether the user is stuck.
+                        // whether the user is stuck. A sensor that is busy
+                        // right now is neither: it is tried once more, and
+                        // then the decision is held, not waved through.
                         val outcome = when (code) {
                             BiometricPrompt.ERROR_HW_NOT_PRESENT,
-                            BiometricPrompt.ERROR_HW_UNAVAILABLE,
                             BiometricPrompt.ERROR_NO_BIOMETRICS,
-                            -> Outcome.UNAVAILABLE
-                            else -> Outcome.CANCELLED
+                            BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL,
+                            -> Attempt.Done(Outcome.UNAVAILABLE)
+                            BiometricPrompt.ERROR_HW_UNAVAILABLE -> Attempt.Transient
+                            else -> Attempt.Done(Outcome.CANCELLED)
                         }
                         cont.resume(outcome)
                     }
@@ -114,25 +164,28 @@ object BiometricGate {
                     // The consequence, in the server's own words, on the
                     // prompt itself — so the last thing seen before confirming
                     // is what this costs if it is wrong.
-                    .setSubtitle(item.risk.why.ifBlank { item.summary })
+                    .setSubtitle(item.risk.why.ifBlank { "Check the card before you confirm." })
                     .setAllowedAuthenticators(ALLOWED)
                     .setConfirmationRequired(true)
                     .build()
                 prompt.authenticate(info)
             }.onFailure {
-                // UNAVAILABLE rather than CANCELLED: the owner refused
-                // nothing, the prompt never appeared. Treating a platform
-                // failure as a refusal would silently drop decisions the owner
-                // never saw.
+                // Not CANCELLED - the owner refused nothing - and no longer
+                // UNAVAILABLE either, which let the decision through with no
+                // check at all. Tried once more; if it fails again the
+                // decision is held with a plain message (MainActivity), and
+                // the card is still there to try again.
                 Log.w(TAG, "could not show the biometric prompt", it)
-                if (cont.isActive) cont.resume(Outcome.UNAVAILABLE)
+                if (cont.isActive) cont.resume(Attempt.Transient)
             }
 
             cont.invokeOnCancellation { runCatching { prompt.cancelAuthentication() } }
         }
-    }
 
     private const val TAG = "JarvisBiometric"
+
+    /** Long enough for a sensor another app was holding to be let go. */
+    private const val RETRY_DELAY_MS = 600L
 
     /**
      * Weak biometrics are deliberately excluded. Face unlock on many devices
