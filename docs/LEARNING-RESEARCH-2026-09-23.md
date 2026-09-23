@@ -164,3 +164,25 @@ Ranked by how much each helps Jarvis learn over time. Approve by number. Effort:
 - A small bug, not checked against your PC's original file: the rebuilt importer reads `~/.openjarvis/facts.json` as one JSON list (`backend/rebuilt/jarvis_memory.py:796-813`), but OpenJarvis writes facts as one-per-line JSONL. A real OpenJarvis facts file would import 0 facts. It matters little, since OpenJarvis never ran.
 
 Research clones are read-only, in `/tmp/claude-0/research/` (ace, ha-core, zynkbot, mem0, graphiti, letta-code, langmem, khoj, pypi/gepa_src). OpenJarvis is at `/home/user/open-jarvis/openjarvis`.
+
+## 7. To revisit later (owner's request, 2026-09-23)
+
+**A local "teacher" model.** OpenJarvis's teacher is a cloud model, which breaks
+rule 1. The local version would be a larger model on the owner's own PC that
+checks and improves the everyday one - for example by suggesting better
+wording for a skill note, or by reviewing answers the owner marked wrong. Not
+built now because the 8 GB RTX 2080 Super cannot hold a model much larger than
+the chat model, and a teacher barely smarter than its student teaches little.
+
+A narrower follow-on, to decide at the same time: training only on facts the
+owner has already approved (never on raw chats), kept only if the owner's own
+right/wrong marks show it helped. Everything section 5 says against
+fine-tuning still applies - what training learns cannot be listed or removed
+one fact at a time - so this needs its own decision, not a default yes.
+
+**Revisit when both are true:**
+1. The second graphics card (RTX 2060 12 GB) is installed, so a larger teacher
+   model can run - most likely overnight, while the chat model is idle.
+2. Item 1's "that was wrong" marks have been collecting for a few weeks, so
+   there is real evidence of what goes wrong, and a way to tell whether the
+   teacher actually helped.
