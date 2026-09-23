@@ -88,6 +88,7 @@ on a throwaway copy instead.
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
 | `loopback-too.patch` | `jarvis_hud.py` | **Pairing the phone unplugged the desktop.** `JARVIS_HUD_BIND` moved the one socket off `127.0.0.1` instead of adding one, and the desktop's HUD may only talk to loopback. Also serves `127.0.0.1` when bound elsewhere. Needs `token-file.patch` — see its own section. |
+| `bind-wildcard.patch` | `jarvis_hud.py` | **`0`, `0x0` and `000.000.000.000` bind every network interface too**, and only the exact text `0.0.0.0` was being caught. Refuses every spelling at startup. Needs `loopback-too.patch` — see its own section. |
 | `feedback.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **There was no way to tell Jarvis an answer was wrong.** Gives every answer an id, a route to mark it right or wrong, and — through `jarvis_feedback.py` — helpful/harmful counts per fact. A fact that keeps turning up in wrong answers raises one "retire this?" card in the normal review queue; nothing retires by itself. Goes before `memory-intake.patch` — see its own section. |
 | `memory-intake.patch` | `jarvis_extract.py`, `jarvis_hud.py` | Seven memory items from the 2026-09-23 learning research: "Remember:", near-duplicate proposals, corrections by number, a "both are true" answer, real dates, a warning on planted instructions, and never learning from turns the backend started. Needs `backend/jarvis_intake.py` copied in. After `feedback.patch` (its hunk rewrites a line feedback's context ends on) - see its own section. |
 | `skill-suggest.patch` | `jarvis_hud.py` | `GET /api/skills/suggestions`: a read-only view of the routines Jarvis has noticed and the skill offers it made. Needs `appearance.patch` (textual) and `jarvis_skill_discovery.py` copied beside `jarvis_hud.py` — see its own section at the end. |
@@ -2569,19 +2570,37 @@ through the same handler for a mesh bind, a warning instead of a crash when
 `127.0.0.1` is taken, and (installed file only) `main()` calling it before the
 main socket opens.
 
-**Every spelling of "every interface" is now refused at startup** (added
-2026-09-23). The desktop's Settings refused only the exact text `0.0.0.0`,
-and this patch's own "is it a wildcard?" test was a list of strings - but
-`0`, `0x0`, `0.0` and `000.000.000.000` all bind every interface too
-(checked with a real `socket.bind`). `_binds_every_interface` now asks the
-same resolver `socket.bind` uses, and `main()` calls
-`_refuse_every_interface(bind)` before anything listens: it prints why and
-exits with code 2. The spellings live in
-`jarvis-desktop/tests/bind-address-cases.json`, shared with the desktop's own
-check; the test binds a real socket to each one first, so the list is proven
-against the operating system rather than against itself. **If you start the
-backend by hand with `JARVIS_HUD_BIND=0.0.0.0`, it will now refuse** - use the
-computer's own Tailscale or Meshnet address instead.
+Its "is this a wildcard?" test is a list of strings, which misses `0`, `0x0`
+and friends. `bind-wildcard.patch`, next, replaces it. That is a separate
+patch rather than an edit to this one on purpose: this one is already on the
+owner's backend, and `apply-patches.ps1` recognises an applied patch by
+reversing it exactly, so editing it would have made it "not apply".
+
+---
+
+# `bind-wildcard.patch` — no spelling of "every interface" gets through
+
+**Added 2026-09-23.** The desktop's Settings refused only the exact text
+`0.0.0.0` for the phone address, and `loopback-too.patch` decided "is this a
+wildcard?" from a list of strings. But `0`, `0x0`, `0.0` and
+`000.000.000.000` all bind every network interface too - checked with a real
+`socket.bind` - which means the home or café Wi-Fi as well as the private
+mesh.
+
+The patch adds `_binds_every_interface(bind)`, which asks the same resolver
+`socket.bind` uses instead of comparing text, makes `_loopback_companion`
+use it, and has `main()` call `_refuse_every_interface(bind)` before anything
+listens: it prints why and exits with code 2. **If you start the backend by
+hand with `JARVIS_HUD_BIND=0.0.0.0` (or `bind_address = "0.0.0.0"`), it now
+refuses to start** - use the computer's own Tailscale or Meshnet address
+(`100.x.x.x`) instead.
+
+The spellings live in `jarvis-desktop/tests/bind-address-cases.json`, shared
+with the desktop's own check. `test_bind_wildcard.py` binds a real socket to
+each one first, so the list is proven against the operating system rather
+than against itself, then checks the patched functions agree, that ordinary
+addresses (loopback, `100.64.12.3`) still start, and that the patch applies
+over what `token-file` and `loopback-too` wrote.
 
 ---
 

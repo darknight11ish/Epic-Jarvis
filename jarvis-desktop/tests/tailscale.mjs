@@ -153,7 +153,7 @@ await check("CONTROL: Rust refuses the wildcard before it is persisted", async (
 
 await check("CONTROL: the shared case table covers the short wildcard spellings", async () => {
   // One table, three readers: the Rust unit tests (include_str!), the
-  // backend's test_loopback_too.py (which binds a real socket to each
+  // backend's test_bind_wildcard.py (which binds a real socket to each
   // every_interface entry, so the table is checked against the OS), and this.
   const table = JSON.parse(read("tests/bind-address-cases.json"));
   for (const spelling of ["0.0.0.0", "0", "0x0", "0.0", "000.000.000.000", "::"]) {
@@ -165,7 +165,7 @@ await check("CONTROL: the shared case table covers the short wildcard spellings"
   const rust = read("src-tauri/src/commands.rs");
   assert.match(rust, /include_str!\("\.\.\/\.\.\/tests\/bind-address-cases\.json"\)/,
     "the Rust tests do not read the shared table");
-  const py = readFileSync(join(HERE, "..", "..", "backend", "test_loopback_too.py"), "utf8");
+  const py = readFileSync(join(HERE, "..", "..", "backend", "test_bind_wildcard.py"), "utf8");
   assert.match(py, /bind-address-cases\.json/, "the backend test does not read the shared table");
 });
 

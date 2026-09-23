@@ -478,7 +478,7 @@ pub fn supervised_bind_address(app: &AppHandle) -> Option<String> {
 /// numbers, or it is refused" — and anything the OS would read as the
 /// wildcard gets the wildcard's own explanation. The cases live in
 /// `jarvis-desktop/tests/bind-address-cases.json`, which this file's tests,
-/// the backend's `test_loopback_too.py` and `tests/tailscale.mjs` all read.
+/// the backend's `test_bind_wildcard.py` and `tests/tailscale.mjs` all read.
 pub(crate) fn validate_bind_address(addr: &str) -> Result<(), String> {
     if addr.is_empty() {
         return Ok(()); // clearing it falls back to loopback-only
@@ -1940,7 +1940,7 @@ mod capture_tests {
     }
 
     /// The shared table: `jarvis-desktop/tests/bind-address-cases.json`.
-    /// The backend's `test_loopback_too.py` binds a real socket to every
+    /// The backend's `test_bind_wildcard.py` binds a real socket to every
     /// `every_interface` entry to prove the OS really reads it as 0.0.0.0, so
     /// this list is checked against the operating system, not against itself.
     fn bind_cases(key: &str) -> Vec<String> {

@@ -195,6 +195,11 @@ $PATCHES = @(
     # `d["notice"]` line); ui-control-wiring and note-capture only add lines
     # above it, so anywhere after approval-notice works - last is simplest.
     'approval-expiry.patch'
+    # Refuses every spelling of "every network interface" ("0", "0x0", ...)
+    # as the bind address. Its context is loopback-too's output (the
+    # _loopback_companion function and its call in main()), so it goes
+    # after that one; nothing else touches those lines.
+    'bind-wildcard.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
