@@ -95,6 +95,31 @@ await check("a voice-heard event from a stranger sends nothing", async () => {
   assert.ok(!sent.some(([cmd]) => cmd === "stream_chat"), "ambient speech from someone else reached the chat turn");
 });
 
+await check('"hey Jarvis." on its own (awake) sends nothing and keeps listening', async () => {
+  const page = await quickbar({});
+  await page.locator("#voice-auto").click();
+  await page.waitForTimeout(150);
+  await page.evaluate((heard) => window.__emit("voice-heard", heard),
+    { ...K.HEARD_OWNER, text: "", wakeHeard: true, awake: true, awakeSeconds: 8 });
+  await page.waitForTimeout(200);
+  const pressed = await page.locator("#voice-auto").getAttribute("aria-pressed");
+  const sent = await invokes(page);
+  await page.close();
+  assert.equal(pressed, "true");
+  assert.ok(!sent.some(([cmd]) => cmd === "stream_chat"), "an empty wake-only clip reached the chat");
+});
+
+await check("the toggle names the wake word, not 'automatic'", async () => {
+  const page = await quickbar({});
+  const title = await page.locator("#voice-auto").getAttribute("title");
+  await page.locator("#voice-auto").click();
+  await page.waitForTimeout(150);
+  const micTitle = await page.locator("#mic").getAttribute("title");
+  await page.close();
+  assert.ok(title.includes("hey Jarvis"), title);
+  assert.ok(micTitle.includes("hey Jarvis"), micTitle);
+});
+
 await check("an unavailable engine turns automatic listening off and sends nothing", async () => {
   const page = await quickbar({});
   await page.locator("#voice-auto").click();

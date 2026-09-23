@@ -27,26 +27,45 @@
 //!
 //! TWO LISTENING MODES, MUTUALLY EXCLUSIVE
 //! Push-to-talk (`start_voice_capture`/`stop_voice_capture`) records exactly
-//! what is held down and sends it once, on release. Automatic listening
-//! (`start_automatic_listening`/`stop_automatic_listening`) opens the
-//! microphone once and keeps it open, deciding for itself when speech starts
-//! and stops and sending each utterance as it finishes - see "THE VAD" below
-//! for what "deciding" actually means here. Both modes want the same
-//! physical microphone, so starting one refuses while the other is active
-//! rather than trying to run two capture threads against one device.
+//! what is held down and sends it once, on release. "Hey Jarvis" listening
+//! (`start_automatic_listening`/`stop_automatic_listening` - the old names,
+//! kept so the command surface and its permissions do not change) opens the
+//! microphone once and keeps it open, cutting it into utterances and sending
+//! each one as `source=wake_word`. Both modes want the same physical
+//! microphone, so starting one refuses while the other is active rather than
+//! trying to run two capture threads against one device.
 //!
-//! THE VAD IS ENERGY-BASED, NOT THE NEURAL ONE THE ARCHITECTURE DOC NAMES
-//! `docs/ARCHITECTURE.md` lists "Silero VAD" under "decisions already
-//! taken" - but no VAD code of any kind exists anywhere in this codebase
-//! (confirmed by reading `backend/jarvis_speech.py` directly), and Silero
-//! VAD needs an ONNX model file and an ONNX Runtime dependency this project
-//! has not taken. What is here instead is a real, working, much simpler
-//! technique: root-mean-square amplitude against a fixed threshold, with a
-//! silence hangover so a normal mid-sentence pause does not cut the
-//! utterance in half. It is genuinely a VAD, just not a neural one - and its
-//! thresholds (below) are reasoned-about defaults, not measured against a
-//! real microphone, because none is reachable from this container. They are
-//! the first thing to tune once this runs on real hardware.
+//! WHERE "HEY JARVIS" IS HEARD - AND WHY THE AUDIO NEVER LEAVES THIS PC
+//! The Jarvis server on this same PC owns every speech model, so it also owns
+//! the wake-word spotter (`backend/jarvis_wakeword.py`). Each utterance cut
+//! here goes to it over loopback; it runs ONLY the spotter first, and a clip
+//! without "hey Jarvis" in it is dropped there - not owner-checked, not
+//! transcribed, not kept. That is why this mode refuses to start unless the
+//! server address is loopback (`is_loopback_base`): a desktop pointed at a
+//! server elsewhere would be sending every sentence spoken in the room over
+//! the network before the wake word had been heard. Building a second
+//! spotter into this app (ONNX Runtime from Rust) would have meant a second
+//! copy of the models and a native dependency CI would have to fetch, for no
+//! privacy gain on one machine.
+//!
+//! It also refuses to start until the server says the wake word is ON - and
+//! if it is off, asking for it raises the ONE approval card
+//! (`POST /api/voice/wake`), exactly as the phone's switch does. Nothing
+//! here can turn it on without that card being approved.
+//!
+//! THE LOCAL DETECTOR IS A LOUDNESS TRIGGER; SILERO DECIDES
+//! What is here cuts the stream into utterances by loudness: root-mean-square
+//! amplitude against a threshold that follows the room's own background
+//! level (`start_threshold`), with a silence hangover so a normal mid-
+//! sentence pause does not cut the utterance in half. It is deliberately
+//! cheap and deliberately eager - a door slam or the TV will trip it. The
+//! decision about whether there was speech at all is made on the server by
+//! Silero VAD (the neural VAD `docs/ARCHITECTURE.md` names), which drops a
+//! clip with no speech before anything else runs and trims the silence off
+//! one that has some. A missed quiet word here is the failure that matters,
+//! so the trigger errs towards sending. Its numbers are reasoned-about
+//! defaults, not measured against a real microphone - none is reachable
+//! from the container this was written in.
 //!
 //! WHAT "STOP" ACTUALLY DOES
 //! `cpal::Stream` is not `Send` on every platform (it wraps native audio-API
@@ -273,6 +292,12 @@ struct HeardRaw {
     source: String,
     #[serde(default)]
     reason: String,
+    #[serde(default)]
+    wake_heard: bool,
+    #[serde(default)]
+    awake: bool,
+    #[serde(default)]
+    awake_seconds: f64,
 }
 
 fn default_true() -> bool {
@@ -291,6 +316,14 @@ pub struct HeardReply {
     pub available: bool,
     pub source: String,
     pub reason: String,
+    /// `source=wake_word` only: "hey Jarvis" was heard in this clip, from
+    /// the owner. False on a wake-word clip means it was not addressed to
+    /// Jarvis and is dropped without a word.
+    pub wake_heard: bool,
+    /// The clip was "hey Jarvis" and nothing else: the server is listening
+    /// for the next clip without the phrase, for `awake_seconds`.
+    pub awake: bool,
+    pub awake_seconds: f64,
 }
 
 impl From<HeardRaw> for HeardReply {
@@ -303,6 +336,9 @@ impl From<HeardRaw> for HeardReply {
             available: raw.available,
             source: raw.source,
             reason: raw.reason,
+            wake_heard: raw.wake_heard,
+            awake: raw.awake,
+            awake_seconds: raw.awake_seconds,
         }
     }
 }
@@ -501,14 +537,22 @@ pub fn cancel_voice_capture(state: State<VoiceCaptureState>) -> Result<(), Strin
 }
 
 // ---------------------------------------------------------------------------
-// Automatic listening (energy-based VAD)
+// "Hey Jarvis" listening: a loudness trigger here, the spotter on the server
 // ---------------------------------------------------------------------------
 
-/// Above this root-mean-square amplitude (on the same -1.0..1.0 scale the
-/// capture callback already normalises every sample format to), a chunk
-/// counts as speech rather than background/silence. Reasoned about, not
-/// measured against a real microphone - see the module docstring.
-const VAD_START_RMS: f32 = 0.02;
+/// The floor under the adaptive threshold: below this RMS nothing counts as
+/// speech however quiet the room, or a silent room would trigger on hiss.
+const VAD_MIN_RMS: f32 = 0.006;
+/// The ceiling: however loud the background, a voice at this RMS still
+/// counts - so a noisy room makes the trigger less eager, never deaf.
+const VAD_MAX_RMS: f32 = 0.05;
+/// Speech must be this many times the room's own background level. The old
+/// fixed threshold (0.02) is what this replaced: too high for a quiet
+/// microphone, which then never triggered at all, and too low in a noisy
+/// room, which triggered on everything.
+const VAD_FLOOR_FACTOR: f32 = 3.0;
+/// Where the background estimate starts before the room has been heard.
+const VAD_INITIAL_FLOOR: f32 = 0.005;
 /// A burst of speech shorter than this is treated as noise (a cough, a
 /// click), not an utterance worth sending.
 const VAD_MIN_SPEECH: Duration = Duration::from_millis(250);
@@ -519,15 +563,172 @@ const VAD_SILENCE_HANGOVER: Duration = Duration::from_millis(900);
 /// Safety valve: send even mid-sentence rather than buffer forever if the
 /// level parks above threshold indefinitely (a held note, sustained noise).
 const VAD_MAX_UTTERANCE: Duration = Duration::from_secs(20);
-/// Kept from before the threshold was crossed, so the first phoneme of
-/// whatever triggered it is not clipped.
-const VAD_PREROLL: Duration = Duration::from_millis(200);
+/// Kept from before the threshold was crossed, so the "h" of "hey" is not
+/// clipped.
+const VAD_PREROLL: Duration = Duration::from_millis(300);
 /// How often the listening loop re-examines the buffer.
 const VAD_POLL_INTERVAL: Duration = Duration::from_millis(30);
 /// While nothing has crossed the threshold, the buffer is trimmed back to
 /// this much trailing audio rather than growing for as long as the
 /// microphone stays open with nobody talking.
 const VAD_IDLE_KEEP: Duration = Duration::from_millis(500);
+/// `/api/voice/status` and `/api/voice/wake` are small; a loopback server
+/// that takes longer than this is not going to hear anything either.
+const WAKE_CHECK_TIMEOUT: Duration = Duration::from_secs(8);
+
+/// The level a chunk must reach to count as speech, given the background.
+pub(crate) fn start_threshold(noise_floor: f32) -> f32 {
+    (noise_floor * VAD_FLOOR_FACTOR).clamp(VAD_MIN_RMS, VAD_MAX_RMS)
+}
+
+/// The background estimate after one more quiet chunk at `level`. Falls
+/// quickly (a door that stopped banging) and rises slowly (so a voice that
+/// has not yet crossed the threshold cannot drag the threshold up past it).
+pub(crate) fn update_floor(floor: f32, level: f32) -> f32 {
+    if level < floor {
+        floor * 0.7 + level * 0.3
+    } else {
+        floor * 0.995 + level * 0.005
+    }
+}
+
+/// Whether `base` (the API address) is this machine. Wake-word listening
+/// sends every utterance in the room to it BEFORE the wake word is heard, so
+/// it may only ever go to loopback.
+pub(crate) fn is_loopback_base(base: &str) -> bool {
+    let rest = base
+        .trim()
+        .strip_prefix("http://")
+        .or_else(|| base.trim().strip_prefix("https://"))
+        .unwrap_or("");
+    let authority = rest.split('/').next().unwrap_or("");
+    let host = if let Some(v6) = authority.strip_prefix('[') {
+        v6.split(']').next().unwrap_or("")
+    } else {
+        authority.split(':').next().unwrap_or("")
+    };
+    let host = host.to_ascii_lowercase();
+    // Parsed, not prefix-matched: "127.0.0.1.example.com" starts with "127."
+    // and is somebody else's machine.
+    host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false)
+}
+
+/// What `/api/voice/status` says about starting wake-word listening here.
+#[derive(Debug, PartialEq)]
+pub(crate) enum WakeReadiness {
+    /// On, and this PC can hear the phrase: start.
+    Ready,
+    /// Off, and no card is waiting: ask for one.
+    Off,
+    /// Off, and a card to turn it on is already waiting.
+    Waiting,
+    /// Cannot start, for this reason (in the server's own words where it
+    /// gave any).
+    Cannot(String),
+}
+
+pub(crate) fn wake_readiness(status: &serde_json::Value) -> WakeReadiness {
+    let Some(wake) = status.get("wake").filter(|w| w.is_object()) else {
+        return WakeReadiness::Cannot(
+            "The Jarvis server on this PC is too old for \"hey Jarvis\". Run \
+             scripts\\apply-patches.ps1 to update it."
+                .to_string(),
+        );
+    };
+    let flag = |v: &serde_json::Value, k: &str| v.get(k).and_then(|b| b.as_bool()) == Some(true);
+    let spotter = wake.get("spotter").cloned().unwrap_or_default();
+    if !flag(wake, "enabled") {
+        return if flag(wake, "pending") {
+            WakeReadiness::Waiting
+        } else {
+            WakeReadiness::Off
+        };
+    }
+    if !flag(&spotter, "available") {
+        let why = spotter
+            .get("why")
+            .and_then(|w| w.as_str())
+            .filter(|w| !w.is_empty())
+            .unwrap_or("its wake-word model is not installed");
+        return WakeReadiness::Cannot(format!(
+            "This PC cannot listen for \"hey Jarvis\" yet: {why}."
+        ));
+    }
+    WakeReadiness::Ready
+}
+
+/// Asks the server whether wake-word listening can start, and - if the wake
+/// word is off - asks for it to be turned on, which raises the approval card
+/// and changes nothing by itself. `Ok(())` only when it is already on.
+async fn ensure_wake_ready(app: &AppHandle) -> Result<(), String> {
+    let base = jarvis_base(app);
+    if !is_loopback_base(&base) {
+        return Err(format!(
+            "\"Hey Jarvis\" listening only works with the Jarvis server on this PC. \
+             It is set to {base}, and every sentence said in the room would be sent \
+             there before the wake word was heard."
+        ));
+    }
+    let client = jarvis_client(Some(WAKE_CHECK_TIMEOUT))?;
+    let unreachable = |e: reqwest::Error| {
+        if e.is_connect() {
+            format!("could not reach the Jarvis server at {base}")
+        } else {
+            format!("could not ask the Jarvis server about the wake word: {e}")
+        }
+    };
+    let status: serde_json::Value = client
+        .get(format!("{base}/api/voice/status"))
+        .headers(jarvis_headers(app)?)
+        .send()
+        .await
+        .map_err(unreachable)?
+        .json()
+        .await
+        .map_err(|e| format!("the server's voice status could not be read: {e}"))?;
+    match wake_readiness(&status) {
+        WakeReadiness::Ready => Ok(()),
+        WakeReadiness::Cannot(why) => Err(why),
+        WakeReadiness::Waiting => Err(
+            "Waiting for you to approve turning on \"hey Jarvis\". Approve the card, \
+             then turn this on again."
+                .to_string(),
+        ),
+        WakeReadiness::Off => {
+            let reply: serde_json::Value = client
+                .post(format!("{base}/api/voice/wake"))
+                .headers(jarvis_headers(app)?)
+                .json(&serde_json::json!({ "enabled": true }))
+                .send()
+                .await
+                .map_err(unreachable)?
+                .json()
+                .await
+                .unwrap_or_default();
+            if reply.get("enabled").and_then(|b| b.as_bool()) == Some(true) {
+                return Ok(());
+            }
+            if reply.get("pending").and_then(|b| b.as_bool()) == Some(true) {
+                return Err(
+                    "\"Hey Jarvis\" is off. Jarvis has asked for your approval to turn it \
+                     on - approve the card, then turn this on again."
+                        .to_string(),
+                );
+            }
+            Err(reply
+                .get("error")
+                .and_then(|e| e.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    "the server did not turn on the wake word or raise a card".to_string()
+                }))
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct AutoListenState(Mutex<Option<AutoListenHandle>>);
@@ -563,21 +764,42 @@ fn rms(samples: &[i16]) -> f32 {
     ((sum_sq / samples.len() as f64).sqrt()) as f32
 }
 
-/// Opens the microphone and keeps it open, cutting and sending one
-/// utterance at a time as the VAD detects speech-then-silence. Refuses
-/// while a push-to-talk recording already owns the microphone.
-#[tauri::command]
-pub fn start_automatic_listening(
-    app: AppHandle,
-    state: State<AutoListenState>,
-    manual: State<VoiceCaptureState>,
-) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(poisoned)?;
-    if guard.is_some() {
-        return Err("already listening".to_string());
+fn busy_error(auto: bool, manual: bool) -> Option<String> {
+    if auto {
+        return Some("already listening".to_string());
     }
-    if manual.0.lock().map_err(poisoned)?.is_some() {
-        return Err("push-to-talk is already using the microphone".to_string());
+    if manual {
+        return Some("push-to-talk is already using the microphone".to_string());
+    }
+    None
+}
+
+/// Starts listening for "hey Jarvis": checks with the server first (see
+/// `ensure_wake_ready` - off means an approval card, not a microphone), then
+/// opens the microphone and keeps it open, cutting and sending one utterance
+/// at a time. Refuses while a push-to-talk recording owns the microphone.
+#[tauri::command]
+pub async fn start_automatic_listening(
+    app: AppHandle,
+    state: State<'_, AutoListenState>,
+    manual: State<'_, VoiceCaptureState>,
+) -> Result<(), String> {
+    {
+        let auto_busy = state.0.lock().map_err(poisoned)?.is_some();
+        let manual_busy = manual.0.lock().map_err(poisoned)?.is_some();
+        if let Some(e) = busy_error(auto_busy, manual_busy) {
+            return Err(e);
+        }
+    }
+
+    ensure_wake_ready(&app).await?;
+
+    // Checked again: the server round trip above is an await, and the
+    // other mode may have taken the microphone meanwhile.
+    let mut guard = state.0.lock().map_err(poisoned)?;
+    let manual_busy = manual.0.lock().map_err(poisoned)?.is_some();
+    if let Some(e) = busy_error(guard.is_some(), manual_busy) {
+        return Err(e);
     }
 
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
@@ -603,10 +825,10 @@ pub fn start_automatic_listening(
     }
 }
 
-/// The VAD state machine. Runs on the dedicated capture thread - NOT the
-/// realtime audio callback, which only ever appends samples - so blocking
-/// here on `tauri::async_runtime::block_on` to post a finished utterance is
-/// safe. Returns when `stop_rx` fires or disconnects.
+/// The trigger's state machine. Runs on the dedicated capture thread - NOT
+/// the realtime audio callback, which only ever appends samples - so
+/// blocking here on `tauri::async_runtime::block_on` to post a finished
+/// utterance is safe. Returns when `stop_rx` fires or disconnects.
 fn run_vad_loop(
     app: &AppHandle,
     samples: &Arc<Mutex<Vec<i16>>>,
@@ -620,6 +842,7 @@ fn run_vad_loop(
 
     let mut read_to: usize = 0;
     let mut phase = VadPhase::Silence;
+    let mut floor = VAD_INITIAL_FLOOR;
 
     loop {
         match stop_rx.recv_timeout(VAD_POLL_INTERVAL) {
@@ -648,7 +871,7 @@ fn run_vad_loop(
         }
         let level = rms(&buf[read_to..]);
         let now = Instant::now();
-        let voiced = level >= VAD_START_RMS;
+        let voiced = level >= start_threshold(floor);
 
         match &mut phase {
             VadPhase::Silence => {
@@ -658,18 +881,19 @@ fn run_vad_loop(
                         started_at: now,
                         last_voiced_at: now,
                     };
-                    // Barge-in's hook: the frontend stops any spoken reply
-                    // still playing right now, well before this utterance
-                    // is anywhere close to finished and sent.
-                    let _ = app.emit(VOICE_SPEECH_STARTED, ());
-                } else if buf.len() > idle_keep {
-                    // Nothing has been said in a while - do not let the
-                    // buffer grow for the entire time the mic is open. The
-                    // drained buffer is entirely "read" either way, which
-                    // the fall-through `read_to = buf.len()` below already
-                    // sets correctly once this branch is done.
-                    let drop_to = buf.len() - idle_keep;
-                    buf.drain(0..drop_to);
+                    // No barge-in here any more. In this mode the trigger
+                    // fires on the TV, on other people, and on Jarvis's own
+                    // voice from the speakers - stopping a reply for every
+                    // one of those would stop every reply. A reply is cut
+                    // off when "hey Jarvis" is actually heard (below).
+                } else {
+                    floor = update_floor(floor, level);
+                    if buf.len() > idle_keep {
+                        // Nothing has been said in a while - do not let the
+                        // buffer grow for the entire time the mic is open.
+                        let drop_to = buf.len() - idle_keep;
+                        buf.drain(0..drop_to);
+                    }
                 }
             }
             VadPhase::Speaking {
@@ -701,14 +925,27 @@ fn run_vad_loop(
                         &app,
                         spec,
                         &clip,
-                        "automatic",
+                        "wake_word",
                     ));
                     match heard {
-                        Ok(reply) => {
+                        Ok(reply) if !reply.available => {
+                            // The server cannot do this at all right now
+                            // (switched off, no model): the frontend says so
+                            // once and turns listening off.
                             let _ = app.emit(VOICE_HEARD, reply);
                         }
+                        Ok(reply) if reply.wake_heard => {
+                            // Barge-in: "hey Jarvis" stops a reply that is
+                            // still being spoken.
+                            let _ = app.emit(VOICE_SPEECH_STARTED, ());
+                            let _ = app.emit(VOICE_HEARD, reply);
+                        }
+                        Ok(_) => {
+                            // Not addressed to Jarvis, or not the owner. The
+                            // server kept nothing; neither does this.
+                        }
                         Err(reason) => {
-                            eprintln!("[voice] automatic utterance not sent: {reason}");
+                            eprintln!("[voice] wake-word utterance not sent: {reason}");
                         }
                     }
                     continue;
@@ -719,15 +956,79 @@ fn run_vad_loop(
     }
 }
 
-/// Stops automatic listening. Fire-and-forget, like `cancel_voice_capture`:
-/// the caller is not waiting on a result, and this must not block the UI
-/// thread for the stream to close or a POST already in flight to finish.
+/// Stops wake-word listening on this PC (the server's switch is left as it
+/// is - the phone may be using it). Fire-and-forget, like
+/// `cancel_voice_capture`: the caller is not waiting on a result, and this
+/// must not block the UI thread for the stream to close or a POST already in
+/// flight to finish.
 #[tauri::command]
 pub fn stop_automatic_listening(state: State<AutoListenState>) -> Result<(), String> {
     if let Some(active) = state.0.lock().map_err(poisoned)?.take() {
         let _ = active.stop_tx.send(());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod wake_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn only_loopback_may_hear_the_room() {
+        for ok in [
+            "http://127.0.0.1:4719",
+            "http://localhost:4719/",
+            "http://[::1]:4719",
+            "https://127.0.0.2",
+        ] {
+            assert!(is_loopback_base(ok), "{ok}");
+        }
+        for no in [
+            "http://100.64.1.2:4719",
+            "http://desktop.tailnet.ts.net:4719",
+            "http://127.0.0.1.evil.example:4719",
+            "http://localhost.example",
+            "",
+            "127.0.0.1:4719",
+        ] {
+            assert!(!is_loopback_base(no), "{no}");
+        }
+    }
+
+    #[test]
+    fn readiness_follows_the_server() {
+        let ready = json!({"wake": {"enabled": true, "pending": false,
+                                    "spotter": {"available": true, "why": ""}}});
+        assert_eq!(wake_readiness(&ready), WakeReadiness::Ready);
+        let off = json!({"wake": {"enabled": false, "pending": false, "spotter": {}}});
+        assert_eq!(wake_readiness(&off), WakeReadiness::Off);
+        let waiting = json!({"wake": {"enabled": false, "pending": true}});
+        assert_eq!(wake_readiness(&waiting), WakeReadiness::Waiting);
+        let no_model = json!({"wake": {"enabled": true,
+                                       "spotter": {"available": false, "why": "no files"}}});
+        assert!(
+            matches!(wake_readiness(&no_model), WakeReadiness::Cannot(w) if w.contains("no files"))
+        );
+        let old = json!({"listening": {"wake_word": true}});
+        assert!(matches!(wake_readiness(&old), WakeReadiness::Cannot(w) if w.contains("too old")));
+    }
+
+    #[test]
+    fn the_threshold_follows_the_room_within_bounds() {
+        assert_eq!(start_threshold(0.0), VAD_MIN_RMS);
+        assert!((start_threshold(0.004) - 0.012).abs() < 1e-6);
+        assert_eq!(start_threshold(1.0), VAD_MAX_RMS);
+        // A quiet room settles low...
+        let mut f = VAD_INITIAL_FLOOR;
+        for _ in 0..200 {
+            f = update_floor(f, 0.001);
+        }
+        assert!(start_threshold(f) <= 0.007, "{f}");
+        // ...and one loud chunk does not drag the floor up past a voice.
+        let g = update_floor(f, 0.3);
+        assert!(start_threshold(g) < 0.02, "{g}");
+    }
 }
 
 // ---------------------------------------------------------------------------

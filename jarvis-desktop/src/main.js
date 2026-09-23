@@ -2792,10 +2792,11 @@ function stopSpeaking() {
   speaking = false;
 }
 
-/** Automatic listening's own barge-in hook: the VAD just heard speech
- *  start, well before the utterance it belongs to is anywhere close to
- *  finished. Push-to-talk gets the same treatment directly in
- *  `startPushToTalk`, since holding the button is itself the signal there. */
+/** "Hey Jarvis" listening's barge-in hook: Rust sends this when a clip
+ *  that held the wake word comes back, so saying "hey Jarvis" cuts off a
+ *  reply still being spoken (other sounds in the room do not). Push-to-talk
+ *  gets the same treatment directly in `startPushToTalk`, since holding the
+ *  button is itself the signal there. */
 listen("voice-speech-started", stopSpeaking);
 
 /** The HUD's mic button (voice.rs `summon_push_to_talk`): the quickbar is
@@ -2811,7 +2812,7 @@ function restorePromptPlaceholder() {
 }
 listen("voice-summon", () => {
   const how = state.autoListening
-    ? "Listening automatically - just speak."
+    ? "Listening for \"hey Jarvis\" - say it, then speak."
     : "Hold the mic button, or hold Space while it is selected, then speak and let go.";
   if (dom.prompt && !state.autoListening) {
     dom.prompt.setAttribute("placeholder", how);
@@ -2822,10 +2823,10 @@ listen("voice-summon", () => {
   announce(how);
 });
 
-/** Turns automatic (voice-activity-detected) listening on or off.
- *  Mutually exclusive with push-to-talk - `start_automatic_listening`
- *  itself refuses if a push-to-talk recording is in progress, and
- *  `startPushToTalk` above refuses while this is on. */
+/** Turns "hey Jarvis" listening on or off (the command keeps its old name,
+ *  `start_automatic_listening`). Mutually exclusive with push-to-talk.
+ *  Turning it on when the PC's wake word is off does not open the
+ *  microphone: it asks for the approval card, and the refusal text says so. */
 async function setAutoListening(enabled) {
   if (enabled === state.autoListening) return;
   if (enabled) {
@@ -2838,14 +2839,14 @@ async function setAutoListening(enabled) {
     state.autoListening = true;
     dom.voiceAuto.setAttribute("aria-pressed", "true");
     dom.mic.dataset.auto = "true";
-    dom.mic.title = "Listening automatically";
+    dom.mic.title = 'Listening for "hey Jarvis"';
     // The name a screen reader reads, not only the tooltip: "Hold to talk"
     // on a button that no longer responds to being held was wrong.
     if (dom.micLabel) {
       dom.micLabel.textContent =
-        "Listening automatically - turn it off with the button next to this";
+        'Listening for "hey Jarvis" - turn it off with the button next to this';
     }
-    announce("Listening automatically.");
+    announce('Listening for "hey Jarvis".');
   } else {
     state.autoListening = false;
     dom.voiceAuto.setAttribute("aria-pressed", "false");
@@ -2859,9 +2860,11 @@ async function setAutoListening(enabled) {
   }
 }
 
-/** One utterance the automatic listener cut and sent on its own - there is
- *  no command call waiting on this the way `stop_voice_capture` returns
- *  push-to-talk's result directly, so it arrives as an event instead. */
+/** One "hey Jarvis" utterance the listener cut and sent on its own - there
+ *  is no command call waiting on this the way `stop_voice_capture` returns
+ *  push-to-talk's result directly, so it arrives as an event instead. Only
+ *  clips that held the wake word (or a broken engine) arrive here; the rest
+ *  are dropped in Rust without a word. */
 listen("voice-heard", (event) => {
   const heard = event && event.payload;
   if (!heard) return;
@@ -2871,13 +2874,18 @@ listen("voice-heard", (event) => {
     // its own kind of noise, so it is said once and the mode turns itself
     // off rather than keep trying against an engine that is not there.
     announce(
-      heard.reason || "Speech recognition is not available here. Automatic listening turned off.",
+      heard.reason || 'Speech recognition is not available here. Listening for "hey Jarvis" turned off.',
       "assertive"
     );
     setAutoListening(false);
     return;
   }
   if (!heard.isOwner) return; // ambient speech that is not the owner - ignored, not announced
+  if (heard.awake) {
+    // "Hey Jarvis." on its own: the PC is listening for the next sentence.
+    announce("Listening.");
+    return;
+  }
   const text = String(heard.text || "").trim();
   if (!text) return;
   state.voiceTurn = true;

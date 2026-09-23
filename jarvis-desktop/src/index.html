@@ -136,23 +136,24 @@
             <span class="sr-only" id="mic-label">Hold to talk to Jarvis - hold Space or Enter, speak, then let go</span>
           </button>
 
-          <!-- Switches #mic between push-to-talk and automatic listening.
-               Off by default: automatic listening has never run against a
-               real microphone, and push-to-talk is the control anyone
-               already understands the first time they see it. -->
+          <!-- Switches #mic between push-to-talk and listening for "hey
+               Jarvis". Off by default. The first time, turning it on asks
+               for the approval card instead of opening the microphone (the
+               PC's wake word is off until you approve it). It has never run
+               against a real microphone. -->
           <button
             id="voice-auto"
             class="icon-button"
             type="button"
             aria-pressed="false"
-            title="Listen automatically, without holding the mic button"
+            title='Listen for "hey Jarvis" instead of holding the mic button'
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path
                 d="M2 8a6 6 0 1 1 12 0A6 6 0 0 1 2 8Zm6-4.25A4.25 4.25 0 1 0 8 12.25 4.25 4.25 0 0 0 8 3.75ZM8 6.5A1.5 1.5 0 1 1 8 9.5 1.5 1.5 0 0 1 8 6.5Z"
               />
             </svg>
-            <span class="sr-only">Toggle automatic listening</span>
+            <span class="sr-only">Toggle listening for "hey Jarvis"</span>
           </button>
 
           <button
