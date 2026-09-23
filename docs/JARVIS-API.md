@@ -203,7 +203,7 @@ explicit that the queue itself is fetched from `/api/pending` — **not**
 | `/api/pending` | GET | — | `stream.rs:641`, `brain/routes.rs` (not listed; fetched by the stream) | `JarvisApi.kt:274` | Answers `{"available", "pending", "history"}`. **Not a bare array.** |
 | `/api/approve` | POST | see below | `commands.rs:954` | `JarvisApi.kt:395` | **The two clients send different bodies.** |
 | `/api/deny` | POST | see below | `commands.rs:954` | `JarvisApi.kt:397` | Same. |
-| `/api/pending/<id>/amend` | POST | `{"note": "…"}` | via `amend_approval` (`jarvis-link.js:429`) | `JarvisApi.kt:339` | **DRAFT — invented name.** See §8. |
+| `/api/pending/<id>/amend` | POST | `{"note": "…"}` | via `amend_approval` | `JarvisApi.amend` | **Real since `backend/task-control.patch`.** Keeps a note with one waiting card; approves and denies nothing. See §11. |
 
 ### The list-key trap
 
@@ -666,11 +666,7 @@ guess someone wrote down honestly.
 
 | Route | Status |
 |---|---|
-| `/api/pending/<id>/amend` | **DRAFT.** The name comes from `docs/AUTONOMY-PROPOSALS.md` §3b, not from the backend. Both clients target it (`JarvisApi.kt:326-339`, `jarvis-link.js:407-429`) and both say in comments that it is unconfirmed. A 404 means "this build has no such route", not "wrong address". |
-| `/api/task/pause` | **DRAFT.** No route name exists anywhere in the design doc; only the mechanism is specified. The name follows the existing domain/verb shape (`JarvisApi.kt:341-362`). |
-| `/api/task/resume` | **DRAFT**, same standing (`JarvisApi.kt:364`). |
-| `/api/task/stop` | **DRAFT**, same standing (`JarvisApi.kt:366`). |
-| `/api/task/note` | **DRAFT**, `{"note": …}`, same standing (`JarvisApi.kt:369`). |
+| `/api/pending/<id>/amend`, `/api/task/pause`, `/api/task/resume`, `/api/task/stop`, `/api/task/note` | **No longer draft** — served by `backend/task-control.patch` under exactly these names (2026-09-23). See §11. A 404 now means the patch is not applied on that backend. |
 | `/api/appearance` | Proposed in `docs/APPEARANCE-API.md`; **implemented in `backend/appearance.patch`**, which may or may not be applied on the owner's machine. See §7.3. |
 | `/api/visual-spec` | Real and correct per `docs/CROSS-CLIENT-CONTRACT-REPLY-2.md`, but only the desktop fetches it. |
 | `GET /api/holds` | **Does not exist and was deliberately not invented.** `JarvisApi.kt:455-464` records that an earlier draft made it up to fill the gap, and that doing so "is the exact mistake that produced `jarvis-android`'s protocol". Removed rather than kept behind a 404. |
@@ -751,3 +747,34 @@ they explain why several obvious routes are missing rather than forgotten.
 
 Reconstructed 2026-09-20 from client call sites on branch
 `fix/audit-remaining-four`. Roughly 55 distinct endpoint paths.
+
+---
+
+<!-- ===== task controls, notes, power (2026-09-23) - begin ===== -->
+
+## 11. Task controls, notes and power (added 2026-09-23)
+
+Written from the backend code that serves them (`backend/jarvis_task_control.py`
+and `backend/task-control.patch`), not from the clients. Every route below
+checks the origin and the token like every other private route.
+
+### Task controls — `backend/task-control.patch`
+
+| Route | Body | Answers | What it does |
+|---|---|---|---|
+| `POST /api/task/stop` | `{}` | 200 `{"ok", "stopping": [ids], "forgot_paused": id\|null, "message"}`; **409** nothing running or paused | Stops the running multi-step task before its next step, and forgets a paused one. No approval card. |
+| `POST /api/task/pause` | `{}` | 200 `{"ok", "pausing": [ids], "message"}`; **409** nothing running / already paused | Stops before the next step and keeps the steps not run. No card. `activity` becomes `"paused"` only once the run has really stopped. |
+| `POST /api/task/resume` | `{}` | **202** `{"ok", "task", "asking": true, "message"}`; **409** nothing paused / a resume card already waiting | **Runs nothing.** Raises ONE approval card (same action, so the same tier, as the original task) listing every remaining step via the module's own `describe()`. Runs those steps only on an allowed verdict. |
+| `POST /api/task/note` | `{"note": "…"}` (≤ 1000 chars kept) | 200; **400** empty; **409** nothing to attach to | Kept with the running (else paused) task. Given to the model when the current step finishes; shown on a resume card. Changes no step. |
+| `POST /api/pending/<id>/amend` | `{"note": "…"}` (≤ 1000 chars kept) | 200 `{"ok", "id", "kept": true, "message"}`; **400** empty; **409** card no longer waiting; **503** queue unreadable | Kept with that one card, which does not change. Given to the model with the owner's answer, approve or deny. |
+| `GET /api/task` | — | `{"available", "running", "paused", "last_resumed", "recent"}` | Ids, tool names and step counts. Never a note's text. |
+
+`activity: "paused"` (with `activity_detail` like "Paused with 2 steps not
+run…") is reported from the moment a run stops at a pause until it is
+resumed, stopped, or an hour old. Clients must keep showing Resume only on
+that report, never on their own click.
+
+Stale link (rule 4): both clients hold **Resume** on a stale stream and let
+Stop, Pause and notes through.
+
+<!-- ===== task controls, notes, power (2026-09-23) - end ===== -->

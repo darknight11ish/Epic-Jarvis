@@ -201,11 +201,12 @@ def _prepare_control_computer(args: dict):
     return p, U.describe(p)
 
 
-def _run_control_computer(args: dict, plan_obj, *, announce=None) -> dict:
+def _run_control_computer(args: dict, plan_obj, *, announce=None, checkpoint=None) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "UI control is not available here"}
     import jarvis_ui_control as U
-    return U.run(plan_obj, announce=announce, approved=True)
+    return U.run(plan_obj, announce=announce, checkpoint=checkpoint,
+                 approved=True)
 
 
 def _prepare_control_phone(args: dict):
@@ -219,11 +220,12 @@ def _prepare_control_phone(args: dict):
     return p, A.describe(p)
 
 
-def _run_control_phone(args: dict, plan_obj, *, announce=None) -> dict:
+def _run_control_phone(args: dict, plan_obj, *, announce=None, checkpoint=None) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "phone control is not available here"}
     import jarvis_android_control as A
-    return A.run(plan_obj, announce=announce, approved=True)
+    return A.run(plan_obj, announce=announce, checkpoint=checkpoint,
+                 approved=True)
 
 
 def _prepare_browser_control(args: dict):
@@ -237,11 +239,12 @@ def _prepare_browser_control(args: dict):
     return p, B.describe(p)
 
 
-def _run_browser_control(args: dict, plan_obj, *, announce=None) -> dict:
+def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "browser control is not available here"}
     import jarvis_browser_control as B
-    return B.run(plan_obj, announce=announce, approved=True)
+    return B.run(plan_obj, announce=announce, checkpoint=checkpoint,
+                 approved=True)
 
 
 def _prepare_github_search(args: dict):
@@ -449,7 +452,8 @@ TOOLS: dict = {
                 "leaves_machine": {"type": "boolean"}}}}},
          "required": ["goal", "window", "requests"]},
         _prepare_control_computer,
-        lambda args, state, **kw: _run_control_computer(args, state, announce=kw.get("announce")),
+        lambda args, state, **kw: _run_control_computer(args, state, announce=kw.get("announce"),
+                                                checkpoint=kw.get("checkpoint")),
         needs_announce=True,
         # "control_computer" is a friendlier name for the model than the
         # actual jarvis_gate key ("jarvis_ui_control_run") this maps to -
@@ -474,7 +478,8 @@ TOOLS: dict = {
                 "leaves_machine": {"type": "boolean"}}}}},
          "required": ["device", "goal", "requests"]},
         _prepare_control_phone,
-        lambda args, state, **kw: _run_control_phone(args, state, announce=kw.get("announce")),
+        lambda args, state, **kw: _run_control_phone(args, state, announce=kw.get("announce"),
+                                                checkpoint=kw.get("checkpoint")),
         needs_announce=True,
         gate_lookup_name=lambda args: "jarvis_android_control_run"),
     "browser_control": Tool(
@@ -524,7 +529,8 @@ TOOLS: dict = {
             }}}},
          "required": ["goal", "session", "requests"]},
         _prepare_browser_control,
-        lambda args, state, **kw: _run_browser_control(args, state, announce=kw.get("announce")),
+        lambda args, state, **kw: _run_browser_control(args, state, announce=kw.get("announce"),
+                                                checkpoint=kw.get("checkpoint")),
         needs_announce=True,
         # New action name, same reason control_phone is: no existing
         # jarvis_gate tier fits a browser step - see browser-control-wiring
@@ -612,6 +618,27 @@ TOOLS: dict = {
 }
 
 
+#: The tools that run a multi-step plan, and the module that plans and runs
+#: it. These are the ones Pause, Stop and Resume apply to (task-control.patch):
+#: each module's run() reads a `checkpoint` before every step. A resume runs
+#: the SAME plan object, cut down to the steps that did not run, through the
+#: same module's describe() and run() - see jarvis_task_control.resume().
+_TASK_MODULES = {
+    "control_computer": "jarvis_ui_control",
+    "control_phone": "jarvis_android_control",
+    "browser_control": "jarvis_browser_control",
+}
+
+
+def _task_control():
+    """jarvis_task_control, or None when it is not installed."""
+    try:
+        import jarvis_task_control
+        return jarvis_task_control
+    except Exception:
+        return None
+
+
 def _github_search_action_name() -> str:
     try:
         import jarvis_research
@@ -661,6 +688,40 @@ def _tool_content(result: dict) -> str:
         "note": f"the real result was {len(full)} characters - too large to "
                  "show in full here",
     }, ensure_ascii=False)
+
+
+def _after_task(tc, task_id: str, name: str, action_name: str, plan_obj,
+                result: dict) -> dict:
+    """What happens once a pausable plan's run() has returned.
+
+    Paused: keep the ORIGINAL plan object, cut down to the steps that did
+    not run, so Resume can show and run exactly those (task-control.patch).
+    Then, however it ended, hand the model any note the owner sent while it
+    ran - "for what runs next", so the model reads it before choosing its
+    next step. A note never alters a step that was already approved.
+    """
+    out = dict(result)
+    if out.get("paused") and plan_obj is not None:
+        try:
+            import dataclasses
+            steps = list(getattr(plan_obj, "steps", []) or [])
+            not_run = len(out.get("not_run") or [])
+            rest = dataclasses.replace(plan_obj, steps=steps[len(steps) - not_run:])
+            tc.remember_paused(task_id, tool=name, action=action_name,
+                               module=_TASK_MODULES[name], plan=rest,
+                               not_run=not_run, done=len(out.get("done") or []))
+            out["paused_note"] = ("Paused by the owner. Do not try to redo these steps "
+                                  "yourself: the owner can resume them, which asks "
+                                  "them first, or stop.")
+        except Exception:
+            pass
+    try:
+        note = tc.take_note(task_id)
+    except Exception:
+        note = None
+    if note:
+        out["owner_note"] = note
+    return out
 
 
 def _gate_check(action: str, detail: dict, prompt: str):
@@ -889,6 +950,17 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 step = {"tool": name, "ran": False, "ok": False,
                         "outcome": str(getattr(verdict, "outcome", None) or "unknown")}
                 steps.append(step)
+                tc = _task_control()
+                # A note the owner attached to THIS card before answering it
+                # (POST /api/pending/<id>/amend). It goes to the model with
+                # the answer - approved or not - and changes nothing about
+                # what was approved. Taken once, so it is never repeated.
+                card_note = None
+                if tc is not None:
+                    try:
+                        card_note = tc.take_amend(getattr(verdict, "request_id", None))
+                    except Exception:
+                        card_note = None
                 if not getattr(verdict, "allowed", False):
                     say_step("tool_refused", name)
                     result = {"ok": False,
@@ -898,13 +970,30 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     if announce:
                         announce(f"Using {name}...")
                     kwargs = {"announce": announce} if tool.needs_announce else {}
+                    # A multi-step plan: register it so Pause/Stop can reach
+                    # it, and hand run() the checkpoint it reads before every
+                    # step. The id is the approval card's own when there was
+                    # one, so "this task" and "that card" are the same thing.
+                    task_id = None
+                    if tc is not None and name in _TASK_MODULES:
+                        task_id = getattr(verdict, "request_id", None) or tc.new_task_id()
+                        tc.begin(task_id, name)
+                        kwargs["checkpoint"] = (lambda tid=task_id: tc.checkpoint(tid))
                     step["ran"] = True
                     try:
                         result = tool.execute(args, state, **kwargs)
                     except Exception as exc:
                         result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+                    finally:
+                        if task_id is not None:
+                            tc.end(task_id)
+                    if task_id is not None and isinstance(result, dict):
+                        result = _after_task(tc, task_id, name, action_name, state, result)
                     step["ok"] = isinstance(result, dict) and result.get("ok") is True
                     say_step("tool_finished", name, ok=step["ok"])
+                if card_note and isinstance(result, dict):
+                    result = dict(result)
+                    result["owner_note"] = card_note
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": _tool_content(result)})
     else:

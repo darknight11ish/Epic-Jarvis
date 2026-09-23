@@ -1254,9 +1254,10 @@ pub async fn decide_approval(
 /// The shared half of the task controls and `amend_approval`: POST a small
 /// JSON body, and turn anything that is not a 2xx into a sentence.
 ///
-/// Deliberately NOT gated on a stale stream, unlike [`decide_approval`].
-/// None of its callers is a decision: a note is an annotation, and pause,
-/// resume and stop are the safe direction in the same sense Deny is — the
+/// Deliberately NOT gated on a stale stream here, unlike [`decide_approval`]
+/// ([`resume_task`] adds its own check, being the one that makes work go
+/// again). A note is an annotation, and pause and stop are the safe
+/// direction in the same sense Deny is — the
 /// moment you most want to stop a running task is the moment the link is
 /// misbehaving, and a Stop button that refuses to work because the link is
 /// unhealthy is a Stop button that fails when it is needed. `jarvis-client`
@@ -1266,7 +1267,7 @@ async fn post_task_control(
     app: &AppHandle,
     path: &str,
     body: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     let base = jarvis_base(app);
     let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
         .post(format!("{base}{path}"))
@@ -1283,29 +1284,46 @@ async fn post_task_control(
         })?;
 
     let status = response.status();
-    if status.is_success() {
-        return Ok(());
-    }
     let detail = response.text().await.unwrap_or_default();
-    // A 404 is the expected answer from a backend that has not added these
-    // routes yet, and saying so beats a bare status code: these four are
-    // `docs/AUTONOMY-PROPOSALS.md` §3d's own proposed names, not confirmed
-    // against a backend that lives outside this repository.
+    if status.is_success() {
+        return Ok(serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null));
+    }
+    // A 404 means this backend does not have `backend/task-control.patch`
+    // applied, and saying so beats a bare status code.
     if status.as_u16() == 404 {
         return Err(format!(
-            "this Jarvis backend has no `{path}` route, so there is nothing \
-             to send that to yet"
+            "this Jarvis backend has no `{path}` route - apply the backend \
+             patches (task-control.patch) to turn it on"
         ));
     }
-    Err(format!(
-        "the server answered HTTP {} to {path}: {}",
-        status.as_u16(),
-        detail.trim()
-    ))
+    Err(server_sentence(status.as_u16(), path, &detail))
+}
+
+/// The sentence a task-control route put in its `error` field, or the raw
+/// body when it did not send one. Those routes answer a 409 with a plain
+/// reason ("nothing is running or paused"), which reads better than JSON.
+fn server_sentence(code: u16, path: &str, body: &str) -> String {
+    let said = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string));
+    match said {
+        Some(reason) if !reason.trim().is_empty() => {
+            let mut s = reason.trim().to_string();
+            if let Some(first) = s.get(0..1) {
+                let upper = first.to_uppercase();
+                s.replace_range(0..1, &upper);
+            }
+            s
+        }
+        _ => format!("the server answered HTTP {code} to {path}: {}", body.trim()),
+    }
 }
 
 /// Pause, resume, or stop whatever Jarvis is running right now, and add a
-/// note to it — `docs/AUTONOMY-PROPOSALS.md` §3d.
+/// note to it — `docs/AUTONOMY-PROPOSALS.md` §3d, served by
+/// `backend/task-control.patch`. Stop and Pause need no approval card.
+/// Resume does not carry on by itself: the server raises one card listing
+/// the steps that are left, and runs them only if that card is approved.
 ///
 /// These four and [`amend_approval`] were invoked by `jarvis-link.js` long
 /// before they existed here, so every one of those buttons failed at the
@@ -1316,22 +1334,33 @@ async fn post_task_control(
 /// None of the four takes a task id, matching the phone and matching this
 /// project's own rule that "the current turn" is singular.
 #[tauri::command]
-pub async fn pause_task(app: AppHandle) -> Result<(), String> {
+pub async fn pause_task(app: AppHandle) -> Result<serde_json::Value, String> {
     post_task_control(&app, "/api/task/pause", serde_json::json!({})).await
 }
 
+/// The one task control held to rule 4 - "block acting when the event
+/// stream is stale" - because it is the one that makes something go again.
+/// It only raises an approval card, but that card should be answered by
+/// someone looking at a live queue. Checked here, not only in the webview,
+/// for the reason [`decide_approval`] gives: any window holding the
+/// capability reaches this command directly.
 #[tauri::command]
-pub async fn resume_task(app: AppHandle) -> Result<(), String> {
+pub async fn resume_task(app: AppHandle) -> Result<serde_json::Value, String> {
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err("the event stream is stale, so resuming is held until it \
+                    reconnects - Stop still works"
+            .to_string());
+    }
     post_task_control(&app, "/api/task/resume", serde_json::json!({})).await
 }
 
 #[tauri::command]
-pub async fn stop_task(app: AppHandle) -> Result<(), String> {
+pub async fn stop_task(app: AppHandle) -> Result<serde_json::Value, String> {
     post_task_control(&app, "/api/task/stop", serde_json::json!({})).await
 }
 
 #[tauri::command]
-pub async fn inject_task_note(app: AppHandle, note: String) -> Result<(), String> {
+pub async fn inject_task_note(app: AppHandle, note: String) -> Result<serde_json::Value, String> {
     post_task_control(&app, "/api/task/note", serde_json::json!({ "note": note })).await
 }
 
@@ -1363,7 +1392,11 @@ fn encode_path_segment(raw: &str) -> String {
 /// an id carrying a `/` or a `?` would otherwise address a different route
 /// entirely.
 #[tauri::command]
-pub async fn amend_approval(app: AppHandle, id: String, note: String) -> Result<(), String> {
+pub async fn amend_approval(
+    app: AppHandle,
+    id: String,
+    note: String,
+) -> Result<serde_json::Value, String> {
     let encoded = encode_path_segment(&id);
     post_task_control(
         &app,

@@ -86,6 +86,7 @@ on a throwaway copy instead.
 | `speed-record.patch` | `jarvis_hud.py` | Records how fast each answer was — numbers only, to a file on this PC — and shows it on the Models screen. Needs `gpu-offload.patch`, `tool-calling-wiring.patch` and `jarvis_speed.py` — see its own section. |
 | `voice-enroll.patch` | `jarvis_hud.py` | **"Train my voice" from the phone.** `POST /api/voice/enroll` takes the owner's recorded sentences, holds them in memory and raises ONE approval card. Only approving it replaces the voice print; the recordings are deleted either way. Needs `voice-503.patch` and `appearance.patch` (textual), and `jarvis_voice_enroll.py` — see its own section at the end. |
 | `cloud-one-turn.patch` | `jarvis_hud.py` | The phone and quickbar now send the conversation so far with each question. This makes sure a **cloud** lane still gets only the newest question, never an earlier one. Needs `ollama-direct.patch` (textual) — see its own section at the end. |
+| `task-control.patch` | `jarvis_hud.py` | **The Pause, Resume, Stop and note buttons on both apps went nowhere.** Adds the routes they call. Resume raises an approval card; nothing else here approves anything. Needs `jarvis_task_control.py` and the updated `jarvis_agent.py` — see its own section, at the end. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -3075,6 +3076,12 @@ request into an empty room, and `link.activity` would never actually say
 
 ## What this does NOT close, and why
 
+> **Closed since, 2026-09-23:** `task-control.patch` (its own section, at the
+> end of this file) adds the routes and the `activity: "paused"` report. The
+> names it uses are the ones both clients call (`/api/task/*`), not the
+> `/api/pending/<id>/control` guessed below. What follows is kept as the
+> record of why it waited.
+
 Nothing here gives a client a way to actually call `request()` or
 `inject_note()`, and nothing here broadcasts `activity: "paused"` back
 out over `GET /api/events`. Both live entirely inside
@@ -3983,6 +3990,87 @@ here for the day one is.
 **Order.** After `ollama-direct.patch`, whose `_completions_url(lane),` line
 is its context. Listed last in `apply-patches.ps1`.
 
+---
+
+<!-- ===== task controls, notes, power (2026-09-23) - begin ===== -->
+
+# `task-control.patch` — Pause, Resume, Stop, and notes, for real
+
+**What was wrong.** Both apps have had Pause, Resume, Stop and "add a note"
+buttons for days. Every one of them sent a request to an address the PC did
+not have, so every press failed (or, worse, looked like it might have worked).
+The note field on approval cards was the same.
+
+**What this adds, in plain words.** Five addresses on the PC, using exactly
+the names both apps were already calling, so neither app had to change where
+it sends:
+
+| button | what happens now | approval card? |
+|---|---|---|
+| **Stop** | The running task stops before its next step. Steps already done stay done. If a task is paused, Stop forgets it. | No — stopping is the safe direction, like Deny. |
+| **Pause** | The running task stops before its next step, and the PC remembers the steps that did not run. Both apps then show "paused" and a Resume button — only once the PC says so, never on the click. | No. |
+| **Resume** | Nothing runs yet. The PC shows **one approval card** listing every step that is left, in full. The task continues only if you approve it. Each step is checked against the screen again before it runs. | **Yes**, through the normal gate, under the same rule (tier) as the original task. |
+| **Note for what runs next** | Kept with the running (or paused) task. Jarvis reads it when the current step finishes. It changes no step you already approved. | No — it approves nothing. |
+| **Note on an approval card** | Kept with that one card. The card does not change. When you answer the card (yes or no), Jarvis reads your note together with your answer. To have Jarvis plan something different, deny the card. | No — it approves and denies nothing. |
+
+Every press is written to the audit log (`task.stop`, `task.pause`,
+`task.resume_asked`, `task.note`, `task.amend` ...) with which device it came
+from. The audit line records a note's **length, never its words**.
+
+**One thing the design document said differently, on purpose.** The design
+(`docs/AUTONOMY-PROPOSALS.md` §3b) imagined that a note on a card would make
+Jarvis re-plan and replace the card's options. Jarvis cannot do that today —
+the gate waits on a card and there is nothing that rewrites a waiting card —
+and inventing it would mean a card whose contents change after you started
+reading it. So the note travels with your answer instead, and **Deny is how
+you ask for a different plan.** Both apps now say exactly that.
+
+**Which tasks can be paused.** The three multi-step tools:
+`control_computer`, `control_phone` and `browser_control`. They already check
+before every step; `jarvis_agent.py` now hands them the pause/stop check too
+(the `checkpoint` that `jarvis_task_control.py` was written for and nothing was
+passing). A plain answer, a calculator call or a one-shot tool has no steps to
+pause between.
+
+**Rule 4 (stale link).** Stop, Pause and notes work even on a stale link: the
+moment you most need Stop is when the link is misbehaving. **Resume** is held
+on a stale link, on both apps, because it is the one that makes work go again.
+
+**Limits, said plainly.**
+- One paused task at a time. A second pause replaces the first.
+- A paused task is forgotten after an hour — its picture of the screen is too
+  old by then. Ask Jarvis again instead.
+- Nothing here survives restarting the backend. A paused task is lost on a
+  restart (the Resume button disappears; nothing runs).
+- After a resumed task finishes, the chat that started it is already over, so
+  Jarvis does not tell you in chat. `GET /api/task` shows what it did.
+- Notes are cut at 1,000 characters; at most 64 card notes are kept.
+
+## What it changes
+
+- `jarvis_hud.py` (the patch): the routes `POST /api/task/pause`,
+  `/api/task/resume`, `/api/task/stop`, `/api/task/note`,
+  `/api/pending/<id>/amend`, and `GET /api/task`. All behind the same origin
+  check and token as every other private route. They only check who is asking
+  and pass the request on — every rule lives in `jarvis_task_control.py`.
+  It also puts a small wrapper in front of `_activity()`: while a task is
+  paused, "idle" is reported as "paused", which is what makes the Resume
+  button appear.
+- `jarvis_task_control.py` (copy it in; the script does): the rules above.
+- `jarvis_agent.py` (copy it in; the script does): registers each running
+  multi-step task, passes the pause/stop check, keeps the rest of a paused
+  plan, and hands notes to the model.
+
+**Where it goes in the stack:** last, after `speed-record.patch`. Its context
+lines are `extraction-wiring`'s (`_activity`), `feedback`'s (the end of the
+`/api/feedback/mark` block) and `memory-intake`'s (the memory-route tuple).
+
+**Not checked against your real `jarvis_hud.py`** — nobody here has it. The
+patch was checked with `git apply` (on, off, and back to the same bytes) on a
+stand-in built from what the earlier patches wrote. `apply-patches.ps1`'s
+rehearsal on a copy of your real files is the real test, and it changes
+nothing if the patch does not fit.
+
 ## Test it
 
 ```
@@ -3993,3 +4081,15 @@ Runs the patch's own lines on a request carrying a private earlier question
 (only the newest question comes out), checks the local lane is untouched,
 rehearses the patch with `git apply` against what the earlier patches wrote,
 and - with `JARVIS_BACKEND` set - checks `_open` in your real file.
+python backend\test_task_control.py
+```
+
+103 checks, no network and no real gate: a fake plan module and a fake gate
+stand in. The ones that matter most: Resume runs **nothing** until the gate
+allows it, and then runs exactly the steps that were left, from the original
+plan object; a denied, timed-out or broken gate runs nothing; a Stop pressed
+while the resume card waits beats approving it; a card note reaches the model
+whether the card was approved or denied; and the audit log never holds a
+note's words.
+
+<!-- ===== task controls, notes, power (2026-09-23) - end ===== -->

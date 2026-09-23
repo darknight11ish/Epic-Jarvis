@@ -330,18 +330,14 @@ class JarvisApi(
 
     /**
      * A note sent before the first decision on a proposal -
-     * `docs/AUTONOMY-PROPOSALS.md` §3b on the desktop branch. This is NOT a
-     * decision and approves nothing; the expected result is a fresh set of
-     * options for the same id, which arrives the normal way through the next
-     * `/api/pending` read - this call does not wait for or apply it.
+     * `docs/AUTONOMY-PROPOSALS.md` §3b. This is NOT a decision and approves
+     * nothing. The desktop keeps the note with the card (the card itself
+     * does not change) and hands it to the model together with the owner's
+     * answer, whichever answer that is.
      *
-     * **DRAFT.** `jarvis_gate.py`/`jarvis_hud.py` are not in either repo, so
-     * neither this route nor its exact shape is confirmed - `POST
-     * /api/pending/<id>/amend` is the design doc's own proposed name, the
-     * same one the desktop's `amend_approval` Tauri command targets. A 404
-     * here means this desktop build does not have the route yet, not a
-     * wrong address, and [JarvisRuntime] reports it that way rather than
-     * through the generic [ApiError.NotFound] wording.
+     * Served by the desktop's `backend/task-control.patch`. A 404 means that
+     * patch is not applied there, and [JarvisRuntime] says so; a 409 means
+     * the card is no longer waiting.
      */
     suspend fun amend(id: String, note: String): ApiResult<Unit> {
         val encodedId = java.net.URLEncoder.encode(id, "UTF-8")
@@ -356,17 +352,11 @@ class JarvisApi(
      * need one, the same reasoning the desktop's own client code gives for
      * its matching, argument-free calls.
      *
-     * **DRAFT, same standing as [amend].** No route name for this is given
-     * anywhere in the shared design doc - only the mechanism is specified
-     * ("just another action against the running task's id, broadcast the
-     * same way `approval-resolved` already is"). `/api/task/pause` and its
-     * three siblings below follow this contract's own existing
-     * domain/verb shape (`/api/models/switch`, `/api/attention/mute`,
-     * `/api/voice/wake`) rather than inventing a new one, but are not
-     * confirmed against `jarvis_hud.py` and may need renaming once they
-     * are. Calling any of these against a backend that has not added them
-     * fails honestly - a 404, surfaced as an error - rather than silently
-     * doing nothing.
+     * Served by the desktop's `backend/task-control.patch`, under exactly
+     * these names. Stop and Pause need no approval card; Resume raises one
+     * listing the steps that are left and runs nothing until it is
+     * approved. A 409 means there was nothing to act on (nothing running or
+     * paused); a 404 means the patch is not applied - see [TaskControl].
      */
     suspend fun pauseTask(): ApiResult<Unit> = postJson("/api/task/pause", "{}")
 

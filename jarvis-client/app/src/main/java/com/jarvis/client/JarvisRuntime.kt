@@ -170,12 +170,10 @@ enum class Activity {
     IDLE, LISTENING, THINKING, SPEAKING, WORKING,
 
     /**
-     * A running task, paused - AUTONOMY-PROPOSALS.md §3d. DRAFT: no backend
-     * anywhere is confirmed to send this value yet (the design doc's own
-     * §3d says plainly that `jarvis_gate.py` does not emit it today), so
-     * this maps from the wire the moment it might, the same speculative
-     * stance the desktop's own widget already takes reading `link.activity`.
-     * Until then this arm is simply never reached.
+     * A running task, paused - AUTONOMY-PROPOSALS.md §3d. The desktop's
+     * `backend/task-control.patch` reports it once a plan has really stopped
+     * at a checkpoint with steps left, and keeps reporting it until the task
+     * is resumed or stopped. Never set by this app on its own say-so.
      */
     PAUSED,
     ERROR;
@@ -1575,10 +1573,8 @@ object JarvisRuntime {
      * see [JarvisApi.amend] and [JarvisApi.pauseTask]'s own doc comments for
      * why a 404 means something more specific here.
      */
-    private fun describeDraft(e: ApiError): String = when (e) {
-        ApiError.NotFound -> "This desktop does not support that yet."
-        else -> describe(e)
-    }
+    private fun describeDraft(e: ApiError, amend: Boolean = false): String =
+        com.jarvis.client.net.TaskControl.failure(e, amend) ?: describe(e)
 
     /**
      * A note sent before the first decision on a proposal -
@@ -1587,26 +1583,39 @@ object JarvisRuntime {
      * Deliberately not gated on [decisionBlocker] the way [decide] is: a
      * note is never itself a verdict on anything Jarvis is holding, only a
      * message attached to one - the same reasoning that already excuses
-     * `markDigestSeen`/`setMuted`/`setWakeWord` from that gate. On success
-     * the queue is refreshed, since the expected result is this same id
-     * coming back with a different set of options.
+     * `markDigestSeen`/`setMuted`/`setWakeWord` from that gate.
+     *
+     * What the desktop does with it (`backend/task-control.patch`): the note
+     * is kept WITH the card, the card itself does not change, and the model
+     * reads the note together with the owner's answer. So success says
+     * exactly that, and the queue is refreshed in case the card was answered
+     * elsewhere meanwhile.
      */
     suspend fun amendPending(id: String, note: String): ApiResult<Unit> {
         val result = api.amend(id, note)
         when (result) {
-            is ApiResult.Ok -> refreshPending()
-            is ApiResult.Failed -> _notice.value = describeDraft(result.error)
+            is ApiResult.Ok -> {
+                _notice.value = com.jarvis.client.net.TaskControl.NOTE_KEPT
+                refreshPending()
+            }
+            is ApiResult.Failed -> _notice.value = describeDraft(result.error, amend = true)
         }
         return result
     }
 
     /**
      * Pause, resume, stop, or add a note to whatever Jarvis is running -
-     * AUTONOMY-PROPOSALS.md §3d. All four are one-shot requests against a
-     * single implied task, never gated on [decisionBlocker]: sending "please
-     * pause" is safe to attempt regardless of the event stream's own
-     * staleness, the same reasoning [amendPending] gives, and none of the
-     * four is itself a verdict on anything pending.
+     * AUTONOMY-PROPOSALS.md §3d, served by the desktop's
+     * `backend/task-control.patch`. Pause, Stop and the note are never gated
+     * on [decisionBlocker]: sending "please stop" is safe to attempt
+     * regardless of the event stream's own staleness - the moment you most
+     * want Stop is the moment the link is misbehaving - and none of them is
+     * a verdict on anything pending.
+     *
+     * **Resume is the exception, and does not carry on by itself.** The
+     * desktop raises one approval card listing the steps that are left and
+     * runs them only if that card is approved; being the one control that
+     * makes work go again, it is held while the link is stale (rule 4).
      *
      * **This function must never set `_activity` to PAUSED itself.** A
      * request succeeding only means the desktop accepted the HTTP call, not
@@ -1617,7 +1626,16 @@ object JarvisRuntime {
      */
     suspend fun pauseTask(): ApiResult<Unit> = runTaskAction { api.pauseTask() }
 
-    suspend fun resumeTask(): ApiResult<Unit> = runTaskAction { api.resumeTask() }
+    suspend fun resumeTask(): ApiResult<Unit> {
+        if (_stale.value || _link.value != LinkState.CONNECTED) {
+            val blocker = com.jarvis.client.net.TaskControl.RESUME_WHILE_STALE
+            _notice.value = blocker
+            return ApiResult.Failed(ApiError.Unreachable(blocker))
+        }
+        val result = runTaskAction { api.resumeTask() }
+        if (result is ApiResult.Ok) _notice.value = com.jarvis.client.net.TaskControl.RESUME_ASKED
+        return result
+    }
 
     suspend fun stopTask(): ApiResult<Unit> = runTaskAction { api.stopTask() }
 

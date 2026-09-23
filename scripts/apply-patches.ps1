@@ -157,6 +157,14 @@ $PATCHES = @(
     # A cloud lane then gets the newest question alone, never the
     # conversation the clients now send with it.
     'cloud-one-turn.patch'
+    # --- task controls, notes, power (2026-09-23) ---------------------------
+    # Pause/Resume/Stop, a note for what runs next, and a note on one approval
+    # card. Its context lines are feedback's and memory-intake's output (the
+    # end of the /api/feedback/mark block, the memory-route tuple) and
+    # extraction-wiring's (_activity), so it goes after all of them. Needs
+    # jarvis_task_control.py copied in; without it the routes answer 503.
+    'task-control.patch'
+    # --- end task controls ---------------------------------------------------
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
@@ -740,6 +748,9 @@ try {
         # first, like every file here.
         'jarvis_speech.py'
         'rebuilt/jarvis_voice.py'   # forward slash: a path on Windows and on Linux alike
+        # --- task controls, notes, power (2026-09-23) ---
+        'jarvis_task_control.py'     # task-control.patch
+        # --- end task controls ---
     )
     $copied = 0
     foreach ($m in $SHIPPED) {

@@ -87,13 +87,11 @@ fun ApprovalCard(
     onDeny: () -> Unit,
     /**
      * A note typed before the first decision - AUTONOMY-PROPOSALS.md §3b.
-     * NOT a decision and approves nothing; the expected result is the
-     * desktop replacing this card with a fresh set of options that accounts
-     * for it, delivered the normal way through the next `/api/pending`
-     * refresh. DRAFT: the route this calls has no confirmed backend yet
-     * (`jarvis_gate.py`/`jarvis_hud.py` are not in this repo) - a failure
-     * here is expected until it exists, and is shown through the same
-     * shared notice every other read on this screen uses, never hidden.
+     * NOT a decision and approves nothing. The desktop
+     * (`backend/task-control.patch`) keeps the note with this card - the card
+     * itself does not change - and hands it to the model together with the
+     * owner's answer. A failure is shown through the same shared notice
+     * every other read on this screen uses, never hidden.
      * Suspend, so this card can hold its own "sending" state without a new
      * field threaded through from outside.
      */

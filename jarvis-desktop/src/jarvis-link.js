@@ -464,15 +464,12 @@ export async function decide(id, approved, optionId = null) {
  * Sends a note before the first decision - docs/AUTONOMY-PROPOSALS.md §3b.
  *
  * This is NOT a decision and approves nothing - `amend_approval` is a
- * distinct, unconfirmed route from `decide_approval` on purpose, so a
- * backend that has not implemented it yet fails this call rather than
- * silently approving or denying anything. The expected result is a NEW
- * proposal for the same id, delivered the normal way through
- * `approvals-changed` - this function only sends the note; it does not wait
- * for or apply the new plan itself.
+ * distinct route from `decide_approval` on purpose, so a backend that has not
+ * implemented it fails this call rather than approving or denying anything.
  *
- * Route name and shape are marked DRAFT in the design doc - confirm against
- * the real `jarvis_hud.py` before this is load-bearing.
+ * Served by `backend/task-control.patch`. The server keeps the note WITH the
+ * card - the card itself does not change - and hands it to the model
+ * together with the owner's answer, whichever answer that is.
  */
 export async function amend(id, note) {
   if (!IS_TAURI) throw new Error("no desktop backend to send the note to");
@@ -495,12 +492,11 @@ export async function amend(id, note) {
  * stopping "whatever Jarvis is doing right now" needs its own signal to the
  * server, not a local abort that only this window can see the effect of.
  *
- * DRAFT, same standing as `amend()` above: `jarvis_gate.py`/`jarvis_hud.py`
- * are not in this repository, so `pause_task`/`resume_task`/`stop_task`/
- * `inject_task_note` are not routes confirmed to exist yet. Calling any of
- * these against a backend that has not added them fails honestly (the
- * command errors, same as any other Tauri call to an unimplemented route)
- * rather than silently doing nothing.
+ * Served by `backend/task-control.patch` (see backend/README.md). A backend
+ * without that patch answers 404, and the command says so rather than
+ * silently doing nothing. Resume does not carry on by itself: the server
+ * raises an approval card listing the steps left, and runs them only if
+ * that card is approved.
  *
  * None of the four takes a task id: this project's own chat state already
  * treats "the current turn" as singular (`cancel_chat` takes none either),
@@ -514,6 +510,16 @@ export async function pauseTask() {
 
 export async function resumeTask() {
   if (!IS_TAURI) throw new Error("no desktop backend to send that to");
+  // The one task control that makes something GO again, so it is held to
+  // rule 4 like a decision: not on a stream that cannot be confirmed live.
+  // (It only raises an approval card - but that card should be answered by
+  // someone looking at a live queue.) Pause, Stop and notes are not gated:
+  // the moment you most want Stop is the moment the link is misbehaving.
+  if (link.stale) {
+    throw new Error(
+      "the event stream is offline, so resuming is held until it reconnects - Stop still works"
+    );
+  }
   return TAURI.core.invoke("resume_task");
 }
 

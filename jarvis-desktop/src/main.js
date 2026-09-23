@@ -1918,10 +1918,7 @@ async function sendNote() {
   try {
     await amendOnBackend(id, note);
     dom.approvalNoteInput.value = "";
-    noteToFeed(
-      "Sent — waiting for a new proposal. Jarvis will read this note and " +
-        "propose again for the same request; nothing has been approved or denied."
-    );
+    noteToFeed("Note kept with this card. Nothing was approved or denied, and the card is unchanged. Jarvis reads your note together with your answer - to have it plan differently, deny the card.");
   } catch (error) {
     noteToFeed(String((error && error.message) || error));
   } finally {
@@ -1960,10 +1957,10 @@ function syncTaskControls() {
 
 /**
  * Sends a pause, resume, or stop request for whatever Jarvis is running
- * right now. DRAFT: `pause_task`/`resume_task`/`stop_task` may not exist as
- * Rust commands yet — same situation `amend_approval` was in before it got
- * one — so a rejected invoke surfaces its real error rather than pretending
- * the task's state changed.
+ * right now, through `backend/task-control.patch`'s routes. A rejected
+ * invoke (no route on this backend, nothing running, a stale link for
+ * Resume) surfaces its real error rather than pretending the task's state
+ * changed.
  *
  * Deliberately does not touch `state.taskActivity` on success. An invoke
  * that resolves only means the IPC round trip completed, not that Jarvis
@@ -1985,13 +1982,11 @@ async function sendTaskAction(kind) {
       );
     } else if (kind === "resume") {
       await resumeTask();
-      noteToFeed(
-        "Resume requested — sent. This button will only say Pause again " +
-          "once Jarvis itself reports it has actually resumed."
-      );
+      // Resume only ASKS (task-control.patch) - see widget.js.
+      noteToFeed("Resume sent. Nothing runs yet: Jarvis shows an approval card listing the steps that are left, and continues only if you approve it.");
     } else {
       await stopTask();
-      noteToFeed("Stop requested — sent. The desktop has no way to confirm it actually did.");
+      noteToFeed("Stop sent. Jarvis stops before its next step; steps already done stay done.");
     }
   } catch (error) {
     noteToFeed(String((error && error.message) || error));
@@ -2017,8 +2012,8 @@ async function sendTaskNote() {
     await injectTaskNote(note);
     dom.taskNoteInput.value = "";
     noteToFeed(
-      "Sent — applies to what Jarvis does next. This does not change the " +
-        "step already running, and the desktop has no way to confirm Jarvis read it."
+      "Sent — applies to what Jarvis does next. Jarvis reads it when the " +
+        "current step finishes; it changes no step you already approved."
     );
   } catch (error) {
     noteToFeed(String((error && error.message) || error));

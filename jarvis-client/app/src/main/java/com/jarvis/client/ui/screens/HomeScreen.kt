@@ -332,7 +332,7 @@ data class HomeActions(
     val onInterrupt: () -> Unit,
     val onApprove: (PendingItem) -> Unit,
     val onDeny: (PendingItem) -> Unit,
-    /** A note before the first decision - AUTONOMY-PROPOSALS.md §3b. DRAFT; see ApprovalCard. */
+    /** A note before the first decision - AUTONOMY-PROPOSALS.md §3b. See ApprovalCard. */
     val onAmend: suspend (id: String, note: String) -> Unit,
     val onReconnect: () -> Unit,
     val onDismissNotice: () -> Unit,
@@ -348,7 +348,7 @@ data class HomeActions(
     val onDismissVoiceNotice: () -> Unit,
     /**
      * Pause, resume, stop, or add a note to whatever Jarvis is running -
-     * AUTONOMY-PROPOSALS.md §3d. DRAFT; see [com.jarvis.client.JarvisRuntime.pauseTask].
+     * AUTONOMY-PROPOSALS.md §3d; see [com.jarvis.client.JarvisRuntime.pauseTask].
      */
     val onPauseTask: suspend () -> Unit = {},
     val onResumeTask: suspend () -> Unit = {},
@@ -1426,9 +1426,9 @@ private fun LaneChip(status: StatusInfo?) {
 
 /**
  * Pause, resume, stop, or add a note to whatever Jarvis is running -
- * AUTONOMY-PROPOSALS.md §3d. DRAFT throughout: no backend anywhere is
- * confirmed to answer any of the four calls this wires to, so every button
- * here can fail, and does so honestly rather than pretending to work - see
+ * AUTONOMY-PROPOSALS.md §3d, served by the desktop's
+ * `backend/task-control.patch`. A desktop without that patch answers 404 and
+ * every button here says so rather than pretending to work - see
  * [com.jarvis.client.JarvisRuntime.pauseTask]'s own doc comment.
  *
  * `paused` answers only to the server's own reported [Activity], never to
@@ -1464,8 +1464,12 @@ private fun TaskControlsPlate(paused: Boolean, actions: HomeActions) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "This section is a draft: the desktop does not yet confirm pausing, " +
-                "resuming or stopping, so these buttons may simply do nothing today.",
+            if (paused) {
+                "Resume asks you first: an approval card lists the steps that are left. " +
+                    "Stop forgets the task."
+            } else {
+                "Pause and Stop take effect before the next step. Steps already done stay done."
+            },
             style = MaterialTheme.typography.labelSmall,
             color = chrome.textLo,
         )

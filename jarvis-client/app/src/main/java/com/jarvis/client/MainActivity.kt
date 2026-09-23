@@ -1386,10 +1386,9 @@ class MainActivity : FragmentActivity() {
                                 onVoiceRelease = ::releaseVoice,
                                 onVoiceCancel = ::cancelVoice,
                                 onDismissVoiceNotice = { JarvisRuntime.voice.clearNotice() },
-                                // AUTONOMY-PROPOSALS.md §3b/§3d, all DRAFT: see
-                                // JarvisRuntime's own doc comments on each of
-                                // these for why a failure here is expected
-                                // until the backend has the route.
+                                // AUTONOMY-PROPOSALS.md §3b/§3d, served by the
+                                // desktop's backend/task-control.patch: see
+                                // JarvisRuntime's own doc comments on each.
                                 onAmend = { id, note -> JarvisRuntime.amendPending(id, note) },
                                 onPauseTask = { JarvisRuntime.pauseTask() },
                                 onResumeTask = { JarvisRuntime.resumeTask() },
