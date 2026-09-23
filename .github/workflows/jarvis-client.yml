@@ -489,6 +489,8 @@ jobs:
             fi
             echo "::group::The last tests the device started, and its last words"
             grep -E "TestRunner\(.*\): (started|finished|failed):" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -8 || true
+            echo "--- which face was drawing, and what the GPU check found ---"
+            grep -E "JarvisFaceRender|JarvisGpuProbe|FATAL EXCEPTION|AndroidRuntime" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -12 || true
             echo "--- last 25 lines of the device log ---"
             tail -25 "$RUNNER_TEMP/device.log" 2>/dev/null || true
             echo "::endgroup::"
