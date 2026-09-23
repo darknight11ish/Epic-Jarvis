@@ -5026,10 +5026,32 @@ async function bootDisplay() {
   }
   if (!faceId || !FACE[faceId]) faceId = SPEC.faces[0].id;
 
+  // The same quality the editor's solo view settles on, so the Widget's face
+  // is exactly as sharp as the reactor kit's solo view rather than a notch
+  // below it. Two things had held it back:
+  //
+  //  - Q starts on the "medium" tier, and only budget() ever raises it - on
+  //    any machine with headroom it climbs to "high" within a few seconds.
+  //    Display mode runs its own tick below and never calls budget(), so it
+  //    stayed on medium for good. Medium's `gpu` is 0.80: the three shader
+  //    faces (nucleus, membrane, tokamak) ray-marched 80% of the Widget's
+  //    device pixels and were stretched up to fill it - soft edges, and the
+  //    single biggest clarity gap against the kit.
+  //  - detail was 1.6 where solo uses 1.9, so every CPU face drew coarser
+  //    geometry than the same face in the kit.
+  //
+  // Fixed at "high", not adaptive, because this surface is tiny: the Widget
+  // frame is 120 CSS px, a few hundred device pixels a side, and the budget
+  // governor exists for twenty full-size tiles at once. "high" and not "max"
+  // because high is as far as budget() itself ever climbs on its own - this
+  // copies what the kit actually does, rather than going past it.
+  Q.ss = TIERS.high.ss; Q.detail = TIERS.high.detail; Q.gpu = TIERS.high.gpu; Q.post = TIERS.high.post;
+  QNAME = "high";
+
   const surface = makeSurface(THEME[faceId], canvas, null);
   surface.seed = 7;
   surface.ss = 2;                              // full pixel density, always
-  surface.detail = Math.max(1.6, Q.detail);
+  surface.detail = Math.max(1.9, Q.detail);    // the full detail budget, as openSolo()
 
   const fit = () => sizeSurface(surface);
   window.addEventListener("resize", fit);

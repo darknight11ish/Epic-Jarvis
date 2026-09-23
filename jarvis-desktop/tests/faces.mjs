@@ -459,6 +459,32 @@ await check("solo view can cycle through every state slowly, and stop", async ()
   assert.equal(afterOff, atOff, "the state kept advancing after cycling was turned off");
 });
 
+await check("the Widget's face draws at full sharpness, like the kit's solo view", async () => {
+  // Display mode (the Widget's live face) runs its own frame loop and never
+  // calls budget(), so it used to stay on the "medium" tier the editor only
+  // STARTS on: shader faces ray-marched 80% of the device pixels and were
+  // stretched to fit, and every face drew with less geometry (detail 1.6)
+  // than the same face in the solo view (1.9). Nucleus is a shader face, so
+  // it is the one that shows the gap.
+  const page = await K.open(browser, base, "faces.html?mode=display&face=nucleus", {},
+                            { width: 120, height: 120 });
+  await page.waitForTimeout(1500);
+  const got = await page.evaluate(() => ({
+    canvases: document.querySelectorAll("canvas").length,
+    grid: Boolean(document.getElementById("grid")),
+    css: Math.round(document.getElementById("display-canvas").getBoundingClientRect().width),
+    dpr: window.devicePixelRatio, tier: QNAME, gpu: Q.gpu, gpupx: GPUPX, detail: QUALITY,
+  }));
+  await page.close();
+  assert.equal(got.canvases, 1, "display mode should draw exactly one face");
+  assert.equal(got.grid, false, "display mode built the editor's grid");
+  assert.equal(got.tier, "high");
+  assert.equal(got.gpu, 1, `the shader is asked for ${got.gpu * 100}% of the device pixels`);
+  assert.equal(got.gpupx, Math.round(got.css * Math.min(got.dpr, 3)),
+    `shader renders ${got.gpupx}px into a ${got.css}px box at ${got.dpr}x`);
+  assert.ok(got.detail >= 1.9, `geometry detail ${got.detail}, the solo view uses 1.9`);
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe faces window holds");
