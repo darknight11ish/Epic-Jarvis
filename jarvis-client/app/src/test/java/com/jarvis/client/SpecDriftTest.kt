@@ -332,16 +332,18 @@ class SpecDriftTest {
      * Rime and Orbital were chosen over flashier candidates precisely to
      * avoid a third.
      *
-     * Spectrum, coreplate, workbench, swarm, shoal, accretion and cascade are
-     * also marked `integrates_per_frame: true` in the spec, because their
-     * desktop reference genuinely does carry state — a smoothed FFT, boid
-     * velocities, a DLA grid, a live particle list. None of that state was
-     * ported. Each one here is a deterministic function of `t`, a fixed
+     * Spectrum, coreplate, workbench, swarm, shoal and accretion are also
+     * marked `integrates_per_frame: true` in the spec, because their desktop
+     * reference genuinely does carry state — a smoothed FFT, boid velocities,
+     * a DLA grid. None of that state was ported as frame-to-frame state. Each
+     * one here is a deterministic function of `t` (accretion: of the walker
+     * count `f.tableAngle` implies - its grid is a cache replayed forward to
+     * that count, with each growth cycle seeded by its own index), a fixed
      * per-element seed, and the already-smoothed `f.amp`: call `draw` twice
      * with the same inputs and it draws the same picture twice, which is
      * exactly the property this test is protecting. They are carved out of
      * the filter below for that reason — the spec's flag describes the
-     * *reference's* technique, not this port's, and is wrong for these seven
+     * *reference's* technique, not this port's, and is wrong for these six
      * specifically, not wrong to check in general.
      *
      * `membrane` is not in that carve-out, and should not be. Its
@@ -351,21 +353,32 @@ class SpecDriftTest {
      * same picture twice; it depends on everything that happened before it,
      * exactly the property the seven above were engineered to avoid and this
      * one cannot. So `membrane` joins `iris` in the expected set itself,
-     * argued here rather than quietly carved out the way the seven were.
+     * argued here rather than quietly carved out the way the six were.
+     *
+     * `cascade` joined them, deliberately, when it was ported to the
+     * reactor kit's own particle system. It used to be in the carve-out, as
+     * a pure function of `t` - and that is exactly why it looked nothing
+     * like the kit: a parcel's position depends on the drag and random walk
+     * of every tick before it, and on the flow and spread of the state that
+     * was showing when it fell, so a function of the current frame could
+     * only replace the physics with dashes on a fixed fall cycle. Matching
+     * the kit meant keeping real state. It keeps as little as that allows -
+     * nothing older than one parcel's ~4 s lifetime - but it is state, so it
+     * is listed here rather than carved out.
      *
      * An exact set rather than a blanket ban, so adding another stateful face
      * fails this test and has to be argued rather than done quietly.
      */
     @Test
-    fun `iris and membrane are the only offered faces that cannot be pinned`() {
-        // See the class comment above: these seven are deterministic in this
+    fun `iris membrane and cascade are the only offered faces that cannot be pinned`() {
+        // See the class comment above: these six are deterministic in this
         // port despite the spec marking their id `integrates_per_frame: true`
         // for the desktop reference's own, genuinely stateful, technique.
-        // membrane is deliberately NOT in this set - unlike these seven, it
-        // really does carry state, so it belongs in the assertion below
-        // instead of being carved out of it.
+        // membrane and cascade are deliberately NOT in this set - unlike these
+        // six, they really do carry state, so they belong in the assertion
+        // below instead of being carved out of it.
         val deterministicDespiteSpecFlag = setOf(
-            "spectrum", "coreplate", "workbench", "swarm", "shoal", "accretion", "cascade",
+            "spectrum", "coreplate", "workbench", "swarm", "shoal", "accretion",
         )
         val stateful = spec["faces"]!!.jsonArray
             .map { it.jsonObject }
@@ -376,7 +389,7 @@ class SpecDriftTest {
             "the set of simulation-driven faces this app offers has changed. Each one is a " +
                 "face that cannot be verified against the desktop, so this should be a " +
                 "deliberate decision rather than a test update",
-            setOf("iris", "membrane"),
+            setOf("iris", "membrane", "cascade"),
             Faces.all.map { it.id }.filter { it in stateful }.toSet(),
         )
     }

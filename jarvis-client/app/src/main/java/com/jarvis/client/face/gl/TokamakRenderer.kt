@@ -13,7 +13,6 @@ import javax.microedition.khronos.opengles.GL10
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -35,28 +34,47 @@ interface MeshRenderer : GLSurfaceView.Renderer {
 }
 
 /**
- * The desktop's own torus mesh (32x12 shaded quads there), ported close to
- * `TOKAMAK_VS`/`TOKAMAK_FS` in the desktop's `faces.html`. Rotation and the
- * perspective divide happen in the vertex shader exactly as the reference
- * does it - the same `k = scale / (dist + z)` division every other 3D face
- * in this app already does on the CPU, just moved onto the GPU because this
- * one draws as a real mesh instead of lines and circles.
+ * The desktop's own torus mesh, ported close to `TOKAMAK_VS`/`TOKAMAK_FS` and
+ * the `mesh()` path of `tokamak` in the reactor kit
+ * (`docs/reference/jarvis-reactor-kit.html`, the same code as the desktop's
+ * `faces.html`). Rotation and the perspective divide happen in the vertex
+ * shader exactly as the reference does it - the same `k = scale / (dist + z)`
+ * division every other 3D face in this app already does on the CPU, just
+ * moved onto the GPU because this one draws as a real mesh instead of lines
+ * and circles.
  *
- * Two things are dropped, matching Nucleus's own precedent and for the same
- * reasons (see its doc comment in `Faces.kt`): the reference's
- * environment-reflection texture (no panorama to sample on a phone, so this
- * always takes its own no-texture fallback tone), and `HUD.beat`, a global
- * pulse nothing in this app drives - the bass-hit "kick" term it fed is
- * simply absent, not zeroed.
+ * Brought up to the kit where the first port drew less than it:
+ *  - Mesh density. The kit builds `detail(GPUPX, 48, 150, 168)` segments
+ *    around the ring and `detail(GPUPX, 20, 56, 64)` around the tube, which
+ *    in its solo view (see [GL.detail]) is 168 x 64 on any phone-sized face.
+ *    This used a fixed 48 x 18, so the current bands were stepped across 18
+ *    rings of the tube.
+ *  - Spin. The kit turns the torus by its whole accumulated phase
+ *    (`ry = PHASE`); this turned it by `0.35 * phase` - Nucleus's camera
+ *    factor, carried over - so it spun at about a third of the kit's speed.
+ *  - Pitch. The kit nods the torus by `sin(t * 0.17) * 0.1` around its -0.55
+ *    tilt, on the raw clock. That nod was missing.
+ *  - The current and the wobble run on the kit's raw clock `t` (`f.t` here),
+ *    not on the spin phase - so the current used to flow at 0.3x the kit's
+ *    speed at idle, the state it is most often looked at in.
+ *  - The environment reflection (see [com.jarvis.client.face.EnvMap]) and
+ *    4x multisampled edges (see [GL.MsaaConfigChooser]) - the first port
+ *    took the no-texture fallback tone and single-sample edges.
  *
- * A third thing is dropped, and unlike the two above it is not a "nothing to
- * plug in" gap: the reference's own hardcoded per-state accent colour and
- * its separately defined "plate" colour. Every canvas face in this app
- * shades with the `hot`/`cool` it is handed - the user's own chosen binding
- * for the current state - and this uses that same pair (`uA` = hot, `uPlate`
- * = cool) rather than a private palette that would make this the one face
- * immune to the colour picker. Geometry (flow/tightness/instability, which
- * have no user-facing control) keeps the reference's own per-state table.
+ * Two things are still dropped. `HUD.beat`, a global pulse nothing in this
+ * app drives - the bass-hit "kick" term it fed is simply absent, not zeroed.
+ * And the reference's own hardcoded per-state accent colour and its
+ * separately defined "plate" colour: every canvas face in this app shades
+ * with the `hot`/`cool` it is handed - the user's own chosen binding for the
+ * current state - and this uses that same pair (`uA` = hot, `uPlate` = cool)
+ * rather than a private palette that would make this the one face immune to
+ * the colour picker. Geometry (flow/tightness/instability, which have no
+ * user-facing control) keeps the reference's own per-state table.
+ *
+ * Size is NOT the kit's: this fills the radius `r` every face is handed
+ * (`uScale = r * DIST`), where the kit draws the torus at about 0.27 of its
+ * canvas. Kept, because how large every face sits in its well is the shell's
+ * decision and applies to all twenty.
  */
 class TokamakRenderer : MeshRenderer {
 
@@ -70,15 +88,6 @@ class TokamakRenderer : MeshRenderer {
     }
 
     private companion object {
-        // The reference's own high tier is 150x64 vertices, chosen by its
-        // detail() ramp against the real device it is running on. There is
-        // no device here to profile this against, and the whole mesh is
-        // rebuilt and re-uploaded every frame - it has to be, the wobble is
-        // a function of time, same as the reference's own mesh() does
-        // unconditionally - so a fixed, conservative grid is the safer
-        // default until it can be measured on real hardware and raised.
-        const val NU = 48
-        const val NV = 18
         const val OBJ_R = 0.72f
         const val OBJ_R0 = 0.29f
         const val DIST = 4.0f
@@ -117,9 +126,14 @@ class TokamakRenderer : MeshRenderer {
             }
         """.trimIndent()
 
+        // The environment block goes in straight after `precision`, which
+        // GLSL ES has to see before the first float declaration. Joined as
+        // separate strings rather than trimIndent()ed as one: trimIndent
+        // strips the smallest indent of ALL lines, and GL.ENV_GLSL has none.
         val FS = """
             #version 300 es
             precision highp float;
+        """.trimIndent() + "\n" + GL.ENV_GLSL + """
             in vec3 vN;
             in float vCur;
             out vec4 oCol;
@@ -135,9 +149,10 @@ class TokamakRenderer : MeshRenderer {
                 vec3 n = normalize(vN);
                 float lam = max(0.0, -dot(n, LIGHT));
                 float rim = pow(1.0 - min(1.0, abs(n.z)), 2.6);
-                vec3 env = vec3(22.0, 24.0, 30.0) / 255.0;
                 vec3 base = uPlate * (0.22 + lam * 1.05);
-                base = mix(base, env, clamp(0.06 + rim * 0.4, 0.0, 1.0));
+                base = mix(base, envSample(n), clamp(0.06 + rim * 0.4, 0.0, 1.0));
+                // Rim: the containment field is brightest where the surface
+                // turns away.
                 base = mix(base, uA, min(0.9, rim * 0.85));
                 base = mix(base, uA, min(1.0, vCur * 0.95));
                 oCol = vec4(tonemap(base), 1.0);
@@ -156,37 +171,52 @@ class TokamakRenderer : MeshRenderer {
     private var uScaleLoc = 0
     private var uPlateLoc = 0
     private var uALoc = 0
+    private var uEnvLoc = -1
 
     private var vao = 0
     private var posBuf = 0
     private var nrmBuf = 0
     private var curBuf = 0
     private var idxBuf = 0
+    private var envTex = 0
     private var indexCount = 0
 
     private var surfaceW = 1
     private var surfaceH = 1
 
-    // The mesh, built on the CPU every frame (the wobble is a function of
-    // time, so it has to be) but allocated exactly once.
+    // The mesh, sized by GL.detail for the surface it is drawn on and rebuilt
+    // only when that size (or the GL context) changes - see ensureMesh.
     //
-    // These three used to be `FloatArray(...)` locals inside `onDrawFrame` -
-    // ~26 KB of Java heap churn per frame at up to 120 fps, which is pure GC
-    // pressure on the one code path in the app that must never stutter.
-    // `MembraneRenderer` already held its equivalents as fields; this one was
-    // simply missed.
-    private val vertCount = (NU + 1) * (NV + 1)
-    private val pos = FloatArray(vertCount * 3)
-    private val nrm = FloatArray(vertCount * 3)
-    private val cur = FloatArray(vertCount)
+    // These used to be `FloatArray(...)` locals inside `onDrawFrame` - heap
+    // churn per frame at up to 120 fps, which is pure GC pressure on the one
+    // code path in the app that must never stutter. They stay fields,
+    // allocated once per mesh size; they are just no longer a fixed 48 x 18.
+    private var nu = 0
+    private var nv = 0
+    /** The GPU side (index list, normals, attribute stores) needs building. */
+    private var gpuMeshStale = true
+    private var pos = FloatArray(0)
+    private var nrm = FloatArray(0)
+    private var cur = FloatArray(0)
+    private var posFb = GL.directFloatBuffer(0)
+    private var curFb = GL.directFloatBuffer(0)
+    /** [pos] holds the unwobbled torus, and it is already on the GPU. */
+    private var restingUploaded = false
 
-    // And one direct buffer per attribute, filled in place each frame instead
-    // of a fresh `ByteBuffer.allocateDirect` per attribute per frame - native
-    // memory that is only ever reclaimed by the Cleaner, so it accumulates
-    // faster than it is freed at frame rate.
-    private val posFb = GL.directFloatBuffer(pos.size)
-    private val nrmFb = GL.directFloatBuffer(nrm.size)
-    private val curFb = GL.directFloatBuffer(cur.size)
+    // Per-ring and per-tube-station trig, so the inner loop has none. The
+    // torus is separable in u and v; the wobble is a product of a u term and
+    // a v term, and the current's sine of a difference expands into the same
+    // shape. At 168 x 64 that turns ~55,000 sin/cos a frame into ~470.
+    private var cu = FloatArray(0)
+    private var su = FloatArray(0)
+    private var cvT = FloatArray(0)
+    private var svT = FloatArray(0)
+    private var wobU = FloatArray(0)
+    private var wobV = FloatArray(0)
+    private var curSU = FloatArray(0)
+    private var curCU = FloatArray(0)
+    private var curSV = FloatArray(0)
+    private var curCV = FloatArray(0)
 
     // Written from the UI thread via queueEvent, read only on the GL thread -
     // GLSurfaceView's own contract for crossing that boundary safely.
@@ -211,9 +241,9 @@ class TokamakRenderer : MeshRenderer {
         // `setPreserveEGLContextOnPause` stays at its default false (the lost
         // context takes the objects with it). Turn that on - or hit a driver
         // that preserves anyway - and every background/foreground cycle leaks
-        // a program, a VAO and four buffers. Deleting first is correct either
-        // way: after a real context loss the stale ids name nothing in the new
-        // context, so the driver ignores them.
+        // a program, a VAO, four buffers and a texture. Deleting first is
+        // correct either way: after a real context loss the stale ids name
+        // nothing in the new context, so the driver ignores them.
         deleteGlObjects()
         // Caught, not allowed to propagate. `GL.compileProgram` ends in
         // `error(...)`, and this runs on GLSurfaceView's own GLThread where
@@ -239,6 +269,7 @@ class TokamakRenderer : MeshRenderer {
         uScaleLoc = GLES30.glGetUniformLocation(program, "uScale")
         uPlateLoc = GLES30.glGetUniformLocation(program, "uPlate")
         uALoc = GLES30.glGetUniformLocation(program, "uA")
+        uEnvLoc = GLES30.glGetUniformLocation(program, "uEnv")
 
         val vaoArr = IntArray(1)
         GLES30.glGenVertexArrays(1, vaoArr, 0)
@@ -249,43 +280,11 @@ class TokamakRenderer : MeshRenderer {
         nrmBuf = bufs[1]
         curBuf = bufs[2]
         idxBuf = bufs[3]
+        envTex = GL.envTexture()
 
-        // The seam row at u = TAU is a duplicated row of vertices rather
-        // than a wrapped index, matching the reference's own comment on
-        // why: one extra row is cheaper than a special case in the inner
-        // loop.
-        val vv = NV + 1
-        val tris = ArrayList<Int>(NU * NV * 6)
-        for (iu in 0 until NU) {
-            for (iv in 0 until NV) {
-                val a = iu * vv + iv
-                val b = (iu + 1) * vv + iv
-                val c = (iu + 1) * vv + iv + 1
-                val d = iu * vv + iv + 1
-                tris.add(a); tris.add(b); tris.add(c)
-                tris.add(a); tris.add(c); tris.add(d)
-            }
-        }
-        indexCount = tris.size
-        val idxData = GL.intBuffer(tris.toIntArray())
-        GLES30.glBindVertexArray(vao)
-        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, idxBuf)
-        GLES30.glBufferData(
-            GLES30.GL_ELEMENT_ARRAY_BUFFER,
-            indexCount * 4,
-            idxData,
-            GLES30.GL_STATIC_DRAW,
-        )
-        GLES30.glBindVertexArray(0)
-
-        // The three attribute stores are DYNAMIC but FIXED SIZE, so their GPU
-        // storage is allocated once here (`null` data = uninitialised store)
-        // and refilled with glBufferSubData each frame. Re-calling
-        // glBufferData every frame orphans and re-allocates the whole store on
-        // the driver side three times a frame for no gain.
-        allocAttr(posBuf, pos.size * 4)
-        allocAttr(nrmBuf, nrm.size * 4)
-        allocAttr(curBuf, cur.size * 4)
+        // Everything sized by the mesh is (re)built on the first frame that
+        // knows the surface size - see ensureMesh.
+        gpuMeshStale = true
 
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
@@ -307,17 +306,132 @@ class TokamakRenderer : MeshRenderer {
             curBuf = 0
             idxBuf = 0
         }
-    }
-
-    private fun allocAttr(buf: Int, bytes: Int) {
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buf)
-        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, bytes, null, GLES30.GL_DYNAMIC_DRAW)
+        if (envTex != 0) {
+            GLES30.glDeleteTextures(1, intArrayOf(envTex), 0)
+            envTex = 0
+        }
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         surfaceW = max(1, width)
         surfaceH = max(1, height)
         GLES30.glViewport(0, 0, surfaceW, surfaceH)
+    }
+
+    /**
+     * Sizes the mesh to the kit's `detail()` for this surface and builds
+     * what depends on that size: the CPU arrays, the per-ring trig, the
+     * normals (a torus's normal is fixed per vertex, so it is uploaded once
+     * here rather than every frame) and the index list. A no-op on every
+     * frame where neither the size nor the GL context changed. The size is
+     * quantised by detail() to whole segments, so dragging the face's pane
+     * larger rebuilds a few times, not on every pixel.
+     */
+    private fun ensureMesh() {
+        val px = GL.meshPx(surfaceW, surfaceH)
+        val wantU = GL.detail(px, 48, 150, 168)
+        val wantV = GL.detail(px, 20, 56, 64)
+        val resized = wantU != nu || wantV != nv
+        if (!resized && !gpuMeshStale) return
+        if (resized) {
+            nu = wantU
+            nv = wantV
+            val count = (nu + 1) * (nv + 1)
+            pos = FloatArray(count * 3)
+            nrm = FloatArray(count * 3)
+            cur = FloatArray(count)
+            posFb = GL.directFloatBuffer(pos.size)
+            curFb = GL.directFloatBuffer(cur.size)
+            cu = FloatArray(nu + 1)
+            su = FloatArray(nu + 1)
+            wobU = FloatArray(nu + 1)
+            curSU = FloatArray(nu + 1)
+            curCU = FloatArray(nu + 1)
+            cvT = FloatArray(nv + 1)
+            svT = FloatArray(nv + 1)
+            wobV = FloatArray(nv + 1)
+            curSV = FloatArray(nv + 1)
+            curCV = FloatArray(nv + 1)
+            for (iu in 0..nu) {
+                val u = iu.toFloat() / nu * TAU
+                cu[iu] = cos(u)
+                su[iu] = sin(u)
+            }
+            for (iv in 0..nv) {
+                val v = iv.toFloat() / nv * TAU
+                cvT[iv] = cos(v)
+                svT[iv] = sin(v)
+            }
+            val vv = nv + 1
+            for (iu in 0..nu) {
+                for (iv in 0..nv) {
+                    val o = (iu * vv + iv) * 3
+                    // The analytic normal of the UNPERTURBED torus, exactly
+                    // as the reference's own mesh() computes it - the
+                    // instability wobble moves the surface without being fed
+                    // back into its own lighting.
+                    nrm[o] = cvT[iv] * cu[iu]
+                    nrm[o + 1] = svT[iv]
+                    nrm[o + 2] = cvT[iv] * su[iu]
+                }
+            }
+        }
+
+        // The seam row at u = TAU is a duplicated row of vertices rather
+        // than a wrapped index, matching the reference's own comment on
+        // why: one extra row is cheaper than a special case in the inner
+        // loop.
+        val vv = nv + 1
+        val tris = IntArray(nu * nv * 6)
+        var t = 0
+        for (iu in 0 until nu) {
+            for (iv in 0 until nv) {
+                val a = iu * vv + iv
+                val b = (iu + 1) * vv + iv
+                val c = (iu + 1) * vv + iv + 1
+                val d = iu * vv + iv + 1
+                tris[t++] = a; tris[t++] = b; tris[t++] = c
+                tris[t++] = a; tris[t++] = c; tris[t++] = d
+            }
+        }
+        indexCount = tris.size
+        GLES30.glBindVertexArray(vao)
+        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, idxBuf)
+        GLES30.glBufferData(
+            GLES30.GL_ELEMENT_ARRAY_BUFFER,
+            indexCount * 4,
+            GL.intBuffer(tris),
+            GLES30.GL_STATIC_DRAW,
+        )
+        // Normals are fixed for a given mesh: STATIC, uploaded once, and the
+        // attribute pointer recorded in the VAO here rather than per frame.
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, nrmBuf)
+        GLES30.glBufferData(
+            GLES30.GL_ARRAY_BUFFER,
+            nrm.size * 4,
+            GL.floatBuffer(nrm),
+            GLES30.GL_STATIC_DRAW,
+        )
+        if (aNrmLoc >= 0) {
+            GLES30.glEnableVertexAttribArray(aNrmLoc)
+            GLES30.glVertexAttribPointer(aNrmLoc, 3, GLES30.GL_FLOAT, false, 0, 0)
+        }
+        GLES30.glBindVertexArray(0)
+
+        // Positions and current are DYNAMIC but FIXED SIZE for this mesh, so
+        // their GPU storage is allocated here (`null` data = uninitialised
+        // store) and refilled with glBufferSubData. Re-calling glBufferData
+        // every frame orphans and re-allocates the whole store on the driver
+        // side for no gain.
+        allocAttr(posBuf, pos.size * 4)
+        allocAttr(curBuf, cur.size * 4)
+        restingUploaded = false
+        gpuMeshStale = false
+    }
+
+    private fun allocAttr(buf: Int, bytes: Int) {
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buf)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, bytes, null, GLES30.GL_DYNAMIC_DRAW)
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -330,42 +444,58 @@ class TokamakRenderer : MeshRenderer {
             return
         }
         val f = frame ?: return
+        ensureMesh()
         val st = stFor(f.motion)
         val inst = st.inst * if (f.motion == FaceState.LISTENING) 1f + f.amp else 1f
-        val t = f.angle
+        // The kit's raw clock, for the current and the wobble. The spin
+        // phase (f.angle) is for the rotation below and nothing else.
+        val t = f.t
 
-        val vu = NU + 1
-        val vv = NV + 1
-        for (iu in 0 until vu) {
-            val u = iu.toFloat() / NU * TAU
-            val cu = cos(u)
-            val su = sin(u)
-            for (iv in 0 until vv) {
-                val v = iv.toFloat() / NV * TAU
+        // This frame's per-ring and per-station terms:
+        //   wob = 1 + inst * sin(3u + 4t) * sin(2v - 3t)
+        //   cur = max(0, sin(tight*u + 2*flow*t - 2v))^6, the sine of that
+        //         difference expanded as sin(A)cos(B) - cos(A)sin(B).
+        val flowT = t * st.flow * 2f
+        for (iu in 0..nu) {
+            val u = iu.toFloat() / nu * TAU
+            wobU[iu] = sin(u * 3f + t * 4f)
+            val a = u * st.tight + flowT
+            curSU[iu] = sin(a)
+            curCU[iu] = cos(a)
+        }
+        for (iv in 0..nv) {
+            val v = iv.toFloat() / nv * TAU
+            wobV[iv] = sin(v * 2f - t * 3f)
+            curSV[iv] = sin(v * 2f)
+            curCV[iv] = cos(v * 2f)
+        }
+
+        val vv = nv + 1
+        // With no instability (idle) the torus itself does not move between
+        // frames - only its current does - so the positions go up once and
+        // stay until a state with a wobble arrives.
+        val wobbling = inst != 0f
+        val uploadPos = wobbling || !restingUploaded
+        for (iu in 0..nu) {
+            for (iv in 0..nv) {
                 val k = iu * vv + iv
-                val o = k * 3
-                val cv = cos(v)
-                val sv = sin(v)
-                val wob = 1f + inst * sin(u * 3f + t * 4f) * sin(v * 2f - t * 3f)
-                val rr = OBJ_R0 * wob
-                pos[o] = (OBJ_R + rr * cv) * cu
-                pos[o + 1] = rr * sv
-                pos[o + 2] = (OBJ_R + rr * cv) * su
-                // The analytic normal of the UNPERTURBED torus, exactly as
-                // the reference's own mesh() computes it - the instability
-                // wobble moves the surface without being fed back into its
-                // own lighting.
-                nrm[o] = cv * cu
-                nrm[o + 1] = sv
-                nrm[o + 2] = cv * su
-                cur[k] = sin(u * st.tight - v * 2f + t * st.flow * 2f)
-                    .coerceAtLeast(0f).pow(6)
+                if (uploadPos) {
+                    val o = k * 3
+                    val rr = OBJ_R0 * (1f + inst * wobU[iu] * wobV[iv])
+                    val ring = OBJ_R + rr * cvT[iv]
+                    pos[o] = ring * cu[iu]
+                    pos[o + 1] = rr * svT[iv]
+                    pos[o + 2] = ring * su[iu]
+                }
+                val c = (curSU[iu] * curCV[iv] - curCU[iu] * curSV[iv]).coerceAtLeast(0f)
+                val c2 = c * c
+                cur[k] = c2 * c2 * c2
             }
         }
 
         GLES30.glBindVertexArray(vao)
-        uploadAttr(posBuf, aPosLoc, pos, posFb, 3)
-        uploadAttr(nrmBuf, aNrmLoc, nrm, nrmFb, 3)
+        if (uploadPos) uploadAttr(posBuf, aPosLoc, pos, posFb, 3)
+        restingUploaded = !wobbling
         uploadAttr(curBuf, aCurLoc, cur, curFb, 1)
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, idxBuf)
 
@@ -376,19 +506,21 @@ class TokamakRenderer : MeshRenderer {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glUseProgram(program)
+        GL.bindEnv(envTex, uEnvLoc)
 
         GLES30.glUniform2f(uResLoc, surfaceW.toFloat(), surfaceH.toFloat())
-        val yaw = f.angle * 0.35f + f.yaw
-        val pitch = -0.55f + f.pitch
+        // The kit's `ry = PHASE` - the whole phase, not a fraction of it -
+        // and `rx = -.55 + sin(t * .17) * .1` on the raw clock. The drag adds
+        // on top, as it does for every 3D face here.
+        val yaw = f.angle + f.yaw
+        val pitch = -0.55f + sin(f.t * 0.17f) * 0.1f + f.pitch
         GLES30.glUniform1f(uYawLoc, yaw)
         GLES30.glUniform1f(uPitLoc, pitch)
         GLES30.glUniform1f(uDistLoc, DIST)
         // r (the on-screen radius every other face is handed) at scale = r *
         // DIST makes the torus - whose own object-space half-extent is ~1
         // unit at a camera distance of 4 - fill roughly that same radius.
-        // Derived from the reference's own numbers (scale=S*1.05, dist=4),
-        // not measured on a screen, since there is no device here to look at
-        // one on.
+        // See the class comment on why this is not the kit's own size.
         val r = min(surfaceW, surfaceH) / 2f * 0.5f * fit
         GLES30.glUniform1f(uScaleLoc, r * DIST)
         GLES30.glUniform3f(uPlateLoc, cool.red, cool.green, cool.blue)
