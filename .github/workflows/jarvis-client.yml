@@ -402,6 +402,7 @@ jobs:
             echo "::group::Emulator log (tail)"
             tail -12 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
             echo "::endgroup::"
+            kill "${LOGCAT:-}" 2>/dev/null || true
             kill "$EMU" 2>/dev/null || true
           }
           trap finish EXIT
@@ -417,14 +418,42 @@ jobs:
           adb shell input keyevent 82 || true
           adb devices
 
+          # The device's log, streamed to the RUNNER while the tests run, not
+          # read back from the device afterwards. The run for a4c5ba9 lost the
+          # emulator itself (the host process segfaulted 84s into the suite),
+          # and a log that lives on a dead device cannot be read. This copy
+          # survives it, and AndroidJUnitRunner's "TestRunner: started:" lines
+          # in it name the test that was running when the device went away.
+          adb logcat -v time > "$RUNNER_TEMP/device.log" 2>/dev/null &
+          LOGCAT=$!
+
           if ! ./gradlew connectedDebugAndroidTest --stacktrace 2>&1 | tee smoke.log; then
+            kill "$LOGCAT" 2>/dev/null || true
             # Ordered noisiest-first, so the thing worth reading is LAST.
             # GitHub's log API serves a tail, and the emulator prints ~110
             # lines of boot properties on its way out - enough to push the
             # failing test names out of every window I could fetch. Three
             # separate log pulls said only "a test failed" because of it.
+            #
+            # Every adb call here has a `timeout`. Without one, `adb logcat`
+            # on a device that has gone away prints "- waiting for device -"
+            # and waits for it forever: the a4c5ba9 run sat there for 27
+            # minutes until the job's own 35-minute limit cancelled it, and
+            # the test names below were never printed.
             echo "::group::Crash log, if the app got that far"
-            adb logcat -d -b crash | tail -80 || true
+            timeout 20 adb logcat -d -b crash 2>/dev/null | tail -80 || true
+            echo "::endgroup::"
+
+            if ! kill -0 "$EMU" 2>/dev/null; then
+              echo "::error::The EMULATOR process itself died during the tests - not the app, and not a test assertion."
+              echo "::group::Emulator log (last 40 lines)"
+              tail -40 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
+              echo "::endgroup::"
+            fi
+            echo "::group::The last tests the device started, and its last words"
+            grep -E "TestRunner: (started|finished|failed)" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -8 || true
+            echo "--- last 25 lines of the device log ---"
+            tail -25 "$RUNNER_TEMP/device.log" 2>/dev/null || true
             echo "::endgroup::"
 
             echo "::group::What the device said"
