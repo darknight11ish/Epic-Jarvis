@@ -764,6 +764,10 @@ try {
         'jarvis_power_switch.py'     # power-mode.patch
         # --- end task controls ---
         'jarvis_wakeword.py'        # "hey Jarvis": jarvis_speech.py calls it for wake-word clips
+        # The overnight-tidy card's words. The old copy promised a pass that
+        # "retires facts"; nothing does, and nothing may retire a fact
+        # without the owner's yes on that one fact. (2026-09-23 memory audit)
+        'rebuilt/jarvis_sleep.py'
     )
     $copied = 0
     foreach ($m in $SHIPPED) {

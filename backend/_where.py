@@ -95,7 +95,10 @@ def explain() -> str:
 #: import fails - so a backend without the file runs, with the feature off.
 SHIPPED = ("jarvis_intake.py", "jarvis_feedback.py", "jarvis_skill_discovery.py",
            "jarvis_speed.py", "jarvis_owned_tables.py", "jarvis_agent.py",
-           "jarvis_voice_enroll.py", "jarvis_speech.py")
+           "jarvis_voice_enroll.py", "jarvis_speech.py",
+           # Copied from rebuilt/ (apply-patches.ps1 lists it as
+           # 'rebuilt/jarvis_sleep.py'): the overnight-tidy card's true words.
+           "rebuilt/jarvis_sleep.py")
 
 
 def _same_text(a: Path, b: Path) -> bool:

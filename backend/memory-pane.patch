@@ -33,18 +33,26 @@
              if not _origin_ok(self):
                  return self._send(403, {"error": "cross-origin request refused"})
              if not _token_ok(self):
-@@ -1667,6 +1684,59 @@
+@@ -1667,6 +1684,67 @@
                  if path == "/api/memory/pending":
 -                    return self._send(200, {"available": True, "pending": jarvis_extract.pending(),
 -                                            "setup": jarvis_extract.setup_status()})
 +                    setup = jarvis_extract.setup_status()
-+                    # `reminder_card()` marks itself seen the moment it is
-+                    # called (jarvis_sleep.py's own `_seen` dict), so the
-+                    # first of the two clients to poll this route on a given
-+                    # day gets the card and the other does not, until
-+                    # tomorrow. Accepted rather than rewriting that
-+                    # function's own tested once-a-day contract.
-+                    setup["sleep_time_offer"] = jarvis_sleep.reminder_card()
++                    # The daily overnight-tidy card. reminder_card() marks
++                    # the day's offer as made the moment it is CALLED
++                    # (jarvis_sleep.py's own `_seen`), so it is called only
++                    # for a client that shows the card and says so with
++                    # ?sleep_offer=1 (exactly 1) - the Brain window and the
++                    # phone. The HUD page reads this route at load, on every
++                    # proposal event and every 30 s, never shows the card,
++                    # and used to use up the day's offer before either of
++                    # them looked. Of two clients that ask, the first to
++                    # ask on a given day gets it.
++                    from urllib.parse import parse_qs
++                    offer_q = (parse_qs(self.path.split("?", 1)[1]).get("sleep_offer")
++                               or [""])[0] if "?" in self.path else ""
++                    setup["sleep_time_offer"] = (jarvis_sleep.reminder_card()
++                                                 if offer_q == "1" else None)
 +                    return self._send(200, {"available": True, "pending": jarvis_extract.pending(),
 +                                            "setup": setup})
 +                if path == "/api/memory/facts":
@@ -95,7 +103,7 @@
                  if path == "/api/memory/status":
                      return self._send(200, {"available": True, **jarvis_memory.store().status(),
                                              "sleep_time": {"enabled": jarvis_sleep.enabled(),
-@@ -1853,6 +1923,107 @@
+@@ -1853,6 +1931,107 @@
                  return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
              return self._send(code, out)
 

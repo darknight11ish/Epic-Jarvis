@@ -110,10 +110,12 @@ def _set(key: str, value: bool) -> dict:
 
 
 def set_enabled(on: bool) -> dict:
-    """The card's "enable" action. Still starts nothing by itself - turning
-    this on only stops `reminder_card()` from offering again; the
+    """The card's "enable" action. Starts nothing - turning this on only
+    records the wish and stops `reminder_card()` from offering again; the
     consolidation pass itself remains unimplemented, see the module
-    docstring."""
+    docstring. If it is ever built, it may only PROPOSE changes as review
+    cards: nothing retires a stored fact without the owner's yes on that
+    one fact."""
     return _set("enabled", on)
 
 
@@ -164,13 +166,25 @@ def reminder_card() -> Optional[dict]:
     if _seen.get("day") == today:
         return None
     _seen["day"] = today
+    # The words are the whole of this card, so they must be true. They used
+    # to promise a pass that would "merge duplicates and retire facts that
+    # newer ones replaced" - nothing does either (status() says
+    # "implemented": false), and a pass that retired facts by itself would
+    # break the rule that no fact is retired without the owner's yes on that
+    # one fact. So: what is built (nothing runs), what switching it on does
+    # (records a wish), and what any future version may do (ask, card by
+    # card). The clients show `title` and `body` as they are.
     return {
         "kind": "sleep_time_offer",
-        "title": "Let Jarvis tidy its memory overnight?",
-        "body": ("Once a night it would re-read what it learned that day, "
-                 "merge duplicates and retire facts that newer ones replaced. "
-                 "It changes stored facts, so it is off until you say."),
+        "title": "Overnight memory tidying - not built yet",
+        "body": ("One day, Jarvis could look over what it learned each day and "
+                 "suggest tidying it, such as merging repeats - as ordinary "
+                 "review cards you answer one at a time. None of that is built "
+                 "yet. Switching it on only records that you want it: nothing "
+                 "runs, and nothing in memory changes. Jarvis never changes or "
+                 "retires a stored fact without your yes on that one fact."),
         "actions": ["enable", "not now", "stop asking"],
+        "implemented": False,
         "config": "[memory.sleep_time] enabled / remind",
     }
 

@@ -361,11 +361,12 @@ setup_complete = false
 review_queue_max = 200
 
 [memory.sleep_time]
-# Letta/MemGPT-style: while you are not talking, use the idle GPU to
-# re-read memory, merge duplicates, retire contradicted facts, and
-# rewrite the summary of you. OFF by default, on purpose: 8B-class models
-# are unreliable at editing structured data about themselves, so this is
-# a prototype until you have watched it work.
+# The idea (Letta/MemGPT-style): while you are not talking, use the idle
+# GPU to re-read memory and SUGGEST tidying it - merging repeats, pointing
+# out facts that contradict each other. Suggest only: any version of this
+# that is ever built may raise review cards, one fact per card, and must
+# never retire or change a stored fact by itself. Nothing in memory is
+# retired or changed without your yes on that one fact.
 #
 # NONE OF THIS EXISTS YET, REGARDLESS OF THE FLAG ABOVE. The line that used
 # to stand here - "the deterministic parts (duplicate merge, contradiction
@@ -376,8 +377,9 @@ review_queue_max = 200
 # the feature, once a day, and says so in its own status() as
 # "implemented": false. There is no "either way" to run in yet.
 enabled = false
-# While disabled, a once-a-day card in the HUD explains what it would do,
-# the upside and the risk, and offers to turn it on. Set remind = false
+# While disabled, a once-a-day card in the Brain window's Memory tab (and
+# on the phone's Brain screen) says it is not built yet and offers to
+# record that you want it. Turning it on runs nothing. Set remind = false
 # to stop being asked.
 remind = true
 remind_hour_local = 9
