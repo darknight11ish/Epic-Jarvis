@@ -215,6 +215,41 @@ def _claude_turns(convo: dict) -> list[dict]:
     return turns
 
 
+#: conversation id -> when it happened (epoch seconds), for every conversation
+#: the parsers below have yielded whose export said. A side table rather than
+#: a third item in the tuple, so everything that already unpacks
+#: `(conv_id, turns)` keeps working. run() reads it to date the conversation:
+#: "yesterday" in a 2023 chat means a day in 2023, not yesterday
+#: (jarvis_intake.conversation_at, memory-intake.patch).
+WHEN: dict = {}
+
+
+def _parse_time(raw) -> Optional[float]:
+    """An export timestamp - ISO 8601 text, or epoch seconds - or None."""
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        v = float(raw)
+        return v / 1000.0 if v > 1e12 else v
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    from datetime import datetime
+    s = raw.strip().replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(s).timestamp()
+    except ValueError:
+        pass
+    # Python before 3.11 refuses fractional seconds that are not 3 or 6
+    # digits; the exports are not consistent about it.
+    try:
+        head, _, tail = s.partition(".")
+        zone = ""
+        for mark in ("+", "-"):
+            if mark in tail:
+                zone = tail[tail.index(mark):]
+        return datetime.fromisoformat(head + zone).timestamp()
+    except ValueError:
+        return None
+
+
 def claude_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
     """Yields (id, turns) for every conversation this export holds."""
     for _label, doc in _walk_json_documents(path):
@@ -225,7 +260,11 @@ def claude_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
             turns = _claude_turns(entry)
             if len(turns) >= 2:  # a monologue with no reply teaches nothing
                 raw_id = entry.get("uuid") or entry.get("id")
-                yield _conv_id("claude", raw_id, turns), turns
+                conv_id = _conv_id("claude", raw_id, turns)
+                when = _parse_time(entry.get("created_at") or entry.get("updated_at"))
+                if when is not None:
+                    WHEN[conv_id] = when
+                yield conv_id, turns
 
 
 # --------------------------------------------------------------------------
@@ -289,7 +328,11 @@ def gemini_conversations(path: Path) -> Iterator[tuple[str, list[dict]]]:
                 # invented reply.
                 pass
             raw_id = rec.get("titleUrl") or f"{rec.get('time','')}:{title}"
-            yield _conv_id("gemini", raw_id, turns), turns
+            conv_id = _conv_id("gemini", raw_id, turns)
+            when = _parse_time(rec.get("time"))
+            if when is not None:
+                WHEN[conv_id] = when
+            yield conv_id, turns
 
 
 # --------------------------------------------------------------------------
@@ -333,6 +376,16 @@ def _walk_json_documents(path: Path) -> Iterator[tuple[str, object]]:
 #   Feeding the review queue
 # --------------------------------------------------------------------------
 
+def _dated(when):
+    """jarvis_intake.conversation_at(when), or a do-nothing block without it."""
+    try:
+        import jarvis_intake
+        return jarvis_intake.conversation_at(when)
+    except Exception:
+        import contextlib
+        return contextlib.nullcontext()
+
+
 def run(sources: list[tuple[str, Path]]) -> int:
     """sources: [("claude", path), ("gemini", path), ...]. Returns an exit
     code, non-zero only when nothing at all could be read."""
@@ -357,7 +410,11 @@ def run(sources: list[tuple[str, Path]]) -> int:
             if conv_id in done:
                 continue
             seen_this_run += 1
-            proposed = X.propose(turns, source=f"import:{kind}")
+            # Dated to when the conversation happened, if the export says and
+            # jarvis_intake.py is installed. Nothing else about the call
+            # changes: same propose(), same model, same review queue.
+            with _dated(WHEN.get(conv_id)):
+                proposed = X.propose(turns, source=f"import:{kind}")
             proposed_this_run += len(proposed)
             done.add(conv_id)
 

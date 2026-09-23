@@ -217,7 +217,9 @@ facts_vec   sqlite-vec, meaning
             fused by reciprocal rank fusion, with a vector distance floor
 
 proposals   the review queue. Extraction writes here. NOTHING reaches `facts`
-            without decide(id, accept) — one integer id, one decision.
+            without decide(id, accept) or decide_keep_both(id) — one integer
+            id, one decision. keep_both keeps the new fact AND leaves the old
+            one current; it retires nothing.
 ```
 
 **Three tables are welded to one local rowid.** `facts` is
@@ -255,6 +257,16 @@ Consequence worth knowing: a turn whose `content` is a list — which is what
 the client sends with a screenshot attached — is skipped whole. Safe
 direction, deliberate, and the obvious "fix" of flattening content arrays
 would immediately admit `tool_result` blocks.
+
+**Who started the turn is the backend's call, never the model's**
+(`memory-intake.patch`). `_Learner.offer()` learns only when its caller
+passes `origin="owner"`, and the default is not that - so a background job
+that forgets learns nothing. Anything the backend writes in the user role
+goes through `jarvis_intake.jarvis_turn()`, which records a hash so the turn
+is never learned even if a client sends it back as history. Nothing in a
+request can mark a turn as the owner's; a marker can only remove one. The
+gate's "your no becomes a proposed rule" path calls `propose()` directly and
+is unaffected.
 
 ---
 

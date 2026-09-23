@@ -365,6 +365,26 @@ them through `probe()` and renders whatever keys are actually present
 as an empty panel that looks built" — which is precisely the mistake that
 produced `jarvis-android`'s unusable protocol.
 
+**`/api/memory/pending`, as far as it is now known** (from the patches that
+wrote it, not a real capture): `{"available": true, "pending": [row, ...],
+"setup": {...}}`. Each row has `id`, `text`, `replaces`, `replaces_id`,
+`replaces_text`, `confidence`, `source`, `created`; `memory-intake.patch`
+adds four:
+
+| row field | type | show it how |
+|---|---|---|
+| `flags` | list of `{"code", "why"}` | Not empty: a warning on the card, each `why` as a line ("It tells Jarvis to send, forward or share something to an address, link or number."). Codes: `override`, `sends_elsewhere`, `standing_order`, `less_oversight`, `addressed_to_ai`, `markup`, `encoded`. A warning only - the card still has keep and discard. |
+| `flags_checked` | bool | `false` means the check could not run (the backend lacks `jarvis_intake.py`), which is not the same as "clean". |
+| `keep_both_ok` | bool | True only on a correction card (one that would retire `replaces_text`). Only then show a third button, "Both are true", which posts `{"id": row.id}` to `/api/memory/keep_both`. |
+| `verbatim` | bool | True when `source` is `"remember"`: the owner's own words from a "Remember:" message. Label it that way. |
+
+`setup` may also carry `near_duplicate_check` (`"on"`, or why not),
+`near_duplicates_dropped` + `near_duplicates_note` (only once one has been
+dropped), and `remember_last`: `{"at", "queued", "reason", "note",
+"proposal_id"}` for the last "Remember:" message - `note` is a plain-words
+sentence meant to be shown as-is ("This exact wording is already waiting for
+your review.").
+
 ### Writes
 
 | Endpoint | Method | Body | Desktop | Android | Notes |
@@ -380,6 +400,7 @@ produced `jarvis-android`'s unusable protocol.
 | `/api/models/switch` | POST | `{"ref": …}` | `brain.rs:435` | `JarvisApi.kt:310` | Allowed from the phone since the 2026-09-18 amendment: tier `ask`, so success means "a card was raised". |
 | `/api/models/rollback` | POST | `{}` | `brain.rs:436` | `JarvisApi.kt:314` | Tier `auto`; never waits. |
 | `/api/memory/decide` | POST | `{"id": <int>, "accept": bool}` | `brain.rs:283` | `JarvisApi.kt:417` | One id, one decision. **No list form anywhere** — a "keep all" would be an approve-all with another name. |
+| `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | **no** | **no** | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs:308` | **no** | Retires rather than deletes. No undo. |
 | `/api/memory/edit` | POST | object | `brain.rs:329` | **no** | |
 | `/api/memory/learning` | POST | object | `brain.rs:344` | **no** | |
