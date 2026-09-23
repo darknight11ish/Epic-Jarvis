@@ -365,11 +365,33 @@ jobs:
           # low-memory kill is not a crash and writes nothing there). A guess,
           # but a free one: the exit-info dump added below will say
           # outright if that is what happened.
-          "$ANDROID_HOME/emulator/emulator" -avd smoke \
-            -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
-            -camera-back none -camera-front none -memory 4096 \
-            -gpu swiftshader_indirect -accel auto > "$RUNNER_TEMP/emulator.log" 2>&1 &
-          EMU=$!
+          start_emulator() {
+            "$ANDROID_HOME/emulator/emulator" -avd smoke \
+              -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics \
+              -camera-back none -camera-front none -memory 4096 \
+              -gpu swiftshader_indirect -accel auto >> "$RUNNER_TEMP/emulator.log" 2>&1 &
+            EMU=$!
+            if ! timeout 300 adb wait-for-device; then
+              echo "::error::The emulator never registered with adb."
+              exit 1
+            fi
+            if ! timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'; then
+              echo "::error::The emulator registered but never finished booting."
+              exit 1
+            fi
+            adb shell input keyevent 82 || true
+            adb devices
+
+            # The device's log, streamed to the RUNNER while the tests run,
+            # not read back from the device afterwards. The run for a4c5ba9
+            # lost the emulator itself (the host process segfaulted 84s into
+            # the suite), and a log that lives on a dead device cannot be
+            # read. This copy survives it, and AndroidJUnitRunner's
+            # "TestRunner( pid): started:" lines in it name the test that was
+            # running when the device went away.
+            adb logcat -v time >> "$RUNNER_TEMP/device.log" 2>/dev/null &
+            LOGCAT=$!
+          }
 
           finish() {
             # Twelve lines, not a hundred and twenty. This runs on EXIT, so it
@@ -386,42 +408,63 @@ jobs:
             tail -12 "$RUNNER_TEMP/emulator.log" 2>/dev/null || echo "(none)"
             echo "::endgroup::"
             kill "${LOGCAT:-}" 2>/dev/null || true
-            kill "$EMU" 2>/dev/null || true
+            kill "${EMU:-}" 2>/dev/null || true
           }
           trap finish EXIT
 
-          if ! timeout 300 adb wait-for-device; then
-            echo "::error::The emulator never registered with adb."
-            exit 1
-          fi
-          if ! timeout 600 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'; then
-            echo "::error::The emulator registered but never finished booting."
-            exit 1
-          fi
-          adb shell input keyevent 82 || true
-          adb devices
-
-          # The device's log, streamed to the RUNNER while the tests run, not
-          # read back from the device afterwards. The run for a4c5ba9 lost the
-          # emulator itself (the host process segfaulted 84s into the suite),
-          # and a log that lives on a dead device cannot be read. This copy
-          # survives it, and AndroidJUnitRunner's "TestRunner: started:" lines
-          # in it name the test that was running when the device went away.
-          adb logcat -v time > "$RUNNER_TEMP/device.log" 2>/dev/null &
-          LOGCAT=$!
-
           # FaceShotTest does NOT run here; it has its own job, `face-shots`,
-          # below. Twice in a row (a4c5ba9, 9473ca7) the emulator itself
-          # went down during it - a segfault in the emulator process, with
-          # "Failed to find ColorBuffer" from its graphics layer - while
-          # FaceRenderTest, which draws the same twenty faces without
-          # resizing the display or taking screenshots, passed. The pictures
-          # are evidence, not a gate, and a test that can take the whole
-          # device down with it must not be what stops the APK being
-          # published.
-          if ! ./gradlew connectedDebugAndroidTest --stacktrace \
-               -Pandroid.testInstrumentationRunnerArguments.notClass=com.jarvis.client.FaceShotTest \
-               2>&1 | tee smoke.log; then
+          # below. The pictures are evidence, not a gate, and a test that can
+          # take the whole device down with it must not be what stops the APK
+          # being published.
+          #
+          # ONE fresh emulator if - and only if - the EMULATOR PROCESS died.
+          # Three runs in a row (a4c5ba9, 9473ca7, eab1b9c) lost the emulator
+          # itself: a segfault in the host process, "Failed to find
+          # ColorBuffer" from its software graphics layer, at a different
+          # point each time - once in FaceShotTest, once six seconds into
+          # FaceRenderTest on the very first face, a face the run before had
+          # drawn without trouble. Every run before the Reactor Kit faces
+          # (which draw several times more per frame) passed. What that points
+          # at is the emulator's software GPU falling over under load, which a
+          # phone's real GPU does not share - but it is an inference, not a
+          # proof, so it is not hidden: the retry is announced as a warning,
+          # a second death fails the job, and a TEST that fails with the
+          # emulator still alive is never retried at all.
+          # "Gone" is dead OR frozen: in the eab1b9c face-shots job the
+          # emulator process stayed alive but adb reported it "offline", and
+          # Gradle waited on it for 26 minutes. `timeout` bounds the suite so
+          # a frozen device ends the attempt instead of the job.
+          emulator_gone() {
+            ! kill -0 "$EMU" 2>/dev/null \
+              || [ "$(timeout 10 adb get-state 2>/dev/null)" != "device" ]
+          }
+          run_suite() {
+            timeout 900 ./gradlew connectedDebugAndroidTest --stacktrace \
+              -Pandroid.testInstrumentationRunnerArguments.notClass=com.jarvis.client.FaceShotTest \
+              2>&1 | tee smoke.log
+          }
+          start_emulator
+          suite_ok=1
+          run_suite || suite_ok=0
+          if [ "$suite_ok" = 0 ] && emulator_gone; then
+            echo "::warning::The EMULATOR died or froze during the tests (not the app, not an assertion). Starting a fresh one and running the suite ONE more time."
+            kill -9 "$EMU" 2>/dev/null || true
+            echo "::group::Emulator log before the retry (last 20 lines)"
+            tail -20 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
+            echo "::endgroup::"
+            echo "::group::The last tests the device started before it died"
+            grep -E "TestRunner\(.*\): (started|finished|failed):" "$RUNNER_TEMP/device.log" 2>/dev/null | tail -4 || true
+            echo "::endgroup::"
+            kill "$LOGCAT" 2>/dev/null || true
+            timeout 30 adb kill-server >/dev/null 2>&1 || true
+            # A crashed emulator leaves its AVD's lock files behind, and the
+            # next one refuses to start on a "running" AVD without this.
+            rm -rf "$ANDROID_AVD_HOME"/smoke.avd/*.lock
+            start_emulator
+            suite_ok=1
+            run_suite || suite_ok=0
+          fi
+          if [ "$suite_ok" = 0 ]; then
             kill "$LOGCAT" 2>/dev/null || true
             # Ordered noisiest-first, so the thing worth reading is LAST.
             # GitHub's log API serves a tail, and the emulator prints ~110
@@ -438,8 +481,8 @@ jobs:
             timeout 20 adb logcat -d -b crash 2>/dev/null | tail -80 || true
             echo "::endgroup::"
 
-            if ! kill -0 "$EMU" 2>/dev/null; then
-              echo "::error::The EMULATOR process itself died during the tests - not the app, and not a test assertion."
+            if emulator_gone; then
+              echo "::error::The EMULATOR itself died or froze during the tests - not the app, and not a test assertion."
               echo "::group::Emulator log (last 40 lines)"
               tail -40 "$RUNNER_TEMP/emulator.log" 2>/dev/null || true
               echo "::endgroup::"
@@ -930,7 +973,9 @@ jobs:
           timeout 20 adb shell wm size || true
           timeout 20 adb shell wm density || true
 
-          ./gradlew connectedDebugAndroidTest \
+          # Bounded: at this size the eab1b9c run's emulator went "offline"
+          # and Gradle waited on it until the job limit cancelled everything.
+          timeout 900 ./gradlew connectedDebugAndroidTest \
             -Pandroid.testInstrumentationRunnerArguments.class=com.jarvis.client.FaceShotTest
 
       - name: Upload the face photographs
