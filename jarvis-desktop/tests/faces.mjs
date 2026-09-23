@@ -99,30 +99,53 @@ await check("the faces are painted once they are on screen", async () => {
   // for twenty procedural canvases several of which integrate a physics step
   // per frame. So this scrolls the grid past every one of them and then asks
   // whether each drew, which also exercises the lazy path itself.
+  //
+  // It WAITS FOR the drawing, rather than sleeping a fixed time and hoping.
+  // The first version scrolled every 450 ms and settled for 1.2 s; on a busy
+  // machine the first frame of a card can take longer than that, and the
+  // test failed on a page that was fine. Now each scroll step waits until
+  // every card on screen has drawn (up to 10 s a step), and a card counts as
+  // painted the first time any pixel of it is seen - so a card that stops
+  // animating once it scrolls away still counts.
   const page = await open();
-  await page.waitForTimeout(2000);
-  await page.evaluate(async () => {
+  await page.waitForFunction(() => document.querySelectorAll("#grid canvas").length >= 20,
+    null, { timeout: 30000 });
+  const got = await page.evaluate(async () => {
+    const canvases = [...document.querySelectorAll("#grid canvas")];
+    const seen = new Set();
+    const drew = (c) => {
+      const ctx = c.getContext("2d");
+      if (!ctx || !c.width || !c.height) return false;
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return true;
+      return false;
+    };
+    const note = () => canvases.forEach((c, i) => { if (!seen.has(i) && drew(c)) seen.add(i); });
+    const onScreen = () => canvases
+      .map((c, i) => [c.getBoundingClientRect(), i])
+      .filter(([r]) => r.bottom > 0 && r.top < window.innerHeight)
+      .map(([, i]) => i);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const step = window.innerHeight * 0.8;
     for (let y = 0; y < document.body.scrollHeight; y += step) {
       window.scrollTo(0, y);
-      await new Promise((r) => setTimeout(r, 450));
-    }
-  });
-  await page.waitForTimeout(1200);
-  const painted = await page.evaluate(() => {
-    let n = 0;
-    for (const c of document.querySelectorAll("#grid canvas")) {
-      const ctx = c.getContext("2d");
-      if (!ctx) continue;
-      const d = ctx.getImageData(0, 0, c.width, c.height).data;
-      for (let i = 3; i < d.length; i += 4) {
-        if (d[i] !== 0) { n += 1; break; }
+      const until = performance.now() + 10000;
+      for (;;) {
+        note();
+        if (onScreen().every((i) => seen.has(i)) || performance.now() > until) break;
+        await wait(100);
       }
     }
-    return n;
+    note();
+    return {
+      n: seen.size,
+      total: canvases.length,
+      missing: canvases.map((_, i) => i).filter((i) => !seen.has(i)),
+    };
   });
   await page.close();
-  assert.equal(painted, 20, `${painted} of 20 canvases drew anything`);
+  assert.equal(got.n, 20,
+    `${got.n} of ${got.total} canvases drew anything (never painted: #${got.missing.join(", #")})`);
 });
 
 await check("a card that is off screen is not being animated", async () => {
