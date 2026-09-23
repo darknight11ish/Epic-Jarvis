@@ -125,6 +125,10 @@ pub mod events {
     /// still playing, this is the moment to stop it, before the finished
     /// utterance (`VOICE_HEARD`, above) is anywhere close to ready.
     pub const VOICE_SPEECH_STARTED: &str = "voice-speech-started";
+    /// Payload: none. Sent to the quickbar only, by
+    /// [`crate::voice::summon_push_to_talk`] (the HUD's mic button): put
+    /// focus on the mic and say how to talk. Starts no recording.
+    pub const VOICE_SUMMON: &str = "voice-summon";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -676,6 +680,7 @@ pub fn run() {
             voice::start_automatic_listening,
             voice::stop_automatic_listening,
             voice::speak_reply,
+            voice::summon_push_to_talk,
         ]);
 
     // The global-shortcut plugin owns a single handler for every accelerator we

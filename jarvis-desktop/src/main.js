@@ -2642,6 +2642,30 @@ function stopSpeaking() {
  *  `startPushToTalk`, since holding the button is itself the signal there. */
 listen("voice-speech-started", stopSpeaking);
 
+/** The HUD's mic button (voice.rs `summon_push_to_talk`): the quickbar is
+ *  already on screen by the time this arrives. Focus the mic and say how to
+ *  use it, in words a sighted owner sees too (the placeholder) and not only
+ *  the screen-reader announcement. Starts NO recording - holding the mic
+ *  (or Space/Enter on it) is still the only thing that does. */
+const PROMPT_PLACEHOLDER = dom.prompt ? dom.prompt.getAttribute("placeholder") : null;
+function restorePromptPlaceholder() {
+  if (!dom.prompt) return;
+  if (PROMPT_PLACEHOLDER === null) dom.prompt.removeAttribute("placeholder");
+  else dom.prompt.setAttribute("placeholder", PROMPT_PLACEHOLDER);
+}
+listen("voice-summon", () => {
+  const how = state.autoListening
+    ? "Listening automatically - just speak."
+    : "Hold the mic button, or hold Space while it is selected, then speak and let go.";
+  if (dom.prompt && !state.autoListening) {
+    dom.prompt.setAttribute("placeholder", how);
+    dom.prompt.addEventListener("input", restorePromptPlaceholder, { once: true });
+    setTimeout(restorePromptPlaceholder, 15000);
+  }
+  dom.mic.focus();
+  announce(how);
+});
+
 /** Turns automatic (voice-activity-detected) listening on or off.
  *  Mutually exclusive with push-to-talk - `start_automatic_listening`
  *  itself refuses if a push-to-talk recording is in progress, and

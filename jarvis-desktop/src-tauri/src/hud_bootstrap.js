@@ -359,7 +359,11 @@
    * copy of that file from the backend needs no re-patching — the same
    * reasoning as the fonts below.
    *
-   * When the local pipeline lands, this block is what to delete.
+   * The local pipeline has landed - on the quickbar, not here (voice.rs:
+   * the microphone is recorded by the app and sent only to the Jarvis
+   * server on this machine). Section 2d below points this page's mic
+   * button at it. This block stays: the page must never reach for the
+   * browser recogniser again, whatever the next copy of it does.
    * ---------------------------------------------------------------- */
   try {
     delete window.SpeechRecognition;
@@ -371,7 +375,104 @@
   window.webkitSpeechRecognition = undefined;
   console.info(
     "[jarvis] Web Speech recognition is disabled: it uploads microphone " +
-      "audio from outside the CSP. Dictation waits on the local pipeline."
+      "audio from outside the CSP. The mic button opens the quickbar's " +
+      "local push-to-talk instead."
+  );
+
+  /* ---------------------------------------------------------------- *
+   * 2d. The mic button: the quickbar's push-to-talk, not a dead button
+   *
+   * With the recogniser gone (2b) the page's mic button did nothing at
+   * all, while its tooltip still said "Hold to talk". The real, local
+   * push-to-talk lives in the quickbar (voice.rs): the app records the
+   * microphone itself and sends the clip only to the Jarvis server on
+   * this machine, which checks it is the owner's voice before turning it
+   * into words.
+   *
+   * This page is not given the recording commands (capabilities/hud.json).
+   * It gets one command, `summon_push_to_talk`, which shows the quickbar
+   * with its mic button focused. It records nothing: the owner then holds
+   * that mic (or Space/Enter on it) to talk, the same as always.
+   *
+   * A capture-phase listener takes the click before the page's own
+   * handler, which would only call the refused recogniser. The page's
+   * Space-bar shortcut is left alone: summoning a window on a key that is
+   * still held down would land the rest of the press in the quickbar.
+   * ---------------------------------------------------------------- */
+  var MIC_TITLE =
+    "Talk to Jarvis: opens the quickbar - hold its mic button to speak. " +
+    "Your voice stays on this computer.";
+
+  function hudMicNote(text) {
+    if (typeof window.addMessage === "function") {
+      try {
+        window.addMessage("system", text);
+        return;
+      } catch (err) {
+        /* fall through to the console */
+      }
+    }
+    console.warn("[jarvis] " + text);
+  }
+
+  function summonPushToTalk() {
+    var tauri = window.__TAURI__;
+    var invoke = tauri && tauri.core && tauri.core.invoke;
+    if (typeof invoke !== "function") {
+      hudMicNote(
+        "The mic works in the quickbar. Open it with its shortcut " +
+          "(Alt+Space unless you changed it) and hold the mic button."
+      );
+      return Promise.resolve(false);
+    }
+    return Promise.resolve()
+      .then(function () {
+        return invoke("summon_push_to_talk");
+      })
+      .then(function () {
+        return true;
+      })
+      .catch(function (err) {
+        hudMicNote(
+          "Could not open the quickbar's push-to-talk: " +
+            String((err && err.message) || err) +
+            ". Open the quickbar with its shortcut and hold the mic button."
+        );
+        return false;
+      });
+  }
+  window.__jarvisSummonPushToTalk = summonPushToTalk;
+
+  function wireHudMic() {
+    var mic = document.getElementById("mic");
+    if (mic) {
+      mic.title = MIC_TITLE;
+      mic.setAttribute("aria-label", MIC_TITLE);
+      mic.setAttribute("aria-pressed", "false");
+      mic.dataset.jarvisMic = "quickbar";
+    }
+    // The readout under "listening" said "unsupported", which was true of
+    // the browser recogniser and is not true of Jarvis.
+    var readout = document.getElementById("r-stt");
+    if (readout) readout.textContent = "in quickbar";
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireHudMic, { once: true });
+  } else {
+    wireHudMic();
+  }
+
+  document.addEventListener(
+    "click",
+    function (event) {
+      var target = event.target;
+      if (!target || !target.closest || !target.closest("#mic")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      summonPushToTalk();
+    },
+    true
   );
 
   /* ---------------------------------------------------------------- *

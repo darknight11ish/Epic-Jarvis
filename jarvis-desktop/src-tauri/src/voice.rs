@@ -11,14 +11,19 @@
 //! module is the real replacement: audio is captured here, on this machine,
 //! and posted only to the local Jarvis server - never to a cloud vendor.
 //!
-//! WHY THIS DOES NOT TOUCH THE HUD WINDOW
-//! `jarvis_hud.html` is vendored byte-identical from the backend folder and
-//! is granted NO app commands at all - `capabilities/hud.json` says so on
-//! purpose, so a future drop of that file can never arrive already holding a
-//! permission nobody audited it for. These commands are granted to the
-//! quickbar instead (see `permissions/surfaces.toml`'s `voice` set) - the
-//! window that already streams chat and already has a real, audited IPC
-//! surface.
+//! WHY THE HUD DOES NOT RECORD ANYTHING ITSELF
+//! `jarvis_hud.html` is vendored from the backend folder, so a future drop
+//! of that file must never arrive already holding the microphone. The
+//! recording commands are granted to the quickbar only (see
+//! `permissions/surfaces.toml`'s `voice` set) - the window that already
+//! streams chat and already has a real, audited IPC surface.
+//!
+//! The HUD's own mic button used to do nothing at all (its browser speech
+//! recogniser is switched off in `hud_bootstrap.js`, because it uploads
+//! audio). It now calls [`summon_push_to_talk`], the ONE command the HUD
+//! holds: it shows the quickbar with its mic button ready. It opens no
+//! microphone and records nothing - the owner still holds the quickbar's
+//! mic to talk, exactly as if they had opened the quickbar themselves.
 //!
 //! TWO LISTENING MODES, MUTUALLY EXCLUSIVE
 //! Push-to-talk (`start_voice_capture`/`stop_voice_capture`) records exactly
@@ -379,6 +384,22 @@ struct ActiveCapture {
     samples: Arc<Mutex<Vec<i16>>>,
     spec: hound::WavSpec,
     join: JoinHandle<()>,
+}
+
+/// The HUD's mic button: bring up the quickbar with its push-to-talk ready.
+///
+/// Opens NO microphone and records nothing. It shows the quickbar and tells
+/// it to put focus on its mic button (`VOICE_SUMMON`); recording starts only
+/// when the owner holds that button (or Space/Enter on it), through
+/// [`start_voice_capture`] like any other push-to-talk. That is why this is
+/// the one app command the HUD window is allowed (`capabilities/hud.json`,
+/// `permissions/surfaces.toml`'s `hud-voice` set): the worst a page can do
+/// with it is open a window.
+#[tauri::command]
+pub fn summon_push_to_talk(app: AppHandle) -> Result<(), String> {
+    crate::windows::show_quickbar(&app)?;
+    crate::emit_quickbar(&app, crate::events::VOICE_SUMMON, ());
+    Ok(())
 }
 
 /// Opens the default microphone and starts buffering. Sends nothing

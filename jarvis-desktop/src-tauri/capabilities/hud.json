@@ -1,12 +1,13 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "hud",
-  "description": "The HUD window, which loads jarvis_hud.html \u2014 a page vendored byte-identical from the backend folder and therefore not written against this app's IPC surface. It gets NO app commands at all. The shell talks to it one way, by evaluating a call to a feed the initialisation script defines, so nothing here needs to be granted for the HUD to work; and the next drop of that file cannot arrive holding a permission it was never audited for. There is deliberately no `remote` block anywhere: every window loads a bundled page.",
+  "description": "The HUD window, which loads jarvis_hud.html \u2014 a page vendored from the backend folder and therefore not written against this app's IPC surface. It gets exactly ONE app command, `summon_push_to_talk` (the `hud-voice` set), for its mic button: it shows the quickbar with push-to-talk ready and records nothing, so the worst any drop of that page can do with it is open a window. It gets no recording, chat, approval or settings command. The shell otherwise talks to it one way, by evaluating a call to a feed the initialisation script defines. There is deliberately no `remote` block anywhere: every window loads a bundled page.",
   "windows": [
     "hud"
   ],
   "permissions": [
     "core:default",
-    "core:webview:allow-set-webview-zoom"
+    "core:webview:allow-set-webview-zoom",
+    "hud-voice"
   ]
 }

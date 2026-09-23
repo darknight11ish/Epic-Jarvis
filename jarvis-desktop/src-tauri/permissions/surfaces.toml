@@ -88,6 +88,18 @@ permissions = [
   "allow-speak-reply",
 ]
 
+# The HUD's mic button, and nothing else. The HUD loads a page vendored from
+# the backend, so it holds no recording command: this only shows the
+# quickbar with its mic button focused (voice.rs, `summon_push_to_talk`). The
+# microphone opens only when the owner holds that button - the `voice` set
+# above, which stays with the quickbar alone.
+[[set]]
+identifier = "hud-voice"
+description = "Show the quickbar with push-to-talk ready. Opens no microphone and records nothing."
+permissions = [
+  "allow-summon-push-to-talk",
+]
+
 # The daily brief and the interruption budget. Granted to the quickbar alone,
 # because that is the only window that renders the panel — the HUD loads the
 # backend's own page and the widget is 320px wide.

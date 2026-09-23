@@ -104,6 +104,18 @@ async function openHud(browser, status, pageOptions = {}) {
   page.on("console", (m) => {
     if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) problems.push(m.text());
   });
+  // The shell's IPC, for the one command the HUD holds (hud-voice). Only
+  // when a scenario asks for it: every other test runs with no __TAURI__
+  // at all, the way the page is served in a plain browser.
+  if (status.tauriInvoke) {
+    await page.addInitScript((mode) => {
+      window.__invokes = [];
+      window.__TAURI__ = { core: { invoke: (cmd, args) => {
+        window.__invokes.push([cmd, args]);
+        return mode === "fail" ? Promise.reject(new Error("not allowed on window")) : Promise.resolve(null);
+      } } };
+    }, status.tauriInvoke);
+  }
   await page.addInitScript(BOOT
     .replace("__JARVIS_BASE__", JSON.stringify(BACKEND))
     .replace("__JARVIS_TOKEN__", JSON.stringify("test-token")));
@@ -240,7 +252,7 @@ await check("the reactor is faces.html in display mode, and it draws", async () 
   const url = frame.url();
   await page.close();
   // Fed by this page, not asking the shell: the HUD window has no app
-  // commands, so asking would only be refused (capabilities/hud.json).
+  // read command, so asking would only be refused (capabilities/hud.json).
   assert.match(url, /[?&]feed=parent(&|$)/, url);
   assert.ok(px.w >= 232, `canvas backing store ${px.w}px - blurrier than the 232px box it fills`);
   assert.ok(px.lit > 150, `only ${px.lit} of 9216 sampled pixels lit - the face is not drawing`);
@@ -443,6 +455,64 @@ await check("no id, no HUD mark; and a backend without the route removes it", as
   await page.waitForTimeout(300);
   assert.equal(await page.locator(".jarvis-mark").count(), 0, "the mark stayed after a 404");
   await page.close();
+});
+
+/* ── The mic: the quickbar's local push-to-talk, never browser speech ────── */
+
+await check("the HUD mic opens the quickbar's push-to-talk, and records nothing itself", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, tauriInvoke: "ok" });
+  const before = await page.evaluate(() => ({
+    title: document.getElementById("mic").title,
+    readout: document.getElementById("r-stt").textContent,
+    sr: typeof window.SpeechRecognition + "/" + typeof window.webkitSpeechRecognition,
+  }));
+  await page.locator("#mic").click();
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => ({
+    invokes: window.__invokes,
+    listening: voice.listening,
+    pressed: document.getElementById("mic").getAttribute("aria-pressed"),
+  }));
+  await page.close();
+  assert.deepEqual(after.invokes.map((c) => c[0]), ["summon_push_to_talk"],
+    "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
+  assert.equal(after.listening, false, "the page's own (browser) recogniser started");
+  assert.equal(after.pressed, "false");
+  assert.equal(before.sr, "undefined/undefined", "Web Speech is back - it uploads the microphone");
+  assert.match(before.title, /quickbar/i);
+  assert.match(before.title, /stays on this computer/i);
+  assert.doesNotMatch(before.readout, /unsupported/);
+  assert.deepEqual(problems, []);
+});
+
+await check("a refused or missing shell says where the mic is, instead of doing nothing", async () => {
+  for (const mode of ["fail", undefined]) {
+    const { page } = await openHud(browser,
+      { jarvis: false, ollama: true, proxy: false, tauriInvoke: mode });
+    await page.locator("#mic").click();
+    await page.waitForTimeout(200);
+    const log = await page.evaluate(() => [...document.querySelectorAll("#log .msg.system .body")]
+      .map((b) => b.textContent));
+    await page.close();
+    assert.ok(log.some((t) => /quickbar/.test(t) && /mic/.test(t)),
+      `no visible line saying where the mic is (${mode || "no shell"}): ${JSON.stringify(log)}`);
+  }
+});
+
+await check("the HUD holds exactly one app command, and it cannot record", async () => {
+  const cap = JSON.parse(readFileSync(join(HERE, "..", "src-tauri", "capabilities", "hud.json"), "utf8"));
+  assert.deepEqual(cap.permissions,
+    ["core:default", "core:webview:allow-set-webview-zoom", "hud-voice"]);
+  const toml = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
+  const set = toml.slice(toml.indexOf('identifier = "hud-voice"'));
+  const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1);
+  assert.deepEqual(perms.match(/allow-[a-z-]+/g), ["allow-summon-push-to-talk"]);
+  const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "voice.rs"), "utf8");
+  const body = rust.slice(rust.indexOf("pub fn summon_push_to_talk"));
+  const fn = body.slice(0, body.indexOf("\n}\n") + 3);
+  assert.doesNotMatch(fn, /start_voice_capture|open_input_stream|cpal|start_automatic_listening/,
+    "summon_push_to_talk must not open the microphone");
 });
 
 await check("the old OpenJarvis light is gone, and chat never depended on it", async () => {

@@ -101,8 +101,9 @@ impl AppearanceState {
 
     /// A copy of the whole document, for the HUD window.
     ///
-    /// That window cannot ask for it (`capabilities/hud.json` grants it no
-    /// commands), so `lib.rs` pushes this into it when its page loads.
+    /// That window cannot ask for it (`capabilities/hud.json` grants it one
+    /// command, the mic button's, and no read), so `lib.rs` pushes this into
+    /// it when its page loads.
     pub fn snapshot(&self) -> Appearance {
         self.0
             .lock()

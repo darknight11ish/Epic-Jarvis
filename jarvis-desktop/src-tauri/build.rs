@@ -140,6 +140,9 @@ fn main() {
             "start_automatic_listening",
             "stop_automatic_listening",
             "speak_reply",
+            // The HUD's mic button. Shows the quickbar with push-to-talk
+            // ready; records nothing. The one command the HUD holds.
+            "summon_push_to_talk",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and
