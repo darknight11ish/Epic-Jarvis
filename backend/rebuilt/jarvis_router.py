@@ -80,8 +80,70 @@ _PRIVATE_TERMS = [
     r"\bcredit card\b", r"\bcvv\b",
     r"\bdiagnos\w*\b", r"\bprescription\b", r"\bbiopsy\b", r"\bmedical record\b",
     r"\bsalary\b", r"\bbank statement\b", r"\btax return\b",
+    # The topics `[privacy] never_leaves_device` names, which this list did
+    # not - rule 1 of the project is that email, files and money stay local,
+    # and "summarise my inbox" or "what's on my calendar" matched nothing
+    # here. Broad on purpose: a false match sends a question to the local
+    # model (costs quality), a miss sends it to a cloud one (costs privacy).
+    r"\be-?mails?\b", r"\binbox\w*\b", r"\bcalendars?\b",
+    r"\bbank\w*\b", r"\binvoic\w*\b", r"\btax(?:es)?\b", r"\bfinanc\w*\b",
+    r"\bmedical\b", r"\bfiles?\b",
 ]
-_PRIVATE = re.compile("|".join(_PRIVATE_TERMS), re.I)
+
+
+def _term_pattern(term: str) -> str:
+    """One `never_leaves_device` entry as a pattern for typed text:
+    "files_on_disk" matches "files on disk", "files-on-disk" and itself, and a
+    plural. Empty for an entry with no words in it."""
+    words = [re.escape(w) for w in re.split(r"[\s_\-]+", str(term or "").strip()) if w]
+    if not words:
+        return ""
+    return r"\b" + r"[\s_\-]?".join(words) + r"s?\b"
+
+
+def _config_terms() -> tuple:
+    raw = _cfg("privacy", "never_leaves_device", []) or []
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    return tuple(str(t) for t in raw if isinstance(t, str) and t.strip())
+
+
+class _PrivateMatcher:
+    """The backstop: the words above AND the owner's own `[privacy]
+    never_leaves_device` list in jarvis-framework.toml.
+
+    That list said it was "kept in sync with the _PRIVATE regex in
+    jarvis_router.py by hand", and it was not - nothing read it at all, so
+    adding a word there changed nothing. Now it is read, on every check, so
+    an edit to the config applies without a restart (the parse is cached by
+    jarvis_framework and only redone when the file changes; the pattern is
+    recompiled here only when the list does).
+
+    Looks like a compiled regex to its callers - jarvis_hud calls
+    `jarvis_router._PRIVATE.search(joined)` - so it has `.search`, and that
+    is all it needs."""
+
+    def __init__(self):
+        self._terms: Optional[tuple] = None
+        self._rx = re.compile("|".join(_PRIVATE_TERMS), re.I)
+
+    def _current(self):
+        terms = _config_terms()
+        if terms != self._terms:
+            extra = [p for p in (_term_pattern(t) for t in terms) if p]
+            self._rx = re.compile("|".join(_PRIVATE_TERMS + extra), re.I)
+            self._terms = terms
+        return self._rx
+
+    def search(self, text):
+        return self._current().search(str(text or ""))
+
+    @property
+    def pattern(self) -> str:
+        return self._current().pattern
+
+
+_PRIVATE = _PrivateMatcher()
 
 
 def is_private(text: str) -> bool:
@@ -487,7 +549,7 @@ def status() -> dict:
     return {"budget": Budget.load().status(),
             "complexity_threshold": _cfg("routing", "complexity_threshold", 0.40),
             "degrade_chain": _cfg("budget", "degrade_chain", []),
-            "private_terms": len(_PRIVATE_TERMS),
+            "private_terms": len(_PRIVATE_TERMS) + len(_config_terms()),
             "secret_patterns": len(_SECRET_PATTERNS)}
 
 

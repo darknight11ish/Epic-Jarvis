@@ -21,8 +21,12 @@ commercial = false          # this build is not a commercial product
 # ------------------------------------------------------------------------
 [privacy]
 # Matching any of these keeps a turn local, no matter the complexity score.
-# Kept in sync with the _PRIVATE regex in jarvis_router.py by hand for now —
-# if you edit one, edit the other.
+# jarvis_router.py reads this list on every turn and adds it to its own
+# built-in words, so a word added here takes effect without editing any code
+# (and without a restart). An underscore matches a space or a hyphen too:
+# "files_on_disk" catches "files on disk". The router also has a built-in list
+# of its own (_PRIVATE_TERMS) covering most of these; this list only adds to
+# it, never takes away.
 never_leaves_device = [
     "email", "inbox", "calendar",
     "password", "api_key", "token", "secret", "credential",
