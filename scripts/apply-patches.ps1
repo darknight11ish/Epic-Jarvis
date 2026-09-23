@@ -121,6 +121,12 @@ $PATCHES = @(
     # It needs backend\jarvis_intake.py copied into the backend folder too;
     # without it every hook falls back to the old behaviour.
     'memory-intake.patch'
+    # Needs appearance.patch: both of its hunks sit inside lines appearance
+    # wrote (the /api/visual-spec entry in the GET list, and the end of the
+    # /api/visual-spec branch). Nothing else here touches those lines. It
+    # also needs jarvis_skill_discovery.py copied beside jarvis_hud.py, or
+    # the route answers "available": false - it never fails the request.
+    'skill-suggest.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
