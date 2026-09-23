@@ -59,7 +59,7 @@
      return out
  
  
-@@ -356,3 +379,169 @@
+@@ -356,3 +379,177 @@
          return len(pending()) >= int(_cfg("review_queue_max", 200))
      except Exception:
          return False
@@ -145,6 +145,13 @@
 +            return {"ok": False, "reason": "not_a_correction", "id": proposal_id,
 +                    "note": "this card retires nothing, so there is no old fact to "
 +                            "keep - answer it with keep or discard"}
++        if row.get("source") == "feedback_retire":
++            # feedback.patch's "retire this?" card names a fact but has no
++            # new one in it. Its answers are retire (decide accept) or keep
++            # using (decide discard); "both" would mean nothing.
++            return {"ok": False, "reason": "not_a_correction", "id": proposal_id,
++                    "note": "this card asks whether to stop using a fact - "
++                            "answer it with retire or keep using"}
 +        claimed = c.execute(
 +            "UPDATE proposals SET state='accepting' WHERE id=? AND state='pending'",
 +            (proposal_id,))
@@ -216,7 +223,8 @@
 +    for r in rows:
 +        r["flags"] = []
 +        r["flags_checked"] = False
-+        r["keep_both_ok"] = bool(r.get("replaces_id"))
++        r["keep_both_ok"] = (bool(r.get("replaces_id"))
++                             and r.get("source") != "feedback_retire")
 +        r["verbatim"] = r.get("source") == "remember"
 +    return rows
 +

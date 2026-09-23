@@ -992,6 +992,11 @@ def injection_flags(text) -> list[dict]:
     return out
 
 
+#: The `source` of feedback.patch's "retire this?" card (jarvis_extract's
+#: RETIRE_SOURCE). Spelled out here so this module does not need that patch.
+RETIRE_CARD_SOURCE = "feedback_retire"
+
+
 def annotate(rows: list) -> list:
     """Add the fields the review card needs to each pending() row."""
     for r in rows:
@@ -1000,8 +1005,12 @@ def annotate(rows: list) -> list:
         r["flags"] = injection_flags(r.get("text"))
         r["flags_checked"] = True
         # The "both are true" answer only means something on a card that
-        # would retire a fact.
-        r["keep_both_ok"] = bool(r.get("replaces_id"))
+        # would retire a fact BY ADDING a new one. feedback.patch's "retire
+        # this?" card names a fact too (replaces_id), but adds nothing: its
+        # two answers are retire and keep using, and a third would mark it
+        # accepted while retiring nothing. See test_learning_integration.py.
+        r["keep_both_ok"] = (bool(r.get("replaces_id"))
+                             and r.get("source") != RETIRE_CARD_SOURCE)
         r["verbatim"] = r.get("source") == "remember"
     return rows
 

@@ -370,7 +370,13 @@ foreach ($name in $PATCHES) {
     $src = Join-Path $PatchSrc $name
     if (-not (Test-Path -LiteralPath $src)) { continue }
     foreach ($line in (Get-Content -LiteralPath $src)) {
-        if ($line -match '^\+\+\+ b/(.+)$') {
+        # Up to a tab, not to the end of the line: `diff -u` writes the
+        # file's date after a tab ("+++ b/jarvis_hud.py<TAB>2026-09-18 ..."),
+        # and three patches here have one. Read to the end of the line, the
+        # name carried the date, no such file existed, and this check stopped
+        # every run with "jarvis_hud.py 2026-09-18 ... is not in your backend
+        # folder" - even with every file present. Found 2026-09-23.
+        if ($line -match '^\+\+\+ b/([^\t]+)') {
             $t = $Matches[1].Trim()
             if (-not $wanted.ContainsKey($t)) { $wanted[$t] = @() }
             $wanted[$t] += $name
@@ -568,7 +574,8 @@ try {
         $touched = @{}
         foreach ($full in $todo) {
             foreach ($line in (Get-Content -LiteralPath $full)) {
-                if ($line -match '^\+\+\+ b/(.+)$') { $touched[$Matches[1].Trim()] = $true }
+                # Up to a tab, for the same reason as the missing-file check.
+                if ($line -match '^\+\+\+ b/([^\t]+)') { $touched[$Matches[1].Trim()] = $true }
             }
         }
         foreach ($f in $touched.Keys) {

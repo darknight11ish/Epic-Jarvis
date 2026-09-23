@@ -5,20 +5,28 @@
 > is the detail.
 
 
-Twenty-seven patches against the Jarvis backend, each with an executable test.
-The newest, `feedback.patch`, goes last of all: its context lines are the
-output of several patches above it — see its own section.
-The last four - `ui-control-wiring.patch`, `ollama-direct.patch`,
+Thirty-one patches against the Jarvis backend, each with an executable test.
+The last four of the older ones - `ui-control-wiring.patch`, `ollama-direct.patch`,
 `tool-calling-wiring.patch` and `loopback-too.patch` - sit outside the ordered
 stack below: each only touches its own few lines, shared with no other patch
 here. Two ordering constraints remain: tool-calling needs ollama-direct (a
 logical one), and loopback-too needs token-file (a textual one - its context
 is token-file's output). See their own sections, after the table.
 
-Added 2026-09-23: `memory-intake.patch`, at the very end. It is *in* the
-stack, not beside it - its context is the output of five patches above it -
-and it needs the new file `jarvis_intake.py` copied into the backend folder.
-See its own section.
+Added 2026-09-23, from the learning research, five more at the very end, in
+this order: `feedback.patch`, `memory-intake.patch`, `skill-suggest.patch`,
+`documents-owned.patch`, `speed-record.patch`. They are *in* the stack, not
+beside it - each quotes the output of older patches above it. One order among
+them matters: **`feedback.patch` must come before `memory-intake.patch`**,
+because memory-intake rewrites a line that feedback's context ends on (see
+memory-intake's own section). The other three touch lines none of the others
+touch. The five were checked together, in that order, with `git apply` on a
+rebuilt `jarvis_hud.py` and `jarvis_extract.py` - and backwards, back to the
+starting text byte for byte. `test_learning_integration.py` checks the order
+and the one place two of them meet on the same card. Four of them need a new
+module copied into the backend folder too: `jarvis_feedback.py`,
+`jarvis_intake.py`, `jarvis_skill_discovery.py`, and `jarvis_speed.py` with
+`jarvis_owned_tables.py`. Each section says how.
 
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
@@ -3539,3 +3547,59 @@ only the three read-only paths are ever asked, all GET with no body, and never
   warns;
 - another machine's address is never contacted;
 - strange replies never crash it.
+
+---
+
+# Where the 2026-09-23 learning jobs meet — `test_learning_integration.py`
+
+The four learning jobs (memory intake, feedback, skill suggestions, and
+speed/doctor/documents) were built at the same time, each on its own. When
+they were merged, three things turned up that none of them could see alone.
+
+**1. `feedback.patch` has to go before `memory-intake.patch`.** Both were
+written as "last in the stack". Feedback's new `/api/feedback/mark` block ends
+on the memory-route line `"/api/memory/learning", "/api/memory/sleep_time"):`
+and memory-intake rewrites that exact line to add `/api/memory/keep_both`.
+With memory-intake first, feedback cannot find its context and the whole run
+stops before changing anything. With feedback first, both apply. Checked both
+ways with `git apply` on a rebuilt `jarvis_hud.py`.
+
+**2. The "retire this?" card was offered a "Both are true" button.** It
+should not be, and now is not. Feedback's retire card names the fact it asks
+about in `replaces_id`, the same field a correction card uses. Memory intake
+offered "Both are true" on any card with that field set. Pressing it on a
+retire card marked the card accepted and retired nothing - the same effect as
+"Keep using it", but written down as something else. Fixed in two places:
+
+- `jarvis_intake.annotate()` (and the patch's fallback copy of it) now sets
+  `keep_both_ok: false` on a card whose `source` is `feedback_retire`;
+- `decide_keep_both()` in `memory-intake.patch` refuses such a card with
+  `409 {"ok": false, "reason": "not_a_correction"}` and leaves it waiting.
+
+The test proves it both ways: it failed 5 checks before the fix, on a
+stand-in `jarvis_extract.py` carrying both patches, and passes after.
+
+**3. `apply-patches.ps1` stopped every run with three files "missing" that
+were not missing.** This one is older than the learning work. Three patches
+(`ui-control-wiring`, `ollama-direct`, `tool-calling-wiring`) have a date
+after a tab on their `+++ b/` line, which is normal for `diff -u`. The
+script's missing-file check read the name up to the end of the line, so it
+looked for a file called `jarvis_hud.py<TAB>2026-09-18 ...`, did not find it,
+and stopped - with every real file present. It now reads the name up to the
+tab. Checked with PowerShell 7 against a folder holding every backend file
+name: before the fix it stopped with the three "missing" files; after it,
+the run went on to the rehearsal. **If you ever saw "jarvis_hud.py 2026-09-18
+... is not in your backend folder", this was why.**
+
+## Test it
+
+```
+python backend\test_learning_integration.py
+```
+
+22 checks without a backend folder (the stack order, the retire card's
+wording, and `jarvis_intake` on its own). With `JARVIS_BACKEND` pointing at a
+backend carrying both patches, 7 more run through the real
+`jarvis_extract.py`: the retire card has no "Both are true", the keep-both
+route refuses it and leaves it waiting, and accepting it still retires the
+fact.
