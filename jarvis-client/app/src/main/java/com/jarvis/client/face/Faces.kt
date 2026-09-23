@@ -882,326 +882,1058 @@ object Kirkwood : Face {
 }
 
 /**
- * Thirty-two bars in a ring, each a pure function of its own index, the
- * clock and the current drive — no persisted per-bar smoothing.
+ * Thirty-two bars standing on a ring, seen from above the plane, each with a
+ * faint mirrored reflection below it.
  *
- * The reference lerps each bar toward a per-state target every frame
- * (`this.bands[i] = lerp(...)`), which is the one piece of real memory in an
- * otherwise stateless face. `f.amp` arrives here already smoothed — attack
- * and release envelopes are applied once, upstream, in `FaceHost` — so a
- * second smoothing layer on top of an already-smooth input would have added
- * nothing but state. Height is a direct function of `(i, t, amp)` instead,
- * which keeps this face out of the set `SpecDriftTest` pins as unverifiable
- * — a genuine simplification from the reference, not a workaround of it.
+ * Rebuilt against the reference line for line (Jarvis Reactor Kit, artifact
+ * lines 3402-3456): the same perspective ring (`proj`, yaw = PHASE x 0.35,
+ * pitch -0.62, distance 3.6, scale 0.80 S, centred at 60% of the height), the
+ * same per-state bar targets and height gains, the same far-to-near draw
+ * order, bars 0.021 S x depth wide with round caps, a reflection at up to 34%
+ * alpha, a glow cap on every bar above 0.35, and the rim ring on top.
+ *
+ * S is the reference's `min(w, h)`. The shell hands a face a radius of a
+ * quarter of the shorter side times `fit`, and the reference applies `fit` as
+ * a scale around the centre, so S = 4r reproduces its picture exactly, line
+ * widths included. The old port sized bars from r (a quarter of S) with no
+ * depth, no reflections, no glow and no ring: it drew about a third of this.
+ *
+ * One deliberate difference: the reference lerps each bar toward its target
+ * every frame (`this.bands[i] = lerp(...)`, 0.18 a frame). Here a bar IS its
+ * target, eased only across a state change (`CoreKit.settle`). The lerp's
+ * time constant is 0.08 s and `f.amp` is already smoothed upstream in
+ * `FaceHost`, so nothing visible is lost, and the face stays a pure function
+ * of its frame, which `SpecDriftTest` relies on.
  */
 object Spectrum : Face {
     override val id = "spectrum"
     override val name = "Spectrum"
 
+    // faces[].render.fit in the spec is 0.86. This face was left at the
+    // default 1.0, so its ring - and the speaking swell - sat 16% larger than
+    // the desktop's and ran into the rim ring and notches.
+    override val fit = 0.86f
+
     private const val N = 32
 
+    // The bar lerp's time constant: 0.18 a frame at 60 fps.
+    private const val BAND_TAU_S = 0.084f
+
+    private val baseX = FloatArray(N)
+    private val baseY = FloatArray(N)
+    private val baseZ = FloatArray(N)
+    private val baseD = FloatArray(N)
+    private val topX = FloatArray(N)
+    private val topY = FloatArray(N)
+    private val reflX = FloatArray(N)
+    private val reflY = FloatArray(N)
+    private val band = FloatArray(N)
+    private val order = IntArray(N)
+    private var sorted = false
+    private val rim = androidx.compose.ui.graphics.Path()
+
+    // st[].sp: the spin rate, which is what `f.angle` (the reference's PHASE)
+    // accumulates. These were 0.5 / 1.0 / 2.4 / 1.3, so thinking's sweep ran
+    // half again as fast as the desktop's and speaking's twice as fast.
     override fun speedFor(motion: FaceState) = when (motion) {
         FaceState.LISTENING -> 1.0f
-        FaceState.THINKING -> 2.4f
-        FaceState.SPEAKING -> 1.3f
-        else -> 0.5f
+        FaceState.THINKING -> 1.6f
+        FaceState.SPEAKING -> 0.55f
+        else -> 0.4f
+    }
+
+    /** st[].h: how tall a full band stands in each state. */
+    private fun heightGain(m: FaceState) = when (m) {
+        FaceState.LISTENING -> 1.1f
+        FaceState.THINKING -> 0.8f
+        FaceState.SPEAKING -> 0.6f
+        else -> 0.22f
+    }
+
+    /** The reference's per-state band target, artifact 3415-3419. */
+    private fun target(m: FaceState, i: Int, f: FaceFrame): Float = when (m) {
+        FaceState.LISTENING -> f.amp * (0.4f + 0.6f * kotlin.math.abs(sin(i * 0.7f + f.t * 3f)))
+        FaceState.THINKING -> {
+            // A pulse travelling round the ring on the spin phase. `%` on
+            // floats keeps the sign exactly like JavaScript's, so this is the
+            // reference's expression unchanged, negative phase included.
+            val d = ((i / N.toFloat()) - ((f.angle * 0.3f) % 1f) + 1f) % 1f
+            kotlin.math.exp(-d * d * 90f) * 0.9f + 0.08f
+        }
+        FaceState.SPEAKING -> 0.3f + 0.45f * kotlin.math.abs(sin(f.t * 2.2f + i * 0.18f))
+        else -> 0.10f + 0.10f * sin(f.t * 0.9f + i * 0.5f)
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
-        val incl = 0.55f
-        val ci = cos(incl)
-        val si = sin(incl)
+        if (r <= 0f) return@with
+        val s = 4f * r
+        val px1 = CoreKit.backingPx(density)
+        CoreKit.clipToView(this)
+        val ccy = cy + 0.10f * s // the reference centres this face at h * 0.60
+        val yaw = f.angle * 0.35f
+        val pitch = -0.62f
+        val dist = 3.6f
+        val scale = s * 0.80f
+        val e = CoreKit.settle(f, BAND_TAU_S)
+        val gain = CoreKit.eased(f, BAND_TAU_S) { heightGain(it) }
+
         for (i in 0 until N) {
-            val a = i / N.toFloat() * PI2 + f.angle * 0.35f + f.yaw
-            val ambient = 0.10f + 0.08f * sin(f.t * 0.9f + i * 0.5f)
-            val reactive = f.amp * (0.4f + 0.6f * kotlin.math.abs(sin(i * 0.7f + f.t * 3f)))
-            val height = (ambient + reactive).coerceIn(0.05f, 1.1f)
-            val bx = cos(a) * r
-            val bz = sin(a) * si
-            val d = ((bz + 1f) / 2f).pow(Spec.DEPTH_GAIN)
-            val baseY = sin(a) * r * ci
-            val topY = baseY - height * r * 0.6f * d.coerceAtLeast(0.35f)
-            drawLine(
-                color = mix(cool, hot, height.coerceAtMost(1f)).copy(
-                    alpha = (0.2f + d * 0.7f).coerceAtMost(1f),
-                ),
-                start = Offset(cx + bx, cy + baseY),
-                end = Offset(cx + bx, cy + topY),
-                strokeWidth = (r * 0.028f * d.coerceAtLeast(0.3f)).coerceAtLeast(1.5f),
-            )
+            val tgt = target(f.motion, i, f)
+            val v = if (e >= 1f) {
+                tgt
+            } else {
+                val from = target(f.prevMotion, i, f)
+                from + (tgt - from) * e
+            }
+            band[i] = v
+            val a = i / N.toFloat() * PI2
+            val x = cos(a)
+            val z = sin(a)
+            // Capped: speaking used to erupt past the frame (the spec's
+            // audit_history "spectrum bar cap").
+            val bh = kotlin.math.min(1.35f, (0.20f + v * gain * 1.5f) * 2.2f)
+            CoreKit.proj(f, x, 0f, z, yaw, pitch, dist, scale, cx, ccy)
+            baseX[i] = CoreKit.px; baseY[i] = CoreKit.py
+            baseZ[i] = CoreKit.pz; baseD[i] = CoreKit.pd
+            CoreKit.proj(f, x, -bh, z, yaw, pitch, dist, scale, cx, ccy)
+            topX[i] = CoreKit.px; topY[i] = CoreKit.py
+            CoreKit.proj(f, x, bh * 0.55f, z, yaw, pitch, dist, scale, cx, ccy)
+            reflX[i] = CoreKit.px; reflY[i] = CoreKit.py
         }
+        CoreKit.sortFarFirst(order, baseZ, N, fresh = !sorted)
+        sorted = true
+
+        val glowStops = CoreKit.fadeToClear(hot, 0.7f)
+        for (k in 0 until N) {
+            val i = order[k]
+            val d = baseD[i]
+            val v = band[i]
+            val w = kotlin.math.max(1.5f * px1, s * 0.021f * d)
+            val col = mix(cool, hot, kotlin.math.min(1f, v * 1.4f))
+            val base = Offset(baseX[i], baseY[i])
+            val top = Offset(topX[i], topY[i])
+            drawLine(
+                color = col, start = base, end = top, strokeWidth = w,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                alpha = (0.2f + (d - 0.55f) * 1.5f).coerceIn(0f, 1f),
+            )
+            drawLine(
+                color = col, start = base, end = Offset(reflX[i], reflY[i]), strokeWidth = w,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                alpha = kotlin.math.min(0.34f, 0.04f + (d - 0.6f) * 0.5f).coerceIn(0f, 1f),
+            )
+            if (v > 0.35f) {
+                // The glow cap: a radial ramp three bar-widths across, which
+                // is what makes a loud band read as lit rather than drawn.
+                drawCircle(
+                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                        *glowStops,
+                        center = top,
+                        radius = w * 3f,
+                    ),
+                    radius = w * 3f,
+                    center = top,
+                    alpha = kotlin.math.min(0.8f, v),
+                )
+            }
+        }
+
+        // The rim the bars stand on, drawn last and faint: 35% of a 50%-alpha
+        // cool, one of the reference's canvas pixels wide.
+        rim.reset()
+        for (k in 0..64) {
+            val a = k / 64f * PI2
+            CoreKit.proj(f, cos(a), 0f, sin(a), yaw, pitch, dist, scale, cx, ccy)
+            if (k == 0) rim.moveTo(CoreKit.px, CoreKit.py) else rim.lineTo(CoreKit.px, CoreKit.py)
+        }
+        rim.close()
+        drawPath(rim, color = cool.copy(alpha = 0.5f), alpha = 0.35f, style = Stroke(width = px1))
+        drawContext.canvas.restore() // CoreKit.clipToView
     }
 }
 
 /**
- * A power cell with its lid off: coaxial plates and a helical winding.
+ * A power cell with its lid off: four coaxial plates at different depths and
+ * a helical winding running through them, tilted so the mechanism is seen
+ * nearly edge-on.
  *
- * The reference eases plate separation toward a per-state target every frame
- * (`this.sepNow = lerp(...)`) — the one piece of memory in it; the winding's
- * travelling current was already a pure function of `t`. Separation here is
- * a direct function of `f.amp` instead, for the same reason as Spectrum.
+ * Rebuilt against the reference line for line (artifact 3668-3752). The old
+ * port drew flat dashed ellipses and a flat helix with no perspective, no
+ * depth sort, no shading and no core; this is the reference's real 3D stack:
+ * 64-segment plates dashed 24 / 36 / 12 / 6, a 7-turn, 180-segment winding,
+ * every piece depth-sorted together so the winding passes in front of and
+ * behind the plates, plates shaded by how much they face up, the
+ * travelling current brightening and fattening the winding, and the glowing
+ * core with its dark three-point mark turning on top.
+ *
+ * Plate separation eases in from the previous state's value (`CoreKit.settle`,
+ * the reference's 0.04-a-frame lerp) rather than carrying last frame's value.
+ * The core's glow reach eases over the same curve; the reference snaps it,
+ * and a snap in the brightest thing on the face is the one step here worth
+ * rounding off.
+ *
+ * The current's phase differs from the reference on purpose. The reference
+ * computes it as `t x cur`: the absolute clock times a per-state rate, which
+ * teleports the pulse by `t x (new - old)` at every state change - exactly
+ * the bug `FaceHost.advance` documents and fixes for spin. Here it runs on
+ * the accumulated `tableAngle` times 2.4, the mean of the reference's
+ * `cur / sp` ratios (2.0 to 2.5), so each state's current runs within 20% of
+ * the reference's speed and never jumps.
  */
 object Coreplate : Face {
     override val id = "coreplate"
     override val name = "Coreplate"
 
-    private val rings = floatArrayOf(0.82f, 0.66f, 0.50f, 0.32f)
-    private val counts = intArrayOf(24, 32, 14, 8)
+    private const val PLATE_SEGS = 64
+    private const val TURNS = 7
+    private const val COIL_SEGS = 180
+    private const val MAX_ITEMS = PLATE_SEGS * 4 + COIL_SEGS
+    private const val KIND_COIL = 4
+    private const val SEP_TAU_S = 0.41f
+
+    private val plateR = floatArrayOf(0.86f, 0.72f, 0.55f, 0.34f)
+    private val plateY = floatArrayOf(-0.16f, -0.06f, 0.04f, 0.13f)
+    private val plateLw = floatArrayOf(0.030f, 0.018f, 0.022f, 0.026f)
+    private val plateHot = booleanArrayOf(false, false, true, true)
+    private val plateDash = intArrayOf(24, 36, 12, 6)
+
+    private val ax = FloatArray(MAX_ITEMS)
+    private val ay = FloatArray(MAX_ITEMS)
+    private val az = FloatArray(MAX_ITEMS)
+    private val bx = FloatArray(MAX_ITEMS)
+    private val by = FloatArray(MAX_ITEMS)
+    private val bz = FloatArray(MAX_ITEMS)
+    private val midZ = FloatArray(MAX_ITEMS)
+    private val flowOf = FloatArray(MAX_ITEMS)
+    private val kind = IntArray(MAX_ITEMS)
+    private val order = IntArray(MAX_ITEMS)
+    private var lastCount = -1
+    private val mark = androidx.compose.ui.graphics.Path()
+
+    // The reference draws the mark in #03060a, its old per-face background.
+    private val markColor = Color(0xFF03060A)
 
     override fun speedFor(motion: FaceState) = when (motion) {
+        FaceState.LISTENING -> 1.2f
+        FaceState.THINKING -> 2.0f
+        FaceState.SPEAKING -> 0.8f
+        else -> 0.5f
+    }
+
+    /** st[].sep: thinking pulls the stack apart into an exploded view. */
+    private fun sepOf(m: FaceState) = when (m) {
+        FaceState.LISTENING -> 0.15f
+        FaceState.THINKING -> 0.85f
+        FaceState.SPEAKING -> 0.25f
+        else -> 0f
+    }
+
+    /** st[].gl: how far the core's glow reaches. */
+    private fun glowOf(m: FaceState) = when (m) {
         FaceState.LISTENING -> 0.9f
-        FaceState.THINKING -> 2.1f
-        FaceState.SPEAKING -> 1.2f
-        else -> 0.45f
+        FaceState.THINKING -> 1f
+        FaceState.SPEAKING -> 0.85f
+        else -> 0.5f
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
-        val sep = 0.06f + f.amp * 0.22f
-        for (ri in rings.indices) {
-            val rr = rings[ri] * r
-            val n = counts[ri]
-            val off = (ri - 1.5f) * sep * r
-            for (i in 0 until n) {
-                if (i % 2 == 1) continue // dashed, like the reference's plates
-                val a0 = i / n.toFloat() * PI2 + f.angle * 0.2f
-                val a1 = (i + 1) / n.toFloat() * PI2 + f.angle * 0.2f
+        if (r <= 0f) return@with
+        val s = 4f * r
+        val px1 = CoreKit.backingPx(density)
+        CoreKit.clipToView(this)
+        val sep = CoreKit.eased(f, SEP_TAU_S) { sepOf(it) }
+        val yaw = f.angle * 0.3f
+        val pitch = -1.02f + sin(f.t * 0.2f) * 0.08f
+        val dist = 4.0f
+        val scale = s * 1.42f
+        val spread = 1f + sep * 4.5f
+
+        var n = 0
+        for (p in 0 until 4) {
+            val y = plateY[p] * spread
+            val rr = plateR[p]
+            // In doubles, exactly as the reference's JavaScript computes it:
+            // 64 / 24 is not a whole number, and in floats `k / 2.6666667f`
+            // lands on the other side of an integer at k = 8, which would
+            // move a dash.
+            val per = PLATE_SEGS.toDouble() / plateDash[p]
+            for (k in 0 until PLATE_SEGS) {
+                if (kotlin.math.floor(k / per).toInt() % 2 == 1) continue
+                val q0 = k / PLATE_SEGS.toFloat() * PI2
+                val q1 = (k + 1) / PLATE_SEGS.toFloat() * PI2
+                CoreKit.rot3(f, cos(q0) * rr, y, sin(q0) * rr, yaw, pitch)
+                ax[n] = CoreKit.rx; ay[n] = CoreKit.ry; az[n] = CoreKit.rz
+                CoreKit.rot3(f, cos(q1) * rr, y, sin(q1) * rr, yaw, pitch)
+                bx[n] = CoreKit.rx; by[n] = CoreKit.ry; bz[n] = CoreKit.rz
+                midZ[n] = (az[n] + bz[n]) / 2f
+                kind[n] = p
+                n++
+            }
+        }
+        val current = f.tableAngle * 2.4f
+        // Each segment's end is the next one's start, so the helix point is
+        // computed once per vertex rather than twice per segment.
+        coilPoint(f, 0f, spread, yaw, pitch)
+        var pX = CoreKit.rx
+        var pY = CoreKit.ry
+        var pZ = CoreKit.rz
+        for (k in 0 until COIL_SEGS) {
+            val u0 = k / COIL_SEGS.toFloat()
+            val u1 = (k + 1) / COIL_SEGS.toFloat()
+            coilPoint(f, u1, spread, yaw, pitch)
+            ax[n] = pX; ay[n] = pY; az[n] = pZ
+            bx[n] = CoreKit.rx; by[n] = CoreKit.ry; bz[n] = CoreKit.rz
+            pX = CoreKit.rx; pY = CoreKit.ry; pZ = CoreKit.rz
+            midZ[n] = (az[n] + bz[n]) / 2f
+            flowOf[n] = kotlin.math.max(0f, sin(u0 * PI2 * 2f - current * 2f)).pow(5)
+            kind[n] = KIND_COIL
+            n++
+        }
+        CoreKit.sortFarFirst(order, midZ, n, fresh = n != lastCount)
+        lastCount = n
+
+        val white = CoreKit.white(f)
+        val coilHot = mix(hot, white, 0.5f) // never pure white: the spec's "coreplate never white"
+        for (o in 0 until n) {
+            val idx = order[o]
+            val ka = scale / (dist + az[idx])
+            val kb = scale / (dist + bz[idx])
+            val d = dist / (dist + midZ[idx])
+            val start = Offset(cx + ax[idx] * ka, cy + ay[idx] * ka)
+            val end = Offset(cx + bx[idx] * kb, cy + by[idx] * kb)
+            if (kind[idx] == KIND_COIL) {
+                val flow = flowOf[idx]
                 drawLine(
-                    color = mix(cool, hot, 0.3f).copy(alpha = 0.5f),
-                    start = Offset(cx + cos(a0) * rr, cy + off * 0.35f + sin(a0) * rr * 0.12f),
-                    end = Offset(cx + cos(a1) * rr, cy + off * 0.35f + sin(a1) * rr * 0.12f),
-                    strokeWidth = r * 0.02f,
+                    color = if (flow > 0.25f) coilHot else hot,
+                    start = start, end = end,
+                    strokeWidth = kotlin.math.max(0.7f * px1, s * 0.008f * d * (1f + flow * 2.2f)),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    alpha = 0.18f + flow * 0.82f,
+                )
+            } else {
+                val p = kind[idx]
+                val len = kotlin.math.sqrt(ax[idx] * ax[idx] + ay[idx] * ay[idx] + az[idx] * az[idx])
+                val up = kotlin.math.max(0f, -ay[idx] / (if (len > 0f) len else 1f))
+                drawLine(
+                    color = CoreKit.shade(if (plateHot[p]) hot else cool, 0.55f + up * 0.9f + d * 0.25f),
+                    start = start, end = end,
+                    strokeWidth = kotlin.math.max(px1, s * plateLw[p] * d),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    alpha = kotlin.math.min(1f, 0.35f + d * 0.5f),
                 )
             }
         }
-        // Helical winding: a travelling current, already stateless in the
-        // reference — a sharp pulse from an even power, rather than the
-        // reference's max(0, sin)^5, which needs no separate clamp.
-        val turns = 7
-        val segs = 90
-        fun point(u: Float): Offset {
-            val ang = u * PI2 * turns
-            val rr = (0.46f + 0.05f * sin(u * PI2 * 3f)) * r
-            val y = (-0.2f + u * 0.42f) * sep * r * 4f
-            return Offset(cx + cos(ang) * rr, cy + y + sin(ang) * rr * 0.12f)
-        }
-        // Every interior vertex of the winding is shared by two segments, and
-        // `point` was called for both ends of every one of them: 180 calls where
-        // 91 do, each costing three trig calls plus an Offset allocation. Carrying
-        // the previous segment's end forward halves both. The two calls were
-        // computing the same u from the same expression - `(k + 1) / segs`, then
-        // `k / segs` one iteration later - so the line ends are bit-identical and
-        // nothing on screen moves.
-        var p0 = point(0f)
-        for (k in 0 until segs) {
-            val u0 = k / segs.toFloat()
-            val u1 = (k + 1) / segs.toFloat()
-            val p1 = point(u1)
-            val s = sin(u0 * PI2 * 2f - f.t * 2.2f)
-            val flow = s * s * s * s
-            drawLine(
-                color = mix(hot, Color.White, flow.coerceIn(0f, 1f)),
-                start = p0,
-                end = p1,
-                strokeWidth = (r * 0.008f * (1f + flow * 2f)).coerceAtLeast(0.6f),
-            )
-            p0 = p1
-        }
+
+        // The core: a white-hot centre fading through the state colour, and a
+        // dark three-point mark turning with the spin, squashed to the tilt.
+        val ey = 0.13f * spread
+        val pulse = if (f.motion == FaceState.LISTENING) f.amp * 0.45f else 0.06f * sin(f.t * 4f)
+        val er = s * 0.052f * (1f + pulse)
+        CoreKit.rot3(f, 0f, ey, 0f, yaw, pitch)
+        val kc = scale / (dist + CoreKit.rz)
+        val core = Offset(cx + CoreKit.rx * kc, cy + CoreKit.ry * kc)
+        val gl = CoreKit.eased(f, SEP_TAU_S) { glowOf(it) }
         drawCircle(
-            color = hot.copy(alpha = 0.5f + 0.4f * f.amp),
-            radius = r * (0.05f + 0.02f * sin(f.t * 4f)),
-            center = Offset(cx, cy),
+            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                0f to white,
+                0.22f to hot,
+                *CoreKit.fadeToClear(hot, 0.25f * gl, from = 0.55f),
+                center = core,
+                radius = er * 4f,
+            ),
+            radius = er * 4f,
+            center = core,
         )
+        mark.reset()
+        for (i in 0 until 3) {
+            val a = i / 3f * PI2 - (PI / 2).toFloat()
+            val x = cos(a) * er * 0.8f
+            val y = sin(a) * er * 0.8f
+            if (i == 0) mark.moveTo(x, y) else mark.lineTo(x, y)
+        }
+        mark.close()
+        // translate, squash, then turn - the reference's own order, so the
+        // mark turns in the plane of the plates rather than of the screen.
+        drawContext.canvas.save()
+        drawContext.transform.translate(core.x, core.y)
+        drawContext.transform.scale(1f, 0.42f, pivot = Offset.Zero)
+        drawContext.transform.rotate(-f.angle * (180f / PI.toFloat()), pivot = Offset.Zero)
+        drawPath(mark, color = markColor, style = Stroke(width = kotlin.math.max(2f * px1, s * 0.012f)))
+        drawContext.canvas.restore()
+        drawContext.canvas.restore() // CoreKit.clipToView
+    }
+
+    /** One point on the winding, rotated, into CoreKit's rx / ry / rz. */
+    private fun coilPoint(f: FaceFrame, u: Float, spread: Float, yaw: Float, pitch: Float) {
+        val a = u * PI2 * TURNS
+        val yy = (-0.2f + u * 0.42f) * spread
+        val rr = 0.46f + 0.05f * sin(u * PI2 * 3f)
+        CoreKit.rot3(f, cos(a) * rr, yy, sin(a) * rr, yaw, pitch)
     }
 }
 
 /**
- * An assembly exploded in mid-air, with a scan plane sweeping through it.
+ * An assembly exploded in mid-air: four nested wireframe shells floating
+ * apart, a scan plane sweeping through them, a floor grid, and a caliper
+ * reading the real projected gap.
  *
- * The reference eases shell separation toward a per-state target every
- * frame — the same one piece of memory Coreplate's plates have — and the
- * scan plane was already a pure function of `t`. Separation here is a
- * direct function of `f.amp`, matching Coreplate and Spectrum's note.
+ * Rebuilt against the reference line for line (artifact 3755-3837). The old
+ * port drew each shell as a row of vertical strokes with no rings, no
+ * perspective, no grid, no scan plane and no caliper. This is the
+ * reference's geometry: each shell a top ring, a bottom ring and every other
+ * strut (105 segments in all), depth-sorted and lit by each segment's real
+ * distance to the scan plane - not a timer - with the plane itself drawn as
+ * a translucent quad, the 11 x 2 floor grid under it all, and the caliper
+ * and its labels on the right and top left.
+ *
+ * Shell separation eases in from the previous state (`CoreKit.settle`, the
+ * reference's 0.05-a-frame lerp). The scan plane does too, and that is a
+ * deliberate difference: the reference computes it as `sin(t x scan)`, the
+ * absolute clock times a per-state rate, which teleports the plane at every
+ * state change. Blending the two waves over the same third of a second
+ * reaches the reference's exact position once settled, without the jump.
  */
 object Workbench : Face {
     override val id = "workbench"
     override val name = "Workbench"
 
-    private val shells = floatArrayOf(0.68f, 0.52f, 0.36f, 0.20f)
-    private val counts = intArrayOf(16, 12, 8, 6)
+    private const val SEP_TAU_S = 0.33f
+
+    private val shellR = floatArrayOf(0.70f, 0.55f, 0.38f, 0.20f)
+    private val shellHh = floatArrayOf(0.34f, 0.26f, 0.20f, 0.13f)
+    private val shellN = intArrayOf(16, 12, 8, 6)
+
+    // 2n ring segments per shell plus a strut on every other vertex.
+    private val maxSegs = shellN.sumOf { it * 2 + (it + 1) / 2 }
+
+    private val ax = FloatArray(maxSegs)
+    private val ay = FloatArray(maxSegs)
+    private val az = FloatArray(maxSegs)
+    private val bx = FloatArray(maxSegs)
+    private val by = FloatArray(maxSegs)
+    private val bz = FloatArray(maxSegs)
+    private val midZ = FloatArray(maxSegs)
+    private val lit = FloatArray(maxSegs)
+    private val order = IntArray(maxSegs)
+    private var sorted = false
+    private val plane = androidx.compose.ui.graphics.Path()
 
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.8f
-        FaceState.THINKING -> 1.9f
-        FaceState.SPEAKING -> 1.0f
-        else -> 0.4f
+        FaceState.LISTENING -> 0.45f
+        FaceState.THINKING -> 0.9f
+        FaceState.SPEAKING -> 0.3f
+        else -> 0.25f
+    }
+
+    /** st[].sep; speaking pulls the assembly back together. */
+    private fun sepOf(m: FaceState) = when (m) {
+        FaceState.LISTENING -> 0.4f
+        FaceState.THINKING -> 1.15f
+        FaceState.SPEAKING -> 0.08f
+        else -> 0.55f
+    }
+
+    /** st[].scan: how fast the scan plane sweeps. */
+    private fun scanOf(m: FaceState) = when (m) {
+        FaceState.LISTENING -> 1.6f
+        FaceState.THINKING -> 2.6f
+        FaceState.SPEAKING -> 0.8f
+        else -> 0.5f
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
-        // A zero-size layout (r == 0) makes the scan-plane falloff below divide
-        // by zero, and the NaN that comes out does NOT merely draw nothing: it
-        // flows through mix() in Resolve.kt into Color(red, green, blue, alpha),
-        // whose `require` on the three colour channels rejects NaN and throws
-        // IllegalArgumentException. So the failure mode is a crashed draw, not a
-        // blank face. There is nothing to draw at zero radius anyway, so stop.
+        // A zero-size layout would divide by zero in the projection below and
+        // hand NaN to mix(), whose Color constructor throws on NaN channels -
+        // a crashed draw rather than a blank face. Nothing to draw anyway.
         if (r <= 0f) return@with
-        val sep = 0.10f + f.amp * 0.35f
-        val scanY = sin(f.t * 0.6f) * r * 0.7f
-        for (si in shells.indices) {
-            val rr = shells[si] * r
-            val off = (si - 1.5f) * sep * r
-            val n = counts[si]
-            for (i in 0 until n) {
-                val a = i / n.toFloat() * PI2 + f.angle * 0.15f
-                val x = cx + cos(a) * rr
-                val yTop = cy + off - rr * 0.3f
-                val yBot = cy + off + rr * 0.3f
-                val mid = (yTop + yBot) / 2f - cy
-                val e = (mid - scanY) / (r * 0.18f)
-                val lit = kotlin.math.exp(-(e * e))
-                drawLine(
-                    color = mix(cool, hot, lit.coerceIn(0f, 1f)).copy(
-                        alpha = (0.2f + lit * 0.8f).coerceAtMost(1f),
-                    ),
-                    start = Offset(x, yTop),
-                    end = Offset(x, yBot),
-                    strokeWidth = (r * 0.012f * (1f + lit * 1.5f)).coerceAtLeast(0.7f),
-                )
+        val s = 4f * r
+        val px1 = CoreKit.backingPx(density)
+        CoreKit.clipToView(this)
+        // Listening narrows the gap with the voice, as the reference does.
+        val sep = CoreKit.eased(f, SEP_TAU_S) {
+            sepOf(it) * (if (it == FaceState.LISTENING) 1f - f.amp * 0.4f else 1f)
+        }
+        val yaw = f.angle
+        val pitch = -0.34f + sin(f.t * 0.17f) * 0.07f
+        val dist = 4.6f
+        val scale = s * 1.05f
+        val scanY = CoreKit.eased(f, SEP_TAU_S) { sin(f.t * scanOf(it)) * 0.85f }
+
+        // The floor grid, drawn first so everything else sits on it.
+        val gridCol = cool.copy(alpha = 0.5f)
+        for (i in -5..5) {
+            val g = i * 0.24f
+            gridLine(f, g, -1.2f, g, 1.2f, yaw, pitch, dist, scale, cx, cy, gridCol, px1)
+            gridLine(f, -1.2f, g, 1.2f, g, yaw, pitch, dist, scale, cx, cy, gridCol, px1)
+        }
+
+        var n = 0
+        for (si in 0 until 4) {
+            val off = (si - 1.5f) * sep
+            val cnt = shellN[si]
+            val rr = shellR[si]
+            val hh = shellHh[si]
+            for (k in 0 until cnt) {
+                val j = (k + 1) % cnt
+                val a0 = k / cnt.toFloat() * PI2
+                val a1 = j / cnt.toFloat() * PI2
+                val x0 = cos(a0) * rr
+                val z0 = sin(a0) * rr
+                val x1 = cos(a1) * rr
+                val z1 = sin(a1) * rr
+                n = segment(f, n, x0, -hh + off, z0, x1, -hh + off, z1, yaw, pitch, scanY)
+                n = segment(f, n, x0, hh + off, z0, x1, hh + off, z1, yaw, pitch, scanY)
+                if (k % 2 == 0) n = segment(f, n, x0, -hh + off, z0, x0, hh + off, z0, yaw, pitch, scanY)
             }
         }
-        drawLine(
-            color = hot.copy(alpha = 0.18f),
-            start = Offset(cx - r * 0.75f, cy + scanY),
-            end = Offset(cx + r * 0.75f, cy + scanY),
-            strokeWidth = r * 0.01f,
+        CoreKit.sortFarFirst(order, midZ, n, fresh = !sorted)
+        sorted = true
+
+        val white = CoreKit.white(f)
+        for (o in 0 until n) {
+            val i = order[o]
+            val ka = scale / (dist + az[i])
+            val kb = scale / (dist + bz[i])
+            val d = dist / (dist + midZ[i])
+            val l = lit[i]
+            drawLine(
+                color = if (l > 0.25f) mix(hot, white, l * 0.7f) else hot,
+                start = Offset(cx + ax[i] * ka, cy + ay[i] * ka),
+                end = Offset(cx + bx[i] * kb, cy + by[i] * kb),
+                strokeWidth = kotlin.math.max(0.7f * px1, s * 0.0035f * d * (1f + l * 2.2f)),
+                alpha = ((0.16f + (d - 0.72f) * 1.5f) + l * 0.85f).coerceIn(0f, 1f),
+            )
+        }
+
+        // The scan plane: a translucent quad at its height, outlined.
+        plane.reset()
+        for (c in 0 until 4) {
+            val qx = if (c == 0 || c == 3) -1f else 1f
+            val qz = if (c < 2) -1f else 1f
+            CoreKit.rot3(f, qx, scanY, qz, yaw, pitch)
+            val k = scale / (dist + CoreKit.rz)
+            val x = cx + CoreKit.rx * k
+            val y = cy + CoreKit.ry * k
+            if (c == 0) plane.moveTo(x, y) else plane.lineTo(x, y)
+        }
+        plane.close()
+        drawPath(plane, color = hot, alpha = 0.16f)
+        drawPath(plane, color = hot, alpha = 0.55f, style = Stroke(width = px1))
+
+        // The caliper: the real projected distance between the outermost
+        // shell tops and bottoms, on the right, with its reading.
+        CoreKit.rot3(f, 0f, -1.5f * sep - 0.34f, 0f, yaw, pitch)
+        val topY = cy + CoreKit.ry * (scale / (dist + CoreKit.rz))
+        CoreKit.rot3(f, 0f, 1.5f * sep + 0.34f, 0f, yaw, pitch)
+        val botY = cy + CoreKit.ry * (scale / (dist + CoreKit.rz))
+        val gx = cx + s * 0.40f
+        val calCol = hot.copy(alpha = 0.6f)
+        drawLine(calCol, Offset(gx, topY), Offset(gx, botY), strokeWidth = px1)
+        drawLine(calCol, Offset(gx - s * 0.02f, topY), Offset(gx + s * 0.02f, topY), strokeWidth = px1)
+        drawLine(calCol, Offset(gx - s * 0.02f, botY), Offset(gx + s * 0.02f, botY), strokeWidth = px1)
+
+        // The labels, placed where the reference puts them on its square
+        // canvas (S x 0.06 across, 0.10 and 0.15 down), measured from the
+        // centre so a non-square view keeps them beside the drawing.
+        val textPx = kotlin.math.round(s * 0.028f)
+        val mm = kotlin.math.abs(botY - topY) / s * 142f
+        drawCoreLabel(
+            String.format(java.util.Locale.US, "%.1fmm", mm),
+            gx + s * 0.03f, (topY + botY) / 2f, textPx, hot.copy(alpha = 0.85f),
         )
+        val lx = cx - s * 0.44f
+        drawCoreLabel("SHELL ASSY / 4 PARTS", lx, cy - s * 0.40f, textPx, hot.copy(alpha = 0.7f))
+        drawCoreLabel(
+            if (f.motion == FaceState.SPEAKING) "RESEATING" else "EXPLODED",
+            lx, cy - s * 0.35f, textPx, hot.copy(alpha = 0.7f),
+        )
+        drawContext.canvas.restore() // CoreKit.clipToView
+    }
+
+    private fun DrawScope.gridLine(
+        f: FaceFrame, x0: Float, z0: Float, x1: Float, z1: Float,
+        yaw: Float, pitch: Float, dist: Float, scale: Float, cx: Float, cy: Float,
+        col: Color, width: Float,
+    ) {
+        CoreKit.rot3(f, x0, 1.05f, z0, yaw, pitch)
+        val ka = scale / (dist + CoreKit.rz)
+        val a = Offset(cx + CoreKit.rx * ka, cy + CoreKit.ry * ka)
+        CoreKit.rot3(f, x1, 1.05f, z1, yaw, pitch)
+        val kb = scale / (dist + CoreKit.rz)
+        drawLine(col, a, Offset(cx + CoreKit.rx * kb, cy + CoreKit.ry * kb), strokeWidth = width)
+    }
+
+    /** Rotates one shell segment into the buffers; returns the next free slot. */
+    private fun segment(
+        f: FaceFrame, n: Int,
+        x0: Float, y0: Float, z0: Float, x1: Float, y1: Float, z1: Float,
+        yaw: Float, pitch: Float, scanY: Float,
+    ): Int {
+        CoreKit.rot3(f, x0, y0, z0, yaw, pitch)
+        ax[n] = CoreKit.rx; ay[n] = CoreKit.ry; az[n] = CoreKit.rz
+        CoreKit.rot3(f, x1, y1, z1, yaw, pitch)
+        bx[n] = CoreKit.rx; by[n] = CoreKit.ry; bz[n] = CoreKit.rz
+        midZ[n] = (az[n] + bz[n]) / 2f
+        // Lit by the segment's own height against the plane, in the shell's
+        // space before rotation - the plane belongs to the object.
+        val e = ((y0 + y1) / 2f - scanY) * 3.4f
+        lit[n] = kotlin.math.exp(-(e * e))
+        return n + 1
     }
 }
 
 /**
- * Two hundred agents that read as a cloud moving together, and pull tighter
- * while listening.
+ * Two hundred and twenty agents, drawn as the reference draws them: a
+ * depth-fogged dot per agent with a short trail along its heading, white
+ * where it is moving fast, the whole cloud under a slowly turning camera.
  *
- * The reference integrates real velocity and position every frame — each
- * agent remembers where it was a moment ago. Here every agent instead
- * follows a fixed, closed path parametrized directly by `t` and the agent's
- * own fixed phase (seeded once at startup, the same way Kirkwood's rocks
- * are): the cloud still reads as many small bodies moving together, and
- * `f.amp` tightens the radius the way "listening pulls the swarm into a
- * ball" did in the reference — without a frame of memory anywhere. This is
- * not a flocking simulation; it is chosen specifically so this face stays
- * out of the set `SpecDriftTest` pins as unverifiable.
+ * The drawing is the reference's line for line (artifact 3596-3662): the
+ * same camera (yaw t x 0.09, pitch -0.2, distance 3.4, scale 0.62 S), the
+ * same fog `(d - 0.62) x 2.1`, dot radius 0.0065 S x depth, a trail seven
+ * frames of travel long at half the fog's alpha and 0.9 of the dot's width,
+ * white heads above the reference's speed threshold, the same colour slot
+ * per state, and all of it depth-sorted. The old port drew 160 fixed-size
+ * dots with no trails, no fog curve and no sort.
+ *
+ * The motion is NOT the reference's, and cannot be while this face stays a
+ * pure function of its frame (`SpecDriftTest`): the reference integrates real
+ * boid velocities in a curl field, and what comes out is emergent. Each state
+ * here is a closed-form path instead, tuned to what that simulation actually
+ * produces - measured by running it for fifty seconds per state (median
+ * radius, speed spread, share of white heads):
+ *  - idle: a streaming ribbon, most agents on one long arc that flows round
+ *    the ball, a few stragglers drifting slowly (median speed 0.04 a frame,
+ *    89% white in the reference);
+ *  - listening: the whole flock pulled into one bright bead that wanders
+ *    near the centre (the reference's spread falls to 0.0003 in five
+ *    seconds);
+ *  - thinking: fast agents scattered over the shell in competing clusters
+ *    (median radius 1.9, speed 0.1 a frame, all white);
+ *  - speaking: agents pinned at the shell with long radial streaks, pulsing
+ *    outward in waves (median radius 1.9).
+ * A state change blends the two paths over half a second, which stands in
+ * for the flock accelerating from one pattern into the next.
  */
 object Swarm : Face {
     override val id = "swarm"
     override val name = "Swarm"
 
-    private const val N = 160
-    private val seedA = FloatArray(N) { hash01(it * 7 + 1) * PI2 }
-    private val seedB = FloatArray(N) { hash01(it * 13 + 3) * PI2 }
-    private val seedR = FloatArray(N) { 0.3f + hash01(it * 19 + 5) * 0.7f }
-    private val seedSize = FloatArray(N) { hash01(it * 29 + 11) }
+    private const val N = 220
+    private const val BUNDLES = 9
+    private const val BLEND_TAU_S = 0.5f
 
-    override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 1.1f
-        FaceState.THINKING -> 2.3f
-        FaceState.SPEAKING -> 1.4f
-        else -> 0.5f
+    private val sizeSeed = FloatArray(N) { hash01(it * 29 + 11) }
+    private val h1 = FloatArray(N) { hash01(it * 7 + 1) }
+    private val h2 = FloatArray(N) { hash01(it * 13 + 3) }
+    private val h3 = FloatArray(N) { hash01(it * 19 + 5) }
+    private val h4 = FloatArray(N) { hash01(it * 37 + 17) }
+    private val h5 = FloatArray(N) { hash01(it * 43 + 23) }
+
+    // A fixed unit direction per agent, uniform over the sphere, and a
+    // second unit vector perpendicular to it, for great-circle motion.
+    private val dirX = FloatArray(N)
+    private val dirY = FloatArray(N)
+    private val dirZ = FloatArray(N)
+    private val perX = FloatArray(N)
+    private val perY = FloatArray(N)
+    private val perZ = FloatArray(N)
+
+    init {
+        for (i in 0 until N) {
+            // Speaking's bundles and thinking's clusters: shared directions
+            // spread evenly over the sphere (a golden-angle spiral - random
+            // ones bunched on one side and the speaking burst went
+            // lopsided), each agent jittered around its own.
+            val c = i % BUNDLES
+            val cz = 1f - 2f * (c + 0.5f) / BUNDLES
+            val cr = kotlin.math.sqrt(kotlin.math.max(0f, 1f - cz * cz))
+            val cph = c * 2.3999632f
+            var x = cr * cos(cph) + (h1[i] - 0.5f) * 0.6f
+            var y = cz + (h2[i] - 0.5f) * 0.6f
+            var z = cr * sin(cph) + (h3[i] - 0.5f) * 0.6f
+            var len = kotlin.math.sqrt(x * x + y * y + z * z).coerceAtLeast(1e-4f)
+            x /= len; y /= len; z /= len
+            dirX[i] = x; dirY[i] = y; dirZ[i] = z
+            // Any vector not parallel to dir, crossed with it, then normalised.
+            val ux = if (kotlin.math.abs(y) < 0.9f) 0f else 1f
+            val uy = if (kotlin.math.abs(y) < 0.9f) 1f else 0f
+            var px = uy * z
+            var py = -ux * z
+            var pz = ux * y - uy * x
+            len = kotlin.math.sqrt(px * px + py * py + pz * pz).coerceAtLeast(1e-4f)
+            px /= len; py /= len; pz /= len
+            perX[i] = px; perY[i] = py; perZ[i] = pz
+        }
+    }
+
+    private val qx = FloatArray(N)
+    private val qy = FloatArray(N)
+    private val qz = FloatArray(N)
+    private val qd = FloatArray(N)
+    private val tx = FloatArray(N)
+    private val ty = FloatArray(N)
+    private val speed = FloatArray(N)
+    private val order = IntArray(N)
+    private var lastUse = -1
+
+    // Filled by `model`: position, and velocity in units per SECOND.
+    private var mx = 0f
+    private var my = 0f
+    private var mz = 0f
+    private var mvx = 0f
+    private var mvy = 0f
+    private var mvz = 0f
+
+    // The reference's swarm has no per-state table, so its spin rate is 1
+    // in every state; nothing here reads `f.angle` anyway.
+    override fun speedFor(motion: FaceState) = 1f
+
+    /** cfg.col: idle PC[1], listening PC[0], thinking and speaking PC[2]. */
+    private fun colourOf(m: FaceState, hot: Color, cool: Color) = when (m) {
+        FaceState.LISTENING -> hot
+        FaceState.THINKING, FaceState.SPEAKING -> mix(hot, cool, 0.5f)
+        else -> cool
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
-        val cp = cos(f.pitch)
-        val sp = sin(f.pitch)
-        // Hoisted, exactly the way Orbit already hoists its inclination above.
-        // The yaw is one number for the whole draw, but these were evaluated
-        // inside the 160-agent loop: 320 redundant trig calls a frame, roughly
-        // 38,000 a second at 120fps, for two values that cannot differ between
-        // agents. Same numbers out, a great deal less arithmetic in.
-        val cyw = cos(f.yaw)
-        val syw = sin(f.yaw)
-        val pull = (1f - f.amp * 0.6f).coerceIn(0.35f, 1f)
-        for (i in 0 until N) {
-            val orbit = f.t * (0.3f + seedR[i] * 0.2f) + seedA[i]
-            val wob = f.t * (0.6f + seedR[i] * 0.4f) + seedB[i]
-            val rr = seedR[i] * pull
-            val x0 = cos(orbit) * rr
-            val y0 = sin(wob) * rr * 0.7f
-            val z0 = sin(orbit) * rr
-            val x = x0 * cyw - z0 * syw
-            val z1 = x0 * syw + z0 * cyw
-            val y = y0 * cp - z1 * sp
-            val z = y0 * sp + z1 * cp
-            val d = ((z + 1f) / 2f).pow(Spec.DEPTH_GAIN)
+        if (r <= 0f) return@with
+        val s = 4f * r
+        val px1 = CoreKit.backingPx(density)
+        CoreKit.clipToView(this)
+        // The reference drops to 110 agents on a canvas under 420 of its
+        // pixels - a thumbnail - and draws all of them otherwise.
+        val use = if (s / px1 < 420f) 110 else N
+        val yaw = f.t * 0.09f
+        val pitch = -0.2f
+        val dist = 3.4f
+        val scale = s * 0.62f
+        val e = CoreKit.settle(f, BLEND_TAU_S)
+
+        for (i in 0 until use) {
+            model(f.motion, i, f)
+            var x = mx; var y = my; var z = mz
+            var vx = mvx; var vy = mvy; var vz = mvz
+            if (e < 1f) {
+                model(f.prevMotion, i, f)
+                x = mx + (x - mx) * e; y = my + (y - my) * e; z = mz + (z - mz) * e
+                vx = mvx + (vx - mvx) * e; vy = mvy + (vy - mvy) * e; vz = mvz + (vz - mvz) * e
+            }
+            // Per frame at 60 fps, the unit the reference's threshold and
+            // trail length are written in.
+            vx /= 60f; vy /= 60f; vz /= 60f
+            CoreKit.proj(f, x, y, z, yaw, pitch, dist, scale, cx, cy)
+            qx[i] = CoreKit.px; qy[i] = CoreKit.py; qz[i] = CoreKit.pz; qd[i] = CoreKit.pd
+            CoreKit.proj(f, x - vx * 7f, y - vy * 7f, z - vz * 7f, yaw, pitch, dist, scale, cx, cy)
+            tx[i] = CoreKit.px; ty[i] = CoreKit.py
+            speed[i] = kotlin.math.sqrt(vx * vx + vy * vy + vz * vz)
+        }
+        CoreKit.sortFarFirst(order, qz, use, fresh = use != lastUse)
+        lastUse = use
+
+        val col = if (e < 1f) {
+            mix(colourOf(f.prevMotion, hot, cool), colourOf(f.motion, hot, cool), e)
+        } else {
+            colourOf(f.motion, hot, cool)
+        }
+        val white = CoreKit.white(f)
+        for (k in 0 until use) {
+            val i = order[k]
+            val d = qd[i]
+            val fog = ((d - 0.62f) * 2.1f).coerceIn(0f, 1f)
+            if (fog <= 0f) continue
+            val rad = kotlin.math.max(0.6f * px1, s * 0.0065f * d * (0.6f + sizeSeed[i] * 0.8f))
+            val head = Offset(qx[i], qy[i])
+            drawLine(col, Offset(tx[i], ty[i]), head, strokeWidth = rad * 0.9f, alpha = fog * 0.5f)
             drawCircle(
-                color = mix(cool, hot, d).copy(alpha = (0.25f + d * 0.65f).coerceAtMost(1f)),
-                radius = (r * 0.012f * d.coerceAtLeast(0.25f) * (0.5f + seedSize[i])).coerceAtLeast(0.6f),
-                center = Offset(cx + x * r, cy + y * r),
+                color = if (kotlin.math.min(1f, speed[i] * 36f) > 0.55f) white else col,
+                radius = rad,
+                center = head,
+                alpha = fog,
             )
         }
+        drawContext.canvas.restore() // CoreKit.clipToView
+    }
+
+    /**
+     * One agent's position and velocity (units per second) in one state,
+     * into mx..mvz. See the class comment for what each state is tuned to.
+     */
+    private fun model(m: FaceState, i: Int, f: FaceFrame) {
+        val t = f.t
+        val ft = t * 0.55f // the reference's flow-field clock
+        when (m) {
+            FaceState.LISTENING -> {
+                // The reference's pull is strong enough here that the whole
+                // flock falls into one point within a few seconds (measured:
+                // spread 0.09 after one second, 0.0003 after five) and that
+                // point wanders 0.03 to 0.2 from the centre - so listening
+                // reads as a single bright bead. The bead here keeps a
+                // hair of size, tighter with a louder voice (the pull grows
+                // by 1 + 2.5 amp), so it is still a crowd up close.
+                val ball = 0.03f * 1.7f / (1f + 2.5f * f.amp)
+                val rho = ball * (0.45f + 1.4f * h4[i] * h4[i]) / 0.8f
+                val w = 0.25f + 0.3f * h5[i]
+                orbit(i, rho, t * w + h1[i] * PI2, w, 0f)
+                val drift = 0.12f / (1f + f.amp)
+                mx += drift * sin(ft * 0.7f); my += drift * 0.6f * sin(ft * 0.5f + 1f); mz += drift * cos(ft * 0.6f)
+                mvx += drift * 0.7f * 0.55f * cos(ft * 0.7f)
+                mvy += drift * 0.6f * 0.5f * 0.55f * cos(ft * 0.5f + 1f)
+                mvz -= drift * 0.6f * 0.55f * sin(ft * 0.6f)
+            }
+            FaceState.THINKING -> {
+                val rho = if (h4[i] < 0.55f) 1.9f else 1.1f + 0.8f * h5[i]
+                val w = (4.5f + 3.5f * h3[i]) / rho
+                // Each cluster starts its circle at the same angle, so the
+                // agents that share a direction travel together.
+                orbit(i, rho, t * w + (i % BUNDLES) * 0.9f + (h2[i] - 0.5f) * 1.1f, w, 0.12f)
+            }
+            FaceState.SPEAKING -> {
+                // A wave per bundle: out fast on the crest, pinned at the
+                // shell, then eased back a little in the trough.
+                val wv = sin(ft * 5f - (i % BUNDLES) * 0.9f - h1[i] * 1.2f)
+                val k = 0.5f + 0.5f * wv
+                val rho = 1.9f - (1f - k) * 0.45f * h2[i]
+                val out = (0.02f + 0.22f * k * kotlin.math.sqrt(k)) * 60f
+                // The bundles drift slowly round the vertical axis.
+                val a = t * 0.15f
+                val ca = cos(a)
+                val sa = sin(a)
+                val dx = dirX[i] * ca - dirZ[i] * sa
+                val dz = dirX[i] * sa + dirZ[i] * ca
+                mx = dx * rho; my = dirY[i] * rho; mz = dz * rho
+                mvx = dx * out; mvy = dirY[i] * out; mvz = dz * out
+            }
+            else -> {
+                if (h5[i] < 0.12f) {
+                    // Stragglers: slow, loose orbits inside the ball, the
+                    // share of the reference's idle heads that are not white.
+                    val rho = 0.6f + 1.0f * h3[i]
+                    val w = 0.35f * (0.6f + 0.8f * h4[i]) / rho
+                    orbit(i, rho, t * w + h1[i] * PI2, w, 0f)
+                } else {
+                    // The stream: agents spread along a 2.6-radian arc of a
+                    // slowly morphing loop, flowing along it at 1.5 rad/s.
+                    val wob = 0.35f * sin(t * 0.7f + h2[i] * PI2)
+                    val u = t * 1.5f + 2.6f * (h1[i] - 0.5f) + wob
+                    val du = 1.5f + 0.35f * 0.7f * cos(t * 0.7f + h2[i] * PI2)
+                    val a2 = 2f * u + ft * 0.6f
+                    val b2 = 2f * u + 0.9f + ft * 0.4f
+                    val c3 = 3f * u - ft * 0.5f
+                    val th = 1f + 0.3f * sin(t * 1.3f + h4[i] * PI2)
+                    mx = 1.25f * sin(u) + 0.25f * sin(a2) + (h3[i] - 0.5f) * 0.32f * th
+                    my = 0.55f * sin(b2) + (h4[i] - 0.5f) * 0.32f * th
+                    mz = 1.25f * cos(u) + 0.25f * cos(c3) + (sizeSeed[i] - 0.5f) * 0.32f * th
+                    mvx = (1.25f * cos(u) + 0.5f * cos(a2)) * du
+                    mvy = 1.1f * cos(b2) * du
+                    mvz = (-1.25f * sin(u) - 0.75f * sin(c3)) * du
+                }
+            }
+        }
+    }
+
+    /**
+     * A great circle of radius [rho] through the agent's own direction, at
+     * angle [th] and angular speed [w], with an optional wiggle of [wig] off
+     * the circle's plane so the trails curve the way a flow field's do.
+     */
+    private fun orbit(i: Int, rho: Float, th: Float, w: Float, wig: Float) {
+        val c = cos(th)
+        val s = sin(th)
+        // The circle's normal is dir x per; the wiggle moves along it.
+        val nx = dirY[i] * perZ[i] - dirZ[i] * perY[i]
+        val ny = dirZ[i] * perX[i] - dirX[i] * perZ[i]
+        val nz = dirX[i] * perY[i] - dirY[i] * perX[i]
+        val wp = 2.7f * th + h5[i] * PI2
+        val off = wig * sin(wp)
+        val offV = wig * 2.7f * w * cos(wp)
+        mx = rho * (c * dirX[i] + s * perX[i]) + off * nx
+        my = rho * (c * dirY[i] + s * perY[i]) + off * ny
+        mz = rho * (c * dirZ[i] + s * perZ[i]) + off * nz
+        mvx = rho * w * (-s * dirX[i] + c * perX[i]) + offV * nx
+        mvy = rho * w * (-s * dirY[i] + c * perY[i]) + offV * ny
+        mvz = rho * w * (-s * dirZ[i] + c * perZ[i]) + offV * nz
     }
 }
 
 /**
- * A schooling sheet that flashes as it wheels — orientation catching the
- * light is the visual idea, not the school's shape.
+ * A schooling sheet that flashes as it wheels: each fish is a filled sliver
+ * with a tail, and its brightness is the angle between its flank and the
+ * light, so the shoal flickers silver exactly when it turns.
  *
- * Like Swarm, agents follow a fixed path parametrized by `t` and a per-agent
- * seed rather than an integrated simulation, for the same reason.
+ * The drawing is the reference's line for line (artifact 4390-4447): up to
+ * 190 fish by canvas size (the reference's `detail(w, 90, 190)`), the same
+ * camera (yaw t x 0.12, pitch -0.12, distance 3.2, scale 1.7 S), body length
+ * 0.042 S x depth, a quadratic body and a triangular tail, colour from a
+ * depth-shaded structural tone to the hot one by `flank^3`, and far-to-near
+ * order. The old port drew 140 plain line segments with no body, no tail,
+ * no perspective and a flash that was not tied to the heading.
+ *
+ * The reference moves each fish with a damped spring toward a shared moving
+ * target plus its own station in the school. That spring is stiff next to
+ * how slowly the target moves, so once settled each fish simply follows the
+ * target a fixed moment behind it: `lag = (1 - damp) / (damp x coh x
+ * fishLag)` frames. This follows that closed form, which keeps the face a
+ * pure function of its frame (`SpecDriftTest`) - checked against the real
+ * simulation run for a minute per state: mean position error 0.007 to 0.08
+ * units in a school about 3 units across, heading error 4 to 14 degrees.
+ *
+ * Two reference details kept deliberately: the owner's drag yaw is applied
+ * twice, as the reference does (its `ry` already includes `VIEW.yaw`, and
+ * `proj` adds it again), so a drag turns this face at the same rate on both
+ * screens; and there is no touch attraction (`TOUCH`), because this shell
+ * reports taps and drags, not a held finger position.
  */
 object Shoal : Face {
     override val id = "shoal"
     override val name = "Shoal"
 
-    private const val N = 140
-    private val seedA = FloatArray(N) { hash01(it * 17 + 2) * PI2 }
-    private val seedR = FloatArray(N) { 0.35f + hash01(it * 23 + 6) * 0.65f }
-    private val seedSize = FloatArray(N) { hash01(it * 31 + 9) }
+    // faces[].render.fit in the spec is 0.8; this was left at 1.0.
+    override val fit = 0.8f
+
+    private const val N = 190
+    private const val SPREAD_TAU_S = 0.6f
+
+    private val seed = FloatArray(N) { hash01(it * 31 + 9) }
+    private val offX = FloatArray(N) { (hash01(it * 17 + 2) - 0.5f) * 1.9f }
+    private val offY = FloatArray(N) { (hash01(it * 23 + 6) - 0.5f) * 1.1f }
+    private val offZ = FloatArray(N) { (hash01(it * 41 + 4) - 0.5f) * 1.9f }
+
+    private val qx = FloatArray(N)
+    private val qy = FloatArray(N)
+    private val qz = FloatArray(N)
+    private val qd = FloatArray(N)
+    private val ang = FloatArray(N)
+    private val flash = FloatArray(N)
+    private val order = IntArray(N)
+    private var lastN = -1
+
+    // The light the flank is lit by: the reference's LIGHT, normalised.
+    private val lightX: Float
+    private val lightY: Float
+
+    init {
+        val lx = -0.45f
+        val ly = -0.75f
+        val lz = -0.48f
+        val n = kotlin.math.sqrt(lx * lx + ly * ly + lz * lz)
+        lightX = lx / n
+        lightY = ly / n
+    }
+
+    // A unit fish, one body length long, pointing along +x: the reference's
+    // quadratic body (width 0.32 of the length) and its triangular tail.
+    // Built once and scaled per fish, rather than rebuilt 190 times a frame;
+    // lazily, on the first draw, like Nucleus's shader, so touching
+    // `Faces.all` at startup builds nothing for a face never shown.
+    private val body by lazy { androidx.compose.ui.graphics.Path().apply {
+        moveTo(0.6f, 0f)
+        quadraticTo(0f, -0.32f, -0.5f, 0f)
+        quadraticTo(0f, 0.32f, 0.6f, 0f)
+        close()
+    } }
+    private val tail by lazy { androidx.compose.ui.graphics.Path().apply {
+        moveTo(-0.45f, 0f)
+        lineTo(-0.75f, -0.32f * 0.8f)
+        lineTo(-0.75f, 0.32f * 0.8f)
+        close()
+    } }
 
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 1.0f
-        FaceState.THINKING -> 2.0f
-        FaceState.SPEAKING -> 1.2f
+        FaceState.LISTENING -> 0.9f
+        FaceState.THINKING -> 1.7f
+        FaceState.SPEAKING -> 0.7f
         else -> 0.5f
+    }
+
+    private fun cohOf(m: FaceState) = when (m) {
+        FaceState.LISTENING -> 0.020f
+        FaceState.THINKING -> 0.004f
+        FaceState.SPEAKING -> 0.013f
+        else -> 0.008f
+    }
+
+    private fun spreadOf(m: FaceState) = when (m) {
+        FaceState.LISTENING -> 0.72f
+        FaceState.THINKING -> 1.25f
+        FaceState.SPEAKING -> 0.9f
+        else -> 1.0f
     }
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
-        val pull = (1f - f.amp * 0.35f).coerceIn(0.55f, 1f)
-        for (i in 0 until N) {
-            val orbit = f.t * (0.35f + seedR[i] * 0.25f) + seedA[i] + f.yaw
-            val rr = seedR[i] * pull * r
-            val bx = cos(orbit) * rr
-            val by = sin(orbit * 0.6f) * rr * 0.5f
-            // Heading from the derivative of the path above, so the body
-            // always points the way it is actually moving.
-            val vx = -sin(orbit)
-            val vy = cos(orbit * 0.6f) * 0.36f
-            val vlen = kotlin.math.sqrt(vx * vx + vy * vy).coerceAtLeast(1e-4f)
-            val len = r * 0.045f * (0.6f + seedSize[i])
-            val hx = vx / vlen * len
-            val hy = vy / vlen * len
-            val flash = kotlin.math.abs(sin(orbit * 1.7f + seedA[i]))
-            val d = 0.6f + 0.4f * cos(orbit)
-            drawLine(
-                color = mix(cool, hot, flash).copy(alpha = (0.35f + d * 0.5f).coerceAtMost(1f)),
-                start = Offset(cx + bx - hx, cy + by - hy),
-                end = Offset(cx + bx + hx, cy + by + hy),
-                strokeWidth = (len * 0.6f).coerceAtLeast(1f),
-            )
+        if (r <= 0f) return@with
+        val s = 4f * r
+        val px1 = CoreKit.backingPx(density)
+        CoreKit.clipToView(this)
+        // detail() reads the canvas width before `fit` is applied.
+        val n = CoreKit.detail(s / (fit * px1), 90, N)
+        val yaw = f.t * 0.12f + f.yaw
+        val pitch = -0.12f + f.pitch
+        val dist = 3.2f
+        val scale = s * 1.7f
+        val tPhase = f.angle
+        val spread = CoreKit.eased(f, SPREAD_TAU_S) { spreadOf(it) }
+        val coh = cohOf(f.motion) * (if (f.motion == FaceState.LISTENING) 1f + f.amp * 2f else 1f)
+        val rate = speedFor(f.motion)
+        val lim = spread * 1.4f
+
+        for (i in 0 until n) {
+            // How far behind the target this fish runs, in phase units.
+            val lagFrames = 0.05f / (0.95f * coh * (0.6f + seed[i] * 0.8f))
+            val tt = tPhase - lagFrames / 60f * rate
+            val x = (sin(tt * 0.7f) * 0.7f + offX[i] * spread).coerceIn(-lim, lim)
+            val y = (sin(tt * 1.1f) * 0.35f + offY[i] * spread).coerceIn(-lim, lim)
+            val z = (cos(tt * 0.9f) * 0.7f + offZ[i] * spread).coerceIn(-lim, lim)
+            CoreKit.proj(f, x, y, z, yaw, pitch, dist, scale, cx, cy)
+            qx[i] = CoreKit.px; qy[i] = CoreKit.py; qz[i] = CoreKit.pz; qd[i] = CoreKit.pd
+            // Heading: the target's own velocity at that moment.
+            var vx = 0.49f * cos(tt * 0.7f)
+            var vy = 0.385f * cos(tt * 1.1f)
+            var vz = -0.63f * sin(tt * 0.9f)
+            val vl = kotlin.math.sqrt(vx * vx + vy * vy + vz * vz).coerceAtLeast(1e-6f)
+            vx /= vl; vy /= vl; vz /= vl
+            CoreKit.rot3(f, vx, vy, vz, yaw, pitch)
+            ang[i] = kotlin.math.atan2(CoreKit.ry, CoreKit.rx)
+            // The flank is perpendicular to travel; the flash is its dot
+            // with the light, cubed so it reads as a glint, not a gradient.
+            val flank = kotlin.math.abs(CoreKit.rx * lightY - CoreKit.ry * lightX)
+            flash[i] = flank * flank * flank
         }
+        CoreKit.sortFarFirst(order, qz, n, fresh = n != lastN)
+        lastN = n
+
+        val toDeg = 180f / PI.toFloat()
+        val bodyPath = body
+        val tailPath = tail
+        for (k in 0 until n) {
+            val i = order[k]
+            val d = qd[i]
+            val len = s * 0.042f * d * (0.6f + seed[i] * 0.7f)
+            val col = mix(CoreKit.shade(cool, 0.5f + d * 0.6f), hot, kotlin.math.min(1f, flash[i] * 1.4f))
+            val a = kotlin.math.min(1f, 0.25f + d * 0.6f)
+            drawContext.canvas.save()
+            drawContext.transform.translate(qx[i], qy[i])
+            drawContext.transform.rotate(ang[i] * toDeg, pivot = Offset.Zero)
+            drawContext.transform.scale(len, len, pivot = Offset.Zero)
+            drawPath(bodyPath, color = col, alpha = a)
+            drawPath(tailPath, color = col, alpha = a)
+            drawContext.canvas.restore()
+        }
+        drawContext.canvas.restore() // CoreKit.clipToView
     }
 }
 

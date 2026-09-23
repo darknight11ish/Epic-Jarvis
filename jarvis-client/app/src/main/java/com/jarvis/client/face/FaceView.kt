@@ -598,6 +598,14 @@ data class FaceFrame(
      * `MembraneRenderer`'s physics, which runs on real elapsed time.
      */
     val calm: Boolean = false,
+    /**
+     * The movement ([motion]) of the state before the current one; [motion]
+     * itself when nothing has changed yet. With [hitchPhase] (seconds since
+     * that change) it lets a face ease a per-state target in from where the
+     * last state left it - see `CoreKit.settle` - while staying a pure
+     * function of this frame, rather than carrying last frame's value.
+     */
+    val prevMotion: FaceState = motion,
 )
 
 /**
@@ -659,6 +667,7 @@ class FaceHost {
     private var colEase = 1f
 
     private var state: FaceState = FaceState.IDLE
+    private var prevState: FaceState = FaceState.IDLE
     private var changedAt = -999f
 
     private var clockStartedAt = -999f
@@ -676,6 +685,7 @@ class FaceHost {
 
     fun onStateChange(next: FaceState) {
         if (next == state) return
+        prevState = state
         state = next
         changedAt = t
         // The RATE is eased, not snapped: a face whose rate steps from 0.22 to
@@ -885,6 +895,7 @@ class FaceHost {
             pitch = pitch,
             t = motionT,
             calm = calm,
+            prevMotion = Spec.transformFor(prevState).borrow,
         )
     }
 
