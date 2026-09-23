@@ -239,36 +239,92 @@ class Say(ReloadsBetweenTests):
 
 
 class WakeToggle(ReloadsBetweenTests):
+    """Since 2026-09-23 turning the wake word ON raises an approval card and
+    changes nothing itself; OFF is immediate. The card flows (denied, timed
+    out, wrong tier, withdrawn, ...) are in test_wakeword.py."""
+
+    def setUp(self):
+        super().setUp()
+        S._reset_wake_for_tests()
+
+    def tearDown(self):
+        S._reset_wake_for_tests()
+        super().tearDown()
+
+    @staticmethod
+    def _approve(action, detail, prompt):
+        return type("V", (), {"allowed": True, "tier": "ask",
+                              "outcome": "approved", "request_id": "t"})()
+
     def test_defaults_to_the_config_value(self):
         with self._with_cfg({"wake_word_enabled": False}):
             self.assertFalse(S._wake_enabled())
 
-    def test_set_and_read_back(self):
-        r = S.set_wake_enabled(True)
+    def test_on_needs_the_card_and_off_is_at_once(self):
+        r = S.set_wake_enabled(True, gate=self._approve, tier_of=lambda a: "ask",
+                               spawn=lambda fn: fn())
         self.assertTrue(r["ok"])
-        self.assertTrue(S._wake_enabled())
+        self.assertTrue(r["pending"], "ON must be reported as a card raised, not as done")
+        self.assertTrue(S._wake_enabled(), "the approved card did not turn it on")
         self.assertTrue(S.status()["wake_word_enabled"])
 
         r = S.set_wake_enabled(False)
         self.assertTrue(r["ok"])
+        self.assertFalse(r["pending"])
         self.assertFalse(S._wake_enabled())
+
+    def test_on_without_an_answer_changes_nothing(self):
+        r = S.set_wake_enabled(True, gate=self._approve, tier_of=lambda a: "ask",
+                               spawn=lambda fn: None)      # the card is never answered
+        self.assertTrue(r["pending"])
+        self.assertFalse(S._wake_enabled())
+        self.assertTrue(S.status()["listening"]["wake_word_pending"])
 
     def test_a_write_failure_is_reported_rather_than_raised(self):
         # Put a FILE where the state directory needs to be a directory, so
         # mkdir(parents=True) fails with a real OSError.
         blocker = Path(self._tmp.name) / "voice"
         blocker.write_text("not a directory")
-        r = S.set_wake_enabled(True)
+        r = S.set_wake_enabled(False)
         self.assertFalse(r["ok"])
         self.assertIn("error", r)
+        # And an approved card that cannot write says "failed", not "enabled".
+        S.set_wake_enabled(True, gate=self._approve, tier_of=lambda a: "ask",
+                           spawn=lambda fn: fn())
+        self.assertEqual(S.wake_state()["last"]["outcome"], "failed")
+        self.assertFalse(S._wake_enabled())
 
 
 class StatusNeverOverstates(ReloadsBetweenTests):
-    def test_reports_the_toml_faster_whisper_mismatch_by_default(self):
-        out = S.status()
+    def test_a_toml_still_naming_faster_whisper_is_told_which_line_to_change(self):
+        # The shipped TOML said this until 2026-09-23, and the owner's copy
+        # may still. No code in Jarvis speaks faster-whisper.
+        with self._with_cfg({"stt_engine": "faster-whisper"}):
+            out = S.status()
         self.assertEqual(out["stt_engine"], "faster-whisper")
         self.assertFalse(out["stt_available"])
-        self.assertIn("sherpa-onnx", out["note"])
+        self.assertIn('stt_engine = "sherpa-onnx"', out["note"])
+
+    def test_the_default_engine_is_the_one_the_code_speaks(self):
+        with self._with_cfg({"stt_engine": None}):
+            self.assertEqual(S._stt_engine_name(), "sherpa-onnx")
+        shipped = (REBUILT / "jarvis-framework.toml").read_text(encoding="utf-8")
+        self.assertIn('stt_engine = "sherpa-onnx"', shipped)
+        self.assertNotIn('stt_engine = "faster-whisper"', shipped)
+
+    def test_the_model_kind_is_recognised_from_the_files(self):
+        d = Path(self._tmp.name) / "voice-models" / "stt"
+        d.mkdir(parents=True)
+        (d / "tokens.txt").write_text("a 0\n")
+        with self._with_cfg({"sherpa_stt_kind": None}):
+            self.assertEqual(S._stt_files()[0], "sense_voice")
+            for n in ("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx"):
+                (d / n).write_bytes(b"x")
+            kind, files = S._stt_files()
+        self.assertEqual(kind, "nemo_transducer")
+        self.assertTrue(files["encoder"].endswith("encoder.int8.onnx"))
+        with self._with_cfg({"sherpa_stt_kind": "sense_voice"}):
+            self.assertEqual(S._stt_files()[0], "sense_voice")
 
     def test_reports_sherpa_selected_but_files_missing(self):
         with self._with_cfg({"stt_engine": "sherpa-onnx"}):

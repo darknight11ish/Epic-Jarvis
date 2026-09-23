@@ -21,66 +21,71 @@ after transcribing would leave a stranger's speech in memory on the way to
 saying no" (the same comment already lives beside the route that calls this).
 The safe failure is to say nothing back, not to say something quietly wrong.
 
-Engine: sherpa-onnx, per docs/ARCHITECTURE.md §11 ("Decisions already
-taken... sherpa-onnx for everything - STT, speaker verification, wake word,
-Kokoro TTS, Silero VAD. 0 GB VRAM"). Speaker verification already lives in
-`jarvis_voice.py`, rebuilt in an earlier pass; this file adds the other two:
-speech-to-text and text-to-speech.
+The whole order, since 2026-09-23 (each step can only refuse, never add):
 
-A DISAGREEMENT WORTH RECORDING RATHER THAN SILENTLY RESOLVING:
-`jarvis-framework.toml`'s own `[voice]` section - the real, checked-in
-config schema - reads
+    1. read the WAV                      bad file        -> refused
+    2. Silero VAD: is there speech?      only noise      -> refused, nothing else runs
+    3. wake word (source=wake_word only): is it switched on, and is
+       "hey Jarvis" in the clip?         no              -> refused, not checked, not transcribed
+    4. the owner check (jarvis_voice)    not the owner   -> refused, not transcribed
+    5. speech-to-text
+    6. wake word only: does the transcript START with "hey Jarvis"? The
+       spotter heard something like it; this is the second opinion that
+       stops "the computer in that film was called Jarvis" counting.
 
-    stt_engine = "faster-whisper"
-    stt_model = "small.en"
+Engines: sherpa-onnx for speech-to-text, Kokoro speech and Silero VAD, per
+docs/ARCHITECTURE.md §11; the owner check is `jarvis_voice.py`; the wake word
+is `jarvis_wakeword.py` (openWakeWord's "hey jarvis" model on ONNX Runtime -
+that module says why that one). Nothing here uses the graphics card.
 
-which is a different STT engine than the one this file implements, and
-neither `faster_whisper` nor `openwakeword` (named in that section's own
-comment as the wake-word engine) is installed anywhere this was written or
-tested. Only `sherpa_onnx` is confirmed present. Rather than overwrite the
-existing `stt_engine`/`stt_model` keys - which would silently break whatever
-already reads them, and would be guessing at a reconciliation nobody asked
-for - this file adds its OWN keys (`sherpa_stt_model`, `sherpa_stt_tokens`,
-...) and only engages when `stt_engine = "sherpa-onnx"` is set explicitly.
-Until that line is added to the TOML, `status()` says so plainly rather than
-pretending to be the active engine. `tts_engine` has no such conflict - the
-TOML has no TTS section at all - so it defaults to `"sherpa-onnx"` outright.
+SPEECH-TO-TEXT: sherpa-onnx, and nothing else. The shipped TOML used to say
+`stt_engine = "faster-whisper"` / `stt_model = "small.en"` - an engine no code
+in this project has ever spoken. That line was the reason push-to-talk could
+never be transcribed. The default is now "sherpa-onnx"; a config still
+naming faster-whisper gets a status note that says which line to change
+(backend/README.md's install step changes it for you). The model on disk is
+recognised by its files, so the install is "put the files in the folder":
 
-WHAT IS NOT HERE: model files. No STT model, no Kokoro voice, no Silero VAD
-weight ships in this repository - they are tens to hundreds of megabytes of
-binary ONNX assets, the kind of thing `backend/README.md` already says does
-not belong in a patch stack. Every engine here is constructed lazily, on
-first real use, from paths read out of `[voice]`; a missing or corrupt file
-raises a real, caught `RuntimeError` (confirmed against the installed
-`sherpa_onnx` package: pointing any of its three model configs at a
-nonexistent path raises `RuntimeError`, it does not hang or abort the
-process) and the caller gets an honest "not available" rather than a crash.
+    voice-models/stt/encoder*.onnx + decoder*.onnx + joiner*.onnx + tokens.txt
+        -> NeMo Parakeet TDT 0.6B v2 (the recommended one: English, with
+           punctuation, ~0.1x real time on a 4-core CPU here)
+    voice-models/stt/model*.onnx + tokens.txt
+        -> SenseVoice (smaller, multilingual)
+    `sherpa_stt_kind` under [voice] overrides the guess.
 
-WHAT IS DELIBERATELY LEFT OUT: whether flipping `wake_word_enabled` should
-first pass through the approval gate. The route comment above the wake-word
-call says turning it on "is gated as change_own_config, because widening
-where Jarvis listens is a change to its exposure and not a preference" - but
-`jarvis_gate.py`'s real `check()`/`decide()` signature is not visible
-anywhere in this repository (confirmed: every patch that touches it shows
-only call sites, never a `def`), and guessing at it would be exactly the kind
-of invented interface this project's own rules exist to prevent. So
-`set_wake_enabled()` here takes effect immediately, in its own small state
-file, the moment it is called - it does not queue an approval. Wiring a real
-gate check in front of it is left for whoever holds `jarvis_gate.py`'s actual
-source, the same gap already recorded for the secret-scan and denial-
-constraint features in `backend/README.md`.
+THE WAKE-WORD SWITCH IS AN APPROVAL CARD, since 2026-09-23. Turning it ON
+widens where Jarvis listens - `change_own_config`, tier "ask" - so
+`set_wake_enabled(True)` raises one card through `jarvis_gate.check()` on a
+background thread, exactly the way jarvis_voice_enroll.py raises its "replace
+my voice" card, and changes nothing itself. The tier is checked before the
+card and again on the answer; only tier "ask" with outcome "approved" turns it
+on. Turning it OFF is immediate and never waits for a card: it only narrows
+what Jarvis hears, and an off switch that could time out would leave a
+microphone open. Before this, the docstring here said it applied at once
+"because jarvis_gate.py's interface was not visible" - the interface
+jarvis_voice_enroll.py and jarvis_skill_discovery.py already call is the one
+used here.
+
+WHAT IS NOT HERE: model files. They are tens to hundreds of megabytes of
+ONNX that belong on the owner's machine, not in git. backend/README.md's
+"Voice: install the models" section has one PowerShell line per model, each
+checked against a SHA-256 measured from the real download. Every engine is
+built lazily on first use; a missing or corrupt file is an honest "not
+available" in status(), never a crash.
 """
 from __future__ import annotations
 
 import io
 import json
 import os
+import re
 import threading
 import time
+import uuid
 import wave
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 try:
     import jarvis_framework as fw
@@ -91,6 +96,11 @@ try:
     import jarvis_voice
 except Exception:
     jarvis_voice = None  # type: ignore
+
+try:
+    import jarvis_wakeword
+except Exception:
+    jarvis_wakeword = None  # type: ignore
 
 try:
     import numpy as np
@@ -118,6 +128,7 @@ def _config_dir() -> Path:
     if fw is not None:
         return Path(fw.CONFIG_DIR)
     return Path(os.environ.get("OPENJARVIS_CONFIG_DIR")
+                or os.environ.get("JARVIS_CONFIG_DIR")
                 or (Path.home() / ".openjarvis"))
 
 
@@ -127,6 +138,13 @@ def _models_dir() -> Path:
 
 def _wake_state_path() -> Path:
     return _config_dir() / "voice" / "wake_override.json"
+
+
+def _threads(key: str) -> int:
+    try:
+        return max(1, min(8, int(_cfg(key, 2))))
+    except (TypeError, ValueError):
+        return 2
 
 
 # --------------------------------------------------------------------------
@@ -178,34 +196,90 @@ def _write_wav(samples, sample_rate: int) -> bytes:
 
 
 # --------------------------------------------------------------------------
-#   Speech-to-text: sherpa-onnx SenseVoice. Lazy, cached, never crashes the
-#   caller on a missing or corrupt model.
+#   Speech-to-text: sherpa-onnx. Lazy, cached, never crashes the caller on a
+#   missing or corrupt model.
 # --------------------------------------------------------------------------
 
 _UNSET = object()
 _LOCK = threading.RLock()
 _stt_cache = _UNSET
 _tts_cache = _UNSET
+_vad_cache = _UNSET
+
+#: What the code speaks. The TOML's old "faster-whisper" is recognised only
+#: to say what to change.
+STT_ENGINE = "sherpa-onnx"
+STT_KINDS = ("nemo_transducer", "transducer", "sense_voice")
+
+
+def _stt_engine_name() -> str:
+    return str(_cfg("stt_engine", STT_ENGINE) or STT_ENGINE).strip()
+
+
+def _stt_dir() -> Path:
+    return Path(str(_cfg("sherpa_stt_dir", "") or (_models_dir() / "stt")))
+
+
+def _first(d: Path, *names: str) -> str:
+    """The first of `names` that exists in `d`, else the first name - so a
+    status message can still say what it looked for."""
+    for n in names:
+        if (d / n).is_file():
+            return str(d / n)
+    return str(d / names[0])
+
+
+def _glob1(d: Path, pattern: str, fallback: str) -> str:
+    """The one file matching `pattern` in `d` (int8 preferred), else fallback.
+    Model folders name their files by training run
+    (encoder-epoch-99-avg-1.int8.onnx), so an exact name cannot be assumed."""
+    try:
+        hits = sorted(d.glob(pattern), key=lambda p: (".int8." not in p.name, p.name))
+    except OSError:
+        hits = []
+    return str(hits[0]) if hits else str(d / fallback)
+
+
+def _stt_files() -> tuple:
+    """(kind, {role: path}). The kind is recognised from what is on disk
+    unless `sherpa_stt_kind` names one."""
+    d = _stt_dir()
+    kind = str(_cfg("sherpa_stt_kind", "") or "").strip().lower().replace("-", "_")
+    trans = {"encoder": _glob1(d, "encoder*.onnx", "encoder.int8.onnx"),
+             "decoder": _glob1(d, "decoder*.onnx", "decoder.int8.onnx"),
+             "joiner": _glob1(d, "joiner*.onnx", "joiner.int8.onnx"),
+             "tokens": str(d / "tokens.txt")}
+    sense = {"model": str(_cfg("sherpa_stt_model", "") or
+                          _first(d, "model.int8.onnx", "model.onnx")),
+             "tokens": str(_cfg("sherpa_stt_tokens", "") or d / "tokens.txt")}
+    if kind not in STT_KINDS:
+        kind = "nemo_transducer" if _files_present(*trans.values()) else "sense_voice"
+    return kind, (sense if kind == "sense_voice" else trans)
 
 
 def _sherpa_stt_paths():
-    default_dir = _models_dir() / "stt"
-    model = str(_cfg("sherpa_stt_model", "") or default_dir / "model.onnx")
-    tokens = str(_cfg("sherpa_stt_tokens", "") or default_dir / "tokens.txt")
-    return model, tokens
+    """(model, tokens) - kept for anything that read the old name. For a
+    transducer the "model" is its encoder."""
+    kind, files = _stt_files()
+    return files.get("model") or files.get("encoder"), files["tokens"]
 
 
 def _build_stt_engine():
-    if sherpa_onnx is None or str(_cfg("stt_engine", "faster-whisper")) != "sherpa-onnx":
+    if sherpa_onnx is None or _stt_engine_name() != STT_ENGINE:
         return None
-    model, tokens = _sherpa_stt_paths()
+    kind, f = _stt_files()
     try:
-        return sherpa_onnx.OfflineRecognizer.from_sense_voice(
-            model=model,
-            tokens=tokens,
-            num_threads=1,
-            use_itn=bool(_cfg("sherpa_stt_use_itn", True)),
-            language=str(_cfg("sherpa_stt_language", "") or ""),
+        if kind == "sense_voice":
+            return sherpa_onnx.OfflineRecognizer.from_sense_voice(
+                model=f["model"], tokens=f["tokens"],
+                num_threads=_threads("stt_threads"),
+                use_itn=bool(_cfg("sherpa_stt_use_itn", True)),
+                language=str(_cfg("sherpa_stt_language", "") or ""),
+            )
+        return sherpa_onnx.OfflineRecognizer.from_transducer(
+            encoder=f["encoder"], decoder=f["decoder"], joiner=f["joiner"],
+            tokens=f["tokens"], num_threads=_threads("stt_threads"),
+            model_type="nemo_transducer" if kind == "nemo_transducer" else "",
         )
     except Exception:
         # A missing file, a corrupt ONNX graph, a tokens file that does not
@@ -230,6 +304,78 @@ def _transcribe(samples, sample_rate: int) -> str:
     stream.accept_waveform(sample_rate, samples)
     engine.decode_stream(stream)
     return (stream.result.text or "").strip()
+
+
+# --------------------------------------------------------------------------
+#   Silero VAD: is there any speech in the clip, and where.
+# --------------------------------------------------------------------------
+
+def _vad_path() -> str:
+    return str(_cfg("vad_model", "") or (_models_dir() / "vad" / "silero_vad.onnx"))
+
+
+def _vad_wanted() -> bool:
+    return bool(_cfg("vad_enabled", True))
+
+
+def _build_vad_config():
+    if sherpa_onnx is None or not _vad_wanted() or not Path(_vad_path()).is_file():
+        return None
+    try:
+        cfg = sherpa_onnx.VadModelConfig(
+            silero_vad=sherpa_onnx.SileroVadModelConfig(
+                model=_vad_path(), threshold=0.5, min_silence_duration=0.25,
+                min_speech_duration=0.1, window_size=512),
+            sample_rate=16000, num_threads=1)
+        # Built once here so a broken file shows up now, not mid-request.
+        sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=1)
+        return cfg
+    except Exception:
+        return None
+
+
+def _vad_config():
+    global _vad_cache
+    with _LOCK:
+        if _vad_cache is _UNSET:
+            _vad_cache = _build_vad_config()
+        return _vad_cache
+
+
+#: Kept either side of the speech the VAD found, so a soft first consonant
+#: or a trailing "s" is not cut off.
+VAD_PAD_SECONDS = 0.3
+
+
+def _speech_span(samples, sample_rate: int):
+    """(start, end) in samples of `samples` holding speech, None when the
+    VAD found none, or "skip" when there is no VAD to ask."""
+    cfg = _vad_config()
+    if cfg is None or jarvis_wakeword is None:
+        return "skip"
+    x = jarvis_wakeword.to_16k(samples, sample_rate)
+    try:
+        vad = sherpa_onnx.VoiceActivityDetector(
+            cfg, buffer_size_in_seconds=max(2.0, len(x) / 16000 + 1))
+        for i in range(0, len(x) - 511, 512):
+            vad.accept_waveform(x[i:i + 512])
+        vad.flush()
+        first = last = None
+        while not vad.empty():
+            seg = vad.front
+            s, e = seg.start, seg.start + len(seg.samples)
+            first = s if first is None else min(first, s)
+            last = e if last is None else max(last, e)
+            vad.pop()
+    except Exception:
+        return "skip"
+    if first is None:
+        return None
+    scale = sample_rate / 16000.0
+    pad = int(VAD_PAD_SECONDS * 16000)
+    start = int(max(0, first - pad) * scale)
+    end = int(min(len(x), last + pad) * scale)
+    return start, min(end, len(samples))
 
 
 # --------------------------------------------------------------------------
@@ -262,7 +408,8 @@ def _build_tts_engine():
             dict_dir=paths["dict_dir"],
             lang=str(_cfg("tts_lang", "en-us") or "en-us"),
         )
-        model_cfg = sherpa_onnx.OfflineTtsModelConfig(kokoro=kokoro, num_threads=1)
+        model_cfg = sherpa_onnx.OfflineTtsModelConfig(
+            kokoro=kokoro, num_threads=_threads("tts_threads"))
         return sherpa_onnx.OfflineTts(sherpa_onnx.OfflineTtsConfig(model=model_cfg))
     except Exception:
         return None
@@ -277,21 +424,31 @@ def _tts_engine():
 
 
 def reload_engines() -> None:
-    """Drop the cached STT/TTS engines so a config change - a new model path
-    - takes effect on the next call rather than needing a restart. Mirrors
-    `jarvis_framework.reload_framework()`; INFERRED, no surviving call site,
-    same reasoning: something has to be able to act on a change without a
-    restart, and nothing here does that automatically."""
-    global _stt_cache, _tts_cache
+    """Drop the cached STT/TTS/VAD engines (and the wake-word models) so a
+    config change - a new model path - takes effect on the next call rather
+    than needing a restart."""
+    global _stt_cache, _tts_cache, _vad_cache
     with _LOCK:
-        _stt_cache = _tts_cache = _UNSET
+        _stt_cache = _tts_cache = _vad_cache = _UNSET
+    if jarvis_wakeword is not None:
+        jarvis_wakeword.reload()
 
 
 # --------------------------------------------------------------------------
-#   The wake-word switch: its own tiny state file, deliberately NOT the
-#   framework TOML - see the module docstring for why writing there is out
-#   of scope here.
+#   The wake-word switch.
+#
+#   Its value lives in its own small state file, not the framework TOML (no
+#   route may write that). ON goes through ONE approval card; OFF is at once.
 # --------------------------------------------------------------------------
+
+#: The gate action - the one the TOML's own [voice] comment names for
+#: "widening where Jarvis listens".
+WAKE_ACTION = "change_own_config"
+
+_WAKE_LOCK = threading.Lock()
+_WAKE_PENDING: Optional[dict] = None      # {"id", "since", "timeout", "withdrawn"}
+_WAKE_LAST: Optional[dict] = None         # how the last card ended
+
 
 def _wake_enabled() -> bool:
     p = _wake_state_path()
@@ -305,24 +462,273 @@ def _wake_enabled() -> bool:
     return bool(_cfg("wake_word_enabled", False))
 
 
-def set_wake_enabled(enabled: bool) -> dict:
-    """Turns wake-word capture on or off, effective immediately.
-
-    See the module docstring: this is NOT routed through an approval gate,
-    because `jarvis_gate.py`'s real interface cannot be seen from here to be
-    called correctly. It IS the owner's own explicit action reaching this
-    function at all - the HTTP route already requires a valid pairing token
-    - so "immediate" here is "as fast as any other setting toggle", not "no
-    check happened".
-    """
+def _write_wake(enabled: bool) -> Optional[str]:
+    """Writes the switch. None on success, else the error in words."""
     p = _wake_state_path()
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({"enabled": bool(enabled), "set_at": time.time()}),
                      encoding="utf-8")
     except OSError as exc:
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-    return {"ok": True, "enabled": bool(enabled)}
+        return f"{type(exc).__name__}: {exc}"
+    return None
+
+
+def describe_wake_on() -> str:
+    """The card. Every word from here; what refusing costs is on it."""
+    return (
+        "Turn on \"hey Jarvis\"?\n\n"
+        "If you say yes: the PC will accept recordings that start with \"hey "
+        "Jarvis\". The desktop app and the phone each still need their own "
+        "listening switched on before anything listens - that stays off until "
+        "you turn it on there, and the phone shows a notification the whole "
+        "time it listens.\n\n"
+        "The wake word is heard on the device itself. No sound is sent "
+        "anywhere until it hears \"hey Jarvis\", and then only to this PC, "
+        "where your voice is checked before any words are written down.\n\n"
+        "If you did not just ask for this, say no.\n\n"
+        "If you say no: nothing changes. Push-to-talk keeps working."
+    )
+
+
+def _wake_tier(action: str) -> str:
+    return str(fw.action_tier(action)) if fw is not None else "unknown"
+
+
+def _wake_gate(action: str, detail: dict, prompt: str):
+    import jarvis_gate
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def _wake_timeout() -> float:
+    try:
+        return float(fw.load_framework().get("autonomy", {})
+                     .get("approval_timeout_seconds", 180))
+    except Exception:
+        return 180.0
+
+
+def _audit(event: str, detail: dict) -> None:
+    try:
+        if fw is not None:
+            fw.audit_log(event, detail)
+    except Exception:
+        pass
+
+
+def _spawn(fn: Callable[[], None]) -> None:
+    threading.Thread(target=fn, name="jarvis-wake-card", daemon=True).start()
+
+
+def _wake_finish(pid: str, outcome: str, **extra) -> dict:
+    global _WAKE_PENDING, _WAKE_LAST
+    with _WAKE_LOCK:
+        if _WAKE_PENDING is not None and _WAKE_PENDING["id"] == pid:
+            _WAKE_PENDING = None
+        _WAKE_LAST = {"outcome": outcome, "at": time.time(),
+                      **{k: v for k, v in extra.items() if k in ("reason",)}}
+        last = dict(_WAKE_LAST)
+    _audit("voice.wake_word.decided", {"outcome": outcome,
+                                       **{k: v for k, v in extra.items()
+                                          if k == "request_id"}})
+    return last
+
+
+def _wake_decide(pid: str, gate: Callable) -> dict:
+    """Raise the card, wait for the answer, act on it. Blocks - runs on its
+    own thread. Only tier "ask" + outcome "approved" turns the wake word on."""
+    text = describe_wake_on()
+    detail = {"text": text, "what": "turn on the \"hey Jarvis\" wake word",
+              "setting": "[voice] wake_word_enabled", "to": True}
+    try:
+        v = gate(WAKE_ACTION, detail, text)
+    except Exception as exc:
+        return _wake_finish(pid, "refused",
+                            reason=f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        # A gate from before gate-outcome.patch: only allowed-on-ask can be
+        # read as a person saying yes.
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    rid = getattr(v, "request_id", None)
+    if vtier != "ask":
+        return _wake_finish(pid, "refused", request_id=rid,
+                            reason=f"the gate answered at tier {vtier!r}, which is "
+                                   f"not a person saying yes")
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _wake_finish(pid, outcome, request_id=rid)
+        return _wake_finish(pid, "refused", request_id=rid,
+                            reason=str(getattr(v, "reason", "refused"))[:200])
+    with _WAKE_LOCK:
+        withdrawn = bool(_WAKE_PENDING and _WAKE_PENDING["id"] == pid
+                         and _WAKE_PENDING.get("withdrawn"))
+    if withdrawn:
+        # Switched off again while the card waited: the later "off" wins, so
+        # approving a stale card cannot turn the microphone back on.
+        return _wake_finish(pid, "withdrawn", request_id=rid,
+                            reason="you turned it off while the card was waiting")
+    err = _write_wake(True)
+    if err:
+        return _wake_finish(pid, "failed", request_id=rid, reason=err[:200])
+    return _wake_finish(pid, "enabled", request_id=rid)
+
+
+def set_wake_enabled(enabled: bool, *, gate: Optional[Callable] = None,
+                     tier_of: Optional[Callable[[str], str]] = None,
+                     spawn: Optional[Callable] = None) -> dict:
+    """POST /api/voice/wake. OFF: at once. ON: raises one approval card and
+    returns straight away - `pending: true` means a card is up, NOT that the
+    wake word is on. Re-read status() for that.
+
+    `ok` keeps its old meaning for the route: true when the request was
+    accepted (applied, or a card raised), false when it was refused.
+    """
+    global _WAKE_PENDING
+    gate = gate or _wake_gate
+    tier_of = tier_of or _wake_tier
+    spawn = spawn or _spawn
+
+    if not enabled:
+        with _WAKE_LOCK:
+            if _WAKE_PENDING is not None:
+                _WAKE_PENDING["withdrawn"] = True
+        err = _write_wake(False)
+        _close_awake()
+        if err:
+            return {"ok": False, "enabled": _wake_enabled(), "pending": False,
+                    "error": err}
+        _audit("voice.wake_word.off", {})
+        return {"ok": True, "enabled": False, "pending": False, "applied": True,
+                "message": "The wake word is off. Nothing listens for it now."}
+
+    if _wake_enabled():
+        return {"ok": True, "enabled": True, "pending": False, "applied": True,
+                "message": "The wake word is already on."}
+
+    with _WAKE_LOCK:
+        if _WAKE_PENDING is not None and not _WAKE_PENDING.get("withdrawn"):
+            left = max(0, int(_WAKE_PENDING["since"] + _WAKE_PENDING["timeout"] - time.time()))
+            return {"ok": False, "enabled": False, "pending": True, "expires_in": left,
+                    "error": ("a card to turn on the wake word is already waiting - "
+                              "approve or deny that one")}
+
+    try:
+        tier = tier_of(WAKE_ACTION)
+    except Exception as exc:
+        tier = f"unreadable ({type(exc).__name__})"
+    if tier != "ask":
+        # Checked BEFORE a card is raised: a card that could not end in a
+        # person deciding should not be raised at all.
+        return {"ok": False, "enabled": False, "pending": False,
+                "error": (f"{WAKE_ACTION} is tier {tier!r} in jarvis-framework.toml; "
+                          f"turning on the wake word needs a person to say yes, so "
+                          f"it must be 'ask'")}
+
+    pid = uuid.uuid4().hex
+    with _WAKE_LOCK:
+        if _WAKE_PENDING is not None and not _WAKE_PENDING.get("withdrawn"):
+            return {"ok": False, "enabled": False, "pending": True,
+                    "error": "a card to turn on the wake word is already waiting"}
+        _WAKE_PENDING = {"id": pid, "since": time.time(), "timeout": _wake_timeout(),
+                         "withdrawn": False}
+    _audit("voice.wake_word.asked", {})
+
+    def work():
+        try:
+            _wake_decide(pid, gate)
+        except Exception:
+            _wake_finish(pid, "failed", reason="unexpected error")
+
+    try:
+        spawn(work)
+    except Exception as exc:
+        _wake_finish(pid, "failed", reason=f"could not start ({type(exc).__name__})")
+        return {"ok": False, "enabled": False, "pending": False,
+                "error": "could not raise the approval card"}
+    return {"ok": True, "enabled": False, "pending": True, "applied": False,
+            "message": ("Approve the card on your PC or phone to turn it on. "
+                        "Nothing changes until you do.")}
+
+
+def wake_state() -> dict:
+    """For status(): the switch, a card waiting, how the last one ended."""
+    with _WAKE_LOCK:
+        p = _WAKE_PENDING if (_WAKE_PENDING and not _WAKE_PENDING.get("withdrawn")) else None
+        out = {"enabled": _wake_enabled(), "pending": p is not None}
+        if p is not None:
+            out["expires_in"] = max(0, int(p["since"] + p["timeout"] - time.time()))
+        if _WAKE_LAST is not None:
+            out["last"] = {k: _WAKE_LAST[k] for k in ("outcome", "at", "reason")
+                           if k in _WAKE_LAST}
+    return out
+
+
+def _reset_wake_for_tests() -> None:
+    global _WAKE_PENDING, _WAKE_LAST
+    with _WAKE_LOCK:
+        _WAKE_PENDING = None
+        _WAKE_LAST = None
+    _close_awake()
+
+
+# --------------------------------------------------------------------------
+#   "Hey Jarvis." ... "what time is it?" - the follow-up window.
+#
+#   A clip that held ONLY the wake phrase opens a short window in which the
+#   next wake-word clip needs no phrase of its own. Opened only after the
+#   owner check passed; used once; `awake_timeout_s` long (8 s shipped).
+# --------------------------------------------------------------------------
+
+_AWAKE_LOCK = threading.Lock()
+_AWAKE_UNTIL = 0.0
+
+
+def _awake_seconds() -> float:
+    try:
+        return max(2.0, min(30.0, float(_cfg("awake_timeout_s", 8))))
+    except (TypeError, ValueError):
+        return 8.0
+
+
+def _open_awake() -> float:
+    global _AWAKE_UNTIL
+    secs = _awake_seconds()
+    with _AWAKE_LOCK:
+        _AWAKE_UNTIL = time.monotonic() + secs
+    return secs
+
+
+def _take_awake() -> bool:
+    """True, once, if a window is open - and closes it."""
+    global _AWAKE_UNTIL
+    with _AWAKE_LOCK:
+        live = time.monotonic() < _AWAKE_UNTIL
+        _AWAKE_UNTIL = 0.0
+    return live
+
+
+def _close_awake() -> None:
+    global _AWAKE_UNTIL
+    with _AWAKE_LOCK:
+        _AWAKE_UNTIL = 0.0
+
+
+def _wake_spotter_state() -> dict:
+    if jarvis_wakeword is None:
+        return {"available": False, "engine": "openWakeWord (ONNX Runtime)",
+                "phrase": str(_cfg("wake_phrase", "hey_jarvis")),
+                "threshold": float(_cfg("wake_threshold", 0.5) or 0.5),
+                "why": "jarvis_wakeword.py is not in the backend folder",
+                "model_dir": ""}
+    try:
+        return jarvis_wakeword.status()
+    except Exception as exc:
+        return {"available": False, "engine": "openWakeWord (ONNX Runtime)",
+                "phrase": "", "threshold": 0.5, "model_dir": "",
+                "why": f"could not read it ({type(exc).__name__})"}
 
 
 # --------------------------------------------------------------------------
@@ -393,18 +799,39 @@ def _push_to_talk(voice: dict, stt_ok: bool, voice_loaded: bool):
     return True, ""
 
 
+def _stt_state() -> tuple:
+    """(available, status sentence, note or "")."""
+    name = _stt_engine_name()
+    kind, files = _stt_files()
+    if sherpa_onnx is None:
+        return (False, "not set up: the sherpa-onnx package is not installed",
+                "sherpa-onnx is not installed in the Python that runs Jarvis "
+                "(python -m pip install sherpa-onnx).")
+    if name != STT_ENGINE:
+        return (False, f"not set up: stt_engine is {name!r}; set it to \"sherpa-onnx\"",
+                f"Your jarvis-framework.toml says stt_engine = {name!r}. Jarvis "
+                f"has no code for that engine and never had - change that line to "
+                f"stt_engine = \"sherpa-onnx\" (backend/README.md's speech-to-text "
+                f"install step does it for you).")
+    if not _files_present(*files.values()):
+        return (False, "sherpa-onnx is selected but its model files are not on disk yet",
+                f"sherpa-onnx speech-to-text is selected but its model files are "
+                f"not on disk yet (looked in {_stt_dir()}).")
+    return True, f"ready ({kind})", ""
+
+
 def status() -> dict:
     """What the voice loop can actually do right now. Never overstates - a
     listed capability the owner then finds does not work is worse than one
     honestly reported missing.
 
+    Cheap: file checks only. No model is loaded to answer this.
+
     TWO SHAPES IN ONE REPLY, on purpose. The flat keys (enabled, enrolled,
     stt_available, ...) are what this module always returned. The nested
-    ones - listening, stt, tts, audio_in, gate - are what the phone reads
-    (jarvis-client net/VoiceModels.kt); it was written against that shape
-    and got none of it, so `listening.push_to_talk` was always missing and
-    its talk button never appeared. test_voice_contract.py now reads the
-    phone's own data classes and fails if a field goes missing again.
+    ones - listening, stt, tts, audio_in, gate, wake, vad - are what the
+    phone reads (jarvis-client net/VoiceModels.kt). test_voice_contract.py
+    reads the phone's own data classes and fails if a field goes missing.
     """
     voice_loaded = jarvis_voice is not None
     voice = jarvis_voice.status() if voice_loaded else {
@@ -413,10 +840,8 @@ def status() -> dict:
         "note": "jarvis_voice is not importable here",
     }
 
-    stt_engine_name = str(_cfg("stt_engine", "faster-whisper"))
-    stt_wanted_sherpa = stt_engine_name == "sherpa-onnx"
-    stt_model, stt_tokens = _sherpa_stt_paths()
-    stt_files_ok = _files_present(stt_model, stt_tokens)
+    stt_engine_name = _stt_engine_name()
+    stt_ok, stt_status, stt_note = _stt_state()
 
     tts_engine_name = str(_cfg("tts_engine", "sherpa-onnx"))
     tts_paths = _sherpa_tts_paths()
@@ -426,32 +851,38 @@ def status() -> dict:
     notes = []
     if voice.get("note"):
         notes.append(voice["note"])
-    if not stt_wanted_sherpa:
-        notes.append(
-            f"stt_engine is {stt_engine_name!r} in jarvis-framework.toml; "
-            "this module only speaks sherpa-onnx. Set stt_engine = "
-            "\"sherpa-onnx\" and point sherpa_stt_model/sherpa_stt_tokens at "
-            "a real model to turn on local transcription.")
-    elif not stt_files_ok:
-        notes.append(f"sherpa-onnx STT is selected but its model files are "
-                      f"not on disk yet (looked for {stt_model} and "
-                      f"{stt_tokens}).")
+    if stt_note:
+        notes.append(stt_note)
     if tts_engine_name == "sherpa-onnx" and not tts_files_ok:
         notes.append("Kokoro TTS model files are not on disk yet (looked "
                       f"under {Path(tts_paths['model']).parent}).")
 
-    stt_ok = stt_wanted_sherpa and stt_files_ok
-    tts_ok = tts_engine_name == "sherpa-onnx" and tts_files_ok
-    wake_on = _wake_enabled()
+    tts_ok = tts_engine_name == "sherpa-onnx" and tts_files_ok and sherpa_onnx is not None
+    wake = wake_state()
+    wake_on = wake["enabled"]
+    spotter = _wake_spotter_state()
     ptt, ptt_why = _push_to_talk(voice, stt_ok, voice_loaded)
 
-    if stt_ok:
-        stt_status = "ready"
-    elif not stt_wanted_sherpa:
-        stt_status = (f"not set up: stt_engine is {stt_engine_name!r}; set it to "
-                      "\"sherpa-onnx\" and add the model files")
+    vad_file = Path(_vad_path()).is_file()
+    vad_ok = vad_file and _vad_wanted() and sherpa_onnx is not None
+    if not _vad_wanted():
+        vad_status = "switched off ([voice] vad_enabled = false)"
+    elif not vad_file:
+        vad_status = f"not installed (looked for {_vad_path()})"
+    elif sherpa_onnx is None:
+        vad_status = "the sherpa-onnx package is not installed"
     else:
-        stt_status = "sherpa-onnx is selected but its model files are not on disk yet"
+        vad_status = "ready"
+
+    if wake_on and not spotter["available"]:
+        wake_why = ("switched on, but the PC cannot hear it yet: " + spotter["why"])
+    elif wake_on:
+        wake_why = "switched on"
+    elif wake["pending"]:
+        wake_why = "waiting for you to approve the card"
+    else:
+        wake_why = ("off unless you turn it on: a phone's microphone goes "
+                    "wherever you do")
 
     return {
         **voice,
@@ -473,9 +904,8 @@ def status() -> dict:
             "push_to_talk": ptt,
             "push_to_talk_why": ptt_why,
             "wake_word": wake_on,
-            "wake_word_why": ("switched on" if wake_on else
-                              "off unless you turn it on: a phone's "
-                              "microphone goes wherever you do"),
+            "wake_word_why": wake_why,
+            "wake_word_pending": bool(wake["pending"]),
         },
         "stt": {
             "engine": stt_engine_name,
@@ -493,6 +923,19 @@ def status() -> dict:
             # The same answer /api/voice/say gives with its 503: the client
             # may speak text it already holds, with an ON-DEVICE voice only.
             "client_fallback_ok": True,
+        },
+        "vad": {"engine": "silero (sherpa-onnx)", "available": vad_ok,
+                "status": vad_status},
+        "wake": {
+            **wake,
+            "phrase": spotter.get("phrase", "hey_jarvis"),
+            "threshold": float(spotter.get("threshold", 0.5)),
+            "awake_seconds": _awake_seconds(),
+            # Whether THIS PC can hear "hey Jarvis" in a clip (the desktop
+            # app's listening needs it). The phone spots on its own.
+            "spotter": {"available": bool(spotter.get("available")),
+                        "engine": str(spotter.get("engine", "")),
+                        "why": str(spotter.get("why", ""))},
         },
         "audio_in": dict(AUDIO_IN),
         "gate": {
@@ -514,6 +957,9 @@ def status() -> dict:
 #   hear() / say()
 # --------------------------------------------------------------------------
 
+SOURCE_WAKE_WORD = "wake_word"
+
+
 @dataclass
 class Heard:
     is_owner: bool
@@ -526,6 +972,15 @@ class Heard:
     mode: str = "owner"
     seconds: float = 0.0
     engine: str = ""
+    #: source=wake_word only: "hey Jarvis" was in this clip (spotter AND
+    #: transcript), or the clip came inside the follow-up window. False on a
+    #: wake-word clip means "not for Jarvis": a client drops it silently.
+    wake_heard: bool = False
+    wake_score: float = 0.0
+    #: The clip held only "hey Jarvis": the next wake-word clip within
+    #: `awake_seconds` needs no phrase of its own.
+    awake: bool = False
+    awake_seconds: float = 0.0
 
     def as_dict(self) -> dict:
         """What /api/voice/utterance sends back - assuming, as the desktop's
@@ -534,12 +989,11 @@ class Heard:
 
         Carries BOTH clients' names for the same facts. The desktop reads
         `is_owner` / `available` (voice.rs HeardRaw). The phone reads `ok` /
-        `owner` (VoiceModels.kt Heard), and before this it got neither, so
-        every answer - including a real transcript - read as "didn't catch
-        that". `ok` means a transcript was actually produced: the owner check
-        passed AND there was an engine to turn the words into text. The
-        phone tells "that didn't sound like you" apart from "too short" by
-        `threshold > 0`, which only a clip that reached the voice check has.
+        `owner` (VoiceModels.kt Heard). `ok` means a transcript was actually
+        produced: the owner check passed AND there was an engine to turn the
+        words into text. The phone tells "that didn't sound like you" apart
+        from "too short" by `threshold > 0`, which only a clip that reached
+        the voice check has.
         """
         d = asdict(self)
         d["owner"] = bool(self.is_owner)
@@ -559,20 +1013,56 @@ def _takes_rate(fn) -> bool:
 
 def hear(raw: bytes, source: str = "push_to_talk") -> Heard:
     """One complete WAV utterance in. Never transcribes before the speaker
-    is checked - see the module docstring for why that order is load-
-    bearing, not a style choice."""
+    is checked - see the module docstring for the whole order and why it is
+    load-bearing, not a style choice."""
     parsed = _read_wav(raw)
     if parsed is None:
         return Heard(False, source=source, available=False,
                       reason="could not read that as a 16-bit PCM WAV clip")
     samples, sample_rate = parsed
     seconds = round(len(samples) / float(sample_rate or 16000), 2)
+    wake = source == SOURCE_WAKE_WORD
+
+    # 2. Is there any speech at all? Silero VAD, when installed. A cough, a
+    #    door, the fan: refused here, before anything else looks at it.
+    span = _speech_span(samples, sample_rate)
+    if span is None:
+        return Heard(False, source=source, seconds=seconds,
+                     reason="no speech in that recording")
+    if span != "skip":
+        samples = samples[span[0]:span[1]]
+
+    # 3. The wake word. Switched on? Then: is "hey Jarvis" in it?
+    via_window = False
+    spot = None
+    if wake:
+        if not _wake_enabled():
+            # available=False: not "this clip was not for Jarvis" but "this
+            # PC takes no wake-word clips" - both clients stop listening on it.
+            return Heard(False, source=source, available=False, seconds=seconds,
+                         reason="the wake word is switched off on the PC")
+        if _take_awake():
+            via_window = True
+        else:
+            if jarvis_wakeword is None:
+                return Heard(False, source=source, available=False, seconds=seconds,
+                             reason="jarvis_wakeword.py is not in the backend folder")
+            spot = jarvis_wakeword.spot(samples, sample_rate)
+            if not spot.ran:
+                return Heard(False, source=source, available=False, seconds=seconds,
+                             reason="the PC cannot listen for \"hey Jarvis\": " + spot.why)
+            if not spot.heard:
+                # Not for Jarvis. Not checked, not transcribed, not kept.
+                return Heard(False, source=source, seconds=seconds,
+                             wake_score=spot.score,
+                             reason="no \"hey Jarvis\" in that recording")
 
     if jarvis_voice is None:
         return Heard(False, source=source, available=False, seconds=seconds,
                       reason="jarvis_voice is not importable; refusing "
                              "rather than skipping the owner check")
 
+    # 4. The owner check.
     try:
         embedder = jarvis_voice.EcapaEmbedder()
     except Exception:
@@ -586,25 +1076,43 @@ def hear(raw: bytes, source: str = "push_to_talk") -> Heard:
     else:
         verdict = jarvis_voice.verify(samples, embedder)
     common = dict(score=verdict.score, threshold=verdict.threshold,
-                  source=source, mode=verdict.mode, seconds=seconds)
+                  source=source, mode=verdict.mode, seconds=seconds,
+                  wake_score=spot.score if spot else 0.0)
 
     if not verdict.is_owner:
         return Heard(False, reason=verdict.reason, **common)
 
     if _stt_engine() is None:
-        return Heard(True, available=False,
+        return Heard(True, available=False, wake_heard=wake,
                      reason="that was you, but no speech-to-text model is "
                             "installed here yet - see jarvis_speech.status()",
                      **common)
 
+    # 5. The words.
     try:
         text = _transcribe(samples, sample_rate)
     except Exception as exc:
-        return Heard(True, available=False,
+        return Heard(True, available=False, wake_heard=wake,
                      reason=f"transcription failed ({type(exc).__name__})",
                      **common)
+    engine = f"{STT_ENGINE}:{_stt_files()[0]}"
 
-    return Heard(True, text=text, engine=str(_cfg("stt_engine", "")), **common)
+    if not wake or via_window:
+        return Heard(True, text=text, engine=engine, wake_heard=wake, **common)
+
+    # 6. Wake word: the transcript must start with it. The words are the
+    #    owner's own (step 4 passed); a clip that was not addressed to
+    #    Jarvis is dropped, not answered.
+    found, rest = jarvis_wakeword.split_wake(text)
+    if not found:
+        return Heard(True, text="", engine=engine,
+                     reason="that did not start with \"hey Jarvis\", so it was ignored",
+                     **common)
+    if not rest:
+        secs = _open_awake()
+        return Heard(True, text="", engine=engine, wake_heard=True, awake=True,
+                     awake_seconds=secs, reason="listening", **common)
+    return Heard(True, text=rest, engine=engine, wake_heard=True, **common)
 
 
 def say(text: str) -> Optional[bytes]:
@@ -635,6 +1143,50 @@ def say(text: str) -> Optional[bytes]:
     return _write_wav(audio.samples, audio.sample_rate)
 
 
+def _self_test() -> int:
+    """`python jarvis_speech.py --test`: speaks a sentence with the installed
+    voice, then hears it back with the installed speech-to-text - the owner
+    check is skipped for this one clip ONLY because the clip is Jarvis's own
+    synthetic voice, made here, never a recording. Prints what it heard and
+    where it saved the WAV. Nothing is sent anywhere."""
+    sentence = "Hey Jarvis, what is the weather like tomorrow?"
+    print(f"1. Speaking: {sentence!r}")
+    t = time.time()
+    wav = say(sentence)
+    if not wav:
+        print("   No voice: the Kokoro files are not installed (see status below).")
+        return 1
+    out = _config_dir() / "voice" / "self-test.wav"
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(wav)
+    except OSError:
+        out = None
+    print(f"   ok, {len(wav)} bytes in {time.time() - t:.1f} s"
+          + (f" - saved to {out}" if out else ""))
+    samples, sr = _read_wav(wav)
+    if jarvis_wakeword is not None:
+        s = jarvis_wakeword.spot(samples, sr)
+        print(f"2. Wake word: {'HEARD' if s.heard else 'not heard'} "
+              f"(score {s.score:.2f}, needs {s.threshold:.2f})" if s.ran
+              else f"2. Wake word: cannot listen - {s.why}")
+    print("3. Speech-to-text:")
+    if _stt_engine() is None:
+        print("   No speech-to-text: " + _stt_state()[2])
+        return 1
+    t = time.time()
+    heard = _transcribe(samples, sr)
+    print(f"   heard {heard!r} in {time.time() - t:.1f} s")
+    return 0
+
+
 if __name__ == "__main__":
+    import sys
+    if "--test" in sys.argv:
+        code = _self_test()
+        print()
+    else:
+        code = 0
     for k, v in status().items():
         print(f"  {k:<28} {v}")
+    raise SystemExit(code)

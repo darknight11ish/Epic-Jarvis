@@ -591,10 +591,17 @@ wake_word_enabled = false
 # check. CPU by default: the local model already holds most of the card, and
 # a push-to-talk clip is transcribed after the fact rather than streamed, so
 # spending VRAM to finish a two-second clip sooner is the wrong trade here.
-# Set JARVIS_STT_DEVICE=cuda to override. "none" disables transcription and
-# says so rather than returning empty text.
-stt_engine = "faster-whisper"
-stt_model = "small.en"
+#
+# sherpa-onnx is the only engine Jarvis has code for. This line used to say
+# "faster-whisper" (with stt_model = "small.en"), which no code in Jarvis
+# ever spoke - so push-to-talk could never be transcribed. The model is
+# found by its files in <this folder>/voice-models/stt; backend/README.md,
+# "Voice: install the models", has the one-line download for each.
+stt_engine = "sherpa-onnx"
+# sherpa_stt_kind = "nemo_transducer"   # or "sense_voice"; normally guessed from the files
+# stt_threads = 2                       # CPU threads for speech-to-text
+# tts_speaker_id = 0                    # Kokoro voice: 0 = American female; 9 = British male (bm_george)
+# vad_enabled = true                    # Silero VAD trims silence and drops clips with no speech
 
 
 # ------------------------------------------------------------------------

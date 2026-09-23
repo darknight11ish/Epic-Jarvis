@@ -763,6 +763,7 @@ try {
         'jarvis_notes.py'            # notes_search; carries the token-in-an-error fix
         'jarvis_power_switch.py'     # power-mode.patch
         # --- end task controls ---
+        'jarvis_wakeword.py'        # "hey Jarvis": jarvis_speech.py calls it for wake-word clips
     )
     $copied = 0
     foreach ($m in $SHIPPED) {
