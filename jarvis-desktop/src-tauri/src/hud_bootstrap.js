@@ -462,6 +462,54 @@
     wireHudMic();
   }
 
+  /* ---------------------------------------------------------------- *
+   * 2e. Spoken replies: this computer's voices only
+   *
+   * The page reads every answer aloud with the browser's speech
+   * synthesis, picking a British voice by name and falling back to ANY
+   * en-GB voice. In WebView2 that list includes Microsoft's "Online
+   * (Natural)" voices, which send the text to Microsoft to be spoken - so
+   * an answer quoting an email or a file could leave the machine as
+   * speech-to-be. Each voice says which kind it is (`localService`), so
+   * the page is shown only the local ones, and an utterance that would
+   * use anything else is given a local voice or not spoken at all.
+   * ---------------------------------------------------------------- */
+  (function localVoicesOnly() {
+    var synth = window.speechSynthesis;
+    if (!synth || typeof synth.getVoices !== "function" || typeof synth.speak !== "function") return;
+    var allVoices = synth.getVoices.bind(synth);
+    var realSpeak = synth.speak.bind(synth);
+    function localVoices() {
+      return (allVoices() || []).filter(function (v) {
+        return v && v.localService === true;
+      });
+    }
+    try {
+      synth.getVoices = localVoices;
+      synth.speak = function (utterance) {
+        if (!utterance) return undefined;
+        if (utterance.voice && utterance.voice.localService !== true) utterance.voice = null;
+        if (!utterance.voice) {
+          var mine = localVoices();
+          var english = mine.filter(function (v) {
+            return /^en/i.test(v.lang || "");
+          });
+          var pick = english[0] || mine[0];
+          if (!pick) {
+            // No voice on this computer (or none loaded yet): silence, not
+            // the browser's choice, which could be an online one.
+            console.info("[jarvis] no local voice available, so this reply is not spoken");
+            return undefined;
+          }
+          utterance.voice = pick;
+        }
+        return realSpeak(utterance);
+      };
+    } catch (err) {
+      console.warn("[jarvis] could not limit speech to local voices", err);
+    }
+  })();
+
   document.addEventListener(
     "click",
     function (event) {

@@ -116,6 +116,20 @@ async function openHud(browser, status, pageOptions = {}) {
       } } };
     }, status.tauriInvoke);
   }
+  // A browser's voice list, with one online voice and one local one, and
+  // an utterance class that accepts them (the real one only takes real
+  // SpeechSynthesisVoice objects). Installed BEFORE the bootstrap, as the
+  // real objects are.
+  if (status.voices) {
+    await page.addInitScript((voices) => {
+      window.__spokenWith = [];
+      window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; this.voice = null; } };
+      const synth = window.speechSynthesis;
+      synth.getVoices = () => voices;
+      synth.speak = (u) => { window.__spokenWith.push(u.voice ? u.voice.name : null); };
+      synth.cancel = () => {};
+    }, status.voices);
+  }
   await page.addInitScript(BOOT
     .replace("__JARVIS_BASE__", JSON.stringify(BACKEND))
     .replace("__JARVIS_TOKEN__", JSON.stringify("test-token")));
@@ -528,6 +542,26 @@ await check("the HUD holds exactly one app command, and it cannot record", async
   const fn = body.slice(0, body.indexOf("\n}\n") + 3);
   assert.doesNotMatch(fn, /start_voice_capture|open_input_stream|cpal|start_automatic_listening/,
     "summon_push_to_talk must not open the microphone");
+});
+
+await check("a HUD reply is read aloud only with a voice on this computer", async () => {
+  const online = { name: "Microsoft Libby Online (Natural) - English (United Kingdom)", lang: "en-GB", localService: false };
+  const local = { name: "Microsoft Hazel - English (United Kingdom)", lang: "en-GB", localService: true };
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, voices: [online, local] });
+  await send(page, "hi");
+  const withLocal = await page.evaluate(() => window.__spokenWith);
+  await page.close();
+  assert.deepEqual(withLocal, [local.name],
+    "the reply was spoken with an online voice, which sends the text to Microsoft");
+  assert.deepEqual(problems, []);
+
+  const only = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, voices: [online] });
+  await send(only.page, "hi");
+  const withNone = await only.page.evaluate(() => window.__spokenWith);
+  await only.page.close();
+  assert.deepEqual(withNone, [], "with no local voice, nothing should be spoken at all");
 });
 
 await check("the old OpenJarvis light is gone, and chat never depended on it", async () => {
