@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,18 +18,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.Activity
 import com.jarvis.client.BrainSnapshot
 import com.jarvis.client.LinkState
+import com.jarvis.client.ModelRequest
+import com.jarvis.client.SectionRead
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.ModelsInfo
@@ -47,8 +55,11 @@ import com.jarvis.client.ui.parts.Refuse
 import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
+import com.jarvis.client.ui.parts.ageText
+import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -134,10 +145,53 @@ fun BrainScreen(
     memoryAsOfBusy: Boolean = false,
     onQueryMemoryAsOf: (epochSeconds: Long) -> Unit = {},
     modifier: Modifier = Modifier,
+    /**
+     * Opens Home with the approval card a model switch or install raised -
+     * the id when it is known, null to open Home without scrolling to one.
+     * Only ever navigates: nothing is approved from this screen. Null (the
+     * default) draws the "waiting for your approval" line without the link,
+     * rather than a link that does nothing.
+     */
+    onOpenApprovals: ((cardId: String?) -> Unit)? = null,
+    /**
+     * Re-read the board every this many milliseconds while the screen is
+     * open and the link is up. 0, the default, is off - the battery reasoning
+     * in [com.jarvis.client.JarvisRuntime.refreshBrain] still holds, and the
+     * age on the freshness line is always shown either way.
+     */
+    autoRefreshMs: Long = 0L,
 ) {
     val chrome = LocalChrome.current
+    // The same test ModelsPlate always had, now shared by every control on this
+    // screen that writes anything. The runtime refuses these again on the way
+    // out (decideMemory, setSleepTime); this is the visible half of rule 4,
+    // and it was missing from Keep/Discard and the sleep offer - the only
+    // buttons on this screen that looked live on a dead link.
+    val canAct = link == LinkState.CONNECTED && !stale
+    // Retry is a READ, so it is not gated on the link the way acting is. Null
+    // while a read is already out: the button then says "Retrying…" rather
+    // than stacking a second read on the first.
+    val retry = if (brain.refreshing) null else onRefresh
+
+    if (autoRefreshMs > 0L && link == LinkState.CONNECTED) {
+        val refreshNow by rememberUpdatedState(onRefresh)
+        val busyNow by rememberUpdatedState(brain.refreshing)
+        LaunchedEffect(autoRefreshMs) {
+            while (true) {
+                delay(autoRefreshMs)
+                if (!busyNow) refreshNow()
+            }
+        }
+    }
+
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
-        TopBar("State of mind", onBack) { Quiet("Refresh", onClick = onRefresh) }
+        TopBar("State of mind", onBack) {
+            Quiet(
+                if (brain.refreshing) "Refreshing…" else "Refresh",
+                enabled = !brain.refreshing,
+                onClick = onRefresh,
+            )
+        }
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
@@ -147,15 +201,50 @@ fun BrainScreen(
             // 1. The rush latch, first, because it changes how everything below
             // should be read. Outside text that tried to raise the tier is the
             // one thing on this screen that is adversarial by construction.
-            rushOf(brain.contentRisk)?.let { rush ->
-                item(key = "rush") { RushBanner(rush) }
+            //
+            // It must never simply vanish. It used to be drawn only when the
+            // last read found one, so a read that timed out drew nothing at
+            // all - under a line that said "Live." - which says "nothing is
+            // raising the tier" when the phone does not know. A failed check
+            // now keeps the last latch it saw, with its age, and says in
+            // amber that it could not check.
+            val rush = rushOf(brain.contentRisk)
+            val riskFailed = brain.contentRiskRead as? SectionRead.Failed
+            if (rush != null || riskFailed != null) {
+                item(key = "rush") {
+                    Column(Modifier.fillMaxWidth()) {
+                        if (rush != null) {
+                            RushBanner(
+                                rush,
+                                // Aged only when it might be out of date. A
+                                // latch from a read that just worked is now.
+                                lastSeenAtMs = if (riskFailed != null) brain.contentRiskAtMs else null,
+                            )
+                        }
+                        if (riskFailed != null) {
+                            if (rush != null) Gap(8)
+                            RushCheckFailed(
+                                reason = riskFailed.reason,
+                                lastCheckedAtMs = brain.contentRiskAtMs,
+                                sawLatch = rush != null,
+                                onRetry = retry,
+                            )
+                        }
+                    }
+                }
             }
 
             // 2. Whether any of this can be trusted at all. A stale board is
             // worse than no board: every number below is last-known, and on a
             // screen full of numbers that distinction has to lead.
             item(key = "freshness") {
-                Freshness(link, stale, brain.fetchedAtMs)
+                Freshness(
+                    link,
+                    stale,
+                    brain.fetchedAtMs,
+                    readWhat = "Board",
+                    refreshing = brain.refreshing,
+                )
             }
 
             if (notice != null) {
@@ -203,10 +292,12 @@ fun BrainScreen(
                         ModelsPlate(
                             models = models,
                             busy = modelBusy,
-                            canAct = link == LinkState.CONNECTED && !stale,
+                            canAct = canAct,
                             onSwitch = onSwitchModel,
                             onRollback = onRollbackModel,
                             onInstall = onInstallModel,
+                            request = brain.modelRequest,
+                            onOpenApprovals = onOpenApprovals,
                         )
                     }
                 }
@@ -229,7 +320,7 @@ fun BrainScreen(
             // 4. The endpoints whose shape the contract does not fix. Rendered
             // from whatever actually came back — see JarvisApi.probe.
             item(key = "compute") {
-                Probed("Compute", brain.compute, "GPU and VRAM plan")
+                Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
             }
             item(key = "memory") {
                 // The QUEUE, not the corpus. /api/graph is desktop-only by the
@@ -240,6 +331,9 @@ fun BrainScreen(
                 // one-at-a-time way the desktop's own Memory tab does.
                 MemoryQueue(
                     data = brain.memory,
+                    read = brain.memoryRead,
+                    onRetry = retry,
+                    canAct = canAct,
                     busyId = memoryDecideBusyId,
                     onKeep = { id -> onDecideMemory(id, true) },
                     onDiscard = { id -> onDecideMemory(id, false) },
@@ -259,13 +353,25 @@ fun BrainScreen(
                 }
             }
             item(key = "initiative") {
-                Probed("Findings", brain.initiative, "What Jarvis noticed on its own")
+                Probed(
+                    "Findings",
+                    brain.initiative,
+                    "What Jarvis noticed on its own",
+                    brain.initiativeRead,
+                    retry,
+                )
             }
             item(key = "ledger") {
-                Probed("Audit chain", brain.ledger, "Entry count and last verified point")
+                Probed(
+                    "Audit chain",
+                    brain.ledger,
+                    "Entry count and last verified point",
+                    brain.ledgerRead,
+                    retry,
+                )
             }
             item(key = "skills") {
-                Probed("Skills", brain.skills, "Installed, with scan verdicts")
+                Probed("Skills", brain.skills, "Installed, with scan verdicts", brain.skillsRead, retry)
             }
 
             item(key = "capabilities") {
@@ -300,7 +406,7 @@ fun BrainScreen(
                                 ?.let { Field("Server", it, machine = true) }
                             Field("API", version.api.toString(), machine = true)
                             Gap(6)
-                            Kicker("Capabilities")
+                            Kicker("Capabilities", Modifier.semantics { heading() })
                             Gap(6)
                             // Branch on capabilities, never on version numbers —
                             // and show the user the same list the app branches
@@ -318,7 +424,7 @@ fun BrainScreen(
                             }
                             if (off.isNotEmpty()) {
                                 Gap(10)
-                                Kicker("Not on this backend")
+                                Kicker("Not on this backend", Modifier.semantics { heading() })
                                 Gap(6)
                                 FlowChips(off, muted = true)
                             }
@@ -332,8 +438,12 @@ fun BrainScreen(
     }
 }
 
+/**
+ * @param lastSeenAtMs when this latch was last read, shown as an age. Null
+ *   when the read that found it is the latest one, so there is nothing to age.
+ */
 @Composable
-private fun RushBanner(rush: JsonObject) {
+private fun RushBanner(rush: JsonObject, lastSeenAtMs: Long? = null) {
     val chrome = LocalChrome.current
     val text = rush.str("text")
         ?: "Outside text raised the current tier."
@@ -341,7 +451,16 @@ private fun RushBanner(rush: JsonObject) {
         tone = chrome.badInk.copy(alpha = 0.10f),
         outline = chrome.badInk.copy(alpha = 0.40f),
     ) {
-        Kicker("Tier raised", color = chrome.badInk)
+        Kicker("Tier raised", Modifier.semantics { heading() }, color = chrome.badInk)
+        if (lastSeenAtMs != null && lastSeenAtMs > 0L) {
+            Gap(2)
+            val now = rememberTickingNow(lastSeenAtMs)
+            Text(
+                "Last seen ${ageText(now - lastSeenAtMs)}. It may have cleared since.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+        }
         Gap(6)
         Text(text, style = MaterialTheme.typography.bodyLarge, color = chrome.badInk)
         rush.str("quote")?.let {
@@ -365,15 +484,70 @@ private fun RushBanner(rush: JsonObject) {
 }
 
 /**
- * The installed models, with a switch that ASKS.
+ * The rush-latch check did not come back. Amber, not red: this is "the phone
+ * does not know", not "something is wrong" - but it is drawn every time, in
+ * words, because the alternative was drawing nothing, and nothing reads as
+ * "no latch".
  *
- * The owner's 2026-09-18 amendment to the standing rules: changing the local
- * model from the phone is allowed. The catalogue is not - there is no install
- * here, nothing downloads, and the list is whatever the desktop already
- * holds. `Use` raises an approval card (tier `ask` on the server), so the
- * change is decided the same way every other change is; `Roll back` is tier
- * `auto` and never waits, because returning to the previous model is the safe
- * direction.
+ * No control here touches the latch. Retry re-reads; it clears nothing.
+ */
+@Composable
+private fun RushCheckFailed(
+    reason: String,
+    lastCheckedAtMs: Long,
+    sawLatch: Boolean,
+    onRetry: (() -> Unit)?,
+) {
+    val chrome = LocalChrome.current
+    Plate(tone = chrome.warnInk.copy(alpha = 0.10f), outline = chrome.warnInk.copy(alpha = 0.35f)) {
+        Kicker("Could not check for a rush latch", Modifier.semantics { heading() }, color = chrome.warnInk)
+        Gap(6)
+        Text(reason, style = MaterialTheme.typography.bodyMedium, color = chrome.warnInk)
+        Gap(6)
+        val now = if (lastCheckedAtMs > 0L) rememberTickingNow(lastCheckedAtMs) else 0L
+        Text(
+            when {
+                sawLatch -> "The latch above is the last one seen. It may still be set."
+                lastCheckedAtMs > 0L ->
+                    "The last check that worked, ${ageText(now - lastCheckedAtMs)}, found " +
+                        "none. One may have been set since."
+                else ->
+                    "It has not been checked since the app opened, so the phone does not " +
+                        "know whether one is set."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+        RetryButton(onRetry)
+    }
+}
+
+/** Re-reads the board. Null [onRetry] means a read is already out. */
+@Composable
+private fun RetryButton(onRetry: (() -> Unit)?) {
+    Quiet(
+        if (onRetry == null) "Retrying…" else "Retry",
+        enabled = onRetry != null,
+        onClick = { onRetry?.invoke() },
+    )
+}
+
+/**
+ * The installed models, with a switch and an install that both ASK.
+ *
+ * The owner's 2026-09-18 amendment to the standing rules allowed changing the
+ * local model from the phone; the 2026-09-20 one allowed installing a model
+ * by typing its name. The catalogue is still not allowed - the list is
+ * whatever the desktop already holds, and there is nothing to browse for
+ * what could be installed. `Use` and `Install` each raise an approval card
+ * (tier `ask` on the server) on Home, so the change is decided the same way
+ * every other change is, and nothing downloads or switches until it is
+ * approved. `Roll back` is tier `auto` and never waits, because returning to
+ * the previous model is the safe direction.
+ *
+ * After an ask, the plate says the card is waiting and where, with a link to
+ * it when the caller supplies one. The link only opens Home; it approves
+ * nothing.
  *
  * The cost is said on the plate rather than discovered: a swap unloads one
  * model and loads another, which the desktop's own topology doc measures at
@@ -388,12 +562,18 @@ private fun ModelsPlate(
     onSwitch: (String) -> Unit,
     onRollback: () -> Unit,
     onInstall: (String) -> Unit,
+    request: ModelRequest?,
+    onOpenApprovals: ((cardId: String?) -> Unit)?,
 ) {
     val chrome = LocalChrome.current
     var installRef by rememberSaveable { mutableStateOf("") }
     val current = models.currentRef
     val entries = models.entries
     Plate {
+        if (request != null) {
+            ApprovalWaiting(request, onOpenApprovals)
+            Gap(12)
+        }
         // Is the model actually ON the graphics card? Nothing else on the
         // phone says, and the only symptom of a spill is that everything got
         // slow - which reads as "Jarvis is slow", not "the model is on the CPU".
@@ -465,7 +645,7 @@ private fun ModelsPlate(
         }
         Gap(8)
         Text(
-            "Use asks the desktop and raises a card here to approve, like any " +
+            "Use asks the desktop and raises a card on Home to approve, like any " +
                 "other change. A switch takes six to ten seconds while one model " +
                 "unloads and the next loads - fine once, not per question.",
             style = MaterialTheme.typography.bodySmall,
@@ -501,6 +681,42 @@ private fun ModelsPlate(
                 },
             )
         }
+    }
+}
+
+/**
+ * "Waiting for your approval", after Use or Install.
+ *
+ * Use used to show "…" for a moment and then nothing, and Install set a
+ * notice that said "approve it" without saying where. The card is on Home,
+ * not on this screen, so this says so, and offers the way there.
+ */
+@Composable
+private fun ApprovalWaiting(request: ModelRequest, onOpenApprovals: ((cardId: String?) -> Unit)?) {
+    val chrome = LocalChrome.current
+    Text(
+        "Waiting for your approval",
+        style = MaterialTheme.typography.titleSmall,
+        color = chrome.warnInk,
+    )
+    Gap(2)
+    Text(
+        if (request.install) {
+            "Installing ${request.ref} is waiting on a card on Home. Nothing " +
+                "downloads until you approve it there."
+        } else {
+            "Switching to ${request.ref} is waiting on a card on Home. Nothing " +
+                "changes until you approve it there."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = chrome.textMid,
+    )
+    if (onOpenApprovals != null) {
+        Quiet(
+            "Open the card →",
+            color = chrome.warnInk,
+            onClick = { onOpenApprovals(request.cardId) },
+        )
     }
 }
 
@@ -700,9 +916,20 @@ private fun MemoryAsOfPlate(
  * Scalars become rows, arrays become a count and their readable entries, and
  * anything nested one level deep is flattened with its parent's name. No field
  * is assumed to exist, so nothing here can be quietly wrong about a key.
+ *
+ * Four states, drawn four ways ([SectionRead]). This used to say "Not
+ * available on this backend" whenever [data] was null - which was also true
+ * before the first read came back and after a read that failed, so two times
+ * out of three it blamed the desktop for something the phone did not know.
  */
 @Composable
-private fun Probed(title: String, data: JsonObject?, blurb: String) {
+private fun Probed(
+    title: String,
+    data: JsonObject?,
+    blurb: String,
+    read: SectionRead,
+    onRetry: (() -> Unit)?,
+) {
     val chrome = LocalChrome.current
     // The expensive part of this composable, done once per payload instead of once
     // per recomposition. `flatten` walks the object and everything nested under it
@@ -719,13 +946,7 @@ private fun Probed(title: String, data: JsonObject?, blurb: String) {
     Section(title) {
         Plate {
             if (data == null) {
-                Text(
-                    "Not available on this backend.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = chrome.textMid,
-                )
-                Gap(4)
-                Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                SectionUnread(read, blurb, onRetry)
                 return@Plate
             }
             if (rows.isEmpty()) {
@@ -745,6 +966,48 @@ private fun Probed(title: String, data: JsonObject?, blurb: String) {
 }
 
 /**
+ * What a section with no payload says, by why it has none: still reading,
+ * not on this backend, or could not be read (with a Retry). Shared by
+ * [Probed] and [MemoryQueue] so the three read the same on every section.
+ */
+@Composable
+private fun SectionUnread(read: SectionRead, blurb: String, onRetry: (() -> Unit)?) {
+    val chrome = LocalChrome.current
+    when (read) {
+        is SectionRead.Failed -> {
+            Text(
+                "Could not read this: ${read.reason}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.warnInk,
+            )
+            Gap(4)
+            Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+            RetryButton(onRetry)
+        }
+        SectionRead.Absent -> {
+            Text(
+                "Not on this backend.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textMid,
+            )
+            Gap(4)
+            Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+        }
+        // Read with no payload cannot happen - a read that answered carries
+        // one - so it falls in with Reading rather than inventing a fifth line.
+        SectionRead.Reading, SectionRead.Read -> {
+            Text(
+                "Reading…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textMid,
+            )
+            Gap(4)
+            Text(blurb, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+        }
+    }
+}
+
+/**
  * The one section on this screen that answers back rather than only
  * reporting. `data` is `/api/memory/pending`'s own JSON — the SAME payload
  * `JarvisRuntime.refreshBrain()` already fetched for the generic [Probed]
@@ -759,6 +1022,10 @@ private fun Probed(title: String, data: JsonObject?, blurb: String) {
 @Composable
 private fun MemoryQueue(
     data: JsonObject?,
+    read: SectionRead,
+    onRetry: (() -> Unit)?,
+    /** False on a dead or stale link: every write here dims, as on ModelsPlate. */
+    canAct: Boolean,
     busyId: Long?,
     onKeep: (id: Long) -> Unit,
     onDiscard: (id: Long) -> Unit,
@@ -782,6 +1049,7 @@ private fun MemoryQueue(
             SleepOfferCard(
                 offer = sleepOffer,
                 busy = sleepOfferBusy,
+                canAct = canAct,
                 onEnable = { onSleepTimeAction(true, null) },
                 onNotNow = onDismissSleepOffer,
                 onStopAsking = { onSleepTimeAction(null, false) },
@@ -790,13 +1058,7 @@ private fun MemoryQueue(
         }
         Plate {
             if (data == null) {
-                Text(
-                    "Not available on this backend.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = chrome.textMid,
-                )
-                Gap(4)
-                Text("Proposed facts", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                SectionUnread(read, "Proposed facts", onRetry)
                 return@Plate
             }
             if (items.isEmpty()) {
@@ -815,6 +1077,7 @@ private fun MemoryQueue(
                     text = item.str("text") ?: "(no text)",
                     source = item.str("source"),
                     busy = id != null && id == busyId,
+                    canAct = canAct,
                     // A row with no readable id can be shown but not decided -
                     // the same "say what you can, act on what you know" rule
                     // as a section with no data at all.
@@ -836,11 +1099,17 @@ private fun MemoryQueue(
 private fun SleepOfferCard(
     offer: JsonObject,
     busy: Boolean,
+    canAct: Boolean,
     onEnable: () -> Unit,
     onNotNow: () -> Unit,
     onStopAsking: () -> Unit,
 ) {
     val chrome = LocalChrome.current
+    // Enable and Stop asking are writes to the desktop, so they dim with the
+    // link. Not now stays live: it only hides this card on this phone for
+    // today and sends nothing, so refusing it on a stale link would guard
+    // nothing.
+    val canWrite = !busy && canAct
     Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
         Text(
             offer.str("title") ?: "Let Jarvis tidy its memory overnight?",
@@ -856,14 +1125,14 @@ private fun SleepOfferCard(
             Quiet(
                 if (busy) "Enabling…" else "Enable",
                 color = chrome.okInk,
-                enabled = !busy,
+                enabled = canWrite,
                 onClick = onEnable,
             )
             Quiet("Not now", color = chrome.textMid, enabled = !busy, onClick = onNotNow)
             Quiet(
                 if (busy) "Working…" else "Stop asking",
                 color = chrome.textLo,
-                enabled = !busy,
+                enabled = canWrite,
                 onClick = onStopAsking,
             )
         }
@@ -875,6 +1144,7 @@ private fun MemoryProposalRow(
     text: String,
     source: String?,
     busy: Boolean,
+    canAct: Boolean,
     onKeep: (() -> Unit)?,
     onDiscard: (() -> Unit)?,
 ) {
@@ -895,37 +1165,41 @@ private fun MemoryProposalRow(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Affirm(
                 if (busy) "Keeping…" else "Keep",
-                enabled = !busy && onKeep != null,
+                enabled = !busy && canAct && onKeep != null,
                 onClick = { onKeep?.invoke() },
             )
             Refuse(
                 if (busy) "Discarding…" else "Discard",
-                enabled = !busy && onDiscard != null,
+                enabled = !busy && canAct && onDiscard != null,
                 onClick = { onDiscard?.invoke() },
             )
         }
     }
 }
 
+/**
+ * Chips that wrap to the width they have.
+ *
+ * This used to be fixed rows of three, on the grounds that FlowRow was still
+ * experimental. A plain Row does not wrap, so with long capability names or
+ * the phone's font size turned up the third chip was squeezed and its text
+ * broke inside the pill. FlowRow places as many as fit and starts a new line.
+ *
+ * The opt-in is kept deliberately. Whether plain FlowRow still needs it in
+ * this BOM (2026.06.00) has not been checked - there is no local Android
+ * build - and an opt-in that turns out to be unneeded costs nothing, while a
+ * missing one would fail the only compiler this project has.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FlowChips(items: Collection<String>, muted: Boolean = false) {
     val chrome = LocalChrome.current
-    // A simple wrapping run. FlowRow would do it in one line but is still
-    // experimental in this BOM, and an opt-in on a layout is not worth it.
-    // `chunked` allocates the outer list plus one inner list per row, and this is
-    // called once per capability list and once per running job — on a screen that
-    // cannot skip recomposition, so it was rebuilding those lists on every server
-    // event for chips whose text never moved. Keyed on the input collection, whose
-    // `==` is a structural compare, so the chips still re-chunk the moment the set
-    // of capabilities actually differs.
-    val rows = remember(items) { items.chunked(3) }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                row.forEach {
-                    Pill(it, color = if (muted) chrome.textLo else chrome.textMid)
-                }
-            }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items.forEach {
+            Pill(it, color = if (muted) chrome.textLo else chrome.textMid)
         }
     }
 }
@@ -949,10 +1223,15 @@ fun TopBar(
         Quiet("← Back", color = LocalAccent.current, onClick = onBack)
         Spacer(Modifier.width(4.dp))
         Column(Modifier.weight(1f)) {
+            // A heading, so TalkBack's "navigate by headings" lands on it. No
+            // screen had a single one, so a long screen like this could only
+            // be read by swiping through every row. Shared by every sub-screen
+            // that uses TopBar.
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 color = chrome.textHi,
+                modifier = Modifier.semantics { heading() },
             )
             if (subtitle != null) {
                 Text(
