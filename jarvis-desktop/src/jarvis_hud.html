@@ -1797,7 +1797,19 @@ async function boot(){
   try{
     const r = await jfetch("/api/graph", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
     graph = await r.json();
-    if(!graph.nodes || graph.nodes.length < 3) graph = demoGraph();
+    // A real graph that is still small is SHOWN as it is, not swapped for the
+    // made-up one: that used to happen online too, with no banner, so a new
+    // owner with an empty memory saw invented facts presented as theirs.
+    // The sample graph is only for when there is no server to ask, and the
+    // offline banner above already says "Everything below is sample data".
+    graph = graph && typeof graph === "object" ? graph : {};
+    if(!Array.isArray(graph.nodes)) graph.nodes = [];
+    if(!Array.isArray(graph.links)) graph.links = [];
+    if(graph.nodes.length < 3){
+      addMessage("system", graph.nodes.length
+        ? "Your brain map is small so far. It fills in as you keep facts Jarvis learns."
+        : "Your brain map is empty so far. It fills in as you keep facts Jarvis learns.");
+    }
   }catch(e){ graph = demoGraph(); }
 
   S.graph = graph;

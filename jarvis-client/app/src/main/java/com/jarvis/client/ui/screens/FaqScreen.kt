@@ -111,10 +111,11 @@ private val FAQS = listOf(
         "What does a Jarvis notification show on my lock screen?",
         "Only that Jarvis is waiting on a decision — never the actual " +
             "content of what it wants to do. The real details stay hidden " +
-            "until you unlock the phone and open the app, and there is no " +
-            "Approve or Deny button on the notification itself, on purpose: " +
-            "a decision this app cares about enough to gate behind a " +
-            "fingerprint is not one to make from a locked screen either.",
+            "until you unlock the phone and open the app. The notification " +
+            "can have a Deny button, when refusing without reading is safe, " +
+            "but never an Approve button, on purpose: saying yes is gated " +
+            "behind your fingerprint inside the app, and that is not a " +
+            "decision to make from a locked screen.",
     ),
     Faq(
         "Does Jarvis's spoken voice ever get sent to a company like Google?",
