@@ -391,7 +391,7 @@ private fun LaneChip(status: StatusInfo?) {
     when (lane) {
         // violet-4 is the desktop's `--cloud`, and it means the same thing on
         // both: this is leaving the local lane.
-        "cloud" -> Pill("Cloud" + (model?.let { " · $it" } ?: ""), color = com.jarvis.client.face.Palette.VIOLET_4)
+        "cloud" -> Pill("Cloud" + (model?.let { " · $it" } ?: ""), color = chrome.cloudInk)
         "offline" -> Pill("Offline", color = chrome.badInk)
         "local" -> Pill("Local" + (model?.let { " · $it" } ?: ""), color = chrome.okInk)
         else -> if (model != null) Pill(model, color = chrome.textMid)

@@ -178,7 +178,7 @@ fun BrainScreen(
                                 else -> lane
                             },
                             valueColor = when (lane) {
-                                "cloud" -> com.jarvis.client.face.Palette.VIOLET_4
+                                "cloud" -> chrome.cloudInk
                                 "local" -> chrome.okInk
                                 "offline" -> chrome.badInk
                                 else -> null
