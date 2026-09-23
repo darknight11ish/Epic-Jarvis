@@ -5,7 +5,9 @@
 > is the detail.
 
 
-Twenty-six patches against the Jarvis backend, each with an executable test.
+Twenty-seven patches against the Jarvis backend, each with an executable test.
+The newest, `feedback.patch`, goes last of all: its context lines are the
+output of several patches above it — see its own section.
 The last four - `ui-control-wiring.patch`, `ollama-direct.patch`,
 `tool-calling-wiring.patch` and `loopback-too.patch` - sit outside the ordered
 stack below: each only touches its own few lines, shared with no other patch
@@ -57,6 +59,7 @@ on a throwaway copy instead.
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
 | `loopback-too.patch` | `jarvis_hud.py` | **Pairing the phone unplugged the desktop.** `JARVIS_HUD_BIND` moved the one socket off `127.0.0.1` instead of adding one, and the desktop's HUD may only talk to loopback. Also serves `127.0.0.1` when bound elsewhere. Needs `token-file.patch` — see its own section. |
+| `feedback.patch` | `jarvis_hud.py`, `jarvis_extract.py` | **There was no way to tell Jarvis an answer was wrong.** Gives every answer an id, a route to mark it right or wrong, and — through `jarvis_feedback.py` — helpful/harmful counts per fact. A fact that keeps turning up in wrong answers raises one "retire this?" card in the normal review queue; nothing retires by itself. Last in the stack — see its own section. |
 
 ## Twenty of the twenty-two actually apply, and that is correct
 
@@ -2763,3 +2766,147 @@ was written). Against the pre-patch `run()` in any of the three, the new
 `checkpoint`-passing cases fail with a `TypeError` for an unexpected
 keyword - which is the correct failure for a parameter that does not
 exist yet, not a false pass.
+
+
+---
+
+# `feedback.patch` and `jarvis_feedback.py` — "that answer was wrong"
+
+Items 1 and 8 of `docs/LEARNING-RESEARCH-2026-09-23.md`, which the owner
+approved on 2026-09-23.
+
+**What was missing.** Jarvis learns what you tell it, but it never found out
+whether its own answers were any good. There was no way to say "that was
+wrong", so nothing could ever learn from it.
+
+**What this adds, in plain words.**
+
+1. Every answer from `/api/chat` gets an ID number, sent back in the
+   `X-Jarvis-Route` header as `turn_id`. The backend quietly notes which
+   remembered facts went into that answer — their ID numbers only.
+2. A new route, `POST /api/feedback/mark`, lets a button on that one answer
+   say `right` or `wrong` (or take the mark back).
+3. For each fact, Jarvis counts how many answers it was used in that you
+   marked right ("helpful") and marked wrong ("harmful"). Only your marks
+   move these counts. Nothing else can: they are counted from your marks
+   every time, not stored as a number something could change.
+4. If a fact keeps showing up in wrong answers — **at least 5 wrong, and at
+   least 3 times as many wrong as right** — Jarvis puts **one** card in the
+   normal memory review queue: "Stop using this fact?". Nothing happens
+   unless you accept it. Accepting **retires** the fact (it gets an end
+   date and stays in the history; it is not deleted). Discarding it leaves
+   the fact exactly as it was, and you will not be asked about it again
+   until it has been in 5 more wrong answers.
+
+## What it never stores, and where it lives
+
+`jarvis_feedback.py` is a new module, shipped as a file like
+`jarvis_research.py` — copy it into the backend folder. It keeps its own
+small database, `feedback.db`, next to `memory.db` in the same config folder.
+Its own file, not new tables in `memory.db`, so it cannot get in the way of
+the memory store or anything that migrates it.
+
+It stores **no text from any conversation**: no question, no answer, no fact
+wording. Only a random answer ID, a time, fact IDs (`mem:12`), and marks. It
+opens no network connection. The test checks every column of every table,
+and fails if one could hold text.
+
+Old marks are never overwritten. Changing your mind adds a new row, and only
+the newest mark on an answer counts.
+
+The counter format (an ID with helpful/harmful counts) is an idea from the
+ACE project's playbook (`ace-agent/ace`, Apache-2.0). Only the idea — no ACE
+code was copied, so there is no `THIRD-PARTY-NOTICES.txt` entry for it.
+
+## Why the card goes through the review queue
+
+`docs/ARCHITECTURE.md` says a feature that needs its own approval flow is a
+design mistake, so the "retire this?" card uses the one that already exists
+for memory: `jarvis_extract`'s proposals, one card, one decision,
+`/api/memory/decide`. The patch adds `propose_retire()` to `jarvis_extract.py`
+and one branch at the top of `_accept()`: a card whose `source` is
+`feedback_retire` retires the fact it names and **adds nothing**. Without that
+branch, accepting it would have stored the card's own sentence as a new fact.
+
+The approval gate (`jarvis_gate`) was the other candidate, and it is the
+wrong one here: it waits on a thread for an answer, and a "no" on it
+proposes a standing rule ("do not do this without asking") — the wrong lesson
+from "keep this fact".
+
+**One thing the apps must change before this is used.** Today both apps label
+every review card "Keep" / "Discard", and the desktop says "Kept. Jarvis can
+recall it now." after Keep. On a retire card, "Keep" (accept) *retires* the
+fact. The card's own sentence says so, but the buttons must be relabelled
+for `source == "feedback_retire"`. No card can appear before the mark button
+exists, so the two must ship together.
+
+## Why the bar is so high
+
+With one user, the counts are small, and a fact that was part of a wrong
+answer did not necessarily cause the mistake. So one or two bad answers must
+never be enough. The numbers are `RETIRE_MIN_WRONG = 5` and `RETIRE_RATIO =
+3` at the top of `jarvis_feedback.py`.
+
+## What the patch changes in `jarvis_hud.py`
+
+Three small additions, none of which change an existing line:
+
+- `/api/chat`: right after the step-down (degrade) loop, one call to
+  `jarvis_feedback.record_turn(route_header["injected_ids"])`, which adds
+  `turn_id` to the `X-Jarvis-Route` header. It sits after the loop on
+  purpose: `degrade-filter.patch` empties `injected_ids` when a turn leaves
+  the local model, so the facts recorded are the ones really used. It is
+  inside its own `try`, so it can never be the reason an answer fails.
+- `POST /api/feedback/mark` — `{"turn_id": "<32 hex>", "mark":
+  "right" | "wrong" | "none"}`. One ID. A list is refused with a 400: a
+  "mark all" would move every counter at once on one tap.
+- `GET /api/feedback/counts` and `GET /api/feedback/mark?turn_id=…`.
+
+All three routes check the token and the origin exactly like the memory
+routes beside them. No new event kind: a new retire card rings the existing
+`proposal` doorbell, because it is an ordinary proposal.
+
+## Skill notes: counted, but nothing feeds them yet
+
+The counters accept skill-note IDs too (`note:<skill>:<hash>`, from
+`jarvis_feedback.note_id()`). But nothing records which skill notes went into
+an answer yet — that happens inside `jarvis_skills.load()`, which is on the
+owner's machine and not in this repository. Until something passes
+`notes=[...]` to `record_turn()`, skill-note counts stay empty. Skill notes
+never raise a retire card: removing a note is a change to the skill, which
+already has its own gate (`skill-notes.patch`).
+
+## Ordering
+
+**Last in the stack.** Its context lines are other patches' output:
+`memory-safety`'s `_accept()` and the end of `propose()` (with `memory-noise`
+and `decide-once` above them), `memory-pane`'s memory routes, and
+`tool-calling-wiring`'s `if use_tools:` split. Needs `jarvis_feedback.py`
+copied into the backend folder as well; without it, the chat hook does
+nothing and the two routes answer 503.
+
+## How it was checked, and what was not
+
+The real `jarvis_hud.py` and `jarvis_extract.py` are not in this repository,
+so the patch was checked against **reconstructions**: every line inside the
+regions it touches was taken verbatim from the patches listed above, and
+`git apply --check` passes against them (forward and in reverse). That
+proves the patch matches what those patches wrote. It cannot prove nothing
+else on the owner's machine differs — `apply-patches.ps1` rehearses on a copy
+first, so if it does differ, the run stops and changes nothing.
+
+Not verified: that `route_header` always holds an `injected_ids` key. It is
+set by code this repository has never seen; `degrade-filter.patch` and
+`test_degrade_filter.py` both treat it as always there. If it is missing,
+the answer still gets a `turn_id`, with no facts recorded.
+
+## Test it
+
+```powershell
+python test_feedback.py
+```
+
+74 checks with the patched backend present. Without a backend folder, the 48
+that test `jarvis_feedback.py` itself still run, and the two halves that
+need `jarvis_extract.py` and `jarvis_hud.py` say SKIP. With those files
+present but unpatched, both halves FAIL rather than skip.

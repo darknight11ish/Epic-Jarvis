@@ -103,6 +103,12 @@ $PATCHES = @(
     # line above HUD_TOKEN), which nothing after token-file touches. Last so
     # a backend that already has everything above takes only this.
     'loopback-too.patch'
+    # After all of these. Its context lines are other patches' output:
+    # memory-safety's _accept() and the end of propose() in jarvis_extract.py
+    # (with memory-noise and decide-once already above it), memory-pane's
+    # GET and POST memory routes, and tool-calling-wiring's `if use_tools:`
+    # split in /api/chat. So it cannot go earlier than tool-calling-wiring.
+    'feedback.patch'
 )
 
 # --- the six patches whose fixes are already IN the rebuilt modules --------
