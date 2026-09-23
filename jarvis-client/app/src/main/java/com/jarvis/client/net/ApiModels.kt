@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -121,6 +122,8 @@ data class ModelsInfo(
     val previous: String?,
     val entries: List<ModelEntry>,
     val offload: ModelOffload?,
+    /** `speed-record.patch`'s `speed` block, or null on a backend without it. */
+    val speed: ModelSpeed? = null,
 ) {
     companion object {
         fun from(json: JsonObject): ModelsInfo {
@@ -151,7 +154,14 @@ data class ModelsInfo(
             val offload = (json["offload"] as? JsonObject)?.let {
                 ModelOffload(status = it.str("status"), note = it.str("note"))
             }
-            return ModelsInfo(currentRef = current, previous = previous, entries = entries, offload = offload)
+            val speed = ModelSpeed.from(json["speed"] as? JsonObject, current)
+            return ModelsInfo(
+                currentRef = current,
+                previous = previous,
+                entries = entries,
+                offload = offload,
+                speed = speed,
+            )
         }
 
         private fun JsonObject.str(key: String): String? =
@@ -171,6 +181,73 @@ data class ModelOffload(
     val note: String? = null,
 ) {
     val bad: Boolean get() = status == "cpu" || status == "partial"
+}
+
+/**
+ * How fast recent answers were - `speed-record.patch`, item 11 of
+ * docs/LEARNING-RESEARCH-2026-09-23.md. Numbers only: nothing in the block is
+ * conversation text. docs/JARVIS-API.md says how to show it, and this follows
+ * that: one line for the running model, the backend's `note` as a warning
+ * only when `slowdown.slower` is true, and `last_switch_note` word for word
+ * when there has been a switch.
+ */
+data class ModelSpeed(
+    /** "Recent answers: about 14 words a second, first word after 0.8 s." Null: no answers yet. */
+    val currentLine: String?,
+    /** The backend's own "got slower" sentence, or null when nothing slowed down. */
+    val slowdownNote: String?,
+    /** The backend's own old-vs-new sentence from the last model switch, or null. */
+    val lastSwitchNote: String?,
+) {
+    val isEmpty: Boolean get() = currentLine == null && slowdownNote == null && lastSwitchNote == null
+
+    companion object {
+        fun from(speed: JsonObject?, current: String?): ModelSpeed? {
+            if (speed == null) return null
+            if ((speed["available"] as? JsonPrimitive)?.booleanOrNull == false) return null
+            val byModel = speed["by_model"] as? JsonObject
+            val mine = current?.let { cur ->
+                (byModel?.get(cur) as? JsonObject)
+                    ?: byModel?.entries?.firstOrNull { (k, _) -> sameModel(k, cur) }?.value as? JsonObject
+            }
+            val slower = ((speed["slowdown"] as? JsonObject)?.get("slower") as? JsonPrimitive)
+                ?.booleanOrNull == true
+            val switched = speed["last_switch"] is JsonObject
+            val out = ModelSpeed(
+                currentLine = mine?.let { line(it) },
+                slowdownNote = if (slower) speed.text("note") else null,
+                lastSwitchNote = if (switched) speed.text("last_switch_note") else null,
+            )
+            return out.takeUnless { it.isEmpty }
+        }
+
+        /** "qwen3:8b" and "qwen3:8b:latest"/"qwen3" + ":latest" name the same model. */
+        private fun sameModel(a: String, b: String): Boolean =
+            a.removeSuffix(":latest") == b.removeSuffix(":latest")
+
+        private fun line(m: JsonObject): String? {
+            val wps = m.num("median_words_per_s")
+            val firstMs = m.num("median_first_word_ms")
+            val parts = buildList {
+                if (wps != null) add("about ${Math.round(wps)} words a second")
+                if (firstMs != null) {
+                    val tenths = Math.round(firstMs / 100.0)
+                    add("first word after ${tenths / 10}.${tenths % 10} s")
+                }
+            }
+            if (parts.isEmpty()) return null
+            val n = m.num("answers")?.let { Math.round(it) }
+            val over = if (n != null && n > 0) " (middle of the last $n answers)" else ""
+            return "Recent answers: " + parts.joinToString(", ") + over + "."
+        }
+
+        private fun JsonObject.num(key: String): Double? =
+            (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull && !it.isString }
+                ?.content?.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0.0 }
+
+        private fun JsonObject.text(key: String): String? =
+            (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.takeIf { it.isNotBlank() }
+    }
 }
 
 // ------------------------------------------------------------ approvals ----

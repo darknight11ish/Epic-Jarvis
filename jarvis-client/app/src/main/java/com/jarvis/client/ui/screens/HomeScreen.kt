@@ -9,6 +9,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.widthIn
+import com.jarvis.client.net.AnswerFeedback
+import com.jarvis.client.net.AnswerMark
+import com.jarvis.client.ui.parts.liveStatus
 import androidx.compose.foundation.gestures.DraggableState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -306,6 +311,12 @@ data class HomeState(
      * [com.jarvis.client.net.ChatSession.question]; nothing writes it to disk.
      */
     val lastUserText: String? = null,
+    /**
+     * The right/wrong mark buttons for the answer on screen, or null to show
+     * none - the answer carried no id (`turn_id`) the desktop could file a
+     * mark against. See [com.jarvis.client.net.Feedback.viewFor].
+     */
+    val answerFeedback: AnswerFeedback? = null,
 )
 
 @Immutable
@@ -344,6 +355,12 @@ data class HomeActions(
      * caller saves it and hands it back as [HomeState.faceFraction].
      */
     val onFaceFractionCommitted: (Float) -> Unit = {},
+    /**
+     * The owner tapped Right or Wrong on the answer [turnId]. The runtime
+     * works out whether that sets, changes or takes back the mark, and sends
+     * nothing while the link is stale.
+     */
+    val onMarkAnswer: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
 )
 
 @Composable
@@ -805,7 +822,19 @@ private fun ConversationList(
         }
 
         // Always the last item - the follow-the-reply effect relies on it.
-        item(key = REPLY_KEY) { Reply(reply, state.streaming, state.lastUserText) }
+        item(key = REPLY_KEY) {
+            Reply(
+                reply,
+                state.streaming,
+                state.lastUserText,
+                feedback = state.answerFeedback,
+                // The same test every other write on the phone uses: a mark is
+                // not an approval, but it is still sent to the desktop, and
+                // nothing is sent over a link that cannot be confirmed live.
+                canMark = state.link == LinkState.CONNECTED && !state.stale,
+                onMark = actions.onMarkAnswer,
+            )
+        }
     }
 }
 
@@ -1510,7 +1539,14 @@ private fun NavItem(
  * still being written is laid out again.
  */
 @Composable
-private fun Reply(reply: () -> String, streaming: Boolean, question: String?) {
+private fun Reply(
+    reply: () -> String,
+    streaming: Boolean,
+    question: String?,
+    feedback: AnswerFeedback? = null,
+    canMark: Boolean = false,
+    onMark: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
+) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
     val clipboard = LocalClipboardManager.current
@@ -1580,8 +1616,127 @@ private fun Reply(reply: () -> String, streaming: Boolean, question: String?) {
                         context.startActivity(Intent.createChooser(intent, null))
                     }
                 }
+                // Only on an answer the desktop gave an id to, and only once
+                // it has finished - the same moment Copy and Share appear.
+                if (feedback != null) {
+                    Gap(4)
+                    AnswerMarks(feedback, canMark, onMark)
+                }
             }
         }
+    }
+}
+
+/**
+ * "Was this answer right?" - one Right and one Wrong for the ONE answer on
+ * screen (`feedback.patch`). There is no "mark all": one answer, one mark.
+ *
+ * Tapping the chosen one again takes the mark back. A mark never changes
+ * memory; at most, if a fact keeps turning up in wrong answers, the desktop
+ * asks - with a card in Mind's memory review - whether to stop using it.
+ */
+@Composable
+private fun AnswerMarks(
+    feedback: AnswerFeedback,
+    canMark: Boolean,
+    onMark: (turnId: String, tapped: AnswerMark) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    if (feedback.unavailable) {
+        Text(
+            "This answer cannot be marked right or wrong.",
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
+        return
+    }
+    val enabled = canMark && !feedback.busy
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Was this right?",
+            style = MaterialTheme.typography.labelMedium,
+            color = chrome.textMid,
+            modifier = Modifier.weight(1f),
+        )
+        MarkToggle(
+            label = "Right",
+            description = "Mark this answer right",
+            selected = feedback.mark == AnswerMark.RIGHT,
+            color = chrome.okInk,
+            enabled = enabled,
+            onClick = { onMark(feedback.turnId, AnswerMark.RIGHT) },
+        )
+        Spacer(Modifier.width(8.dp))
+        MarkToggle(
+            label = "Wrong",
+            description = "Mark this answer wrong",
+            selected = feedback.mark == AnswerMark.WRONG,
+            color = chrome.badInk,
+            enabled = enabled,
+            onClick = { onMark(feedback.turnId, AnswerMark.WRONG) },
+        )
+    }
+    val line = when {
+        feedback.busy -> "Saving…"
+        !canMark -> "Not connected, so a mark cannot be sent right now."
+        feedback.mark == AnswerMark.WRONG ->
+            "Marked wrong. Nothing changes without asking you. Tap Wrong again to take it back."
+        feedback.mark == AnswerMark.RIGHT -> "Marked right. Tap Right again to take it back."
+        else -> null
+    }
+    if (line != null) {
+        Text(
+            line,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+            modifier = Modifier.liveStatus(),
+        )
+    }
+}
+
+/**
+ * One mark button. Chosen is told apart by shape and a tick, not by colour
+ * alone (SHARED-LOOK.md §9): filled with a "✓" when chosen, outlined when not.
+ * 48dp tall and wide whatever the label, like every other control here.
+ */
+@Composable
+private fun MarkToggle(
+    label: String,
+    description: String,
+    selected: Boolean,
+    color: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val shape = LocalRadii.current.chipShape
+    val ink = if (enabled) color else chrome.textLo
+    Box(
+        Modifier
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
+            .pressable(enabled = enabled, onClick = onClick)
+            .semantics {
+                contentDescription = description
+                stateDescription = if (selected) "Chosen" else "Not chosen"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (selected) "✓ $label" else label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected && enabled) chrome.surface0 else ink,
+            modifier = Modifier
+                .clip(shape)
+                .then(
+                    if (selected) {
+                        Modifier.background(ink)
+                    } else {
+                        Modifier.border(1.dp, ink.copy(alpha = 0.6f), shape)
+                    },
+                )
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+        )
     }
 }
 

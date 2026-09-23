@@ -6,7 +6,11 @@ import android.util.Log
 import com.jarvis.client.data.AppearanceStore
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
+import com.jarvis.client.net.AnswerMark
+import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.ApiError
+import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
@@ -272,6 +276,15 @@ object JarvisRuntime {
 
     private val _version = MutableStateFlow<VersionInfo?>(null)
     val version: StateFlow<VersionInfo?> = _version.asStateFlow()
+
+    /**
+     * The owner's right/wrong mark on the answer now on screen, keyed by that
+     * answer's id so a mark can never be shown beside a different answer.
+     * Null until the owner marks something. In memory only, like the answer
+     * itself; the desktop keeps the real record (`feedback.db`).
+     */
+    private val _answerMark = MutableStateFlow<AnswerMarkState?>(null)
+    val answerMark: StateFlow<AnswerMarkState?> = _answerMark.asStateFlow()
 
     private val _status = MutableStateFlow<StatusInfo?>(null)
     val status: StateFlow<StatusInfo?> = _status.asStateFlow()
@@ -1232,7 +1245,7 @@ object JarvisRuntime {
                 val jobs = async { api.jobs().onOk { _jobs.value = it } }
                 val models = async { refreshModels() }
                 val compute = async { api.probe("/api/compute").asSection() }
-                val memory = async { api.probe("/api/memory/pending").asSection() }
+                val memory = async { api.probe(MemoryCards.PENDING_PATH).asSection() }
                 val ledger = async { api.probe("/api/ledger").asSection() }
                 val skills = async { api.probe("/api/skills").asSection() }
                 val initiative = async { api.probe("/api/initiative").asSection() }
@@ -1303,7 +1316,7 @@ object JarvisRuntime {
      * this one section had.
      */
     suspend fun refreshMemoryQueue() {
-        val (memory, read) = api.probe("/api/memory/pending").asSection()
+        val (memory, read) = api.probe(MemoryCards.PENDING_PATH).asSection()
         _brain.update { it.copy(memory = memory, memoryRead = read) }
     }
 
@@ -1600,6 +1613,107 @@ object JarvisRuntime {
             // have touched.
             is ApiResult.Ok -> refreshMemoryQueue()
             is ApiResult.Failed -> _notice.value = describe(result.error)
+        }
+        return result
+    }
+
+    /**
+     * "Both are true" on a correction card: keep the new fact and the old
+     * one (`memory-intake.patch`). Gated exactly like [decideMemory] - it is
+     * a decision on the same queue, so it waits for a live link.
+     *
+     * 409 means the desktop refused the third answer for this card (it has
+     * no old fact to keep); 404 that the card was already answered. Either
+     * way the card list is re-read so the screen shows the truth, and the
+     * owner is told in one plain sentence.
+     */
+    suspend fun keepBothMemory(id: Long): ApiResult<Unit> {
+        if (_stale.value || _link.value != LinkState.CONNECTED) {
+            val blocker = "Not connected to the desktop, so this decision cannot be delivered."
+            _notice.value = blocker
+            return ApiResult.Failed(ApiError.Unreachable(blocker))
+        }
+        val result = api.keepBothMemory(id)
+        when (result) {
+            is ApiResult.Ok -> refreshMemoryQueue()
+            is ApiResult.Failed -> {
+                _notice.value = when (result.error) {
+                    ApiError.AlreadyHandled ->
+                        "The desktop would not keep both for that card. Answer it with Keep or Discard."
+                    ApiError.NotFound -> "That card was already answered."
+                    else -> describe(result.error)
+                }
+                refreshMemoryQueue()
+            }
+        }
+        return result
+    }
+
+    /**
+     * Marks the answer [turnId] right or wrong - or takes the mark back when
+     * the owner taps the mark already chosen ([Feedback.nextMark]).
+     *
+     * Not an approval, and it never changes memory. It is still a write to
+     * the desktop that can end in a "stop using this fact?" card, so it
+     * follows the same rule as the other writes here: nothing is sent while
+     * the link is down or stale ([actionBlocker]).
+     *
+     * One answer at a time, and a second tap while the first is on its way
+     * is ignored rather than queued. If the desktop cannot take marks for
+     * this answer (404: it does not know the answer; 503: the feedback
+     * module is not installed), the buttons are swapped for one quiet line -
+     * no error wall.
+     */
+    fun markAnswerDetached(turnId: String, tapped: AnswerMark) {
+        // On the runtime's own scope, like [decideDetached]: a rotation must
+        // not cancel the call between the POST and the state update, which
+        // would leave the buttons greyed out as "saving" for good.
+        scope.launch { markAnswer(turnId, tapped) }
+    }
+
+    suspend fun markAnswer(turnId: String, tapped: AnswerMark): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        // Check-and-claim in one atomic step. Two quick taps each launch on
+        // the multi-threaded runtime scope, and a separate read-then-write
+        // let both through - two marks racing, and the screen free to end up
+        // showing the one the desktop did not keep.
+        var claimed = false
+        var current = AnswerMark.NONE
+        _answerMark.update { s ->
+            val mine = s?.takeIf { it.turnId == turnId }
+            if (mine?.busy == true || mine?.unavailable == true) {
+                claimed = false
+                s
+            } else {
+                claimed = true
+                current = mine?.mark ?: AnswerMark.NONE
+                AnswerMarkState(turnId, current, busy = true)
+            }
+        }
+        if (!claimed) return ApiResult.Failed(ApiError.AlreadyHandled)
+        val next = Feedback.nextMark(current, tapped)
+        val result = api.markAnswer(turnId, next)
+        _answerMark.update { s ->
+            if (s == null || s.turnId != turnId) {
+                s
+            } else {
+                when (result) {
+                    is ApiResult.Ok -> s.copy(mark = next, busy = false)
+                    is ApiResult.Failed -> when (result.error) {
+                        ApiError.NotFound, ApiError.NotAvailable ->
+                            s.copy(busy = false, unavailable = true)
+                        else -> s.copy(busy = false)
+                    }
+                }
+            }
+        }
+        if (result is ApiResult.Failed &&
+            result.error != ApiError.NotFound && result.error != ApiError.NotAvailable
+        ) {
+            _notice.value = "That mark did not reach the desktop. " + describe(result.error)
         }
         return result
     }

@@ -39,6 +39,7 @@ import com.jarvis.client.face.FaceQuality
 import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.Feedback
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.PlatformReadiness
@@ -482,6 +483,10 @@ class MainActivity : FragmentActivity() {
         // The owner's last question, for Home's "You" line above the reply.
         // In memory only - ChatSession never writes it to disk.
         val lastQuestion by chat.question.collectAsState()
+        // The answer's id (`turn_id`) and the owner's mark on it, for the
+        // Right / Wrong buttons under the answer. Ids only, memory only.
+        val answerTurnId by chat.turnId.collectAsState()
+        val answerMark by JarvisRuntime.answerMark.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
         val idleColour = bindings.of(FaceState.IDLE).tint ?: com.jarvis.client.face.Palette.ICE_3
@@ -1026,6 +1031,15 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             },
+                            onKeepBothMemory = { id ->
+                                if (memoryDecideBusyId == null) {
+                                    memoryDecideBusyId = id
+                                    scope.launch {
+                                        JarvisRuntime.keepBothMemory(id)
+                                        memoryDecideBusyId = null
+                                    }
+                                }
+                            },
                             sleepOffer = cachedSleepOffer,
                             sleepOfferBusy = sleepOfferBusy,
                             onSleepTimeAction = { enabled, remind ->
@@ -1247,6 +1261,7 @@ class MainActivity : FragmentActivity() {
                             glow = look.glow,
                             calmMotion = calmMotion,
                             lastUserText = lastQuestion,
+                            answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1342,6 +1357,11 @@ class MainActivity : FragmentActivity() {
                                 // Home's temporary shrink for an approval or the
                                 // keyboard, which would overwrite their layout.
                                 onFaceFractionCommitted = appearance::setFaceFraction,
+                                // One answer, one mark. The runtime refuses on a
+                                // stale link and works out set / change / take back.
+                                onMarkAnswer = { turnId, mark ->
+                                    JarvisRuntime.markAnswerDetached(turnId, mark)
+                                },
                             )
                         },
                         modifier = root,

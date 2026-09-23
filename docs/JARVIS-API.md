@@ -285,9 +285,20 @@ two minutes of silence is a wedge (`JarvisApi.kt:192-215`).
 `X-Jarvis-Route` header (JSON) now carries `turn_id`, a 32-character hex id
 for this answer. Show a right/wrong mark on the answer only when it is there,
 and post it to `/api/feedback/mark` (§6). Missing means an older backend or
-that recording failed - show no mark buttons. Neither client's chat code was
-checked for whether it passes response headers through to the screen; if it
-does not, it will need to.
+that recording failed - show no mark buttons. **Android reads it** in
+`ChatSession.send` (`ChatSession.kt:204`, parsed by
+`Feedback.turnIdFromRouteHeader` in `net/Learning.kt`): the header must be a
+JSON object and the id exactly 32 lowercase hex characters, the same rule the
+backend's `jarvis_feedback._TURN` applies, or the phone shows no buttons. The
+id is cleared the moment a new question is sent, so a mark can never land on
+the answer being replaced. Home shows "Was this right?" with Right and
+Wrong under a finished answer; tapping the chosen one again sends `"none"`;
+nothing is sent while the event stream is stale (the same `actionBlocker` as
+the other writes); a `404` (unknown answer) or `503` (module missing) swaps
+the buttons for one quiet line. The phone does not read
+`/api/feedback/counts` - a per-fact list of counts needs the fact list beside
+it, which is the desktop Brain's job. The desktop's chat code was not checked
+here.
 
 **No tool receipt.** A 200 from `/api/chat` means "a chat completed", not
 "the thing you asked for happened". There is no `tool_calls` field on the
@@ -355,7 +366,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/watch` | GET | `routes.rs:24` | **no** | |
 | `/api/watch/report` | GET | `routes.rs:27` | **no** | A peek. Marking read is a POST on purpose. |
 | `/api/memory/status` | GET | `routes.rs:28` | **no** | |
-| `/api/memory/pending` | GET | `routes.rs:29` | via `probe` (`BrainScreen.kt:697`) | The review QUEUE, never the corpus. |
+| `/api/memory/pending` | GET | `routes.rs:29` | via `probe`, as `/api/memory/pending?retire_cards=1` (`MemoryCards.PENDING_PATH`, read by `JarvisRuntime.refreshBrain`/`refreshMemoryQueue`) | The review QUEUE, never the corpus. The phone asks for retire cards because it labels them correctly - see below. |
 | `/api/memory/facts` | GET | `routes.rs:32`, `brain.rs:413` | `JarvisApi.kt:429` | Takes `?known_at=<unix seconds>` — "what did I believe then?" |
 | `/api/memory/export` | GET | `brain.rs:382` | **no** | |
 | `/api/initiative` | GET | `routes.rs:33` | via `probe` | The **only** list route that uses the key `items`. |
@@ -364,8 +375,8 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/config` | GET | `routes.rs:36` | **no** | **Read-only: writing answers 501.** This is why there is no shared place to store a preference — `API-DISAGREEMENTS.md` §11. |
 | `/api/visual-spec` | GET | `spec_drift.rs:50` | **no** | Desktop checks its bundled spec against the server's at startup. The phone never fetches it. |
 | `/api/appearance` | GET / POST | `appearance.rs:41` | `JarvisApi.kt:381`, `:391` | See §7 — the clients disagree about whether this exists. |
-| `/api/feedback/counts` | GET | **no** | **no** | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
-| `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
+| `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
+| `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
 
 **`/api/models` gains `speed`** (`speed-record.patch`), next to `offload`:
@@ -378,7 +389,10 @@ path ever appears in it (`routes.rs:67-101`).
 line for `by_model[current]`; show `note` as a warning line only when
 `slowdown.slower` is true; show `last_switch_note` word for word beside the
 rollback button when `last_switch` is set. Numbers only - nothing in it is
-conversation text.
+conversation text. **Android** does exactly those three things in Mind's Model
+section (`ModelSpeed.from` in `ApiModels.kt`, drawn by `BrainScreen.kt`'s
+`ModelsPlate`); `by_model` is matched to the running model by name, treating
+`name` and `name:latest` as the same.
 
 **`/api/graph` gains `sources.documents_not_ours`** (`documents-owned.patch`):
 true means a `documents` table made by another program (most likely
@@ -407,6 +421,20 @@ adds four:
 | `keep_both_ok` | bool | True only on a correction card (one that would retire `replaces_text` by adding a new fact). **False on a "retire this?" card** (`source == "feedback_retire"`), even though that card also has `replaces_id`. Only when true, show a third button, "Both are true", which posts `{"id": row.id}` to `/api/memory/keep_both`. |
 | `verbatim` | bool | True when `source` is `"remember"`: the owner's own words from a "Remember:" message. Label it that way. |
 
+**How the phone draws these** (`MemoryCards.from` in `net/Learning.kt`, pinned
+by `LearningTest`; drawn by `BrainScreen.kt`'s `MemoryProposalRow`): each `why`
+under the plain line "Careful: this may be an instruction someone slipped in,
+not a fact about you." and "If you did not say this, discard it." - both
+buttons stay; `flags_checked: false` gets one quiet line saying the check could
+not run, and an absent `flags_checked` says nothing; a `verbatim` card gets a
+"Your own words" label; a correction (a card with a non-zero `replaces_id`)
+shows "Would replace: <replaces_text>", and "Both are true" only when
+`keep_both_ok` is true AND the card is not a retire card AND it has an id. A
+card with `replaces` words but no `replaces_id` is shown as a plain new fact,
+because `_accept()` retires only by id. Under the cards: `remember_last.note`
+when `queued` is false (a queued one is already a card), and
+`near_duplicates_note`.
+
 `setup` may also carry `near_duplicate_check` (`"on"`, or why not),
 `near_duplicates_dropped` + `near_duplicates_note` (only once one has been
 dropped), and `remember_last`: `{"at", "queued", "reason", "note",
@@ -422,6 +450,9 @@ accepting it (`/api/memory/decide {"id", "accept": true}`) **retires** the
 fact, and discarding it keeps the fact exactly as it is. Label accept
 "Retire it" and discard "Keep using it"; show `replaces_text` as the fact in
 question and `text` as the reason; show no confidence; no "Both are true".
+**Android** labels accept "Stop using this fact" (the same action in plainer
+words) and discard "Keep using it", with the line "Stopping it does not delete
+it. The fact stays in the history - Jarvis just stops using it."
 The desktop's current Keep button, and its "Kept. Jarvis can recall it now."
 reply, would say the opposite of what happens on this card.
 
@@ -452,8 +483,8 @@ lists it too - it is a backup, not a card list.
 | `/api/models/switch` | POST | `{"ref": …}` | `brain.rs:435` | `JarvisApi.kt:310` | Allowed from the phone since the 2026-09-18 amendment: tier `ask`, so success means "a card was raised". |
 | `/api/models/rollback` | POST | `{}` | `brain.rs:436` | `JarvisApi.kt:314` | Tier `auto`; never waits. |
 | `/api/memory/decide` | POST | `{"id": <int>, "accept": bool}` | `brain.rs:283` | `JarvisApi.kt:417` | One id, one decision. **No list form anywhere** — a "keep all" would be an approve-all with another name. |
-| `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | **no** | **no** | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
-| `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | **no** | **no** | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
+| `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | **no** | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
+| `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | **no** | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs:308` | **no** | Retires rather than deletes. No undo. |
 | `/api/memory/edit` | POST | object | `brain.rs:329` | **no** | |
 | `/api/memory/learning` | POST | object | `brain.rs:344` | **no** | |

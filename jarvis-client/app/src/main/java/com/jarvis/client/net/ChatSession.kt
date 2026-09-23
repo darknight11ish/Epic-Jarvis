@@ -62,6 +62,20 @@ class ChatSession(private val api: JarvisApi) {
      */
     val question: StateFlow<String?> = _question.asStateFlow()
 
+    private val _turnId = MutableStateFlow<String?>(null)
+
+    /**
+     * The id the desktop gave the answer now on screen, or null.
+     *
+     * Read from the answer's `X-Jarvis-Route` response header, where
+     * `feedback.patch` puts it as `turn_id`, so the owner can mark THIS answer
+     * right or wrong. Null until the headers of the current answer arrive,
+     * and null for good on a backend that does not send one - Home then shows
+     * no mark buttons at all. Memory only, like [question]: an id and nothing
+     * else, and never written anywhere.
+     */
+    val turnId: StateFlow<String?> = _turnId.asStateFlow()
+
     @Volatile private var call: Call? = null
 
     /**
@@ -94,6 +108,9 @@ class ChatSession(private val api: JarvisApi) {
         // a question that got no answer is still what the owner asked, and
         // the screen should not go on showing the one before it.
         _question.value = message
+        // The previous answer's id goes with the previous answer: a mark
+        // tapped now must never land on the answer that is being replaced.
+        _turnId.value = null
 
         val c = api.chatCall(message)
         if (c == null) {
@@ -180,6 +197,12 @@ class ChatSession(private val api: JarvisApi) {
                         )
                         return@use
                     }
+                    // The answer's id, from the headers, which arrive before
+                    // the first word. Same identity guard as every other
+                    // write to the shared flows: a cancelled call unwinding
+                    // late must not put its id beside the new answer.
+                    val tid = Feedback.turnIdFromRouteHeader(resp.header(Feedback.ROUTE_HEADER))
+                    if (call === c) _turnId.value = tid
                     // Decoded as CHARACTERS, not as whatever bytes happened
                     // to be buffered.
                     //

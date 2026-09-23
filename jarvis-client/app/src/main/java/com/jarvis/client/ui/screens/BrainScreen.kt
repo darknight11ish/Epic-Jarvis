@@ -38,6 +38,9 @@ import com.jarvis.client.ModelRequest
 import com.jarvis.client.SectionRead
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.JobRecord
+import com.jarvis.client.net.MemoryCardKind
+import com.jarvis.client.net.MemoryCardView
+import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ModelsInfo
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
@@ -54,6 +57,7 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Refuse
 import com.jarvis.client.ui.parts.Rule
+import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.ageText
@@ -101,6 +105,13 @@ fun BrainScreen(
     /** Which proposal, if any, has a decision in flight - never two at once. */
     memoryDecideBusyId: Long?,
     onDecideMemory: (id: Long, accept: Boolean) -> Unit,
+    /**
+     * "Both are true" on a correction card - keep the new fact and the old
+     * one. Only ever offered where the card's own `keep_both_ok` says so;
+     * shares [memoryDecideBusyId] with Keep/Discard, so one card gets one
+     * answer.
+     */
+    onKeepBothMemory: (id: Long) -> Unit = {},
     /**
      * The daily "tidy memory overnight?" card, or null to show none.
      *
@@ -339,6 +350,7 @@ fun BrainScreen(
                     busyId = memoryDecideBusyId,
                     onKeep = { id -> onDecideMemory(id, true) },
                     onDiscard = { id -> onDecideMemory(id, false) },
+                    onKeepBoth = onKeepBothMemory,
                     sleepOffer = sleepOffer,
                     sleepOfferBusy = sleepOfferBusy,
                     onSleepTimeAction = onSleepTimeAction,
@@ -588,6 +600,13 @@ private fun ModelsPlate(
             )
             Gap(10)
         }
+        // speed-record.patch. The backend's own sentence, and only when it
+        // says the running model got slower - never built from the numbers
+        // here, so this screen and the desktop cannot say it differently.
+        models.speed?.slowdownNote?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = chrome.warnInk)
+            Gap(10)
+        }
         if (entries.isEmpty()) {
             Text(
                 "No models reported.",
@@ -633,6 +652,16 @@ private fun ModelsPlate(
                         )
                     }
                 }
+            }
+            models.speed?.currentLine?.let {
+                Gap(4)
+                Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            }
+            // Old speed against new, word for word from the backend, beside
+            // the button that undoes the switch.
+            models.speed?.lastSwitchNote?.let {
+                Gap(6)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
             }
             val previous = models.previous?.takeIf { it.isNotBlank() && it != current }
             if (previous != null) {
@@ -1031,6 +1060,7 @@ private fun MemoryQueue(
     busyId: Long?,
     onKeep: (id: Long) -> Unit,
     onDiscard: (id: Long) -> Unit,
+    onKeepBoth: (id: Long) -> Unit,
     sleepOffer: JsonObject?,
     sleepOfferBusy: Boolean,
     onSleepTimeAction: (enabled: Boolean?, remind: Boolean?) -> Unit,
@@ -1044,8 +1074,11 @@ private fun MemoryQueue(
     // hoisted above the null branch so the remember is not behind a conditional
     // return.
     val items = remember(data) {
-        (data?.get("pending") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+        (data?.get("pending") as? JsonArray).orEmpty()
+            .mapNotNull { it as? JsonObject }
+            .map { MemoryCards.from(it) }
     }
+    val setupNotes = remember(data) { MemoryCards.setupNotes(data) }
     Section("Memory awaiting review") {
         if (sleepOffer != null) {
             SleepOfferCard(
@@ -1070,14 +1103,12 @@ private fun MemoryQueue(
                     style = MaterialTheme.typography.bodyMedium,
                     color = chrome.textMid,
                 )
-                return@Plate
             }
-            items.forEachIndexed { i, item ->
+            items.forEachIndexed { i, card ->
                 if (i > 0) Rule()
-                val id = item.str("id")?.toLongOrNull()
+                val id = card.id
                 MemoryProposalRow(
-                    text = item.str("text") ?: "(no text)",
-                    source = item.str("source"),
+                    card = card,
                     busy = id != null && id == busyId,
                     canAct = canAct,
                     // A row with no readable id can be shown but not decided -
@@ -1085,7 +1116,14 @@ private fun MemoryQueue(
                     // as a section with no data at all.
                     onKeep = id?.let { { onKeep(it) } },
                     onDiscard = id?.let { { onDiscard(it) } },
+                    onKeepBoth = id?.takeIf { card.bothAreTrue }?.let { { onKeepBoth(it) } },
                 )
+            }
+            // Why the last "Remember:" did not become a card, and how many
+            // repeat cards were dropped - the backend's own sentences.
+            setupNotes.forEach { note ->
+                Gap(10)
+                Text(note, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
             }
         }
     }
@@ -1141,40 +1179,112 @@ private fun SleepOfferCard(
     }
 }
 
+/**
+ * One review card. What it says and which answers it offers come from
+ * [MemoryCards.from], which the unit tests pin:
+ *
+ *  - a planted-instruction warning, in plain words, when the backend flagged
+ *    the text (a warning only - both answers still work);
+ *  - "Your own words" on a card from a "Remember:" message;
+ *  - on a correction, the old fact it would replace, and a third answer,
+ *    "Both are true", only when the backend says that answer fits;
+ *  - on a "stop using this fact?" card, buttons that say what they do -
+ *    accepting RETIRES the fact, so it must never read "Keep".
+ *
+ * Still one card, one decision. Nothing here answers more than one card.
+ */
 @Composable
 private fun MemoryProposalRow(
-    text: String,
-    source: String?,
+    card: MemoryCardView,
     busy: Boolean,
     canAct: Boolean,
     onKeep: (() -> Unit)?,
     onDiscard: (() -> Unit)?,
+    onKeepBoth: (() -> Unit)?,
 ) {
     val chrome = LocalChrome.current
     Column {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
-        if (source != null) {
+        if (card.warnings.isNotEmpty()) {
+            Plate(outline = chrome.warnInk.copy(alpha = 0.5f)) {
+                Kicker("Check this one", color = chrome.warnInk)
+                Gap(4)
+                Text(
+                    MemoryCards.PLANTED_HEADLINE,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.warnInk,
+                )
+                card.warnings.forEach { why ->
+                    Gap(2)
+                    Text("• $why", style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                }
+                Gap(4)
+                Text(
+                    MemoryCards.PLANTED_ADVICE,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid,
+                )
+            }
+            Gap(8)
+        }
+        if (card.kind == MemoryCardKind.RETIRE) {
+            Kicker(MemoryCards.RETIRE_QUESTION, color = chrome.warnInk)
+            Gap(4)
+        }
+        Text(card.fact, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        card.reason?.let {
+            Gap(4)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        card.replaces?.let {
+            Gap(4)
+            Text(
+                "Would replace: $it",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+        }
+        if (card.ownWords) {
+            Gap(4)
+            Pill("Your own words", color = chrome.textMid)
+        }
+        card.sourceLine?.let {
             Gap(2)
-            Text("from $source", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        if (card.checked == false) {
+            Gap(2)
+            Text(MemoryCards.NOT_CHECKED, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
         Gap(6)
         // Affirm/Refuse, not two Quiets tinted okInk/badInk - this app's own
         // rule (SHARED-LOOK.md §9) is that ok and bad are never told apart by
         // colour alone, because verdant-4/rose-4 simulate to nearly the same
         // beige for a deuteranope. Every other approve/deny pair already uses
-        // this shape (ApprovalCard's Approve/Deny); this row was the one the
-        // Sept 18 UI audit found still hadn't been moved over.
+        // this shape (ApprovalCard's Approve/Deny).
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Affirm(
-                if (busy) "Keeping…" else "Keep",
+                if (busy) "Sending…" else card.acceptLabel,
                 enabled = !busy && canAct && onKeep != null,
                 onClick = { onKeep?.invoke() },
             )
             Refuse(
-                if (busy) "Discarding…" else "Discard",
+                if (busy) "Sending…" else card.discardLabel,
                 enabled = !busy && canAct && onDiscard != null,
                 onClick = { onDiscard?.invoke() },
             )
+        }
+        if (onKeepBoth != null) {
+            Gap(8)
+            Secondary(
+                if (busy) "Sending…" else MemoryCards.BOTH_ARE_TRUE,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !busy && canAct,
+                onClick = onKeepBoth,
+            )
+        }
+        card.explainer?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
     }
 }

@@ -426,6 +426,35 @@ class JarvisApi(
         postJson("/api/memory/decide", """{"id":$id,"accept":$accept}""")
 
     /**
+     * The third answer on a correction card, "Both are true": keep the new
+     * fact AND keep the old one - nothing is retired (`memory-intake.patch`).
+     * One PROPOSAL id, one decision, like [decideMemory]; no list form.
+     *
+     * The backend answers 409 for a card that has no old fact to keep (and
+     * for a "stop using this fact?" card), which [postJson] reports as
+     * [ApiError.AlreadyHandled]; 404 when the card was already decided. The
+     * screen only offers this where the row's own `keep_both_ok` is true,
+     * so on a backend without the route the button never appears.
+     */
+    suspend fun keepBothMemory(id: Long): ApiResult<Unit> =
+        postJson(MemoryCards.KEEP_BOTH_PATH, MemoryCards.keepBothBody(id))
+
+    /**
+     * The owner's right/wrong mark on ONE answer - `POST /api/feedback/mark`
+     * (`feedback.patch`). [AnswerMark.NONE] takes a mark back. One id per
+     * call and no list form: the backend refuses a list, because a "mark
+     * all" would move every fact's counter at once on one tap.
+     *
+     * A mark never changes memory. At most it makes the desktop queue ONE
+     * "stop using this fact?" card, which the owner still has to answer.
+     */
+    suspend fun markAnswer(turnId: String, mark: AnswerMark): ApiResult<Unit> {
+        val body = Feedback.markBody(turnId, mark)
+            ?: return ApiResult.Failed(ApiError.Malformed("not an answer id"))
+        return postJson(Feedback.MARK_PATH, body)
+    }
+
+    /**
      * "What did I believe as of this moment?" - `GET /api/memory/facts?known_at=`,
      * the exact route the desktop's 2026-09-18 feature audit named for this
      * (§3, "Memory consolidation", P3). Read-only, and still not the memory

@@ -4,9 +4,12 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
+import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
+import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.SaidAloud
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
@@ -214,6 +217,103 @@ class ApiContractTest {
         assertEquals(ApiError.BadToken, (out as ApiResult.Failed).error)
     }
 
+    // ---------------------------------------------------------- learning ---
+
+    /**
+     * `feedback.patch`: one answer id and one mark, and nothing else - the
+     * route refuses a list, so there can be no "mark all".
+     */
+    @Test
+    fun markingAnAnswerPostsOneIdAndOneMark() = runBlocking {
+        routes["/api/feedback/mark"] = ok(
+            """{"ok":true,"turn_id":"$TURN","mark":"wrong","was":"none","changed":true,"facts":2,"retire_cards_raised":0}""",
+        )
+        val out = api.markAnswer(TURN, AnswerMark.WRONG)
+        assertTrue("mark failed: $out", out is ApiResult.Ok)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("POST", req.method)
+        assertEquals("/api/feedback/mark", req.path)
+        assertEquals("hud", req.getHeader("X-Jarvis-Client"))
+        assertEquals("""{"turn_id":"$TURN","mark":"wrong"}""", req.body.readUtf8())
+    }
+
+    /** A backend without jarvis_feedback.py answers 503 - "not here", not "broken". */
+    @Test
+    fun markingOnABackendWithoutTheModuleIsNotAvailable() = runBlocking {
+        routes["/api/feedback/mark"] = MockResponse().setResponseCode(503)
+            .setBody("""{"error":"ModuleNotFoundError: jarvis_feedback"}""")
+        val out = api.markAnswer(TURN, AnswerMark.RIGHT)
+        assertEquals(ApiError.NotAvailable, (out as ApiResult.Failed).error)
+    }
+
+    /** An id the backend would refuse is never sent at all. */
+    @Test
+    fun aBadAnswerIdIsNeverSent() = runBlocking {
+        val out = api.markAnswer("not-an-id", AnswerMark.WRONG)
+        assertTrue(out is ApiResult.Failed)
+        assertEquals(0, server.requestCount)
+    }
+
+    /** `memory-intake.patch`: "Both are true" posts ONE proposal id, like decide. */
+    @Test
+    fun bothAreTruePostsOneProposalId() = runBlocking {
+        routes["/api/memory/keep_both"] = ok(
+            """{"ok":true,"id":7,"fact_id":40,"kept_id":12,"kept_text":"old"}""",
+        )
+        val out = api.keepBothMemory(7)
+        assertTrue(out is ApiResult.Ok)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("/api/memory/keep_both", req.path)
+        assertEquals("""{"id":7}""", req.body.readUtf8())
+    }
+
+    /** A card with no old fact to keep: 409, reported as "already handled", not a crash. */
+    @Test
+    fun bothAreTrueRefusedIsA409NotAFailureWall() = runBlocking {
+        routes["/api/memory/keep_both"] = MockResponse().setResponseCode(409)
+            .setBody("""{"ok":false,"reason":"not_a_correction","note":"x"}""")
+        val out = api.keepBothMemory(7)
+        assertEquals(ApiError.AlreadyHandled, (out as ApiResult.Failed).error)
+    }
+
+    /**
+     * The review queue is read WITH `retire_cards=1`, because this app labels
+     * the "stop using this fact?" card for what it does. Without it the
+     * backend hides those cards and they wait for ever.
+     */
+    @Test
+    fun theReviewQueueAsksForRetireCards() = runBlocking {
+        routes["/api/memory/pending"] = ok("""{"available":true,"pending":[],"setup":{}}""")
+        api.probe(MemoryCards.PENDING_PATH)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("/api/memory/pending?retire_cards=1", req.path)
+    }
+
+    /**
+     * The answer's id comes from the `X-Jarvis-Route` response header, through
+     * the real ChatSession, and a new question clears it before its own
+     * answer arrives.
+     */
+    @Test
+    fun theAnswersIdIsReadFromTheRouteHeader() = runBlocking {
+        routes["/api/chat"] = MockResponse().setResponseCode(200)
+            .setHeader("Content-Type", "text/plain")
+            .setHeader("X-Jarvis-Route", """{"lane":"local","injected_ids":["mem:3"],"turn_id":"$TURN"}""")
+            .setBody("Hello there.")
+        val chat = ChatSession(api)
+        val reply = chat.send("hi")
+        assertEquals("Hello there.", reply)
+        assertEquals(TURN, chat.turnId.value)
+
+        // An older backend: no turn_id, so no mark buttons for this answer.
+        routes["/api/chat"] = MockResponse().setResponseCode(200)
+            .setHeader("Content-Type", "text/plain")
+            .setHeader("X-Jarvis-Route", """{"lane":"local"}""")
+            .setBody("Again.")
+        chat.send("again")
+        assertEquals(null, chat.turnId.value)
+    }
+
     // ------------------------------------------------------------- voice ---
 
     /**
@@ -266,5 +366,6 @@ class ApiContractTest {
 
     private companion object {
         const val TOKEN = "jarvis_pair_contract_test"
+        const val TURN = "0123456789abcdef0123456789abcdef"
     }
 }
