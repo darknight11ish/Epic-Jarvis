@@ -482,8 +482,12 @@ private fun GLFaceSurface(
                 // The torus mesh needs real depth testing - the near wall
                 // has to hide the far one - and GLSurfaceView's own default
                 // config carries no depth buffer at all unless one is asked
-                // for. RGBA8888 plus a 16-bit depth buffer, no stencil.
-                setEGLConfigChooser(8, 8, 8, 8, 16, 0)
+                // for. RGBA8888 plus a 16-bit depth buffer, no stencil, and
+                // now 4x multisampling where the device has it: the kit's
+                // WebGL context antialiases its mesh edges, and without it
+                // the torus and drum silhouettes were single-sample
+                // staircases. Falls back to exactly the old config.
+                setEGLConfigChooser(com.jarvis.client.face.gl.GL.MsaaConfigChooser())
                 setRenderer(mesh)
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
             }.also { glSurfaceView = it }
@@ -540,14 +544,19 @@ private fun GLFaceSurface(
         //
         // It is this face's glow, so the Glow setting scales it the same way
         // it scales the canvas faces' sprite - down only, `glow` is 0..1.
+        //
+        // The kit's wash reaches half its canvas (`S * .5`), and its torus is
+        // `S * 1.05 / 4` per unit where this one is `radius` per unit - so
+        // half the kit's canvas is 1.9 radii here. It was 2.5, a wash a
+        // third wider than the kit's; narrowing it only ever takes light away.
         if (face.id == "tokamak" && glow > 0f) {
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(hot.copy(alpha = 0.13f * glow), hot.copy(alpha = 0f)),
                     center = Offset(cx, cy),
-                    radius = radius * 2.5f,
+                    radius = radius * 1.9f,
                 ),
-                radius = radius * 2.5f,
+                radius = radius * 1.9f,
                 center = Offset(cx, cy),
             )
         }

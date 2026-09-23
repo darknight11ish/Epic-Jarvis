@@ -71,21 +71,22 @@ interface Face {
  * engine is — though as of this writing no face's geometry has one; only
  * `Resolve.kt`'s colours do (`PatternGoldenTest`).
  *
- * Spectrum, Coreplate, Workbench, Swarm, Shoal, Accretion and Cascade are a
+ * Spectrum, Coreplate, Workbench, Swarm, Shoal and Accretion are a
  * different case, and it is worth being honest about which. The spec marks
- * all seven `integrates_per_frame: true` because their JS/desktop reference
+ * all six `integrates_per_frame: true` because their JS/desktop reference
  * genuinely does carry state between frames — a running FFT smoother, boid
- * velocities, a DLA grid, a live particle list. None of that was ported here.
- * Each one is instead reimplemented as a deterministic function of `t`, a
- * fixed per-element seed (`hash01` or a seeded `Random`), and `f.amp` — which
+ * velocities, a DLA grid. None of that was ported here as frame-to-frame
+ * state. Each one is instead reimplemented as a deterministic function of `t`
+ * (Accretion: of the walker count `f.tableAngle` implies, see its own
+ * comment), a fixed per-element seed (`hash01` or a seeded `Random`), and `f.amp` — which
  * is already smoothed upstream by `FaceHost.advance()`, so there is no
  * envelope left to track locally. Nothing here is appended to, removed from,
  * or nudged by its own last frame; call `draw` with the same `(t, amp)` twice
- * and it draws the same picture twice. That makes these seven exactly as
+ * and it draws the same picture twice. That makes these six exactly as
  * pinnable as Rime and Kirkwood, even though the spec's flag — describing the
  * *reference's* technique, not this port's — says otherwise. See
- * `SpecDriftTest`'s `iris and membrane are the only offered faces that
- * cannot be pinned` for where that distinction is enforced and argued in
+ * `SpecDriftTest`'s `iris membrane and cascade are the only offered faces
+ * that cannot be pinned` for where that distinction is enforced and argued in
  * more detail.
  *
  * Membrane is the one face here that genuinely cannot make that same claim.
@@ -93,7 +94,15 @@ interface Face {
  * the next one - a real dependency on its own history, not a description of
  * a technique this port declined to use. It joins `iris` in that same test's
  * pinned exact set, by name, argued there rather than folded into the
- * deterministic seven above where it would not belong.
+ * deterministic six above where it would not belong.
+ *
+ * Cascade joined it. It was the seventh "deterministic" face until it was
+ * ported to the reactor kit's own particle system: a parcel's path depends
+ * on the drag and random walk of every tick before it and on the flow of
+ * whichever state was showing when it fell, and a pure function of the
+ * frame could only fake that - which is exactly what it used to do, as a
+ * field of dashes on a fixed fall cycle that looked nothing like the kit.
+ * Its own comment says how little history it keeps (the last ~4 seconds).
  */
 object Faces {
     val all: List<Face> = listOf(
@@ -1206,139 +1215,507 @@ object Shoal : Face {
 }
 
 /**
- * A branching structure that grows outward from a seed.
+ * Diffusion-limited aggregation: particles wander at random until they touch
+ * what is already there, then stick for good. This is the reactor kit's own
+ * algorithm (`accretion` in `docs/reference/jarvis-reactor-kit.html`), ported
+ * walker for walker: the 243-cell grid, the release circle just outside the
+ * cluster, the kill circle at `2.2 * rmax + 8`, the 420-step walks, both
+ * reset rules, and the drawing - one square per stuck cell, coloured and
+ * faded by its distance from the seed, with the faint rim circle on top.
  *
- * The reference genuinely grows a diffusion-limited-aggregation cluster one
- * random walker at a time — real per-frame state, and an unbounded one at
- * that (a grid that fills over minutes of uptime). This uses Rime's own
- * technique instead: deterministic, hash-seeded branches, revealed
- * progressively as a function of `t` and cycling rather than accumulating —
- * the exact choice Rime's own comment already explains for crystal growth,
- * applied here to an asymmetric, coral-like branch pattern instead of Rime's
- * clean six-fold one.
+ * It used to be something else wearing the name: five hash-seeded arms of 22
+ * line segments, on the grounds that the reference's grid was "unbounded (a
+ * grid that fills over minutes of uptime)". That was not true of the
+ * reference. Its grid is bounded (243 x 243 here, see [GW]), it starts over
+ * the moment the coral reaches the rim circle or covers 5.5% of the grid,
+ * and one whole growth takes about 9,000-12,000 walkers - four or five
+ * seconds at idle. Bounded, cheap (~15,000 random-walk steps a frame), and
+ * nothing like five arms. Side by side with the kit, the phone was showing
+ * a different face.
+ *
+ * It is still a pure function of the frame, which is the property
+ * `SpecDriftTest` pins this face on. The walker COUNT is the clock rather
+ * than the frame: `f.tableAngle` - which the shell integrates from
+ * [speedFor], so it already carries each state's rate, calm motion and the
+ * transforms, and never runs backwards - times [WALKERS_PER_UNIT] says how
+ * many walkers have been released since this face started, and each growth
+ * cycle draws its random numbers from a generator seeded by that cycle's own
+ * index. So the same `tableAngle` always grows the same coral however many
+ * frames it took to get there; [Growth] is a cache that walks forward to
+ * that count, not state the picture depends on. (One edge, stated rather
+ * than hidden: a THIRD simultaneous viewer - there are two slots, for the
+ * live face and a picker thumbnail - arriving far into a session cannot
+ * afford the replay from zero, and restarts at the cycle that count would
+ * roughly be on. Still a function of the count, just not the same coral.)
+ *
+ * What differs from the kit, deliberately:
+ *  - The kit's listening rate is also multiplied by `1 + amp * 2`. `f.amp`
+ *    is instantaneous; integrating it would make the walker count depend on
+ *    the microphone's whole history instead of on the frame. Listening still
+ *    grows at twice idle's rate, from [speedFor].
+ *  - Thinking in the kit sticks only 70% of the time. Which walkers get
+ *    rejected would depend on WHEN each was released, i.e. on the state
+ *    history, for the same reason. Every walker sticks here; thinking's coral
+ *    is a little less furry than the kit's, and grows at its 1.5x rate.
+ *  - The kit's rate is per display frame, so it grows twice as fast on a
+ *    120 Hz panel as on a 60 Hz one. This is the kit at 60 Hz, everywhere.
  */
 object Accretion : Face {
     override val id = "accretion"
     override val name = "Accretion"
 
-    private const val ARMS = 5
-    private const val SEGMENTS = 22
-
+    // The kit's walkers per frame - idle 40, listening 80, thinking 60,
+    // speaking 22 - as multiples of idle's. The shell integrates these into
+    // `f.tableAngle`, which is what the walker count reads.
     override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 0.9f
-        FaceState.THINKING -> 2.0f
-        FaceState.SPEAKING -> 1.1f
-        else -> 0.4f
+        FaceState.LISTENING -> 2.0f
+        FaceState.THINKING -> 1.5f
+        FaceState.SPEAKING -> 0.55f
+        else -> 1.0f
     }
+
+    /**
+     * The kit's `small_n(w, 84, 128)` in its solo view, which runs every face
+     * at a detail of 1.9 ("solo is what Jarvis will really look like"): 128 x
+     * 1.9 = 243 on any phone-sized face. The gallery's 128 is a thumbnail's
+     * grid; at 243 the coral is twice as fine, cells ~2 px on a phone.
+     */
+    private const val GW = 243
+    /** Idle's 40 walkers a frame, at 60 frames a second. */
+    private const val WALKERS_PER_UNIT = 40f * 60f
+    private const val MID = (GW - 1) / 2f
+    /** The rim circle; the coral starts over just inside it. */
+    private const val R0 = MID * 0.94f
+    /** `(GW/2)|0` in both axes - one cell off true centre, as in the kit. */
+    private const val SEED_CELL = (GW / 2) * GW + GW / 2
+    /** The kit's other reset: 5.5% of the grid covered. */
+    private const val FILL_LIMIT = GW * GW * 0.055f
+    private const val WALK_STEPS = 420
+    /**
+     * The most walkers one draw will replay to catch up. The live face moves
+     * 20-160 walkers a frame; a picker thumbnail starts from zero at ~3,000
+     * (~1 M random-walk steps, once, when the picker opens). Anything past
+     * this is the third-viewer edge described above.
+     */
+    private const val CATCH_UP_MAX = 6_000L
+    /** A typical cycle's walker count at GW 243, used only by that edge. */
+    private const val TYPICAL_CYCLE = 10_000L
+
+    /** The kit's `d`: each cell's distance from the seed, over MID. Fixed. */
+    private val dist = FloatArray(GW * GW) { q ->
+        val dx = q % GW - MID
+        val dy = q / GW - MID
+        kotlin.math.sqrt(dx * dx + dy * dy) / MID
+    }
+
+    private class Growth {
+        val grid = BooleanArray(GW * GW)
+        var cells = 0
+        var rmax = 1f
+        var cycle = 0
+        var released = -1L
+        var rng = 1
+        var lastUse = 0L
+
+        fun reset(nextCycle: Int) {
+            grid.fill(false)
+            grid[SEED_CELL] = true
+            cells = 1
+            rmax = 1f
+            cycle = nextCycle
+            // Any odd-mixed nonzero seed; xorshift must never be handed 0.
+            rng = (nextCycle * -1640531535 + 0x5BD1E995) or 1
+        }
+
+        /** xorshift32 -> [0, 1). Math.random's stand-in, seeded per cycle. */
+        fun next(): Float {
+            var x = rng
+            x = x xor (x shl 13)
+            x = x xor (x ushr 17)
+            x = x xor (x shl 5)
+            rng = x
+            return (x ushr 8) * (1f / 16_777_216f)
+        }
+
+        /** One walker, released, walked and (maybe) stuck - the kit's inner loop. */
+        fun walk() {
+            // The kit checks the fill limit once at the top of each frame;
+            // per walker is the same rule without a frame to hang it on.
+            if (cells > FILL_LIMIT) reset(cycle + 1)
+            val rl = minOf(R0, rmax + 3f)
+            val rk = minOf(MID - 1f, rmax * 2.2f + 8f)
+            val rk2 = rk * rk
+            val a = next() * PI2
+            // Math.round, which rounds halves up.
+            var x = kotlin.math.floor(MID + cos(a) * rl + 0.5f).toInt()
+            var y = kotlin.math.floor(MID + sin(a) * rl + 0.5f).toInt()
+            for (s in 0 until WALK_STEPS) {
+                x += (next() * 3f).toInt() - 1
+                y += (next() * 3f).toInt() - 1
+                if (x < 1 || y < 1 || x >= GW - 1 || y >= GW - 1) break
+                val dx = x - MID
+                val dy = y - MID
+                val rr2 = dx * dx + dy * dy
+                if (rr2 > rk2) break
+                val q = y * GW + x
+                if (grid[q - 1] || grid[q + 1] || grid[q - GW] || grid[q + GW]) {
+                    // The kit counts a stick even when the walker is standing
+                    // on a cell that is already set; so does this, since the
+                    // count is what the fill limit reads.
+                    grid[q] = true
+                    cells++
+                    val rr = kotlin.math.sqrt(rr2)
+                    if (rr > rmax) rmax = rr
+                    break
+                }
+            }
+            released++
+            if (rmax > R0 - 2f) reset(cycle + 1)
+        }
+    }
+
+    private val slots = arrayOf(Growth(), Growth())
+    private var uses = 0L
+
+    /** The coral after [target] walkers, from whichever slot can reach it. */
+    private fun growthAt(target: Long): Growth {
+        uses++
+        var best: Growth? = null
+        for (s in slots) {
+            if (s.released < 0 || s.released > target || target - s.released > CATCH_UP_MAX) continue
+            if (best == null || s.released > best.released) best = s
+        }
+        val g = best ?: slots.minBy { it.lastUse }.also { fresh ->
+            if (target <= CATCH_UP_MAX) {
+                fresh.reset(0)
+                fresh.released = 0L
+            } else {
+                // The third-viewer edge: see the class comment.
+                fresh.reset((target / TYPICAL_CYCLE).toInt())
+                fresh.released = target
+            }
+        }
+        while (g.released < target) g.walk()
+        g.lastUse = uses
+        return g
+    }
+
+    private fun shade(c: Color, m: Float) = Color(c.red * m, c.green * m, c.blue * m, c.alpha)
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
-        // Cycles out and resets rather than accumulating forever — the same
-        // choice Rime makes, for the same reason.
-        val grown = (0.4f + 0.5f * (0.5f + 0.5f * sin(f.t * 0.25f)) + f.amp * 0.15f).coerceIn(0f, 1f)
-        for (arm in 0 until ARMS) {
-            val armSeed = arm * 71 + 3
-            var px = cx
-            var py = cy
-            var ang = hash01(armSeed) * PI2 + f.angle * 0.1f
-            for (seg in 0 until SEGMENTS) {
-                val f01 = seg / (SEGMENTS - 1f)
-                if (f01 > grown) break
-                val h = hash01(armSeed + seg * 13)
-                ang += (h - 0.5f) * 0.7f
-                val step = r * 0.045f * (1f - f01 * 0.3f)
-                val nx = px + cos(ang) * step
-                val ny = py + sin(ang) * step
-                val bright = 1f - f01
-                drawLine(
-                    color = mix(cool, hot, bright).copy(alpha = (0.35f + bright * 0.5f).coerceAtMost(1f)),
-                    start = Offset(px, py),
-                    end = Offset(nx, ny),
-                    strokeWidth = (r * 0.012f * (1f - f01 * 0.5f)).coerceAtLeast(0.7f),
+        val g = growthAt((f.tableAngle * WALKERS_PER_UNIT).toLong().coerceAtLeast(0L))
+
+        // The kit's canvas is `min(w, h)` = S wide and its faces reach about
+        // 0.44 S; this app hands every face its radius r instead, so S = 2r -
+        // the same equivalence Nucleus's shader uses (p = 1 at r). The grid
+        // spans the whole of S, as the kit's does, so a cell is S / GW, and
+        // each is drawn 1.25 cells wide so neighbours overlap into a
+        // continuous branch rather than a lattice - the kit's own numbers.
+        val sz = r * 2f
+        val cell = sz / GW
+        val ox = cx - sz / 2f
+        val oy = cy - sz / 2f
+        val side = androidx.compose.ui.geometry.Size(cell * 1.25f, cell * 1.25f)
+        // Age is encoded by distance from the seed, so the tips read hot.
+        val base = shade(cool, 0.55f)
+        val grid = g.grid
+        for (y in 0 until GW) {
+            val row = y * GW
+            for (x in 0 until GW) {
+                if (!grid[row + x]) continue
+                val d = dist[row + x]
+                drawRect(
+                    color = mix(base, hot, minOf(1f, d * 1.5f)),
+                    topLeft = Offset(ox + x * cell, oy + y * cell),
+                    size = side,
+                    alpha = (0.55f + d * 0.45f).coerceAtMost(1f),
                 )
-                if (hash01(armSeed + seg * 29 + 5) > 0.72f) {
-                    val side = if (hash01(armSeed + seg * 41) > 0.5f) 1f else -1f
-                    val bAng = ang + side * 0.9f
-                    val blen = step * 1.6f
-                    drawLine(
-                        color = mix(cool, hot, bright * 0.7f).copy(alpha = (0.2f + bright * 0.35f).coerceAtMost(1f)),
-                        start = Offset(nx, ny),
-                        end = Offset(nx + cos(bAng) * blen, ny + sin(bAng) * blen),
-                        strokeWidth = r * 0.006f,
-                    )
-                }
-                px = nx
-                py = ny
             }
         }
-        drawCircle(hot.copy(alpha = 0.7f), r * 0.02f, Offset(cx, cy))
+        // The rim the coral resets at. The kit's `lineWidth = 1` is one
+        // backing-store pixel, which at its default quality on a phone is
+        // almost exactly one device pixel - so a hairline here too.
+        drawCircle(
+            color = cool,
+            radius = R0 * cell,
+            center = Offset(cx, cy),
+            alpha = 0.22f,
+            style = Stroke(width = 1f),
+        )
     }
 }
 
 /**
- * Water leaving a lip as a sheet, breaking into falling parcels lower down.
+ * Water leaves the lip as a coherent sheet and only breaks up once it has
+ * fallen far enough for drag to win: glassy at the top, shredding in the
+ * middle, spray at the bottom, and a plume where the parcels bounce off the
+ * pool. The reactor kit's own particle system (`cascade` in
+ * `docs/reference/jarvis-reactor-kit.html`), ported parcel for parcel: the
+ * lip and its two ledges, the gradient sheet, per-parcel gravity, speed-
+ * dependent drag and a lateral random walk that grows with age, one bounce
+ * at 0.84 of the height, the plunge-pool glow, and each parcel drawn as a
+ * streak along its own velocity that thins and fades as it breaks up.
  *
- * The reference is a genuine particle system — added at the top, updated by
- * drag and gravity, removed at the bottom — which is real per-frame state,
- * and an unbounded list at that. Each parcel here instead follows a fixed
- * vertical fall cycle keyed to its own seed, `(t*speed + seed) mod 1`, so it
- * recycles forever with no list to grow or shrink: the standard
- * deterministic-rain technique, applied for the same reason Rime and
- * Accretion use one.
+ * It used to be 260 vertical dashes on a fixed fall cycle between two
+ * points, with a bar for the lip and a flat disc for the pool - no sheet, no
+ * drag, no spray, no bounce, a quarter of the kit's parcel count, and hard
+ * 0.6 px floors under widths the kit scales with the face. Recognisably
+ * "falling", but not this face.
+ *
+ * This one is genuinely stateful, and says so: a parcel's path depends on
+ * the drag and the random walk of every tick before it, and on the flow and
+ * spread of whichever state was showing when it fell - none of which a
+ * function of the current frame can know. Making it one (the old approach)
+ * is what produced the dashes: a pure function of `t` has to either rescale
+ * every parcel in flight the instant the state changes, or give up the
+ * physics. So `cascade` moves out of `SpecDriftTest`'s "deterministic
+ * despite the spec flag" set and into its stateful set, argued there.
+ *
+ * The state is kept as small and as honest as that allows:
+ *  - It ticks at a fixed 60 per unit of `f.tableAngle` ([speedFor] is 1 for
+ *    every state, so that is 60 a second times the shell's transform rate
+ *    and calm motion - BANKED's stopped clock stops the water too). The kit
+ *    ticks once per display frame instead, so it pours twice as fast on a
+ *    120 Hz panel; this is the kit at 60 Hz.
+ *  - A parcel lives at most ~250 ticks, so the picture never depends on
+ *    more than the last ~4 seconds. When the clock jumps (a new host, a
+ *    picker thumbnail, a long stall), [pour] refills the last 250 ticks from
+ *    a seed fixed by the tick count rather than trying to be continuous with
+ *    a history it does not have.
+ *  - Two slots, like Accretion's, so a thumbnail and the live face do not
+ *    keep throwing each other's water away.
+ *
+ * Cost: up to 1,400 parcels, one `drawLine` each - about 1-3 ms a frame on a
+ * mid-range phone at thinking's flow, the most expensive canvas face in this
+ * file after Kirkwood. The kit caps at the same 1,400.
  */
 object Cascade : Face {
     override val id = "cascade"
     override val name = "Cascade"
 
-    private const val N = 260
-    private val seedX = FloatArray(N) { hash01(it * 11 + 1) }
-    private val seedPhase = FloatArray(N) { hash01(it * 41 + 7) }
-    private val seedSize = FloatArray(N) { hash01(it * 53 + 13) }
+    // faces[].render.fit for cascade: the lip ledges run to the edge of the
+    // kit's canvas, so the whole picture is pulled in. Was left at the
+    // default 1, so the phone drew this face 22% larger than the kit does.
+    override val fit: Float = 0.82f
 
-    override fun speedFor(motion: FaceState) = when (motion) {
-        FaceState.LISTENING -> 1.1f
-        FaceState.THINKING -> 2.2f
-        FaceState.SPEAKING -> 1.3f
-        else -> 0.6f
+    // Not a spin rate - this face has none. 1 for every state makes
+    // `f.tableAngle` a plain clock carrying only the shell's transform rate
+    // and calm motion, which is what the particle ticks run on. Per-state
+    // pace lives in the flow table below, as it does in the kit.
+    override fun speedFor(motion: FaceState) = 1f
+
+    private data class St(val flow: Float, val spread: Float)
+
+    private fun stFor(motion: FaceState): St = when (motion) {
+        FaceState.LISTENING -> St(flow = 130f, spread = 0.20f)
+        FaceState.THINKING -> St(flow = 220f, spread = 0.34f)
+        FaceState.SPEAKING -> St(flow = 100f, spread = 0.17f)
+        else -> St(flow = 70f, spread = 0.14f)
     }
+
+    private const val TICKS_PER_UNIT = 60f
+    /** The kit's `parts.slice(-1400)`: the oldest parcels go first. */
+    private const val CAP = 1400
+    /** Room for one tick's emission on top of CAP (listening at full mic: 38). */
+    private const val HEADROOM = 64
+    /** `life > 4` at 0.016 a tick. Nothing older than this is on screen. */
+    private const val LONGEST_LIFE_TICKS = 251
+    /** The kit removes a parcel 20 px below its ~1,100 px canvas. */
+    private const val REMOVE_BELOW = 1.018f
+
+    // Geometry in the kit's canvas units, 0..1 across its square.
+    private const val LIP_Y = 0.16f
+    private const val LIP_X0 = 0.30f
+    private const val LIP_X1 = 0.70f
+    private const val BOUNCE_Y = 0.84f
+
+    /** One pour of water: parcels in birth order, oldest first, as the kit's array. */
+    private class Pour {
+        val x = FloatArray(CAP + HEADROOM)
+        val y = FloatArray(CAP + HEADROOM)
+        val vx = FloatArray(CAP + HEADROOM)
+        val vy = FloatArray(CAP + HEADROOM)
+        val rad = FloatArray(CAP + HEADROOM)
+        val life = FloatArray(CAP + HEADROOM)
+        val bounced = BooleanArray(CAP + HEADROOM)
+        var n = 0
+        var tick = -1L
+        var rng = 1
+        var lastUse = 0L
+
+        fun restart(atTick: Long) {
+            n = 0
+            tick = atTick
+            rng = (atTick.toInt() * -1640531535 + 0x27D4EB2F) or 1
+        }
+
+        fun next(): Float {
+            var v = rng
+            v = v xor (v shl 13)
+            v = v xor (v ushr 17)
+            v = v xor (v shl 5)
+            rng = v
+            return (v ushr 8) * (1f / 16_777_216f)
+        }
+
+        /** One tick of the kit's update, at SPEED 1. */
+        fun step(st: St, flowK: Float) {
+            // `for(i=0; i<flow*.12; i++)`: the kit emits the CEILING of that,
+            // nine a tick at idle.
+            val emit = st.flow * flowK * 0.12f
+            var i = 0
+            while (i < emit && n < x.size) {
+                x[n] = LIP_X0 + next() * (LIP_X1 - LIP_X0)
+                y[n] = LIP_Y
+                vx[n] = (next() - 0.5f) * 0.4f
+                vy[n] = 1f + next() * 0.6f
+                rad[n] = 0.4f + next() * 1.5f
+                life[n] = 0f
+                bounced[n] = false
+                n++
+                i++
+            }
+            var k = 0
+            for (j in 0 until n) {
+                val lf = life[j] + 0.016f
+                var nvy = vy[j] + 0.09f
+                // Drag grows with speed, which is what shreds the sheet. (On
+                // the way back UP after the bounce vy is negative and this
+                // briefly becomes a push - the kit's formula, kept.)
+                nvy *= 1f - minOf(0.06f, nvy * 0.004f)
+                var nvx = vx[j] + (next() - 0.5f) * st.spread * 0.5f * minOf(1f, lf * 2f)
+                val nx = x[j] + nvx * 0.012f
+                val ny = y[j] + nvy * 0.012f
+                var nr = rad[j]
+                var nb = bounced[j]
+                if (ny > BOUNCE_Y && !nb) {
+                    nb = true
+                    nvy *= -0.32f
+                    nvx += (next() - 0.5f) * 4f
+                    nr *= 0.6f
+                }
+                if (ny > REMOVE_BELOW || lf > 4f) continue
+                x[k] = nx; y[k] = ny; vx[k] = nvx; vy[k] = nvy
+                rad[k] = nr; life[k] = lf; bounced[k] = nb
+                k++
+            }
+            n = k
+            if (n > CAP) {
+                val drop = n - CAP
+                x.copyInto(x, 0, drop, n); y.copyInto(y, 0, drop, n)
+                vx.copyInto(vx, 0, drop, n); vy.copyInto(vy, 0, drop, n)
+                rad.copyInto(rad, 0, drop, n); life.copyInto(life, 0, drop, n)
+                bounced.copyInto(bounced, 0, drop, n)
+                n = CAP
+            }
+            tick++
+        }
+    }
+
+    private val pours = arrayOf(Pour(), Pour())
+    private var uses = 0L
+
+    /** The water at [target] ticks: advanced, or refilled if it cannot be. */
+    private fun pour(target: Long, st: St, flowK: Float): Pour {
+        uses++
+        var best: Pour? = null
+        for (p in pours) {
+            if (p.tick < 0 || p.tick > target || target - p.tick > LONGEST_LIFE_TICKS) continue
+            if (best == null || p.tick > best.tick) best = p
+        }
+        val p = best ?: pours.minBy { it.lastUse }.also {
+            it.restart(maxOf(0L, target - LONGEST_LIFE_TICKS))
+        }
+        while (p.tick < target) p.step(st, flowK)
+        p.lastUse = uses
+        return p
+    }
+
+    private fun shade(c: Color, m: Float) = Color(c.red * m, c.green * m, c.blue * m, c.alpha)
 
     override fun draw(
         scope: DrawScope, cx: Float, cy: Float, r: Float,
         hot: Color, cool: Color, f: FaceFrame,
     ) = with(scope) {
-        val flowRate = 0.5f + f.amp * 0.4f
-        val topY = cy - r * 0.85f
-        val botY = cy + r * 0.85f
-        for (i in 0 until N) {
-            var phase = (f.t * (0.7f + flowRate) + seedPhase[i]) % 1f
-            if (phase < 0f) phase += 1f
-            val x = cx + (seedX[i] - 0.5f) * r * 0.9f
-            // Squared phase, not linear: covers more distance per unit phase
-            // near the bottom than the top, the way a real fall accelerates.
-            val eased = phase * phase
-            val y = topY + eased * (botY - topY)
-            val fade = (1f - phase) * 0.6f + 0.4f
-            val half = r * 0.02f * (0.5f + seedSize[i])
+        val st = stFor(f.motion)
+        val flowK = if (f.motion == FaceState.LISTENING) 1f + f.amp * 1.4f else 1f
+        val p = pour((f.tableAngle * TICKS_PER_UNIT).toLong().coerceAtLeast(0L), st, flowK)
+
+        // The kit's square canvas is S = 2r across (see Accretion), and
+        // everything below is in its 0..1 units: u across, v down.
+        val sz = r * 2f
+        val left = cx - r
+        val top = cy - r
+        fun px(u: Float) = left + u * sz
+        fun py(v: Float) = top + v * sz
+
+        // The kit's canvas edge clips parcels that fly out sideways after
+        // the bounce. `fit` shrinks the drawing, not the canvas, so the card
+        // edge is at r / fit from the centre, not at r.
+        val card = r / fit
+        drawContext.canvas.save()
+        drawContext.transform.clipRect(cx - card, cy - card, cx + card, cy + card)
+
+        // The coherent sheet at the top, before break-up.
+        drawRect(
+            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                colors = listOf(hot.copy(alpha = 0.55f), hot.copy(alpha = 0f)),
+                startY = py(LIP_Y),
+                endY = py(0.52f),
+            ),
+            topLeft = Offset(px(LIP_X0), py(LIP_Y)),
+            size = androidx.compose.ui.geometry.Size((LIP_X1 - LIP_X0) * sz, 0.36f * sz),
+        )
+
+        // Parcels: streaks while fast, dots once broken up. Widths scale with
+        // the face as the kit's do (`r * S * .0035`, 0.75-3.6 px on a 1080 px
+        // face); the 0.5 floor is the kit's own, in its pixels.
+        for (j in 0 until p.n) {
+            val age = minOf(1f, p.life[j] * 1.3f)
+            val a = 0.10f + (1f - age) * 0.35f + if (p.bounced[j]) 0.18f else 0f
+            val x = p.x[j]
+            val y = p.y[j]
             drawLine(
-                color = mix(hot, cool, phase * 0.5f).copy(alpha = (fade * 0.7f).coerceAtMost(1f)),
-                start = Offset(x, y - half),
-                end = Offset(x, y + half),
-                strokeWidth = (r * 0.006f * (0.5f + seedSize[i])).coerceAtLeast(0.6f),
+                color = hot,
+                start = Offset(px(x), py(y)),
+                end = Offset(px(x - p.vx[j] * 0.010f), py(y - p.vy[j] * 0.014f)),
+                strokeWidth = maxOf(0.5f, p.rad[j] * sz * 0.0035f * (1f - age * 0.4f)),
+                alpha = a.coerceAtMost(1f),
             )
         }
-        drawLine(
-            color = hot.copy(alpha = 0.6f),
-            start = Offset(cx - r * 0.3f, topY),
-            end = Offset(cx + r * 0.3f, topY),
-            strokeWidth = r * 0.02f,
+
+        // Plunge pool: the kit's radial glow, cut off at the canvas bottom.
+        drawRect(
+            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                colors = listOf(hot.copy(alpha = 0.20f), hot.copy(alpha = 0f)),
+                center = Offset(px(0.5f), py(0.88f)),
+                radius = 0.42f * sz,
+            ),
+            topLeft = Offset(px(0f), py(0.7f)),
+            size = androidx.compose.ui.geometry.Size(sz, 0.3f * sz),
         )
-        drawCircle(
-            color = hot.copy(alpha = 0.15f),
-            radius = r * 0.5f,
-            center = Offset(cx, botY),
+
+        // The lip itself: two ledges, and the bright edge the water leaves.
+        val ledge = shade(cool, 0.5f)
+        val ledgeH = 0.05f * sz
+        drawRect(
+            color = ledge,
+            topLeft = Offset(px(0f), py(LIP_Y) - ledgeH),
+            size = androidx.compose.ui.geometry.Size(LIP_X0 * sz, ledgeH),
         )
+        drawRect(
+            color = ledge,
+            topLeft = Offset(px(LIP_X1), py(LIP_Y) - ledgeH),
+            size = androidx.compose.ui.geometry.Size((1f - LIP_X1) * sz, ledgeH),
+        )
+        val edge = maxOf(1f, sz * 0.005f)
+        drawLine(hot, Offset(px(0f), py(LIP_Y)), Offset(px(LIP_X0), py(LIP_Y)), edge, alpha = 0.5f)
+        drawLine(hot, Offset(px(LIP_X1), py(LIP_Y)), Offset(px(1f), py(LIP_Y)), edge, alpha = 0.5f)
+
+        drawContext.canvas.restore()
     }
 }
 
@@ -1353,32 +1730,35 @@ object Cascade : Face {
  * is why this is the one face rendered through a real fragment shader (AGSL,
  * via `android.graphics.RuntimeShader`) instead of `DrawScope` draw calls.
  * `RuntimeShader` needs API 33, which is already this app's `minSdk` - there
- * is no older device to fall back from.
+ * is no older device to fall back from. It shades one fragment per real
+ * device pixel, which is already as sharp as the kit gets (the kit renders
+ * this at 0.8x device pixels at its default quality, and upscales).
  *
  * The march, the field and the lighting are a close port of the reference's
  * own GPU shader (`NUCLEUS_FS` in the desktop's `faces.html`). Unlike the
  * object-rotation faces elsewhere in this file, a ray-based camera needs its
  * origin and its ray directions built from the exact same rotation, so this
  * keeps the reference's own pitch-then-yaw camera formula rather than
- * reordering it to match Geodesic's yaw-then-pitch convention - getting that
- * order right by inspection, with no way to render this and look at it
- * before it ships, mattered more here than file-wide consistency. `uYaw` and
+ * reordering it to match Geodesic's yaw-then-pitch convention. `uYaw` and
  * `uPit` still feed from `f.angle`, `f.yaw` and `f.pitch` the same way every
  * other 3D face here does, and the screen-to-object-space mapping is redone
  * for a circle (`(fragCoord - uCenter) / uR`) rather than ported from the
  * reference's square canvas (`(fragCoord - 0.5*res) / min(res.x, res.y)`) -
  * the two are the same normalisation for the shape this app actually draws.
  *
- * Three things ARE dropped, and none of them is the rotation question:
+ * With one correction that port missed: the reference's `gl_FragCoord` - and
+ * its CPU fallback, which says so explicitly (`v = -(py / R - .5) * 2`) -
+ * counts y UP the screen. AGSL's `fragCoord` counts it DOWN. Porting the
+ * normalisation without flipping y rendered the nucleus upside down: lit
+ * from below instead of above, and the ring seen from underneath instead of
+ * from the kit's "look down on it" angle. `p.y` is negated below.
+ *
+ * Two things ARE dropped:
  *  - `HUD.beat`, a global heartbeat pulse with nothing this app tracks to
  *    drive it. It only ever scaled the field's blend radii; at a fixed 1 the
  *    `M()` wrapper the reference uses to apply it becomes the identity, so
  *    this calls `field()` directly and the wrapper is gone rather than kept
  *    around multiplying by one.
- *  - The reference's environment-reflection texture. There is no panorama to
- *    sample on a phone, so this always takes the reference's own fallback
- *    tone (`vec3(22,24,30)/255`) rather than adding a texture uniform that
- *    would only ever return that one constant anyway.
  *  - The reference's own hardcoded per-state glow/hot colours. Every other
  *    face in this file shades with the `hot`/`cool` this call is handed -
  *    the user's own chosen binding for the current state - and a face that
@@ -1386,6 +1766,10 @@ object Cascade : Face {
  *    to the colour picker. Geometry (the blend/ring/displacement numbers,
  *    which have no user-facing control) keeps the reference's own per-state
  *    table; colour does not.
+ *
+ * The environment reflection used to be a third drop ("there is no panorama
+ * to sample on a phone"). There is - the kit's own, in [EnvMap] - and it is
+ * sampled here exactly as the kit's `envSample` does, four-tap tent and all.
  */
 object Nucleus : Face {
     override val id = "nucleus"
@@ -1421,7 +1805,28 @@ object Nucleus : Face {
     // was actually chosen. Now an owner who never picks Nucleus never pays
     // for it. `draw` is only ever called on the main thread, so the default
     // synchronized lazy costs one uncontended check per frame.
-    private val shader by lazy { android.graphics.RuntimeShader(AGSL) }
+    //
+    // The panorama is bound here, once: it never changes, and an AGSL child
+    // has to be bound before the first draw or the shader samples nothing.
+    // REPEAT across, CLAMP down and bilinear, as the kit sets its texture -
+    // the seam at the back of the panorama wraps, the poles do not.
+    private val shader by lazy {
+        android.graphics.RuntimeShader(AGSL).apply {
+            setInputShader(
+                "uEnv",
+                android.graphics.BitmapShader(
+                    EnvMap.bitmap,
+                    android.graphics.Shader.TileMode.REPEAT,
+                    android.graphics.Shader.TileMode.CLAMP,
+                ).apply { filterMode = android.graphics.BitmapShader.FILTER_MODE_LINEAR },
+            )
+            setFloatUniform(
+                "uEnvSize",
+                EnvMap.bitmap.width.toFloat(),
+                EnvMap.bitmap.height.toFloat(),
+            )
+        }
+    }
 
     // The brush is only a wrapper that hands `shader` back, and `shader` is
     // already a single reused instance - so building one per frame was a fresh
@@ -1449,6 +1854,11 @@ object Nucleus : Face {
         shader.setFloatUniform("uPit", pitch)
         shader.setFloatUniform("uGlow", cool.red, cool.green, cool.blue)
         shader.setFloatUniform("uHot", hot.red, hot.green, hot.blue)
+        // The kit marches 96 steps once its buffer is over 900 px across and
+        // 72 below - more steps resolve the thin fillet where the ring meets
+        // the core. Its buffer is its whole canvas, which is 2r / fit here
+        // (see Accretion on S = 2r; `fit` scales the drawing, not the canvas).
+        shader.setIntUniform("uSteps", if (2f * r / fit > 900f) 96 else 72)
 
         drawCircle(
             brush = shaderBrush,
@@ -1462,11 +1872,35 @@ uniform float2 uCenter;
 uniform float uR;
 uniform float uT, uBlend, uRing, uDisp, uPump, uYaw, uPit;
 uniform float3 uGlow, uHot;
+uniform int uSteps;
+uniform shader uEnv;
+uniform float2 uEnvSize;
 
 const float TAU = 6.283185307179586;
 const float3 LIGHT = float3(-0.4510, -0.7517, -0.4812);
 const float DIST = 2.05;
-const int STEPS = 72;
+const int MAX_STEPS = 96;
+
+// The kit's envSample: reflect the fixed view ray about the normal, look the
+// reflection up in the equirectangular panorama, and average four taps a
+// texel apart - the kit's fix for bilinear showing as diamond facets when a
+// 128 x 64 picture is magnified across a smooth surface. `eval` takes texel
+// coordinates rather than 0..1, hence uEnvSize.
+float3 envSample(float3 n) {
+    float d = -n.z;
+    float3 r = normalize(float3(-2.0 * d * n.x, -2.0 * d * n.y, -1.0 - 2.0 * d * n.z));
+    float u = 0.5 + atan(r.x, -r.z) / TAU;
+    float v = 0.5 - asin(clamp(r.y, -1.0, 1.0)) / 3.14159265;
+    float2 uv = float2(u, v) * uEnvSize;
+    float e = 0.75;
+    // eval() hands back half4; widened explicitly rather than trusting an
+    // implicit half-to-float coercion in the sum.
+    float3 s = float3(uEnv.eval(uv + float2( e,  e)).rgb)
+             + float3(uEnv.eval(uv + float2(-e,  e)).rgb)
+             + float3(uEnv.eval(uv + float2( e, -e)).rgb)
+             + float3(uEnv.eval(uv + float2(-e, -e)).rgb);
+    return 0.25 * s;
+}
 
 float fres3(float vdot) {
     float m = 1.0 - clamp(vdot, 0.0, 1.0);
@@ -1510,7 +1944,9 @@ float3 normalAt(float3 h) {
 }
 
 half4 main(float2 fragCoord) {
+    // y negated: fragCoord counts down the screen, the kit's gl_FragCoord up.
     float2 p = (fragCoord - uCenter) / uR;
+    p.y = -p.y;
     float3 dir = normalize(float3(p, 1.55));
 
     float cp = cos(uPit), sp = sin(uPit), cy = cos(uYaw), sy = sin(uYaw);
@@ -1530,9 +1966,12 @@ half4 main(float2 fragCoord) {
     float tt = max(0.0, -b0 - sq);
     float tMax = -b0 + sq;
 
+    // A constant bound with an early exit, because AGSL loops must have one;
+    // uSteps is the kit's own 72-or-96.
     float hit = -1.0;
     int steps = 0;
-    for (int i = 0; i < STEPS; i++) {
+    for (int i = 0; i < MAX_STEPS; i++) {
+        if (i >= uSteps) break;
         float ds = field(ro + rd * tt);
         steps = i;
         if (ds < 0.0015) { hit = tt; break; }
@@ -1546,9 +1985,9 @@ half4 main(float2 fragCoord) {
     float3 hp = ro + rd * hit;
     float3 n = normalAt(hp);
     float lam = max(0.0, -dot(n, LIGHT));
-    float3 env = float3(22.0, 24.0, 30.0) / 255.0;
+    float3 env = envSample(n);
     float fres = fres3(abs(dot(n, rd)));
-    float ao = 1.0 - min(0.75, float(steps) / float(STEPS) * 1.5);
+    float ao = 1.0 - min(0.75, float(steps) / float(uSteps) * 1.5);
 
     float sh = 1.0;
     float ts = 0.035;
