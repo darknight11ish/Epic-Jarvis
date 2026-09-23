@@ -17,12 +17,19 @@
  * So this serves the page as Tauri does - header CSP from tauri.conf.json
  * with every inline script hashed, the shell's bootstrap injected first, no
  * charset on the response - and drives a real send.
+ *
+ * The reactor is now the kit face: faces.html?mode=display in an iframe, fed
+ * state and appearance by the page (see jarvis_hud.html's "Arc reactor" and
+ * src/hud-face-bridge.js). So every other file under src/ is served too,
+ * each HTML page under its own hashed header policy, and the face is checked
+ * to load, draw, follow the page's state and the shell's appearance push,
+ * stop behind the Galaxy view, and calm down under reduced motion.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, extname, join, normalize } from "node:path";
 import * as K from "./uikit.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -68,8 +75,27 @@ const cors = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-async function openHud(browser, status) {
-  const page = await browser.newPage();
+const TYPES = {
+  ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
+  ".json": "application/json", ".woff2": "font/woff2", ".woff": "font/woff",
+};
+
+/** Any other file under src/, served as Tauri serves the bundle. The HUD's
+ *  reactor is faces.html in an iframe, which pulls faces-spec.js, the fonts
+ *  and hud-face-bridge.js - every one a real request under the real policy,
+ *  so a CSP or path mistake in any of them shows up here. HTML gets its own
+ *  header CSP, hashed for ITS inline scripts, as every page does. */
+function serveStatic(route, url) {
+  const file = normalize(join(SRC, decodeURIComponent(url.pathname)));
+  if (!file.startsWith(SRC) || !existsSync(file)) return route.fulfill({ status: 404, body: "" });
+  const body = readFileSync(file);
+  const headers = { "Content-Type": TYPES[extname(file)] || "application/octet-stream" };
+  if (extname(file) === ".html") headers["Content-Security-Policy"] = tauriCsp(body.toString("utf8"));
+  return route.fulfill({ status: 200, body, headers });
+}
+
+async function openHud(browser, status, pageOptions = {}) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 820 }, ...pageOptions });
   const problems = [];
   const chats = [];
   page.on("pageerror", (e) => problems.push(String(e)));
@@ -103,6 +129,7 @@ async function openHud(browser, status) {
       }
       return route.fulfill({ status: 404, headers: cors, json: { error: "not in this test" } });
     }
+    if (url.origin === ORIGIN) return serveStatic(route, url);
     return route.abort();
   });
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
@@ -154,6 +181,172 @@ await check("with nothing up, Send still answers - from sample replies, and says
   assert.ok(log.some((m) => m.who === "you" && m.body === "hi"), JSON.stringify(log));
   assert.match(banner, /Ollama/, "the banner should name what is actually missing");
   assert.doesNotMatch(banner, /jarvis serve/, "OpenJarvis is not part of this setup");
+});
+
+/* ── The reactor is the kit face ─────────────────────────────────────────── */
+
+/** The face's frame, once faces.html has booted in display mode and the
+ *  bridge has attached. */
+async function faceFrame(page) {
+  const deadline = Date.now() + 8000;
+  for (;;) {
+    const frame = page.frames().find((f) => /\/faces\.html\?mode=display/.test(f.url()));
+    if (frame) {
+      const ready = await frame.evaluate(() => document.documentElement.dataset.hudFace).catch(() => null);
+      if (ready === "ready") return frame;
+    }
+    if (Date.now() > deadline) throw new Error("faces.html?mode=display never loaded with the bridge attached");
+    await page.waitForTimeout(100);
+  }
+}
+
+/** Lit pixels in the face's canvas, copied through a 2D canvas so it reads
+ *  the same whether the face drew with Canvas 2D or WebGL. */
+function litPixels(frame) {
+  return frame.evaluate(() => {
+    const src = document.getElementById("display-canvas");
+    if (!src || !src.width) return { w: 0, lit: 0 };
+    const c = document.createElement("canvas");
+    c.width = 96; c.height = 96;
+    const g = c.getContext("2d");
+    g.drawImage(src, 0, 0, 96, 96);
+    const d = g.getImageData(0, 0, 96, 96).data;
+    let lit = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 20 && d[i] + d[i + 1] + d[i + 2] > 90) lit++;
+    return { w: src.width, lit };
+  });
+}
+
+await check("the reactor is faces.html in display mode, and it draws", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const frame = await faceFrame(page);
+  await page.waitForTimeout(600);
+  const px = await litPixels(frame);
+  const box = await page.locator("#reactor").boundingBox();
+  await page.close();
+  assert.ok(px.w >= 232, `canvas backing store ${px.w}px - blurrier than the 232px box it fills`);
+  assert.ok(px.lit > 150, `only ${px.lit} of 9216 sampled pixels lit - the face is not drawing`);
+  assert.equal(Math.round(box.width), 232);
+  assert.equal(Math.round(box.height), 232);
+  assert.deepEqual(problems, [], "a CSP refusal or a page error in the HUD or its face");
+});
+
+await check("the HUD's own state machine drives the face, offline included", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const frame = await faceFrame(page);
+  const seen = {};
+  for (const s of ["thinking", "listening", "speaking", "idle"]) {
+    await page.evaluate((st) => reactor.set(st), s);
+    await page.waitForTimeout(80);
+    seen[s] = await frame.evaluate(() => LIVE_STATE);
+  }
+  // Offline: the page keeps its own label, and the face goes to standby.
+  await page.evaluate(() => { S.online = false; reactor.set("idle"); });
+  await page.waitForTimeout(80);
+  seen.offline = await frame.evaluate(() => LIVE_STATE);
+  const label = await page.locator("#reactor-state").textContent();
+  // A page state with no face of its own rests at idle...
+  await page.evaluate(() => { S.online = true; reactor.set("dancing"); });
+  await page.waitForTimeout(80);
+  seen.unknown = await frame.evaluate(() => LIVE_STATE);
+  // ...and the bridge itself ignores a state id the spec does not have,
+  // rather than handing the renderer something it would draw as nothing.
+  await page.evaluate(() => document.getElementById("reactor").contentWindow
+    .postMessage({ type: "jarvis-hud-face", state: "dancing" }, "/"));
+  await page.waitForTimeout(80);
+  seen.bogus = await frame.evaluate(() => LIVE_STATE);
+  await page.close();
+  assert.deepEqual(seen, {
+    thinking: "thinking", listening: "listening", speaking: "speaking", idle: "idle",
+    offline: "standby", unknown: "idle", bogus: "idle",
+  });
+  assert.equal(label, "offline");
+  assert.deepEqual(problems, []);
+});
+
+await check("the face follows the owner's appearance pushed by the shell", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await faceFrame(page);
+  // What lib.rs's push_to_hud(app, "appearance", doc) evaluates in this page.
+  await page.evaluate(() => window.__jarvisFeed("appearance", {
+    face: "orbit",
+    bindings: { idle: { pattern: "breathe", color: "amber-4" } },
+    updated: 1,
+  }));
+  const deadline = Date.now() + 8000;
+  let frame;
+  while (!(frame = page.frames().find((f) => /face=orbit/.test(f.url())))) {
+    if (Date.now() > deadline) throw new Error("the frame never reloaded with the owner's face");
+    await page.waitForTimeout(100);
+  }
+  await frame.waitForFunction(() => document.documentElement.dataset.hudFace === "ready");
+  await page.waitForTimeout(300);
+  const bound = await frame.evaluate(() => BIND.idle);
+  // An identical push must not reload the frame: get_appearance re-adopts
+  // the same document every time the Faces window opens.
+  const src = await page.evaluate(() => document.getElementById("reactor").src);
+  await page.evaluate(() => window.__jarvisFeed("appearance", window.__jarvisAppearance));
+  await page.waitForTimeout(300);
+  const reloaded = frame.isDetached() ||
+    (await page.evaluate(() => document.getElementById("reactor").src)) !== src;
+  await page.close();
+  assert.equal(bound.pattern, "breathe");
+  assert.equal(bound.color, "amber-4");
+  assert.equal(reloaded, false, "an unchanged document reloaded the face");
+  assert.deepEqual(problems, []);
+});
+
+await check("the face stops while Galaxy is up, and the narrow layout keeps 150px", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
+    { viewport: { width: 640, height: 820 } });
+  await faceFrame(page);
+  const narrow = await page.locator("#reactor").boundingBox();
+  await page.evaluate(() => setView("brain"));
+  await page.waitForTimeout(200);
+  const away = await page.evaluate(() => document.getElementById("reactor").getAttribute("src"));
+  await page.evaluate(() => setView("talk"));
+  await faceFrame(page);
+  await page.close();
+  assert.equal(Math.round(narrow.width), 150);
+  assert.equal(away, "about:blank", "the face kept animating behind the Galaxy view");
+  assert.deepEqual(problems, []);
+});
+
+/** How many times a second the face's canvas actually changes, over 1.5s. */
+function redrawsPerSecond(frame) {
+  return frame.evaluate(() => new Promise((done) => {
+    const src = document.getElementById("display-canvas");
+    const c = document.createElement("canvas");
+    c.width = 64; c.height = 64;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    let last = null, changes = 0;
+    const t0 = performance.now();
+    (function step() {
+      g.clearRect(0, 0, 64, 64);
+      g.drawImage(src, 0, 0, 64, 64);
+      const d = g.getImageData(0, 0, 64, 64).data;
+      let h = 0;
+      for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) | 0;
+      if (h !== last) { changes++; last = h; }
+      if (performance.now() - t0 < 1500) requestAnimationFrame(step);
+      else done(changes / 1.5);
+    })();
+  }));
+}
+
+await check("with the OS asking for less motion, the face redraws at most ~10 times a second", async () => {
+  // The canvas this replaced slowed right down under reduced motion, and
+  // the editor paces faces to 10fps for it. Display mode on its own does
+  // not, so hud-face-bridge.js does - this is what holds it.
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
+    { reducedMotion: "reduce" });
+  const frame = await faceFrame(page);
+  await page.waitForTimeout(300);
+  const calm = await redrawsPerSecond(frame);
+  await page.close();
+  assert.ok(calm > 0, "the face stopped drawing altogether - reduce means reduce, not remove");
+  assert.ok(calm <= 12, `${calm} redraws a second under prefers-reduced-motion`);
+  assert.deepEqual(problems, []);
 });
 
 await browser.close();

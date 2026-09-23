@@ -91,6 +91,17 @@ impl AppearanceState {
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = doc.clone();
     }
 
+    /// A copy of the whole document, for the HUD window.
+    ///
+    /// That window cannot ask for it (`capabilities/hud.json` grants it no
+    /// commands), so `lib.rs` pushes this into it when its page loads.
+    pub fn snapshot(&self) -> Appearance {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
     /// The owner's binding for a state, if they have set one.
     ///
     /// Returns `None` for a state they have not touched, so the caller falls
@@ -142,6 +153,10 @@ fn adopt(app: &AppHandle, doc: &Appearance) {
     app.state::<AppearanceState>().put(doc);
     crate::tray::on_appearance_changed(app);
     let _ = app.emit(crate::events::APPEARANCE_CHANGED, ());
+    // The HUD cannot hear that event - its page's own CSP refuses Tauri's
+    // IPC - so its reactor, which wears this same face, is handed the
+    // document directly. See `push_to_hud`.
+    crate::push_to_hud(app, "appearance", doc);
 }
 
 /// Loads the stored document at startup so the tray wears it immediately.
@@ -428,6 +443,31 @@ mod tests {
         });
         let bound = state.binding("thinking").expect("binding lost");
         assert_eq!(bound.params.get("span_deg"), Some(&serde_json::json!(58)));
+    }
+
+    #[test]
+    fn the_hud_snapshot_is_the_whole_document() {
+        // The HUD's reactor picks its face from `face` and its colours from
+        // `bindings`, so the push has to carry both, as the page will read
+        // them: the same field names the Faces window saves.
+        let state = AppearanceState::default();
+        let mut doc = Appearance {
+            face: Some("orbit".into()),
+            ..Default::default()
+        };
+        doc.bindings.insert(
+            "thinking".into(),
+            Binding {
+                pattern: "breathe".into(),
+                color: Some("amber-4".into()),
+                params: serde_json::Map::new(),
+            },
+        );
+        state.put(&doc);
+        let pushed = serde_json::to_value(state.snapshot()).unwrap();
+        assert_eq!(pushed["face"], "orbit");
+        assert_eq!(pushed["bindings"]["thinking"]["pattern"], "breathe");
+        assert_eq!(pushed["bindings"]["thinking"]["color"], "amber-4");
     }
 
     #[test]
