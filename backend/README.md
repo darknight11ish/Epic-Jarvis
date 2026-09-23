@@ -2213,6 +2213,27 @@ not "on or off": a tool call for something not in that list is refused with
 reaches the real tool's code. Two independent checks, so a bug in either one
 does not silently become "every tool, everywhere."
 
+**Six tools only run after a person says yes, whatever the config says.**
+`github_search`, `browser_control`, `control_computer`, `control_phone`,
+`shell_exec` and `home_control` (`NEEDS_A_PERSON` in `jarvis_agent.py`)
+each send something off this computer or act on the real world. The gate
+answers "allowed" on tier `auto` (nobody was asked) and `notify` (you are
+told afterwards) as well as on an approved card, and the loop used to check
+only "allowed". So `github_search` - whose action is `web_research`, which
+is `"auto"` in the shipped `jarvis-framework.toml` - sent a search term to
+GitHub with nobody asked. Now the loop also checks that the gate's answer
+was a person approving (`outcome == "approved"`), and otherwise refuses
+without running anything and tells the model which line to change.
+
+What that means for you: **`github_search` is refused until you set
+`web_research = "ask"`** (and `research_authenticated = "ask"`, if you use
+a GitHub token) in `jarvis-framework.toml`'s `[autonomy.tiers]`. Be aware
+that `web_research` may also govern other web tools you have, which will
+then ask too. The reads you chose to leave at `"auto"` (calendar, email,
+notes, home state) and the two note writes are not affected.
+`test_agent.py` proves it against the shipped config: every one of the six,
+at `auto` or `notify`, never runs.
+
 **What's genuinely rough about this first pass, said plainly rather than
 smoothed over:** a tool-enabled turn is one extra non-streamed round trip
 slower than a plain one (the model is asked once, without streaming, purely

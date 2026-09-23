@@ -696,6 +696,49 @@ def _github_search_action_name() -> str:
     return "jarvis_research_run"
 
 
+#: Tools that must never run unless a PERSON said yes on a card, whatever
+#: tier jarvis-framework.toml gives their action.
+#:
+#: docs/ARCHITECTURE.md §3: "`allowed` is not 'a human decided'" - the gate
+#: returns allowed=True on tier `auto` (nobody asked) and `notify` (told
+#: after). That was all this loop checked, so `github_search`, which resolves
+#: to `web_research` - "auto" in the shipped config - sent a model-chosen
+#: search term to GitHub with nobody asked, while §4 lists research as egress
+#: "per approved plan" and jarvis_research.run() is documented as executing
+#: "a plan that a human has already approved".
+#:
+#: Each entry either leaves this machine with something the model chose, or
+#: can: the gate's own risk table calls a shell, the desktop and the phone
+#: "outbound" by their worst case, a browser step nearly always sends
+#: something, and home_control moves a real lock or light. The reads the
+#: owner chose to leave at "auto" (calendar, email, notes, home state) and the
+#: two note writes (owner decision, 2026-09-23: saved straight away, no card)
+#: are deliberately NOT here - they are the config's call.
+NEEDS_A_PERSON = {
+    "github_search": "sends a search term to GitHub",
+    "browser_control": "drives a web page, which nearly always sends something",
+    "control_computer": "clicks and types in another program, which can press Send",
+    "control_phone": "taps on the phone, which can send a message or pay for something",
+    "shell_exec": "runs a command, which can do anything, including reach the internet",
+    "home_control": "changes something real in the house",
+}
+
+
+def _a_person_said_yes(verdict) -> bool:
+    """True only when the gate's verdict records a human approving.
+
+    Read off `outcome` (gate-outcome.patch) when the gate sets one: only
+    "approved" is a person. A gate from before that patch has no `outcome`,
+    and then the same rule jarvis_voice_enroll uses applies: allowed AND tier
+    "ask" is the only reading that means somebody was asked."""
+    if getattr(verdict, "allowed", False) is not True:
+        return False
+    outcome = getattr(verdict, "outcome", None)
+    if outcome is not None:
+        return outcome == "approved"
+    return getattr(verdict, "tier", None) == "ask"
+
+
 # --------------------------------------------------------------------------
 #   The loop
 # --------------------------------------------------------------------------
@@ -1012,6 +1055,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     say_step("tool_refused", name)
                     result = {"ok": False,
                               "error": f"refused: {getattr(verdict, 'reason', 'not approved')}"}
+                elif name in NEEDS_A_PERSON and not _a_person_said_yes(verdict):
+                    # Allowed, but nobody was asked. See NEEDS_A_PERSON.
+                    say_step("tool_refused", name)
+                    vtier = getattr(verdict, "tier", None) or "unknown"
+                    # The gate's own name for the action - the key that
+                    # [autonomy.tiers] uses - rather than the lookup name.
+                    vaction = getattr(verdict, "action", None) or action_name
+                    result = {"ok": False,
+                              "error": (f"refused: {name} {NEEDS_A_PERSON[name]}, so it "
+                                        f"only runs after the owner approves it on a "
+                                        f"card - but the approval gate let it through "
+                                        f"at tier {vtier!r} without asking anyone. "
+                                        f"Nothing was run. To use it, set "
+                                        f"{vaction} to \"ask\" in "
+                                        f"jarvis-framework.toml's [autonomy.tiers].")}
                 else:
                     say_step("tool_started", name)
                     if announce:

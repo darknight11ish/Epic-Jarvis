@@ -333,6 +333,121 @@ def t_every_tool_resolves_to_a_real_jarvis_gate_action():
               lookup in jarvis_gate._TOOL_ACTIONS, lookup)
 
 
+class _GateVerdict:
+    """The shape jarvis_gate.Verdict has after gate-outcome.patch: allowed,
+    tier, action, reason, request_id, outcome - built here the way check()
+    builds it for each tier (auto -> outcome "auto", notify -> "notify",
+    ask -> "approved"/"denied")."""
+    def __init__(self, allowed, tier, action, reason, outcome):
+        self.allowed, self.tier, self.action = allowed, tier, action
+        self.reason, self.outcome, self.request_id = reason, outcome, None
+
+
+def _shipped_tiers():
+    """Each tool's tier under the SHIPPED config, resolved the way the gate
+    resolves it: tool lookup name -> _TOOL_ACTIONS (as the patches add it) ->
+    [autonomy.tiers] in rebuilt/jarvis-framework.toml -> unknown_action_tier.
+    Read from the real files, not restated here."""
+    import re
+    import tomllib
+    here = Path(__file__).resolve().parent
+    cfg = tomllib.loads((here / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8"))
+    tiers = cfg["autonomy"]["tiers"]
+    unknown = cfg["autonomy"].get("unknown_action_tier", "ask")
+    mapping = {}
+    for patch in sorted(here.glob("*.patch")):
+        for m in re.finditer(r'"(jarvis_\w+?_run(?:_authenticated)?)":\s*"(\w+)"',
+                             patch.read_text(encoding="utf-8")):
+            mapping[m.group(1)] = m.group(2)
+    out = {}
+    for tname, tool in AG.TOOLS.items():
+        lookup = tool.gate_lookup_name({}) if tool.gate_lookup_name else tname
+        action = mapping.get(lookup, lookup)
+        out[tname] = (action, tiers.get(action, unknown))
+    return out
+
+
+def t_github_search_resolves_to_an_auto_tier_in_the_shipped_config():
+    """The finding this guards: github_search -> jarvis_research_run ->
+    web_research, which the shipped toml sets to "auto". If this ever stops
+    being true the test below still holds; this one just pins the fact that
+    made the code check necessary."""
+    tiers = _shipped_tiers()
+    action, tier = tiers["github_search"]
+    check("github_search resolves to web_research", action == "web_research", action)
+    check("web_research is 'auto' in the shipped config", tier == "auto", tier)
+
+
+def t_every_outbound_tool_is_refused_unless_a_person_approved():
+    """ARCHITECTURE §3: `allowed` is not "a human decided". For every tool in
+    NEEDS_A_PERSON, a verdict the gate would give at tier auto or notify
+    (allowed=True, nobody asked) must not run it; only an approved `ask`
+    does. Run for the tier each tool has in the shipped config AND for
+    auto/notify regardless, so an owner who lowers a tier is covered too."""
+    tiers = _shipped_tiers()
+    for tname in sorted(AG.NEEDS_A_PERSON):
+        action, shipped = tiers[tname]
+        cases = [("auto", True, "auto", False), ("notify", True, "notify", False),
+                 ("ask", True, "approved", True), ("ask", False, "denied", False),
+                 # A pre-gate-outcome gate: no `outcome` at all.
+                 ("auto", True, None, False), ("ask", True, None, True)]
+        if shipped in ("auto", "notify"):
+            cases.insert(0, (shipped, True, shipped, False))
+        for tier, allowed, outcome, should_run in cases:
+            executed = []
+            tool = AG.TOOLS[tname]
+            real_prepare, real_execute = tool.prepare, tool.execute
+            tool.prepare = lambda args: (None, "plan")
+            tool.execute = lambda args, state, **kw: executed.append(1) or {"ok": True}
+            v = _GateVerdict(allowed, tier, action, f"tier is {tier}", outcome)
+            if outcome is None:
+                del v.outcome
+            responses = [
+                {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                    {"id": "1", "function": {"name": tname, "arguments": "{}"}}]}}]},
+                {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
+            ]
+            post, calls = scripted_post(responses)
+            try:
+                with NoRealIO():
+                    AG.run_local_turn(
+                        [{"role": "user", "content": "go"}], "m", ollama_url="http://x",
+                        stream_out=lambda b: None, post=post,
+                        gate_check=lambda *a, v=v: v,
+                        open_stream=lambda u, p: FakeStream([b""]),
+                        record_chain=lambda s: None)
+            finally:
+                tool.prepare, tool.execute = real_prepare, real_execute
+            label = (f"{tname} ({action}, shipped tier {shipped}) at tier {tier}, "
+                     f"outcome {outcome}: {'runs' if should_run else 'refused'}")
+            check(label, bool(executed) == should_run, repr(executed))
+            if not should_run and allowed:
+                said = calls[1]["messages"][-1]["content"]
+                check(f"{tname} at {tier}: the model is told why, and which line to change",
+                      "without asking anyone" in said and action in said, said)
+
+
+def t_every_outbound_gate_action_is_covered():
+    """Any tool whose gate action the risk table calls "outbound" (as the
+    patches write it) must be in NEEDS_A_PERSON - so adding such a tool
+    without it fails here, not on the owner's machine."""
+    import re
+    here = Path(__file__).resolve().parent
+    outbound = set()
+    for patch in here.glob("*.patch"):
+        outbound |= set(re.findall(r'"(\w+)":\s*\("\w+",\s*"outbound"',
+                                   patch.read_text(encoding="utf-8")))
+    check("the patches name some outbound actions", {"run_shell_on_host",
+          "control_computer", "control_phone"} <= outbound, repr(outbound))
+    # research_authenticated is github_search with a token; web_research is
+    # its tokenless twin (egress per ARCHITECTURE §4).
+    outbound |= {"web_research", "control_browser"}
+    tiers = _shipped_tiers()
+    for tname, (action, _tier) in tiers.items():
+        if action in outbound:
+            check(f"{tname} ({action}) is in NEEDS_A_PERSON", tname in AG.NEEDS_A_PERSON)
+
+
 def t_calculator_cannot_reach_names_or_calls():
     for expr in ("__import__('os').system('echo hi')", "open('/etc/passwd').read()",
                  "os.system('x')"):
@@ -725,6 +840,9 @@ if __name__ == "__main__":
                t_file_read_rejects_reserved_windows_device_names,
                t_tool_content_never_slices_a_json_string_mid_structure,
                t_every_tool_resolves_to_a_real_jarvis_gate_action,
+               t_github_search_resolves_to_an_auto_tier_in_the_shipped_config,
+               t_every_outbound_tool_is_refused_unless_a_person_approved,
+               t_every_outbound_gate_action_is_covered,
                t_calculator_cannot_reach_names_or_calls,
                t_enabled_tools_actually_restricts_what_the_model_is_offered_and_can_call,
                t_empty_enabled_tools_offers_nothing,
