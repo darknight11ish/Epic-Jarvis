@@ -25,7 +25,13 @@ import kotlin.math.sin
  * contract, not one this app invents.
  */
 interface MeshRenderer : GLSurfaceView.Renderer {
-    fun setFrame(f: FaceFrame, hot: Color, cool: Color, fit: Float)
+    /**
+     * @param background the colour to clear to - FaceView's own `background`,
+     *   which is the theme's well when the caller passes one. Handed over with
+     *   every frame rather than set once, so a theme change reaches the GL
+     *   thread through the same one crossing point as everything else.
+     */
+    fun setFrame(f: FaceFrame, hot: Color, cool: Color, fit: Float, background: Color)
 }
 
 /**
@@ -188,12 +194,14 @@ class TokamakRenderer : MeshRenderer {
     private var hot = Color(0xFF39E0FF)
     private var cool = Color(0xFF0B6B8F)
     private var fit = 1f
+    private var background = Spec.BACKGROUND
 
-    override fun setFrame(f: FaceFrame, hot: Color, cool: Color, fit: Float) {
+    override fun setFrame(f: FaceFrame, hot: Color, cool: Color, fit: Float, background: Color) {
         this.frame = f
         this.hot = hot
         this.cool = cool
         this.fit = fit
+        this.background = background
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -314,15 +322,10 @@ class TokamakRenderer : MeshRenderer {
 
     override fun onDrawFrame(gl: GL10?) {
         // The shader did not build on this device (see onSurfaceCreated).
-        // Clearing to the spec's own background leaves a dark, still surface
-        // rather than whatever the uninitialised framebuffer holds.
+        // Clearing to the ground leaves a dark, still surface rather than
+        // whatever the uninitialised framebuffer holds.
         if (program == 0) {
-            GLES30.glClearColor(
-                Spec.BACKGROUND.red,
-                Spec.BACKGROUND.green,
-                Spec.BACKGROUND.blue,
-                1f,
-            )
+            GLES30.glClearColor(background.red, background.green, background.blue, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
             return
         }
@@ -366,7 +369,9 @@ class TokamakRenderer : MeshRenderer {
         uploadAttr(curBuf, aCurLoc, cur, curFb, 1)
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, idxBuf)
 
-        GLES30.glClearColor(Spec.BACKGROUND.red, Spec.BACKGROUND.green, Spec.BACKGROUND.blue, 1f)
+        // The caller's ground (the theme's well), not a fixed Spec.BACKGROUND,
+        // so this face sits in the same black as the pane around it.
+        GLES30.glClearColor(background.red, background.green, background.blue, 1f)
         GLES30.glClearDepthf(1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         GLES30.glDisable(GLES30.GL_BLEND)
