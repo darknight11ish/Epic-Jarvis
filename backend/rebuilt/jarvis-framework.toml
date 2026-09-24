@@ -142,6 +142,15 @@ power_manage              = "auto"
 # stay "ask": anything else and the switch refuses to turn on at all.
 second_card_enable        = "ask"
 
+# --- The wiki builder (Brain window or phone: "Add to wiki") -------------
+# Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
+# that Jarvis Wiki folder, on this PC, using the model on the second card.
+# Nothing leaves this PC, and the earlier copy of any page it changes is
+# kept in Jarvis Wiki/.versions. "ask" shows you the card (every page it
+# would write) first. You may lower it to "notify" or "auto" to have pages
+# written without asking; "never" turns "Add to wiki" off.
+wiki_update               = "ask"
+
 
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES

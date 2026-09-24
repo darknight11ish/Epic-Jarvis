@@ -230,6 +230,12 @@ $PATCHES = @(
     # jarvis_second_card.py copied in; without it every hook does exactly
     # what it did before and the route answers 503.
     'second-card.patch'
+    # The wiki builder: GET /api/wiki, GET and POST /api/wiki/ingest, and
+    # the approval notice's words for wiki_update in jarvis_gate.py. Its
+    # context is second-card's own GET and POST route blocks and its
+    # jarvis_gate.py line, so it goes after second-card. Needs jarvis_wiki.py
+    # copied in; without it the routes answer 503.
+    'wiki.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -278,6 +284,7 @@ $SHIPPED = @(
     'jarvis_wakeword.py'         # "hey Jarvis": jarvis_speech.py calls it for wake-word clips
     'jarvis_token_store.py'      # token-store.patch; the pairing token in Credential Manager
     'jarvis_second_card.py'      # second-card.patch; the second graphics card's switches
+    'jarvis_wiki.py'             # wiki.patch; the wiki builder (runs only on the second card)
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

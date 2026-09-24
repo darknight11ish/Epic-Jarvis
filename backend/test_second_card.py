@@ -685,8 +685,10 @@ def t_the_patch():
     start_ = ps1.index("$PATCHES = @(")
     names = [l.strip().strip("'") for l in ps1[start_:ps1.index("\n)", start_)].splitlines()
              if l.strip().startswith("'")]
-    check("apply-patches.ps1 applies it, last",
-          names and names[-1] == "second-card.patch"
+    # Last until wiki.patch (2026-09-24), whose context is this patch's own
+    # route blocks, so it must come after this one - test_wiki.py checks that.
+    check("apply-patches.ps1 applies it, after the patches its context comes from",
+          names and "second-card.patch" in names
           and all(names.index(p) < names.index("second-card.patch")
                   for p in ("chat-stream.patch", "power-mode.patch", "note-capture.patch")))
     check("apply-patches.ps1 copies jarvis_second_card.py in",

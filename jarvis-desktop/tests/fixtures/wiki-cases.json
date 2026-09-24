@@ -1,0 +1,358 @@
+{
+  "_about": "Real answers of backend/jarvis_wiki.py's status() (GET /api/wiki), ingest() (POST /api/wiki/ingest) and ingest_status() (GET /api/wiki/ingest?id=), one per named case, each {status, body}, made by tools/gen_wiki_cases.py against a real folder. The model and the approval gate are stand-ins; the clock and job ids are fixed; the made-up vault is shown as /home/owner/Vault. Do not edit by hand: re-run the tool.",
+  "cases": {
+    "ingest_busy": {
+      "body": {
+        "error": "the wiki builder is already working on \"spring-meeting.md\" - wait for that one",
+        "ok": false,
+        "state": "refused"
+      },
+      "status": 409
+    },
+    "ingest_in_wiki": {
+      "body": {
+        "error": "\"seed-list.txt\" is already in the wiki, unchanged.",
+        "ok": false,
+        "state": "refused"
+      },
+      "status": 409
+    },
+    "ingest_off": {
+      "body": {
+        "error": "The wiki builder runs only on the second graphics card. Its switch there says: Needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer).",
+        "ok": false,
+        "state": "refused"
+      },
+      "status": 503
+    },
+    "ingest_started": {
+      "body": {
+        "id": "wiki_0000000000000000",
+        "message": "The model on the second card is reading it. No card yet, and nothing is written.",
+        "ok": true,
+        "pending": true,
+        "state": "reading"
+      },
+      "status": 202
+    },
+    "ingest_too_big": {
+      "body": {
+        "error": "\"old-minutes.md\" cannot be added: It is about 26,667 tokens, and the model on the second card has room for about 8,685 with the wiki's index and its answer (16,384 in all). Nothing is cut short, so split it into smaller files.",
+        "ok": false,
+        "state": "refused"
+      },
+      "status": 400
+    },
+    "ingest_unreadable": {
+      "body": {
+        "error": "\"plot-map.pdf\" cannot be added: Jarvis reads only .md and .txt files for now; this is a .pdf.",
+        "ok": false,
+        "state": "refused"
+      },
+      "status": 400
+    },
+    "job_denied": {
+      "body": {
+        "created": 1790000000.0,
+        "id": "wiki_0000000000000000",
+        "message": "You said no, so nothing was written.",
+        "ok": false,
+        "outcome": "denied",
+        "pages": [
+          {
+            "action": "update",
+            "chars": 142,
+            "path": "Pages/Allotment Society.md",
+            "summary": "The allotment society: who runs it and when it meets."
+          },
+          {
+            "action": "create",
+            "chars": 101,
+            "path": "Pages/Margaret Hale.md",
+            "summary": "Chair of the allotment society since spring."
+          }
+        ],
+        "pending": false,
+        "source": "spring-meeting.md",
+        "state": "refused",
+        "updated": 1790000000.0
+      },
+      "status": 200
+    },
+    "job_done": {
+      "body": {
+        "created": 1790000000.0,
+        "id": "wiki_0000000000000000",
+        "message": "Added \"spring-meeting.md\" to the wiki: 1 new page, 1 changed.",
+        "ok": true,
+        "outcome": "approved",
+        "pages": [
+          {
+            "action": "update",
+            "chars": 142,
+            "path": "Pages/Allotment Society.md",
+            "summary": "The allotment society: who runs it and when it meets."
+          },
+          {
+            "action": "create",
+            "chars": 101,
+            "path": "Pages/Margaret Hale.md",
+            "summary": "Chair of the allotment society since spring."
+          }
+        ],
+        "pending": false,
+        "source": "spring-meeting.md",
+        "state": "done",
+        "updated": 1790000000.0
+      },
+      "status": 200
+    },
+    "job_failed": {
+      "body": {
+        "created": 1790000000.0,
+        "id": "wiki_0000000000000000",
+        "message": "Not added: \"spring-meeting.md\" changed after the card was made. Nothing was written.",
+        "ok": false,
+        "pages": [
+          {
+            "action": "update",
+            "chars": 142,
+            "path": "Pages/Allotment Society.md",
+            "summary": "The allotment society: who runs it and when it meets."
+          },
+          {
+            "action": "create",
+            "chars": 101,
+            "path": "Pages/Margaret Hale.md",
+            "summary": "Chair of the allotment society since spring."
+          }
+        ],
+        "pending": false,
+        "source": "spring-meeting.md",
+        "state": "failed",
+        "updated": 1790000000.0
+      },
+      "status": 200
+    },
+    "job_model_refused": {
+      "body": {
+        "created": 1790000000.0,
+        "id": "wiki_0000000000000000",
+        "message": "Not added: the model's answer was not valid JSON. Nothing was written.",
+        "ok": false,
+        "pending": false,
+        "source": "spring-meeting.md",
+        "state": "refused",
+        "updated": 1790000000.0
+      },
+      "status": 200
+    },
+    "job_reading": {
+      "body": {
+        "created": 1790000000.0,
+        "id": "wiki_0000000000000000",
+        "message": "The model on the second card is reading it. No card yet, and nothing is written.",
+        "ok": true,
+        "pending": true,
+        "source": "spring-meeting.md",
+        "state": "reading",
+        "updated": 1790000000.0
+      },
+      "status": 200
+    },
+    "job_unknown": {
+      "body": {
+        "error": "no wiki job with that id on this PC",
+        "ok": false
+      },
+      "status": 404
+    },
+    "job_waiting": {
+      "body": {
+        "created": 1790000000.0,
+        "id": "wiki_0000000000000000",
+        "message": "Waiting for your approval. The card is on your PC and your phone; nothing is written until you answer.",
+        "ok": true,
+        "pages": [
+          {
+            "action": "update",
+            "chars": 142,
+            "path": "Pages/Allotment Society.md",
+            "summary": "The allotment society: who runs it and when it meets."
+          },
+          {
+            "action": "create",
+            "chars": 101,
+            "path": "Pages/Margaret Hale.md",
+            "summary": "Chair of the allotment society since spring."
+          }
+        ],
+        "pending": true,
+        "source": "spring-meeting.md",
+        "state": "waiting",
+        "updated": 1790000000.0
+      },
+      "status": 200
+    },
+    "status_no_wiki_folder": {
+      "body": {
+        "available": true,
+        "folder": null,
+        "folder_why": "Make a folder called \"Jarvis Wiki\" in your Obsidian vault, and a folder called \"Sources\" inside it, then put .md or .txt files in Sources.",
+        "pages": 0,
+        "reads": [
+          ".md",
+          ".txt"
+        ],
+        "recent": [],
+        "running": null,
+        "sources": [],
+        "vault_folder_ok": false,
+        "why": "Ready: Wiki builder: qwen3:14b on the NVIDIA GeForce RTX 2060."
+      },
+      "status": 200
+    },
+    "status_off": {
+      "body": {
+        "available": false,
+        "folder": "/home/owner/Vault/Jarvis Wiki",
+        "folder_why": "",
+        "pages": 1,
+        "reads": [
+          ".md",
+          ".txt"
+        ],
+        "recent": [
+          "## [2026-09-20] ingest | seed-list.txt"
+        ],
+        "running": null,
+        "sources": [
+          {
+            "name": "old-minutes.md",
+            "state": "too_big",
+            "why": "It is about 26,667 tokens, and the model on the second card has room for about 8,685 with the wiki's index and its answer (16,384 in all). Nothing is cut short, so split it into smaller files."
+          },
+          {
+            "name": "planting-dates.md",
+            "state": "changed",
+            "why": "Changed since it was added to the wiki; adding it again updates the pages."
+          },
+          {
+            "name": "plot-map.pdf",
+            "state": "unreadable",
+            "why": "Jarvis reads only .md and .txt files for now; this is a .pdf."
+          },
+          {
+            "name": "seed-list.txt",
+            "state": "in_wiki",
+            "why": "Already in the wiki (added 2026-09-20); unchanged since."
+          },
+          {
+            "name": "spring-meeting.md",
+            "state": "new",
+            "why": "Not in the wiki yet."
+          }
+        ],
+        "vault_folder_ok": true,
+        "why": "The wiki builder runs only on the second graphics card. Its switch there says: Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+      },
+      "status": 200
+    },
+    "status_ready": {
+      "body": {
+        "available": true,
+        "folder": "/home/owner/Vault/Jarvis Wiki",
+        "folder_why": "",
+        "pages": 1,
+        "reads": [
+          ".md",
+          ".txt"
+        ],
+        "recent": [
+          "## [2026-09-20] ingest | seed-list.txt"
+        ],
+        "running": null,
+        "sources": [
+          {
+            "name": "old-minutes.md",
+            "state": "too_big",
+            "why": "It is about 26,667 tokens, and the model on the second card has room for about 8,685 with the wiki's index and its answer (16,384 in all). Nothing is cut short, so split it into smaller files."
+          },
+          {
+            "name": "planting-dates.md",
+            "state": "changed",
+            "why": "Changed since it was added to the wiki; adding it again updates the pages."
+          },
+          {
+            "name": "plot-map.pdf",
+            "state": "unreadable",
+            "why": "Jarvis reads only .md and .txt files for now; this is a .pdf."
+          },
+          {
+            "name": "seed-list.txt",
+            "state": "in_wiki",
+            "why": "Already in the wiki (added 2026-09-20); unchanged since."
+          },
+          {
+            "name": "spring-meeting.md",
+            "state": "new",
+            "why": "Not in the wiki yet."
+          }
+        ],
+        "vault_folder_ok": true,
+        "why": "Ready: Wiki builder: qwen3:14b on the NVIDIA GeForce RTX 2060."
+      },
+      "status": 200
+    },
+    "status_running": {
+      "body": {
+        "available": true,
+        "folder": "/home/owner/Vault/Jarvis Wiki",
+        "folder_why": "",
+        "pages": 1,
+        "reads": [
+          ".md",
+          ".txt"
+        ],
+        "recent": [
+          "## [2026-09-20] ingest | seed-list.txt"
+        ],
+        "running": {
+          "id": "wiki_0000000000000000",
+          "source": "spring-meeting.md",
+          "state": "reading"
+        },
+        "sources": [
+          {
+            "name": "old-minutes.md",
+            "state": "too_big",
+            "why": "It is about 26,667 tokens, and the model on the second card has room for about 8,685 with the wiki's index and its answer (16,384 in all). Nothing is cut short, so split it into smaller files."
+          },
+          {
+            "name": "planting-dates.md",
+            "state": "changed",
+            "why": "Changed since it was added to the wiki; adding it again updates the pages."
+          },
+          {
+            "name": "plot-map.pdf",
+            "state": "unreadable",
+            "why": "Jarvis reads only .md and .txt files for now; this is a .pdf."
+          },
+          {
+            "name": "seed-list.txt",
+            "state": "in_wiki",
+            "why": "Already in the wiki (added 2026-09-20); unchanged since."
+          },
+          {
+            "name": "spring-meeting.md",
+            "state": "new",
+            "why": "Not in the wiki yet."
+          }
+        ],
+        "vault_folder_ok": true,
+        "why": "Ready: Wiki builder: qwen3:14b on the NVIDIA GeForce RTX 2060."
+      },
+      "status": 200
+    }
+  }
+}

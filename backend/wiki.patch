@@ -1,0 +1,81 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1932,6 +1932,33 @@
+                 return self._send(503, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
++        if path in ("/api/wiki", "/api/wiki/ingest"):
++            # wiki.patch - the wiki builder (jarvis_wiki.py). GET /api/wiki:
++            # whether it can run (it needs the second card's "wiki" lane),
++            # the documents in <vault>/Jarvis Wiki/Sources and their state,
++            # and the last few log lines. GET /api/wiki/ingest?id=<job>: how
++            # one "Add to wiki" is going. Never a page's text, never a token.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_wiki
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            if path == "/api/wiki":
++                try:
++                    return self._send(200, jarvis_wiki.status())
++                except Exception as exc:
++                    return self._send(503, {"available": False,
++                                            "error": f"{type(exc).__name__}: {exc}"})
++            from urllib.parse import parse_qs
++            wid = (parse_qs(self.path.split("?", 1)[1]).get("id") or [""])[0] \
++                if "?" in self.path else ""
++            code, out = jarvis_wiki.ingest_status(wid)
++            return self._send(code, out)
++
+         if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
+                     "/api/compute", "/api/memory/facts", "/api/memory/export"):
+             if not _origin_ok(self):
+@@ -2316,6 +2343,28 @@
+             code, out = jarvis_second_card.handle_post(body)
+             return self._send(code, out)
+ 
++        if route == "/api/wiki/ingest":
++            # wiki.patch - "Add to wiki" for one document in Sources. The
++            # second card's model reads it and proposes pages, then ONE
++            # approval card is raised (wiki_update, tier "ask" as shipped);
++            # nothing is written before it is answered. 202 {"id", "pending":
++            # true} while that runs; 400/409/503 {"error": "<a sentence>"}.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_wiki
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            code, out = jarvis_wiki.handle_post(body)
++            return self._send(code, out)
++
+         if route in ("/api/memory/forget", "/api/memory/edit",
+                      "/api/memory/learning", "/api/memory/sleep_time",
+                      "/api/memory/keep_both"):
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -321,6 +321,13 @@
+     # stops it again. Without this line the action would be read as
+     # "unknown", and the notice would say it might leave the machine.
+     "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); turning the switch off stops it"),
++    # wiki.patch (jarvis_wiki.py). Adding a document to the wiki writes
++    # pages in <vault>/Jarvis Wiki/ on this PC, using the model on the
++    # second card (127.0.0.1). Reversible: the earlier copy of every page
++    # it changes is kept in Jarvis Wiki/.versions/. Without this line the
++    # action would be read as "unknown", and the notice would say it might
++    # leave the machine.
++    "wiki_update": ("yes", "local", "writes pages in the Jarvis Wiki folder of your vault on this PC; the earlier copy of any page it changes is kept in .versions"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
