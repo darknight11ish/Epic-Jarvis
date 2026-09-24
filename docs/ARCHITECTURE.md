@@ -481,8 +481,8 @@ That asymmetry is worth stating once: **this repo is version-controlled and the
 thing it patches is not.** A patch here can always be recovered. The file it
 edits cannot.
 
-Forty-eight patches (counted in `scripts/apply-patches.ps1`'s list on
-2026-09-24, after `voice-flow.patch`), applied in that list's order. The order matters: many patches
+Forty-nine patches (counted in `scripts/apply-patches.ps1`'s list on
+2026-09-24, after `voice-flow.patch` and `chat-history.patch`), applied in that list's order. The order matters: many patches
 edit lines an earlier one wrote, and the list's comments say which. Above
 all, `memory-safety` must land first: without it the first accepted proposal
 retires a roughly-matching unrelated fact, permanently, and `retire()` has

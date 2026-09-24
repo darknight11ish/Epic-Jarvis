@@ -119,6 +119,13 @@ CLASSIFICATION = {
     "/api/events": ("ported", ""),
     "/api/feedback/mark": ("ported", ""),
     "/api/graph": ("deliberate", "The memory graph is explicitly out of scope on the phone (CLAUDE.md)."),
+    # Chat history kept on the PC (backend/chat-history.patch, 2026-09-24):
+    # built on the backend first; both apps are to build against
+    # docs/JARVIS-API.md section 18.
+    "/api/history": ("planned", "Chat history: the conversations this PC has kept, newest first, with the switch's state and why nothing is being kept when it is not (docs/JARVIS-API.md section 18). Desktop: the Brain window's History section. Phone: a History screen next to Mind's other sections."),
+    "/api/history/conversation": ("planned", "One kept conversation, read-only, with where each of your messages came from."),
+    "/api/history/delete": ("planned", "Delete one conversation, after a confirm step. There is no delete-all."),
+    "/api/history/settings": ("planned", "\"Keep chat history on this PC\": OFF is immediate; ON raises one approval card (history_enable) and both apps say \"Waiting for your approval\" while it waits. Also how long to keep conversations."),
     "/api/holds/cancel": ("ported", ""),
     "/api/initiative": ("ported", "Brain screen, read-only."),
     "/api/jobs": ("ported", ""),

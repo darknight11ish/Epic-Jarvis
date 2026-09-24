@@ -277,6 +277,17 @@ $PATCHES = @(
     # jarvis_voice_flow.py copied in; without it barge_in answers "do not
     # stop" and the clip route answers 503.
     'voice-flow.patch'
+    # Chat history kept on this PC, encrypted (the owner's decision,
+    # 2026-09-24): /api/chat records each turn, the apps' bookkeeping fields
+    # are taken off before any model sees them, and GET /api/history,
+    # /api/history/conversation, POST /api/history/delete and
+    # /api/history/settings are added, with the approval notice's words for
+    # history_enable in jarvis_gate.py. Its context is voices' route blocks
+    # and jarvis_gate.py line, chat-stream's and speed-record's /api/chat
+    # lines and memory-intake's learner call - last, like every new patch.
+    # Needs jarvis_chat_log.py copied in; without it the history routes
+    # answer 503 and chat works as before, keeping nothing.
+    'chat-history.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -337,6 +348,7 @@ $SHIPPED = @(
     'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
     'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
+    'jarvis_chat_log.py'         # chat-history.patch: chat history kept on this PC, encrypted
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

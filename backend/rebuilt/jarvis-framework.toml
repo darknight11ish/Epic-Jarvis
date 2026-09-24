@@ -168,6 +168,12 @@ big_model_enable          = "ask"
 # turning it off never asks. It must stay "ask": jarvis_learning_switch.py
 # refuses any other tier rather than let this line become your yes.
 learning_enable           = "ask"
+# Turning chat history back ON after it was turned off (Brain window or
+# phone). It is on by default: your chats, voice included, kept on this PC,
+# encrypted. One card; turning it off never asks. It must stay "ask":
+# jarvis_chat_log.py refuses any other tier rather than let this line
+# become your yes.
+history_enable            = "ask"
 
 # --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
 # Adding a voice (a recording of someone reading a sentence, kept on this

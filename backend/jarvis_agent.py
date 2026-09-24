@@ -1701,7 +1701,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
     Ollama failing is reported to the app in plain words (plain_error), in
     the same framing, and this returns normally. Returns a small summary:
-    {"finish_reason", "client_gone", "rounds"}.
+    {"finish_reason", "client_gone", "rounds", "answer", "tools_ran"} -
+    `answer` is the text the app was sent, `tools_ran` the names of the tools
+    that really ran (chat-history.patch keeps both in the PC's own record).
 
     When the turn is over, `record_chain(steps)` gets the list of tools this
     turn asked for, as `{"tool", "ran", "ok", "outcome"}` dicts in order.
@@ -1960,7 +1962,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 recorder(steps)
             except Exception:
                 pass
-    return {"finish_reason": finish, "client_gone": out.gone, "rounds": rounds}
+    return {"finish_reason": finish, "client_gone": out.gone, "rounds": rounds,
+            "answer": "".join(answer),
+            "tools_ran": [s["tool"] for s in steps if s.get("ran")]}
 
 
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,

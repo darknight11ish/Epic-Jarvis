@@ -672,6 +672,8 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
+| `/api/history?limit=&before=` | GET | **not yet** (planned: Brain, History) | **not yet** (planned: a History screen) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. Token + origin. The switch's state (`enabled`, `recording`, `why_not`, `waiting`, `keep_days`, `encrypted`) and `conversations`, newest first: `[{id, title, started, updated, turns, device, has_voice, tainted}]`. `limit` 1-100 (default 30); `before=<updated>` pages to older ones. `503 {"available": false, "error", "reason"}` if `jarvis_chat_log.py` is missing. |
+| `/api/history/conversation?id=` | GET | **not yet** | **not yet** | `chat-history.patch` - **§18**. One kept conversation, read-only: `{id, title, tainted, turns: [{role, text, at, provenance, read_outside, answer_kept} or {role: "assistant", text, at}]}`. `404` if there is no such conversation, `400` for a malformed id, `503` if it cannot be opened (the reason in words). |
 
 **`/api/models` gains `speed`** (`speed-record.patch`), next to `offload`:
 `{"available": true, "recent": [up to 20 answer rows, oldest first],
@@ -801,6 +803,8 @@ neither app says it would.
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | **no** | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. |
 | `/api/memory/edit` | POST | object | `brain.rs` `brain_memory_edit` | **no** | Refused while the stream is stale. |
 | `/api/memory/learning` | POST | `{"enabled": bool}` | `brain.rs` `brain_memory_learning` | `JarvisApi.setLearning` (Mind, "What Jarvis remembers") | **ON asks first** (`learning-asks.patch`, `jarvis_learning_switch.py`, 2026-09-24): **202** `{"ok": true, "waiting": true, "enabled": false, "message"}` while one approval card under the action `learning_enable` waits; it turns on (and starts the learner) only when that card is approved. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, and it withdraws a waiting ON. Both apps hold ON (not OFF) while the stream is stale, and say "waiting" until the card leaves the queue. A "Remember:" message makes a card even while learning is off. |
+| `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | **not yet** (planned: Brain, History) | **not yet** (planned: History) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted. Anything else: `400`. Every reply carries the `/api/history` status fields. |
+| `/api/history/delete` | POST | `{"id": "<conversation id>"}` | **not yet** (planned, with a confirm step) | **not yet** (planned, with a confirm step) | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. |
 | `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}` | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.kt:447` | The overnight tidy is **not built**: `enabled` only records the wish, and nothing runs. "Not now" sends nothing at all — the card tracks "already offered today" itself. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
 | `/api/attention/unmute` | POST | `{}` | `attention.rs:121` | `JarvisApi.kt:471` | Response is `budget()`, not `status()`, so the desktop re-reads rather than applying half an update. |
@@ -1784,3 +1788,222 @@ speech the microphone hears is sent as `source=barge_in` (with the rules in
 plays the clip as in 3; send `waited_ms` on every utterance; and a "Voice
 delay" panel showing `flow.summary` (the `label`, `median_ms` and
 `worst_ms` columns), with `flow.warm.state`.
+---
+
+## 18. Chat history (added 2026-09-24)
+
+**What it is.** The owner decided on 2026-09-24 that chat history,
+including what is said to Jarvis by voice, is kept **on the PC**, by
+default, **encrypted**, with a switch to turn it off. Until now the only copy
+of a conversation was the one an app held in memory. The phone keeps no
+history of its own beyond what it already does: both apps read it from the
+PC.
+
+It is also the PC's own record of each turn, written as the turn arrives,
+with **where its words came from**. The apps re-send the whole conversation
+with every question (§4), so a re-sent turn is only the app's say-so; the
+later automatic-learning work is meant to trust this record instead.
+
+Backend: `backend/chat-history.patch` (last in the patch order) and
+`backend/jarvis_chat_log.py` (shipped whole). Routes are in the §6 tables
+too. Every route needs the pairing token and passes the origin check, like
+every other private route.
+
+### 18.1 What every app adds to `POST /api/chat`
+
+Both optional; an app that sends neither still works exactly as before.
+
+On the request:
+
+- `conversation_id`: 8-64 characters of `A-Z a-z 0-9 _ -`, made by the app (a
+  random UUID is fine). A new one on "New conversation", when the chat is
+  cleared, and when the app starts. Anything else is treated as missing.
+- `device`: `"desktop"`, `"hud"` or `"phone"`. Shown in the History list;
+  never trusted for anything.
+
+On each `role: "user"` message:
+
+- `provenance`, one of:
+
+  | value | meaning |
+  |---|---|
+  | `typed` | typed into the box by the owner (the app's default for its own box) |
+  | `voice` | the transcript the PC's speech route gave back for this turn |
+  | `shared` | came from another app (the phone's Share sheet) |
+  | `clipboard` | put in the box from the clipboard (the desktop hotkey) and not edited before sending |
+  | `pasted` | pasted or dropped into the box (desktop: a `paste` or `drop` on the box since it was last empty; phone: one edit that inserted more than 40 characters at once) |
+  | `picture_caption` | words sent with a picture |
+
+  Missing, or any other value, is recorded as **`unknown`**, and unknown
+  counts as "not the owner's own words" everywhere it matters. The apps keep
+  each user turn's `provenance` in their own history and send it again with
+  that turn every time. The existing `origin` field is unchanged.
+
+**Phone Share.** Shared text is no longer put into the owner's draft. It
+is held as a chip above the box ("Shared text · 1,204 characters", with an
+X), and sent as its **own** user message, `provenance: "shared"`, just
+before the owner's typed message in the same request. If the owner typed
+nothing, the shared message is sent alone.
+
+**Desktop clipboard hotkey.** The short-snippet prefill is tagged
+`clipboard`; it becomes `typed` only if the owner edits it before sending.
+The long-snippet `system` context path is unchanged.
+
+**The server takes `provenance`, `conversation_id` and `device` off before
+anything goes to any model**, local or cloud: the local answering loop gets
+the messages without them, and every request the relay sends (each hop of
+the step-down loop) is cleaned in `_open()`. The request as it arrived is
+left alone, because the learner reads `origin` from it and the history
+record reads `provenance`.
+
+### 18.2 What the PC keeps
+
+For each `/api/chat` request, while history is on and encryption works:
+
+- **The newest user message only** - the live question, never the history
+  the app re-sent - with its provenance. The one addition: a `shared`
+  message sent immediately before it in the same request (phone Share) is
+  kept with it.
+- **The answer - only when the local model made it** through Jarvis's own
+  answering loop (`jarvis_agent.run_local_turn`) and it finished. **A cloud
+  answer is not kept**: the question is recorded with `answer_kept: false`
+  and the answer is not. Nor is an answer the app left before it finished,
+  or one that failed.
+- `read_outside`: true if **any** tool ran in that turn - every tool result
+  is text Jarvis did not get from the owner. From that turn on, the
+  conversation is `tainted`.
+- when (`at`, unix seconds), which app (`device`), which model (`lane`),
+  and the turn's number in the conversation.
+- A picture turn: **the words only**, as `picture_caption`. The picture
+  itself is never kept.
+
+`voice` is recorded as `voice` only when the words match a transcript the
+PC's own speech route produced in the last 10 minutes (only a hash of it is
+held, with the voice check's strictness, model and mode). Otherwise a claimed
+`voice` is recorded as `voice_unverified`.
+
+**Not kept:** tool output, system or context messages, deep questions,
+wiki jobs, notes (#obs, #log), approval cards, pictures. None of them come
+through `/api/chat`'s record.
+
+A request with no (or a malformed) `conversation_id` - an older app - is
+still kept, grouped per app and per day under an id like
+`untagged-phone-20260924`.
+
+**Encryption.** Every piece of text (each turn, and each conversation's
+title - its first user line, cut to 80 characters) is encrypted on its own
+with AES-256-GCM and a fresh nonce; the conversation id and turn number are
+bound in, so a row cannot be moved to another conversation and still open.
+The key is 32 random bytes in **Windows Credential Manager**, under
+`Jarvis Backend/chat history key`, made on first use and read back before
+use. The file is `<config folder>/chat-history.db` (the same folder as the
+custom voices). Not encrypted, said plainly: the conversation ids, turn
+numbers, times, roles, provenance, device, model name, `read_outside` and
+`answer_kept` - they say when and how often you talked to Jarvis, not what
+about.
+
+**Fail closed.** If the `cryptography` package is missing, Credential
+Manager cannot be used, or the key does not open what is already kept (it
+was deleted or replaced), **nothing is recorded and nothing is written in
+plain text**. `recording` is `false` and `why_not` says why, in words the
+apps show as they are.
+
+**Keeping and deleting.** `keep_days` is `0` (keep until deleted - the
+default), `30`, `90` or `365`. Conversations whose last turn is older are
+deleted when the history is first used after the backend starts, and then
+at most once a day. Turning history off stops recording at once; what is
+already kept stays until it is deleted or expires. Deleting a conversation
+removes its rows. **Why the extra step:** SQLite does not wipe deleted rows -
+their bytes stay in the file's free pages until something reuses them - so
+`secure_delete` is on (freed space is overwritten with zeros) and the file
+is compacted with `VACUUM` after a delete, at most once an hour.
+
+### 18.3 Routes
+
+`GET /api/history?limit=30&before=<updated unix seconds>`
+
+```json
+{"enabled": true, "recording": true, "why_not": "", "waiting": false,
+ "keep_days": 0, "encrypted": true,
+ "conversations": [{"id": "...", "title": "...", "started": 1790000000,
+   "updated": 1790000300, "turns": 6, "device": "phone",
+   "has_voice": true, "tainted": false}]}
+```
+
+Newest first. `limit` 1-100, default 30; `before` pages to older ones
+(pass the last row's `updated`). `has_voice` is true when any message was
+`voice` or `voice_unverified`. When the history cannot be opened the list is
+empty and `why_not` says why.
+
+`GET /api/history/conversation?id=<id>`
+
+```json
+{"id": "...", "title": "...", "tainted": false,
+ "turns": [{"role": "user", "text": "...", "at": 1790000000,
+            "provenance": "typed", "read_outside": false, "answer_kept": true},
+           {"role": "assistant", "text": "...", "at": 1790000004}]}
+```
+
+`404` if there is no such conversation. `answer_kept: false` on a user turn
+means its answer was not kept (a cloud answer, or one that did not finish).
+
+`POST /api/history/delete {"id": "..."}` - `200 {"ok": true}` or `404`. One
+conversation per request. **There is no "delete all" route**: irreversible
+bulk actions stay off the API.
+
+`POST /api/history/settings` - one setting per request:
+
+- `{"enabled": false}` - 200 at once, "Chat history is off. Nothing new is
+  kept. What is already kept stays until you delete it." It also withdraws
+  a waiting ON card.
+- `{"enabled": true}` - **202** `{"waiting": true, ...}` and ONE approval
+  card, action **`history_enable`**, which must be tier `ask` in
+  `jarvis-framework.toml` (shipped that way) or this answers **503**. Only
+  approving the card turns history on; denied, timed out or withdrawn
+  changes nothing. Already on: 200, no card. A card already waiting: 202, no
+  second card. A "no" on this card is never turned into a proposed memory
+  (`gate-outcome.patch`'s list).
+- `{"keep_days": 0 | 30 | 90 | 365}` - 200 at once; the reply says how many
+  conversations the change deleted.
+- Anything else - `400`.
+
+Every reply carries the same status fields as `GET /api/history`.
+
+If `jarvis_chat_log.py` is not installed, all four routes answer **503**
+`{"available": false, "error": "chat history is not installed on this PC,
+so no chats are kept", "reason"}` - and chat keeps working, keeping nothing.
+
+### 18.4 What each app shows
+
+Both apps (parity rule): a **History** view - desktop, a History section in
+the Brain window next to Memory; phone, a History screen next to Mind's
+other sections. (The HUD page sends `conversation_id`, `device: "hud"` and
+`provenance` too, but has no History view of its own.)
+
+- The list: title, when, device, a small mic mark for `has_voice`, a small
+  "read outside text" mark for `tainted`. Newest first, "Load older".
+- Opening one: a read-only transcript. On user turns that are not
+  typed or voice, the provenance is shown quietly ("shared", "pasted",
+  "from clipboard").
+- Deleting one, with a confirm step. No delete-all.
+- In the same place: **"Keep chat history on this PC"** - under it, "Your
+  chats, including what you say to Jarvis by voice, are kept on this PC,
+  encrypted. Nothing is sent anywhere." ON raises the card and shows
+  "Waiting for your approval" the way the learning switch does (track the
+  `history_enable` card in the approval queue); OFF is immediate. And
+  **"Delete conversations older than"**: Never / 30 days / 90 days / 1 year.
+- When `recording` is false, show `why_not` plainly.
+
+The approval card reads: "Turn chat history back on? Jarvis will keep your
+chats, including voice, on this PC, encrypted. Nothing leaves this PC."
+
+### 18.5 Known gaps, said plainly
+
+- **A cloud answer is not in the history.** Only the question is. A cloud
+  answer never passes through the PC's answering loop, where the answer is
+  collected.
+- **Voice is `voice_unverified` until the speech route is wired in.**
+  `jarvis_chat_log.note_transcript()` is what the PC's speech route calls
+  with each transcript it makes; that call is added separately.
+- **Checked only against a stand-in of the owner's `jarvis_hud.py`** built
+  from the whole patch stack, not against the real file.

@@ -122,6 +122,7 @@ SHIPPED = (
     "jarvis_learning_switch.py",
     "jarvis_voicebank.py",
     "jarvis_voice_flow.py",
+    "jarvis_chat_log.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",
