@@ -118,6 +118,18 @@ The owner types the name by hand, the same as at a terminal
 (`ollama pull <ref>`) - see `BrainScreen.kt`'s `ModelsPlate` and
 `JarvisRuntime.installModel`.
 
+Amended by the owner on 2026-09-24: **Jarvis learns automatically by
+default.** Facts about the owner and their projects, learned from the
+owner's own words only (never from web pages, emails, documents, notes or
+tool output), are saved without a per-fact yes, and every one is listed in
+both apps with a one-tap Forget. Sensitive topics (health, money, passwords
+and account details, private details about other people) still wait for
+the owner's yes, unless the owner turns on "Also remember sensitive topics
+automatically", which is off by default. Turning either setting on raises
+an approval card; turning it off is immediate. **Chat history, including
+voice transcripts, is kept on the PC by default**, encrypted, with a switch
+to turn it off. Background learning stays on by default.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
