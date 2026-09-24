@@ -137,6 +137,17 @@ Also decided 2026-09-24: an answer that uses a sensitive saved fact is
 for answers that use memories. A voice setting lets the owner allow it;
 turning that on raises an approval card like the other voice settings.
 
+Also decided 2026-09-24, after the safety research
+(`docs/RESEARCH-2026-09-24.md`):
+- **Note-writing waits for a yes after outside text.** In a turn where Jarvis
+  has read an email, web page, file or other tool output (or the
+  conversation is tainted, or the message was pasted or shared), writing to
+  Obsidian, Logseq or Joplin raises an approval card. Other turns save notes
+  straight away, as before.
+- **Passwords, PINs, account numbers and ID numbers always wait for the
+  owner's yes**, even with "Also remember sensitive topics automatically"
+  on. That setting covers health, money and the other sensitive topics only.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
