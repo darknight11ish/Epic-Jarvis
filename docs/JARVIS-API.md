@@ -932,9 +932,10 @@ link and let going quieter through.
 ## 12. The second graphics card (added 2026-09-24)
 
 `backend/second-card.patch` and `backend/jarvis_second_card.py`. The owner's
-guide is `docs/SECOND-CARD.md`. Neither app calls these routes yet;
-`tools/check_parity.py` records `/api/second-card` as `planned` until the
-desktop does (then reclassify it: `ported` once the phone calls it too).
+guide is `docs/SECOND-CARD.md`. **The phone calls both** (2026-09-24: Mind
+screen, "Second graphics card", `SecondCardPlate.kt` / `net/SecondCard.kt`);
+the desktop does not yet. `tools/check_parity.py` keeps `/api/second-card` as
+`planned` until the desktop calls it too, then it becomes `ported`.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
@@ -986,3 +987,17 @@ see pictures". The backend cannot make it say yes without lying about
 go to <model> on the second graphics card."); otherwise do what it does
 today. The phone does the same wherever it decides whether to send a
 picture. The route header then carries `second_card: "vision"` on that turn.
+
+**The phone's picture** (2026-09-24): a Photo button in chat, shown only
+while the `vision` row's `available` is true, and checked again (a fresh
+`GET`) before the send. Android's photo picker, no storage permission; the
+photo is shrunk in memory to 1920 pixels on its long side at JPEG quality 82
+(the desktop's `MAX_CAPTURE_WIDTH` and `JPEG_QUALITY`), then lower quality or
+smaller until it is at most 1.5 MB, which stays well inside `MAX_BODY` (4 MiB)
+after base64. The request is the desktop's, byte for byte in shape: the text
+and an `image_url` part (`data:image/jpeg;base64,...`) in the newest user
+message, `has_image: true`. `backend/test_phone_second_card_contract.py`
+checks that shape against `newest_turn_has_image`, `choose_lane` and the
+router, and the phone's `ChatPictureContractTest` builds the same bodies with
+its own encoder. Under the answer the phone says "Answered on the second
+graphics card (<model>)" when `second_card` is in the route header.

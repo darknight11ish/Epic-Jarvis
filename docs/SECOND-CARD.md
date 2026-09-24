@@ -112,10 +112,13 @@ program uses which card, so a "yes" is a good sign, not a guarantee.
    card that says which card, which model, how much memory, and that nothing
    leaves the PC. Say yes on the PC or the phone.
 
-**The switch screens are not in the apps yet.** The backend is done (this
-change); the desktop's Brain window and the phone's Mind screen are being
-built against it next. Until then nothing can be switched on, which is also
-the safe default.
+**On the phone:** open Mind (the button on Home), then the "Second graphics
+card" section, under Model. It shows what Jarvis found, the main switch and
+one switch per feature. Turning one on raises the approval card; the switch
+says "Waiting for you to approve the card on your PC or phone" until you
+answer it. With Pictures working, chat gets a Photo button. **On the desktop**
+the Brain window's switches are being built separately; until they are, the
+phone is the only place to switch these on.
 
 **Then measure before trusting it** (CLAUDE.md: "installed and measured").
 With a feature on, ask something that uses it and watch `nvidia-smi` in a
