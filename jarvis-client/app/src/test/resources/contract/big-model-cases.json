@@ -1,0 +1,1480 @@
+{
+  "_about": "Real output of backend/jarvis_big_model.py (GET /api/big-model, GET /api/deep, and the POST answers), one per named case, made by tools/gen_big_model_cases.py. The PC behind them (memory, drives, folders) is made up to look like the owner's, and colibri's answers are a stand-in in its documented shape; neither was captured on the owner's PC. Do not edit by hand: re-run the tool.",
+  "cases": {
+    "ask_accepted": {
+      "body": {
+        "id": "deep_000001",
+        "message": "Queued. The big model answers in the background - expect minutes. The answer appears in the list when it is done.",
+        "ok": true,
+        "pending": true,
+        "state": "queued"
+      },
+      "status": 202
+    },
+    "ask_empty_400": {
+      "body": {
+        "error": "say what to ask: {\"question\": \"...\"}",
+        "ok": false,
+        "state": "refused"
+      },
+      "status": 400
+    },
+    "ask_refused_off": {
+      "body": {
+        "error": "The big-model switch is off.",
+        "ok": false,
+        "state": "refused"
+      },
+      "status": 503
+    },
+    "ask_too_long_400": {
+      "body": {
+        "error": "the question is 4,001 characters; at most 4,000",
+        "ok": false,
+        "state": "refused"
+      },
+      "status": 400
+    },
+    "deep_done": {
+      "available": true,
+      "enabled": true,
+      "jobs": [
+        {
+          "answer": "Because the sky scatters blue light more than red.",
+          "finished": 1800000000,
+          "id": "deep_000001",
+          "model": "dsv4-flash",
+          "question": "Why is the sky blue?",
+          "queued": 1800000000,
+          "seconds": 8.0,
+          "started": 1800000000,
+          "state": "done",
+          "tokens": 12,
+          "tokens_per_s": 1.5,
+          "why": "Answered in 8 s by DeepSeek V4 Flash, 1.5 tokens a second (1.12 words a second). The time includes reading the question.",
+          "words_per_s": 1.12
+        }
+      ],
+      "limits": {
+        "answer_tokens": 2048,
+        "question_chars": 4000,
+        "queue": 3
+      },
+      "model": "dsv4-flash",
+      "why": "Ready. Questions are answered one at a time, in the background, by DeepSeek V4 Flash."
+    },
+    "deep_failed": {
+      "available": true,
+      "enabled": true,
+      "jobs": [
+        {
+          "finished": 1800000000,
+          "id": "deep_000002",
+          "model": "dsv4-flash",
+          "question": "And why are sunsets red?",
+          "queued": 1800000000,
+          "seconds": null,
+          "started": 1800000000,
+          "state": "failed",
+          "tokens": null,
+          "tokens_per_s": null,
+          "why": "Not answered: the big model answered HTTP 500.",
+          "words_per_s": null
+        },
+        {
+          "answer": "Because the sky scatters blue light more than red.",
+          "finished": 1800000000,
+          "id": "deep_000001",
+          "model": "dsv4-flash",
+          "question": "Why is the sky blue?",
+          "queued": 1800000000,
+          "seconds": 8.0,
+          "started": 1800000000,
+          "state": "done",
+          "tokens": 12,
+          "tokens_per_s": 1.5,
+          "why": "Answered in 8 s by DeepSeek V4 Flash, 1.5 tokens a second (1.12 words a second). The time includes reading the question.",
+          "words_per_s": 1.12
+        }
+      ],
+      "limits": {
+        "answer_tokens": 2048,
+        "question_chars": 4000,
+        "queue": 3
+      },
+      "model": "dsv4-flash",
+      "why": "Ready. Questions are answered one at a time, in the background, by DeepSeek V4 Flash."
+    },
+    "deep_loading": {
+      "available": true,
+      "enabled": true,
+      "jobs": [
+        {
+          "finished": null,
+          "id": "deep_000001",
+          "model": null,
+          "question": "Why is the sky blue?",
+          "queued": 1800000000,
+          "seconds": null,
+          "started": null,
+          "state": "loading",
+          "tokens": null,
+          "tokens_per_s": null,
+          "why": "Starting the big model (this can take minutes).",
+          "words_per_s": null
+        }
+      ],
+      "limits": {
+        "answer_tokens": 2048,
+        "question_chars": 4000,
+        "queue": 3
+      },
+      "model": "dsv4-flash",
+      "why": "Ready. Questions are answered one at a time, in the background, by DeepSeek V4 Flash."
+    },
+    "deep_off": {
+      "available": false,
+      "enabled": false,
+      "jobs": [],
+      "limits": {
+        "answer_tokens": 2048,
+        "question_chars": 4000,
+        "queue": 3
+      },
+      "model": "dsv4-flash",
+      "why": "The big-model switch is off."
+    },
+    "deep_queued": {
+      "available": true,
+      "enabled": true,
+      "jobs": [
+        {
+          "finished": null,
+          "id": "deep_000001",
+          "model": null,
+          "question": "Why is the sky blue?",
+          "queued": 1800000000,
+          "seconds": null,
+          "started": null,
+          "state": "queued",
+          "tokens": null,
+          "tokens_per_s": null,
+          "why": "Queued.",
+          "words_per_s": null
+        }
+      ],
+      "limits": {
+        "answer_tokens": 2048,
+        "question_chars": 4000,
+        "queue": 3
+      },
+      "model": "dsv4-flash",
+      "why": "Ready. Questions are answered one at a time, in the background, by DeepSeek V4 Flash."
+    },
+    "deep_thinking": {
+      "available": true,
+      "enabled": true,
+      "jobs": [
+        {
+          "finished": null,
+          "id": "deep_000001",
+          "model": "dsv4-flash",
+          "question": "Why is the sky blue?",
+          "queued": 1800000000,
+          "seconds": null,
+          "started": 1800000000,
+          "state": "thinking",
+          "tokens": null,
+          "tokens_per_s": null,
+          "why": "DeepSeek V4 Flash is thinking. On this PC that can take many minutes; nothing else waits for it.",
+          "words_per_s": null
+        }
+      ],
+      "limits": {
+        "answer_tokens": 2048,
+        "question_chars": 4000,
+        "queue": 3
+      },
+      "model": "dsv4-flash",
+      "why": "Ready. Questions are answered one at a time, in the background, by DeepSeek V4 Flash."
+    },
+    "post_master_off": {
+      "body": {
+        "enabled": false,
+        "message": "The big model is off.",
+        "ok": true,
+        "pending": false
+      },
+      "status": 200
+    },
+    "post_master_on_again_409": {
+      "body": {
+        "error": "a card to turn on the big model is already waiting - approve or deny that one"
+      },
+      "status": 409
+    },
+    "post_master_on_pending": {
+      "body": {
+        "enabled": false,
+        "message": "Approve the card on your PC or phone to turn it on. Nothing changes until you do.",
+        "ok": true,
+        "pending": true
+      },
+      "status": 200
+    },
+    "status_after_one_answer": {
+      "active": true,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: Qwen3.6-35B-A3B (medium), DeepSeek V4 Flash (giant)"
+      },
+      "enabled": true,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": "dsv4-flash",
+        "since": 1800000000.0,
+        "state": "ready",
+        "why": "running DeepSeek V4 Flash on 127.0.0.1:8765 (this PC only); it stops after 10 minutes with nothing to do"
+      },
+      "key_kept": "credential-manager",
+      "key_where": "Windows Credential Manager, \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": {
+          "at": 1800000000,
+          "model": "dsv4-flash",
+          "seconds": 8.0,
+          "tokens": 12,
+          "tokens_per_s": 1.5,
+          "words": 9,
+          "words_per_s": 1.12
+        },
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Off."
+        },
+        {
+          "available": true,
+          "enabled": true,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Working: DeepSeek V4 Flash is loaded."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_cuda_refused": {
+      "active": true,
+      "cuda": {
+        "setting": "on",
+        "usable": false,
+        "why": "[big_model] cuda is \"on\", but there is no capable second card (only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)). colibri is never put on the main card: that one is everyday chat"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: Qwen3.6-35B-A3B (medium), DeepSeek V4 Flash (giant)"
+      },
+      "enabled": true,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": "dsv4-flash",
+        "since": null,
+        "state": "failed",
+        "why": "[big_model] cuda is \"on\", but there is no capable second card (only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)). colibri is never put on the main card: that one is everyday chat"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Off."
+        },
+        {
+          "available": false,
+          "enabled": true,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "On. [big_model] cuda is \"on\", but there is no capable second card (only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)). colibri is never put on the main card: that one is everyday chat."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_giant_on_sata": {
+      "active": false,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\DeepSeek-V4-Flash",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": "D: is a SATA SSD drive. colibri reads most of a giant model from the disk for every word (its README: \"speed is set by your disk\"), and your own plan says giant models on the SATA drive are too slow: keep it on the NVMe drive.",
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: DeepSeek V4 Flash (giant)"
+      },
+      "enabled": false,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": null,
+        "since": null,
+        "state": "off",
+        "why": "not running - it starts only when a background job needs it"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Off. Turn on the big model itself first."
+        },
+        {
+          "available": false,
+          "enabled": false,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Off. Turn on the big model itself first."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_loading": {
+      "active": true,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: Qwen3.6-35B-A3B (medium), DeepSeek V4 Flash (giant)"
+      },
+      "enabled": true,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": "dsv4-flash",
+        "since": 1800000000.0,
+        "state": "loading",
+        "why": "loading DeepSeek V4 Flash from E: - this can take several minutes. colibri listens on 127.0.0.1:8765 (this PC only)"
+      },
+      "key_kept": "credential-manager",
+      "key_where": "Windows Credential Manager, \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Off."
+        },
+        {
+          "available": true,
+          "enabled": true,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "On. DeepSeek V4 Flash is loading."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_model_folder_missing": {
+      "active": false,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": false,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": false,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "unknown",
+            "found": false,
+            "free_gb": null,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": false,
+            "why": "the folder D:\\models\\qwen36_i4_gs64 does not exist"
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "Qwen3.6-35B-A3B: the folder D:\\models\\qwen36_i4_gs64 does not exist"
+      },
+      "enabled": false,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": null,
+        "since": null,
+        "state": "off",
+        "why": "not running - it starts only when a background job needs it"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Needs the big model set up: Qwen3.6-35B-A3B: the folder D:\\models\\qwen36_i4_gs64 does not exist."
+        },
+        {
+          "available": false,
+          "enabled": false,
+          "id": "deep_questions",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Needs the big model set up: Qwen3.6-35B-A3B: the folder D:\\models\\qwen36_i4_gs64 does not exist."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_no_python": {
+      "active": false,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": false,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": false,
+          "why": "Python 3 was not found. colibri's launcher is a Python script: install Python 3 from python.org and tick \"Add python.exe to PATH\""
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "Python 3 was not found. colibri's launcher is a Python script: install Python 3 from python.org and tick \"Add python.exe to PATH\""
+      },
+      "enabled": false,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": null,
+        "since": null,
+        "state": "off",
+        "why": "not running - it starts only when a background job needs it"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Needs the big model set up: Python 3 was not found. colibri's launcher is a Python script: install Python 3 from python.org and tick \"Add python.exe to PATH\"."
+        },
+        {
+          "available": false,
+          "enabled": false,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Needs the big model set up: Python 3 was not found. colibri's launcher is a Python script: install Python 3 from python.org and tick \"Add python.exe to PATH\"."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_not_enough_free_memory": {
+      "active": true,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": false,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Usable, but not right now: it needs 24 GB of free memory to start and 12.4 GB is free. Close something big, or wait."
+          },
+          {
+            "can_start_now": false,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Usable, but not right now: it needs 16 GB of free memory to start and 12.4 GB is free. Close something big, or wait."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 12.4,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: Qwen3.6-35B-A3B (medium), DeepSeek V4 Flash (giant)"
+      },
+      "enabled": true,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": "qwen36",
+        "since": null,
+        "state": "failed",
+        "why": "not started: Qwen3.6-35B-A3B needs 24 GB of free memory and 12.4 GB is free right now. Close something big (a game, a browser with many tabs) and it tries again"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": true,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "On. Not started: Qwen3.6-35B-A3B needs 24 GB of free memory and 12.4 GB is free right now. Close something big (a game, a browser with many tabs) and it tries again."
+        },
+        {
+          "available": false,
+          "enabled": true,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "On. Usable, but not right now: it needs 16 GB of free memory to start and 12.4 GB is free. Close something big, or wait.."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_not_installed": {
+      "active": false,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": false,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": false,
+          "why": "[big_model] coli_path is C:\\colibri, but there is no coli.cmd in that folder. It must be the folder you unpacked colibri's release into"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": false,
+          "why": "not checked (colibri first)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "[big_model] coli_path is C:\\colibri, but there is no coli.cmd in that folder. It must be the folder you unpacked colibri's release into"
+      },
+      "enabled": false,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": null,
+        "since": null,
+        "state": "off",
+        "why": "not running - it starts only when a background job needs it"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Needs the big model set up: [big_model] coli_path is C:\\colibri, but there is no coli.cmd in that folder. It must be the folder you unpacked colibri's release into."
+        },
+        {
+          "available": false,
+          "enabled": false,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Needs the big model set up: [big_model] coli_path is C:\\colibri, but there is no coli.cmd in that folder. It must be the folder you unpacked colibri's release into."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_on_idle": {
+      "active": true,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: Qwen3.6-35B-A3B (medium), DeepSeek V4 Flash (giant)"
+      },
+      "enabled": true,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": null,
+        "since": null,
+        "state": "off",
+        "why": "not running - it starts only when a background job needs it"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": true,
+          "enabled": true,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "On. Qwen3.6-35B-A3B starts when this job next has work, and stops 10 minutes after."
+        },
+        {
+          "available": true,
+          "enabled": true,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "On. DeepSeek V4 Flash starts when this job next has work, and stops 10 minutes after."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_pending": {
+      "active": false,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: Qwen3.6-35B-A3B (medium), DeepSeek V4 Flash (giant)"
+      },
+      "enabled": false,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": null,
+        "since": null,
+        "state": "off",
+        "why": "not running - it starts only when a background job needs it"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [
+        "master"
+      ],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Off. Turn on the big model itself first."
+        },
+        {
+          "available": false,
+          "enabled": false,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Off. Turn on the big model itself first."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_ready_off": {
+      "active": false,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: Qwen3.6-35B-A3B (medium), DeepSeek V4 Flash (giant)"
+      },
+      "enabled": false,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": null,
+        "since": null,
+        "state": "off",
+        "why": "not running - it starts only when a background job needs it"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Off. Turn on the big model itself first."
+        },
+        {
+          "available": false,
+          "enabled": false,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Off. Turn on the big model itself first."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_running": {
+      "active": true,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": true,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 24 GB needed."
+          },
+          {
+            "can_start_now": true,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Ready to use: 25.3 GB of memory free, 16 GB needed."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 25.3,
+          "total_gb": 31.9
+        },
+        "why": "colibri and Python 3 found; usable: Qwen3.6-35B-A3B (medium), DeepSeek V4 Flash (giant)"
+      },
+      "enabled": true,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": "dsv4-flash",
+        "since": 1800000000.0,
+        "state": "ready",
+        "why": "running DeepSeek V4 Flash on 127.0.0.1:8765 (this PC only); it stops after 10 minutes with nothing to do"
+      },
+      "key_kept": "credential-manager",
+      "key_where": "Windows Credential Manager, \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Off."
+        },
+        {
+          "available": true,
+          "enabled": true,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Working: DeepSeek V4 Flash is loaded."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    },
+    "status_too_little_memory": {
+      "active": false,
+      "cuda": {
+        "setting": "off",
+        "usable": true,
+        "why": "not used: [big_model] cuda is \"off\", so colibri runs on the processor and never touches a graphics card"
+      },
+      "detected": {
+        "capable": true,
+        "colibri": {
+          "dir": "C:\\colibri",
+          "found": true,
+          "why": "colibri found in C:\\colibri ([big_model] coli_path)"
+        },
+        "models": [
+          {
+            "can_start_now": false,
+            "dir": "D:\\models\\qwen36_i4_gs64",
+            "drive": "D:",
+            "drive_type": "SATA SSD",
+            "found": true,
+            "free_gb": 3100.0,
+            "id": "qwen36",
+            "kind": "medium",
+            "name": "Qwen3.6-35B-A3B",
+            "need_gb": 24.0,
+            "note": null,
+            "usable": false,
+            "why": "this PC has 16 GB of memory, and a medium model needs 24 GB, because the whole model is held in memory (colibri's README.md; docs/qwen36.md: ~30 GB is comfortable)"
+          },
+          {
+            "can_start_now": false,
+            "dir": "E:\\models\\DeepSeek-V4-Flash",
+            "drive": "E:",
+            "drive_type": "NVMe",
+            "found": true,
+            "free_gb": 290.0,
+            "id": "dsv4-flash",
+            "kind": "giant",
+            "name": "DeepSeek V4 Flash",
+            "need_gb": 16.0,
+            "note": null,
+            "usable": true,
+            "why": "Usable, but not right now: it needs 16 GB of free memory to start and 11 GB is free. Close something big, or wait."
+          }
+        ],
+        "python": {
+          "found": true,
+          "why": "Python 3 found (py)"
+        },
+        "ram": {
+          "available_gb": 11.0,
+          "total_gb": 16.0
+        },
+        "why": "colibri and Python 3 found; usable: DeepSeek V4 Flash (giant)"
+      },
+      "enabled": false,
+      "engine": {
+        "busy": false,
+        "idle_minutes": 10,
+        "listens_on": "127.0.0.1:8765",
+        "model": null,
+        "since": null,
+        "state": "off",
+        "why": "not running - it starts only when a background job needs it"
+      },
+      "key_kept": "not-made-yet",
+      "key_where": "made when colibri first starts, then kept in Windows Credential Manager as \"Jarvis Big Model/api key\"",
+      "measured": {
+        "deep_questions": null,
+        "wiki": null
+      },
+      "pending": [],
+      "switches": [
+        {
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "model": "qwen36",
+          "model_name": "Qwen3.6-35B-A3B",
+          "name": "Wiki builder",
+          "what": "The wiki builder uses the big model, on this PC's processor and SSD, instead of the second graphics card. Much slower; for when you want a bigger model to write the pages, or have no second card.",
+          "why": "Off. Turn on the big model itself first."
+        },
+        {
+          "available": false,
+          "enabled": false,
+          "id": "deep_questions",
+          "model": "dsv4-flash",
+          "model_name": "DeepSeek V4 Flash",
+          "name": "Deep questions",
+          "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
+          "why": "Off. Turn on the big model itself first."
+        }
+      ],
+      "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",
+      "verified": false
+    }
+  }
+}
