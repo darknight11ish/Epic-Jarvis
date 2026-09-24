@@ -603,6 +603,56 @@ def t_last_card():
               and "while its card was waiting" in last["why"], last)
 
 
+def t_standby_frees_the_second_card():
+    # Standby promised to free "the graphics card" and freed only the main
+    # one. And a stopped lane has to STAY stopped: both apps poll
+    # GET /api/second-card, which reconciles - without the asleep flag the
+    # next poll started it again.
+    import jarvis_power as PW
+    try:
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True, long_context=True, learning=True)
+            SC.status()
+            p = w.started[0]
+            PW.set_mode("standby", why="test")
+            out = SC.sleep()
+            check("sleep: the second Ollama is stopped, and it says so",
+                  out["stopped"] and w.killed == [p] and SC._LANE.state == "off"
+                  and "second graphics card" in out["sentence"], (out, SC._LANE.state))
+            for _ in range(3):
+                st = SC.status()
+            check("the apps' polling does not start it again while asleep",
+                  len(w.started) == 1 and st["lane"]["state"] == "off"
+                  and "asleep" in st["lane"]["why"], st["lane"])
+            check("background learning does not wake it",
+                  SC.lane_for("learning") is None and len(w.started) == 1)
+            SC.lane_for("long_context")
+            check("the owner using a feature wakes it, on demand",
+                  len(w.started) == 2 and not SC.asleep())
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True, long_context=True)
+            PW.set_mode("standby", why="test")
+            out = SC.sleep()
+            check("nothing running: stopped is False, and nothing is said",
+                  out == {"stopped": False, "sentence": ""}, out)
+            SC.status()
+            check("still asleep while Jarvis is on standby", not w.started)
+            PW.set_mode("active", why="test")
+            SC.status()
+            check("Jarvis leaving standby wakes it by itself",
+                  len(w.started) == 1 and not SC.asleep())
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True, long_context=True)
+            PW.set_mode("active", why="test")
+            SC.sleep()
+            SC.status()
+            check("sleep() while Jarvis is not on standby does not stick",
+                  len(w.started) == 1 and not SC.asleep())
+    finally:
+        PW.set_mode("active", why="test")
+        SC.wake()
+
+
 def t_lane_for_is_none_when_not_ready():
     def ready(**kw):
         return G.World(G.SMI["2080s_2060"], **kw)

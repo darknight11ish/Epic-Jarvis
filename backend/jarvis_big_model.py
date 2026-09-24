@@ -1328,6 +1328,36 @@ def shutdown() -> None:
 atexit.register(shutdown)
 
 
+def sleep(why: str = "Jarvis is on standby") -> dict:
+    """Standby: stop colibri and free its memory (and, with cuda="on", the
+    second card). {"stopped": bool, "sentence": str}. Never raises.
+
+    A job that is using it right now - a deep question being answered, a
+    wiki page being written - is NOT cut off: that would throw away minutes
+    of work the owner asked for. It is left to finish, and colibri stops by
+    itself after its idle minutes, as always. Nothing here needs a "stay
+    asleep" flag: colibri only ever starts for a job (lane_for), never from
+    a status read."""
+    try:
+        with _ENGINE.lock:
+            running = _ENGINE.state in ("loading", "ready") or _ENGINE.proc is not None
+            if not running:
+                return {"stopped": False, "sentence": ""}
+            holder = _ENGINE.other_holder(None)
+            if holder is not None or _ENGINE.busy:
+                name = JOB_NAMES.get(holder or "", "a job")
+                return {"stopped": False, "busy": holder or "",
+                        "sentence": (f"The big model is still working on {name.lower()}; it "
+                                     f"stops by itself {_idle_minutes()} minutes after it "
+                                     f"finishes.")}
+            _ENGINE.stop(f"asleep: {why}")
+        _audit("big_model.sleep", {"stopped": True})
+        return {"stopped": True, "sentence": "The big model was stopped too."}
+    except Exception as exc:
+        return {"stopped": False,
+                "sentence": f"Could not stop the big model ({type(exc).__name__})."}
+
+
 def engine_card() -> Optional[dict]:
     """The graphics card colibri is on right now, or None: {"uuid",
     "state", "idle_minutes"}. There is only ever one with [big_model] cuda =

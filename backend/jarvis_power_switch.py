@@ -12,9 +12,12 @@ WHAT THIS DOES (power-mode.patch adds `POST /api/power`)
 
     active    answers, and may speak first.
     quiet     answers, but does not start things on its own.
-    standby   also frees the graphics card: the loaded model is unloaded
-              (what the desktop FAQ promises), so the next answer takes
-              5-15 seconds while it loads again.
+    standby   also frees the graphics cards (what the desktop FAQ
+              promises): the loaded model is unloaded, and so are the
+              second card's Ollama and the big model when they run
+              (jarvis_second_card.sleep, jarvis_big_model.sleep; a big-model
+              job already under way is left to finish). The next answer
+              takes 5-15 seconds while it loads again.
 
 PERMISSION - the one model, and why it does not ask by default
 It goes through jarvis_gate.check("power_manage", ...), like everything else.
@@ -51,7 +54,7 @@ MODES = ("active", "quiet", "standby")
 _WORDS = {
     "active": "Active: Jarvis answers, and may speak first.",
     "quiet": "Quiet: Jarvis still answers you, but starts nothing on its own.",
-    "standby": ("Standby: Jarvis frees the graphics card by unloading the model. The "
+    "standby": ("Standby: Jarvis frees its graphics cards by unloading its models. The "
                 "next answer takes 5-15 seconds while it loads again."),
 }
 
@@ -109,6 +112,29 @@ _PENDING_LOCK = threading.Lock()
 _PENDING: dict = {}
 
 
+def _free_other_engines(others=None) -> list:
+    """Standby frees the SECOND graphics card and the big model too, not only
+    the everyday model - "frees its graphics cards" has to be true with two.
+    `others` is for tests: a list of modules with sleep(why). Each answers one
+    sentence (empty when there was nothing to say). Never raises."""
+    if others is None:
+        others = []
+        for name in ("jarvis_second_card", "jarvis_big_model"):
+            try:
+                others.append(__import__(name))
+            except Exception:
+                continue
+    out = []
+    for mod in others:
+        try:
+            said = (mod.sleep("Jarvis is on standby") or {}).get("sentence", "")
+        except Exception as exc:
+            said = f"Could not free {getattr(mod, '__name__', 'an engine')} ({type(exc).__name__})."
+        if said:
+            out.append(str(said))
+    return out
+
+
 def card_text(mode: str, current: str) -> str:
     return "\n".join([
         f"Switch Jarvis from {current} to {mode}.", "",
@@ -118,7 +144,7 @@ def card_text(mode: str, current: str) -> str:
 
 
 def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
-             power=None, models=None, wait_s: float = 1.5) -> tuple:
+             power=None, models=None, wait_s: float = 1.5, others=None) -> tuple:
     """Change the power mode through the gate. Returns (http_status, body)."""
     mode = str(mode or "").strip().lower()
     if mode not in MODES:
@@ -176,6 +202,10 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
         out = {"ok": True, "mode": mode, "changed": True, "message": _WORDS[mode]}
         if mode == "standby":
             out.update(_unload_models(models))
+            also = _free_other_engines(others)
+            if also:
+                out["also"] = also
+                out["message"] = " ".join([out["message"]] + also)
         box["out"] = (200, out)
 
     t = threading.Thread(target=work, name="jarvis-power-switch", daemon=True)

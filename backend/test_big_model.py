@@ -529,6 +529,25 @@ def t_one_job_at_a_time():
               BM._ENGINE.holder is None and BM.deep_status()["jobs"][0]["state"] == "done")
 
 
+def t_standby_stops_the_big_model():
+    with World() as w:
+        out = BM.sleep()
+        check("nothing running: nothing stopped, nothing said",
+              out == {"stopped": False, "sentence": ""} and not w.killed, out)
+    with World(spawn_now=False) as w:
+        w.switches(master=True, deep_questions=True)
+        BM.lane_for("deep_questions")
+        out = BM.sleep()
+        check("a deep question under way is not cut off, and it says why",
+              not out["stopped"] and not w.killed and out["busy"] == "deep_questions"
+              and "deep questions" in out["sentence"], out)
+        BM.release("deep_questions")
+        out = BM.sleep()
+        check("once the job has ended: colibri is stopped, and it says so",
+              out["stopped"] and len(w.killed) == 1 and BM._ENGINE.state == "off"
+              and "big model" in out["sentence"], out)
+
+
 def t_the_graphics_card():
     capable = {"capable": True, "uuid": G.U_2060, "name": "NVIDIA GeForce RTX 2060",
                "lane": "off", "why": "the RTX 2060 can take the second-card features"}

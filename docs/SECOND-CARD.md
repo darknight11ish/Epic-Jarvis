@@ -63,6 +63,13 @@ that:
   `GPU-`).
 - holds one model at a time, with the compact `q8_0` memory format.
 
+**Standby frees this card too.** Choosing Standby (tray menu or phone)
+stops this copy, which frees everything it held on the card. It stays
+stopped until you use a second-card feature again, or Jarvis leaves
+Standby; background learning does not wake it. The big model is stopped
+the same way, unless it is in the middle of a job you asked for - that is
+left to finish.
+
 When every switch is off again, Jarvis stops that copy. It never stops an
 Ollama it did not start: if something else is already using port 11435,
 Jarvis says so and leaves it alone. Its log is `second-card-ollama.log` in

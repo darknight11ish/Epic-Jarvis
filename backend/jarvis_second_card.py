@@ -1006,8 +1006,15 @@ def _feature_active(feature: str, sw: dict, det: dict) -> bool:
 
 
 def _reconcile(sw: dict, det: dict) -> None:
-    """Start the second Ollama if something needs it, stop it if nothing does."""
+    """Start the second Ollama if something needs it, stop it if nothing does.
+    While Jarvis is on standby (sleep()), it starts nothing."""
     try:
+        if _still_asleep():
+            if _LANE.state != "off" or _LANE.proc is not None:
+                _LANE.stop(_ASLEEP["why"])
+            else:
+                _LANE.why = _ASLEEP["why"]
+            return
         if _wanted(sw, det):
             second = det["_second"]
             _, ctx, _ = _long_context_plan(second.total_mb)
@@ -1035,6 +1042,73 @@ def _reconcile(sw: dict, det: dict) -> None:
                          if det.get("capable") else f"no capable second card: {det.get('why')}")
     except Exception as exc:
         _LANE.state, _LANE.why = "failed", f"unexpected error ({type(exc).__name__})"
+
+
+# --------------------------------------------------------------------------
+#   Standby: the second card is freed too
+# --------------------------------------------------------------------------
+#
+# Standby (jarvis_power_switch.py) promises to free the graphics card. With
+# two cards that has to mean both: sleep() stops the second Ollama, which
+# frees everything it held on that card, CUDA's own share included.
+#
+# It then has to STAY stopped. Both apps read GET /api/second-card every few
+# seconds, and status() reconciles - so without this flag the next poll
+# started the lane again, and standby freed the card for a few seconds.
+# It wakes the way the main model does, "on demand": the next time the owner
+# actually uses a second-card feature (lane_for), or when Jarvis leaves
+# standby. Background learning is not the owner using it, so it does not
+# wake the card; it waits, like the rest of Jarvis's own background work.
+
+_ASLEEP = {"on": False, "why": ""}
+_ASLEEP_LOCK = threading.Lock()
+#: Features that run in the background on Jarvis's own schedule. They never
+#: wake the card from standby.
+_BACKGROUND = frozenset({"learning"})
+
+
+def sleep(why: str = "Jarvis is on standby") -> dict:
+    """Stop the second Ollama and keep it stopped until it is really needed
+    or Jarvis leaves standby. {"stopped": bool, "sentence": str}. Never raises."""
+    try:
+        with _ASLEEP_LOCK:
+            _ASLEEP.update(on=True, why=f"asleep: {why}")
+        running = _LANE.state != "off" or _LANE.proc is not None
+        if running:
+            _LANE.stop(_ASLEEP["why"])
+        _audit("second_card.sleep", {"stopped": running})
+        return {"stopped": running,
+                "sentence": "The second graphics card was freed too." if running else ""}
+    except Exception as exc:
+        return {"stopped": False,
+                "sentence": f"Could not stop the second graphics card ({type(exc).__name__})."}
+
+
+def wake() -> None:
+    """Allow the second Ollama to start again. It starts only when something
+    needs it. Never raises."""
+    with _ASLEEP_LOCK:
+        _ASLEEP.update(on=False, why="")
+
+
+def asleep() -> bool:
+    return bool(_ASLEEP["on"])
+
+
+def _still_asleep() -> bool:
+    """Asleep, unless Jarvis has left standby since - then wake by itself.
+    A power module that cannot be read leaves it asleep: the safe direction
+    for a promise to keep the card free."""
+    if not _ASLEEP["on"]:
+        return False
+    try:
+        import jarvis_power
+        if str(jarvis_power.current()) != "standby":
+            wake()
+            return False
+    except Exception:
+        pass
+    return True
 
 
 def lane_state() -> str:
@@ -1076,6 +1150,10 @@ def lane_for(feature: str) -> Optional[Lane]:
             return None
         if not all(sw["features"].get(d) for d in _BY_ID[feature]["needs"]):
             return None
+        if _ASLEEP["on"]:
+            if feature in _BACKGROUND:
+                return None     # Jarvis's own background work does not wake the card
+            wake()              # the owner is using it: wake on demand
         det = detect()
         _reconcile(sw, det)
         if not det.get("capable") or _LANE.state != "running":
@@ -1696,6 +1774,7 @@ def _reset_for_tests() -> None:
         _LAST_ANY.clear()
     _TAGS.clear()
     _LEARN.update(failed_at=-1e9, short=False)
+    wake()
     try:
         _LANE.stop("reset")
     except Exception:

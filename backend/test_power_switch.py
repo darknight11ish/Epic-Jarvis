@@ -113,6 +113,41 @@ def t_standby_frees_the_card_and_says_so():
     check("waking works the same way", P.current() == "active" and out["changed"])
 
 
+def t_standby_frees_the_other_cards_too():
+    # With two cards, "frees its graphics cards" has to cover the second
+    # card's Ollama and the big model as well as the everyday model.
+    reset()
+    calls = []
+
+    def engine(name, sentence=None, boom=False):
+        def sleep(why):
+            calls.append((name, why))
+            if boom:
+                raise RuntimeError("no")
+            return {"stopped": bool(sentence), "sentence": sentence or ""}
+        return types.SimpleNamespace(__name__=name, sleep=sleep)
+
+    others = [engine("jarvis_second_card", "The second graphics card was freed too."),
+              engine("jarvis_big_model"),
+              engine("jarvis_other", boom=True)]
+    code, out = S.set_mode("standby", gate_check=lambda *a: Verdict(True, "auto"),
+                           models=FakeModels(), others=others)
+    check("every engine is asked to sleep, once each, because of standby",
+          [c[0] for c in calls] == ["jarvis_second_card", "jarvis_big_model", "jarvis_other"]
+          and all("standby" in c[1] for c in calls), calls)
+    check("what was freed is said, what had nothing to free says nothing",
+          out.get("also", [])[:1] == ["The second graphics card was freed too."]
+          and "The second graphics card was freed too." in out["message"]
+          and len(out.get("also", [])) == 2, out)
+    check("an engine that fails says so, and standby still happens",
+          "Could not free jarvis_other" in out["also"][1] and P.current() == "standby", out)
+    reset()
+    calls.clear()
+    S.set_mode("quiet", gate_check=lambda *a: Verdict(True, "auto"),
+               models=FakeModels(), others=others)
+    check("quiet frees nothing", calls == [])
+
+
 def t_standby_refused_while_a_task_runs():
     reset()
     TC.begin("appr_busy", "control_computer")
