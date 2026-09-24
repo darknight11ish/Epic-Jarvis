@@ -244,6 +244,10 @@ def answer(code_body):
 TIME_KEYS = ("created", "at", "since", "changed")
 
 
+#: What every measured step time reads as in the fixture.
+FIXED_MS = 1.0
+
+
 def scrub(value, world):
     if isinstance(value, dict):
         out = {}
@@ -252,6 +256,12 @@ def scrub(value, world):
                 out[k] = FIXED_TIME
             elif k == "expires_in" and isinstance(v, int):
                 out[k] = FIXED_EXPIRES_IN
+            elif k.endswith("_ms") and isinstance(v, float):
+                # The voice flow's step timings (jarvis_voice_flow): measured
+                # on this machine, so different on every run. Settings in
+                # milliseconds (ask_after_ms, after_ms) are whole numbers and
+                # are kept as they are.
+                out[k] = FIXED_MS
             elif k in ("seconds", "rtf") and "engine" in value and isinstance(v, float):
                 # A say() timing row: how long it took is a measured time.
                 out[k] = FIXED_TOOK if k == "seconds" else (
