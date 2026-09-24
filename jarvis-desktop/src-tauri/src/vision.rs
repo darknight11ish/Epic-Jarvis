@@ -26,13 +26,24 @@
 //!
 //! Nothing is sent anywhere but those two loopback services, and nothing
 //! about the picture is sent at all - only the model's name.
+//!
+//! THE SECOND GRAPHICS CARD. With its Pictures switch on and working, the
+//! backend does NOT send a picture to `current`: it sends it to a picture
+//! model (`qwen2.5vl:7b` today) on the second card (docs/SECOND-CARD.md,
+//! JARVIS-API.md section 12). The two requests above would still say "cannot
+//! see pictures" about `current`, which would be wrong. So a third request
+//! comes FIRST: `GET /api/second-card` on the same Jarvis server. If its
+//! `vision` row says `available: true`, the answer is yes, and the reason
+//! names that model. Anything else - the switch off, the model not
+//! installed, an older backend with no such route (404), the module missing
+//! (503), no answer - and the check is exactly what it was before.
 
 use std::time::Duration;
 
 use serde::Serialize;
 use tauri::AppHandle;
 
-use crate::commands::{jarvis_base, jarvis_client, jarvis_headers};
+use crate::commands::{jarvis_base, jarvis_client, jarvis_headers, SECOND_CARD_PATH};
 
 /// Both requests are loopback and small. A model that is still loading can
 /// make `/api/show` slow; past this, the answer is "cannot tell".
@@ -76,6 +87,59 @@ pub fn vision_from_show(show: &serde_json::Value) -> Option<bool> {
         Some(info) if !info.is_null() => Some(true),
         _ => None,
     }
+}
+
+/// The picture model the second card is answering pictures with, out of
+/// `GET /api/second-card` (`jarvis_second_card.status()`): the `vision`
+/// feature's `model`, but ONLY when that row's `available` is exactly `true`
+/// (the switch on, a capable card, the second Ollama running and the model
+/// installed). `enabled` or `active` alone is not enough: an enabled switch
+/// that is still waiting sends the picture to `current`, as before.
+pub fn second_card_picture_model(status: &serde_json::Value) -> Option<String> {
+    let row = status
+        .get("features")?
+        .as_array()?
+        .iter()
+        .find(|f| f.get("id").and_then(|i| i.as_str()) == Some("vision"))?;
+    if row.get("available").and_then(|a| a.as_bool()) != Some(true) {
+        return None;
+    }
+    let model = row
+        .get("model")
+        .and_then(|m| m.as_str())
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .unwrap_or("the picture model");
+    Some(model.to_string())
+}
+
+/// The answer when the second card takes pictures.
+pub fn second_card_check(model: String) -> VisionCheck {
+    VisionCheck {
+        reason: format!("Pictures go to {model} on the second graphics card."),
+        model: Some(model),
+        vision: Some(true),
+    }
+}
+
+/// Asks the Jarvis server whether the second card is answering pictures.
+/// Every failure is `None` - "not that way" - so the check carries on exactly
+/// as it did before the second card existed.
+async fn read_second_card_picture_model(
+    app: &AppHandle,
+    client: &reqwest::Client,
+) -> Option<String> {
+    let response = client
+        .get(format!("{}{SECOND_CARD_PATH}", jarvis_base(app)))
+        .headers(jarvis_headers(app).ok()?)
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = response.json().await.ok()?;
+    second_card_picture_model(&body)
 }
 
 async fn read_current_model(app: &AppHandle, client: &reqwest::Client) -> Result<String, String> {
@@ -134,6 +198,9 @@ pub async fn local_model_vision(app: AppHandle) -> VisionCheck {
             }
         }
     };
+    if let Some(model) = read_second_card_picture_model(&app, &client).await {
+        return second_card_check(model);
+    }
     let model = match read_current_model(&app, &client).await {
         Ok(model) => model,
         Err(reason) => {
@@ -208,5 +275,102 @@ mod tests {
     fn no_capabilities_and_no_projector_is_cannot_tell_not_no() {
         assert_eq!(vision_from_show(&json!({"modelfile": "FROM x"})), None);
         assert_eq!(vision_from_show(&json!({"projector_info": null})), None);
+    }
+
+    /// The real `status()` output (tools/gen_second_card_cases.py) - never
+    /// hand-written here.
+    const SECOND_CARD: &str = include_str!("../../tests/fixtures/second-card-cases.json");
+
+    fn second_card_cases() -> serde_json::Value {
+        serde_json::from_str(SECOND_CARD).expect("second-card-cases.json is JSON")
+    }
+
+    /// In every real case the Pictures switch is not working, so the check
+    /// must fall through to today's: ask about `current`, as before.
+    #[test]
+    fn no_real_case_with_pictures_off_claims_the_second_card() {
+        let doc = second_card_cases();
+        for (name, status) in doc["cases"].as_object().unwrap() {
+            let row = status["features"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|f| f["id"] == "vision")
+                .unwrap_or_else(|| panic!("{name}: no vision row"));
+            assert_ne!(row["available"], true, "{name}: the fixture changed");
+            assert_eq!(second_card_picture_model(status), None, "{name}");
+        }
+    }
+
+    /// Pictures working: the `vision` row of a real status with `available`
+    /// set true (the only field that differs when the second Ollama is up and
+    /// the model is installed). The answer is yes, and names the model and
+    /// the card.
+    #[test]
+    fn pictures_on_the_second_card_are_a_yes_naming_the_model() {
+        let doc = second_card_cases();
+        let mut status = doc["cases"]["running_long_context"].clone();
+        for f in status["features"].as_array_mut().unwrap() {
+            if f["id"] == "vision" {
+                f["enabled"] = json!(true);
+                f["active"] = json!(true);
+                f["available"] = json!(true);
+                f["model_installed"] = json!(true);
+            }
+        }
+        let model = second_card_picture_model(&status).expect("a picture model");
+        assert_eq!(model, "qwen2.5vl:7b");
+        let check = second_card_check(model);
+        assert_eq!(check.vision, Some(true));
+        assert_eq!(check.model.as_deref(), Some("qwen2.5vl:7b"));
+        assert_eq!(
+            check.reason,
+            "Pictures go to qwen2.5vl:7b on the second graphics card."
+        );
+    }
+
+    /// On-but-waiting is not working: `enabled` and `active` without
+    /// `available` sends the picture to `current`, so it must not say yes.
+    #[test]
+    fn enabled_but_not_available_is_not_a_yes() {
+        let doc = second_card_cases();
+        let mut status = doc["cases"]["card_missing_but_enabled"].clone();
+        let row = status["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["id"] == "vision")
+            .unwrap()
+            .clone();
+        assert_eq!(row["enabled"], true, "the fixture changed");
+        assert_eq!(second_card_picture_model(&status), None);
+        for f in status["features"].as_array_mut().unwrap() {
+            if f["id"] == "vision" {
+                f["active"] = json!(true);
+                f["available"] = json!("true");
+            }
+        }
+        assert_eq!(
+            second_card_picture_model(&status),
+            None,
+            "a string is not true"
+        );
+    }
+
+    /// An older backend's answers, or none at all, are "not that way".
+    #[test]
+    fn anything_else_is_not_that_way() {
+        assert_eq!(
+            second_card_picture_model(&json!({"available": false})),
+            None
+        );
+        assert_eq!(second_card_picture_model(&json!({"features": {}})), None);
+        assert_eq!(second_card_picture_model(&json!(null)), None);
+        // Working, but no model named: still a yes, in words.
+        let bare = json!({"features": [{"id": "vision", "available": true, "model": null}]});
+        assert_eq!(
+            second_card_picture_model(&bare).as_deref(),
+            Some("the picture model")
+        );
     }
 }

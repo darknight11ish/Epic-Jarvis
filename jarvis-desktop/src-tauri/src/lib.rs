@@ -684,6 +684,8 @@ pub fn run() {
             commands::get_api_settings,
             commands::set_api_settings,
             commands::reveal_pairing_token,
+            commands::get_second_card,
+            commands::set_second_card,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

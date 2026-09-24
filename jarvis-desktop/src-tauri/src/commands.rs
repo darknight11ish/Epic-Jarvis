@@ -1317,11 +1317,17 @@ pub fn turn_id_from_route(header: &str) -> Option<String> {
 pub const ROUTE_LINE_PREFIX: &str = "\u{1f}jarvis-route:";
 
 /// The small JSON object for [`ROUTE_LINE_PREFIX`], from an `X-Jarvis-Route`
-/// header value: `lane`, `where` and `gate`, each only when it is a string.
+/// header value: `lane`, `where`, `gate` and `second_card`, each only when it
+/// is a string.
+///
+/// `second_card` (second-card.patch) is there only on a turn the second
+/// graphics card answered, and says why: `"long_context"` or `"vision"`.
+/// `where` is still `"local"` then (it is this PC) and `lane` names the model
+/// really answering. main.js adds "on the second graphics card" to the model.
 pub fn route_line_from_header(header: &str) -> Option<String> {
     let route: serde_json::Value = serde_json::from_str(header).ok()?;
     let mut out = serde_json::Map::new();
-    for key in ["lane", "where", "gate"] {
+    for key in ["lane", "where", "gate", "second_card"] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
                 key.to_string(),
@@ -1453,7 +1459,8 @@ async fn pump_chat(
     }
 
     // Which lane answered and whether it is this PC, for the Local/Cloud
-    // badge - see ROUTE_LINE_PREFIX. Only those three fields go to the page.
+    // badge - see ROUTE_LINE_PREFIX. Only those fields (and `second_card`,
+    // on a turn the second graphics card answered) go to the page.
     if let Some(route) = response
         .headers()
         .get("X-Jarvis-Route")
@@ -2228,6 +2235,280 @@ async fn note_answer(response: reqwest::Response, path: &str) -> Result<serde_js
     Err(server_sentence(status.as_u16(), path, &body))
 }
 
+// ---------------------------------------------------------------------------
+// The second graphics card (backend/second-card.patch, docs/SECOND-CARD.md)
+// ---------------------------------------------------------------------------
+
+/// The one route both second-card commands use, and `vision.rs` reads too.
+pub(crate) const SECOND_CARD_PATH: &str = "/api/second-card";
+
+/// What a backend without `jarvis_second_card.py` is told to do about it.
+/// The page shows this sentence; it never sees a status code or a body.
+pub(crate) const SECOND_CARD_UPDATE: &str =
+    "This PC's Jarvis does not have the second graphics card part yet. \
+     Update the backend by running apply-patches.ps1, then open this again.";
+
+/// A transport failure in plain words. Never the request, never a header:
+/// the only thing named is the address the owner typed in Settings.
+fn second_card_unreachable(err: &reqwest::Error, base: &str) -> String {
+    if err.is_connect() {
+        format!("Jarvis is not answering at {base}. Is it running?")
+    } else if err.is_timeout() {
+        "Jarvis took too long to answer. Try again in a moment.".to_string()
+    } else {
+        "The request to Jarvis did not finish. Try again in a moment.".to_string()
+    }
+}
+
+/// The backend's own sentence (`{"error": "..."}`), first letter raised,
+/// words unchanged - JARVIS-API.md section 12 says to show it word for word.
+/// With no sentence, a plain line with the status code, never the body.
+fn second_card_refusal(code: u16, body: &str) -> String {
+    let said = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string));
+    match said {
+        Some(reason) if !reason.trim().is_empty() => {
+            let mut s = reason.trim().to_string();
+            if let Some(first) = s.get(0..1) {
+                let upper = first.to_uppercase();
+                s.replace_range(0..1, &upper);
+            }
+            s
+        }
+        _ => format!("Jarvis refused the request (HTTP {code})."),
+    }
+}
+
+/// Whether a 404/503 means "this backend has no second-card module": a 404
+/// (no such route - an older backend), or the route's own 503
+/// `{"available": false}` when `jarvis_second_card.py` is missing. A POST 503
+/// with an `error` sentence and no `available: false` is a real refusal ("no
+/// capable second card"), and is NOT this.
+fn second_card_missing(code: u16, body: &str) -> bool {
+    if code == 404 {
+        return true;
+    }
+    code == 503
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| v.get("available").and_then(|a| a.as_bool()))
+            == Some(false)
+}
+
+/// [`get_second_card`]'s reading of the server's answer, on its own so it can
+/// be tested against `tests/fixtures/second-card-cases.json` (the real
+/// `status()` output).
+///
+/// * 200 with `detected` and `features` - `status()` itself, passed on as is.
+/// * 404, or 503 `{"available": false}` - `{"available": false, "why":
+///   "<update the backend>"}`, so the page says what to do rather than error.
+/// * anything else - the backend's own sentence, or a plain line.
+pub(crate) fn second_card_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
+        return parsed
+            .filter(|v| {
+                v.get("detected").is_some_and(|d| d.is_object())
+                    && v.get("features").is_some_and(|f| f.is_array())
+            })
+            .ok_or_else(|| {
+                "Jarvis answered, but not in a way this app can read. \
+                 Update the backend by running apply-patches.ps1."
+                    .to_string()
+            });
+    }
+    if second_card_missing(status, body) {
+        return Ok(serde_json::json!({ "available": false, "why": SECOND_CARD_UPDATE }));
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// [`set_second_card`]'s reading of the server's answer. 200 is the backend's
+/// `{"ok", "enabled", "pending", "message"}` as is: `pending: true` means an
+/// approval card is up and NOTHING is on yet. Every refusal (409 a card
+/// already waits, 400 the main switch or a needed feature is off, 503 no
+/// capable card) is the backend's own sentence.
+pub(crate) fn second_card_change_answer(
+    status: u16,
+    body: &str,
+) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| "Jarvis answered, but not in a way this app can read.".to_string());
+    }
+    if second_card_missing(status, body) {
+        return Err(SECOND_CARD_UPDATE.to_string());
+    }
+    Err(second_card_refusal(status, body))
+}
+
+/// A switch name the backend could know: `master` or a feature id, lower-case
+/// letters and underscores only. The backend refuses an unknown one with its
+/// own sentence; this only keeps anything else from being sent at all.
+pub(crate) fn second_card_feature(feature: &str) -> Result<&str, String> {
+    let f = feature.trim();
+    if f.is_empty() || f.len() > 40 || !f.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
+        return Err("That is not one of the second graphics card's switches.".to_string());
+    }
+    Ok(f)
+}
+
+/// What the second graphics card could do on this PC, and which of its
+/// switches are on: `GET /api/second-card` (`jarvis_second_card.status()`).
+///
+/// Settings window only (permissions/surfaces.toml, `settings-surface`). The
+/// answer names the cards and their hardware ids (`GPU-...`) and carries the
+/// one-line PowerShell `pin_command`; it never carries a token. The token goes
+/// out in `X-Jarvis-Token` through [`jarvis_headers`], with `X-Jarvis-Client:
+/// hud`, the same as every other call to Jarvis, and is never logged or put in
+/// an error.
+#[tauri::command]
+pub async fn get_second_card(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}{SECOND_CARD_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    second_card_answer(status, &body)
+}
+
+/// One second-card switch on or off: `POST /api/second-card` with
+/// `{"feature", "enabled"}`.
+///
+/// This approves nothing. ON only raises one approval card on the PC and the
+/// phone (action `second_card_enable`, tier `ask`), and the answer says
+/// `pending: true` until the owner decides it there. OFF is immediate, because
+/// it only narrows what runs. There is no form that sends more than one
+/// switch. Settings window only, like [`get_second_card`].
+#[tauri::command]
+pub async fn set_second_card(
+    app: AppHandle,
+    feature: String,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    let feature = second_card_feature(&feature)?;
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{SECOND_CARD_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "feature": feature, "enabled": enabled }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    second_card_change_answer(status, &body)
+}
+
+#[cfg(test)]
+mod second_card_tests {
+    use super::{
+        second_card_answer, second_card_change_answer, second_card_feature, SECOND_CARD_UPDATE,
+    };
+
+    /// The real `status()` output, one per case, made by
+    /// `tools/gen_second_card_cases.py` - never hand-written here.
+    const CASES: &str = include_str!("../../tests/fixtures/second-card-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(CASES).expect("second-card-cases.json is JSON")
+    }
+
+    #[test]
+    fn every_real_status_is_passed_on_unchanged() {
+        let doc = cases();
+        let all = doc["cases"].as_object().expect("cases");
+        assert!(all.len() >= 6, "fewer cases than the fixture promised");
+        for (name, status) in all {
+            let body = status.to_string();
+            let got = second_card_answer(200, &body).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(&got, status, "{name}");
+        }
+    }
+
+    #[test]
+    fn an_older_backend_is_told_to_update_not_shown_an_error() {
+        // 404: no such route. 503 {"available": false}: the patch is in but
+        // jarvis_second_card.py is missing (second-card.patch's own answer).
+        for (code, body) in [
+            (404, ""),
+            (404, "<html>Not Found</html>"),
+            (
+                503,
+                r#"{"available": false, "error": "ModuleNotFoundError: No module named 'jarvis_second_card'"}"#,
+            ),
+        ] {
+            let got = second_card_answer(code, body).expect("not an error");
+            assert_eq!(got["available"], false, "{code}");
+            assert_eq!(got["why"], SECOND_CARD_UPDATE);
+            assert!(!got.to_string().contains("ModuleNotFoundError"));
+            assert_eq!(
+                second_card_change_answer(code, body).unwrap_err(),
+                SECOND_CARD_UPDATE
+            );
+        }
+        assert!(SECOND_CARD_UPDATE.contains("apply-patches.ps1"));
+    }
+
+    #[test]
+    fn a_refusal_is_the_backends_own_sentence_never_its_json() {
+        // jarvis_second_card.request_change's real refusals.
+        let busy = r#"{"error": "a card to turn on \"Pictures\" is already waiting - approve or deny that one"}"#;
+        assert_eq!(
+            second_card_change_answer(409, busy).unwrap_err(),
+            "A card to turn on \"Pictures\" is already waiting - approve or deny that one"
+        );
+        let no_card = r#"{"error": "The second graphics card cannot be turned on: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."}"#;
+        let said = second_card_change_answer(503, no_card).unwrap_err();
+        assert!(said.starts_with("The second graphics card cannot be turned on"));
+        assert_ne!(
+            said, SECOND_CARD_UPDATE,
+            "a real 503 refusal read as 'update'"
+        );
+        // No sentence: a plain line, and never the body.
+        let odd = second_card_answer(500, "<html>boom</html>").unwrap_err();
+        assert!(!odd.contains("<html>") && odd.contains("500"), "{odd}");
+        // A 200 that is not status() is not passed on.
+        assert!(second_card_answer(200, r#"{"ok": true}"#).is_err());
+        assert!(second_card_answer(200, "not json").is_err());
+    }
+
+    #[test]
+    fn on_is_pending_until_the_card_is_decided() {
+        // request_change's real 200 answers.
+        let up = r#"{"ok": true, "enabled": false, "pending": true, "message": "Approve the card on your PC or phone to turn it on. Nothing changes until you do."}"#;
+        let got = second_card_change_answer(200, up).unwrap();
+        assert_eq!(got["pending"], true);
+        assert_eq!(got["enabled"], false);
+        let off = r#"{"ok": true, "enabled": false, "pending": false, "message": "\"Pictures\" is off."}"#;
+        assert_eq!(
+            second_card_change_answer(200, off).unwrap()["pending"],
+            false
+        );
+    }
+
+    #[test]
+    fn only_a_switch_name_is_sent() {
+        let doc = cases();
+        for f in doc["cases"]["capable_off"]["features"].as_array().unwrap() {
+            let id = f["id"].as_str().unwrap();
+            assert_eq!(second_card_feature(id), Ok(id));
+        }
+        assert_eq!(second_card_feature("master"), Ok("master"));
+        let long = "a".repeat(41);
+        for bad in ["", "Vision", "vision; rm", "../x", long.as_str()] {
+            assert!(second_card_feature(bad).is_err(), "{bad:?} was accepted");
+        }
+    }
+}
+
 #[cfg(test)]
 mod note_target_tests {
     use super::{note_target, note_targets_answer};
@@ -2980,6 +3261,46 @@ mod turn_tests {
                 case["name"]
             );
         }
+    }
+
+    /// A turn the second graphics card answered. `chat-stream-cases.json` has
+    /// no such header yet (its producer, test_chat_stream_contract.py, does
+    /// not build one), so this starts from its REAL local header and makes
+    /// exactly the two changes second-card.patch makes to `route_header`:
+    /// `lane` becomes the model really answering and `second_card` the
+    /// feature (`route_header["lane"] = _lane2.model`,
+    /// `route_header["second_card"] = _lane2.feature`); `where` stays.
+    #[test]
+    fn the_route_line_carries_second_card_when_the_second_card_answered() {
+        let doc = cases();
+        let local = doc["route_headers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["expect"]["where"] == "local")
+            .expect("a local header");
+        let mut header: serde_json::Value =
+            serde_json::from_str(local["header"].as_str().unwrap()).unwrap();
+        assert!(
+            header.get("second_card").is_none(),
+            "an ordinary turn has no second_card"
+        );
+        let plain = super::route_line_from_header(&header.to_string()).unwrap();
+        assert!(!plain.contains("second_card"));
+        for (model, feature) in [("qwen3:14b", "long_context"), ("qwen2.5vl:7b", "vision")] {
+            header["lane"] = serde_json::json!(model);
+            header["second_card"] = serde_json::json!(feature);
+            let line = super::route_line_from_header(&header.to_string()).unwrap();
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(got["lane"], model);
+            assert_eq!(got["where"], "local");
+            assert_eq!(got["second_card"], feature);
+            assert!(got.get("reason").is_none() && got.get("injected_ids").is_none());
+        }
+        // Not a string: not passed on.
+        header["second_card"] = serde_json::json!(true);
+        let line = super::route_line_from_header(&header.to_string()).unwrap();
+        assert!(!line.contains("second_card"));
     }
 
     /// A failed /api/chat shows the server's sentence, not its JSON.

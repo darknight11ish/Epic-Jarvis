@@ -234,6 +234,13 @@ permissions = [
   # page, on a click, so the owner can type it into the phone. Here and
   # nowhere else - the other windows never need to see it.
   "allow-reveal-pairing-token",
+  # "Second graphics card": what was found, and one switch at a time. Turning
+  # a switch ON starts a second copy of Ollama once its approval card is
+  # approved, so it sits with the other settings-only powers. It approves
+  # nothing itself - ON only raises the card - and there is no form that
+  # sends more than one switch.
+  "allow-get-second-card",
+  "allow-set-second-card",
   "allow-supervisor-status",
   "allow-set-supervision",
   "allow-start-backend",

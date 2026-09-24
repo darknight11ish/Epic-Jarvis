@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-second-card"
+description = "Enables the set_second_card command without any pre-configured scope."
+commands.allow = ["set_second_card"]
+
+[[permission]]
+identifier = "deny-set-second-card"
+description = "Denies the set_second_card command without any pre-configured scope."
+commands.deny = ["set_second_card"]

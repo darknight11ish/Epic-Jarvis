@@ -90,6 +90,11 @@ fn main() {
             "set_api_settings",
             // Settings' "Show the token for my phone". Settings window only.
             "reveal_pairing_token",
+            // Settings' "Second graphics card": read what was found and the
+            // switches, and turn ONE switch on or off. ON only raises an
+            // approval card. Settings window only.
+            "get_second_card",
+            "set_second_card",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",
