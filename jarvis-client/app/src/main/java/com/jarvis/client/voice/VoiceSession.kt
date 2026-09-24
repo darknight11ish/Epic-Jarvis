@@ -10,6 +10,7 @@ import com.jarvis.client.net.SaidAloud
 import com.jarvis.client.net.Heard
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.VoiceStatus
+import com.jarvis.client.net.VoiceStrict
 import com.jarvis.client.net.WakeWord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -44,12 +45,21 @@ class VoiceSession(
      */
     private val linkBlocker: () -> String? = { null },
     /**
-     * Sends a turn and returns the reply, or null if it could not be sent.
-     * `onDelta` is called, zero or more times, with the reply accumulated so
-     * far as it streams in - see [ChatSession.send]'s own doc for why this is
-     * a call-local callback and not a subscription to a shared flow.
+     * What the phone knows about tools right now, for "private answers stay
+     * on screen" ([PrivateAloud]): how many `step` events said a tool ran,
+     * how many times the event stream dropped, and whether it is live. The
+     * default knows nothing - so nothing private-looking is read aloud.
      */
-    private val chat: suspend (String, onDelta: (String) -> Unit) -> String?,
+    private val toolWatch: () -> PrivateAloud.Watch = { PrivateAloud.Watch(0, 0, live = false) },
+    /**
+     * Sends a turn and returns the reply, or null if it could not be sent.
+     * `onRoute` is called once with the answer's `X-Jarvis-Route` header (or
+     * null) before any words; `onDelta`, zero or more times, with the reply
+     * accumulated so far as it streams in - see [ChatSession.send]'s own doc
+     * for why these are call-local callbacks and not subscriptions to a
+     * shared flow.
+     */
+    private val chat: suspend (String, onRoute: (String?) -> Unit, onDelta: (String) -> Unit) -> String?,
 ) {
 
     enum class Phase {
@@ -88,6 +98,15 @@ class VoiceSession(
 
     /** What the desktop says the voice path can do. Refusing defaults. */
     val status: StateFlow<VoiceStatus> = _status.asStateFlow()
+
+    private val _strict = MutableStateFlow(VoiceStrict.View())
+
+    /**
+     * The stricter voice check, from the same `/api/voice/status` read as
+     * [status]: very strict or balanced, private answers, training in
+     * rounds, the repeat numbers. An older PC's defaults: none of it.
+     */
+    val strict: StateFlow<VoiceStrict.View> = _strict.asStateFlow()
 
     private val _answered = MutableStateFlow(false)
 
@@ -266,9 +285,20 @@ class VoiceSession(
 
     /** Call before offering the button. Never assumes; a failure leaves it hidden. */
     suspend fun refreshStatus() {
-        when (val r = api.voiceStatus()) {
-            is ApiResult.Ok -> { _status.value = r.value; _answered.value = true }
-            is ApiResult.Failed -> { _status.value = VoiceStatus(available = false); _answered.value = false }
+        // One read, two halves: the talk button's status as before, and the
+        // stricter voice check (VoiceStrict), read field by field so that
+        // nothing in it can hide the talk button.
+        when (val r = api.voiceStatusRead()) {
+            is ApiResult.Ok -> {
+                _status.value = r.value.first
+                _strict.value = r.value.second
+                _answered.value = true
+            }
+            is ApiResult.Failed -> {
+                _status.value = VoiceStatus(available = false)
+                _strict.value = VoiceStrict.View()
+                _answered.value = false
+            }
         }
     }
 
@@ -588,7 +618,9 @@ class VoiceSession(
         // erased a cancel that had arrived during the previous one and Jarvis
         // spoke on. See `Speaker.arm`.
         speaker.arm()
-        speakStreamed(turn, text)
+        // What the phone knows about tools as the question goes: every
+        // sentence is checked against it before it is read aloud.
+        speakStreamed(turn, text, heard, toolWatch())
         setPhase(turn, Phase.OFF)
         return heard
     }
@@ -607,22 +639,40 @@ class VoiceSession(
      * them as locals rather than fields makes that true by construction
      * rather than by remembering to reset them.
      */
-    private suspend fun speakStreamed(turn: Turn, text: String) {
+    private suspend fun speakStreamed(turn: Turn, text: String, heard: Heard, asked: PrivateAloud.Watch) {
         var spokenUpTo = 0
         var spokeAny = false
         val queue = Channel<String>(Channel.UNLIMITED)
+        // This answer's X-Jarvis-Route header, read once before any words
+        // (on the HTTP thread, hence the atomic).
+        val route = java.util.concurrent.atomic.AtomicReference<PrivateAloud.Route?>(null)
 
         // Speaks whatever lands in the queue, one sentence at a time, in
         // order - concurrently with `chat` below, so the first sentence can
         // be playing while the model is still writing the third. Ends only
         // when the queue is closed AND drained, never merely when it is
         // momentarily empty (a fast model can easily outrun TTS).
+        //
+        // "Private answers stay on screen": before EVERY sentence the phone
+        // asks whether this answer may be read aloud (PrivateAloud). The
+        // first time it may not, it says the one fixed line instead and
+        // reads nothing more of this answer - which stays on the screen as
+        // always. Asked per sentence because a tool can start halfway.
         val drainJob = scope.launch {
-            for (sentence in queue) speak(turn, sentence)
+            var hushed = false
+            for (sentence in queue) {
+                if (hushed) continue
+                if (!PrivateAloud.mayRead(heard, route.get(), asked, toolWatch())) {
+                    hushed = true
+                    speak(turn, PrivateAloud.ON_SCREEN)
+                    continue
+                }
+                speak(turn, sentence)
+            }
         }
 
         try {
-            val reply = chat(text) { soFar ->
+            val reply = chat(text, { header -> route.set(PrivateAloud.route(header)) }) { soFar ->
                 for ((sentence, consumedTo) in SpeechText.findSentences(soFar, spokenUpTo)) {
                     spokenUpTo = consumedTo
                     if (!spokeAny) {

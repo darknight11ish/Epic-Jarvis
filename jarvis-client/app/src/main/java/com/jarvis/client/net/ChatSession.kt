@@ -146,6 +146,10 @@ class ChatSession(private val api: JarvisApi) {
      * start speaking before the answer has finished arriving, without ever
      * touching [reply] itself.
      *
+     * [onRoute], if given, gets this call's `X-Jarvis-Route` header (or null
+     * when the PC sent none) once, as the headers arrive and before the
+     * first word - call-local, like [onDelta].
+     *
      * [picture], when given, is a `data:image/jpeg;base64,` URI ([ChatPicture])
      * sent inside this one question. It is not kept: only the words join
      * [history], so it is never sent again with a later question.
@@ -154,6 +158,7 @@ class ChatSession(private val api: JarvisApi) {
         message: String,
         onDelta: ((String) -> Unit)? = null,
         picture: String? = null,
+        onRoute: ((String?) -> Unit)? = null,
     ): String? {
         cancel()
         _reply.value = ""
@@ -278,6 +283,11 @@ class ChatSession(private val api: JarvisApi) {
                     val routeHeader = resp.header(Feedback.ROUTE_HEADER)
                     val tid = Feedback.turnIdFromRouteHeader(routeHeader)
                     if (call === c) _turnId.value = tid
+                    // The whole header, to THIS call's own caller - the voice
+                    // loop decides from it whether a private answer may be
+                    // read aloud (voice/PrivateAloud.kt). Before any word, and
+                    // unguarded like `onDelta`: it belongs to this call alone.
+                    onRoute?.invoke(routeHeader)
                     // Where it was made. Only a cloud answer gets a line: an
                     // answer from this user's own PC is the normal case.
                     val cloud = ChatChunkParser.whereFromRouteHeader(routeHeader) == "cloud"

@@ -69,6 +69,9 @@ object CustomVoices {
 
     data class Pending(val kind: String, val voice: String, val name: String, val expiresIn: Int)
 
+    /** One engine on the PC: can it speak, and why not. */
+    data class Engine(val available: Boolean, val why: String)
+
     data class Last(val kind: String, val voice: String, val outcome: String, val why: String)
 
     /** One `say()`: which engine, how long it took, and why a custom voice was not used. */
@@ -98,6 +101,8 @@ object CustomVoices {
         val speakingWith: String = "kokoro",
         val fallback: String = "",
         val voices: List<Voice> = emptyList(),
+        /** "kokoro", "zipvoice", "f5". */
+        val engines: Map<String, Engine> = emptyMap(),
         val better: Better = Better(),
         val pending: Pending? = null,
         val last: Last? = null,
@@ -162,6 +167,10 @@ object CustomVoices {
             speakingWith = o.str("speaking_with"),
             fallback = o.str("fallback"),
             voices = voices,
+            engines = o.obj("engines")?.entries?.mapNotNull { (k, v) ->
+                val e = v as? JsonObject ?: return@mapNotNull null
+                k to Engine(e.flag("available"), e.str("why"))
+            }?.toMap().orEmpty(),
             better = if (b == null) {
                 Better()
             } else {
@@ -396,6 +405,32 @@ object CustomVoices {
         return WavCheck.Bad("That WAV file is damaged (no sound found in it).")
     }
 
+    /**
+     * An audio file the owner picked on the phone, read into memory (never
+     * copied anywhere) and checked: its length, or why it cannot be used.
+     */
+    class Picked(val bytes: ByteArray, val seconds: Double?, val problem: String?)
+
+    fun picked(bytes: ByteArray, maxBytes: Int = Limits().maxClipBytes): Picked =
+        when (val c = checkWav(bytes, maxBytes)) {
+            is WavCheck.Ok -> Picked(bytes, c.seconds, null)
+            is WavCheck.Bad -> Picked(ByteArray(0), null, c.why)
+        }
+
+    /** A recording made on the phone for a voice that is too short or too long, or null. */
+    fun recordingProblem(seconds: Float, limits: Limits = Limits()): String? = when {
+        seconds < limits.minSeconds ->
+            "That was too short: read the whole sentence, at least ${limits.minSeconds.toInt()} seconds."
+        seconds > limits.maxSeconds + 2.0 ->
+            "That was too long: at most ${limits.maxSeconds.toInt()} seconds of speech."
+        else -> null
+    }
+
+    /** The warning on the add form - what the PC's card says too. */
+    const val CONSENT =
+        "A copied voice sounds like a real person. Only add the voice of someone who has agreed " +
+            "to it. A voice that sounds like yours is refused."
+
     // --------------------------------------------------------------- words --
 
     /** The engine, in plain words. */
@@ -434,6 +469,23 @@ object CustomVoices {
 
     /** How the last voice card ended - the PC's sentence, as it is. */
     fun lastLine(s: Status): String? = s.last?.why?.takeIf { it.isNotBlank() }
+
+    /**
+     * Each engine, one line: ready, or the PC's reason it is not. F5-TTS
+     * ("the better voice") says its state, which is what the owner can act on.
+     */
+    fun engineLines(s: Status): List<String> {
+        fun line(label: String, key: String): String {
+            val e = s.engines[key] ?: return "$label: not reported by your PC."
+            return "$label: " + if (e.available) "ready." else sentence(e.why.ifBlank { "not available" })
+        }
+        return listOf(
+            line("Built-in voice (Kokoro)", "kokoro"),
+            line("ZipVoice, on your PC's processor", "zipvoice"),
+            "Better voice (F5-TTS), on the second graphics card: " +
+                sentence(s.better.stateWhy.ifBlank { s.better.state }),
+        )
+    }
 
     /** One line per recent `say()`, newest first. Never the text - the PC never sends it. */
     fun timingLines(s: Status, max: Int = 5): List<String> = s.timings.takeLast(max).reversed().map { t ->

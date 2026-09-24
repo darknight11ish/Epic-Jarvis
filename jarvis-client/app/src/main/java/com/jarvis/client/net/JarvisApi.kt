@@ -819,7 +819,72 @@ class JarvisApi(
      * into a 404.
      */
     suspend fun voiceStatus(): ApiResult<VoiceStatus> =
-        get("/api/voice/status", VoiceStatus.serializer())
+        voiceStatusRead().map { it.first }
+
+    /**
+     * `/api/voice/status`, read ONCE into both halves: the [VoiceStatus]
+     * the talk button has always read, and the stricter voice check
+     * ([VoiceStrict.View] - the two settings, training in rounds, the
+     * repeat numbers), which is read field by field so that nothing in it
+     * can hide the talk button. See [VoiceStrict.read].
+     */
+    suspend fun voiceStatusRead(): ApiResult<Pair<VoiceStatus, VoiceStrict.View>> =
+        when (val r = probe("/api/voice/status")) {
+            is ApiResult.Ok -> VoiceStrict.read(r.value)
+            is ApiResult.Failed -> r
+        }
+
+    /**
+     * `POST /api/voice/enroll` with a body built by [VoiceStrict] or
+     * [com.jarvis.client.voice.VoiceRounds]: a training round, a cancel, a
+     * setting or the guided test. Every explained answer comes back as an
+     * [VoiceStrict.Answer] - the refusals are sentences for the owner.
+     * Nothing here is logged: a round's body is the owner's voice.
+     */
+    suspend fun voiceEnroll(json: String): ApiResult<VoiceStrict.Answer> =
+        postVoice("/api/voice/enroll", json).map { (code, body) -> VoiceStrict.answer(code, body) }
+
+    /** `GET /api/voice/voices` - custom voices. Loads nothing on the PC. */
+    suspend fun customVoices(): ApiResult<JsonObject> = probe(CustomVoices.PATH)
+
+    /**
+     * One of the custom-voice POSTs ([CustomVoices.CREATE_PATH] and the
+     * rest). A create carries a recording of up to 2.9 MB, so this is the
+     * general client, not the short one - and its body is never logged.
+     */
+    suspend fun customVoicePost(path: String, json: String): ApiResult<CustomVoices.Answer> =
+        postVoice(path, json).map { (code, body) -> CustomVoices.answer(code, body) }
+
+    /**
+     * A voice POST whose refusals carry the PC's own sentence: (status,
+     * body) for any answer with a JSON object in it, so a 400/409/503 with
+     * `error` reaches the owner as it was written. A 404 is "this PC has no
+     * such route" unless the body is the voice module's own (`ok` in it -
+     * "there is no voice with that id"). 401/403 stay failures: a bad token
+     * is not the PC's sentence to relay.
+     */
+    private suspend fun postVoice(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                client.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
 
     /**
      * One complete utterance in, one verdict out.

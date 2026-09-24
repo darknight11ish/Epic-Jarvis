@@ -241,6 +241,33 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `each engine in a line, with the PC's reason when it cannot speak`() {
+        assertEquals(
+            listOf(
+                "Built-in voice (Kokoro): ready.",
+                "ZipVoice, on your PC's processor: ZipVoice could not be loaded (RuntimeError).",
+                "Better voice (F5-TTS), on the second graphics card: Not running - it starts when " +
+                    "Jarvis speaks in a custom voice.",
+            ),
+            CustomVoices.engineLines(status("fallback")),
+        )
+    }
+
+    @Test
+    fun `a picked file is kept only when it can be used, and a recording must be long enough`() {
+        val ok = CustomVoices.picked(wav(24_000, 1, 16, 5.0))
+        assertNull(ok.problem)
+        assertEquals(5.0, ok.seconds!!, 0.0)
+        val bad = CustomVoices.picked("not a wav".toByteArray())
+        assertEquals(0, bad.bytes.size)
+        assertNotNull(bad.problem)
+        assertEquals("That was too short: read the whole sentence, at least 3 seconds.",
+            CustomVoices.recordingProblem(2.0f))
+        assertNull(CustomVoices.recordingProblem(4.5f))
+        assertNotNull(CustomVoices.recordingProblem(12.5f))
+    }
+
+    @Test
     fun `engine words`() {
         assertEquals("ZipVoice, on your PC's processor", CustomVoices.engineWords("zipvoice"))
         assertTrue(CustomVoices.engineWords("f5").contains("second graphics card"))

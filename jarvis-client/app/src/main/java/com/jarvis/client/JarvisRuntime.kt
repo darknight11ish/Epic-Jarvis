@@ -49,6 +49,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import com.jarvis.client.net.CustomVoices
+import com.jarvis.client.net.VoiceStrict
+import com.jarvis.client.voice.StrictVoice
+import com.jarvis.client.voice.VoiceRounds
 import com.jarvis.client.voice.VoiceSession
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.launch
@@ -502,15 +506,30 @@ object JarvisRuntime {
         val chatSession = ChatSession(jarvisApi)
         // The link check is a lambda, not a value: it is read at the moment
         // "hey Jarvis" ON is asked for, and `actionBlocker` reads the flows.
-        val voiceSession = VoiceSession(app, jarvisApi, scope, linkBlocker = { actionBlocker() }) { text, onDelta ->
+        val voiceSession = VoiceSession(
+            app,
+            jarvisApi,
+            scope,
+            linkBlocker = { actionBlocker() },
+            // For "private answers stay on screen": tools that ran (the `step`
+            // event), and whether the stream could have told us.
+            toolWatch = {
+                com.jarvis.client.voice.PrivateAloud.Watch(
+                    runs = toolRuns,
+                    drops = streamOpens,
+                    live = _link.value == LinkState.CONNECTED && !_stale.value,
+                )
+            },
+        ) { text, onRoute, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
             // cancel the spoken one and leave its own partial reply in there —
             // and Jarvis would say it aloud as the answer to the question that
             // was spoken. `onDelta` is this same call's own local callback,
             // not a subscription to that shared flow - see ChatSession.send's
-            // own doc for why that distinction is the whole point.
-            chatSession.send(text, onDelta)?.takeIf { it.isNotBlank() }
+            // own doc for why that distinction is the whole point. `onRoute`
+            // is the same kind of callback, for the answer's header.
+            chatSession.send(text, onDelta, onRoute = onRoute)?.takeIf { it.isNotBlank() }
         }
 
         settings = clientSettings
@@ -875,7 +894,17 @@ object JarvisRuntime {
         settings.lastEventId = id
     }
 
+    /**
+     * `step` events that said a tool ran, and how many times the stream has
+     * (re)opened - read by the voice loop's private-answer rule
+     * ([com.jarvis.client.voice.PrivateAloud.Watch]). Counters only.
+     */
+    @Volatile private var toolRuns = 0L
+    @Volatile private var streamOpens = 0L
+
     private suspend fun onOpen(hello: com.jarvis.client.net.HelloPayload?) {
+        // A (re)connect: step events may have been missed since the last one.
+        streamOpens += 1
         _link.value = LinkState.CONNECTED
         linkDownSince = 0L
         _linkDetail.value = null
@@ -944,7 +973,18 @@ object JarvisRuntime {
                 if (voice.answered.value && voice.status.value.cardWaiting) {
                     recheckVoiceAfterDecision()
                 }
+                // A custom-voice card (add, switch, the better voice): the PC
+                // rings `voices` when one ends, and this is the belt to that
+                // pair of braces - a PC whose event list drops `voices`
+                // would otherwise leave "Waiting" on the Voices screen.
+                val cv = customVoiceStatus()
+                if (cv != null && (cv.pending != null || cv.better.pending)) refreshCustomVoices()
             }
+            // A custom-voice card ended, a voice was deleted, the voice went
+            // back to the built-in one, or the better voice went off
+            // (`{"what", "outcome"}` - a doorbell, never a name or words).
+            // Read again only once the Voices screen has asked.
+            "voices" -> if (customVoicesAsked) refreshCustomVoices()
             // A deep question finished (`{"id", "state"}` only - a doorbell,
             // never the question or the answer). The list is re-read for the
             // answer, and the switches for the speed it measured.
@@ -1000,6 +1040,9 @@ object JarvisRuntime {
             // finishing or refused - kept for Mind's "What Jarvis is doing".
             // It used to fall through to "unhandled" below.
             "step" -> {
+                // Counted for "private answers stay on screen": an answer a
+                // tool helped write is not read aloud (PrivateAloud).
+                if (com.jarvis.client.voice.PrivateAloud.isToolRun(event.data)) toolRuns += 1
                 val line = com.jarvis.client.net.Steps.Line(
                     com.jarvis.client.net.Steps.clock(System.currentTimeMillis()),
                     com.jarvis.client.net.Steps.text(event.data),
@@ -1405,6 +1448,221 @@ object JarvisRuntime {
             is ApiResult.Failed -> VoiceTraining.SendResult(false, describe(result.error))
         }
     }
+
+    // ------------------------------- voice: rounds, the two settings, the test
+
+    private val _voiceSent = MutableStateFlow<VoiceRounds.Plan?>(null)
+
+    /**
+     * The training plan this phone last FINISHED sending - sentence numbers
+     * only, never audio - so the PC's "round 2, clip 5 was left out" can be
+     * turned back into the sentence to read again. Memory only: after a
+     * restart the phone honestly does not know, and says only how many.
+     */
+    val voiceSent: StateFlow<VoiceRounds.Plan?> = _voiceSent.asStateFlow()
+
+    /**
+     * Sends round [index] of [plan]. Every round but the last is HELD on the
+     * PC (no card, nothing changed); the last carries `finish` and raises ONE
+     * card for all of them. An older PC's single round goes the old way
+     * ([sendVoiceTraining]).
+     *
+     * Held on a stale or dropped link ([actionBlocker], rule 4) - the rounds
+     * all lead to one card. Nothing here is logged or kept: the caller drops
+     * the round's clips once this says accepted.
+     */
+    suspend fun sendVoiceRound(plan: VoiceRounds.Plan, index: Int, clips: List<ByteArray>): VoiceRounds.Result {
+        actionBlocker()?.let { return VoiceRounds.Result(false, it) }
+        if (plan.kind == VoiceRounds.Kind.SINGLE_OLD) {
+            val r = sendVoiceTraining(clips)
+            if (r.accepted) _voiceSent.value = plan
+            return VoiceRounds.Result(r.accepted, r.message, finished = r.accepted)
+        }
+        if (!voice.strict.value.rounds) {
+            return VoiceRounds.Result(false, "Your PC does not take training in rounds yet. Run the patch script on the PC first.")
+        }
+        val last = VoiceRounds.isLast(plan, index)
+        if (index > 0) {
+            // The earlier rounds must still be held: the PC drops them 15
+            // minutes after the last, and a round sent after that would
+            // start a new training with only itself in it.
+            voice.refreshStatus()
+            if (!voice.answered.value) {
+                return VoiceRounds.Result(
+                    false,
+                    "Could not ask your PC whether it still holds the earlier rounds. Try again.",
+                )
+            }
+            VoiceRounds.lostRounds(plan, index, voice.strict.value.session)?.let {
+                return VoiceRounds.Result(false, it)
+            }
+        }
+        return when (val result = api.voiceEnroll(VoiceRounds.body(plan, index, clips, VoiceTraining.MIC))) {
+            is ApiResult.Ok -> {
+                val a = result.value
+                if (a.accepted && last) {
+                    _voiceSent.value = plan
+                    // The card should appear in this phone's approvals too.
+                    refreshPending()
+                }
+                voice.refreshStatus()
+                VoiceRounds.Result(
+                    accepted = a.accepted,
+                    message = when {
+                        !a.accepted -> VoiceRounds.otherSessionLine(a)
+                            ?: VoiceRounds.sentence(a.error.ifBlank { a.message.ifBlank { "Your PC did not take that round." } })
+                        last -> VoiceRounds.finishedLine(a)
+                        else -> VoiceRounds.heldLine(a, plan, index)
+                    },
+                    finished = a.accepted && last,
+                    heldElsewhere = a.session != null,
+                )
+            }
+            is ApiResult.Failed -> VoiceRounds.Result(false, describe(result.error))
+        }
+    }
+
+    /**
+     * Cancel: every round the PC is holding is deleted. Never held back on
+     * a stale link - it only deletes (like turning the wake word OFF). If
+     * the PC cannot be reached, it deletes what it holds after 15 minutes
+     * anyway, and the line says so.
+     */
+    suspend fun cancelVoiceRounds(): String {
+        if (!voice.strict.value.rounds) return VoiceRounds.cancelledLine(null)
+        return when (val r = api.voiceEnroll(VoiceStrict.CANCEL_BODY)) {
+            is ApiResult.Ok -> {
+                voice.refreshStatus()
+                VoiceRounds.cancelledLine(r.value)
+            }
+            is ApiResult.Failed ->
+                "Cancelled on this phone. Your PC could not be reached; it deletes the rounds it " +
+                    "holds by itself after 15 minutes."
+        }
+    }
+
+    /**
+     * Very strict / balanced, and private answers. LOOSENING raises one
+     * approval card on the PC and changes nothing until it is approved, so
+     * it is held on a stale link; TIGHTENING applies at once and always goes
+     * ([StrictVoice.blocker]). The PC's answer is shown as it is, and the
+     * status read again so the screen shows what is TRUE, not what was asked.
+     */
+    suspend fun setVoiceSetting(setting: String, value: String): String {
+        StrictVoice.blocker(setting, value, voice.strict.value, actionBlocker())?.let { return it }
+        return when (val r = api.voiceEnroll(VoiceStrict.settingBody(setting, value))) {
+            is ApiResult.Ok -> {
+                if (r.value.pending) refreshPending()
+                voice.refreshStatus()
+                StrictVoice.answerLine(r.value)
+            }
+            is ApiResult.Failed -> describe(r.error)
+        }
+    }
+
+    /**
+     * The guided repeat test: the owner's own sentences, judged on the PC at
+     * both settings, then thrown away there. No card and nothing changed, so
+     * - like the "someone else" check - it is not held on a stale link. Sent
+     * in parts the PC will take (80 seconds each), and the counts added up.
+     */
+    suspend fun measureVoice(clips: List<ByteArray>, seconds: List<Float>): StrictVoice.Tested {
+        val strict = voice.strict.value
+        if (!strict.measure) return StrictVoice.Tested(false, listOf(StrictVoice.NO_TEST_ON_THIS_PC))
+        val parts = mutableListOf<com.jarvis.client.net.VoiceStrict.Measured?>()
+        for (range in StrictVoice.batches(seconds, strict.limits.measureMaxClips, strict.limits.maxTotalSeconds)) {
+            val body = com.jarvis.client.net.enrollRequestBody(
+                clips.slice(range), mic = VoiceTraining.MIC, mode = "measure",
+            )
+            when (val r = api.voiceEnroll(body)) {
+                is ApiResult.Ok -> {
+                    val a = r.value
+                    if (a.error.isNotBlank() || a.measured == null) {
+                        return StrictVoice.Tested(false, listOf(VoiceRounds.sentence(a.error.ifBlank { "Your PC could not check them." })))
+                    }
+                    parts += a.measured
+                }
+                is ApiResult.Failed -> return StrictVoice.Tested(false, listOf(describe(r.error)))
+            }
+        }
+        voice.refreshStatus()
+        val all = StrictVoice.combine(parts) ?: return StrictVoice.Tested(false, listOf("Your PC could not check them."))
+        return StrictVoice.Tested(true, StrictVoice.measureLines(all))
+    }
+
+    // --------------------------------------------------- custom voices ----
+
+    private val _customVoices = MutableStateFlow<CustomVoices.Read>(CustomVoices.Read.Loading)
+
+    /** `GET /api/voice/voices`, read when the Voices screen opens and on the `voices` event. */
+    val customVoices: StateFlow<CustomVoices.Read> = _customVoices.asStateFlow()
+
+    /** Set once the Voices screen has asked; the `voices` event only re-reads after that. */
+    @Volatile private var customVoicesAsked = false
+
+    suspend fun refreshCustomVoices() {
+        customVoicesAsked = true
+        _customVoices.value = CustomVoices.read(api.customVoices())
+    }
+
+    private fun customVoiceStatus(): CustomVoices.Status? =
+        (_customVoices.value as? CustomVoices.Read.Loaded)?.status
+
+    /**
+     * Adds a voice: a recording and exactly what is said in it - the
+     * sentence the phone showed, or the words the owner typed for a picked
+     * file. The phone never turns the recording into words. ONE card on the
+     * PC; nothing is kept until it is approved. Held on a stale link.
+     */
+    suspend fun addCustomVoice(name: String, clip: ByteArray, transcript: String): CustomVoices.Answer? {
+        CustomVoices.blocker(raisesCard = true, linkBlocker = actionBlocker(), status = customVoiceStatus())
+            ?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.CREATE_PATH, CustomVoices.createBody(name, clip, transcript))
+    }
+
+    /** Switches to a custom voice (a card; held on a stale link) or back to the built-in one (at once, always). */
+    suspend fun switchCustomVoice(id: String): CustomVoices.Answer? {
+        val card = id != CustomVoices.BUILTIN
+        CustomVoices.blocker(raisesCard = card, linkBlocker = actionBlocker(), status = customVoiceStatus())
+            ?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.ACTIVE_PATH, CustomVoices.activeBody(id))
+    }
+
+    /** Deletes a voice. At once, never held: it only takes something away. The screen asks first. */
+    suspend fun deleteCustomVoice(id: String): CustomVoices.Answer? =
+        postCustomVoice(CustomVoices.DELETE_PATH, CustomVoices.deleteBody(id))
+
+    /** The better voice: ON is a card (held on a stale link), OFF is at once (never held). */
+    suspend fun setBetterVoice(on: Boolean): CustomVoices.Answer? {
+        CustomVoices.blocker(raisesCard = on, linkBlocker = actionBlocker(), status = null)
+            ?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.BETTER_PATH, CustomVoices.betterBody(on))
+    }
+
+    private val _customVoiceNote = MutableStateFlow<String?>(null)
+
+    /** The last thing a Voices request came to, in words, for the screen to show. */
+    val customVoiceNote: StateFlow<String?> = _customVoiceNote.asStateFlow()
+
+    fun clearCustomVoiceNote() { _customVoiceNote.value = null }
+
+    private suspend fun postCustomVoice(path: String, json: String): CustomVoices.Answer? =
+        when (val r = api.customVoicePost(path, json)) {
+            is ApiResult.Ok -> {
+                val a = r.value
+                _customVoiceNote.value = CustomVoices.answerLine(a)
+                if (a.pending) refreshPending()
+                refreshCustomVoices()
+                a
+            }
+            is ApiResult.Failed -> {
+                _customVoiceNote.value = when (r.error) {
+                    ApiError.NotFound -> "Your PC does not have custom voices yet. Run the patch script on the PC first."
+                    else -> describe(r.error)
+                }
+                null
+            }
+        }
 
     // -------------------------------------------------------- appearance ----
 

@@ -47,6 +47,7 @@ import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatPicture
+import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.SecondCard
@@ -82,7 +83,9 @@ import com.jarvis.client.ui.screens.LockedScreen
 import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
 import com.jarvis.client.ui.screens.SecurityScreen
+import com.jarvis.client.ui.screens.VoiceCheckScreen
 import com.jarvis.client.ui.screens.VoiceTrainingScreen
+import com.jarvis.client.ui.screens.VoicesScreen
 import com.jarvis.client.ui.theme.JarvisTheme
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
@@ -235,6 +238,45 @@ class MainActivity : FragmentActivity() {
     ) { uri ->
         if (uri == null) return@registerForActivityResult
         attachPicture(uri)
+    }
+
+    /**
+     * An audio file picked for a new custom voice (VoicesScreen), read into
+     * memory and checked ([CustomVoices.picked]), or null. Never copied to
+     * the app's storage, never in a Bundle: a rotation drops it.
+     */
+    private val pickedVoiceFile = mutableStateOf<CustomVoices.Picked?>(null)
+
+    /**
+     * The system's file picker, for one audio file. Like the photo picker it
+     * asks for no storage permission: the owner chooses one file and the app
+     * may read that one, once.
+     */
+    private val pickVoiceFile = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            pickedVoiceFile.value = withContext(Dispatchers.IO) { readVoiceFile(uri) }
+        }
+    }
+
+    /** At most one byte over the PC's limit is read - enough to say "too big". */
+    private fun readVoiceFile(uri: Uri): CustomVoices.Picked {
+        val limit = CustomVoices.Limits().maxClipBytes
+        val bytes = runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val out = java.io.ByteArrayOutputStream()
+                val buf = ByteArray(64 * 1024)
+                while (out.size() <= limit) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                }
+                out.toByteArray()
+            }
+        }.getOrNull() ?: return CustomVoices.Picked(ByteArray(0), null, "That file could not be read.")
+        return CustomVoices.picked(bytes, limit)
     }
 
     /**
@@ -612,6 +654,8 @@ class MainActivity : FragmentActivity() {
         val streaming by chat.streaming.collectAsState()
         val voicePhase by voice.phase.collectAsState()
         val voiceStatus by voice.status.collectAsState()
+        // The stricter voice check, from the same status read.
+        val voiceStrict by voice.strict.collectAsState()
         val transcript by voice.transcript.collectAsState()
         val voiceNotice by voice.notice.collectAsState()
         // Held as State and read only inside drawBehind — a microphone
@@ -1216,6 +1260,19 @@ class MainActivity : FragmentActivity() {
                             } else {
                                 null
                             },
+                            // The stricter check's settings and test, and custom
+                            // voices: both are the PC's, so only once paired.
+                            voiceStrict = voiceStrict,
+                            onVoiceCheck = if (paired) {
+                                { nav.go(Screen.VOICE_CHECK) }
+                            } else {
+                                null
+                            },
+                            onVoices = if (paired) {
+                                { nav.go(Screen.VOICES) }
+                            } else {
+                                null
+                            },
                             // Lock and fingerprint (SecurityScreen). On this
                             // phone only; nothing here reaches the desktop.
                             securitySummary = SecurityRules.summary(security),
@@ -1237,15 +1294,19 @@ class MainActivity : FragmentActivity() {
                         // Asked on arrival: the card says whether Jarvis knows
                         // the owner's voice, and a stale answer would mislead.
                         LaunchedEffect(Unit) { voice.refreshStatus() }
+                        val voiceSent by JarvisRuntime.voiceSent.collectAsState()
                         VoiceTrainingScreen(
                             status = voiceStatus,
+                            strict = voiceStrict,
                             answered = voiceAnswered,
                             // Keyed on `link` and `stale`, which are collected
                             // above: actionBlocker() reads the runtime's flows
                             // directly, and that alone subscribes to nothing.
                             linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() },
+                            sentPlan = voiceSent,
                             record = { stop, onLevel -> voice.recordTrainingClip(stop, onLevel) },
-                            send = { clips -> JarvisRuntime.sendVoiceTraining(clips) },
+                            sendRound = { plan, index, clips -> JarvisRuntime.sendVoiceRound(plan, index, clips) },
+                            cancelRounds = { JarvisRuntime.cancelVoiceRounds() },
                             checkOthers = { clips -> JarvisRuntime.checkVoiceWithSomeoneElse(clips) },
                             proposeThreshold = { value -> JarvisRuntime.proposeVoiceThreshold(value) },
                             onRefresh = { voice.refreshStatus() },
@@ -1257,6 +1318,61 @@ class MainActivity : FragmentActivity() {
                                 micPermission.launch(Manifest.permission.RECORD_AUDIO)
                             },
                             onBack = { nav.back() },
+                            modifier = root,
+                        )
+                    }
+
+                    Screen.VOICE_CHECK -> {
+                        val voiceAnswered by voice.answered.collectAsState()
+                        // Asked on arrival: the settings shown must be the
+                        // PC's, not an old read.
+                        LaunchedEffect(Unit) { voice.refreshStatus() }
+                        VoiceCheckScreen(
+                            status = voiceStatus,
+                            strict = voiceStrict,
+                            answered = voiceAnswered,
+                            linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() },
+                            setSetting = { setting, value -> JarvisRuntime.setVoiceSetting(setting, value) },
+                            record = { stop, onLevel -> voice.recordTrainingClip(stop, onLevel) },
+                            measure = { clips, seconds -> JarvisRuntime.measureVoice(clips, seconds) },
+                            onRefresh = { voice.refreshStatus() },
+                            onAskMicrophone = {
+                                micGrantedCallback = null
+                                micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                            },
+                            onBack = { nav.back() },
+                            modifier = root,
+                        )
+                    }
+
+                    Screen.VOICES -> {
+                        val voicesRead by JarvisRuntime.customVoices.collectAsState()
+                        val voicesNote by JarvisRuntime.customVoiceNote.collectAsState()
+                        LaunchedEffect(Unit) { JarvisRuntime.refreshCustomVoices() }
+                        VoicesScreen(
+                            read = voicesRead,
+                            note = voicesNote,
+                            linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() },
+                            picked = pickedVoiceFile.value,
+                            record = { stop, onLevel -> voice.recordTrainingClip(stop, onLevel) },
+                            add = { name, clip, words -> JarvisRuntime.addCustomVoice(name, clip, words) },
+                            switchTo = { id -> JarvisRuntime.switchCustomVoice(id) },
+                            delete = { id -> JarvisRuntime.deleteCustomVoice(id) },
+                            setBetter = { on -> JarvisRuntime.setBetterVoice(on) },
+                            // Any audio type: the file is checked for being a WAV
+                            // once read, and says so plainly when it is not.
+                            onPickFile = { pickVoiceFile.launch(arrayOf("audio/*")) },
+                            onClearPicked = { pickedVoiceFile.value = null },
+                            onRefresh = { JarvisRuntime.refreshCustomVoices() },
+                            onDismissNote = { JarvisRuntime.clearCustomVoiceNote() },
+                            onAskMicrophone = {
+                                micGrantedCallback = null
+                                micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                            },
+                            onBack = {
+                                JarvisRuntime.clearCustomVoiceNote()
+                                nav.back()
+                            },
                             modifier = root,
                         )
                     }

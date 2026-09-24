@@ -30,6 +30,7 @@ import com.jarvis.client.BuildConfig
 import com.jarvis.client.LinkState
 import com.jarvis.client.net.UpdateCheck
 import com.jarvis.client.net.VoiceStatus
+import com.jarvis.client.net.VoiceStrict
 import com.jarvis.client.net.WakeWord
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.ReadinessItem
@@ -45,6 +46,7 @@ import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.BargeIn
+import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.delay
 
@@ -130,6 +132,12 @@ fun ReadinessScreen(
     voiceAnswered: Boolean = false,
     /** Opens "Train my voice". Null hides the button. */
     onTrainVoice: (() -> Unit)? = null,
+    /** The stricter voice check, from the same status read. */
+    voiceStrict: VoiceStrict.View = VoiceStrict.View(),
+    /** Opens "Voice check" (how strict, private answers, the repeat test). Null hides the button. */
+    onVoiceCheck: (() -> Unit)? = null,
+    /** Opens "Jarvis's voice" (custom voices). Null hides the button. */
+    onVoices: (() -> Unit)? = null,
     /** One line on what Security has on (`SecurityRules.summary`). Null hides the card. */
     securitySummary: String? = null,
     /** Opens Security. */
@@ -197,7 +205,7 @@ fun ReadinessScreen(
             items(warnings, key = { it.title }) { ReadinessCard(it, fixFor(it)) }
             if (voiceStatus != null) {
                 item(key = "your-voice") {
-                    YourVoiceCard(voiceStatus, voiceAnswered, onTrainVoice)
+                    YourVoiceCard(voiceStatus, voiceAnswered, onTrainVoice, voiceStrict, onVoiceCheck, onVoices)
                 }
             }
             item(key = "wake-word") {
@@ -373,7 +381,14 @@ private fun plainReason(detail: String): String = when {
  * speech-to-text set up, and that should be findable.
  */
 @Composable
-private fun YourVoiceCard(status: VoiceStatus, answered: Boolean, onTrain: (() -> Unit)?) {
+private fun YourVoiceCard(
+    status: VoiceStatus,
+    answered: Boolean,
+    onTrain: (() -> Unit)?,
+    strict: VoiceStrict.View,
+    onVoiceCheck: (() -> Unit)?,
+    onVoices: (() -> Unit)?,
+) {
     val chrome = LocalChrome.current
     val trained = answered && status.available && status.gate.enrolled &&
         !status.gate.needsRetraining
@@ -399,11 +414,19 @@ private fun YourVoiceCard(status: VoiceStatus, answered: Boolean, onTrain: (() -
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textMid,
         )
-        VoiceTraining.lastLine(status.gate.training.last)?.let {
+        StrictVoice.nowLine(strict)?.let {
+            Gap(4)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        VoiceTraining.lastLine(status.gate.training.last, strict.last)?.let {
             Gap(4)
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
         VoiceTraining.basicCheckLine(status, answered)?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
+        StrictVoice.modelLine(strict)?.let {
             Gap(6)
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
         }
@@ -424,6 +447,23 @@ private fun YourVoiceCard(status: VoiceStatus, answered: Boolean, onTrain: (() -
                 text = if (trained) "Train my voice again" else "Train my voice",
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onTrain,
+            )
+        }
+        // The stricter check's settings and test - only on a PC that has them.
+        if (onVoiceCheck != null && (strict.settings || strict.measure)) {
+            Gap(8)
+            Secondary(
+                text = "Voice check: how strict, private answers",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onVoiceCheck,
+            )
+        }
+        if (onVoices != null) {
+            Gap(8)
+            Secondary(
+                text = "Jarvis's voice",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onVoices,
             )
         }
     }

@@ -199,7 +199,7 @@ class VoiceRoundsTest {
     fun `nothing to redo after a failed training, without knowing what was sent, or on an older PC`() {
         val failed = view("failed_outliers")
         assertEquals("failed", failed.last!!.outcome)
-        assertEquals(6, failed.last?.outliers?.size)
+        assertEquals(6, failed.last.outliers.size)
         val sent = VoiceRounds.plan(view("strong_untrained"))
         assertNull(VoiceRounds.redo(failed, failed.last, sent))
         assertNull(VoiceRounds.outliersLine(failed.last, sent))
@@ -218,6 +218,41 @@ class VoiceRoundsTest {
         assertEquals(stale, VoiceRounds.sendBlocker(p, 0, 12, 30f, stale))
         assertNotNull(VoiceRounds.sendBlocker(p, 0, 12, 81f, null))
         assertNull(VoiceRounds.sendBlocker(p, 0, 12, 30f, null))
+    }
+
+    @Test
+    fun `a later round is not sent when the PC no longer holds the earlier ones`() {
+        val p = VoiceRounds.plan(view("strong_untrained"))
+        val held = view("round_held").session
+        // Round 2 after round 1 is held: fine.
+        assertNull(VoiceRounds.lostRounds(p, 1, held))
+        // Round 3 when only round 1 is held (round 2 was lost): refused.
+        assertNotNull(VoiceRounds.lostRounds(p, 2, held))
+        // Nothing held any more (15 minutes passed): refused, in words.
+        val gone = VoiceRounds.lostRounds(p, 1, view("cancelled").session)!!
+        assertTrue(gone, gone.contains("15 minutes"))
+        // The first round never needs anything held.
+        assertNull(VoiceRounds.lostRounds(p, 0, null))
+        // A held training of the other kind (adding) is not this one's rounds.
+        assertNotNull(VoiceRounds.lostRounds(p, 1, held!!.copy(add = true)))
+    }
+
+    @Test
+    fun `an unfinished training on the PC can be picked up at the next round`() {
+        val v = view("round_held")
+        val (plan, next) = VoiceRounds.resume(v, "phone")!!
+        assertEquals(VoiceRounds.Kind.EXTENDED, plan.kind)
+        assertEquals(1, next)
+        assertEquals(
+            "Your PC is holding an unfinished training (round 1, 12 recordings) in its memory. " +
+                "It deletes them by itself 15 minutes after the last round arrived.",
+            VoiceRounds.unfinishedLine(v),
+        )
+        // Not a training this phone can continue: another microphone, or one that adds.
+        assertNull(VoiceRounds.resume(v, "desktop"))
+        assertNull(VoiceRounds.resume(v.copy(session = v.session!!.copy(add = true)), "phone"))
+        assertNull(VoiceRounds.resume(view("strong_untrained"), "phone"))
+        assertNull(VoiceRounds.unfinishedLine(view("strong_untrained")))
     }
 
     @Test

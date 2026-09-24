@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.VoiceStatus
+import com.jarvis.client.net.VoiceStrict
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
@@ -38,54 +39,60 @@ import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.voice.StrictVoice
+import com.jarvis.client.voice.VoiceRounds
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * "Train my voice": read twelve short sentences, send them to the PC,
- * approve the card. Then, optionally, "check it with someone else".
+ * "Train my voice": read short sentences, send them to the PC, approve the
+ * card. Then, optionally, "check it with someone else".
  *
- * Three stages on one screen: a short explanation, then one sentence at a
- * time (tap Record, read it, tap Stop - each clip's length is shown and any
- * one can be redone), then a review with "Send to your PC". After sending,
- * the screen says to approve the card; the PC learns nothing until that card
- * is approved, and throws the recordings away either way.
+ * HOW MANY SENTENCES depends on the PC's voice check ([VoiceRounds.plan]):
+ * balanced keeps one round of twelve; very strict asks for three rounds of
+ * the same twelve, in three conditions (close; further away or quieter;
+ * another time or room). Each round is sent as it is finished and HELD on
+ * the PC, in memory, with no card; the last one raises ONE approval card for
+ * all of them. An older PC gets today's single round.
+ *
+ * Also here: "Train more" (one more round in a condition Jarvis struggles
+ * with, ADDED to the voice), "Record them again" (the recordings the PC left
+ * out because they did not sound like the rest), picking up an unfinished
+ * training the PC is still holding, and Cancel, which deletes everything
+ * recorded so far - on this phone and on the PC.
  *
  * The clips live in this screen's memory and nowhere else. They are dropped
- * the moment the PC accepts them, and when the screen is left - there is no
- * file, no cache and no log line with audio in it. A rotation also drops
- * them (and starts again from the explanation): keeping audio across that
- * would mean saving it, which is the one thing this screen must not do.
- *
- * Tap-to-start and tap-to-stop rather than hold-to-talk: reading a whole
- * sentence off the screen while holding a button down is awkward, and the
- * recorder underneath is the same one the talk button uses, so the PC gets
- * the same 16 kHz WAV it checks every other time.
+ * the moment the PC accepts a round, and when the screen is left - there is
+ * no file, no cache and no log line with audio in it. A rotation also drops
+ * them: keeping audio across that would mean saving it, which is the one
+ * thing this screen must not do. Rounds already sent stay on the PC (it
+ * deletes them 15 minutes after the last one), so coming back offers
+ * "Continue with round N".
  *
  * "Check it with someone else" (only when the PC understands it, see
  * [VoiceTraining.canCheck]): another person reads three sentences; the PC
  * scores them against the owner's voice print, throws them away and says
- * whether they would have passed. When the owner's own training clips all
- * scored above every one of theirs, it suggests a stricter setting, and
- * the one button here that uses it ASKS - it raises an approval card, like
- * everything else that changes who Jarvis obeys.
+ * whether they would have passed.
  *
  * @param linkBlocker why nothing can be sent right now (link down or stale),
  *   or null. The same rule every other write on the phone follows.
+ * @param sentPlan the training this phone last finished sending, so the
+ *   PC's "round 2, clip 5" can be turned back into the sentence to redo.
  * @param record records one clip until `stop()` returns true.
- * @param send sends the clips; the answer says whether a card is now up.
- * @param checkOthers sends someone else's clips to be scored (changes nothing).
- * @param proposeThreshold asks for a card to use a stricter setting.
- * @param onAskMicrophone opens the system's microphone permission dialog.
+ * @param sendRound sends one round; the answer says whether the PC took it.
+ * @param cancelRounds deletes whatever the PC is holding; never held back.
  */
 @Composable
 fun VoiceTrainingScreen(
     status: VoiceStatus,
+    strict: VoiceStrict.View,
     answered: Boolean,
     linkBlocker: String?,
+    sentPlan: VoiceRounds.Plan?,
     record: suspend (stop: () -> Boolean, onLevel: (Float) -> Unit) -> VoiceTraining.Take,
-    send: suspend (List<ByteArray>) -> VoiceTraining.SendResult,
+    sendRound: suspend (VoiceRounds.Plan, Int, List<ByteArray>) -> VoiceRounds.Result,
+    cancelRounds: suspend () -> String,
     checkOthers: suspend (List<ByteArray>) -> VoiceTraining.CheckResult,
     proposeThreshold: suspend (Double) -> VoiceTraining.SendResult,
     onRefresh: suspend () -> Unit,
@@ -94,13 +101,14 @@ fun VoiceTrainingScreen(
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
-    val sentences = VoiceTraining.SENTENCES
-    val total = sentences.size
     val scope = rememberCoroutineScope()
 
-    val clips = remember { mutableStateListOf<VoiceTraining.Clip?>().apply { repeat(total) { add(null) } } }
-    // -1: the explanation. 0 until total: that sentence. total: the review.
-    var step by remember { mutableIntStateOf(-1) }
+    // The training being recorded, or null on the first screen.
+    var plan by remember { mutableStateOf<VoiceRounds.Plan?>(null) }
+    var roundIndex by remember { mutableIntStateOf(0) }
+    val clips = remember { mutableStateListOf<VoiceTraining.Clip?>() }
+    // -1: the round's own first screen. 0 until total: that sentence. total: the review.
+    var step by remember { mutableIntStateOf(0) }
     var recording by remember { mutableStateOf<Int?>(null) }
     val stopFlag = remember { AtomicBoolean(false) }
     var level by remember { mutableFloatStateOf(0f) }
@@ -108,8 +116,19 @@ fun VoiceTrainingScreen(
     var needsMic by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var sendNote by remember { mutableStateOf<String?>(null) }
+    // The PC's words after the round before this one was held.
+    var roundNote by remember { mutableStateOf<String?>(null) }
     var sent by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
+    // The PC said another training is held (a 409 with `session`).
+    var heldElsewhere by remember { mutableStateOf(false) }
+    var confirmCancel by remember { mutableStateOf(false) }
+    var cancelling by remember { mutableStateOf(false) }
+    var cancelNote by remember { mutableStateOf<String?>(null) }
+
+    val sentences: List<String> = plan?.rounds?.getOrNull(roundIndex)?.sentences
+        ?.map { VoiceTraining.SENTENCES[it] }.orEmpty()
+    val total = sentences.size
 
     // "Check it with someone else": -1 not started, 0..2 that sentence,
     // 3 compare/result. Their clips live here only, like the owner's.
@@ -130,6 +149,27 @@ fun VoiceTrainingScreen(
             clips.clear()
             otherClips.clear()
         }
+    }
+
+    fun resetClips(n: Int) {
+        clips.clear()
+        repeat(n) { clips.add(null) }
+    }
+
+    fun begin(p: VoiceRounds.Plan, index: Int = 0) {
+        plan = p
+        roundIndex = index
+        resetClips(p.rounds[index].sentences.size)
+        // Rounds each get a first screen saying where to record them; one
+        // round starts on its first sentence, as it always has.
+        step = if (p.kind == VoiceRounds.Kind.EXTENDED) -1 else 0
+        roundNote = null
+        sendNote = null
+        sent = false
+        heldElsewhere = false
+        confirmCancel = false
+        cancelNote = null
+        problem = null
     }
 
     /** Records into slot [i] of [into]; [key] tells the two lists' sentences apart. */
@@ -186,9 +226,12 @@ fun VoiceTrainingScreen(
         }
     }
 
-    fun sendAll() {
-        val done = clips.count { it != null }
-        val blocked = VoiceTraining.sendBlocker(done, total, linkBlocker, totalSeconds(clips))
+    fun sendThisRound() {
+        val p = plan ?: return
+        val index = roundIndex
+        val blocked = VoiceRounds.sendBlocker(
+            p, index, clips.count { it != null }, totalSeconds(clips), linkBlocker, strict.limits,
+        )
         if (blocked != null || sending) {
             sendNote = blocked
             return
@@ -198,17 +241,55 @@ fun VoiceTrainingScreen(
         sendNote = null
         scope.launch {
             val result = try {
-                send(payload)
+                sendRound(p, index, payload)
             } finally {
                 sending = false
             }
-            sendNote = result.message
-            if (result.accepted) {
-                // Sent: this phone keeps no copy.
-                for (k in clips.indices) clips[k] = null
-                sent = true
-                onRefresh()
+            heldElsewhere = result.heldElsewhere
+            if (!result.accepted) {
+                sendNote = result.message
+                return@launch
             }
+            // Sent: this phone keeps no copy.
+            for (k in clips.indices) clips[k] = null
+            if (result.finished) {
+                sendNote = result.message
+                sent = true
+                plan = null
+                onRefresh()
+            } else {
+                roundIndex = index + 1
+                resetClips(p.rounds[index + 1].sentences.size)
+                step = -1
+                roundNote = result.message
+            }
+        }
+    }
+
+    /** Deletes everything recorded so far - here, and whatever the PC holds. */
+    fun cancelAll() {
+        val onPc = (plan != null && roundIndex > 0) || heldElsewhere || strict.session != null
+        stopFlag.set(true)
+        plan = null
+        clips.clear()
+        step = 0
+        roundIndex = 0
+        confirmCancel = false
+        sendNote = null
+        roundNote = null
+        problem = null
+        if (!onPc) {
+            cancelNote = VoiceRounds.cancelledLine(null)
+            return
+        }
+        cancelling = true
+        scope.launch {
+            cancelNote = try {
+                cancelRounds()
+            } finally {
+                cancelling = false
+            }
+            heldElsewhere = false
         }
     }
 
@@ -230,8 +311,9 @@ fun VoiceTrainingScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            VoiceNowPlate(status, answered)
+            VoiceNowPlate(status, strict, answered)
 
+            val current = plan
             when {
                 checkStep in others.indices -> {
                     Text(
@@ -374,29 +456,53 @@ fun VoiceTrainingScreen(
                     )
                     Gap(8)
                     Primary(text = "Done", modifier = Modifier.fillMaxWidth(), onClick = onBack)
+                    Gap(4)
+                    Quiet("Back to training", onClick = {
+                        sent = false
+                        sendNote = null
+                    })
                 }
 
-                step < 0 -> Plate {
+                current == null -> {
+                    cancelNote?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                    }
+                    StartPlates(
+                        status = status,
+                        strict = strict,
+                        answered = answered,
+                        sentPlan = sentPlan,
+                        busy = cancelling,
+                        onBegin = { p, i -> begin(p, i) },
+                        onDeleteHeld = { cancelAll() },
+                    )
+                }
+
+                current != null && step < 0 -> Plate {
                     Text(
-                        VoiceTraining.INTRO,
-                        style = MaterialTheme.typography.bodyLarge,
+                        VoiceRounds.roundTitle(current, roundIndex, strict),
+                        style = MaterialTheme.typography.titleSmall,
                         color = chrome.textHi,
                     )
+                    roundNote?.let {
+                        Gap(6)
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                    }
                     Gap(8)
                     Text(
-                        VoiceTraining.INTRO_DETAIL,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = chrome.textMid,
+                        if (roundIndex == 0) ROUND_FIRST else ROUND_AGAIN,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = chrome.textHi,
                     )
                     Gap(12)
                     Primary(
-                        text = "Start",
+                        text = "Start round ${roundIndex + 1}",
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { step = 0 },
                     )
                 }
 
-                step < total -> SentencePlate(
+                current != null && step < total -> SentencePlate(
                     index = step,
                     total = total,
                     sentence = sentences[step],
@@ -422,9 +528,11 @@ fun VoiceTrainingScreen(
                         step += 1
                     },
                     nextLabel = if (step == total - 1) "Review" else "Next sentence",
+                    heading = VoiceRounds.roundTitle(current, roundIndex, strict)
+                        .takeIf { current.kind != VoiceRounds.Kind.SINGLE && current.kind != VoiceRounds.Kind.SINGLE_OLD },
                 )
 
-                else -> Plate {
+                current != null -> Plate {
                     Text(
                         "Check your recordings",
                         style = MaterialTheme.typography.titleSmall,
@@ -458,18 +566,20 @@ fun VoiceTrainingScreen(
                         }
                     }
                     Gap(12)
-                    val blocked = VoiceTraining.sendBlocker(
+                    val blocked = VoiceRounds.sendBlocker(
+                        current,
+                        roundIndex,
                         clips.count { it != null },
-                        total,
-                        linkBlocker,
                         totalSeconds(clips),
+                        linkBlocker,
+                        strict.limits,
                     )
                     Primary(
-                        text = "Send to your PC",
+                        text = VoiceRounds.sendLabel(current, roundIndex),
                         busy = sending,
                         enabled = blocked == null && !sending,
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = { sendAll() },
+                        onClick = { sendThisRound() },
                     )
                     val note = sendNote ?: blocked
                     if (note != null) {
@@ -478,17 +588,48 @@ fun VoiceTrainingScreen(
                     }
                     Gap(6)
                     Text(
-                        "Sending raises an approval card. Jarvis only learns your voice once " +
-                            "you approve it.",
+                        if (VoiceRounds.isLast(current, roundIndex)) {
+                            "Sending raises an approval card. Jarvis only learns your voice once " +
+                                "you approve it."
+                        } else {
+                            "This round is kept in your PC's memory until the last one is sent. " +
+                                "Nothing changes yet."
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = chrome.textMid,
                     )
                 }
             }
 
+            // Cancel, while a training is being recorded.
+            if (current != null && !sent && checkStep < 0) {
+                Plate {
+                    if (confirmCancel) {
+                        Text(
+                            VoiceRounds.CANCEL_NOTE,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textHi,
+                        )
+                        Gap(10)
+                        Primary(
+                            text = "Delete the recordings",
+                            color = chrome.warnInk,
+                            busy = cancelling,
+                            enabled = !sending && !cancelling,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { cancelAll() },
+                        )
+                        Gap(4)
+                        Quiet("Keep going", onClick = { confirmCancel = false })
+                    } else {
+                        Quiet("Cancel this training", enabled = !sending, onClick = { confirmCancel = true })
+                    }
+                }
+            }
+
             // Offered from the first screen and after sending, never in the
             // middle of recording the owner's own sentences.
-            if (checkStep < 0 && (step < 0 || sent) && VoiceTraining.canCheck(status, answered)) {
+            if (checkStep < 0 && (current == null || sent) && VoiceTraining.canCheck(status, answered)) {
                 Plate {
                     Text(
                         "Check it with someone else",
@@ -519,6 +660,134 @@ fun VoiceTrainingScreen(
     }
 }
 
+/** The first of three rounds: what to do now. */
+private const val ROUND_FIRST =
+    "Hold the phone the way you usually do and read each sentence in your normal voice. " +
+        "Tap Record, read it, then tap Stop."
+
+/** Between rounds: what to do now. */
+private const val ROUND_AGAIN =
+    "Read the same 12 sentences again, in this new place or way. Take a break first if you " +
+        "like - your PC keeps the earlier rounds for 15 minutes."
+
+/**
+ * The first screen: start a training, pick up one the PC is holding, record
+ * again what the PC left out, or train more.
+ */
+@Composable
+private fun StartPlates(
+    status: VoiceStatus,
+    strict: VoiceStrict.View,
+    answered: Boolean,
+    sentPlan: VoiceRounds.Plan?,
+    busy: Boolean,
+    onBegin: (VoiceRounds.Plan, Int) -> Unit,
+    onDeleteHeld: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val first = VoiceRounds.plan(strict)
+
+    // An unfinished training on the PC (sent before the app was closed, say).
+    VoiceRounds.unfinishedLine(strict)?.let { line ->
+        Plate {
+            Text("Unfinished training", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Gap(6)
+            Text(line, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Gap(10)
+            VoiceRounds.resume(strict, VoiceTraining.MIC)?.let { (p, next) ->
+                Primary(
+                    text = "Continue with round ${next + 1}",
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onBegin(p, next) },
+                )
+                Gap(8)
+            }
+            Secondary(
+                text = "Delete them",
+                busy = busy,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onDeleteHeld,
+            )
+        }
+    }
+
+    // The recordings the PC left out of the last training.
+    VoiceRounds.outliersLine(strict.last, sentPlan)?.let { line ->
+        Plate {
+            Text(line, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+            val redo = VoiceRounds.redo(strict, strict.last, sentPlan)
+            Gap(10)
+            if (redo != null) {
+                Primary(
+                    text = "Record them again",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onBegin(redo, 0) },
+                )
+                Gap(4)
+                Text(
+                    VoiceRounds.introDetail(redo),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+            } else {
+                Text(
+                    "This phone does not know which sentences those were (it was restarted, or " +
+                        "the training came from elsewhere). Use Train more below, or train again.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+            }
+        }
+    }
+
+    Plate {
+        Text(VoiceRounds.intro(first), style = MaterialTheme.typography.bodyLarge, color = chrome.textHi)
+        Gap(8)
+        Text(VoiceRounds.introDetail(first), style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        Gap(12)
+        Primary(
+            text = "Start",
+            enabled = !busy && strict.session == null,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { onBegin(first, 0) },
+        )
+        if (strict.session != null) {
+            Gap(4)
+            Text(
+                "Finish or delete the unfinished training above first.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+        }
+    }
+
+    // "Train more": only once there is a voice to add to.
+    val trained = answered && status.available && status.gate.enrolled && !status.gate.needsRetraining
+    if (trained && strict.rounds && strict.session == null) {
+        Plate {
+            Text("Train more", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Gap(6)
+            Text(
+                "Does Jarvis turn you away in one place more than others? Add 12 more " +
+                    "recordings made that way. Nothing it has now is deleted. Pick one:",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            for (round in 1..3) {
+                val more = VoiceRounds.more(strict, round) ?: continue
+                Gap(8)
+                Secondary(
+                    text = VoiceRounds.ask(strict, round).replaceFirstChar { it.uppercase() },
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onBegin(more, 0) },
+                )
+            }
+        }
+    }
+}
+
 /** [recording] keys for the other person's sentences, apart from the owner's 0..11. */
 private const val OTHER_KEY = 100
 
@@ -526,7 +795,7 @@ private fun totalSeconds(clips: List<VoiceTraining.Clip?>): Float = clips.sumOf 
 
 /** What the PC says right now: trained or not, and with which check. */
 @Composable
-private fun VoiceNowPlate(status: VoiceStatus, answered: Boolean) {
+private fun VoiceNowPlate(status: VoiceStatus, strict: VoiceStrict.View, answered: Boolean) {
     val chrome = LocalChrome.current
     val trained = answered && status.available && status.gate.enrolled && !status.gate.needsRetraining
     Plate {
@@ -541,7 +810,11 @@ private fun VoiceNowPlate(status: VoiceStatus, answered: Boolean) {
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textMid,
         )
-        VoiceTraining.lastLine(status.gate.training.last)?.let {
+        StrictVoice.nowLine(strict)?.let {
+            Gap(4)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        }
+        VoiceTraining.lastLine(status.gate.training.last, strict.last)?.let {
             Gap(4)
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
@@ -553,11 +826,21 @@ private fun VoiceNowPlate(status: VoiceStatus, answered: Boolean) {
             Gap(6)
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
         }
+        StrictVoice.modelLine(strict)?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
     }
 }
 
+/**
+ * One sentence to read: Record / Stop with a level bar, the length once
+ * recorded, and Back / Next. Shared with the guided repeat test
+ * ([VoiceCheckScreen]) and adding a custom voice ([VoicesScreen]), so all
+ * three record the same way.
+ */
 @Composable
-private fun SentencePlate(
+internal fun SentencePlate(
     index: Int,
     total: Int,
     sentence: String,
@@ -573,15 +856,23 @@ private fun SentencePlate(
     onPrevious: (() -> Unit)?,
     onNext: () -> Unit,
     nextLabel: String,
+    /** A line above the counter - which round, or what this recording is for. */
+    heading: String? = null,
 ) {
     val chrome = LocalChrome.current
     Plate {
-        Text(
-            "Sentence ${index + 1} of $total",
-            style = MaterialTheme.typography.labelMedium,
-            color = chrome.textMid,
-        )
-        Gap(8)
+        if (heading != null) {
+            Text(heading, style = MaterialTheme.typography.labelMedium, color = chrome.textHi)
+            Gap(4)
+        }
+        if (total > 1) {
+            Text(
+                "Sentence ${index + 1} of $total",
+                style = MaterialTheme.typography.labelMedium,
+                color = chrome.textMid,
+            )
+            Gap(8)
+        }
         Text(sentence, style = MaterialTheme.typography.titleMedium, color = chrome.textHi)
         Gap(12)
 
