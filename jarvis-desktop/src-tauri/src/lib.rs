@@ -774,6 +774,8 @@ pub fn run() {
             voice_training::cancel_voice_training,
             voice_training::measure_voice,
             voice_training::set_voice_setting,
+            voice_training::check_voice_with_someone_else,
+            voice_training::propose_voice_threshold,
             voice_training::get_custom_voices,
             voice_training::create_custom_voice,
             voice_training::set_active_voice,

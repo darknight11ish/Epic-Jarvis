@@ -143,6 +143,8 @@ fn main() {
             "cancel_voice_training",
             "measure_voice",
             "set_voice_setting",
+            "check_voice_with_someone_else",
+            "propose_voice_threshold",
             "get_custom_voices",
             "create_custom_voice",
             "set_active_voice",

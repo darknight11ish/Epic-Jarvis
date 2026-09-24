@@ -283,6 +283,8 @@ permissions = [
   "allow-cancel-voice-training",
   "allow-measure-voice",
   "allow-set-voice-setting",
+  "allow-check-voice-with-someone-else",
+  "allow-propose-voice-threshold",
   "allow-get-custom-voices",
   "allow-create-custom-voice",
   "allow-set-active-voice",

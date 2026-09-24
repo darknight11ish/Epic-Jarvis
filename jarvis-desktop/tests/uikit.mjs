@@ -786,6 +786,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "cancel_voice_training":
           case "measure_voice":
           case "set_voice_setting":
+          case "check_voice_with_someone_else":
+          case "propose_voice_threshold":
           case "get_custom_voices":
           case "create_custom_voice":
           case "set_active_voice":
@@ -819,6 +821,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.measure));
               case "set_voice_setting":
                 return JSON.parse(JSON.stringify(v.settings[args.value] || v.settings.default));
+              // The "someone else" check and its threshold card: a scenario
+              // gives the answers (`check`, `threshold`).
+              case "check_voice_with_someone_else":
+                return JSON.parse(JSON.stringify(v.check || null));
+              case "propose_voice_threshold":
+                return JSON.parse(JSON.stringify(v.threshold || null));
               case "get_custom_voices":
                 v.reads += 1;
                 if (v.voicesUnavailable) {

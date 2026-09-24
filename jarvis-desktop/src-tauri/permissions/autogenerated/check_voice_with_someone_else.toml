@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-voice-with-someone-else"
+description = "Enables the check_voice_with_someone_else command without any pre-configured scope."
+commands.allow = ["check_voice_with_someone_else"]
+
+[[permission]]
+identifier = "deny-check-voice-with-someone-else"
+description = "Denies the check_voice_with_someone_else command without any pre-configured scope."
+commands.deny = ["check_voice_with_someone_else"]

@@ -32,12 +32,13 @@
 //! WHAT IS HELD ON A STALE LINK (rule 4). Only what raises an approval card
 //! or loosens something: finishing a training (the card), the one-shot
 //! training an older PC takes, loosening the voice check or the privacy
-//! setting, adding a voice, switching to a custom voice and turning the
-//! better voice on. Tightening, cancelling, going back to the built-in
-//! voice, deleting a voice, turning the better voice off, sending a round
-//! that is only held in memory, and the guided test (which changes nothing)
-//! always go through: each only narrows what Jarvis does, or changes
-//! nothing at all.
+//! setting, adding a voice, switching to a custom voice, turning the
+//! better voice on, and the stricter bar the "someone else" check suggests
+//! (its card). Tightening, cancelling, going back to the built-in voice,
+//! deleting a voice, turning the better voice off, sending a round that is
+//! only held in memory, the guided test and the "someone else" check itself
+//! (neither changes anything) always go through: each only narrows what
+//! Jarvis does, or changes nothing at all.
 //!
 //! Settings window only (permissions/surfaces.toml, `settings-surface`).
 
@@ -160,7 +161,8 @@ pub struct SampleTaken {
 }
 
 /// A slot name the page may use: `voice`, `t<round 1-3>-<sentence 0-11>`,
-/// or `m<sentence 0-19>`. Anything else is refused, so a page cannot fill
+/// `m<sentence 0-19>`, or `o<sentence 0-4>` (someone else's voice, for the
+/// "someone else" check). Anything else is refused, so a page cannot fill
 /// memory with names of its own.
 pub(crate) fn valid_slot(slot: &str) -> Result<&str, String> {
     let number = |s: &str, below: u32| {
@@ -172,6 +174,7 @@ pub(crate) fn valid_slot(slot: &str) -> Result<&str, String> {
     };
     let ok = slot == "voice"
         || slot.strip_prefix('m').is_some_and(|n| number(n, 20))
+        || slot.strip_prefix('o').is_some_and(|n| number(n, 5))
         || slot.strip_prefix('t').is_some_and(|rest| {
             rest.split_once('-')
                 .is_some_and(|(r, n)| matches!(r, "1" | "2" | "3") && number(n, 12))
@@ -705,6 +708,108 @@ pub async fn set_voice_setting(
 }
 
 // ---------------------------------------------------------------------------
+// The "someone else" check, and the stricter bar it may suggest
+// ---------------------------------------------------------------------------
+
+/// Whether the PC's voice status says it understands `mode: calibrate` and
+/// `mode: threshold` (`gate.training.calibrate`). An older PC reads any body
+/// with clips in it as a TRAINING - the other person's voice would become a
+/// card to make them "the owner" - so nothing is sent unless it is true.
+pub(crate) fn calibrate_understood(status: &Value) -> bool {
+    status
+        .pointer("/gate/training/calibrate")
+        .and_then(Value::as_bool)
+        == Some(true)
+}
+
+/// The body for the threshold card: this PC's microphone's print, the bar
+/// rounded to two places (the server's own rounding), and the model the
+/// check was scored with when it said (`small` or `strong`).
+pub(crate) fn threshold_body(threshold: f64, model: Option<&str>) -> Result<Value, String> {
+    if !threshold.is_finite() || !(0.05..=0.9).contains(&threshold) {
+        return Err("The setting must be between 0.05 and 0.90.".to_string());
+    }
+    let mut body = json!({
+        "mode": "threshold",
+        "mic": MIC_DESKTOP,
+        "threshold": (threshold * 100.0).round() / 100.0,
+    });
+    match model.map(str::trim).unwrap_or("") {
+        "" => {}
+        m @ ("small" | "strong") => body["model"] = json!(m),
+        _ => return Err("That is not one of the voice-ID models.".to_string()),
+    }
+    Ok(body)
+}
+
+/// Said when the PC is too old for the check.
+pub(crate) const CHECK_UPDATE: &str =
+    "Your PC does not have this check yet. Update the backend by running apply-patches.ps1, \
+     then open this again.";
+
+/// The "someone else" check (`mode: calibrate`): another person's sentences,
+/// recorded here under `o0`..`o4`, scored on the PC against the owner's
+/// print for this microphone and thrown away there. The recordings are
+/// dropped here too, whatever the answer. Changes nothing and raises no
+/// card, so it is NOT held on a stale link - the phone's rule. It is
+/// refused unless the PC says it understands it ([`calibrate_understood`]).
+#[tauri::command]
+pub async fn check_voice_with_someone_else(
+    app: AppHandle,
+    slots: Vec<String>,
+    state: State<'_, SampleState>,
+) -> Result<Value, String> {
+    if slots.is_empty() || slots.len() > 5 || !slots.iter().all(|s| s.trim().starts_with('o')) {
+        forget(&state, &slots);
+        return Err("Record their sentences first.".to_string());
+    }
+    let understood = match crate::voice::get_voice_status(app.clone()).await {
+        Ok(status) => calibrate_understood(&status),
+        Err(e) => {
+            forget(&state, &slots);
+            return Err(e);
+        }
+    };
+    if !understood {
+        forget(&state, &slots);
+        return Err(CHECK_UPDATE.to_string());
+    }
+    let clips = match take_held(&state, &slots) {
+        Ok(held) => held.into_iter().map(|(c, _)| c).collect::<Vec<_>>(),
+        Err(e) => {
+            forget(&state, &slots);
+            return Err(e);
+        }
+    };
+    let body = json!({ "mode": "calibrate", "mic": MIC_DESKTOP, "clips": clips });
+    drop(clips);
+    let sent = post(&app, "/api/voice/enroll", &body, ENROLL_TIMEOUT).await;
+    drop(body);
+    // Scored and thrown away on the PC; nothing is kept here either.
+    forget(&state, &slots);
+    let (status, text) = sent?;
+    enroll_answer(status, &text)
+}
+
+/// Asks the PC to use a stricter bar for the owner's voice on this PC's
+/// microphone (`mode: threshold`): ONE approval card, and the bar changes
+/// only once it is approved. Held while the event stream is stale (rule 4),
+/// the same as every other card.
+#[tauri::command]
+pub async fn propose_voice_threshold(
+    app: AppHandle,
+    threshold: f64,
+    model: Option<String>,
+) -> Result<Value, String> {
+    let body = threshold_body(threshold, model.as_deref())?;
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(&app, "/api/voice/enroll", &body, ENROLL_TIMEOUT).await?;
+    enroll_answer(status, &text)
+}
+
+// ---------------------------------------------------------------------------
 // Custom voices
 // ---------------------------------------------------------------------------
 
@@ -951,11 +1056,12 @@ mod tests {
 
     #[test]
     fn only_known_slots_and_voices() {
-        for ok in ["voice", "t1-0", "t3-11", "m0", "m19"] {
+        for ok in ["voice", "t1-0", "t3-11", "m0", "m19", "o0", "o4"] {
             assert_eq!(valid_slot(ok), Ok(ok));
         }
         for bad in [
-            "", "t4-0", "t1-12", "t1-01", "m20", "m", "voice2", "t1", "../x", "t1-a",
+            "", "t4-0", "t1-12", "t1-01", "m20", "m", "voice2", "t1", "../x", "t1-a", "o5", "o",
+            "o01",
         ] {
             assert!(valid_slot(bad).is_err(), "{bad} was accepted");
         }
@@ -967,6 +1073,43 @@ mod tests {
         for bad in ["", "Grandpa", "-x", "a/b", "a b", &"x".repeat(33)] {
             assert!(voice_id(bad).is_err(), "{bad} was accepted");
         }
+    }
+
+    #[test]
+    fn someone_else_only_to_a_pc_that_understands_it() {
+        assert!(calibrate_understood(
+            &json!({ "gate": { "training": { "calibrate": true } } })
+        ));
+        for older in [
+            json!({ "gate": { "training": { "available": true } } }),
+            json!({ "gate": { "training": { "calibrate": "true" } } }),
+            json!({ "available": false }),
+            json!(null),
+        ] {
+            assert!(!calibrate_understood(&older), "{older}");
+        }
+    }
+
+    #[test]
+    fn the_threshold_card_names_this_microphone_and_the_model() {
+        assert_eq!(
+            threshold_body(0.553, Some("strong")),
+            Ok(
+                json!({ "mode": "threshold", "mic": "desktop", "threshold": 0.55, "model": "strong" })
+            )
+        );
+        assert_eq!(
+            threshold_body(0.5, None),
+            Ok(json!({ "mode": "threshold", "mic": "desktop", "threshold": 0.5 }))
+        );
+        assert_eq!(
+            threshold_body(0.5, Some(" ")).map(|b| b.get("model").is_none()),
+            Ok(true)
+        );
+        for bad in [0.0, 0.04, 0.95, f64::NAN, f64::INFINITY] {
+            assert!(threshold_body(bad, None).is_err(), "{bad} was accepted");
+        }
+        assert!(threshold_body(0.5, Some("huge")).is_err());
     }
 
     #[test]

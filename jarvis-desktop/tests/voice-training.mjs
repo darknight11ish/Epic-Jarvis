@@ -26,6 +26,7 @@
  *   AND in the Rust.
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -534,6 +535,136 @@ await check("the small model is said plainly, with a link that opens in the real
   assert.deepEqual(opened, [VT.README_STRONGER]);
 });
 
+/* ── The "someone else" check ───────────────────────────────────────── */
+
+// REAL answers: backend/jarvis_voice_enroll.calibrate() itself, run on
+// three real WAV clips with the voice-ID model stood in by fixed scores
+// (the scoring is the model's job; the reply's shape and words, the
+// suggestion and the counting are the module's).
+const BACKEND_DIR = join(HERE, "..", "..", "backend");
+function realCalibrate(got) {
+  const code = [
+    "import sys, json, io, wave, base64, struct, math",
+    "sys.path.insert(0, 'rebuilt'); sys.path.insert(0, '.')",
+    "import jarvis_voice_enroll as E",
+    "def clip():",
+    "    b = io.BytesIO(); w = wave.open(b, 'wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)",
+    "    w.writeframes(b''.join(struct.pack('<h', int(8000 * math.sin(i / 7.0))) for i in range(32000))); w.close()",
+    "    return base64.b64encode(b.getvalue()).decode()",
+    `got = json.loads(${JSON.stringify(JSON.stringify(got))})`,
+    "code, body = E.calibrate({'mode': 'calibrate', 'mic': 'desktop', 'clips': [clip(), clip(), clip()]}, score=lambda pcm, mic: got)",
+    "body['http'] = code; print(json.dumps(body))",
+  ].join("\n");
+  return JSON.parse(execFileSync("python3", ["-c", code],
+    { cwd: BACKEND_DIR, encoding: "utf8", env: { ...process.env, JARVIS_NO_EMBED: "1" } }));
+}
+const APART = realCalibrate({ ok: true, scores: [0.21, 0.33, 0.28], threshold: 0.35,
+  owner_scores: [0.62, 0.7, 0.66], print: "desktop", strictness: "very_strict",
+  passed: [false, false, false], model: "strong" });
+const ONE_IN = realCalibrate({ ok: true, scores: [0.4, 0.3, 0.2], threshold: 0.35,
+  owner_scores: [0.62, 0.7, 0.66], print: "desktop", strictness: "very_strict",
+  passed: [true, false, false], model: "small" });
+const TOO_CLOSE = realCalibrate({ ok: true, scores: [0.6, 0.5, 0.55], threshold: 0.35,
+  owner_scores: [0.52, 0.7, 0.66], print: "desktop", strictness: "very_strict", model: "strong" });
+const NOTHING_TRAINED = realCalibrate({ ok: false, why: "no voice has been trained yet" });
+// What stage_threshold() answers when the card is up (jarvis_voice_enroll.py:
+// `return 202, {"ok": True, "pending": True, "threshold": new, "model": which,
+// "message": ...}`), as voice_training.rs passes it on (`http` added).
+const THRESHOLD_UP = { ok: true, pending: true, threshold: 0.47, model: "strong", http: 202,
+  message: "Approve the card on your PC or phone to use the new setting. Nothing changes until you do." };
+
+await check("the \"someone else\" check in words, from the PC's real answers", async () => {
+  assert.equal(APART.http, 200);
+  const a = VT.checkResult(APART);
+  assert.equal(a.text, "Good: none of their 3 clips would pass as you now. A stricter setting, 0.47 (now 0.35), would turn them away and still let you in.");
+  assert.deepEqual([a.ok, a.suggested, a.model], [true, 0.47, "strong"]);
+  const b = VT.checkResult(ONE_IN);
+  assert.match(b.text, /^1 of their 3 clips would pass as you now\./);
+  assert.equal(b.model, "small");
+  const c = VT.checkResult(TOO_CLOSE);
+  assert.equal(c.suggested, null, "no safe stricter setting, so none is offered");
+  assert.match(c.text, /^3 of their 3 clips would pass as you now\. /, "no verdicts: the PC counts against the bar");
+  const d = VT.checkResult(NOTHING_TRAINED);
+  assert.equal(NOTHING_TRAINED.http, 409);
+  assert.deepEqual([d.ok, d.text], [false, "No voice has been trained yet."]);
+  for (const r of [a, b, c, d]) noRaw(r.text);
+  assert.equal(VT.thresholdReply(THRESHOLD_UP, WHERE).text,
+    `Waiting for your approval. Approve it ${WHERE} — nothing changes until you do.`);
+  // Only a PC that understands it, with a print to compare against.
+  assert.equal(VT.canCheck(S.strong_ready), true);
+  const old = JSON.parse(JSON.stringify(S.strong_ready));
+  delete old.gate.training.calibrate;
+  assert.equal(VT.canCheck(old), false, "an older PC reads the clips as a training");
+  const none = JSON.parse(JSON.stringify(S.strong_ready));
+  for (const k of ["desktop", "phone", "general"]) none.gate.prints[k].trained = false;
+  assert.equal(VT.canCheck(none), false);
+  // The phone's three sentences and intro, word for word ("this phone" made "this PC's microphone").
+  const phone = read("../jarvis-client/app/src/main/java/com/jarvis/client/voice/VoiceTraining.kt");
+  const kotlin = phone.slice(phone.indexOf("val OTHER_SENTENCES"), phone.indexOf(")", phone.indexOf("val OTHER_SENTENCES")));
+  assert.deepEqual([...kotlin.matchAll(/"([^"]+)"/g)].map((m) => m[1]), [...VT.OTHER_SENTENCES]);
+});
+
+const othersPage = (status, extra = {}) =>
+  open(status, { vt: { check: APART, threshold: THRESHOLD_UP }, ...extra });
+
+await check("someone else reads 3 sentences; the PC compares; the stricter bar is ONE card", async () => {
+  const page = await othersPage(S.strong_ready);
+  await click(page, "vt-others", "Start the check");
+  await readAll(page, "vt-others", 3);
+  await click(page, "vt-others", "Compare them");
+  await page.waitForTimeout(150);
+  const checked = await calls(page, "check_voice_with_someone_else");
+  const said = await text(page, "vt-others");
+  await click(page, "vt-others", "Use 0.47 (asks for approval)");
+  await page.waitForTimeout(150);
+  const proposed = await calls(page, "propose_voice_threshold");
+  const after = await text(page, "vt-others");
+  const sampled = await calls(page, "start_voice_sample");
+  await page.close();
+  assert.deepEqual(sampled.map((c) => c.slot), ["o0", "o1", "o2"]);
+  assert.deepEqual(checked, [{ slots: ["o0", "o1", "o2"] }]);
+  assert.match(said, /Good: none of their 3 clips would pass as you now\. A stricter setting, 0\.47 \(now 0\.35\)/);
+  assert.match(said, /Nothing changes until you approve the card\./);
+  assert.deepEqual(proposed, [{ threshold: 0.47, model: "strong" }]);
+  assert.match(after, /Waiting for your approval\. Approve it in the Jarvis bar/);
+});
+
+await check("on a stale link the check still runs, but the stricter bar's card is held", async () => {
+  const page = await othersPage(S.strong_ready, { link: { stale: true } });
+  await click(page, "vt-others", "Start the check");
+  await readAll(page, "vt-others", 3);
+  await click(page, "vt-others", "Compare them");
+  await page.waitForTimeout(150);
+  const checked = await calls(page, "check_voice_with_someone_else");
+  const use = await page.evaluate(() => document.getElementById("vt-others-use").disabled);
+  const said = await text(page, "vt-others");
+  await page.close();
+  assert.equal(checked.length, 1, "the check was held, though it changes nothing");
+  assert.equal(use, true, "the card could be asked for on a stale link");
+  assert.match(said, /catching up/);
+});
+
+await check("an older PC is not offered the check at all", async () => {
+  const old = JSON.parse(JSON.stringify(S.strong_ready));
+  delete old.gate.training.calibrate;
+  const page = await othersPage(old);
+  const hidden = await page.evaluate(() => [document.getElementById("vt-others").hidden,
+    document.getElementById("vt-others-head").hidden]);
+  await page.close();
+  assert.deepEqual(hidden, [true, true]);
+});
+
+await check("the guided test's 20 sentences are ONE list: the phone's is this one, word for word", async () => {
+  assert.equal(VT.TEST_SENTENCES.length, 20);
+  assert.equal(new Set(VT.TEST_SENTENCES).size, 20);
+  const phone = read("../jarvis-client/app/src/main/java/com/jarvis/client/voice/StrictVoice.kt");
+  const at = phone.indexOf("val MEASURE_SENTENCES");
+  assert.ok(at > -1, "StrictVoice.MEASURE_SENTENCES is gone");
+  const kotlin = phone.slice(at, phone.indexOf(")", at));
+  assert.deepEqual([...kotlin.matchAll(/"([^"]+)"/g)].map((m) => m[1]), [...VT.TEST_SENTENCES],
+    "the phone's guided test reads other sentences (jarvis-client voice/StrictVoice.kt)");
+});
+
 /* ── The Rust ───────────────────────────────────────────────────────── */
 
 const fnBody = (src, sig) => {
@@ -545,7 +676,8 @@ const fnBody = (src, sig) => {
 const RUST = read("src-tauri/src/voice_training.rs");
 const COMMANDS = ["start_voice_sample", "voice_sample_level", "stop_voice_sample", "cancel_voice_sample",
   "discard_voice_samples", "send_voice_training", "cancel_voice_training", "measure_voice",
-  "set_voice_setting", "get_custom_voices", "create_custom_voice", "set_active_voice",
+  "set_voice_setting", "check_voice_with_someone_else", "propose_voice_threshold",
+  "get_custom_voices", "create_custom_voice", "set_active_voice",
   "delete_custom_voice", "set_better_voice"];
 
 await check("CONTROL (Rust): what raises a card is held on a stale link, and nothing else", async () => {
@@ -553,6 +685,12 @@ await check("CONTROL (Rust): what raises a card is held on a stale link, and not
   assert.match(fnBody(RUST, "pub async fn set_voice_setting("), /if loosening && stale\(&app\)/);
   assert.doesNotMatch(fnBody(RUST, "pub async fn cancel_voice_training("), /stale/);
   assert.doesNotMatch(fnBody(RUST, "pub async fn measure_voice("), /stale/);
+  // The "someone else" check changes nothing: never held. Its card is.
+  assert.doesNotMatch(fnBody(RUST, "pub async fn check_voice_with_someone_else("), /stale/);
+  assert.match(fnBody(RUST, "pub async fn propose_voice_threshold("), /if stale\(&app\) \{\s+return Err\(HELD_STALE/);
+  // ...and it goes only to a PC that says it understands it.
+  assert.match(fnBody(RUST, "pub async fn check_voice_with_someone_else("),
+    /calibrate_understood\(&status\)[\s\S]*if !understood \{[\s\S]*return Err\(CHECK_UPDATE[\s\S]*"mode": "calibrate"/);
   assert.match(fnBody(RUST, "pub(crate) fn voice_setting("), /\("strictness", "balanced"\) => Ok\(\("strictness", "balanced", true\)\)/);
   assert.match(fnBody(RUST, "pub(crate) fn voice_setting("), /\("privacy", "voice_is_enough"\) => Ok\(\("privacy", "voice_is_enough", true\)\)/);
 });
