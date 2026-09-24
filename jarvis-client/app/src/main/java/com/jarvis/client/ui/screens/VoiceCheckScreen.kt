@@ -449,10 +449,12 @@ private fun SettingPlate(
                 color = chrome.textMid,
             )
         }
-        if (!open) {
+        // Why the memory choices are greyed out, or that "Keep on screen"
+        // for memories already covers sensitive saved facts.
+        StrictVoice.plateNote(setting, strict)?.let {
             Gap(8)
             Text(
-                StrictVoice.MEMORY_WHILE_VOICE_IS_ENOUGH,
+                it,
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textMid,
             )

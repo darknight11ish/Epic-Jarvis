@@ -57,10 +57,18 @@ THE OWNER'S THREE DECISIONS (2026-09-24), in plain words:
    the first question's words went from 3.3-3.6 s to 0.42-0.59 s, and its
    first sentence of sound from 2.4-3.2 s to 1.3-1.6 s.
    `[voice] warm_engines = false` turns it off.
-   What was checked and NOT changed: both apps already ask for each
-   sentence's sound as soon as that sentence is complete; the owner check
-   still runs before speech-to-text, always (running them side by side
-   would transcribe a stranger's words on the way to refusing them).
+   What the apps do with the sound (changed 2026-09-24): both apps ask
+   for the FIRST sentence's sound as soon as that sentence is complete,
+   and for each later sentence's sound while the sentence before it is
+   still playing - one ahead, never more, so the PC makes at most one
+   sentence's sound at a time for an answer (jarvis-desktop main.js
+   drainSpeechQueue; jarvis-client voice/SpeechAhead.kt). Before that
+   they asked only once the previous sentence had finished playing, which
+   left a silence between sentences as long as say() took. The gap
+   between sentences is not in `flow.timings`.
+   What was checked and NOT changed: the owner check still runs before
+   speech-to-text, always (running them side by side would transcribe a
+   stranger's words on the way to refusing them).
 
 3. "ONE MOMENT." If no sound has started about a second after the owner
    finished, the apps may play a short clip: "One moment.", in the voice
@@ -607,7 +615,10 @@ def summary(rows: Optional[list] = None) -> list:
 # ==========================================================================
 
 MOMENT_TEXT = "One moment."
-#: A suggestion only - the apps decide when to play it.
+#: A suggestion only - the apps decide when to play it. At today's speeds
+#: (roughly 2.5-4 s from the owner finishing to the first sound, voice on
+#: the processor - an estimate) it would fire on most spoken turns; see
+#: JARVIS-API.md section 17, "One moment.".
 MOMENT_AFTER_MS = 1000
 
 _MOMENT_LOCK = threading.Lock()

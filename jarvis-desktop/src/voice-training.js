@@ -484,6 +484,19 @@ export function memoryMoot(view) {
   return Boolean(view && view.privacy === "voice_is_enough");
 }
 
+/** Under the sensitive-facts choices while "Keep on screen" is chosen for
+ *  what Jarvis remembers: every answer that uses a saved fact already stays
+ *  on screen, the sensitive ones included (private-speech.js). The choices
+ *  stay usable - this one takes over if the memory choice changes. */
+export const SENSITIVE_COVERED_NOTE = "\"Keep on screen\" above already keeps these answers on screen.";
+
+/** Whether the memory choice already keeps sensitive answers on screen
+ *  (see SENSITIVE_COVERED_NOTE). Not under "Voice check is enough": that
+ *  makes the memory choice moot, and then only this one holds them back. */
+export function sensitiveCovered(view) {
+  return Boolean(view && view.memory === "memory_on_screen" && !memoryMoot(view));
+}
+
 /** The value `setting` has now, by the PC's status, or "" when not said. */
 export function currentSetting(status, setting) {
   const view = settingsView(status);

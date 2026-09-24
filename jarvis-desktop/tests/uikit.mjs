@@ -1297,6 +1297,52 @@ export async function launch() {
   return chromium.launch(CHROME ? { executablePath: CHROME } : {});
 }
 
+/**
+ * A speaker whose every clip lasts `playMs`, for the quickbar's spoken
+ * replies (main.js drainSpeechQueue). Each clip `speak_reply` returns is
+ * tagged with its sentence (a `#` fragment on the data URI), and "playing"
+ * one writes `["play", text]` and, `playMs` later, `["end", text]` into
+ * `window.__voiceCalls`, next to the `["speak", text]` of each request - so
+ * a test can read what was asked for, what was played, and in what order.
+ * `window.__mostAsking` is the most `speak_reply` requests ever in flight
+ * at once.
+ */
+export function slowSpeaker(page, playMs) {
+  return page.evaluate((ms) => {
+    const core = window.__TAURI__.core;
+    const invoke = core.invoke;
+    let asking = 0;
+    window.__mostAsking = 0;
+    core.invoke = async (cmd, args) => {
+      if (cmd !== "speak_reply") return invoke(cmd, args);
+      asking += 1;
+      window.__mostAsking = Math.max(window.__mostAsking, asking);
+      try {
+        const out = await invoke(cmd, args);
+        return typeof out === "string" ? `${out}#${encodeURIComponent(args.text)}` : out;
+      } finally {
+        asking -= 1;
+      }
+    };
+    HTMLMediaElement.prototype.play = function () {
+      const text = decodeURIComponent(String(this.src).split("#")[1] || "");
+      window.__voiceCalls.push(["play", text]);
+      setTimeout(() => {
+        window.__voiceCalls.push(["end", text]);
+        this.dispatchEvent(new Event("ended"));
+      }, ms);
+      return Promise.resolve();
+    };
+  }, playMs);
+}
+
+/** What `slowSpeaker` wrote down: `"speak One."`, `"play One."`, `"end One."`, in order. */
+export function speechLog(page) {
+  return page.evaluate(() => (window.__voiceCalls || [])
+    .filter((c) => Array.isArray(c) && ["speak", "play", "end"].includes(c[0]))
+    .map((c) => `${c[0]} ${c[1]}`));
+}
+
 /** Opens a page with the bridge installed and the given scenario data. */
 export async function open(browser, base, file, data, viewport) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 2 });

@@ -507,14 +507,22 @@ await check("while \"voice check is enough\" is on, the memory choices are disab
   assert.deepEqual(free, [false, false]);
 });
 
-/** A status from a PC with decision 13's setting (the backend is built to
- *  the same contract in parallel, so the fixtures do not carry it yet). */
+/** A status from a PC with decision 13's setting, as `value`, said in
+ *  `gate.settings` or only in `gate`. (The fixtures carry it in both since
+ *  they were regenerated from the backend.) */
 const withSensitive = (st, value, where = "settings") => {
-  const c = JSON.parse(JSON.stringify(st));
+  const c = withoutSensitive(st);
   if (where === "settings") c.gate.settings.sensitive_memory = value;
   else c.gate.sensitive_memory = value;
   return c;
 };
+/** The same status from a PC older than decision 13: no such setting. */
+function withoutSensitive(st) {
+  const c = JSON.parse(JSON.stringify(st));
+  delete c.gate.settings.sensitive_memory;
+  delete c.gate.sensitive_memory;
+  return c;
+}
 
 await check("answers that use sensitive saved facts: on screen by default, the contract's words, and only when the PC has it", async () => {
   assert.deepEqual(VT.SENSITIVE_MEMORY.map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
@@ -528,7 +536,7 @@ await check("answers that use sensitive saved facts: on screen by default, the c
   assert.equal(VT.settingsView(withSensitive(S.strong_ready, "sensitive_on_screen")).sensitiveMemory, "sensitive_on_screen");
   assert.equal(VT.settingsView(withSensitive(S.strong_ready, "sensitive_aloud", "gate")).sensitiveMemory, "sensitive_aloud");
   assert.equal(VT.settingsView(withSensitive(S.strong_ready, "loud")).sensitiveMemory, "");
-  assert.equal(VT.settingsView(S.strong_ready).sensitiveMemory, "");
+  assert.equal(VT.settingsView(withoutSensitive(S.strong_ready)).sensitiveMemory, "");
 
   const page = await open(withSensitive(S.strong_ready, "sensitive_on_screen"));
   const got = await page.evaluate(() => ({
@@ -545,10 +553,42 @@ await check("answers that use sensitive saved facts: on screen by default, the c
   assert.equal(got.pressed, "sensitive_on_screen");
   assert.match(note, /health, money, passwords or other people are shown, not read aloud/);
   // A PC without it ("" or missing): not offered at all.
-  const old = await open(S.strong_ready);
+  const old = await open(withoutSensitive(S.strong_ready));
   const hidden = await old.evaluate(() => document.getElementById("vt-sensitive-box").hidden);
   await old.close();
   assert.equal(hidden, true);
+});
+
+await check("sensitive saved facts under \"Keep on screen\" for memories: the note says that already covers them", async () => {
+  const NOTE = "\"Keep on screen\" above already keeps these answers on screen.";
+  assert.equal(VT.SENSITIVE_COVERED_NOTE, NOTE);
+  const withMemory = (st, memory) => {
+    const c = JSON.parse(JSON.stringify(st));
+    c.gate.settings.memory = memory;
+    return c;
+  };
+  const covered = withMemory(withSensitive(S.strong_ready, "sensitive_aloud"), "memory_on_screen");
+  assert.equal(VT.sensitiveCovered(VT.settingsView(covered)), true);
+  const page = await open(covered);
+  const note = await text(page, "vt-sensitive-note");
+  const free = await page.evaluate(() => [...document.querySelectorAll("#vt-sensitive button")].map((b) => b.disabled));
+  await page.close();
+  assert.ok(note.endsWith(NOTE), note);
+  assert.match(note, /^Those answers are read aloud/, "the chosen one's own words stay");
+  assert.deepEqual(free, [false, false], "still usable: it takes over if the memory choice changes");
+  // CONTROL: memories read aloud - this choice is what holds them back.
+  const aloud = await open(withMemory(withSensitive(S.strong_ready, "sensitive_on_screen"), "memory_aloud"));
+  const plain = await text(aloud, "vt-sensitive-note");
+  await aloud.close();
+  assert.ok(!plain.includes(NOTE), plain);
+  // CONTROL: "Voice check is enough" makes the memory choice moot, so it
+  // covers nothing - no note.
+  const moot = withMemory(withSensitive(S.voice_is_enough, "sensitive_on_screen"), "memory_on_screen");
+  assert.equal(VT.sensitiveCovered(VT.settingsView(moot)), false);
+  const mootPage = await open(moot);
+  const mootNote = await text(mootPage, "vt-sensitive-note");
+  await mootPage.close();
+  assert.ok(!mootNote.includes(NOTE), mootNote);
 });
 
 await check("sensitive saved facts: keeping them on screen is at once; Read aloud asks, and is held on a stale link", async () => {
