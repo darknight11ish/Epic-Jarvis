@@ -512,7 +512,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (reply && typeof onmessage === "function") {
               const chunks = Array.isArray(reply) ? reply : [reply];
               for (const chunk of chunks) {
-                onmessage(chunk);
+                // `{emit, payload}` is not a chunk: it is a Tauri event sent
+                // at that point in the answer - a `step` event on the bus,
+                // say, or the link going stale - the other road into the
+                // window, interleaved the way the real app sees them.
+                if (chunk && typeof chunk === "object" && typeof chunk.emit === "string") {
+                  window.__emit(chunk.emit, chunk.payload);
+                } else {
+                  onmessage(chunk);
+                }
                 await new Promise((r) => setTimeout(r, 0));
               }
             }
