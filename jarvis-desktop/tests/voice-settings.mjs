@@ -13,7 +13,8 @@
  * - which voice check is installed, in the phone's words for the basic one;
  * - the owner's own "hey Jarvis" check, the wake word, "stop", Smart Turn and
  *   the talk button, each in words;
- * - training is NOT offered here; the page says it is on the phone;
+ * - training is offered here too, for THIS PC's microphone (its words and
+ *   its page are tested in voice-training.mjs);
  * - an older backend, or no answer, is a sentence - never a code or JSON.
  *
  * The CONTROL checks read the Rust: the header and token, and that only the
@@ -136,10 +137,10 @@ await check("the older single print is shown, and said to be replaced by the nex
   assert.equal(W.summaryLine(C.older_single_print, WHERE), "Trained, from 4 samples.");
 });
 
-await check("a print made with another voice check: train again, on the phone", async () => {
+await check("a print made with another voice check: train again, here or on the phone", async () => {
   const st = C.needs_retraining;
   assert.equal(W.summaryLine(st, WHERE),
-    "Your PC's voice check changed since you trained it. Train your voice again on your phone.");
+    "Your PC's voice check changed since you trained it. Train your voice again, below or on your phone.");
   assert.equal(W.isTrained(st), false);
   const general = W.printLines(st).find((l) => l.id === "general");
   assert.match(general.text, /needs training again/);
@@ -168,7 +169,7 @@ await check("a card to turn the wake word on is waiting: said, with where to app
 
 /* ── The page ───────────────────────────────────────────────────────────── */
 
-await check("the section shows the real status, with training pointed at the phone and no training button", async () => {
+await check("the section shows the real status, and offers training on this PC", async () => {
   const page = await open({ status: C.phone_trained });
   const s = await section(page);
   await page.close();
@@ -188,8 +189,11 @@ await check("the section shows the real status, with training pointed at the pho
   assert.match(s.stopWord, /cannot hear it yet/);
   assert.match(s.turn, /not installed on this PC/);
   assert.equal(s.last, null);
-  assert.match(s.all, /use your phone for now: open Platform checks and tap Train my voice/);
-  assert.ok(!s.buttons.some((b) => /train/i.test(b)), `a training button: ${s.buttons}`);
+  assert.doesNotMatch(s.all, /use your phone for now/);
+  // With only the basic check every voice is refused, so training is not
+  // offered - the section says why instead (voice-training.mjs has the rest).
+  assert.ok(!s.buttons.includes("Train my voice"), `a training button: ${s.buttons}`);
+  assert.match(s.all, /No voice-ID model is installed on your PC, so training cannot help yet/);
   noRaw(s.all);
 });
 
@@ -204,6 +208,7 @@ await check("everything ready: the PC's own print, the \"hey Jarvis\" check, sto
   assert.match(s.verifier, /built from your training/);
   assert.match(s.stopWord, /this PC can hear it/);
   assert.match(s.turn, /on\. Jarvis waits until you have finished/);
+  assert.ok(s.buttons.includes("Train my voice"), `no training button: ${s.buttons}`);
   noRaw(s.all);
 });
 

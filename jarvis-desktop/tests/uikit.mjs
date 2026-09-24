@@ -68,6 +68,18 @@ export const BIG_MODEL = JSON.parse(fsSync.readFileSync(path.join(
  * answers (`VOICE.answers`), written by tools/gen_voice_status_cases.py.
  * Never hand-made: pick a case by name, e.g. `VOICE.cases.phone_trained`.
  */
+/**
+ * The backend's real answers for voice training, the voice-check settings,
+ * the guided test and custom voices, written by
+ * tools/gen_voice_training_cases.py: `statuses` (GET /api/voice/status),
+ * `enroll` and `voice_posts` ({code, body} of each POST) and `voices`
+ * (GET /api/voice/voices). `TRAINING.answer(x)` is what voice_training.rs
+ * hands the page for one of those POSTs: the body with its code as `http`.
+ */
+export const TRAINING = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "voice-training-cases.json"), "utf8"));
+TRAINING.answer = (a) => ({ ...a.body, http: a.code });
+
 export const VOICE = JSON.parse(fsSync.readFileSync(path.join(
   path.dirname(fileURLToPath(import.meta.url)), "fixtures", "voice-status-cases.json"),
   "utf8"));
@@ -385,7 +397,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -752,6 +764,71 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return JSON.parse(JSON.stringify(vs.status));
           }
+          // voice_training.rs: Settings' recordings, training, settings,
+          // guided test and custom voices. Every answer a scenario gives is a
+          // REAL backend answer (TRAINING, with its code as `http`, which is
+          // what the Rust passes on); `fails` names commands that reject
+          // with a sentence instead. `window.__vt.calls` records each call.
+          case "start_voice_sample":
+          case "voice_sample_level":
+          case "stop_voice_sample":
+          case "cancel_voice_sample":
+          case "discard_voice_samples":
+          case "send_voice_training":
+          case "cancel_voice_training":
+          case "measure_voice":
+          case "set_voice_setting":
+          case "get_custom_voices":
+          case "create_custom_voice":
+          case "set_active_voice":
+          case "delete_custom_voice":
+          case "set_better_voice": {
+            const v = window.__vt;
+            if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
+            if (v.fails[cmd]) throw new Error(v.fails[cmd]);
+            switch (cmd) {
+              case "start_voice_sample":
+                v.recording = args.slot;
+                return null;
+              case "voice_sample_level":
+                return v.level;
+              case "stop_voice_sample": {
+                const slot = v.recording;
+                v.recording = null;
+                const t = (v.takes && v.takes[slot]) || v.take;
+                return { slot, seconds: t.seconds, peak: t.peak };
+              }
+              case "cancel_voice_sample":
+                v.recording = null;
+                return null;
+              case "discard_voice_samples":
+                return null;
+              case "send_voice_training":
+                return JSON.parse(JSON.stringify(v.sends.length > 1 ? v.sends.shift() : v.sends[0]));
+              case "cancel_voice_training":
+                return JSON.parse(JSON.stringify(v.cancel));
+              case "measure_voice":
+                return JSON.parse(JSON.stringify(v.measure));
+              case "set_voice_setting":
+                return JSON.parse(JSON.stringify(v.settings[args.value] || v.settings.default));
+              case "get_custom_voices":
+                v.reads += 1;
+                if (v.voicesUnavailable) {
+                  return { available: false, why: "This PC's Jarvis does not have custom voices yet. Update the backend by running apply-patches.ps1, then open this again." };
+                }
+                return JSON.parse(JSON.stringify(v.voices));
+              case "create_custom_voice":
+                return JSON.parse(JSON.stringify(v.create));
+              case "set_active_voice":
+                return JSON.parse(JSON.stringify(args.voice === "builtin" ? v.builtin : v.active));
+              case "delete_custom_voice":
+                return JSON.parse(JSON.stringify(v.del));
+              case "set_better_voice":
+                return JSON.parse(JSON.stringify(args.enabled ? v.betterOn : v.betterOff));
+              default:
+                return null;
+            }
+          }
           // commands.rs get_backend_capabilities: the NAMES the Rust makes
           // of /api/version's capabilities. `answer` is that; `fails` is the
           // sentence it rejects with.
@@ -1012,6 +1089,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__voice = { reads: 0, changes: [], getFails: null, setFails: null,
                      unavailable: false, ...(voice || {}) };
   window.__voice.status = JSON.parse(JSON.stringify(window.__voice.status || null));
+  // Settings' voice training and custom voices (voice_training.rs), with
+  // the real answers open() fills in; a scenario names only what it changes.
+  window.__vt = { calls: [], fails: {}, reads: 0, recording: null, level: 0.3,
+                  take: { seconds: 2.6, peak: 0.42 }, takes: null, voicesUnavailable: false,
+                  ...(vt || {}) };
   // Unset, what commands.rs makes of backend/rebuilt/jarvis_events.hello()
   // run with none of the owner's own modules (its Rust test pins the same).
   // Unset, lock.rs's defaults on a PC with Windows Hello set up, and the
@@ -1073,6 +1155,26 @@ export async function open(browser, base, file, data, viewport) {
             ...(data && data.deep) },
     voice: { status: VOICE.cases.phone_trained, onAnswer: VOICE.answers.wake_on_pending,
              offAnswer: VOICE.answers.wake_off, ...(data && data.voice) },
+    vt: {
+      sends: [TRAINING.answer(TRAINING.enroll.round_held)],
+      cancel: TRAINING.answer(TRAINING.enroll.cancel),
+      measure: TRAINING.answer(TRAINING.enroll.measure),
+      settings: {
+        balanced: TRAINING.answer(TRAINING.enroll.loosen_strictness),
+        voice_is_enough: TRAINING.answer(TRAINING.enroll.loosen_privacy),
+        very_strict: TRAINING.answer(TRAINING.enroll.tighten_strictness),
+        private_on_screen: TRAINING.answer(TRAINING.enroll.tighten_privacy),
+        default: TRAINING.answer(TRAINING.enroll.tighten_already),
+      },
+      voices: TRAINING.voices.builtin_nothing_installed,
+      create: TRAINING.answer(TRAINING.voice_posts.create_accepted),
+      active: TRAINING.answer(TRAINING.voice_posts.switch_pending),
+      builtin: TRAINING.answer(TRAINING.voice_posts.builtin),
+      del: TRAINING.answer(TRAINING.voice_posts.delete),
+      betterOn: TRAINING.answer(TRAINING.voice_posts.better_on_pending),
+      betterOff: TRAINING.answer(TRAINING.voice_posts.better_off),
+      ...(data && data.vt),
+    },
   });
   await page.goto(`${base}/${file}`);
   await page.waitForTimeout(500);

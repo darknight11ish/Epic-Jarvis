@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-voice-sample-level"
+description = "Enables the voice_sample_level command without any pre-configured scope."
+commands.allow = ["voice_sample_level"]
+
+[[permission]]
+identifier = "deny-voice-sample-level"
+description = "Denies the voice_sample_level command without any pre-configured scope."
+commands.deny = ["voice_sample_level"]
