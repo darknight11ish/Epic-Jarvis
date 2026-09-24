@@ -151,10 +151,15 @@ Also decided 2026-09-24, after the safety research
   history. A second action, "Erase the words", wipes the fact's text for
   good (and its search entry); only the dates stay, so the history shows
   that something was erased. It asks "are you sure?" first, like Forget.
-- **Hands-free voice stays as trusted as the talk button.** The owner chose
-  to leave it as it is (the research's "only trust the button" option was
-  offered and declined). The voice check's wording says plainly that it
-  cannot tell a recording or a copy from the real voice.
+- **Hands-free voice is as trusted as the talk button by default, with a
+  setting to make it stricter** (owner, 2026-09-24). A voice setting
+  "Hands-free ("Hey Jarvis")" offers: "Same as the talk button" (default)
+  and "Only trust the talk button" - under the stricter choice, a turn
+  started by "Hey Jarvis" cannot save facts without a card, and its memory,
+  sensitive or private answers stay on screen. Choosing the stricter option
+  is immediate; going back raises an approval card, like the other voice
+  settings. The voice check's wording says plainly that it cannot tell a
+  recording or a copy from the real voice.
 - **Spoken questions get spoken-style answers, and speech starts at the
   first comma.** A voice turn tells the model its answer will be spoken
   (short first sentence, 1-3 sentences unless asked for more, no lists or
