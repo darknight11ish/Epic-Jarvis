@@ -489,9 +489,26 @@ await check("the Widget's face draws at full sharpness, like the kit's solo view
   // stretched to fit, and every face drew with less geometry (detail 1.6)
   // than the same face in the solo view (1.9). Nucleus is a shader face, so
   // it is the one that shows the gap.
+  //
+  // What is checked is the tier the face is CONFIGURED to draw at, not
+  // whatever the frame-time governor has picked since. "Face on this
+  // computer" defaults to High with Auto adjust on (face-tuning.js), and
+  // Auto adjust steps down to Medium when frames are slow - which on a busy
+  // test machine they are, so this failed with 'medium' !== 'high' on a
+  // page that was right. So: the default is asserted to be High, and the
+  // page is then loaded with that same default except Auto adjust off,
+  // which pins the governor and leaves the tier exactly as configured.
+  const tuning = await import(new URL("../src/face-tuning.js", import.meta.url).href);
+  assert.equal(tuning.FACE_TUNING_DEFAULT.quality, "high", "the face no longer defaults to High");
   const page = await K.open(browser, base, "faces.html?mode=display&face=nucleus", {},
                             { width: 120, height: 120 });
-  await page.waitForTimeout(1500);
+  await page.evaluate(([key, value]) => localStorage.setItem(key, value),
+    [tuning.FACE_TUNING_KEY, JSON.stringify({ ...tuning.FACE_TUNING_DEFAULT, autoAdjust: false })]);
+  await page.reload();
+  await page.waitForFunction(
+    () => document.documentElement.getAttribute("data-face-quality") === "high"
+          && document.getElementById("display-canvas"),
+    null, { timeout: 30000 }).catch(() => { /* the asserts below say what is wrong */ });
   const got = await page.evaluate(() => ({
     canvases: document.querySelectorAll("canvas").length,
     grid: Boolean(document.getElementById("grid")),
