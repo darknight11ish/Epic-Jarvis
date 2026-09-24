@@ -135,6 +135,13 @@ rollback_model            = "auto"
 # change and waits - see change_own_config above.
 power_manage              = "auto"
 
+# --- The second graphics card -------------------------------------------
+# Turning on any second-card switch (Brain window or phone) is one approval
+# card. It starts a second copy of Ollama on this PC, reachable from this PC
+# only (127.0.0.1), on the second card. Turning a switch OFF never asks. Must
+# stay "ask": anything else and the switch refuses to turn on at all.
+second_card_enable        = "ask"
+
 
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES
@@ -421,6 +428,29 @@ idle_minutes_required = 30
 # "capability": the biggest model the pair can hold, generation bounded
 #          by the slower card (a P100 is Pascal: ~2-3x slower per token).
 prefer = "speed"
+# Which card everyday chat runs on. Empty: the card a monitor is plugged
+# into, else nvidia-smi's first card. To choose by hand, put the card's id
+# here - run `nvidia-smi -L` in a terminal and copy the part that starts
+# "GPU-". A number (0, 1) works too, but numbers can change; the id cannot.
+primary_gpu = ""
+
+# ------------------------------------------------------------------------
+# 9b. THE SECOND GRAPHICS CARD (docs/SECOND-CARD.md)
+# ------------------------------------------------------------------------
+# HOW the second card is used, not WHETHER: the on/off switches are not in
+# this file. They are set from the Brain window or the phone, each one
+# through an approval card, and kept in second-card.json next to this file.
+# Everything is off until then, and nothing can be turned on until Jarvis
+# sees a capable second card (Turing or newer, 10 GB or more).
+[second_card]
+# The second copy of Ollama listens on 127.0.0.1 (this PC only - that part
+# cannot be changed) on this port. Not 11434: that is the everyday Ollama.
+port = 11435
+# How long a model stays loaded on the second card after its last use.
+keep_alive = "30m"
+# "auto" leaves it to Ollama, which is what docs/MODEL-TOPOLOGY.md says to
+# do. "on" forces it; "off" turns it off.
+flash_attention = "auto"
 
 # ------------------------------------------------------------------------
 # 10. INITIATIVE - acting without being asked

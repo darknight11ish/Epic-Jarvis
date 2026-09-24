@@ -37,6 +37,11 @@ Failures - each one means a decision is missing or has gone stale:
 
 A route marked `todo` that the phone has started calling is a warning, not
 a failure: it means "reclassify as ported", which is good news.
+
+A route marked `planned` is built on the backend and neither app calls it
+yet (the backend is written first, then each app builds against it). It is
+exempt from rule 4. The moment the desktop calls it, a warning says to
+reclassify it (`ported` once the phone calls it too, else `todo`).
 """
 import os
 import re
@@ -59,6 +64,7 @@ ROUTE = re.compile(r"/api/[a-zA-Z0-9/_-]+")
 # "todo"         - portable and wanted, nobody has done it yet
 # "not-backend"  - not a Jarvis route at all: the desktop calls Ollama's own
 #                  API on loopback under the same /api/ prefix
+# "planned"      - on the backend, for both apps, and neither calls it yet
 CLASSIFICATION = {
     "/api/appearance": ("ported", ""),
     "/api/approve": ("ported", ""),
@@ -97,6 +103,7 @@ CLASSIFICATION = {
     "/api/notes/capture": ("ported", ""),
     "/api/pending": ("ported", ""),
     "/api/power": ("ported", ""),
+    "/api/second-card": ("planned", "The second graphics card's switches (backend/second-card.patch, 2026-09-24). Both apps are to show it: the desktop's Brain and the phone's Mind. Read-only list plus one switch at a time; each ON is an approval card."),
     "/api/retrieve": ("todo", "The HUD's retrieval trace (which facts an answer reached for). Not in JARVIS-API.md yet; decide what it should show before porting."),
     "/api/show": ("not-backend", "Ollama's /api/show on loopback: does the model take pictures (vision.rs)."),
     "/api/shutdown": ("deliberate", "Shutting the backend down from a phone is a foot-gun: the phone would then have nothing to reach and no way to undo it."),
@@ -122,7 +129,7 @@ CLASSIFICATION = {
     "/api/watch/report": ("todo", "A watch's findings."),
     "/api/watch/seen": ("todo", "Marking a watch report read."),
 }
-STATUSES = {"ported", "deliberate", "todo", "not-backend"}
+STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)
 _HTML = re.compile(r"<!--.*?-->", re.S)
@@ -189,7 +196,12 @@ def main():
             f"but the phone calls it ({', '.join(sorted(phone_at[r]))}).")
     for r in sorted(by("todo") & phone):
         warnings.append(f"{r} is 'todo' but the phone now calls it - reclassify it as 'ported'.")
-    for r in sorted(set(CLASSIFICATION) - desk):
+    for r in sorted(by("planned") & desk):
+        warnings.append(f"{r} is 'planned' but the desktop now calls it - reclassify it as "
+                        f"'ported' (if the phone calls it too) or 'todo'.")
+    for r in sorted(by("planned") & phone - desk):
+        warnings.append(f"{r} is 'planned' and the phone calls it; the desktop does not yet.")
+    for r in sorted(set(CLASSIFICATION) - desk - by("planned")):
         problems.append(
             f"{r} is classified here but the desktop no longer calls it. "
             "Remove it, or find out where it went.")
@@ -197,7 +209,8 @@ def main():
     todo, no = sorted(by("todo")), sorted(by("deliberate"))
     print(f"desktop: {len(desk)} routes   phone: {len(phone)}   "
           f"ported: {len(by('ported'))}   not porting: {len(no)}   still to port: {len(todo)}   "
-          f"not the backend's: {len(by('not-backend'))}")
+          f"not the backend's: {len(by('not-backend'))}   "
+          f"planned (backend first): {len(by('planned'))}")
     if todo:
         print("\nStill to port:")
         for r in todo:

@@ -220,6 +220,16 @@ $PATCHES = @(
     # else touches those lines. Needs jarvis_token_store.py copied in; without
     # it the backend runs with no token (this PC only) and says so.
     'token-store.patch'
+    # The second graphics card: GET and POST /api/second-card, the chat
+    # turn's route header saying when the second card answered, the
+    # learner's quiet wait, and the approval notice's words for
+    # second_card_enable in jarvis_gate.py. Its context is power-mode's and
+    # note-capture's route blocks, chat-stream's route-header lines,
+    # extraction-wiring's learner loop, and note-capture's jarvis_gate.py
+    # lines, so it goes after all of them; last is simplest. Needs
+    # jarvis_second_card.py copied in; without it every hook does exactly
+    # what it did before and the route answers 503.
+    'second-card.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -267,6 +277,7 @@ $SHIPPED = @(
     # --- end task controls ---
     'jarvis_wakeword.py'         # "hey Jarvis": jarvis_speech.py calls it for wake-word clips
     'jarvis_token_store.py'      # token-store.patch; the pairing token in Credential Manager
+    'jarvis_second_card.py'      # second-card.patch; the second graphics card's switches
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it
