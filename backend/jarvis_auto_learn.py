@@ -14,6 +14,10 @@ and every one is listed in both apps with a one-tap Forget. Sensitive topics
 people) still wait for the owner's yes, unless the owner turns on 'Also
 remember sensitive topics automatically', which is off by default. Turning
 either setting on raises an approval card; turning it off is immediate."
+And, decided later that day after the safety research: "Passwords, PINs,
+account numbers and ID numbers always wait for the owner's yes, even with
+'Also remember sensitive topics automatically' on. That setting covers
+health, money and the other sensitive topics only."
 
 WHAT THIS DOES
 The learner still PROPOSES every fact into the review queue, exactly as
@@ -59,6 +63,10 @@ THE CHECKS (each a small function below, returning a reason in words or "")
               other-person rule, then the learner's own local model. Unless
               "Also remember sensitive topics automatically" is on, a hit is a
               card (L7). When unsure - or when the model does not answer: a hit.
+              With it on, passwords, PINs, account and ID numbers are still a
+              card (jarvis_sensitive.always_asks - the patterns only, no
+              model; the owner's decision of 2026-09-24, after the safety
+              research).
 
 NOTHING LEAVES THIS PC. There is no network code here; the sensitive-topic
 check asks the learner's own model, on this PC only. The event it raises,
@@ -114,9 +122,12 @@ AUTO_CARD = "\n".join([
 SENSITIVE_CARD = "\n".join([
     "Also remember sensitive topics automatically.",
     "",
-    "Health, money, passwords and account details, and private details about "
-    "other people, from what you type or say to Jarvis, will be saved without "
-    "asking you first, and listed under \"Saved automatically\" with Forget.",
+    "Health, money, and private details about other people, from what you type "
+    "or say to Jarvis, will be saved without asking you first, and listed under "
+    "\"Saved automatically\" with Forget.",
+    "",
+    "Passwords, PINs, account and ID numbers always wait for your yes, even with "
+    "this on.",
     "",
     "Nothing leaves this PC. You can turn it off at any time from either app, "
     "and that is instant.",
@@ -127,8 +138,9 @@ SENSITIVE_CARD = "\n".join([
 AUTO_TEXT = ("Jarvis saves facts about you and your projects from what you type "
              "or say to it - never from web pages, emails, documents or notes. "
              "You can forget any of them here.")
-SENSITIVE_TEXT = ("Health, money, passwords and account details, and private "
-                  "details about other people. When this is off, Jarvis asks you first.")
+SENSITIVE_TEXT = ("Health, money, and private details about other people. When this "
+                  "is off, Jarvis asks you first. Passwords, PINs, account and ID numbers "
+                  "always wait for your yes.")
 #: The note under "Learn automatically" while background learning is off -
 #: the desktop's sentence, which both apps now show (fit audit item 10).
 NEEDS_LEARNING = ("Background learning is off, so nothing is saved automatically. "
@@ -1024,17 +1036,43 @@ def sensitivity(text: str) -> str:
         return "a topic that could not be checked (jarvis_sensitive.py is missing)"
 
 
+#: The card's reason when a fact holds something that always waits for a
+#: yes (the owner's decision of 2026-09-24, after the safety research) -
+#: given while "Also remember sensitive topics automatically" is on; with it
+#: off, the ordinary sensitive-topic reason is given, as before.
+ALWAYS_ASKS = {
+    "credentials": "a password, PIN or account number - these always wait for your yes",
+    "identity": "an ID number, birth date or contact details - these always wait for your yes",
+}
+
+
 def check_sensitive(fact: str, turns: list, allowed: bool) -> str:
     """"" when the fact may be saved without a card, else the card's reason:
     "about health, a sensitive topic". `allowed` is the owner's "Also
-    remember sensitive topics automatically": on, nothing is checked."""
-    if allowed:
-        return ""
+    remember sensitive topics automatically".
+
+    On, health, money, other people and the rest are saved - but passwords,
+    PINs, account and ID numbers still are not (jarvis_sensitive.
+    always_asks, on the fact AND the words it came from). That check is the
+    patterns alone: the model is not asked, so the switch adds no wait."""
     try:
         import jarvis_sensitive
     except Exception:
         return "the check for sensitive topics is not installed (jarvis_sensitive.py)"
-    return jarvis_sensitive.card_reason(fact, turns)
+    if not allowed:
+        return jarvis_sensitive.card_reason(fact, turns)
+    always = getattr(jarvis_sensitive, "always_asks", None)
+    if always is None:
+        return ("the check for passwords, PINs and ID numbers is not installed "
+                "(jarvis_sensitive.py is too old)")
+    for text in [fact] + [t for t in turns or [] if isinstance(t, str)]:
+        try:
+            cat = always(text)
+        except Exception as exc:
+            return f"the check for passwords, PINs and ID numbers failed ({type(exc).__name__})"
+        if cat:
+            return ALWAYS_ASKS.get(cat, ALWAYS_ASKS["credentials"])
+    return ""
 
 
 # --------------------------------------------------------------------------

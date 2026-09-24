@@ -66,7 +66,10 @@ thinking cut out, the history fitted to the model's real context, and
 keepalives so a phone does not give up. See run_local_turn.
 
 OUTSIDE TEXT IN THE TOOL LOOP (2026-09-24; backend/README.md has the plain
-version). Four guards, none of which changes which tools need a card:
+version). One rule that does change which tools need a card - the owner's
+decision after the safety research: in a turn shaped by outside text, a
+note write (Obsidian, Logseq, Joplin) waits for a person's yes (NOTE_WRITES)
+- and four guards that do not:
   - A tool call is checked against its own schema BEFORE prepare() and the
     gate (check_call). Broken arguments are never turned into {} and never
     reach a card; the model is told what was wrong, once, and a second
@@ -763,7 +766,9 @@ def _github_search_action_name() -> str:
 #: owner chose to leave at "auto" (calendar, email, notes, home state) and the
 #: note writes (owner decisions, 2026-09-23 and, for Obsidian, 2026-09-24:
 #: saved straight away, no card)
-#: are deliberately NOT here - they are the config's call.
+#: are deliberately NOT here - they are the config's call, except in a turn
+#: shaped by outside text, where a note write waits for a person too (see
+#: NOTE_WRITES below).
 NEEDS_A_PERSON = {
     "github_search": "sends a search term to GitHub",
     "browser_control": "drives a web page, which nearly always sends something",
@@ -772,6 +777,37 @@ NEEDS_A_PERSON = {
     "shell_exec": "runs a command, which can do anything, including reach the internet",
     "home_control": "changes something real in the house",
 }
+
+
+#: The tools that write into the owner's notes.
+#:
+#: The owner's decision of 2026-09-24, after the safety research
+#: (docs/RESEARCH-2026-09-24.md): in a turn where Jarvis has read an email,
+#: a web page, a file or any other tool output - or the conversation is
+#: tainted, or the newest message was pasted, shared or from the clipboard -
+#: writing to Obsidian, Logseq or Joplin waits for a person's yes. Other
+#: turns are unchanged: the config's own tier for each note action decides
+#: (the shipped one saves straight away).
+#:
+#: How: in such a turn a note write is put to the gate under
+#: NOTE_AFTER_OUTSIDE_ACTION instead of its own action - an "ask" action in
+#: the shipped config, and "ask" by unknown_action_tier in an owner's file
+#: without the line - and, like NEEDS_A_PERSON, it runs only when the
+#: verdict records a person approving (_a_person_said_yes). A note action
+#: the config sets to "never" stays "never"; one already at "ask" keeps its
+#: own action. The same gate, the same card - no second approval path.
+NOTE_WRITES = frozenset({"append_logseq_journal", "append_obsidian_daily",
+                         "create_joplin_note"})
+
+#: The gate action a note write is asked under after outside text. Read out
+#: by the approval notice as "Jarvis wants to write notes after outside text".
+NOTE_AFTER_OUTSIDE_ACTION = "write_notes_after_outside_text"
+
+#: The line the card gets, in plain words, above "What shaped this request:".
+NOTE_AFTER_READING = ("Jarvis read outside text in this conversation, so it asks "
+                      "before writing to your notes.")
+NOTE_AFTER_NOT_TYPED = ("Your newest message {how}, so Jarvis asks before writing "
+                        "to your notes.")
 
 
 #: jarvis_gate stores a card's `detail` as `json.dumps(detail)[:4000]`. A
@@ -1713,6 +1749,19 @@ class _TurnWatch:
                         break       # the whole value: its pieces say nothing more
         return found[:5]
 
+    def note_needs_a_person(self) -> str:
+        """"" when a note write in this turn goes by the config's own tier,
+        else the card's line saying why it waits for a yes (NOTE_WRITES): a
+        reading tool ran this turn, the conversation is tainted, or the
+        newest message was not typed. A note write's own result is Jarvis's
+        confirmation of what it wrote, not outside text, so two notes in a
+        clean turn are both saved straight away."""
+        if self.tainted or any(n not in NOTE_WRITES for n in self.read):
+            return NOTE_AFTER_READING
+        if self.provenance:
+            return NOTE_AFTER_NOT_TYPED.format(how=_NOT_OWN_WORDS[self.provenance])
+        return ""
+
     def shaped_by(self, args: dict) -> str:
         """The lines a card gets about what shaped it, or "" when the turn has
         read nothing from outside and the owner's newest words are their own."""
@@ -2533,6 +2582,12 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
     except Exception:
         pass
+    # A note write after outside text waits for a person (NOTE_WRITES): put
+    # to the gate as NOTE_AFTER_OUTSIDE_ACTION when its own tier would not
+    # ask. "never" stays "never", and "ask" asks anyway.
+    note_why = watch.note_needs_a_person() if name in NOTE_WRITES else ""
+    if note_why and _tier_of(action_name) in ("auto", "notify"):
+        action_name = NOTE_AFTER_OUTSIDE_ACTION
     # prepare() inside a try, like execute() below: a prepare-time raise - a
     # tool validating its own arguments, e.g. {"days_ahead": "seven"} - comes
     # back as a tool RESULT the model can read and retry from.
@@ -2552,6 +2607,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     # text the card shows (never to the plan that runs), and before the
     # length check below, so a card is never cut short by it.
     shaped = watch.shaped_by(args)
+    if note_why:
+        plan_text = f"{plan_text}\n\n{note_why}"
     if shaped:
         plan_text = f"{plan_text}\n\nWhat shaped this request:\n{shaped}"
     if _card_would_be_cut(name, action_name, plan_text):
@@ -2610,6 +2667,18 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                             f"Nothing was run. To use it, set "
                             f"{vaction} to \"ask\" in "
                             f"jarvis-framework.toml's [autonomy.tiers].")}
+    elif note_why and not _a_person_said_yes(verdict):
+        # Allowed, but nobody was asked - after outside text. See NOTE_WRITES.
+        say_step("tool_refused", name)
+        vtier = getattr(verdict, "tier", None) or "unknown"
+        vaction = getattr(verdict, "action", None) or action_name
+        result = {"ok": False,
+                  "error": (f"refused: {name} writes to the owner's notes, and outside "
+                            f"text shaped this turn, so it only runs after the owner "
+                            f"approves it on a card - but the approval gate let it "
+                            f"through at tier {vtier!r} without asking anyone. "
+                            f"Nothing was written. To use it, set {vaction} to "
+                            f"\"ask\" in jarvis-framework.toml's [autonomy.tiers].")}
     elif out.gone:
         # Approved - but the app that asked has gone, so nobody would see
         # what it did or the answer that followed. Not run; the owner is told

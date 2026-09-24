@@ -79,6 +79,19 @@ def t_the_wiki_says_what_it_appends_without_a_copy():
           run.count("VERSIONS_DIR}/{c.name}") == 1 and "VERSIONS_DIR}/{INDEX" not in run)
 
 
+def t_a_note_after_outside_text_says_it_stays_on_this_pc():
+    """jarvis_agent.py asks for a note write after outside text under its own
+    action (the owner's decision of 2026-09-24). Without a _RISK line the
+    notice would read it as unknown: "might leave the machine"."""
+    import jarvis_agent
+    r = _risk().get(jarvis_agent.NOTE_AFTER_OUTSIDE_ACTION)
+    check("write_notes_after_outside_text has a risk line", r is not None, repr(r))
+    r = r or ("", "", "")
+    check("... that says it stays on this PC and can be undone",
+          r[0] == "yes" and r[1] == "local", repr(r))
+    check("... and why it asks", "outside text" in r[2] and "notes" in r[2], r[2])
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

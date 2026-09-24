@@ -461,9 +461,36 @@ response. `docs/API-DISAGREEMENTS.md` §10 records the consequence: the quick-
 capture widget used to say "Appended to Logseq." on any 200, and now reports
 only what Jarvis itself said it did.
 
-**Tool calls and outside text** (`jarvis_agent.py`, 2026-09-24). Nothing
-here changes which tools need a card; that is still the gate's tier table.
-What changed, all on the PC, no app change needed:
+**Tool calls and outside text** (`jarvis_agent.py`, 2026-09-24). One thing
+here changes which tools need a card - note writes after outside text, the
+owner's decision after the safety research - and the rest does not. All on
+the PC, no app change needed:
+
+- **A note write after outside text waits for a yes.** In a turn where a
+  reading tool ran (anything but the calculator and the note writes
+  themselves), or the conversation is tainted, or the newest message's
+  `provenance` is `pasted`, `shared` or `clipboard`, `append_obsidian_daily`,
+  `append_logseq_journal` and `create_joplin_note` go to the gate as
+  **`write_notes_after_outside_text`** instead of their own action - `"ask"`
+  in the shipped `jarvis-framework.toml`, and `"ask"` through
+  `unknown_action_tier` in a file without the line - so a card is raised.
+  The card's `detail.text` has one plain line above "What shaped this
+  request:" - "Jarvis read outside text in this conversation, so it asks
+  before writing to your notes." (or, when only the newest message was not
+  typed: "Your newest message was pasted in, not typed, so Jarvis asks
+  before writing to your notes."). The note runs only when the verdict
+  records a person approving: a config that sets the new action to `auto`
+  gets the note refused, never written unasked. A note action set to
+  `"never"` stays never; one already at `"ask"` keeps its own action and
+  gets the same line. Any other turn: unchanged, the note's own tier decides
+  (the shipped config saves straight away). The approval notice reads "Jarvis
+  wants to write notes after outside text" and says it stays on this PC
+  (`note-capture.patch`'s risk line); a "no" on this card never becomes a
+  proposed standing rule (`gate-outcome.patch`). Not affected: the `#log` /
+  `#obs` / `#joplin` prefixes and the quick-note field, which go to
+  `POST /api/notes/capture` with no model involved (§11) - the
+  capture route is not told whether the words were typed or pasted, so a
+  pasted `#obs` note is filed the way a typed one is.
 
 - **A broken tool call raises no card.** Before a call is prepared, its
   arguments are checked against the tool's own schema: not JSON, not an
@@ -1101,6 +1128,11 @@ The phone uses it too: Home's "Quick note…" field, opened directly or by the
 home-screen widget's Note button (`JarvisApi.captureNote`, `noteStatus`,
 `JarvisRuntime.fileNote`). The phone keeps asking while a card waits and
 shows the desktop's own sentence in its notice.
+
+A note Jarvis writes from chat (the `append_*` / `create_joplin_note`
+tools) is a different path: after outside text in that turn it always
+waits for a yes, as `write_notes_after_outside_text` (§4, "Tool calls and
+outside text"). This route is not affected.
 
 ### Power — `backend/power-mode.patch`
 
@@ -2182,6 +2214,11 @@ wait for the owner's yes, unless the owner turns on 'Also remember
 sensitive topics automatically', which is off by default. Turning either
 setting on raises an approval card; turning it off is immediate."
 
+Decided the same day, after the safety research: "Passwords, PINs, account
+numbers and ID numbers always wait for the owner's yes, even with 'Also
+remember sensitive topics automatically' on. That setting covers health,
+money and the other sensitive topics only." (Check 9 below.)
+
 The learner still **proposes** every fact into the review queue, exactly as
 before (§6, `/api/memory/pending`). After each learning pass, and after each
 "Remember: ...", the PC looks at what was just proposed and saves a proposal
@@ -2311,9 +2348,25 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    fact (`replaces_id`, or even `replaces` words) is always a card: "it would
    replace a fact you already have".
 9. **Not sensitive**, unless "Also remember sensitive topics automatically"
-   is on (GUARDS L7) - then this check does not run at all. Otherwise
-   `jarvis_sensitive.py` looks at the fact AND at the turns it shares words
-   with, in two layers; either one saying "sensitive" makes a card:
+   is on (GUARDS L7). **With it on**, only one narrow check runs:
+   passwords, PINs, account and ID numbers still wait
+   (`jarvis_sensitive.always_asks`, on the fact AND the turns it shares
+   words with, the patterns alone - the model is not asked, so the switch
+   adds no wait). It catches whatever the patterns put under passwords and
+   account details or under ID numbers, birth dates and contact details
+   (the latter category is whole: a phone number, an email address and a
+   birth date wait too), anything `jarvis_router.looks_like_a_secret`
+   catches, and account numbers, IBANs and sort codes, which the patterns
+   otherwise count as money ("my salary is 40k" stays money, and is saved).
+   The card says "a password, PIN or account number - these always wait for
+   your yes" or "an ID number, birth date or contact details - these always
+   wait for your yes". Said plainly: with the switch on, a password the
+   patterns miss - a plain word with no password word near it, "my
+   Netflix is sunflower" - is saved, because only the model would have
+   caught it ("my Netflix password is sunflower" still waits).
+   **With it off**, `jarvis_sensitive.py` looks at the fact AND at the
+   turns it shares words with, in two layers; either one saying "sensitive"
+   makes a card:
    - **patterns** (no model): word lists for health, money, passwords and
      account details, ID numbers and birth dates, addresses and routines,
      religion, politics, sexuality, ethnicity, immigration and the law, in
@@ -2476,8 +2529,11 @@ Where the learning switch lives today (desktop: Brain -> Memory; phone: Mind
   projects from what you type or say to it - never from web pages, emails,
   documents or notes. You can forget any of them here."
 - **"Also remember sensitive topics automatically"** (off by default), with:
-  "Health, money, passwords and account details, and private details about
-  other people. When this is off, Jarvis asks you first."
+  "Health, money, and private details about other people. When this is
+  off, Jarvis asks you first. Passwords, PINs, account and ID numbers always
+  wait for your yes." (Changed 2026-09-24 with the owner's decision; it
+  used to list "passwords and account details" among what the switch
+  covers.)
 - Both: ON raises the card and shows "Waiting for your approval" (from
   `auto_waiting` / `sensitive_waiting`, and the card in the approval queue -
   including one raised on the other device); OFF immediate; ON held on a
@@ -2492,6 +2548,8 @@ Where the learning switch lives today (desktop: Brain -> Memory; phone: Mind
 The approval cards read "Turn on automatic learning. ..." and "Also remember
 sensitive topics automatically. ..." (`jarvis_auto_learn.AUTO_CARD`,
 `SENSITIVE_CARD`); both say nothing leaves this PC and what a "no" means.
+The sensitive one also says "Passwords, PINs, account and ID numbers always
+wait for your yes, even with this on."
 
 ### 19.6 Known gaps, said plainly
 

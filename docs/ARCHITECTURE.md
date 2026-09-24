@@ -99,7 +99,15 @@ card. Tool output is cleaned of chat markers and labelled as data before the
 model reads it, and a card proposed after outside text says so under "What
 shaped this request:" - which tools were read, and which values came from
 that text, not the owner. The card still shows the plan in full; this only
-adds to it. `backend/README.md`, "Outside text in the tool loop".
+adds to it. One thing there does change which tools ask (the owner's
+decision of 2026-09-24, after the safety research): in a turn shaped by
+outside text - a reading tool ran, the conversation is tainted, or the
+newest message was pasted, shared or from the clipboard - a note write
+(Obsidian, Logseq, Joplin) is put to the same gate as
+`write_notes_after_outside_text`, tier `ask`, and runs only on a person's
+yes, like `NEEDS_A_PERSON`. Not a second approval path: the same gate, the
+same card, one more line on it saying why. `backend/README.md`, "Outside
+text in the tool loop".
 
 ### Two rules that are easy to get wrong
 
@@ -293,7 +301,9 @@ word or he/she/they of theirs left out of the fact - never a correction,
 nothing sensitive unless the owner allowed it (`jarvis_sensitive.py`: word
 lists in eight languages, number and token shapes, any fact about another
 person, then the learner's own local model - its "unsure" or no answer is a
-card too), and a local model by address AND name. Anything else is the same
+card too; and passwords, PINs, account and ID numbers are a card even when
+the owner allowed sensitive topics, by the patterns alone,
+`jarvis_sensitive.always_asks`), and a local model by address AND name. Anything else is the same
 card as before, with the reason on it. Saved facts are `source = "auto"` and
 listed in both apps with Forget; the `memory_saved` event carries ids only.
 Turning either switch ON is an approval card; OFF is immediate. An answer

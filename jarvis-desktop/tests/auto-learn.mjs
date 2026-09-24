@@ -87,8 +87,8 @@ await check("the wording is the contract's, word for word (section 5)", async ()
   assert.equal(AUTO_DETAIL, "Jarvis saves facts about you and your projects from what you type or say " +
     "to it - never from web pages, emails, documents or notes. You can forget any of them here.");
   assert.equal(SENSITIVE_LABEL, "Also remember sensitive topics automatically");
-  assert.equal(SENSITIVE_DETAIL, "Health, money, passwords and account details, and private details " +
-    "about other people. When this is off, Jarvis asks you first.");
+  assert.equal(SENSITIVE_DETAIL, "Health, money, and private details about other people. When this " +
+    "is off, Jarvis asks you first. Passwords, PINs, account and ID numbers always wait for your yes.");
   assert.equal(rememberedLine(2), "Jarvis remembered 2 things");
   assert.equal(rememberedLine(1), "Jarvis remembered 1 thing");
   assert.equal(rememberedLine(0), "");

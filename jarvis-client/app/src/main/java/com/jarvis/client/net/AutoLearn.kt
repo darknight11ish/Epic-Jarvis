@@ -21,7 +21,9 @@ import java.time.ZoneId
  * the owner's own words only, are saved without a per-fact yes, and every
  * one is listed in both apps with a one-tap Forget. Sensitive topics still
  * wait for a yes unless the owner turns on "Also remember sensitive topics
- * automatically", which is off by default.
+ * automatically", which is off by default - and passwords, PINs, account
+ * and ID numbers wait for a yes even with that on (decided the same day,
+ * after the safety research; the PC enforces it, the phone only says so).
  *
  * Two switches, the same shape as the learning switch ([MemoryCounts]) and
  * chat history's ([ChatLog]): turning either ON raises ONE approval card on
@@ -92,8 +94,8 @@ object AutoLearn {
             path = "/api/memory/learning/sensitive",
             action = "learning_sensitive_enable",
             title = "Also remember sensitive topics automatically",
-            under = "Health, money, passwords and account details, and private details about other " +
-                "people. When this is off, Jarvis asks you first.",
+            under = "Health, money, and private details about other people. When this is off, " +
+                "Jarvis asks you first. Passwords, PINs, account and ID numbers always wait for your yes.",
             key = "auto_sensitive",
             waitingKey = "sensitive_waiting",
             lastKey = "sensitive_last",
