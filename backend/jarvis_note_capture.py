@@ -206,23 +206,24 @@ def _vault():
 
 
 def _joplin_token() -> str:
-    """Read fresh, every time, and only by the functions that send it."""
-    tok = os.environ.get(JOPLIN_TOKEN_ENV, "").strip()
-    if tok:
-        return tok
-    name = str(_cfg("joplin", "token_env", "JOPLIN_TOKEN") or "JOPLIN_TOKEN")
-    return os.environ.get(name, "").strip()
+    """Read fresh, every time, and only by the functions that send it.
+    jarvis_notes.joplin_token(), so the search and the capture can never
+    disagree about which token (bug audit 3, K11). "" without jarvis_notes,
+    which reads as "Joplin is not set up"."""
+    try:
+        import jarvis_notes
+    except Exception:
+        return ""
+    return jarvis_notes.joplin_token()
 
 
 def _joplin_base() -> str:
-    env = os.environ.get(JOPLIN_URL_ENV, "").strip()
-    if env:
-        return env.rstrip("/")
+    """jarvis_notes.joplin_base(), for the same reason as _joplin_token()."""
     try:
-        port = int(_cfg("joplin", "port", 41184) or 41184)
-    except (TypeError, ValueError):
-        port = 41184
-    return f"http://127.0.0.1:{port}"
+        import jarvis_notes
+    except Exception:
+        return "http://127.0.0.1:41184"
+    return jarvis_notes.joplin_base()
 
 
 def _is_loopback(url: str) -> bool:
