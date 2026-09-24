@@ -13,6 +13,8 @@ extraction-wiring.patch	extraction-wiring/fcdba5d.patch	fcdba5d698e7c6c0e21f224c
 extraction-wiring.patch	extraction-wiring/a50cbf1.patch	a50cbf1ee96d71ac66e3d7a9bab702dc5b7b8b49	2026-09-15T00:50:38+00:00	backend: give the learning loop a trigger and the review queue a doorbell
 feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
 feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29+00:00	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
+gate-outcome.patch	gate-outcome/7f6b490.patch	7f6b49027b128beee4839a565e296bfbb4b1c0da	2026-09-24T08:14:30+00:00	gate-outcome: a "no" on a custom-voice card proposes no standing rule
+gate-outcome.patch	gate-outcome/c7e17c8.patch	c7e17c81fe7db24c95a804c3c1bcd6c6570d9206	2026-09-24T08:13:46+00:00	Turning background learning on asks first, from both apps
 gate-outcome.patch	gate-outcome/fabb3f6.patch	fabb3f66b919f48fa5603572b3c31ce7d4c9435c	2026-09-24T06:55:22+00:00	gate-outcome: Browser control's own action is always-ask too
 gate-outcome.patch	gate-outcome/3fe5486.patch	3fe5486e240d54cd0ca8f77dd9dbc3b9ce72091b	2026-09-24T06:11:30+00:00	Gate (AP-11): no memory proposal from a "no" on an always-ask card
 gate-outcome.patch	gate-outcome/37fad26.patch	37fad2683a8941a4d26ae5ce6909cc9c984d6a4d	2026-09-16T20:38:00+00:00	gate: a denial can propose a standing rule, never apply one
