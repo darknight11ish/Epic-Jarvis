@@ -71,6 +71,12 @@ import {
   CANCEL_TITLE,
   cardReason,
   EMPTY as AUTO_EMPTY,
+  ERASE_LABEL,
+  ERASE_TITLE,
+  ERASED,
+  erasedAt,
+  erasedLine,
+  eraseQuestion,
   factMeta,
   FORGOTTEN,
   forgetQuestion,
@@ -1381,10 +1387,11 @@ async function memoryWrite(command, args, okText) {
       toast(String(out.error || out.reason || "Refused."), "bad");
     } else {
       toast(typeof okText === "function" ? okText(out) : okText, "ok");
-      // Forgotten or reworded, from either list: no longer current, so not
+      // Forgotten, reworded or erased, from either list: no longer current, so not
       // "saved automatically" any more - even on a page "Load older" brought
       // in, which the re-read below does not replace.
-      if (command === "brain_memory_forget" || command === "brain_memory_edit") {
+      if (command === "brain_memory_forget" || command === "brain_memory_edit"
+          || command === "brain_memory_erase") {
         autoL.rows = autoL.rows.filter((r) => r.id !== args.id);
       }
     }
@@ -1798,8 +1805,12 @@ function renderFacts() {
         : f.current === false ? false
         : f.valid_to === null || f.valid_to === undefined
           || Number(f.valid_to) > asOfSeconds;
+      // "Erase the words" (the owner's decision, 2026-09-24): an erased fact
+      // is drawn as the date it was erased, never its words - the server
+      // sends a marker as its text, and that marker is not shown either.
+      const erased = erasedAt(f);
       const actions = [];
-      if (current && !past) {
+      if (current && !past && erased === null) {
         actions.push(
           button("Reword", async () => {
             // A prompt rather than an inline editor: this is the one place the
@@ -1837,10 +1848,16 @@ function renderFacts() {
           }, { danger: true, title: "Stop this being recalled. There is no undo." })
         );
       }
+      // Erase is offered on a forgotten fact too: forgetting kept its words,
+      // and this is how they go. Never in the past view, like every write.
+      if (!past && erased === null) {
+        actions.push(button(ERASE_LABEL, () => eraseFact(f),
+          { danger: true, live: true, title: ERASE_TITLE }));
+      }
       return row({
-        tag: current ? "fact" : "retired",
-        state: current ? "ok" : undefined,
-        title: String(f.text || "(no text)"),
+        tag: erased !== null ? "erased" : current ? "fact" : "retired",
+        state: current && erased === null ? "ok" : undefined,
+        title: erased !== null ? erasedLine(erased) : String(f.text || "(no text)"),
         meta: [
           f.source === "auto" ? "saved automatically"
             : f.source ? `from ${f.source}` : "",
@@ -2599,6 +2616,19 @@ async function setAutoSwitch(which, on) {
   await loadAuto();
 }
 
+/** "Erase the words" on one fact, from either list: asks first, then one
+ *  brain_memory_erase for that id (held on a stale link in Rust, like
+ *  Forget). An erased fact is no longer current, so it leaves "Saved
+ *  automatically" too. */
+async function eraseFact(f) {
+  if (!window.confirm(eraseQuestion(f))) return;
+  const out = await memoryWrite("brain_memory_erase", { id: Number(f.id) }, ERASED);
+  if (out && out.ok !== false) {
+    autoL.rows = autoL.rows.filter((r) => r.id !== Number(f.id));
+    paintAuto();
+  }
+}
+
 async function forgetAuto(f) {
   if (!window.confirm(forgetQuestion(f))) return;
   const out = await memoryWrite("brain_memory_forget", { id: f.id }, FORGOTTEN);
@@ -2851,6 +2881,8 @@ function paintAutoList() {
       actions: past ? [] : [
         button("Forget", () => forgetAuto(f),
           { danger: true, live: true, title: "Stop this being recalled. There is no undo." }),
+        button(ERASE_LABEL, () => eraseFact(f),
+          { danger: true, live: true, title: ERASE_TITLE }),
       ],
     });
     item.dataset.id = String(f.id);

@@ -983,6 +983,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // the calls and read the ids, not merely see that nothing threw.
           case "brain_memory_decide":
           case "brain_memory_forget":
+          case "brain_memory_erase":
           case "brain_memory_edit":
           case "brain_memory_learning":
           case "brain_memory_sleep_time":
@@ -1009,8 +1010,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (cmd === "brain_memory_sleep_time") {
               return { ok: true, enabled: args.enabled ?? true, remind: args.remind ?? true };
             }
-            if (cmd === "brain_memory_forget") {
-              // A forgotten fact is no longer current, so it leaves the
+            if (cmd === "brain_memory_forget" || cmd === "brain_memory_erase") {
+              // A forgotten (or erased) fact is no longer current, so it leaves the
               // "Saved automatically" list the PC sends.
               window.__auto.facts = window.__auto.facts.filter((f) => f.id !== args.id);
             }

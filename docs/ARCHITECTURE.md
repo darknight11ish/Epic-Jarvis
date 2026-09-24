@@ -232,6 +232,22 @@ proposals   the review queue. Extraction writes here. NOTHING reaches `facts`
             claimed like decide(), never a correction.
 ```
 
+**The one exception to "nothing is deleted": "Erase the words"** (the
+owner's decision, 2026-09-24; `MemoryStore.erase()`, `memory-erase.patch`,
+docs/JARVIS-API.md §6 `/api/memory/erase`). It destroys the WORDS of one
+fact and nothing else: `text` becomes the marker `[erased]`, its `facts_fts`
+row and `facts_vec` row go, meta keeps only dates, ids and where it came
+from, the copies of its words in `proposals` go, and the file is cleaned
+(word index compacted, `secure_delete`, `memory.db-wal` checkpointed and
+truncated) so the old bytes are really gone, not just unreachable. The row
+stays - id, `created`, `valid_from`, `valid_to`, `retired_at`, `retired_by`,
+`source` - with `erased_at` set, so the history and "what did you know in
+June" still show that something was there. A current fact is retired as
+Forget retires it; a forgotten one keeps its dates. No card (Forget has
+none), a confirm in both apps, held on a stale link. Nothing may ever
+recall, re-embed or show an erased fact's text: `backfill_embeddings()`
+skips it, and the apps draw "Erased on <date>" from `erased_at`.
+
 **Three tables are welded to one local rowid.** `facts` is
 `id INTEGER PRIMARY KEY`, `facts_fts` uses `content_rowid='id'`, and
 `facts_vec` is `vec0(fact_id INTEGER PRIMARY KEY)`. Any proposal needing
@@ -295,7 +311,7 @@ lists in eight languages, number and token shapes, any fact about another
 person, then the learner's own local model - its "unsure" or no answer is a
 card too), and a local model by address AND name. Anything else is the same
 card as before, with the reason on it. Saved facts are `source = "auto"` and
-listed in both apps with Forget; the `memory_saved` event carries ids only.
+listed in both apps with Forget and "Erase the words"; the `memory_saved` event carries ids only.
 Turning either switch ON is an approval card; OFF is immediate. An answer
 that uses a sensitive saved fact is kept on screen, not read aloud, unless
 the owner turned on the voice setting `sensitive_memory` (X-Jarvis-Route's
@@ -480,6 +496,7 @@ backend routes, in both directions; the rest are listed here only.
 |---|---|
 | The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
 | Rewording a stored fact (`/api/memory/edit`), and forgetting one that was not saved automatically | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19). |
+| "Erase the words" (`/api/memory/erase`) on a fact that was already forgotten, or was never saved automatically | The same line as Forget, above: the phone lists only facts saved automatically that are still in use, and a list of every fact, forgotten ones included, is deep memory editing. The phone offers Erase wherever it offers Forget (Mind → Saved automatically), so the route itself is on both apps. |
 | Exporting all memory (`/api/memory/export`) | A copy of everything Jarvis knows does not belong on a phone that can be lost. |
 | Shutting the backend down (`/api/shutdown`) | The phone would then have nothing to reach and no way to undo it. |
 | Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
@@ -529,8 +546,8 @@ That asymmetry is worth stating once: **this repo is version-controlled and the
 thing it patches is not.** A patch here can always be recovered. The file it
 edits cannot.
 
-Fifty patches (counted in `scripts/apply-patches.ps1`'s list on
-2026-09-24, after `chat-history.patch` and `auto-learn.patch`), applied in that list's order. The order matters: many patches
+Fifty-one patches (counted in `scripts/apply-patches.ps1`'s list on
+2026-09-24, after `chat-history.patch`, `auto-learn.patch` and `memory-erase.patch`), applied in that list's order. The order matters: many patches
 edit lines an earlier one wrote, and the list's comments say which. Above
 all, `memory-safety` must land first: without it the first accepted proposal
 retires a roughly-matching unrelated fact, permanently, and `retire()` has

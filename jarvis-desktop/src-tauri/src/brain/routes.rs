@@ -99,6 +99,7 @@ mod tests {
             "/api/digest/seen",
             "/api/memory/decide",
             "/api/memory/forget",
+            "/api/memory/erase",
             "/api/memory/edit",
             "/api/memory/learning",
             "/api/memory/learning/auto",

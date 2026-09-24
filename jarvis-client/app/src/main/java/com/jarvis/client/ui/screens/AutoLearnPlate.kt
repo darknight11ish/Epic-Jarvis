@@ -22,6 +22,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.AutoLearn
+import com.jarvis.client.net.MemoryErase
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
@@ -175,8 +176,11 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
  * newest first, with "Load older", a small "said aloud" mark for voice, and
  * a Forget on each. Forget asks first ([AutoLearn.FORGET_CONFIRM], one
  * wording for both apps), and is held while the link is down or stale, like
- * the desktop's. One line under the title says History's Delete does not
- * forget a fact ([AutoLearn.HISTORY_NOTE]).
+ * the desktop's. Beside it, "Erase the words" (the owner's decision,
+ * 2026-09-24; [MemoryErase]): the fact's words wiped from the PC for good,
+ * its dates kept - asked first in both apps' words, held the same way. One
+ * line under the title says History's Delete does not forget a fact
+ * ([AutoLearn.HISTORY_NOTE]).
  *
  * Read from the PC when Mind shows it, on Refresh, after a Forget, and on
  * every `memory_saved` event ([JarvisRuntime.autoTick]) - a read again keeps
@@ -208,7 +212,10 @@ internal fun SavedAutomaticallySection(
     var readError by remember { mutableStateOf<String?>(null) }
     var loadingOlder by remember { mutableStateOf(false) }
     var confirmId by remember { mutableStateOf<Long?>(null) }
+    var confirmEraseId by remember { mutableStateOf<Long?>(null) }
     var busyId by remember { mutableStateOf<Long?>(null) }
+    // Which of the two the busy row is doing, for its label.
+    var erasing by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     // "Learn automatically", as the list's own answer says it: the empty
     // list says so when it is off.
@@ -255,7 +262,7 @@ internal fun SavedAutomaticallySection(
             }
             if (!shown.isNullOrEmpty() && !canAct) {
                 Text(
-                    "Not connected to the desktop, so Forget waits until the link is back.",
+                    "Not connected to the desktop, so Forget and Erase wait until the link is back.",
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textLo,
                 )
@@ -297,13 +304,48 @@ internal fun SavedAutomaticallySection(
                             )
                             Quiet("Keep it", onClick = { confirmId = null })
                         }
+                    } else if (confirmEraseId == fact.id) {
+                        Text(MemoryErase.CONFIRM, style = MaterialTheme.typography.bodySmall,
+                            color = chrome.warnInk)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Quiet(
+                                MemoryErase.YES,
+                                color = chrome.badInk,
+                                enabled = canAct && busyId == null,
+                                onClick = {
+                                    confirmEraseId = null
+                                    busyId = fact.id
+                                    erasing = true
+                                    said = null
+                                    scope.launch {
+                                        try {
+                                            val (gone, sentence) = JarvisRuntime.eraseAutoFact(fact.id)
+                                            if (gone) facts = facts?.filterNot { it.id == fact.id }
+                                            said = sentence
+                                        } finally {
+                                            busyId = null
+                                            erasing = false
+                                        }
+                                    }
+                                },
+                            )
+                            Quiet("Keep it", onClick = { confirmEraseId = null })
+                        }
                     } else {
-                        Quiet(
-                            if (busyId == fact.id) "Forgetting…" else "Forget",
-                            color = chrome.badInk,
-                            enabled = canAct && busyId == null,
-                            onClick = { confirmId = fact.id },
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Quiet(
+                                if (busyId == fact.id && !erasing) "Forgetting…" else "Forget",
+                                color = chrome.badInk,
+                                enabled = canAct && busyId == null,
+                                onClick = { confirmEraseId = null; confirmId = fact.id },
+                            )
+                            Quiet(
+                                if (busyId == fact.id && erasing) MemoryErase.BUSY else MemoryErase.LABEL,
+                                color = chrome.badInk,
+                                enabled = canAct && busyId == null,
+                                onClick = { confirmId = null; confirmEraseId = fact.id },
+                            )
+                        }
                     }
                 }
             }

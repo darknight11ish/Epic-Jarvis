@@ -2748,6 +2748,23 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * "Erase the words" of ONE automatically saved fact, after Mind's
+     * confirm (the owner's decision, 2026-09-24): its words wiped from the
+     * PC for good, its dates kept. Held on a stale link (rule 4), exactly
+     * like [forgetAutoFact] and the desktop's `brain_memory_erase`: there is
+     * no undo at all, and the list it acts on was read over a link that
+     * cannot be confirmed live. @return whether the words are gone now (so
+     * the row leaves the list), and the sentence to show.
+     */
+    suspend fun eraseAutoFact(id: Long): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.eraseFact(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryErase.said(r.value)
+            is ApiResult.Failed -> false to ("Not erased. " + describe(r.error))
+        }
+    }
+
     // ---------------------------------------------------- chat history ----
     // docs/JARVIS-API.md section 18 (2026-09-24) - see
     // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The

@@ -1129,10 +1129,20 @@ private fun MemoryAsOfPlate(
                     answer.facts.forEachIndexed { i, fact ->
                         if (i > 0) Rule()
                         Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            // "Erase the words": the date it was erased, never
+                            // its words and never the PC's marker.
+                            val erasedAt = fact.erasedAt
                             Text(
-                                fact.text,
+                                if (erasedAt != null) {
+                                    com.jarvis.client.net.MemoryErase.erasedLine(
+                                        erasedAt,
+                                        java.time.ZoneId.systemDefault(),
+                                    )
+                                } else {
+                                    fact.text
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = chrome.textHi,
+                                color = if (erasedAt != null) chrome.textMid else chrome.textHi,
                             )
                             com.jarvis.client.net.MemoryAsOf.tag(fact)?.let { tag ->
                                 Gap(4)

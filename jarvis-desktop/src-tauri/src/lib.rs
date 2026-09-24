@@ -685,6 +685,7 @@ pub fn run() {
             brain::brain_remove_skill,
             brain::brain_memory_decide,
             brain::brain_memory_forget,
+            brain::brain_memory_erase,
             brain::brain_memory_edit,
             brain::brain_memory_learning,
             brain::brain_memory_sleep_time,

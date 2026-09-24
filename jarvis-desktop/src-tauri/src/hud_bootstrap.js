@@ -566,7 +566,7 @@
   // every memory write from this page is refused here, stale link or not.
   // Reads (/api/memory/pending, /status, /facts) pass untouched.
   var MEMORY_WRITE =
-    /\/api\/memory\/(decide|keep_both|forget|edit|learning|sleep_time)(\?|$)/;
+    /\/api\/memory\/(decide|keep_both|forget|erase|edit|learning|sleep_time)(\?|$)/;
   if (realFetch) {
     window.fetch = function (input, init) {
       var path = typeof input === "string" ? input : "";
