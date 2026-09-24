@@ -202,6 +202,24 @@ job by hand (take everything off, then put everything on):
 .\scripts\apply-patches.ps1 -Revert; .\scripts\apply-patches.ps1
 ```
 
+**If you ran this script before, it will recognise the older patches and
+replace them.** Some patches were edited after they were published
+(`extraction-wiring`, `memory-pane`, `feedback`, `memory-intake` and nine
+more). The script finds out what is on by taking a patch off, and only the
+exact text that went on comes off - so an older text used to stop the run
+with "will not apply" and nothing you could do. Now, when the current text
+will not come off, it tries every earlier version this repository ever
+committed, newest first; the one that comes off is the one you have. It is
+taken off and the current one put on, rehearsed on a copy first like
+everything else, and each one is named in a line starting `older`.
+`-Revert` recognises them the same way.
+
+Those earlier versions live in `backend/patch-history/` (one folder per
+patch, plus `index.tsv`, newest first). **After editing any patch, run
+`python3 tools/build_patch_history.py` and commit what it writes** -
+`test_patch_history.py` fails in CI until you do, because a version missing
+from there is one the script cannot recognise on the PC.
+
 **It also copies in every module this repository ships whole** - the list
 is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
 `backend/_where.py`:
@@ -4109,7 +4127,7 @@ Paste each line into PowerShell, one at a time.
 **1. Install sherpa-onnx** into the Python that runs Jarvis:
 
 ```powershell
-python -m pip install --upgrade sherpa-onnx; python -c "import sherpa_onnx; print('sherpa-onnx', sherpa_onnx.__version__, 'is installed')"
+py -3 -m pip install --upgrade sherpa-onnx; py -3 -c "import sherpa_onnx; print('sherpa-onnx', sherpa_onnx.__version__, 'is installed')"
 ```
 
 **2. Download the speaker model.** It lands in the `voice-models\speaker`
@@ -4136,7 +4154,7 @@ up any older copies first:
 Look for `embedder  sherpa-onnx:357a834f702b` and `speaker_model  True`:
 
 ```powershell
-cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; python jarvis_voice.py
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_voice.py
 ```
 
 If it still says `spectral-v1`, the `note` line says why (for example "the
@@ -4165,7 +4183,7 @@ after training, it is worth having someone else try the talk button once.
 ## Test it
 
 ```powershell
-python backend\test_voice_enroll.py; python backend\test_voice_contract.py
+py -3 backend\test_voice_enroll.py; py -3 backend\test_voice_contract.py
 ```
 
 `test_voice_enroll.py`: staging never enrols; approving enrols and deletes
@@ -4492,7 +4510,7 @@ it uses the graphics card.
 and Silero VAD; onnxruntime runs the wake word):
 
 ```powershell
-python -m pip install --upgrade sherpa-onnx onnxruntime; python -c "import sherpa_onnx, onnxruntime; print('OK - sherpa-onnx', sherpa_onnx.__version__, 'and onnxruntime', onnxruntime.__version__, 'are installed')"
+py -3 -m pip install --upgrade sherpa-onnx onnxruntime; py -3 -c "import sherpa_onnx, onnxruntime; print('OK - sherpa-onnx', sherpa_onnx.__version__, 'and onnxruntime', onnxruntime.__version__, 'are installed')"
 ```
 
 **2. Speech-to-text** - NVIDIA's Parakeet TDT 0.6B v2 (English, with
@@ -4507,7 +4525,7 @@ $ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityPro
 copy of the old file beside it (`jarvis-framework.toml.before-voice`):
 
 ```powershell
-cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $t = python -c "import jarvis_framework as f; print(f.config_path() or '')"; if (-not $t) { Write-Host 'Could not find jarvis-framework.toml (or jarvis_framework.py is not in this folder). Nothing was changed.' -ForegroundColor Red } else { $s = [IO.File]::ReadAllText($t); $rx = [regex]'(?m)^([ \t]*)stt_engine[ \t]*=[^\r\n]*'; if ($s -match '(?m)^[ \t]*stt_engine[ \t]*=[ \t]*"sherpa-onnx"') { Write-Host "Already set: $t says stt_engine = sherpa-onnx" -ForegroundColor Green } elseif ($rx.IsMatch($s)) { Copy-Item $t "$t.before-voice" -Force; $s = $rx.Replace($s, '${1}stt_engine = "sherpa-onnx"', 1); [IO.File]::WriteAllText($t, $s, (New-Object Text.UTF8Encoding $false)); Write-Host "OK - $t now says stt_engine = sherpa-onnx (the old copy is $t.before-voice)" -ForegroundColor Green } else { Write-Host "$t has no stt_engine line. Add stt_engine = `"sherpa-onnx`" under [voice]." -ForegroundColor Yellow } }
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $t = py -3 -c "import jarvis_framework as f; print(f.config_path() or '')"; if (-not $t) { Write-Host 'Could not find jarvis-framework.toml (or jarvis_framework.py is not in this folder). Nothing was changed.' -ForegroundColor Red } else { $s = [IO.File]::ReadAllText($t); $rx = [regex]'(?m)^([ \t]*)stt_engine[ \t]*=[^\r\n]*'; if ($s -match '(?m)^[ \t]*stt_engine[ \t]*=[ \t]*"sherpa-onnx"') { Write-Host "Already set: $t says stt_engine = sherpa-onnx" -ForegroundColor Green } elseif ($rx.IsMatch($s)) { Copy-Item $t "$t.before-voice" -Force; $s = $rx.Replace($s, '${1}stt_engine = "sherpa-onnx"', 1); [IO.File]::WriteAllText($t, $s, (New-Object Text.UTF8Encoding $false)); Write-Host "OK - $t now says stt_engine = sherpa-onnx (the old copy is $t.before-voice)" -ForegroundColor Green } else { Write-Host "$t has no stt_engine line. Add stt_engine = `"sherpa-onnx`" under [voice]." -ForegroundColor Yellow } }
 ```
 
 **4. Jarvis's voice** - Kokoro v0.19 (English, 11 voices), 320 MB, into
@@ -4538,7 +4556,7 @@ it spoke to `C:\Users\pcadmin\.openjarvis\voice\self-test.wav` so you can
 play it. Nothing is sent anywhere:
 
 ```powershell
-cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; python jarvis_speech.py --test
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_speech.py --test
 ```
 
 Look for `Wake word: HEARD` and `heard 'Hey Jarvis, what is the weather like
@@ -4645,7 +4663,7 @@ is assumed to pass that on as before.
 ## Test it
 
 ```powershell
-python backend\test_wakeword.py; python backend\test_speech.py; python backend\test_voice_contract.py
+py -3 backend\test_wakeword.py; py -3 backend\test_speech.py; py -3 backend\test_voice_contract.py
 ```
 
 `test_wakeword.py`: the order in `hear()` (each later step made to fail if it

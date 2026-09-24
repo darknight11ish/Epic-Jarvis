@@ -28,12 +28,16 @@
        Python (not the Microsoft Store shortcut that is also called `python`).
     6. Runs the test suites and prints a summary.
 
-  Safe to run again. Three starting points work:
+  Safe to run again. Four starting points work:
     - nothing applied yet: the whole list goes on;
     - everything applied already: it says so and changes nothing;
     - SOME applied, by an earlier run with an older list: those are taken
       off, newest first, and the whole list is put back on in the current
-      order - rehearsed on a copy first like everything else.
+      order - rehearsed on a copy first like everything else;
+    - an OLDER VERSION of a patch applied, from before that patch was edited
+      here: it is recognised (backend/patch-history keeps every earlier
+      committed version), taken off, and the current version put on in its
+      place - rehearsed on a copy first, and named in what the script prints.
 
 .PARAMETER BackendPath
   The folder holding jarvis_hud.py. Defaults to the path in backend/README.md.
@@ -469,25 +473,34 @@ if ($UsingRebuilt) {
 # machine where the files were already LF, so there is no case to detect.
 $LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"
 New-Item -ItemType Directory -Path $LfDir -Force | Out-Null
+
+# Copies $Src to $Dest with every CRLF made LF. Returns how many it changed.
+function Copy-AsLf {
+    param([string] $Src, [string] $Dest)
+    # Byte-level. Get-Content/Set-Content would re-encode, and a patch can
+    # carry any bytes its target carries.
+    $raw = [IO.File]::ReadAllBytes($Src)
+    $buf = New-Object 'System.Collections.Generic.List[byte]'
+    $dropped = 0
+    for ($i = 0; $i -lt $raw.Length; $i++) {
+        # Drop a CR only when it is part of CRLF. A bare CR inside a line is
+        # content and stays.
+        if ($raw[$i] -eq 13 -and $i + 1 -lt $raw.Length -and $raw[$i + 1] -eq 10) {
+            $dropped++
+            continue
+        }
+        $buf.Add($raw[$i])
+    }
+    [IO.File]::WriteAllBytes($Dest, $buf.ToArray())
+    return $dropped
+}
+
 $crlfPatches = 0
 foreach ($name in $PATCHES) {
     $src = Join-Path $PatchDir $name
     if (-not (Test-Path -LiteralPath $src)) { continue }
     $flat = Split-Path -Leaf $name
-    # Byte-level. Get-Content/Set-Content would re-encode, and a patch can
-    # carry any bytes its target carries.
-    $raw = [IO.File]::ReadAllBytes($src)
-    $out = New-Object 'System.Collections.Generic.List[byte]'
-    for ($i = 0; $i -lt $raw.Length; $i++) {
-        # Drop a CR only when it is part of CRLF. A bare CR inside a line is
-        # content and stays.
-        if ($raw[$i] -eq 13 -and $i + 1 -lt $raw.Length -and $raw[$i + 1] -eq 10) {
-            $crlfPatches++
-            continue
-        }
-        $out.Add($raw[$i])
-    }
-    [IO.File]::WriteAllBytes((Join-Path $LfDir $flat), $out.ToArray())
+    $crlfPatches += (Copy-AsLf -Src $src -Dest (Join-Path $LfDir $flat))
 }
 # Everything that applies a patch reads from here, never from $PatchDir.
 $PatchSrc = $LfDir
@@ -495,6 +508,72 @@ if ($crlfPatches -gt 0) {
     Say "Endings : normalised $crlfPatches CRLF line(s) to LF in a temp copy of" Yellow
     Say "          the patches (your files are untouched - that is git's" Yellow
     Say "          autocrlf having written them that way, not anything you did)" Yellow
+}
+
+# --- earlier versions of each patch ------------------------------------------
+#
+# Whether a patch is on is found out by taking it off (git apply --reverse),
+# and that only works with the EXACT text that went on. Several patches were
+# edited after they were first published. A backend that got the older text
+# could not take it off with the newer one, so the run stopped with "will
+# not apply" and there was nothing the owner could do about it.
+#
+# backend/patch-history holds every earlier committed text of every patch
+# (tools/build_patch_history.py writes it; backend/test_patch_history.py
+# fails if it falls behind). index.tsv lists them newest first per patch,
+# tab-separated: patch, file, commit, date, subject. When the current text
+# of a patch will not come off, step (c) below tries these, newest first.
+$HistDir = Join-Path $PatchDir 'patch-history'
+$History = @{}
+$histIndex = Join-Path $HistDir 'index.tsv'
+if (Test-Path -LiteralPath $histIndex) {
+    foreach ($line in [IO.File]::ReadAllLines($histIndex)) {
+        if (-not $line -or $line.StartsWith('#')) { continue }
+        $cols = $line.Split([char]9)
+        if ($cols.Count -lt 4) { continue }
+        $subject = ''
+        if ($cols.Count -gt 4) { $subject = $cols[4] }
+        if (-not $History.ContainsKey($cols[0])) { $History[$cols[0]] = @() }
+        $History[$cols[0]] += @{ File = $cols[1]; Commit = $cols[2]; Date = $cols[3]; Subject = $subject }
+    }
+}
+
+# The older texts to try for one entry of $PATCHES, newest first, each an
+# LF copy in $LfDir: @{ File = <LF copy>; Label = <plain words> }. Written to
+# the pipeline one by one - call it inside @( ) to get a list.
+#
+# For a split half (rebuilt-patches\x.patch) the FULL x.patch is tried too,
+# as it is now and then its older texts: runs before the split existed put
+# the whole patch on, and the half alone may not match what they left.
+function Get-OlderVersions {
+    param([string] $Name)
+    $key = $Name -replace '\\', '/'
+    $keys = @($key)
+    $leaf = ($key -split '/')[-1]
+    if ($key -ne $leaf) { $keys += $leaf }
+    foreach ($k in $keys) {
+        if ($k -ne $key) {
+            $whole = Join-Path $PatchDir $k
+            if (Test-Path -LiteralPath $whole) {
+                $dest = Join-Path $LfDir ('older__whole__' + $leaf)
+                [void](Copy-AsLf -Src $whole -Dest $dest)
+                @{ File = $dest; Label = "the whole $k, as it is now (from before the split into rebuilt-patches)" }
+            }
+        }
+        if (-not $History.ContainsKey($k)) { continue }
+        foreach ($h in $History[$k]) {
+            # index.tsv writes '/', which Windows reads as '\'.
+            $src = Join-Path $HistDir $h.File
+            if (-not (Test-Path -LiteralPath $src)) { continue }
+            $dest = Join-Path $LfDir ('older__' + ($h.File -replace '[\\/]', '__'))
+            [void](Copy-AsLf -Src $src -Dest $dest)
+            $short = $h.Commit
+            if ($short.Length -gt 7) { $short = $short.Substring(0, 7) }
+            $day = $h.Date
+            if ($day.Length -gt 10) { $day = $day.Substring(0, 10) }
+            @{ File = $dest; Label = "the older $k from $day (commit $short)" }
+        }
+    }
 }
 
 # THE BACKEND FILES - reported, never fixed. Rewriting someone's source to
@@ -660,6 +739,16 @@ try {
             if ((Invoke-Patch -File $full -Check -Reverse).Ok) {
                 $r = Invoke-Patch -File $full -Reverse
                 if ($r.Ok) { Ok $name; $removed++ } else { Bad "$name`n$($r.Output)" }
+                continue
+            }
+            # Not the current text. An older one, from before it was edited?
+            $older = $null
+            foreach ($o in @(Get-OlderVersions -Name $name)) {
+                if ((Invoke-Patch -File $o.File -Check -Reverse).Ok) { $older = $o; break }
+            }
+            if ($older) {
+                $r = Invoke-Patch -File $older.File -Reverse
+                if ($r.Ok) { Ok "$name - $($older.Label)"; $removed++ } else { Bad "$name`n$($r.Output)" }
             } else {
                 Warn "$name (was not applied)"
             }
@@ -693,7 +782,8 @@ try {
     #
     #   Does the ENTIRE stack reverse cleanly?  -> already applied, nothing to do
     #   Does the ENTIRE stack apply cleanly?    -> go ahead for real
-    #   Take off what IS applied, newest first,
+    #   Take off what IS applied, newest first
+    #   (current text, or an older one),
     #   then does the ENTIRE stack apply?       -> go ahead: undo those, then all
     #   None of these                           -> say so and touch nothing
     #
@@ -768,21 +858,49 @@ try {
             # first N are applied": decide-once sits in the middle and is not
             # on the owner's machine, so the applied ones are not an unbroken
             # run from the top.
+            #
+            # And a patch that is on may be an OLDER TEXT of it: several were
+            # edited after they were published, and the current text cannot
+            # take off the old one. So when the current text will not come
+            # off, every earlier committed text of that patch is tried,
+            # newest first (backend/patch-history, read above). The one that
+            # comes off cleanly is the one that is there; it is taken off
+            # here on the copy, and later from the real files, and the
+            # current text goes on in its place with everything else.
             if ($broken.Count -gt 0) {
                 Reset-Rehearsal
                 Push-Location -LiteralPath $rehearsal
+                # Each: @{ Name = <list entry>; File = <the text that came
+                # off>; Older = <plain words, or $null for the current text> }
                 $found = @()
                 $backwards = @($PATCHES); [array]::Reverse($backwards)
                 foreach ($name in $backwards) {
                     $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
                     if (-not (Test-Path -LiteralPath $full)) { continue }
                     if ((Invoke-Patch -File $full -Check -Reverse).Ok) {
-                        if ((Invoke-Patch -File $full -Reverse).Ok) { $found += $name }
+                        if ((Invoke-Patch -File $full -Reverse).Ok) {
+                            $found += @{ Name = $name; File = $full; Older = $null }
+                        }
+                        continue
+                    }
+                    foreach ($o in @(Get-OlderVersions -Name $name)) {
+                        if ((Invoke-Patch -File $o.File -Check -Reverse).Ok) {
+                            if ((Invoke-Patch -File $o.File -Reverse).Ok) {
+                                $found += @{ Name = $name; File = $o.File; Older = $o.Label }
+                            }
+                            break
+                        }
                     }
                 }
                 if ($found.Count -gt 0) {
+                    $olderFound = @($found | Where-Object { $_.Older })
                     Say ""
                     Say "$($found.Count) of these are already on your backend from an earlier run." Cyan
+                    if ($olderFound.Count -gt 0) {
+                        Say "$($olderFound.Count) of those are an OLDER version of the patch, from before it" Cyan
+                        Say "was changed here. Each is taken off and the current version put on:" Cyan
+                        foreach ($f in $olderFound) { Say "  older        $($f.Name)  -  $($f.Older)" Yellow }
+                    }
                     Say "Rehearsing again: take those off, newest first, then put all" Cyan
                     Say "$($PATCHES.Count) back on in order. Still on the copy." Cyan
                     $again = @()
@@ -822,8 +940,9 @@ try {
         }
         Say ""
         Say "Usually this means the backend file has moved on since the patch was" Cyan
-        Say "written, or that your backend has an OLDER version of a patch that" Cyan
-        Say "has since been changed. Send the block above back and the patch gets" Cyan
+        Say "written, or was edited by hand. (Older versions of these patches that" Cyan
+        Say "this repository ever published were already tried and would have" Cyan
+        Say "been recognised.) Send the block above back and the patch gets" Cyan
         Say "regenerated." Cyan
         exit 1
     }
@@ -842,8 +961,11 @@ try {
 
         # Every file named in any patch header, so a revert is always possible
         # even if this script is never run again.
+        # That includes the files an OLDER text being taken off names: it may
+        # touch a file the current list does not.
         $touched = @{}
-        foreach ($full in $todo) {
+        $headerSources = @($todo) + @($undoFirst | ForEach-Object { $_.File })
+        foreach ($full in $headerSources) {
             foreach ($line in (Get-Content -LiteralPath $full)) {
                 # Up to a tab, for the same reason as the missing-file check.
                 if ($line -match '^\+\+\+ b/([^\t]+)') { $touched[$Matches[1].Trim()] = $true }
@@ -866,16 +988,19 @@ try {
         Ok "Backed up $($touched.Count) file(s) to $backup"
 
         # From (c): what an earlier run left on, taken off newest first -
-        # exactly what the rehearsal did before the whole list applied.
+        # exactly what the rehearsal did before the whole list applied, with
+        # the same text (the current one, or the older one it found).
         if ($undoFirst.Count -gt 0) {
             Say ""
             Say "Taking off $($undoFirst.Count) patch(es) an earlier run applied, newest first." Cyan
-            foreach ($name in $undoFirst) {
-                $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
-                $r = Invoke-Patch -File $full -Reverse
-                if ($r.Ok) { Ok "off  $name" }
+            foreach ($u in $undoFirst) {
+                $r = Invoke-Patch -File $u.File -Reverse
+                if ($r.Ok) {
+                    if ($u.Older) { Ok "off  $($u.Name)  ($($u.Older) - the current version goes on below)" }
+                    else          { Ok "off  $($u.Name)" }
+                }
                 else {
-                    Bad "$name`n$($r.Output)"
+                    Bad "$($u.Name)`n$($r.Output)"
                     Say ""
                     Bad "Stopped part-way. Your originals are in:"
                     Say "  $backup" Yellow

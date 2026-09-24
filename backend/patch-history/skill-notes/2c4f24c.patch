@@ -1,0 +1,40 @@
+--- a/jarvis_skills.py
++++ b/jarvis_skills.py
+@@ -691,7 +691,14 @@
+     for name, row in sorted(ix.items()):
+         out.append({"name": name, "description": row.get("description", ""),
+                     "trust": row.get("trust", "third_party"),
+-                    "uses": row.get("uses", 0)})
++                    "uses": row.get("uses", 0),
++                    # The notes go with the body into the model's context on
++                    # every load(), so they steer answers. Anything that steers
++                    # an answer has to be readable by the owner, and this is
++                    # the only surface that lists skills at all. Sending them
++                    # is what makes the pool inspectable rather than a private
++                    # store of self-authored heuristics.
++                    "notes": row.get("notes", [])})
+     return out
+ 
+ 
+@@ -831,6 +838,21 @@
+     note = " ".join(str(note or "").split())[:400]
+     if not note:
+         return {"ok": False, "reason": "empty note"}
++    # Gated, like write_skill() beside it. A note is not the body, but load()
++    # returns it WITH the body, so it reaches the prompt and changes what the
++    # skill does next time - and unlike the body, nothing approved it and no
++    # surface showed it. That is a store of self-authored heuristics that
++    # steers behaviour and the owner cannot read: the shape this product's
++    # rules exist to forbid, sitting inside the module that otherwise enforces
++    # them best. Nothing calls refine() today, which is why it survived; the
++    # gate is here so that stays true when something does.
++    v = _gate("modify_own_code",
++              {"skill": name, "note": note},
++              f"Jarvis wants to note this against the {name} skill, which it "
++              f"will read every time it uses it:\n\n{note}")
++    if not getattr(v, "allowed", False):
++        return {"ok": False, "reason": getattr(v, "reason", "refused"),
++                "tier": getattr(v, "tier", "unknown")}
+     if [f for f in scan_text(note, "note") if f.severity == "block"]:
+         return {"ok": False, "reason": "that note contains something the scanner "
+                                        "refuses to store in a skill"}

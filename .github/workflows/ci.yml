@@ -96,6 +96,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The WHOLE history, not the last commit: test_patch_history.py
+          # rebuilds backend/patch-history from `git log` and fails if the
+          # committed copy differs. In a shallow clone it has nothing to
+          # read, and with CI set it fails rather than skip.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -202,6 +208,141 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "second run exited $LASTEXITCODE" }
           if ((Get-FileHash $toml).Hash -ne $before) { throw "the second run changed the owner's jarvis-framework.toml" }
           "the owner's settings file was left alone"
+      - name: apply-patches.ps1 in 5.1 replaces an OLDER version of a patch
+        run: |
+          # The owner may have run the script before some patches were edited
+          # here, and the current text of an edited patch cannot take its old
+          # text off. So: a made-up backend and a made-up list of three
+          # patches. The backend carries the first patch and an OLD text of
+          # the second (the third was added to the list since). The script
+          # must find that old text in backend\patch-history - after trying a
+          # newer old text that is NOT there - take it off, and leave exactly
+          # what the current list gives. A text that was never published
+          # must be refused with the file untouched and no backup made.
+          $ErrorActionPreference = 'Stop'
+          # Native programs run with 'Continue', so what they write to
+          # stderr is output, not a terminating error (CLAUDE.md's trap).
+          function Invoke-Native([string] $Exe, [string[]] $Arguments) {
+            $prev = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try { $out = & $Exe @Arguments 2>&1 | Out-String; $code = $LASTEXITCODE } finally { $ErrorActionPreference = $prev }
+            return @{ Code = $code; Out = $out }
+          }
+          function Assert-Native([string] $Exe, [string[]] $Arguments) {
+            $r = Invoke-Native $Exe $Arguments
+            if ($r.Code -ne 0) { throw "$Exe $($Arguments -join ' ') exited $($r.Code): $($r.Out)" }
+          }
+          function Write-Lf([string] $Path, [string] $Content) {
+            [IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding $false))
+          }
+          # A 40-line jarvis_hud.py with some lines changed (0-based index).
+          function Get-Hud([hashtable] $Changes) {
+            $lines = @(1..40 | ForEach-Object { "line $_" })
+            foreach ($k in $Changes.Keys) { $lines[$k] = $Changes[$k] }
+            return (($lines -join "`n") + "`n")
+          }
+          # A git-format patch taking jarvis_hud.py from one state to another.
+          function New-ToyPatch([hashtable] $Before, [hashtable] $After, [string] $Out) {
+            $g = Join-Path $env:RUNNER_TEMP 'toy-gen'
+            if (Test-Path -LiteralPath $g) { Remove-Item -LiteralPath $g -Recurse -Force }
+            New-Item -ItemType Directory -Path $g | Out-Null
+            Assert-Native 'git' @('-C', $g, 'init', '-q')
+            Assert-Native 'git' @('-C', $g, 'config', 'core.autocrlf', 'false')
+            Write-Lf (Join-Path $g 'jarvis_hud.py') (Get-Hud $Before)
+            Assert-Native 'git' @('-C', $g, 'add', 'jarvis_hud.py')
+            Write-Lf (Join-Path $g 'jarvis_hud.py') (Get-Hud $After)
+            Assert-Native 'git' @('-C', $g, 'diff', "--output=$Out")
+            if (-not (Test-Path -LiteralPath $Out) -or (Get-Item -LiteralPath $Out).Length -eq 0) { throw "no patch written to $Out" }
+          }
+
+          $one    = @{ 4 = 'line 5 - one' }
+          $twoOld = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, as first published' }
+          $decoy  = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, some other old text' }
+          $never  = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, hand-edited, never published' }
+          $twoNew = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, as it is now'; 24 = 'line 25 - two, added later' }
+          $three  = @{ 4 = 'line 5 - one'; 19 = 'line 20 - two, as it is now'; 24 = 'line 25 - two, added later'; 34 = 'line 35 - three' }
+
+          # A copy of the repository with the made-up list and history.
+          $repo = Join-Path $env:RUNNER_TEMP 'repo-old'
+          New-Item -ItemType Directory -Force -Path $repo | Out-Null
+          Copy-Item -Recurse scripts, backend -Destination $repo
+          $pd = Join-Path $repo 'backend'
+          Remove-Item (Join-Path $pd '*.patch')
+          Remove-Item -LiteralPath (Join-Path $pd 'patch-history') -Recurse -Force
+          New-ToyPatch @{} $one (Join-Path $pd 'toy-one.patch')
+          New-ToyPatch $one $twoNew (Join-Path $pd 'toy-two.patch')
+          New-ToyPatch $twoNew $three (Join-Path $pd 'toy-three.patch')
+          $hist = Join-Path $pd 'patch-history\toy-two'
+          New-Item -ItemType Directory -Force -Path $hist | Out-Null
+          New-ToyPatch $one $decoy (Join-Path $hist 'bbbbbbb.patch')
+          New-ToyPatch $one $twoOld (Join-Path $hist 'aaaaaaa.patch')
+          $tab = [char]9
+          Write-Lf (Join-Path $pd 'patch-history\index.tsv') (
+            "# made up for this test`n" +
+            "toy-two.patch${tab}toy-two/bbbbbbb.patch${tab}bbbbbbb0000${tab}2026-09-02T00:00:00+00:00${tab}an old text that is not on the backend`n" +
+            "toy-two.patch${tab}toy-two/aaaaaaa.patch${tab}aaaaaaa0000${tab}2026-09-01T00:00:00+00:00${tab}the old text the backend has`n")
+          $ps1 = Join-Path $repo 'scripts\apply-patches.ps1'
+          $t = [IO.File]::ReadAllText($ps1)
+          $t2 = [regex]::Replace($t, '(?s)\$PATCHES = @\(.*?\n\)', '$$PATCHES = @(''toy-one.patch'', ''toy-two.patch'', ''toy-three.patch'')')
+          if ($t2 -eq $t) { throw "could not replace the patch list" }
+          [IO.File]::WriteAllText($ps1, $t2)
+          $cfg = Join-Path $env:RUNNER_TEMP 'cfg-old'
+          New-Item -ItemType Directory -Force -Path $cfg | Out-Null
+          $env:OPENJARVIS_CONFIG_DIR = $cfg
+          $runArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ps1, '-SkipPackages', '-SkipTests', '-BackendPath')
+
+          # 1. The first patch and the OLD second one are on: replaced.
+          $be = Join-Path $env:RUNNER_TEMP 'backend-old'
+          New-Item -ItemType Directory -Force -Path $be | Out-Null
+          $hud = Join-Path $be 'jarvis_hud.py'
+          Write-Lf $hud (Get-Hud @{})
+          Assert-Native 'git' @('-C', $be, 'apply', (Join-Path $pd 'toy-one.patch'))
+          Assert-Native 'git' @('-C', $be, 'apply', (Join-Path $hist 'aaaaaaa.patch'))
+          if ([IO.File]::ReadAllText($hud) -ne (Get-Hud $twoOld)) { throw "the stand-in backend was not built as intended" }
+          $r = Invoke-Native 'powershell' ($runArgs + @($be))
+          $r.Out
+          if ($r.Code -ne 0) { throw "the run on a backend with an older patch exited $($r.Code)" }
+          if ([IO.File]::ReadAllText($hud) -ne (Get-Hud $three)) { throw "the result is not what the current list gives" }
+          if ($r.Out -notmatch 'OLDER version') { throw "it did not say it found an older version" }
+          if ($r.Out -notmatch 'toy-two\.patch from 2026-09-01 \(commit aaaaaaa\)') { throw "it did not name the older version it found" }
+          $bk = @(Get-ChildItem -Directory -LiteralPath $be -Filter '_jarvis-backup-*')
+          if ($bk.Count -ne 1) { throw "expected one backup folder, found $($bk.Count)" }
+          if ([IO.File]::ReadAllText((Join-Path $bk[0].FullName 'jarvis_hud.py')) -ne (Get-Hud $twoOld)) { throw "the backup is not the file as it was before the run" }
+          "an older toy-two.patch was recognised, taken off and replaced; the backup holds the file as it was"
+
+          # 2. Run again: everything is on, nothing changes.
+          $r = Invoke-Native 'powershell' ($runArgs + @($be))
+          if ($r.Code -ne 0) { throw "the second run exited $($r.Code)`n$($r.Out)" }
+          if ($r.Out -notmatch 'already applied') { throw "the second run did not find everything applied`n$($r.Out)" }
+          if ([IO.File]::ReadAllText($hud) -ne (Get-Hud $three)) { throw "the second run changed the file" }
+          "a second run found everything applied"
+
+          # 3. A text of the second patch that was never published: refused,
+          #    nothing changed, no backup.
+          $be2 = Join-Path $env:RUNNER_TEMP 'backend-never'
+          New-Item -ItemType Directory -Force -Path $be2 | Out-Null
+          $hud2 = Join-Path $be2 'jarvis_hud.py'
+          Write-Lf $hud2 (Get-Hud $never)
+          $r = Invoke-Native 'powershell' ($runArgs + @($be2))
+          $r.Out
+          if ($r.Code -eq 0) { throw "a never-published text was not refused" }
+          if ($r.Out -notmatch 'NOTHING HAS BEEN CHANGED') { throw "the refusal did not say nothing was changed" }
+          if ([IO.File]::ReadAllText($hud2) -ne (Get-Hud $never)) { throw "the refused run changed the file" }
+          if (@(Get-ChildItem -Directory -LiteralPath $be2 -Filter '_jarvis-backup-*').Count -ne 0) { throw "the refused run made a backup folder, so it got past the rehearsal" }
+          "a never-published text was refused and nothing was touched"
+
+          # 4. Nothing on yet: the whole current list goes on.
+          $be3 = Join-Path $env:RUNNER_TEMP 'backend-fresh'
+          New-Item -ItemType Directory -Force -Path $be3 | Out-Null
+          $hud3 = Join-Path $be3 'jarvis_hud.py'
+          Write-Lf $hud3 (Get-Hud @{})
+          $r = Invoke-Native 'powershell' ($runArgs + @($be3))
+          if ($r.Code -ne 0) { throw "the run on a fresh backend exited $($r.Code)`n$($r.Out)" }
+          if ([IO.File]::ReadAllText($hud3) -ne (Get-Hud $three)) { throw "a fresh backend did not get the current list" }
+          "a fresh backend got the whole current list"
+          # Explicitly: the runner ends a powershell step with the LAST native
+          # exit code, and case 3 above expects one that is not 0.
+          exit 0
 
   audit:
     runs-on: ubuntu-latest

@@ -1,0 +1,385 @@
+--- a/jarvis_extract.py
++++ b/jarvis_extract.py
+@@ -195,8 +195,20 @@
+             if re.match(r"^(is|are|was|were|do|does|did|can|could|would|should|will|have|has)\s+"
+                         r"(i|you|we|they|he|she|it|there|that|this)\b", text, re.I):
+                 continue
++            # memory-intake: a relative date gets its real date added in
++            # brackets ("yesterday (2026-09-22)"), anchored to when the
++            # conversation happened. Before the dedupe, so both compare the
++            # dated form. See jarvis_intake.learned_text.
++            text = _intake_text(text)
+             if text.lower() in known or text.lower() in have:
+                 continue
++            # memory-intake: the same statement in slightly different words
++            # as a kept fact or a waiting/discarded card. Never a correction,
++            # never on a number/date/negation difference, never before the
++            # real embedder is loaded - and counted. Drops the PROPOSAL only;
++            # no stored fact is touched. See jarvis_intake.near_duplicate.
++            if _intake_near_duplicate(text, f, store):
++                continue
+             if pending_n >= cap:
+                 # Counted, not just silently folded into the same `continue`
+                 # as the dedupe check. Once the queue is at its cap, every
+@@ -216,7 +228,12 @@
+             # this will retire. find_one returns None rather than a guess, and
+             # None means "add it, retire nothing" - two facts that disagree is
+             # a recoverable state, a silently deleted allergy is not.
+-            target = store.find_one(replaces) if replaces else None
++            #
++            # memory-intake: when the learner's prompt listed the closest
++            # stored facts by number, the model answered with a number and
++            # this is that exact fact - or None for a number off the list.
++            # Otherwise find_one() on the model's words, exactly as before.
++            target = _intake_target(f, replaces, store)
+             cur = c.execute(
+                 "INSERT INTO proposals (text, replaces, confidence, source, created,"
+                 " replaces_id, replaces_text) VALUES (?,?,?,?,?,?,?)",
+@@ -262,8 +279,11 @@
+     with closing(store._connect()) as c:
+         _init(c)
+-        return [dict(r) for r in c.execute(
++        # memory-intake: each row also gets `flags` (does this read like a
++        # planted instruction?), `keep_both_ok` and `verbatim`. Computed, not
++        # stored: a card queued before this patch gets them too.
++        return _intake_annotate([dict(r) for r in c.execute(
+             "SELECT id,text,replaces,replaces_id,replaces_text,confidence,source,created"
+-            " FROM proposals WHERE state='pending' ORDER BY created")]
++            " FROM proposals WHERE state='pending' ORDER BY created")])
+ 
+ 
+ def decide(proposal_id: int, accept: bool) -> Optional[int]:
+@@ -338,6 +358,9 @@
+             f"{_dropped_full} proposal(s) since this backend started were "
+             "never queued because the review queue was already full - "
+             "clear some pending items to keep learning new things")
++    # memory-intake: near-duplicate drops, whether that check is running yet,
++    # and how the last "Remember:" went.
++    out.update(_intake_status())
+     return out
+ 
+ 
+@@ -356,3 +379,177 @@
+         return len(pending()) >= int(_cfg("review_queue_max", 200))
+     except Exception:
+         return False
++
++
++# --------------------------------------------------------------------------
++#   memory-intake.patch
++#
++#   Two new decisions-shaped functions, and the hooks propose(), pending() and
++#   setup_status() call into jarvis_intake.py. Every hook falls back to this
++#   file's old behaviour when jarvis_intake cannot be imported, so the patch
++#   without the module is the backend as it was.
++# --------------------------------------------------------------------------
++
++def propose_verbatim(text: str, source: str = "remember") -> dict:
++    """Queue the owner's own words as a proposal - no model, no rewording.
++
++    What "Remember: ..." turns into. It is still a PROPOSAL: it waits in the
++    same review queue as everything else and becomes a fact only through
++    decide(). It skips propose()'s shape filters on purpose - they exist to
++    catch a model's fragments and questions, and "Remember: when I say the
++    usual I mean a flat white" opens with a wh-word the owner meant.
++
++    The same three guards as propose(), in the same order: already a current
++    fact, already waiting or already discarded in these exact words, queue
++    full (counted in _dropped_full like any other full-queue drop).
++    """
++    global _dropped_full
++    text = " ".join(str(text or "").split())
++    if not text:
++        return {"queued": False, "reason": "empty"}
++    store = M.store()
++    with closing(store._connect()) as c:
++        _init(c)
++        low = text.lower()
++        now = time.time()
++        for r in c.execute("SELECT text FROM facts WHERE valid_to IS NULL OR valid_to > ?",
++                           (now,)):
++            if str(r[0]).lower() == low:
++                return {"queued": False, "reason": "already_known"}
++        for r in c.execute("SELECT id, text, state FROM proposals"
++                           " WHERE state IN ('pending','rejected') ORDER BY id DESC"):
++            if str(r[1]).lower() == low:
++                return {"queued": False, "proposal_id": r[0],
++                        "reason": "already_pending" if r[2] == "pending" else "rejected_before"}
++        cap = int(_cfg("review_queue_max", 200))
++        pending_n = c.execute("SELECT COUNT(*) FROM proposals WHERE state='pending'").fetchone()[0]
++        if pending_n >= cap:
++            _dropped_full += 1
++            return {"queued": False, "reason": "queue_full"}
++        cur = c.execute(
++            "INSERT INTO proposals (text, replaces, confidence, source, created,"
++            " replaces_id, replaces_text) VALUES (?,?,?,?,?,?,?)",
++            (text, None, 1.0, source, now, None, None))
++        return {"queued": True, "proposal_id": cur.lastrowid}
++
++
++def decide_keep_both(proposal_id: int) -> Optional[dict]:
++    """The third answer on a correction card: keep the new fact AND the old.
++
++    One id, one decision, the same as decide(): there is no list form. It
++    claims the row exactly the way decide() does - the UPDATE is the claim -
++    so a double-tap or two devices on one card write one fact, not two.
++
++    The new fact is written with nothing superseded, so the fact the card
++    named stays current. Unlike the "keep new" button this was modelled on,
++    nothing is deleted or retired here at all.
++
++    Returns None when the proposal is not pending (unknown, or already
++    decided), {"ok": False, "reason": "not_a_correction"} when there is no
++    old fact to keep - use decide() for that card - and otherwise
++    {"ok": True, "fact_id": ..., "kept_id": ..., "kept_text": ...}.
++    """
++    store = M.store()
++    with closing(store._connect()) as c:
++        _init(c)
++        row = c.execute("SELECT * FROM proposals WHERE id=? AND state='pending'",
++                        (proposal_id,)).fetchone()
++        if not row:
++            return None
++        row = dict(row)
++        if not row.get("replaces_id"):
++            return {"ok": False, "reason": "not_a_correction", "id": proposal_id,
++                    "note": "this card retires nothing, so there is no old fact to "
++                            "keep - answer it with keep or discard"}
++        if row.get("source") == "feedback_retire":
++            # feedback.patch's "retire this?" card names a fact but has no
++            # new one in it. Its answers are retire (decide accept) or keep
++            # using (decide discard); "both" would mean nothing.
++            return {"ok": False, "reason": "not_a_correction", "id": proposal_id,
++                    "note": "this card asks whether to stop using a fact - "
++                            "answer it with retire or keep using"}
++        claimed = c.execute(
++            "UPDATE proposals SET state='accepting' WHERE id=? AND state='pending'",
++            (proposal_id,))
++        if claimed.rowcount == 0:
++            return None
++        try:
++            fid = _accept(c, store, dict(row, replaces_id=None))
++        except Exception:
++            c.execute("UPDATE proposals SET state='pending' WHERE id=?", (proposal_id,))
++            raise
++        # Recorded on the proposal, so "why are both of these current?" has
++        # an answer later. Added on first use, like replaces_id was.
++        try:
++            c.execute("ALTER TABLE proposals ADD COLUMN kept_both REAL")
++        except Exception:
++            pass                      # already there
++        c.execute("UPDATE proposals SET kept_both=? WHERE id=?", (time.time(), proposal_id))
++        return {"ok": True, "id": proposal_id, "fact_id": fid,
++                "kept_id": row["replaces_id"], "kept_text": row.get("replaces_text")}
++
++
++def _intake():
++    try:
++        import jarvis_intake
++        return jarvis_intake
++    except Exception:
++        return None
++
++
++def _intake_text(text: str) -> str:
++    I = _intake()
++    if I is None:
++        return text
++    try:
++        return I.learned_text(text)
++    except Exception:
++        return text
++
++
++def _intake_near_duplicate(text: str, f: dict, store) -> bool:
++    I = _intake()
++    if I is None:
++        return False
++    try:
++        return bool(I.near_duplicate(text, f, store))
++    except Exception:
++        return False                  # never drop because a check failed
++
++
++def _intake_target(f: dict, replaces, store):
++    I = _intake()
++    if I is not None:
++        try:
++            return I.resolve_target(f, replaces, store)
++        except Exception:
++            pass
++    # The old line, minus one crash: a model that answered a bare number with
++    # no list to index used to reach find_one() with an int.
++    return store.find_one(replaces) if isinstance(replaces, str) and replaces else None
++
++
++def _intake_annotate(rows: list) -> list:
++    I = _intake()
++    if I is not None:
++        try:
++            return I.annotate(rows)
++        except Exception:
++            pass
++    for r in rows:
++        r["flags"] = []
++        r["flags_checked"] = False
++        r["keep_both_ok"] = (bool(r.get("replaces_id"))
++                             and r.get("source") != "feedback_retire")
++        r["verbatim"] = r.get("source") == "remember"
++    return rows
++
++
++def _intake_status() -> dict:
++    I = _intake()
++    if I is None:
++        return {"near_duplicate_check": "off (jarvis_intake.py is not installed)"}
++    try:
++        return I.status(M.store())
++    except Exception:
++        return {}
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -558,18 +558,52 @@
+         self._thread: Optional[threading.Thread] = None
+ 
+     # -- called from the request thread; must be cheap and must not raise ---
+-    def offer(self, messages) -> None:
+-        """A turn just ended. Keep what was said; do not act on it yet."""
++    def offer(self, messages, origin: str = "unknown") -> None:
++        """A turn just ended. Keep what was said; do not act on it yet.
++
++        `origin` is who started the turn, and the CALLER decides it: the
++        backend, at the one place a turn arrives from a person. Only "owner"
++        is learned from. The default is deliberately not "owner" - a caller
++        added later (a scheduled digest, a background job) that forgets to
++        say learns nothing, rather than filing its own wording as something
++        you said. Nothing in the request body or the model's answer sets it.
++        """
+         if not learning_enabled() or not messages:
+             return
++        if origin != "owner":
++            return
+         said = [{"role": "user", "content": m.get("content")}
+                 for m in messages
+                 if isinstance(m, dict) and m.get("role") == "user"
+                 and isinstance(m.get("content"), str) and m.get("content").strip()]
++        try:
++            import jarvis_intake
++        except Exception:
++            jarvis_intake = None
++        if jarvis_intake is not None:
++            # "Remember: ..." as the NEWEST turn goes to the review queue now,
++            # in the owner's own words - no model, no waiting for quiet. Still
++            # a card to keep or discard. See jarvis_intake.remember_from_turn.
++            try:
++                jarvis_intake.remember_from_turn(messages)
++            except Exception:
++                pass
++            # Drop turns the backend wrote itself, turns a client marked as
++            # not the owner's, and "Remember:" turns the line above already
++            # queued word for word. Given the ORIGINAL messages, not `said`:
++            # `said` has already thrown each message's "origin" marker away.
++            # On an error, learn nothing from this turn rather than everything.
++            try:
++                said = jarvis_intake.owner_turns(messages, origin)
++            except Exception:
++                said = []
+         if not said:
+             return
+         with self._lock:
+             self._pending = said
++            # When it was said, so "yesterday" is anchored to the day of the
++            # conversation, not the moment the learner finally ran.
++            self._pending_at = time.time()
+         self._woken.set()
+ 
+     def start(self) -> None:
+@@ -604,6 +638,7 @@
+         """One extraction. True if the model was actually asked."""
+         with self._lock:
+             convo, self._pending = self._pending, None
++            said_at = getattr(self, "_pending_at", None)
+         if not convo:
+             return False
+         seen = json.dumps(convo, sort_keys=True)[-8000:]
+@@ -633,7 +668,20 @@
+             return out
+ 
+         try:
+-            out = jarvis_extract.propose(convo, llm=_ask, source="conversation")
++            try:
++                import jarvis_intake
++            except Exception:
++                jarvis_intake = None
++            if jarvis_intake is not None:
++                # The same propose(), with two things added to the prompt: the
++                # date of the conversation, so "last week" becomes a real date,
++                # and the closest stored facts numbered 0, 1, 2 ..., so a
++                # correction names the fact it replaces by number instead of
++                # describing it. See jarvis_intake.prepare_llm.
++                out = jarvis_intake.propose(jarvis_extract, convo, _ask,
++                                            source="conversation", when=said_at)
++            else:
++                out = jarvis_extract.propose(convo, llm=_ask, source="conversation")
+         except Exception as exc:
+             # Never retried on the spot. The usual cause is that the local
+             # model is not up, and a tight retry against a model that is down
+@@ -1940,7 +1988,8 @@
+             return self._send(code, out)
+ 
+         if route in ("/api/memory/forget", "/api/memory/edit",
+-                     "/api/memory/learning", "/api/memory/sleep_time"):
++                     "/api/memory/learning", "/api/memory/sleep_time",
++                     "/api/memory/keep_both"):
+             if not _origin_ok(self):
+                 return self._send(403, {"error": "cross-origin request refused"})
+             if not _token_ok(self):
+@@ -1977,6 +2026,33 @@
+                     out = jarvis_sleep.set_remind(sleep_remind)
+                 return self._send(200 if out.get("ok") else 500, out)
+ 
++            if route == "/api/memory/keep_both":
++                # The third answer on a correction card: "both are true". The
++                # new fact is kept and the old one is NOT retired. One
++                # PROPOSAL id, one decision, like /api/memory/decide - there
++                # is no list form. memory-intake.patch.
++                pid = body.get("id")
++                if not isinstance(pid, int) or isinstance(pid, bool):
++                    return self._send(400, {"error": "need an integer id"})
++                try:
++                    keep = getattr(jarvis_extract, "decide_keep_both", None)
++                except Exception:          # jarvis_extract not importable
++                    keep = None
++                if keep is None:
++                    return self._send(501, {
++                        "error": "this backend's jarvis_extract.py has no "
++                                 "keep-both decision - memory-intake.patch is "
++                                 "not applied"})
++                try:
++                    res = keep(pid)
++                except Exception as exc:
++                    return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
++                if res is None:
++                    return self._send(404, {
++                        "error": "no pending proposal with that id - it may "
++                                 "already have been decided"})
++                return self._send(200 if res.get("ok") else 409, res)
++
+             # One integer id, like /api/memory/decide. There is deliberately no
+             # list form: forgetting is irreversible and editing supersedes, so
+             # both are one decision about one fact, every time.
+@@ -2223,9 +2299,13 @@
+             # turn, and carrying the recalled-facts block on a local one.
+             # Off a try because a learning pass must never be the reason an
+             # answered turn reports an error.
++            #
++            # origin="owner" because this is a request from a paired client:
++            # a person typed or said it. Backend-started turns must never come
++            # through here with "owner" - see jarvis_intake.jarvis_turn().
+             try:
+                 if MEMORY and not jarvis_side_memory:
+-                    LEARNER.offer(body.get("messages") or [])
++                    LEARNER.offer(body.get("messages") or [], origin="owner")
+             except Exception:
+                 pass
+ 

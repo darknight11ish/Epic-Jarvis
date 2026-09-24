@@ -1,0 +1,31 @@
+# Every earlier committed version of each patch, newest first per patch.
+# Written by tools/build_patch_history.py - do not edit by hand.
+# Columns: patch, file (under backend/patch-history/), commit, date, subject
+appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a23a	2026-09-15T03:11:39+00:00	Three honesty fixes: /api/visual-spec, the HUD proposal handler, INSTALL
+appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30+00:00	I invented a NameError, then reported it twice as a finding
+appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27+00:00	The backend route, written against the real jarvis_hud.py
+extraction-wiring.patch	extraction-wiring/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18+00:00	Routes to read, edit, forget and export what Jarvis has learned
+extraction-wiring.patch	extraction-wiring/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30+00:00	I invented a NameError, then reported it twice as a finding
+extraction-wiring.patch	extraction-wiring/80309e5.patch	80309e584047abb27a30f3163c29a841000ea7f7	2026-09-15T01:42:10+00:00	The route is /api/pending, and I told the other client the wrong one
+extraction-wiring.patch	extraction-wiring/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34+00:00	Master audit: the worst finding was a cloud lane nobody re-filtered
+extraction-wiring.patch	extraction-wiring/a50cbf1.patch	a50cbf1ee96d71ac66e3d7a9bab702dc5b7b8b49	2026-09-15T00:50:38+00:00	backend: give the learning loop a trigger and the review queue a doorbell
+feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
+feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29+00:00	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
+gate-outcome.patch	gate-outcome/10db67c.patch	10db67c2111fb8d61d0954380cd764052c5717d5	2026-09-15T04:28:13+00:00	There was an approve-all in the gate, and a timeout looked like a refusal
+gate-push.patch	gate-push/5cb5947.patch	5cb5947da824b6d2faf13f16a5335674a2cdabd5	2026-09-15T00:16:24+00:00	Stop the two paths that send private content off the machine
+loopback-too.patch	loopback-too/88921b8.patch	88921b89d89c516c30caad112696d0e79b7dcbdc	2026-09-24T00:20:44+00:00	Bind address: refuse every spelling of "every interface", on both sides
+memory-intake.patch	memory-intake/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45+00:00	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
+memory-intake.patch	memory-intake/c870ceb.patch	c870cebfff6cebd437ac56e4aa8ff78a8b915f93	2026-09-23T09:02:25+00:00	Learning jobs integrated: patch order, retire card vs "Both are true", script fix
+memory-intake.patch	memory-intake/a1d21de.patch	a1d21de7a10014af8282786adf8e4653c25b52ed	2026-09-23T08:37:20+00:00	Memory intake: Remember:, near-duplicates, numbered corrections, keep-both, real dates, planted-instruction flags, origin check
+memory-pane.patch	memory-pane/03c51c7.patch	03c51c7b1b5e56df1ee596ebc27d0b4ca599a3b3	2026-09-17T02:21:24+00:00	backend + desktop: wire the overnight-memory offer into the Brain pane
+memory-pane.patch	memory-pane/c75a8bf.patch	c75a8bf0e80faea37ae80e6b7c0557dca2c886c4	2026-09-16T20:19:56+00:00	memory: make backdated corrections reachable, not just supported
+memory-pane.patch	memory-pane/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18+00:00	Routes to read, edit, forget and export what Jarvis has learned
+memory-prefix.patch	memory-prefix/a7ed401.patch	a7ed401bdbf059e6b8a633844d657ad2365e0658	2026-09-15T00:53:01+00:00	backend: the recalled-facts block was also dropping the persona invariants
+memory-prefix.patch	memory-prefix/3040b3d.patch	3040b3dc0803600ff1ccd92e8ed6460c921d687c	2026-09-15T00:43:39+00:00	backend: recalled facts were at token 0, so every turn re-prefilled everything
+memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34+00:00	Master audit: the worst finding was a cloud lane nobody re-filtered
+memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51+00:00	Memory: stop the destructive paths, and start the event pump
+skill-notes.patch	skill-notes/2c4f24c.patch	2c4f24cd99c3400a83e45efb2d743e8b0c4bdd0b	2026-09-15T00:20:02+00:00	Three sentences that were not true, and an ungated insight pool
+tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit
+tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47+00:00	backend: jarvis_agent.py - the model can finally use a tool, local lane only
+voice-503.patch	voice-503/8d2c6f6.patch	8d2c6f615e4db690c28465fc892805f3d74a70a0	2026-09-15T01:07:41+00:00	The voice routes were telling four different stories, and one was a leak
+rebuilt-patches/extraction-wiring.patch	rebuilt-patches/extraction-wiring/8b24ce6.patch	8b24ce6dc1eb488435760b60236924c60f2b0a01	2026-09-16T06:44:39+00:00	apply-patches: stop refusing all 21 because six are already in the rebuild

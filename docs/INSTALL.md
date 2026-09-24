@@ -150,6 +150,13 @@ In order, it:
 It is safe to run again - after a `git pull`, run the same line. It works out
 what is already done and does the rest.
 
+**If you ran this script before, it will recognise the older patches and
+replace them.** Some patches were changed after they were first published.
+The script keeps every earlier version (in `backend\patch-history`), finds
+which one your backend has, takes it off and puts the current one on -
+rehearsed on a copy first like everything else. It prints a line starting
+`older` for each one it replaces, so you can see what happened.
+
 **If it ends with failures**, send back what it printed. A failing suite
 here is a real finding: CI runs the suites too, but the ones that test a
 patch against *your* `jarvis_hud.py` can only run on your PC.
