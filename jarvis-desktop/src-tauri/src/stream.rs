@@ -1011,7 +1011,7 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
 /// re-read looked like nothing had arrived. `jarvis-link.js` already turns a
 /// number into a string (`String(row.id)`), so this is the same id the
 /// windows answer with.
-fn approval_id(item: &serde_json::Value) -> Option<String> {
+pub(crate) fn approval_id(item: &serde_json::Value) -> Option<String> {
     match &item["id"] {
         serde_json::Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
         serde_json::Value::Number(n) => Some(n.to_string()),

@@ -115,7 +115,19 @@ windows = { version = "0.61", features = [
   "Win32_Media_Multimedia",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Variant",
+  # Windows Hello for the app lock, approvals and private answers (lock.rs):
+  # UserConsentVerifier, and the desktop-app form of its prompt that is shown
+  # over a real window (IUserConsentVerifierInterop). Features of a crate
+  # already here - nothing new is downloaded.
+  "Security_Credentials_UI",
+  "Win32_System_WinRT",
 ] }
+# The type that Windows Hello's answer arrives in (IAsyncOperation). Not a new
+# download either: the `windows` crate above already depends on exactly this
+# version (0.2.1, in Cargo.lock), it just does not re-export it, and lock.rs
+# has to name the type to ask for it. No default features, so nothing about
+# how the existing copy is built changes.
+windows-future = { version = "0.2", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

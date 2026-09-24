@@ -283,8 +283,21 @@ pub fn center_quickbar(window: &WebviewWindow) -> Result<(), String> {
         .map_err(|e| format!("unable to position the quickbar: {e}"))
 }
 
-/// Shows, centres and focuses the quickbar.
+/// Shows, centres and focuses the quickbar - or, while the app lock is on
+/// and the owner has been away, asks Windows Hello first and shows it once
+/// they confirm (lock.rs). `Ok` either way: every caller's next step (focus
+/// the input, hand over the clipboard) lands in the bar, which the owner sees
+/// when they have unlocked it.
 pub fn show_quickbar(app: &AppHandle) -> Result<(), String> {
+    if !crate::lock::may_open(app, crate::lock::Covered::Quickbar) {
+        return Ok(());
+    }
+    show_quickbar_unlocked(app)
+}
+
+/// [`show_quickbar`] without the app lock. Only lock.rs calls this, after
+/// Windows Hello confirmed it is the owner.
+pub(crate) fn show_quickbar_unlocked(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(QUICKBAR_LABEL)
         .ok_or_else(|| format!("window `{QUICKBAR_LABEL}` was not found"))?;
@@ -380,7 +393,18 @@ pub const SETTINGS_LABEL: &str = "settings";
 /// Built on demand rather than declared in `tauri.conf.json` because it is a
 /// window most sessions never open, and a hidden one costs a WebView2 process
 /// for as long as the app runs.
+///
+/// While the app lock is on and the owner has been away, Windows Hello is
+/// asked first and the window opens once they confirm (lock.rs).
 pub fn show_settings(app: &AppHandle) -> Result<(), String> {
+    if !crate::lock::may_open(app, crate::lock::Covered::Settings) {
+        return Ok(());
+    }
+    show_settings_unlocked(app)
+}
+
+/// [`show_settings`] without the app lock. Only lock.rs calls this.
+pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
         window
             .show()
@@ -422,7 +446,18 @@ pub const BRAIN_LABEL: &str = "brain";
 /// Larger minimum than settings because the galaxy is the point: a force-
 /// directed graph in a 520px column is a hairball, and shrinking it below this
 /// makes the window look broken rather than cramped.
+///
+/// While the app lock is on and the owner has been away, Windows Hello is
+/// asked first and the window opens once they confirm (lock.rs).
 pub fn show_brain(app: &AppHandle) -> Result<(), String> {
+    if !crate::lock::may_open(app, crate::lock::Covered::Brain) {
+        return Ok(());
+    }
+    show_brain_unlocked(app)
+}
+
+/// [`show_brain`] without the app lock. Only lock.rs calls this.
+pub(crate) fn show_brain_unlocked(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(BRAIN_LABEL) {
         window
             .show()

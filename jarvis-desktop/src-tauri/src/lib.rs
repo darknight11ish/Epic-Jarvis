@@ -23,6 +23,7 @@ pub mod autostart;
 pub mod brain;
 pub mod commands;
 pub mod hotkeys;
+pub mod lock;
 pub mod logfile;
 pub mod proctree;
 pub mod sidecar;
@@ -136,6 +137,14 @@ pub mod events {
     /// how it hears while still on: the echo-cancelled microphone stopped
     /// and it carries on through the ordinary one (`note` says so).
     pub const VOICE_LISTENING: &str = "voice-listening";
+    /// Payload: [`crate::lock::Security`] - the Security settings changed
+    /// (Settings' Windows Hello section). The Brain re-reads its memory
+    /// lists, which may now be hidden or shown.
+    pub const SECURITY_CHANGED: &str = "security-changed";
+    /// Payload: none. Sent to the Brain only: the owner was away longer than
+    /// "Lock again after", so a Show on the private lists has ended and they
+    /// are read again, hidden.
+    pub const PRIVATE_HIDDEN: &str = "private-hidden";
 
     // ---- the fanned-out event stream -----------------------------------
     //
@@ -629,6 +638,13 @@ pub fn run() {
         .manage(system_theme::AppliedTheme::default())
         .manage(voice::VoiceCaptureState::default())
         .manage(voice::AutoListenState::default())
+        // Windows Hello: when the owner was last here, and whether the
+        // Brain's private lists are shown (lock.rs).
+        .manage(lock::LockState::default())
+        // Every window's focus changes reach the app lock: a Jarvis bar,
+        // Brain or Settings window focused again after the owner was away is
+        // hidden and asks Windows Hello (lock.rs `on_window_event`).
+        .on_window_event(lock::on_window_event)
         .invoke_handler(tauri::generate_handler![
             // Eight commands used to be registered here with no caller in any
             // window: capture_screen, is_quickbar_pinned, notify_user,
@@ -741,6 +757,11 @@ pub fn run() {
             voice::get_voice_status,
             voice::set_wake_word,
             vision::local_model_vision,
+            // Windows Hello (lock.rs): Settings reads and changes the four
+            // Security settings; the Brain's Show button.
+            lock::get_security_settings,
+            lock::set_security_settings,
+            lock::reveal_private_answers,
         ]);
 
     // The global-shortcut plugin owns a single handler for every accelerator we
@@ -927,6 +948,11 @@ pub fn run() {
             // the tray colour, the approval queue in all three windows, the
             // online pill — is fed from here and nowhere else.
             stream::spawn(handle.clone());
+
+            // Windows Hello's app lock: hides the Jarvis bar, the Brain and
+            // Settings once the owner has been away longer than "Lock again
+            // after" (lock.rs). Does nothing while the lock is off.
+            lock::spawn_watch(handle.clone());
 
             // A Deny clicked on a toast while Jarvis was CLOSED. The
             // single-instance callback above only fires when a process is

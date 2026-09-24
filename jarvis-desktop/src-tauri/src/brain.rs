@@ -131,6 +131,15 @@ pub async fn brain_read(
             },
         );
     }
+
+    // "Windows Hello for private answers" (lock.rs): the memory lists come
+    // back with their entries taken out until Show has passed Windows Hello.
+    // Here rather than in brain.js, so a page script cannot read round it.
+    if crate::lock::private_hidden(&app) {
+        for (section, body) in out.iter_mut() {
+            *body = crate::lock::redact_private(section, std::mem::take(body));
+        }
+    }
     Ok(serde_json::Value::Object(out))
 }
 
@@ -433,6 +442,8 @@ pub async fn brain_memory_keep_both(app: AppHandle, id: i64) -> Result<serde_jso
 /// the window.
 #[tauri::command]
 pub async fn brain_memory_export(app: AppHandle) -> Result<serde_json::Value, String> {
+    // Every fact at once: held while the memory lists are hidden (lock.rs).
+    crate::lock::require_private_shown(&app)?;
     let base = commands::jarvis_base(&app);
     let headers = commands::jarvis_headers(&app)?;
     // Read first: a backend that cannot answer is said before a dialog opens.
@@ -603,6 +614,8 @@ pub async fn brain_memory_as_of(app: AppHandle, when: f64) -> Result<serde_json:
     if !when.is_finite() || when <= 0.0 {
         return Err(format!("{when} is not a moment in time"));
     }
+    // The same facts in another shape: held while the lists are hidden.
+    crate::lock::require_private_shown(&app)?;
     let base = commands::jarvis_base(&app);
     let headers = commands::jarvis_headers(&app)?;
     // Whole seconds. Sub-second precision means nothing here and a float in

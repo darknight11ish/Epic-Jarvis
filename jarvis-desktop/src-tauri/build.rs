@@ -85,6 +85,13 @@ fn main() {
             "mark_answer",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
+            // Windows Hello (lock.rs). The Security settings are read and
+            // changed from the settings window only; loosening one asks
+            // Windows Hello first. Show, for the Brain's private lists, is
+            // the Brain's only.
+            "get_security_settings",
+            "set_security_settings",
+            "reveal_private_answers",
             // Connection settings — settings window only
             "get_api_settings",
             "set_api_settings",

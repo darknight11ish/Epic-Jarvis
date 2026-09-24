@@ -149,10 +149,16 @@ await check("CONTROL: the widget's buttons do work", async () => {
 // staleness gate consulted by one caller out of seven — and raised it in
 // docs/CROSS-CLIENT-CONTRACT.md. This is a source assertion because the Rust
 // cannot be linked here: no MSVC linker, no GTK for the host target.
+// `decide_approval` is a thin command now: the body both it and a
+// notification's Deny share is `answer_approval` (the Windows Hello check for
+// an Approve lives there too - tests/security.mjs), so that is what is read.
 await check("the Rust command refuses a stale queue too, not just the buttons", async () => {
   const src = await (await import("node:fs/promises")).readFile(
     new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
-  const fn = src.slice(src.indexOf("pub async fn decide_approval"));
+  const cmd = src.slice(src.indexOf("pub async fn decide_approval"));
+  assert.match(cmd.slice(0, cmd.indexOf("\n}\n")), /answer_approval\(/,
+    "decide_approval no longer goes through answer_approval");
+  const fn = src.slice(src.indexOf("async fn answer_approval"));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
   assert.match(body, /StreamState>\(\)\.link\(\)\.stale/,
     "decide_approval posts without consulting the link state");
@@ -173,10 +179,11 @@ await check("the Rust command refuses a stale queue too, not just the buttons", 
 await check("the Rust command refuses an option it cannot actually send", async () => {
   const src = await (await import("node:fs/promises")).readFile(
     new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
-  const fn = src.slice(src.indexOf("pub async fn decide_approval"));
-  const body = fn.slice(0, fn.indexOf("\n}\n"));
-  assert.match(body, /option_id:\s*Option<String>/,
+  const cmd = src.slice(src.indexOf("pub async fn decide_approval"));
+  assert.match(cmd.slice(0, cmd.indexOf("\n}\n")), /option_id:\s*Option<String>/,
     "decide_approval must accept option_id, or Tauri drops it silently");
+  const fn = src.slice(src.indexOf("async fn answer_approval"));
+  const body = fn.slice(0, fn.indexOf("\n}\n"));
   const refusal = body.indexOf("option_id");
   const post = body.indexOf(".post(");
   assert.ok(refusal > 0 && refusal < post,

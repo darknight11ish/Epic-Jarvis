@@ -1650,14 +1650,46 @@ async fn pump_chat(
 // Approval gates
 // ---------------------------------------------------------------------------
 
-/// Answers a pending autonomy approval.
+/// Answers a pending autonomy approval, from the Jarvis bar or the widget.
 ///
 /// `approved` picks the endpoint: `/api/approve` or `/api/deny`. Both carry
 /// `{"id": …, "by": "desktop_spotlight"}` so the server can attribute the
 /// decision to the machine the human was actually sitting at.
+///
+/// `window` is the window whose page asked - Tauri fills it in, a page
+/// cannot choose it. An Approve is shown to Windows Hello over that window
+/// when the Security settings say this one needs it (lock.rs).
 #[tauri::command]
 pub async fn decide_approval(
     app: AppHandle,
+    window: tauri::WebviewWindow,
+    id: String,
+    approved: bool,
+    option_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    answer_approval(app, AnsweredFrom::Window(&window), id, approved, option_id).await
+}
+
+/// Denies from a notification's Deny button (winrt_toast.rs). There is no
+/// approving form of this: a notification never approves anything.
+pub async fn deny_from_notification(
+    app: AppHandle,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    answer_approval(app, AnsweredFrom::Notification, id, false, None).await
+}
+
+/// Where an answer came from. A notification can only deny - see
+/// `answer_approval`.
+enum AnsweredFrom<'a> {
+    Window(&'a tauri::WebviewWindow),
+    Notification,
+}
+
+/// The one place a decision is sent, for both callers above.
+async fn answer_approval(
+    app: AppHandle,
+    from: AnsweredFrom<'_>,
     id: String,
     approved: bool,
     option_id: Option<String>,
@@ -1716,6 +1748,35 @@ pub async fn decide_approval(
              nothing can be answered until it reconnects"
                 .to_string(),
         );
+    }
+
+    // Windows Hello, for an Approve (lock.rs): after the checks above, so
+    // the owner is never asked to confirm something that would then be
+    // refused anyway, and before the request is built. Deny is never held:
+    // refusing costs a retry, approving the wrong thing is what this is for.
+    //
+    // A notification cannot approve at all, whatever it is asked to do -
+    // docs/ARCHITECTURE.md §3: "Deny may be a notification action. Approve
+    // may not."
+    if approved {
+        match from {
+            AnsweredFrom::Window(window) => crate::lock::check_approval(&app, window, id).await?,
+            AnsweredFrom::Notification => {
+                return Err(
+                    "a notification can deny, never approve - open Jarvis to approve".to_string(),
+                )
+            }
+        }
+        // The prompt can stay open for a while. Answering a queue that went
+        // stale meanwhile is the same mistake as answering one that already
+        // was, so the link is asked again.
+        if app.state::<crate::stream::StreamState>().link().stale {
+            return Err(
+                "the event stream went stale while Windows Hello was open - \
+                 nothing can be answered until it reconnects"
+                    .to_string(),
+            );
+        }
     }
 
     let endpoint = if approved { "approve" } else { "deny" };
