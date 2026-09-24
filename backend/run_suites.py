@@ -82,13 +82,17 @@ CONFIG_NAME = "jarvis-framework.toml"
 def _config_the_suites_would_read(env: dict, backend: Path):
     """The jarvis-framework.toml jarvis_framework.config_path() would find for
     a suite, BEFORE the config folder is moved: the override, the config
-    folder, beside the modules, one folder up."""
+    folder, beside the modules, one folder up - and last this repository's
+    rebuilt/ copy, which is what a suite that imports rebuilt/ directly
+    (test_voice_enroll, test_speech, ...) finds beside jarvis_framework.py.
+    Its log_directory is ~/.openjarvis/logs/ too."""
     raw = env.get("JARVIS_FRAMEWORK_TOML")
     home_cfg = env.get("OPENJARVIS_CONFIG_DIR") or env.get("JARVIS_CONFIG_DIR")
     cfg_dir = Path(os.path.expanduser(home_cfg)) if home_cfg \
         else Path(os.path.expanduser("~")) / ".openjarvis"
     for c in (Path(os.path.expanduser(raw)) if raw else None, cfg_dir / CONFIG_NAME,
-              backend / CONFIG_NAME, backend.parent / CONFIG_NAME):
+              backend / CONFIG_NAME, backend.parent / CONFIG_NAME,
+              HERE / "rebuilt" / CONFIG_NAME):
         if c is not None and c.is_file():
             return c
     return None

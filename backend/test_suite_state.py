@@ -32,6 +32,9 @@ except ImportError:  # Python < 3.11
 
 FAILED, PASSED = [], []
 SUITE = "test_task_control.py"      # writes task.* audit events through jarvis_framework
+# Imports jarvis_framework from rebuilt/, where the repository's own config sits
+# beside it - with log_directory = "~/.openjarvis/logs/".
+SUITE_REBUILT = "test_voice_enroll.py"
 TOML = HERE / "rebuilt" / "jarvis-framework.toml"
 
 
@@ -85,20 +88,26 @@ def t_the_config_copy_changes_only_log_directory():
 
 
 def t_a_ci_run_leaves_home_alone():
-    home = Path(tempfile.mkdtemp(prefix="jarvis-empty-home-"))
     staged = R.stage()
     try:
-        _run([HERE / SUITE], _env(home, JARVIS_BACKEND=str(staged)))
-        before = _written(home)
-        check(f"CONTROL: {SUITE} run on its own writes the audit log into HOME",
-              any(".openjarvis" in p for p in before), before)
-        shutil.rmtree(home)
-        home.mkdir()
-        r = _run([HERE / "run_suites.py", SUITE], _env(home))
-        check(f"run_suites.py {SUITE} passes", r.returncode == 0, r.stdout[-800:])
-        check("and writes nothing at all into HOME", _written(home) == [], _written(home))
+        for suite in (SUITE, SUITE_REBUILT):
+            home = Path(tempfile.mkdtemp(prefix="jarvis-empty-home-"))
+            try:
+                _run([HERE / suite], _env(home, JARVIS_BACKEND=str(staged)))
+                before = _written(home)
+                check(f"CONTROL: {suite} run on its own writes the audit log into HOME",
+                      any(p.startswith(".openjarvis") for p in before), before)
+                shutil.rmtree(home)
+                home.mkdir()
+                r = _run([HERE / "run_suites.py", suite], _env(home))
+                check(f"run_suites.py {suite} passes", r.returncode == 0, r.stdout[-800:])
+                # Only Jarvis's own folder counts: onnxruntime (which the voice
+                # suites load) keeps a cache in ~/.cache whatever anyone does.
+                left = [p for p in _written(home) if not p.startswith(".cache")]
+                check(f"and {suite} writes nothing of Jarvis's into HOME", left == [], left)
+            finally:
+                shutil.rmtree(home, ignore_errors=True)
     finally:
-        shutil.rmtree(home, ignore_errors=True)
         shutil.rmtree(staged, ignore_errors=True)
 
 
