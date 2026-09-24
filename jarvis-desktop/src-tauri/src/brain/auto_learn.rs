@@ -27,6 +27,12 @@
 //! Forget on this list is the existing [`super::brain_memory_forget`] - one
 //! fact per call, held on a stale link. There is no "forget all".
 //!
+//! The Brain window is destroyed when it is closed, so a `memory_saved` event
+//! that arrives while it is closed would never reach its "Jarvis remembered
+//! 2 things" line. [`note_saved`] keeps those ids here (ids only, never a
+//! fact's words), and [`brain_memory_saved_unseen`] hands them to the Brain
+//! when it opens and forgets them once the owner has opened the list.
+//!
 //! "Windows Hello for memory lists and chat history" (lock.rs) covers this
 //! list too: while the Brain's private lists are hidden it comes back with
 //! its facts taken out (how many there were is kept). The two switches stay:
@@ -35,6 +41,9 @@
 //!
 //! The answer-reading functions are plain functions of (status, body) so
 //! their tests run without a Tauri app or a network.
+
+use std::collections::VecDeque;
+use std::sync::Mutex;
 
 use tauri::AppHandle;
 
@@ -155,6 +164,79 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
 }
 
 // ---------------------------------------------------------------------------
+// "Jarvis remembered 2 things", across the Brain being closed
+// ---------------------------------------------------------------------------
+
+/// How many ids are kept, each way. The phone's `AutoLearn.SEEN_CAP`.
+const SAVED_CAP: usize = 500;
+
+/// The ids from `memory_saved` events: every one met (`known`, so a replayed
+/// event is not counted twice) and those the owner has not looked at yet
+/// (`unseen`). Oldest dropped past [`SAVED_CAP`].
+pub(crate) struct Saved {
+    known: VecDeque<i64>,
+    unseen: VecDeque<i64>,
+}
+
+impl Saved {
+    pub(crate) const fn new() -> Self {
+        Self {
+            known: VecDeque::new(),
+            unseen: VecDeque::new(),
+        }
+    }
+
+    /// Adds the ids in one `memory_saved` frame's data.
+    pub(crate) fn note(&mut self, data: &serde_json::Value) {
+        for id in saved_ids(data) {
+            if self.known.contains(&id) {
+                continue;
+            }
+            self.known.push_back(id);
+            if self.known.len() > SAVED_CAP {
+                self.known.pop_front();
+            }
+            self.unseen.push_back(id);
+            if self.unseen.len() > SAVED_CAP {
+                self.unseen.pop_front();
+            }
+        }
+    }
+
+    /// `{"ids": [...]}`, the unseen ones - the same shape as the event, so
+    /// the page reads it with the same `savedIds`. `seen` forgets them.
+    pub(crate) fn take(&mut self, seen: bool) -> serde_json::Value {
+        let ids: serde_json::Value = self.unseen.iter().copied().collect();
+        if seen {
+            self.unseen.clear();
+            return serde_json::json!({ "ids": [] });
+        }
+        serde_json::json!({ "ids": ids })
+    }
+}
+
+static SAVED: Mutex<Saved> = Mutex::new(Saved::new());
+
+/// The fact ids a `memory_saved` frame names: `{"ids": [...]}` flat (the
+/// bus's `publish`) or `{"value": {"ids": [...]}}` (`note`). Whole numbers
+/// only; anything else is dropped, never guessed.
+pub(crate) fn saved_ids(data: &serde_json::Value) -> impl Iterator<Item = i64> + '_ {
+    data.get("ids")
+        .or_else(|| data.get("value").and_then(|v| v.get("ids")))
+        .and_then(|ids| ids.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|id| id.as_i64())
+}
+
+/// A `memory_saved` event reached the app (stream.rs).
+pub(crate) fn note_saved(data: &serde_json::Value) {
+    if let Ok(mut saved) = SAVED.lock() {
+        saved.note(data);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The commands
 // ---------------------------------------------------------------------------
 
@@ -239,9 +321,57 @@ pub async fn brain_memory_learning_sensitive(
     set(&app, Switch::Sensitive, enabled).await
 }
 
+/// The ids of facts saved automatically that the owner has not looked at
+/// yet, including any saved while the Brain was closed: `{"ids": [...]}`.
+/// `seen: true` - the owner opened the list - forgets them. Never a fact's
+/// words, and nothing else changes.
+#[tauri::command]
+pub fn brain_memory_saved_unseen(seen: bool) -> serde_json::Value {
+    match SAVED.lock() {
+        Ok(mut saved) => saved.take(seen),
+        Err(_) => serde_json::json!({ "ids": [] }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saves_are_counted_while_the_brain_is_closed_once_each_and_cleared_when_seen() {
+        let mut saved = Saved::new();
+        saved.note(&serde_json::json!({ "ids": [20, 21] }));
+        // A replayed frame, and the bus's `note()` shape with one new id.
+        saved.note(&serde_json::json!({ "ids": [21] }));
+        saved.note(&serde_json::json!({ "value": { "ids": [21, 22] } }));
+        // Not whole numbers, or not there: nothing.
+        saved.note(&serde_json::json!({ "ids": ["23", 5.5, null] }));
+        saved.note(&serde_json::json!({}));
+        assert_eq!(
+            saved.take(false),
+            serde_json::json!({ "ids": [20, 21, 22] })
+        );
+        assert_eq!(
+            saved.take(false),
+            serde_json::json!({ "ids": [20, 21, 22] })
+        );
+        assert_eq!(saved.take(true), serde_json::json!({ "ids": [] }));
+        assert_eq!(saved.take(false), serde_json::json!({ "ids": [] }));
+        // Seen stays seen: the same ids again are not new saves.
+        saved.note(&serde_json::json!({ "ids": [20, 22, 30] }));
+        assert_eq!(saved.take(false), serde_json::json!({ "ids": [30] }));
+    }
+
+    #[test]
+    fn the_saved_count_is_capped() {
+        let mut saved = Saved::new();
+        let ids: Vec<serde_json::Value> = (0..(SAVED_CAP as i64 + 20)).map(|i| i.into()).collect();
+        saved.note(&serde_json::json!({ "ids": ids }));
+        let got = saved.take(false);
+        let got = got["ids"].as_array().unwrap();
+        assert_eq!(got.len(), SAVED_CAP);
+        assert_eq!(got[0], 20);
+    }
 
     #[test]
     fn a_page_is_asked_for_within_limits() {

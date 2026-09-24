@@ -1084,7 +1084,23 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             a.status[field] = args.enabled === true;
             a.status[`${which}_waiting`] = false;
+            // OFF: the PC's own sentence (jarvis_auto_learn.request), unless
+            // a scenario is an older PC that sent none (`offSilent`).
+            if (args.enabled !== true && !a.offSilent) {
+              return { ok: true, waiting: false, [field]: false, message: a.offMessage || (which === "auto"
+                ? "\"Learn automatically\" is off. Every fact waits for your yes."
+                : "Sensitive topics wait for your yes.") };
+            }
             return { ok: true, [field]: args.enabled === true };
+          }
+          // Rust's count of `memory_saved` ids the owner has not looked at
+          // (brain/auto_learn.rs): `unseen` in the scenario, every call kept.
+          case "brain_memory_saved_unseen": {
+            const a = window.__auto;
+            a.unseenCalls.push(args.seen === true);
+            const ids = [...a.unseen];
+            if (args.seen === true) a.unseen = [];
+            return { ids: args.seen === true ? [] : ids };
           }
           case "brain_history_list": {
             const h = window.__history;
@@ -1264,12 +1280,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // one without GET /api/memory/learning.
   window.__auto = JSON.parse(JSON.stringify({
     missing: false, statusMissing: false, waits: [], listFails: null, statusFails: null,
-    switchFails: null, facts: [],
+    switchFails: null, facts: [], unseen: [], offSilent: false,
     ...(auto || {}),
     status: { enabled: true, auto: true, auto_sensitive: false, auto_waiting: false,
               sensitive_waiting: false, ...((auto && auto.status) || {}) },
   }));
-  Object.assign(window.__auto, { reads: [], statusReads: 0, switches: [] });
+  Object.assign(window.__auto, { reads: [], statusReads: 0, switches: [], unseenCalls: [] });
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
   window.__answer = answer;
   window.__brain = brain;

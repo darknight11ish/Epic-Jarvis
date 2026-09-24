@@ -680,6 +680,15 @@ pub(crate) fn voice_setting(
         ("privacy", "voice_is_enough") => Ok(("privacy", "voice_is_enough", true)),
         ("memory", "memory_on_screen") => Ok(("memory", "memory_on_screen", false)),
         ("memory", "memory_aloud") => Ok(("memory", "memory_aloud", true)),
+        // Decision 13: answers that use a sensitive saved fact. Keeping them
+        // on screen is the default and applies at once; reading them aloud
+        // raises the voice card and is held on a stale link.
+        ("sensitive_memory", "sensitive_on_screen") => {
+            Ok(("sensitive_memory", "sensitive_on_screen", false))
+        }
+        ("sensitive_memory", "sensitive_aloud") => {
+            Ok(("sensitive_memory", "sensitive_aloud", true))
+        }
         _ => Err("That is not one of the voice settings.".to_string()),
     }
 }
@@ -1139,6 +1148,17 @@ mod tests {
             voice_setting("memory", "memory_on_screen").map(|t| t.2),
             Ok(false)
         );
+        assert_eq!(
+            voice_setting("sensitive_memory", "sensitive_aloud"),
+            Ok(("sensitive_memory", "sensitive_aloud", true))
+        );
+        assert_eq!(
+            voice_setting("sensitive_memory", "sensitive_on_screen"),
+            Ok(("sensitive_memory", "sensitive_on_screen", false))
+        );
+        // Each value belongs to its own setting only.
+        assert!(voice_setting("memory", "sensitive_aloud").is_err());
+        assert!(voice_setting("sensitive_memory", "memory_aloud").is_err());
         assert!(voice_setting("mode", "broad").is_err());
     }
 

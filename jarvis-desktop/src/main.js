@@ -334,8 +334,9 @@ const state = {
    *  header, so nothing in the stream may overwrite it with a guess. */
   routeFromHeader: false,
   /** The private-answer rule (private-speech.js), for a voice turn: what the
-   *  utterance reply said (`privateAloud`, `questionPrivate`), the route
-   *  line (`gate`, `injected_facts`), whether `: jarvis-status` said a
+   *  utterance reply said (`privateAloud`, `questionPrivate`,
+   *  `memoryAloud`, `sensitiveAloud`), the route line (`gate`,
+   *  `injected_facts`, `injected_sensitive`), whether `: jarvis-status` said a
    *  tool ran, the tool counters when the question was sent (`toolStart`,
    *  a `toolWatch` snapshot), and whether "It's on your screen." was said
    *  already. */
@@ -3205,8 +3206,9 @@ dom.prompt.addEventListener("input", (event) => {
   state.historyIndex = null;
   // Where the words came from (JARVIS-API.md section 18). A paste or a drop
   // is tagged by its own event below, which fires first; any other edit
-  // makes a clipboard snippet the owner's own typing, and an emptied box
-  // starts again as typed.
+  // makes a voice transcript the owner's own typing (a clipboard snippet
+  // stays "clipboard", like pasted text), and an emptied box starts again
+  // as typed.
   const type = (event && event.inputType) || "";
   if (type !== "insertFromPaste" && type !== "insertFromDrop") {
     state.boxTag = boxTagAfter(state.boxTag, "edit", dom.prompt.value);

@@ -72,6 +72,9 @@ fn main() {
             "brain_memory_auto_list",
             "brain_memory_learning_auto",
             "brain_memory_learning_sensitive",
+            // How many facts were saved automatically while the Brain was
+            // closed - ids only, never the words. Brain only.
+            "brain_memory_saved_unseen",
             // Chat history on the PC (JARVIS-API.md section 18): list, open
             // one read-only, delete ONE, and the two settings. Brain only.
             "brain_history_list",

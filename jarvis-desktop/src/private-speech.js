@@ -32,7 +32,17 @@
  *
  * Otherwise Jarvis says one fixed line instead, `PRIVATE_LINE`, once.
  * `private_aloud: true` (the owner chose "voice check is enough", and the
- * very strict check passed) reads everything aloud as before.
+ * very strict check passed) reads everything else aloud as before.
+ *
+ * One step comes before all of that (the owner's decision 13, 2026-09-24:
+ * sensitive saved facts stay on screen): an answer that used a SENSITIVE
+ * saved fact - health, money, passwords, other people - is kept on screen
+ * unless the utterance reply said `sensitive_aloud: true` (the owner chose
+ * "Read aloud" under "Answers that use sensitive saved facts" and a real
+ * voice check passed). That holds even with `private_aloud` or
+ * `memory_aloud` true. The route line says how many of the facts that went
+ * in were sensitive (`injected_sensitive`); a PC that does not say, while
+ * `injected_facts` is above 0, is read as "they may all be sensitive".
  *
  * @module private-speech
  */
@@ -46,9 +56,9 @@ export const TOOL_WORDS = Object.freeze(["working", "approval"]);
 /**
  * The privacy facts of one voice question, from the utterance reply
  * (`HeardReply`, camelCased by voice.rs): `{privateAloud, questionPrivate,
- * memoryAloud}`. Anything missing reads as the refusing answer for
- * `privateAloud` and `memoryAloud` (an older PC), and as "not said" for
- * `questionPrivate`.
+ * memoryAloud, sensitiveAloud}`. Anything missing reads as the refusing
+ * answer for `privateAloud`, `memoryAloud` and `sensitiveAloud` (an older
+ * PC), and as "not said" for `questionPrivate`.
  */
 export function privacyFromHeard(heard) {
   const h = heard && typeof heard === "object" ? heard : {};
@@ -56,7 +66,22 @@ export function privacyFromHeard(heard) {
     privateAloud: h.privateAloud === true,
     questionPrivate: h.questionPrivate === true,
     memoryAloud: h.memoryAloud === true,
+    sensitiveAloud: h.sensitiveAloud === true,
   };
+}
+
+/**
+ * Did a sensitive saved fact go into this answer? The route line's
+ * `injected_sensitive` above 0 - or, from a PC that does not send it,
+ * any `injected_facts` at all (fail closed: they may all be sensitive).
+ */
+export function usedSensitiveFact(route) {
+  const r = route && typeof route === "object" ? route : {};
+  const facts = Number(r.injected_facts);
+  const hasSensitive = Object.prototype.hasOwnProperty.call(r, "injected_sensitive");
+  const sensitive = Number(r.injected_sensitive);
+  if (hasSensitive && Number.isFinite(sensitive)) return sensitive > 0;
+  return Number.isFinite(facts) && facts > 0;
 }
 
 /** Does a `step` event's `data` say a tool ran (started, or finished)?
@@ -115,13 +140,16 @@ export function toolsKnownBetween(start, now) {
 
 /**
  * May this answer be read aloud? `ctx`: `{privateAloud, questionPrivate,
- * memoryAloud}` from the question, `route` (the route line's object:
- * `gate`, `injected_facts`), `toolRan`, and `toolsKnown` (the event stream
- * was live the whole time; anything but `true` counts as "a tool may have
- * run", as on the phone).
+ * memoryAloud, sensitiveAloud}` from the question, `route` (the route
+ * line's object: `gate`, `injected_facts`, `injected_sensitive`),
+ * `toolRan`, and `toolsKnown` (the event stream was live the whole time;
+ * anything but `true` counts as "a tool may have run", as on the phone).
  */
 export function mayReadAloud(ctx) {
   const c = ctx && typeof ctx === "object" ? ctx : {};
+  // Decision 13, first: a sensitive saved fact stays on screen unless the
+  // owner chose to hear those answers - whatever else says "aloud".
+  if (usedSensitiveFact(c.route) && c.sensitiveAloud !== true) return false;
   if (c.privateAloud === true) return true;
   if (c.questionPrivate === true) return false;
   const route = c.route && typeof c.route === "object" ? c.route : {};

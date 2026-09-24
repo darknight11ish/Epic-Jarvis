@@ -89,11 +89,13 @@ check("a tag the PC does not know is sent as none - unknown, never guessed", () 
     ["typed", "voice", "shared", "clipboard", "pasted", "picture_caption"]);
 });
 
-check("the clipboard prefill is tagged clipboard, and typed only once it is edited", () => {
+check("the clipboard prefill is tagged clipboard until the box is empty again, like pasted text", () => {
   let tag = boxTagAfter("typed", "clipboard", "a snippet");
   assert.equal(tag, "clipboard");
   tag = boxTagAfter(tag, "edit", "a snippet, edited");
-  assert.equal(tag, "typed");
+  assert.equal(tag, "clipboard", "typing around a clipboard snippet made it the owner's own (R3)");
+  tag = boxTagAfter(tag, "edit", "");
+  assert.equal(tag, "typed", "an emptied box still carried the clipboard tag");
 });
 
 check("a paste or a drop tags the box pasted until it is empty again", () => {

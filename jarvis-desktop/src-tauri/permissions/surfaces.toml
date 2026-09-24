@@ -394,6 +394,11 @@ permissions = [
   "allow-brain-memory-auto-list",
   "allow-brain-memory-learning-auto",
   "allow-brain-memory-learning-sensitive",
+  # The ids of facts saved automatically that the owner has not looked at
+  # yet, counted in Rust because the Brain is destroyed when it is closed
+  # (brain/auto_learn.rs note_saved). Ids only, never a fact's words; it
+  # changes nothing but that count.
+  "allow-brain-memory-saved-unseen",
 ]
 
 # Chat history on the PC (JARVIS-API.md section 18; brain/history.rs).

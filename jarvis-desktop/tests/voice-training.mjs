@@ -500,6 +500,92 @@ await check("while \"voice check is enough\" is on, the memory choices are disab
   assert.deepEqual(free, [false, false]);
 });
 
+/** A status from a PC with decision 13's setting (the backend is built to
+ *  the same contract in parallel, so the fixtures do not carry it yet). */
+const withSensitive = (st, value, where = "settings") => {
+  const c = JSON.parse(JSON.stringify(st));
+  if (where === "settings") c.gate.settings.sensitive_memory = value;
+  else c.gate.sensitive_memory = value;
+  return c;
+};
+
+await check("answers that use sensitive saved facts: on screen by default, the contract's words, and only when the PC has it", async () => {
+  assert.deepEqual(VT.SENSITIVE_MEMORY.map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
+  assert.equal(VT.SENSITIVE_MEMORY[0].detail,
+    "Answers that use a saved fact about your health, money, passwords or other people are shown, not read aloud.");
+  assert.equal(VT.SENSITIVE_MEMORY[1].detail,
+    "Those answers are read aloud when your voice passes the check. Anyone near the speaker will hear them.");
+  assert.equal(VT.loosens("sensitive_memory", "sensitive_aloud"), true);
+  assert.equal(VT.loosens("sensitive_memory", "sensitive_on_screen"), false);
+  // Read from gate.settings, or gate itself; anything else is not offered.
+  assert.equal(VT.settingsView(withSensitive(S.strong_ready, "sensitive_on_screen")).sensitiveMemory, "sensitive_on_screen");
+  assert.equal(VT.settingsView(withSensitive(S.strong_ready, "sensitive_aloud", "gate")).sensitiveMemory, "sensitive_aloud");
+  assert.equal(VT.settingsView(withSensitive(S.strong_ready, "loud")).sensitiveMemory, "");
+  assert.equal(VT.settingsView(S.strong_ready).sensitiveMemory, "");
+
+  const page = await open(withSensitive(S.strong_ready, "sensitive_on_screen"));
+  const got = await page.evaluate(() => ({
+    shown: !document.getElementById("vt-sensitive-box").hidden,
+    title: document.querySelector("#vt-sensitive-box h3").textContent,
+    labels: [...document.querySelectorAll("#vt-sensitive button")].map((b) => b.textContent),
+    pressed: document.querySelector('#vt-sensitive button[aria-pressed="true"]').dataset.value,
+  }));
+  const note = await text(page, "vt-sensitive-note");
+  await page.close();
+  assert.equal(got.shown, true, "not offered by a PC that reports it");
+  assert.equal(got.title, "Answers that use sensitive saved facts");
+  assert.deepEqual(got.labels, ["Keep on screen (recommended)", "Read aloud"]);
+  assert.equal(got.pressed, "sensitive_on_screen");
+  assert.match(note, /health, money, passwords or other people are shown, not read aloud/);
+  // A PC without it ("" or missing): not offered at all.
+  const old = await open(S.strong_ready);
+  const hidden = await old.evaluate(() => document.getElementById("vt-sensitive-box").hidden);
+  await old.close();
+  assert.equal(hidden, true);
+});
+
+await check("sensitive saved facts: keeping them on screen is at once; Read aloud asks, and is held on a stale link", async () => {
+  // Never moot: it holds even under "Voice check is enough".
+  const moot = await open(withSensitive(S.voice_is_enough, "sensitive_on_screen"));
+  const free = await moot.evaluate(() => [...document.querySelectorAll("#vt-sensitive button")].map((b) => b.disabled));
+  await moot.close();
+  assert.deepEqual(free, [false, false]);
+  // Aloud -> on screen: sent at once, even on a stale link.
+  const tighten = await open(withSensitive(S.strong_ready, "sensitive_aloud"), { link: { stale: true } });
+  await tighten.click('#vt-sensitive button[data-value="sensitive_on_screen"]');
+  await tighten.waitForTimeout(150);
+  const sentTight = await calls(tighten, "set_voice_setting");
+  await tighten.close();
+  assert.deepEqual(sentTight, [{ setting: "sensitive_memory", value: "sensitive_on_screen" }]);
+  // On screen -> aloud on a stale link: nothing sent, and it says why.
+  const held = await open(withSensitive(S.strong_ready, "sensitive_on_screen"), { link: { stale: true } });
+  await held.click('#vt-sensitive button[data-value="sensitive_aloud"]');
+  await held.waitForTimeout(150);
+  const none = await calls(held, "set_voice_setting");
+  const said = await text(held, "vt-setting-status");
+  await held.close();
+  assert.deepEqual(none, []);
+  assert.match(said, /catching up/);
+  // On a live link it is sent - the PC answers with the card.
+  const live = await open(withSensitive(S.strong_ready, "sensitive_on_screen"));
+  await live.click('#vt-sensitive button[data-value="sensitive_aloud"]');
+  await live.waitForTimeout(150);
+  const sent = await calls(live, "set_voice_setting");
+  await live.close();
+  assert.deepEqual(sent, [{ setting: "sensitive_memory", value: "sensitive_aloud" }]);
+  // The waiting line and the last-card line name it.
+  assert.match(VT.settingWaitingLine({ setting: "sensitive_memory", value: "sensitive_aloud" }, WHERE),
+    /^Waiting for your approval to change answers that use sensitive saved facts to "Read aloud"\./);
+  const card = { ...S.balanced.gate.training.last, setting: "sensitive_memory", value: "sensitive_aloud" };
+  const now = withSensitive(S.strong_ready, "sensitive_on_screen");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, now), "Approved: \"Read aloud\" is on now.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, now), "You said no, so \"Keep on screen\" stays.");
+  // CONTROL: the Rust knows the setting, and holds only its loosening.
+  const rust = read("src-tauri/src/voice_training.rs");
+  assert.match(rust, /\("sensitive_memory", "sensitive_aloud"\) => \{?\s*Ok\(\("sensitive_memory", "sensitive_aloud", true\)\)/);
+  assert.match(rust, /\("sensitive_memory", "sensitive_on_screen"\) => \{?\s*Ok\(\("sensitive_memory", "sensitive_on_screen", false\)\)/);
+});
+
 await check("the guided test: 20 sentences, one request, the result in words", async () => {
   const page = await open(S.strong_ready);
   await click(page, "vt-test", "Start the test");

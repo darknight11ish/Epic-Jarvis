@@ -66,9 +66,15 @@ import {
 import {
   addPage as addAutoPage,
   AUTO_MISSING,
+  AUTO_OFF,
+  CANCEL_LABEL,
+  CANCEL_TITLE,
   cardReason,
+  EMPTY as AUTO_EMPTY,
   factMeta,
+  FORGOTTEN,
   forgetQuestion,
+  lastLineNow,
   LEARNING_OFF_NOTE,
   olderThan as olderAuto,
   PAGE as AUTO_PAGE,
@@ -76,6 +82,8 @@ import {
   refreshRows as refreshAutoRows,
   rememberedLine,
   savedIds,
+  SENSITIVE_NEEDS_AUTO,
+  stillOffLine,
   SWITCHES as AUTO_SWITCHES,
   VOICE_MARK,
   VOICE_TITLE,
@@ -957,7 +965,7 @@ onQueue((queue) => {
       state.learningAsk = null;
       const facts = state.data.memory_facts || {};
       if (facts.learning !== true) {
-        toast("Learning stays off: the card was denied or ran out of time.", "bad");
+        toast("Background learning stays off: the card was denied or ran out of time.", "bad");
       }
       renderLearning();
     }
@@ -1518,16 +1526,17 @@ function renderLearning() {
   }
 
   const dl = el("dl", "kv");
-  dl.append(el("dt", "", "Learning"), el("dd", "", on ? "on" : "off"));
+  dl.append(el("dt", "", "Background learning"), el("dd", "", on ? "on" : "off"));
   dl.append(el("dt", "", "Waiting"), el("dd", "",
     String(facts.pending ?? waitingCount(pending))));
   if (setup.note) dl.append(el("dt", "", "Note"), el("dd", "", String(setup.note)));
   // memory-intake.patch: why the last "Remember:" did NOT become a card (a
-  // queued one is already a card, marked "your own words"), and how many
+  // queued one is already a card, marked "your own words"), or that it was
+  // saved without one (`auto_saved`, JARVIS-API.md section 19), and how many
   // repeat cards were dropped - the backend's own sentences, as the phone's
   // MemoryCards.setupNotes shows them.
   const last = setup.remember_last;
-  if (last && last.queued === false && last.note) {
+  if (last && (last.queued === false || last.auto_saved === true) && last.note) {
     dl.append(el("dt", "", "Last “Remember:”"), el("dd", "", String(last.note)));
   }
   if (setup.near_duplicates_note) {
@@ -1539,7 +1548,7 @@ function renderLearning() {
   // (`chats.ask || v.waiting`), read from the queue.
   if (state.learningAsk || (!on && learningCardWaiting())) {
     dom.memoryLearning.append(el("p", "hint learning-waiting",
-      `Waiting for your approval to turn learning on. Approve it ${APPROVE_WHERE}.`));
+      `Waiting for your approval to turn background learning on. Approve it ${APPROVE_WHERE}.`));
   }
   const box = el("div", "row-actions");
   box.append(
@@ -1558,8 +1567,8 @@ function renderLearning() {
             : out && out.note
               ? String(out.note)
               : out && out.enabled
-                ? "Learning is on."
-                : "Learning is off. Nothing new will be proposed."
+                ? "Background learning is on."
+                : "Background learning is off. Nothing new will be proposed."
       );
       state.learningAsk = out && out.waiting ? { cardId: await findNewCard(waitingBefore) } : null;
       renderLearning();
@@ -1654,7 +1663,7 @@ function renderProposals() {
     dom.memoryProposals,
     items,
     (p) => proposalRow(p),
-    "Nothing is waiting. Either Jarvis has not heard anything worth keeping, or learning is off."
+    "Nothing is waiting. Either Jarvis has not heard anything worth keeping, or background learning is off."
   );
 }
 
@@ -1814,11 +1823,7 @@ function renderFacts() {
               "Reworded. The old wording is kept as history.");
           }, { title: "Replace the wording. The old one is retired, not erased." }),
           button("Forget", async () => {
-            if (!window.confirm(
-              `Stop recalling this?\n\n${f.text}\n\n` +
-              "It stays in the history but Jarvis will not use it again. " +
-              "This cannot be undone."
-            )) return;
+            if (!window.confirm(forgetQuestion(f))) return;
             const validTo = promptValidTo(
               "When did this actually stop being true?\n\n" +
               "Leave blank for \"just now\" — the usual case. Only answer this " +
@@ -1828,8 +1833,7 @@ function renderFacts() {
             if (validTo === undefined) return; // the date prompt was cancelled
             const args = { id: Number(f.id) };
             if (validTo !== null) args.valid_to = validTo;
-            await memoryWrite("brain_memory_forget", args,
-              "Forgotten. It stays in the history and will not be recalled.");
+            await memoryWrite("brain_memory_forget", args, FORGOTTEN);
           }, { danger: true, title: "Stop this being recalled. There is no undo." })
         );
       }
@@ -2457,6 +2461,12 @@ function renderHistory() {
    card and shows "Waiting for your approval" until the card leaves the
    queue - including a card raised on the phone; OFF is immediate. Rust
    holds ON on a stale link, and the switch is greyed then; OFF never is.
+   While a card waits the switch is greyed too (a second ON would only ask
+   for the same card), and "Cancel the request" in the waiting line sends
+   OFF, which withdraws the card on the PC (FIXLIST 8, R6). Under each
+   switch: how its newest card ended (`auto_last` / `sensitive_last`, in
+   the PC's plain words when it refused), and for "Learn automatically" the
+   PC's sentence when its settings file was damaged (`why`).
    "Saved automatically" lists what was saved without a card, newest first,
    with Forget on each (brain_memory_forget, one fact, after a confirm) and
    "Load older". A `memory_saved` event is a quiet line that opens the list.
@@ -2480,6 +2490,11 @@ const autoL = {
   ask: { auto: null, sensitive: null },
   /** Whether each switch's card was in the queue at the last look. */
   seen: { auto: false, sensitive: false },
+  /** Ids of ON cards withdrawn by turning the switch OFF while they waited
+   *  (R6). The PC has let go of them - approving one changes nothing - but
+   *  the card stays in the queue until it is answered or runs out, so the
+   *  switch must not keep saying "waiting" for it. */
+  withdrawn: { auto: new Set(), sensitive: new Set() },
   /** Ids from `memory_saved` events the owner has not looked at yet. */
   unseen: new Set(),
 };
@@ -2547,7 +2562,8 @@ async function loadOlderAuto() {
 function autoCardWaiting(which, queue = currentQueue()) {
   const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
   const action = AUTO_SWITCHES[which].action;
-  return items.some((item) => item && item.action === action);
+  const gone = autoL.withdrawn[which];
+  return items.some((item) => item && item.action === action && !gone.has(item.id));
 }
 
 async function setAutoSwitch(which, on) {
@@ -2566,7 +2582,15 @@ async function setAutoSwitch(which, on) {
       toast(said || sw.waiting(APPROVE_WHERE), "ok");
     } else {
       autoL.ask[which] = null;
-      toast(on ? (said || sw.on) : sw.off, "ok");
+      // OFF withdraws a waiting ON card on the PC (R6): the card is not
+      // counted as waiting any more, even while it is still in the queue.
+      if (!on) {
+        for (const item of currentQueue().items || []) {
+          if (item && item.action === sw.action && item.id) autoL.withdrawn[which].add(item.id);
+        }
+      }
+      // The PC's own sentence first, both ways (FIXLIST 5).
+      toast(said || (on ? sw.on : sw.off), "ok");
     }
   } catch (error) {
     toast(errorText(error), "bad");
@@ -2577,8 +2601,7 @@ async function setAutoSwitch(which, on) {
 
 async function forgetAuto(f) {
   if (!window.confirm(forgetQuestion(f))) return;
-  const out = await memoryWrite("brain_memory_forget", { id: f.id },
-    "Forgotten. It stays in the history and will not be recalled.");
+  const out = await memoryWrite("brain_memory_forget", { id: f.id }, FORGOTTEN);
   if (out && out.ok !== false) {
     autoL.rows = autoL.rows.filter((r) => r.id !== f.id);
     paintAuto();
@@ -2595,9 +2618,11 @@ function noteMemorySaved(data) {
   if (state.view === "memory") loadAuto();
 }
 
-/** The quiet line opens the list: shown, scrolled to, and the line goes. */
+/** The quiet line opens the list: shown, scrolled to, and the line goes -
+ *  here and in Rust's copy of the count (below). */
 async function openSavedList() {
   autoL.unseen.clear();
+  if (IS_TAURI) invoke("brain_memory_saved_unseen", { seen: true }).catch(() => {});
   if (state.view !== "memory") await showView("memory");
   paintSavedLine();
   const card = $("memory-auto-card");
@@ -2630,10 +2655,20 @@ onQueue((queue) => {
       if (autoL.ask[which] === ask) {
         autoL.ask[which] = null;
         const v = autoL.view;
-        if (!(v && v[AUTO_SWITCHES[which].field])) toast(AUTO_SWITCHES[which].denied, "bad");
+        // Still off: how the card ended, as the PC says it (`*_last`) -
+        // never a guess that it was denied (FIXLIST 2, 28).
+        if (!(v && v[AUTO_SWITCHES[which].field])) {
+          toast((v && lastLineNow(which, v)) || stillOffLine(which), "bad");
+        }
         if (state.view === "memory") paintAuto();
       }
     }, MODEL_ASK_GRACE_MS);
+  }
+  // A withdrawn card that has left the queue is forgotten.
+  const ids = new Set(((queue && Array.isArray(queue.items)) ? queue.items : [])
+    .map((item) => item && item.id));
+  for (const gone of Object.values(autoL.withdrawn)) {
+    for (const id of gone) if (!ids.has(id)) gone.delete(id);
   }
   // A card came or went: the line follows the queue at once, and the PC's
   // own `*_waiting` is read again so it does not hold the line up.
@@ -2655,9 +2690,24 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("private-hidden", rereadAuto);
 }
 
+// The Brain window is destroyed when it is closed, and a `memory_saved`
+// that came while it was closed never reached it. Rust counts them for it
+// (brain/auto_learn.rs note_saved), ids only: picked up here when the
+// window opens, and cleared when the owner opens the list.
+if (IS_TAURI) {
+  invoke("brain_memory_saved_unseen", { seen: false }).then((out) => {
+    const before = autoL.unseen.size;
+    for (const id of savedIds(out)) autoL.unseen.add(id);
+    if (autoL.unseen.size !== before) paintSavedLine();
+  }).catch(() => {});
+}
+
 function autoSwitchNode(which, v) {
   const sw = AUTO_SWITCHES[which];
   const on = v[sw.field] === true;
+  // Our own click, or a card raised elsewhere (the phone): the queue says,
+  // and so does the PC (`auto_waiting` / `sensitive_waiting`).
+  const waiting = !on && Boolean(autoL.ask[which] || v[sw.waitingField] || autoCardWaiting(which));
   const box = el("div", "auto-switch-box");
   const label = el("label", "history-switch auto-switch");
   const input = document.createElement("input");
@@ -2670,8 +2720,14 @@ function autoSwitchNode(which, v) {
   const detail = el("p", "note history-switch-detail", sw.detail);
   detail.id = `memory-${which}-detail`;
   box.append(label, detail);
-  // Turning it ON waits for a live link (rule 4); OFF never does.
-  if (!on) {
+  if (waiting) {
+    // Greyed while its card waits (FIXLIST 8): pressing it again would only
+    // ask for the same card. Turning it back OFF is the Cancel button in
+    // the waiting line, which withdraws the card (R6).
+    input.disabled = true;
+    input.title = "A card to turn this on is waiting for your approval.";
+  } else if (!on) {
+    // Turning it ON waits for a live link (rule 4); OFF never does.
     input.dataset.title = "Asks you first, with an approval card.";
     liveButtons.add(input);
     syncLiveButton(input);
@@ -2684,11 +2740,29 @@ function autoSwitchNode(which, v) {
     input.dataset.busy = "true";
     await setAutoSwitch(which, want);
   });
-  // Our own click, or a card raised elsewhere (the phone): the queue says,
-  // and so does the PC (`auto_waiting` / `sensitive_waiting`).
-  if (!on && (autoL.ask[which] || v[sw.waitingField] || autoCardWaiting(which))) {
-    box.append(el("p", "hint learning-waiting history-waiting auto-waiting",
-      sw.waiting(APPROVE_WHERE)));
+  // The settings file was damaged, so the PC treats this as off and says
+  // why (FIXLIST 1).
+  if (which === "auto" && v.fileWhy) {
+    box.append(el("p", "history-why-not auto-file-why", v.fileWhy));
+  }
+  // The sensitive switch does nothing without the first (FIXLIST 3).
+  if (which === "sensitive" && !v.auto) {
+    box.append(el("p", "hint auto-needs-auto", SENSITIVE_NEEDS_AUTO));
+  }
+  if (waiting) {
+    const line = el("p", "hint learning-waiting history-waiting auto-waiting", sw.waiting(APPROVE_WHERE));
+    // OFF, so never held on a stale link.
+    line.append(" ", button(CANCEL_LABEL, () => setAutoSwitch(which, false), { title: CANCEL_TITLE }));
+    box.append(line);
+  } else {
+    // How the newest card ended, in the PC's words (FIXLIST 2).
+    const words = lastLineNow(which, v);
+    if (words) {
+      const line = el("p", "hint auto-last", words);
+      const last = v[sw.lastField];
+      if (last && last.why) line.title = last.why;
+      box.append(line);
+    }
   }
   return box;
 }
@@ -2762,9 +2836,7 @@ function paintAutoList() {
     return;
   }
   if (!autoL.rows.length) {
-    box.append(el("p", "empty", v.auto
-      ? "Nothing saved automatically yet."
-      : "Nothing saved automatically. Learning automatically is off."));
+    box.append(el("p", "empty", v.auto ? AUTO_EMPTY : `${AUTO_EMPTY} ${AUTO_OFF}`));
     return;
   }
   const past = memoryAsOf !== null;
