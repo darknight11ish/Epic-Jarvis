@@ -467,7 +467,9 @@ object JarvisRuntime {
         val tokenStore = TokenStore(app)
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         val chatSession = ChatSession(jarvisApi)
-        val voiceSession = VoiceSession(app, jarvisApi, scope) { text, onDelta ->
+        // The link check is a lambda, not a value: it is read at the moment
+        // "hey Jarvis" ON is asked for, and `actionBlocker` reads the flows.
+        val voiceSession = VoiceSession(app, jarvisApi, scope, linkBlocker = { actionBlocker() }) { text, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
             // cancel the spoken one and leave its own partial reply in there —
@@ -1842,11 +1844,18 @@ object JarvisRuntime {
      * that could name jobs long finished. Neither is an approval. Both are
      * actions, and rule 4 is about actions.
      *
-     * Deliberately not applied to `markDigestSeen`, `setMuted` or
-     * `setWakeWord`: marking a brief read is idempotent and claims nothing
-     * about the brief, and mute and the wake word are settings on this device's
-     * relationship with Jarvis rather than verdicts on anything Jarvis is
-     * holding. Refusing those on a stale link would be ceremony, not safety.
+     * Deliberately not applied to `markDigestSeen` or `setMuted`: marking a
+     * brief read is idempotent and claims nothing about the brief, and mute is
+     * a setting on this device's relationship with Jarvis rather than a
+     * verdict on anything Jarvis is holding. Refusing those on a stale link
+     * would be ceremony, not safety.
+     *
+     * Turning the wake word ON is NOT in that list any more. It used to be,
+     * described as a mere setting, but it raises a `change_own_config`
+     * approval card on the desktop - a card-raising action like the second
+     * card or a model switch - so [VoiceSession.setWakeWord] holds it here
+     * too ([com.jarvis.client.voice.WakeRules.requestBlocker]). Turning it
+     * OFF still always goes: it only closes a microphone.
      */
     fun actionBlocker(): String? =
         if (_stale.value || _link.value != LinkState.CONNECTED) {
@@ -1965,7 +1974,7 @@ object JarvisRuntime {
      * Deliberately not gated on [decisionBlocker] the way [decide] is: a
      * note is never itself a verdict on anything Jarvis is holding, only a
      * message attached to one - the same reasoning that already excuses
-     * `markDigestSeen`/`setMuted`/`setWakeWord` from that gate.
+     * `markDigestSeen`/`setMuted` from that gate.
      *
      * What the desktop does with it (`backend/task-control.patch`): the note
      * is kept WITH the card, the card itself does not change, and the model

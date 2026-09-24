@@ -36,6 +36,13 @@ class VoiceSession(
     private val api: JarvisApi,
     private val scope: CoroutineScope,
     /**
+     * Why a state-changing request cannot go now (the runtime's
+     * `actionBlocker()`: a stale or dropped link, rule 4), or null. Read only
+     * by [setWakeWord], and only for turning it ON - see
+     * [WakeRules.requestBlocker].
+     */
+    private val linkBlocker: () -> String? = { null },
+    /**
      * Sends a turn and returns the reply, or null if it could not be sent.
      * `onDelta` is called, zero or more times, with the reply accumulated so
      * far as it streams in - see [ChatSession.send]'s own doc for why this is
@@ -220,10 +227,15 @@ class VoiceSession(
      * would show "off" over a microphone that is still open, or "on" over a
      * card nobody has approved.
      *
+     * Turning it ON is held while the link is stale or down, like every
+     * other request that raises a card (rule 4); nothing is sent then.
+     * Turning it OFF always goes.
+     *
      * @return null when the desktop now says what was asked for, or a sentence
      *   to show the owner (including "approve the card").
      */
     suspend fun setWakeWord(enabled: Boolean): String? {
+        WakeRules.requestBlocker(enabled, linkBlocker())?.let { return it }
         val sent = api.setWakeWord(enabled)
         refreshStatus()
         if (!_answered.value) {

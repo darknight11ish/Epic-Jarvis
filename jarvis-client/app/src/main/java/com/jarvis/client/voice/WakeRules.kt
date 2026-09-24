@@ -62,6 +62,18 @@ object WakeRules {
                 null
             }
 
+    /**
+     * Whether asking the desktop to change the wake word may go now. Null means
+     * yes; otherwise the sentence to show, and nothing is sent.
+     *
+     * Turning it ON raises a `change_own_config` approval card, so it is held
+     * on a stale or dropped link exactly like every other card-raising action
+     * (rule 4) - [linkBlocker] is the runtime's `actionBlocker()`. Turning it
+     * OFF is never held: it only closes things, and must not wait on a link.
+     */
+    fun requestBlocker(enabled: Boolean, linkBlocker: String?): String? =
+        if (enabled) linkBlocker else null
+
     /** The desktop's threshold, held inside the range anyone would mean. */
     fun threshold(status: VoiceStatus): Float = status.wake.threshold.toFloat().coerceIn(0.1f, 0.99f)
 

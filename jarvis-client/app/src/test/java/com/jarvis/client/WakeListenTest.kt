@@ -176,6 +176,15 @@ class WakeListenTest {
         assertTrue(why!!.contains("nothing was sent"))
     }
 
+    /** Rule 4: turning it ON raises a card, so it waits for a live link. OFF never waits. */
+    @Test
+    fun `asking for the wake word ON is held on a stale link, and OFF never is`() {
+        val down = "Not connected to the desktop, so this cannot be delivered."
+        assertEquals(down, WakeRules.requestBlocker(enabled = true, linkBlocker = down))
+        assertNull(WakeRules.requestBlocker(enabled = true, linkBlocker = null))
+        assertNull("off only closes things", WakeRules.requestBlocker(enabled = false, linkBlocker = down))
+    }
+
     @Test
     fun `the phone uses the desktop's threshold, held in range`() {
         assertEquals(0.6f, WakeRules.threshold(on), 1e-6f)
