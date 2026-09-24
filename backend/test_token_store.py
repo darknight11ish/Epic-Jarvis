@@ -191,6 +191,56 @@ def t_blank_and_unreadable_files():
     check("a blank old file is not a token", got.token == "fresh")
 
 
+
+def t_the_old_file_in_any_encoding_windows_writes():
+    # Bug audit 3, CONN-5. PowerShell 5.1's `Out-File` and `>` write UTF-16
+    # with a byte-order mark; `-Encoding UTF8` writes UTF-8 WITH one; Notepad
+    # can save either. The file used to be read as plain UTF-8: UTF-16 raised
+    # UnicodeDecodeError (the backend did not start), and a UTF-8 mark became
+    # the token's first character (the phone never matched it again).
+    cases = (
+        ("UTF-8 with a byte-order mark", b"\xef\xbb\xbfold-plain-token\r\n"),
+        ("UTF-16 little-endian with a mark (PowerShell 5.1's default)",
+         "old-plain-token\r\n".encode("utf-16")),  # Python writes the LE mark here
+        ("UTF-16 big-endian with a mark", b"\xfe\xff" + "old-plain-token\n".encode("utf-16-be")),
+        ("plain UTF-8, spaces and a Windows line end", b"  old-plain-token \r\n"),
+    )
+    for name, data in cases:
+        d, f = scratch()
+        f.write_bytes(data)
+        try:
+            tok, problem = ts._read_file(f)
+        except Exception as exc:
+            tok, problem = None, f"RAISED {type(exc).__name__}"
+        check(f"{name}: read as the token itself", tok == "old-plain-token" and problem is None,
+              repr((tok, problem)))
+        store = FakeStore()
+        got = ts.resolve(f, store=store, environ={}, make=lambda: "fresh")
+        check(f"{name}: moved into the store unchanged, and the file deleted",
+              got.token == "old-plain-token" and store.value == "old-plain-token"
+              and not f.exists(), repr((got.token, store.value, f.exists())))
+    # Not text at all: a sentence, not an exception, and the file is kept.
+    for name, data in (("bytes that are not UTF-8", b"old\xff\xfe\x80token"),
+                       ("UTF-16 cut off mid-character", b"\xff\xfeo\x00l")):
+        d, f = scratch()
+        f.write_bytes(data)
+        try:
+            tok, problem = ts._read_file(f)
+        except Exception as exc:
+            tok, problem = None, f"RAISED {type(exc).__name__}"
+        check(f"{name}: no token, a plain problem sentence, no exception",
+              tok is None and problem and "RAISED" not in problem and "UTF" in problem,
+              repr((tok, problem)))
+        store = FakeStore()
+        try:
+            got = ts.resolve(f, store=store, environ={}, make=lambda: "fresh")
+            ok = (got.token == "fresh" and f.exists()
+                  and any("not UTF-8 or UTF-16" in n for n in got.notes))
+            detail = repr((got.token, got.notes))
+        except Exception as exc:
+            ok, detail = False, f"resolve raised {type(exc).__name__}: {exc}"
+        check(f"{name}: the backend still starts, says why, and leaves the file alone", ok, detail)
+
 def t_errors_carry_codes_not_tokens():
     src = (HERE / "jarvis_token_store.py").read_text(encoding="utf-8")
     raises = re.findall(r"raise (?:StoreError|Unavailable)\((.*)\)", src)
@@ -342,7 +392,8 @@ if __name__ == "__main__":
     for fn in (t_first_run_makes_one_in_the_store, t_the_old_file_is_moved_in_and_deleted,
                t_a_file_that_disagrees_wins, t_a_refusing_store_keeps_the_old_file,
                t_a_refusing_store_with_no_file_writes_nothing, t_the_environment_still_wins,
-               t_blank_and_unreadable_files, t_errors_carry_codes_not_tokens,
+               t_blank_and_unreadable_files, t_the_old_file_in_any_encoding_windows_writes,
+               t_errors_carry_codes_not_tokens,
                t_the_desktop_reads_the_same_name, t_the_patch_applies_and_reverses,
                t_the_patched_function_runs, t_the_install_lists_have_it,
                t_live_windows_round_trip):

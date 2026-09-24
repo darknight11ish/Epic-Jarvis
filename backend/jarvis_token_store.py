@@ -212,15 +212,40 @@ class Resolved:
         return out
 
 
+#: Byte-order marks: the few bytes some editors put at the very start of a
+#: text file to say how it is encoded. Windows PowerShell 5.1 writes UTF-16
+#: with one by default (`Out-File`, `>`), and UTF-8 with one when asked for
+#: `-Encoding UTF8`; Notepad can save either.
+_BOMS = ((b"\xef\xbb\xbf", "utf-8"), (b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be"))
+
+
 def _read_file(path: Path):
-    """(token or None, problem or None)."""
+    """(token or None, problem or None). Never raises.
+
+    Read as bytes, then decoded by what the file says it is (bug audit 3,
+    CONN-5): a UTF-8 byte-order mark is dropped rather than becoming the
+    first character of the token, UTF-16 (either byte order) is decoded as
+    UTF-16, and anything else must be UTF-8. A file that is none of those is
+    a `problem` sentence - it used to be a UnicodeDecodeError that stopped
+    the backend from starting at all. Surrounding spaces and line breaks are
+    dropped either way."""
     try:
         if not path.is_file():
             return None, None
-        text = path.read_text(encoding="utf-8").strip()
-        return (text or None), None
+        raw = path.read_bytes()
     except OSError as e:
         return None, f"the old token file could not be read ({type(e).__name__})"
+    codec = "utf-8"
+    for bom, name in _BOMS:
+        if raw.startswith(bom):
+            raw, codec = raw[len(bom):], name
+            break
+    try:
+        text = raw.decode(codec).strip()
+    except UnicodeDecodeError:
+        return None, (f"the old token file {path} is not UTF-8 or UTF-16 text, so it was "
+                      f"ignored and left where it is")
+    return (text or None), None
 
 
 def _remove(path: Path):
