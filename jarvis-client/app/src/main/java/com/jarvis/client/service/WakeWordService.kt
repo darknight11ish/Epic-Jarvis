@@ -421,6 +421,19 @@ class WakeWordService : Service() {
         // back and is played - on the voice-call path the echo canceller
         // needs. The caller ends it in its `finally`.
         voice.speaker.beginVoiceCall()
+        // NOT CHANGED - needs a real-phone test first (audit T10). The
+        // sentence after a "hey Jarvis" cut-in is recorded here, on
+        // VOICE_COMMUNICATION: the path Android's echo canceller works on,
+        // which is why it is used. But the owner's phone voice print was
+        // trained on VOICE_RECOGNITION clips (Recorder.kt, the talk button
+        // and "Train my voice"), and the call path adds its own processing -
+        // echo cancelling, noise suppression, automatic gain - that the
+        // training clips never had. So the PC's voice check may score these
+        // sentences lower than an ordinary "hey Jarvis" and refuse more of
+        // them. That fails safe (a refusal, never a false pass), and it is a
+        // guess until measured: say the same sentence both ways on a real
+        // phone and compare the scores the PC reports, before changing the
+        // source or training on call-path clips.
         val rec = openRecorder(MediaRecorder.AudioSource.VOICE_COMMUNICATION) ?: return null
         val canceller = runCatching {
             if (AcousticEchoCanceler.isAvailable()) {
