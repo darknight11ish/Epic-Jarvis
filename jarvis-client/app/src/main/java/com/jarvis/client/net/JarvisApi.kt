@@ -506,6 +506,56 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
         }
 
+    // --------------------------------------------------------- big model ----
+
+    /**
+     * `GET /api/big-model` - what the PC found for the big model (slow) and
+     * each switch's state ([BigModel.parse]). Starts nothing on the PC. A 404
+     * is an older backend and a 503 a module that did not load;
+     * [BigModel.readOf] turns both into sentences.
+     */
+    suspend fun bigModel(): ApiResult<JsonObject> = probe(BigModel.PATH)
+
+    /**
+     * One big-model switch on or off: `{"switch": ..., "enabled": ...}`. ON
+     * raises one approval card on the PC and changes nothing until it is
+     * approved; OFF is immediate. So a success never means "it is on" -
+     * re-read [bigModel] for that. [BigModel.classifyPost] says which answers
+     * come back as sentences.
+     */
+    suspend fun setBigModel(switch: String, enabled: Boolean): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(BigModel.PATH) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = BigModel.postBody(switch, enabled)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    BigModel.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
+    /** `GET /api/deep` - the deep questions and their answers, newest first ([BigModel.parseDeep]). */
+    suspend fun deep(): ApiResult<JsonObject> = probe(BigModel.DEEP_PATH)
+
+    /**
+     * Queues one deep question. Answers 202 with the job, or a refusal the
+     * PC explained (`state: "refused"` with `error`) - both as
+     * [ApiResult.Ok], for [BigModel.askReply]. No approval card per
+     * question: the switch was approved with one.
+     */
+    suspend fun deepAsk(question: String): ApiResult<JsonObject> {
+        val body = BigModel.askBody(question)
+            ?: return ApiResult.Failed(ApiError.Malformed("the question is empty"))
+        return postForJob(BigModel.ASK_PATH, body)
+    }
+
     // ------------------------------------------------------- appearance ----
 
     /**
