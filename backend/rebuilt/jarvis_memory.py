@@ -196,6 +196,74 @@ _STOP = {
 _MAX_VEC_DISTANCE = float(os.environ.get("JARVIS_MEMORY_MAX_DISTANCE", "1.0"))
 
 
+def _share_env(name: str, default: float) -> float:
+    """A number from 0 to 1 out of the environment, never an exception.
+
+    Not float(os.environ.get(...)) like the line above: that raises at
+    import on "" or "half", and an import error here is "memory layer failed
+    to start". `$env:X = ""` in PowerShell sets the variable to empty, not
+    unset, so empty is the realistic mistake. Anything unreadable is the
+    default; anything outside 0..1 is clamped to it.
+    """
+    raw = os.environ.get(name, "")
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(v):
+        return default
+    return min(1.0, max(0.0, v))
+
+
+#: The floor for WORD search (finding F3 of the 2026-09-24 memory research).
+#:
+#: The distance floor above only ever applied to the meaning (vector) list.
+#: Every word-search hit was fused in with no cut-off at all, so a question
+#: that shared ONE ordinary word with a fact got that fact: "what is my dog
+#: called?" came back with "Owner's cat is called Biscuit", on nothing but
+#: "called". On day one - before fastembed has downloaded - words are the
+#: only list there is, so this was the whole of recall.
+#:
+#: The rule: a fact must match at least this SHARE of the question's content
+#: words, each word weighted by how rare it is in the store (the same idf
+#: weighting bm25 uses). A rare word the question asks about ("dog") that no
+#: fact contains carries most of the weight, so a fact that matches only the
+#: common word next to it ("called") falls below the line. A fact matching
+#: the one specific word ("Where do I live?" -> "Owner lives in Leeds") keeps
+#: its full share. 0 turns the floor off (the old behaviour); 1 would demand
+#: every word. The default was chosen by backend/eval_memory.py on half of
+#: the golden questions and reported on the other half - backend/README.md,
+#: "The memory self-test", has the table. Set JARVIS_MEMORY_MIN_WORD_SHARE to
+#: change it.
+_MIN_WORD_SHARE = _share_env("JARVIS_MEMORY_MIN_WORD_SHARE", 0.1)
+
+#: Words that frame a question rather than say what it is about. They still
+#: search (FTS ranks with them, exactly as before); they only do not count
+#: towards the floor's share. Without this, "Where did I live BEFORE?" asked
+#: the floor to find "before" in the fact about Harrogate, and "What is my
+#: dog CALLED?" let the cat fact through on "called" alone. Time words are
+#: here because jarvis_past.py reads them as dates; they are never in a fact
+#: about the thing asked.
+_FRAME = {
+    "name", "names", "named", "called", "call", "kind", "sort", "type", "about",
+    "ever", "now", "still", "currently", "usually", "often", "always",
+    "much", "many", "long", "time", "times", "again", "also", "really",
+    "actually", "exactly", "please", "jarvis", "remember", "tell", "told",
+    "say", "said", "know", "knew", "think", "thought", "believe", "believed",
+    "before", "previously", "formerly", "earlier", "ago", "back", "last",
+    "year", "years", "month", "months", "week", "weeks", "use", "used",
+    "january", "february", "march", "april", "may", "june", "july",
+    "august", "september", "october", "november", "december",
+}
+
+
+def _floor_terms(terms) -> list:
+    """The question's words that the floor weighs: not frame words, not a
+    bare year."""
+    return [t for t in terms
+            if t not in _FRAME and not re.fullmatch(r"(?:19|20)\d\d", t)]
+
+
 def _words(text: str) -> set:
     """Content words, lowercased, possessives folded. For overlap tests.
 
@@ -941,9 +1009,71 @@ class MemoryStore:
 
     # ---- reading ----------------------------------------------------------
 
+    def _word_floor(self, c, terms: list, rows: list, floor: float) -> list:
+        """The word-search hits that match at least `floor` of the question.
+
+        Each content word of the question is weighted by how rare it is in
+        the store, ln(1 + (N + 1) / (df + 0.5)), and a hit's share is the
+        weight of the words it contains over the weight of all of them.
+
+        Not bm25's own idf, ln(1 + (N - df + 0.5) / (df + 0.5)), which was
+        tried first: it gives a word that is in EVERY fact a weight of almost
+        nothing, so in a small store where every fact mentions the laptop,
+        "what did I say about my laptop" weighed "laptop" at 0.18 against
+        1.79 for "about" and floored the right fact away. This one still
+        ranks rare words above common ones, and never weighs a word at zero. Which words a hit contains is asked of FTS5 itself,
+        one word at a time, so the Porter stemming is the index's own and
+        "lives" still matches "live".
+
+        Two small queries per content word (a question has one to six), and
+        only over the hits already found. If anything here fails the hits
+        come back unfiltered: this decides relevance, not safety, and the
+        old behaviour is the right thing to degrade to.
+        """
+        terms = _floor_terms(terms)
+        if floor <= 0 or not rows or not terms:
+            # Nothing left to judge by ("what's my name?" is all frame):
+            # the hits stand, as they always did.
+            return rows
+        try:
+            n = c.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+            ids = [row["rowid"] for row in rows]
+            marks = ",".join("?" * len(ids))
+            weight, has = {}, {}
+            for t in terms:
+                q = f'"{t}"'
+                df = c.execute("SELECT COUNT(*) FROM facts_fts WHERE facts_fts MATCH ?",
+                               (q,)).fetchone()[0]
+                weight[t] = math.log(1.0 + (n + 1.0) / (df + 0.5))
+                has[t] = {r[0] for r in c.execute(
+                    "SELECT rowid FROM facts_fts WHERE facts_fts MATCH ?"
+                    f" AND rowid IN ({marks})", (q, *ids))}
+            total = sum(weight.values())
+            if total <= 0:
+                return rows
+            return [row for row in rows
+                    if sum(w for t, w in weight.items() if row["rowid"] in has[t]) / total
+                    >= floor - 1e-9]
+        except Exception:
+            return rows
+
     def search(self, query: str, k: int = 8, candidates: int = 50,
-               at: Optional[float] = None, include_retired: bool = False) -> list[dict]:
-        """Words and meaning, fused with reciprocal rank fusion."""
+               at: Optional[float] = None, include_retired: bool = False,
+               known_at: Optional[float] = None,
+               word_floor: Optional[float] = None) -> list[dict]:
+        """Words and meaning, fused with reciprocal rank fusion.
+
+        at          VALID time: only facts true at that moment (default now).
+        known_at    TRANSACTION time: only facts this machine BELIEVED at that
+                    moment - the same condition known_at() uses, created <= t
+                    and not yet retired at t. On its own it answers "what did
+                    Jarvis think in June", right or wrong, so the valid-time
+                    filter is then applied only when `at` is given as well.
+        include_retired  skip the valid-time filter (timeline()).
+        word_floor  the share of the question a word-search hit must match;
+                    None is _MIN_WORD_SHARE, 0 turns it off (find_one does).
+        """
+        at_given = at is not None
         query = " ".join(str(query).split())
         if not query:
             return []
@@ -969,6 +1099,10 @@ class MemoryStore:
                 rows = c.execute(
                     "SELECT rowid, bm25(facts_fts) AS s FROM facts_fts WHERE facts_fts MATCH ?"
                     " ORDER BY s LIMIT ?", (q, candidates)).fetchall()
+                # The floor (F3): a hit that matches too little of the
+                # question does not get a rank at all. See _MIN_WORD_SHARE.
+                rows = self._word_floor(
+                    c, terms, rows, _MIN_WORD_SHARE if word_floor is None else word_floor)
                 for r, row in enumerate(rows, 1):
                     ranks[row["rowid"]] = ranks.get(row["rowid"], 0) + 1.0 / (60 + r)
             except sqlite3.OperationalError:
@@ -1012,8 +1146,17 @@ class MemoryStore:
             if f is None:
                 continue
             score = ranks[fid]
+            if known_at is not None:
+                # What this machine believed at known_at: the exact condition
+                # known_at() uses, so the memory pane's as-of list and a
+                # search as of the same moment cannot disagree.
+                if f["created"] > known_at:
+                    continue
+                if f["retired_at"] is not None and f["retired_at"] <= known_at:
+                    continue
             valid = f["valid_from"] <= at and (f["valid_to"] is None or f["valid_to"] > at)
-            if not valid and not include_retired:
+            if (not valid and not include_retired
+                    and (known_at is None or at_given)):
                 continue
             f["score"] = round(score, 5)
             # Was `f["valid_to"] is None`, which disagreed with the validity
@@ -1060,7 +1203,11 @@ class MemoryStore:
         if not want:
             return None
         best, best_score = None, 0.0
-        for cand in self.search(text, k=5):
+        # word_floor=0: this has its own, stricter rule below (two shared
+        # words and 50% containment), and a correction names facts in its
+        # own words - "Mario drives a 2005 Honda" shares only two of four
+        # with the fact it replaces, and the recall floor would hide it.
+        for cand in self.search(text, k=5, word_floor=0.0):
             have = _words(cand["text"])
             shared = want & have
             if len(shared) < 2:

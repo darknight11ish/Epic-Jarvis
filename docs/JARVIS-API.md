@@ -455,6 +455,18 @@ which is not in this repository; the patch sets this field beside the
 `turn_id` line `feedback.patch` added, and was checked only against the
 patch-stack stand-in (`backend/test_auto_learn.py`).
 
+**Which facts a local turn recalls** (memory wave 1, 2026-09-24; no field or
+route changed). Word search now has a floor (`JARVIS_MEMORY_MIN_WORD_SHARE`,
+default 0.1), so a question that shares one ordinary word with a fact no
+longer recalls it - `injected_facts` is 0 more often, which is right. And a
+question about the past ("where did I live before?", "what did I tell you in
+June?") also recalls up to three matching **retired** facts
+(`past-recall.patch`, `jarvis_past.py`), each ending "(no longer true since
+<date>)" inside the FACTS block. They are counted in `injected_facts`,
+listed in `injected_ids` and checked for `injected_sensitive` like any
+other recalled fact. Neither app shows recalled facts' words, so neither
+app changes. `backend/README.md`, "Memory wave 1", has the details.
+
 **No tool receipt.** A 200 from `/api/chat` means "a chat completed", not
 "the thing you asked for happened". There is no `tool_calls` field on the
 response. `docs/API-DISAGREEMENTS.md` §10 records the consequence: the quick-

@@ -1,0 +1,127 @@
+{"id": "q001", "q": "Where do I live?", "answers": ["f11"], "type": "update", "split": "tune", "stale": ["f10"]}
+{"id": "q002", "q": "What's my cat called?", "answers": ["f13"], "type": "single", "split": "tune"}
+{"id": "q003", "q": "What is Biscuit scared of?", "answers": ["f14"], "type": "single", "split": "test"}
+{"id": "q004", "q": "Am I vegetarian?", "answers": ["f16"], "type": "single", "split": "tune"}
+{"id": "q005", "q": "What am I allergic to?", "answers": ["f17"], "type": "single", "split": "test"}
+{"id": "q006", "q": "What's my favourite meal?", "answers": ["f19"], "type": "single", "split": "tune"}
+{"id": "q007", "q": "Who do I work for?", "answers": ["f22"], "type": "single", "split": "test"}
+{"id": "q008", "q": "When do I work night shifts?", "answers": ["f21"], "type": "single", "split": "tune"}
+{"id": "q009", "q": "Who is my manager?", "answers": ["f06"], "type": "update", "split": "test", "stale": ["f05"]}
+{"id": "q010", "q": "What's my cello teacher's name?", "answers": ["f24"], "type": "single", "split": "test"}
+{"id": "q011", "q": "When do I play football?", "answers": ["f25"], "type": "single", "split": "tune"}
+{"id": "q012", "q": "How far do I run at parkrun?", "answers": ["f26"], "type": "single", "split": "test"}
+{"id": "q013", "q": "What's my favourite band?", "answers": ["f27"], "type": "single", "split": "tune"}
+{"id": "q014", "q": "What book am I reading?", "answers": ["f29"], "type": "update", "split": "tune", "stale": ["f28"]}
+{"id": "q015", "q": "Which football team do I support?", "answers": ["f30"], "type": "single", "split": "test"}
+{"id": "q016", "q": "What car do I drive?", "answers": ["f32"], "type": "update", "split": "test", "stale": ["f31"]}
+{"id": "q017", "q": "When is my birthday?", "answers": ["f33"], "type": "date", "split": "tune"}
+{"id": "q018", "q": "When is my anniversary with Jonas?", "answers": ["f34"], "type": "date", "split": "test"}
+{"id": "q019", "q": "When is my dentist appointment?", "answers": ["f63"], "type": "update", "split": "tune", "stale": ["f35"]}
+{"id": "q020", "q": "When does my passport expire?", "answers": ["f36"], "type": "date", "split": "tune"}
+{"id": "q021", "q": "Should you use bullet points?", "answers": ["f37"], "type": "preference", "split": "tune"}
+{"id": "q022", "q": "What should the heating be set to?", "answers": ["f38"], "type": "preference", "split": "test"}
+{"id": "q023", "q": "Do I prefer trains or flying?", "answers": ["f39"], "type": "preference", "split": "tune"}
+{"id": "q024", "q": "Do I wear glasses?", "answers": ["f41"], "type": "single", "split": "tune"}
+{"id": "q025", "q": "What am I saving for?", "answers": ["f42"], "type": "single", "split": "test"}
+{"id": "q026", "q": "When did I visit Iceland?", "answers": ["f43"], "type": "date", "split": "test"}
+{"id": "q027", "q": "What does my laptop run?", "answers": ["f45"], "type": "update", "split": "test", "stale": ["f44"]}
+{"id": "q028", "q": "Do I drink alcohol?", "answers": ["f46"], "type": "negation", "split": "tune"}
+{"id": "q029", "q": "Have I ever been to America?", "answers": ["f47"], "type": "negation", "split": "test"}
+{"id": "q030", "q": "Do I still play the guitar?", "answers": ["f48"], "type": "negation", "split": "tune"}
+{"id": "q031", "q": "What's my favourite colour?", "answers": ["f49"], "type": "preference", "split": "test"}
+{"id": "q032", "q": "What kind of bike do I have?", "answers": ["f51"], "type": "single", "split": "tune"}
+{"id": "q033", "q": "Where did I grow up?", "answers": ["f52"], "type": "single", "split": "test"}
+{"id": "q034", "q": "What did I study at university?", "answers": ["f53"], "type": "single", "split": "tune"}
+{"id": "q035", "q": "When do I go to the climbing wall?", "answers": ["f54"], "type": "single", "split": "test"}
+{"id": "q036", "q": "When do I water the plants?", "answers": ["f56"], "type": "single", "split": "tune"}
+{"id": "q037", "q": "Who is my doctor?", "answers": ["f57"], "type": "single", "split": "test"}
+{"id": "q038", "q": "What's my usual takeaway?", "answers": ["f58"], "type": "single", "split": "tune"}
+{"id": "q039", "q": "Where is the Wi-Fi router?", "answers": ["f60"], "type": "single", "split": "test"}
+{"id": "q040", "q": "What's my sister called?", "answers": ["f01"], "type": "person", "split": "tune"}
+{"id": "q041", "q": "What's my partner called?", "answers": ["f03"], "type": "person", "split": "test"}
+{"id": "q042", "q": "What does Jonas do?", "answers": ["f04"], "type": "person", "split": "tune"}
+{"id": "q043", "q": "Where does Kofi live?", "answers": ["f07"], "type": "person", "split": "test"}
+{"id": "q044", "q": "What's my mum called?", "answers": ["f08"], "type": "person", "split": "tune"}
+{"id": "q045", "q": "When was my nephew born?", "answers": ["f09"], "type": "date", "split": "tune"}
+{"id": "q046", "q": "Where is Priya's wedding?", "answers": ["f02"], "type": "person", "split": "test"}
+{"id": "q047", "q": "Where did I use to work?", "answers": ["f61"], "type": "single", "split": "tune"}
+{"id": "q048", "q": "When do I get paid?", "answers": ["f62"], "type": "date", "split": "test"}
+{"id": "q049", "q": "Do I like spicy food?", "answers": ["f18"], "type": "negation", "split": "test"}
+{"id": "q050", "q": "Do I drink coffee?", "answers": ["f15"], "type": "negation", "split": "tune"}
+{"id": "q051", "q": "Which street is my flat on?", "answers": ["f12"], "type": "single", "split": "test"}
+{"id": "q052", "q": "What should you never call me?", "answers": ["f40"], "type": "preference", "split": "tune"}
+{"id": "q053", "q": "Am I scared of heights?", "answers": ["f50"], "type": "preference", "split": "test"}
+{"id": "q054", "q": "What language do I want to learn?", "answers": ["f59"], "type": "single", "split": "tune"}
+{"id": "q055", "q": "Who lends me a ladder?", "answers": ["f55"], "type": "person", "split": "tune"}
+{"id": "q056", "q": "Which city am I living in now?", "answers": ["f11"], "type": "paraphrase", "split": "tune", "stale": ["f10"]}
+{"id": "q057", "q": "What's my cat's name?", "answers": ["f13"], "type": "paraphrase", "split": "test"}
+{"id": "q058", "q": "What colour is Biscuit?", "answers": ["f14"], "type": "paraphrase", "split": "tune"}
+{"id": "q059", "q": "Should you offer me an espresso?", "answers": ["f15"], "type": "paraphrase", "split": "test"}
+{"id": "q060", "q": "Do I eat meat?", "answers": ["f16"], "type": "paraphrase", "split": "tune"}
+{"id": "q061", "q": "Can I eat satay sauce?", "answers": ["f17"], "type": "paraphrase", "split": "test"}
+{"id": "q062", "q": "What is my job?", "answers": ["f20"], "type": "paraphrase", "split": "tune"}
+{"id": "q063", "q": "What's my boss called?", "answers": ["f06"], "type": "paraphrase", "split": "test", "stale": ["f05"]}
+{"id": "q064", "q": "What instrument am I learning?", "answers": ["f23"], "type": "paraphrase", "split": "tune"}
+{"id": "q065", "q": "Who teaches me music?", "answers": ["f24"], "type": "paraphrase", "split": "test"}
+{"id": "q066", "q": "What sport do I play?", "answers": ["f25"], "type": "paraphrase", "split": "tune"}
+{"id": "q067", "q": "What do I do on Saturday mornings?", "answers": ["f26"], "type": "paraphrase", "split": "test"}
+{"id": "q068", "q": "What music do I like?", "answers": ["f27"], "type": "paraphrase", "split": "tune"}
+{"id": "q069", "q": "What novel have I got on the go?", "answers": ["f29"], "type": "paraphrase", "split": "test", "stale": ["f28"]}
+{"id": "q070", "q": "What colour is my car?", "answers": ["f32"], "type": "paraphrase", "split": "tune", "stale": ["f31"]}
+{"id": "q071", "q": "How do I like your replies formatted?", "answers": ["f37"], "type": "paraphrase", "split": "test"}
+{"id": "q072", "q": "How warm do I like the house?", "answers": ["f38"], "type": "paraphrase", "split": "tune"}
+{"id": "q073", "q": "Where am I planning to travel?", "answers": ["f42"], "type": "paraphrase", "split": "test"}
+{"id": "q074", "q": "Which operating system is on my computer?", "answers": ["f45"], "type": "paraphrase", "split": "tune", "stale": ["f44"]}
+{"id": "q075", "q": "Am I afraid of heights?", "answers": ["f50"], "type": "paraphrase", "split": "test"}
+{"id": "q076", "q": "Is my eyesight good?", "answers": ["f41"], "type": "paraphrase", "split": "tune"}
+{"id": "q077", "q": "Who is my GP?", "answers": ["f57"], "type": "paraphrase", "split": "test"}
+{"id": "q078", "q": "Where does my partner work?", "answers": ["f04"], "type": "alias", "split": "tune"}
+{"id": "q079", "q": "Where is my sister getting married?", "answers": ["f02"], "type": "alias", "split": "test"}
+{"id": "q080", "q": "What's my best mate's name?", "answers": ["f07"], "type": "alias", "split": "tune"}
+{"id": "q081", "q": "What's my neighbour's name?", "answers": ["f55"], "type": "person", "split": "test"}
+{"id": "q082", "q": "When is payday?", "answers": ["f62"], "type": "paraphrase", "split": "tune"}
+{"id": "q083", "q": "Where was I raised?", "answers": ["f52"], "type": "paraphrase", "split": "test"}
+{"id": "q084", "q": "Which town was I brought up in?", "answers": ["f52"], "type": "paraphrase", "split": "tune"}
+{"id": "q085", "q": "What do I usually order for dinner delivery?", "answers": ["f58"], "type": "paraphrase", "split": "test"}
+{"id": "q086", "q": "What is my dog called?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q087", "q": "What's my brother's name?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q088", "q": "What is my blood type?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q089", "q": "Why is the sky blue?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q090", "q": "What's the capital of Australia?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q091", "q": "How many children do I have?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q092", "q": "What's my horse called?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q093", "q": "What's my favourite film?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q094", "q": "What is my shoe size?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q095", "q": "Which hospital was I born in?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q096", "q": "What does my dad do?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q097", "q": "What's my salary?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q098", "q": "What's my car's registration number?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q099", "q": "What is my bank PIN?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q100", "q": "What's the password for the router?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q101", "q": "What time is my flight to Japan?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q102", "q": "How tall am I?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q103", "q": "Who is my favourite football player?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q104", "q": "What's the weather going to be tomorrow?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q105", "q": "When is my cat's birthday?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q106", "q": "What did my grandmother do for a living?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q107", "q": "Do I have a tattoo?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q108", "q": "What's my middle name?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q109", "q": "Which gym am I a member of?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q110", "q": "What's my email address?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q111", "q": "How do I make pancakes?", "answers": [], "type": "abstain", "split": "test"}
+{"id": "q112", "q": "What is my wife's name?", "answers": [], "type": "abstain", "split": "tune"}
+{"id": "q113", "q": "Where did I live before?", "answers": ["f10"], "type": "past", "split": "tune"}
+{"id": "q114", "q": "Where did I use to live?", "answers": ["f10"], "type": "past", "split": "test"}
+{"id": "q115", "q": "What car did I drive before?", "answers": ["f31"], "type": "past", "split": "tune"}
+{"id": "q116", "q": "Who was my manager last year?", "answers": ["f05"], "type": "past", "split": "test"}
+{"id": "q117", "q": "What book was I reading in July?", "answers": ["f28"], "type": "past", "split": "tune"}
+{"id": "q118", "q": "What did I use to run on my laptop?", "answers": ["f44"], "type": "past", "split": "test"}
+{"id": "q119", "q": "When was my dentist appointment before it moved?", "answers": ["f35"], "type": "past", "split": "tune"}
+{"id": "q120", "q": "Where did I live in 2025?", "answers": ["f10"], "type": "past", "split": "test"}
+{"id": "q121", "q": "Where do I live?", "answers": ["f10"], "type": "belief", "split": "tune", "stale": ["f11"], "known_at": "2026-01-15"}
+{"id": "q122", "q": "Who is my manager?", "answers": ["f05"], "type": "belief", "split": "test", "stale": ["f06"], "known_at": "2026-02-01"}
+{"id": "q123", "q": "What car do I drive?", "answers": ["f31"], "type": "belief", "split": "tune", "stale": ["f32"], "known_at": "2026-01-01"}
+{"id": "q124", "q": "What book am I reading?", "answers": ["f28"], "type": "belief", "split": "test", "stale": ["f29"], "known_at": "2026-05-01"}
+{"id": "q125", "q": "What does my laptop run?", "answers": ["f44"], "type": "belief", "split": "tune", "stale": ["f45"], "known_at": "2026-04-01"}
+{"id": "q126", "q": "When is my dentist appointment?", "answers": ["f35"], "type": "belief", "split": "test", "stale": ["f63"], "known_at": "2026-09-01"}
+{"id": "q127", "q": "What's my cat called?", "answers": [], "type": "belief", "split": "tune", "known_at": "2025-07-01"}

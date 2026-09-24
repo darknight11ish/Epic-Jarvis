@@ -1274,11 +1274,14 @@ def _stacks():
 
 def t_the_patch_is_last_and_builds():
     names = [str(p).replace("\\", "/").split("/")[-1] for p in _stack.order()]
-    # memory-erase.patch came after it (2026-09-24); its context is this
-    # patch's /api/memory/learning/auto block, so it must stay after.
-    check("auto-learn.patch comes right after chat-history, before memory-erase",
-          names.index("auto-learn.patch") == names.index("chat-history.patch") + 1
-          and names.index("memory-erase.patch") > names.index("auto-learn.patch"), names[-3:])
+    # Last when it was added; memory-erase.patch (its context is this
+    # patch's /api/memory/learning/auto block, so it must stay after) and
+    # past-recall.patch (memory wave 1, touches none of its lines) follow it.
+    i = names.index("auto-learn.patch")
+    check("auto-learn.patch comes straight after chat-history in apply-patches.ps1's "
+          "order, and only memory-erase.patch and past-recall.patch after it",
+          names[i - 1] == "chat-history.patch"
+          and names[i + 1:] == ["memory-erase.patch", "past-recall.patch"], names[-4:])
     for target, (text, log) in _stacks().items():
         check(f"{target}: the whole stack builds", text is not None, "\n".join(log[-2:]))
         check(f"{target}: every auto-learn hunk found its context (none made up)",
