@@ -164,6 +164,10 @@ wiki_update               = "ask"
 # it, reachable from this PC only (127.0.0.1). Turning a switch OFF never
 # asks. Must stay "ask": anything else and the switch refuses to turn on.
 big_model_enable          = "ask"
+# Turning background learning ON (Brain window or phone Mind). One card;
+# turning it off never asks. It must stay "ask": jarvis_learning_switch.py
+# refuses any other tier rather than let this line become your yes.
+learning_enable           = "ask"
 
 
 # ------------------------------------------------------------------------

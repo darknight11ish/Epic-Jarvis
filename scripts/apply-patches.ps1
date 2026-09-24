@@ -254,6 +254,13 @@ $PATCHES = @(
     # copied in; without it the routes answer 503 and the wiki keeps using
     # the second card only.
     'big-model.patch'
+    # Turning background learning ON raises an approval card (the owner's
+    # decision, 2026-09-24); OFF stays immediate. One line of memory-pane's
+    # /api/memory/learning route; its context is that route, so it goes after
+    # memory-pane - last, like every new patch. Needs jarvis_learning_switch.py
+    # copied in; without it the route answers 503 rather than switching on
+    # with no card.
+    'learning-asks.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -309,6 +316,7 @@ $SHIPPED = @(
     'jarvis_stopword.py'         # the "stop" word's numbers: jarvis_wakeword.spot_stop, to interrupt Jarvis while it talks
     'jarvis_local_http.py'       # HTTP to this PC's own services (Ollama, Joplin, the second card) never through a proxy
     'jarvis_child_env.py'        # what the second Ollama and colibri inherit: an allowlist, so no token or key goes with them
+    'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it
