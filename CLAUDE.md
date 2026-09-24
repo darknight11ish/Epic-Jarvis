@@ -118,6 +118,30 @@ The owner types the name by hand, the same as at a terminal
 (`ollama pull <ref>`) - see `BrainScreen.kt`'s `ModelsPlate` and
 `JarvisRuntime.installModel`.
 
+## Every new feature gets its own audit, without being asked
+
+Standing instruction from the owner, 2026-09-24. Whenever features are added
+to Jarvis, run a follow-up audit scoped to the new feature set as part of
+the same piece of work. Do not wait to be asked. It covers three things:
+
+1. **Bugs.** A bug audit of the new code. Findings are verified against the
+   source before they are reported, as everywhere else in this file.
+2. **Both apps.** Was the feature added to the desktop program AND the
+   Android app, wherever it makes sense? If one side is deliberately left
+   out, the reason must be written down in `docs/ARCHITECTURE.md` §8
+   ("One-sided on purpose"). `tools/check_parity.py` must be clean.
+3. **Fit with what is already there.** Does it tie in with the existing
+   features? That means:
+   - the same permission model and approval cards;
+   - the same settings patterns and the same wording;
+   - no clash with an existing feature, and no duplicate of one;
+   - `docs/JARVIS-API.md` and the other docs updated.
+
+"Features" means abilities the owner can see or use, not bug fixes or doc
+edits. When several features land together, one audit covers the batch.
+Report the result in plain words. Fix what it finds, or ask when the fix is
+the owner's call.
+
 ## Tell the owner when something is wrong
 
 Standing instruction from them: "Tell me plainly when something in the brief is
