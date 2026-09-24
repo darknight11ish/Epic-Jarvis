@@ -2789,11 +2789,10 @@ async function setAutoListening(enabled) {
     // `echoCancelling` (voice.rs ListenInfo): the microphone goes through
     // Windows' echo cancelling, so "stop" or "hey Jarvis" is heard over
     // Jarvis's own voice. An older build returns nothing - the plain line.
-    announce(
-      info && info.echoCancelling
-        ? 'Listening for "hey Jarvis". Say "stop" to interrupt Jarvis while it talks.'
-        : 'Listening for "hey Jarvis".',
-    );
+    // `microphone`: which one, by Windows' own name for it - both paths
+    // open the default microphone, and a PC with a headset and a webcam
+    // has more than one.
+    announce(listeningLine(info));
   } else {
     state.autoListening = false;
     dom.voiceAuto.setAttribute("aria-pressed", "false");
@@ -2806,6 +2805,26 @@ async function setAutoListening(enabled) {
     await invoke("stop_automatic_listening");
   }
 }
+
+/** What the listener says it is hearing through, in one line. */
+function listeningLine(info) {
+  const mic = info && typeof info.microphone === "string" && info.microphone.trim()
+    ? ` on ${info.microphone.trim()}`
+    : "";
+  return info && info.echoCancelling
+    ? `Listening for "hey Jarvis"${mic}. Say "stop" to interrupt Jarvis while it talks.`
+    : `Listening for "hey Jarvis"${mic}.`;
+}
+
+/** The listener changed how it hears while still on (voice.rs
+ *  VOICE_LISTENING): the echo-cancelled microphone stopped and it carries
+ *  on through the ordinary one. Said, so the owner is not left expecting
+ *  "stop" to work over Jarvis's voice when it no longer can. */
+listen("voice-listening", (event) => {
+  const info = event && event.payload;
+  if (!info || !state.autoListening) return;
+  announce(info.note ? `${info.note} ${listeningLine(info)}` : listeningLine(info));
+});
 
 /** One "hey Jarvis" utterance the listener cut and sent on its own - there
  *  is no command call waiting on this the way `stop_voice_capture` returns

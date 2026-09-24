@@ -31,6 +31,25 @@
 //! capture exactly as before. So this can only ever add echo cancelling,
 //! never take the old path away.
 //!
+//! WHICH MICROPHONE. The default microphone - Windows' "Default Device"
+//! (`eConsole`), the same one the ordinary capture opens through cpal - not
+//! the "Default Communication Device". It used to open the communications
+//! one, so the two paths could listen to two different microphones on a PC
+//! with a headset set up for calls. Echo cancelling comes from the stream's
+//! CATEGORY (communications), not from which default the device is; when
+//! Windows does not report it on for this device the ordinary capture is
+//! used, as before.
+//!
+//! DUCKING. Windows turns other sounds down by default while a
+//! communications stream is open ("Communications activity" in the Sound
+//! settings) - which would have turned Jarvis's own voice down every time
+//! listening started. The stream opts out (`SetDuckingPreference(TRUE)`),
+//! best effort: a Windows that refuses it only logs.
+//!
+//! WHEN IT FAILS LATER. An error after the stream started (the microphone
+//! unplugged, the device invalidated) is sent on `died`, and voice.rs falls
+//! back to the ordinary capture instead of carrying on deaf.
+//!
 //! NOT VERIFIED ON WINDOWS. It compiles against the Windows target from the
 //! container (`cargo check --target x86_64-pc-windows-msvc`); it has not been
 //! run on a Windows machine. Every failure falls back to the old capture.
@@ -43,15 +62,17 @@ pub(crate) struct Opened {
     pub spec: hound::WavSpec,
 }
 
-/// Pumps the default communications microphone, echo-cancelled, into
-/// `samples` until `stop` fires. Reports on `ready` exactly once: the format
-/// when the stream is open AND Windows says echo cancelling is on, or why
-/// not (and then returns without capturing).
+/// Pumps the default microphone, echo-cancelled, into `samples` until
+/// `stop` fires. Reports on `ready` exactly once: the format when the stream
+/// is open AND Windows says echo cancelling is on, or why not (and then
+/// returns without capturing). A failure AFTER that - the stream stopping
+/// under it - is sent on `died`, so the listener does not carry on deaf.
 #[cfg(windows)]
 pub(crate) fn run(
     samples: Arc<Mutex<Vec<i16>>>,
     ready: mpsc::Sender<Result<Opened, String>>,
     stop: mpsc::Receiver<()>,
+    died: mpsc::Sender<String>,
 ) {
     // SAFETY: every call below is a plain COM call on interfaces this
     // function created and holds for its whole life; the one raw buffer
@@ -59,8 +80,7 @@ pub(crate) fn run(
     // released before the next call.
     let outcome = unsafe { imp::capture(&samples, &ready, &stop) };
     if let Err(e) = outcome {
-        // Harmless when ready was already sent: the receiver only reads once.
-        let _ = ready.send(Err(e));
+        report_failure(&ready, &died, e);
     }
 }
 
@@ -69,8 +89,22 @@ pub(crate) fn run(
     _samples: Arc<Mutex<Vec<i16>>>,
     ready: mpsc::Sender<Result<Opened, String>>,
     _stop: mpsc::Receiver<()>,
+    died: mpsc::Sender<String>,
 ) {
-    let _ = ready.send(Err("echo cancelling is Windows-only".to_string()));
+    report_failure(&ready, &died, "echo cancelling is Windows-only".to_string());
+}
+
+/// A failure, to whoever is still listening for it: `ready`'s receiver
+/// reads only once, so after the stream started this is harmless there,
+/// and `died` is the one that hears it; before the stream started, `died`'s
+/// receiver is already gone and `ready` is the one.
+pub(crate) fn report_failure(
+    ready: &mpsc::Sender<Result<Opened, String>>,
+    died: &mpsc::Sender<String>,
+    why: String,
+) {
+    let _ = ready.send(Err(why.clone()));
+    let _ = died.send(why);
 }
 
 /// Converts one captured packet to i16, mono or not (kept interleaved, as the
@@ -118,12 +152,13 @@ mod imp {
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+    use windows::core::Interface;
     use windows::Win32::Media::Audio::{
-        eCapture, eCommunications, AudioCategory_Communications, AudioClientProperties,
-        IAudioCaptureClient, IAudioClient2, IAudioEffectsManager, IMMDeviceEnumerator,
-        MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMOPTIONS_NONE, AUDIO_EFFECT, AUDIO_EFFECT_STATE_ON, WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE,
+        eCapture, eConsole, AudioCategory_Communications, AudioClientProperties,
+        IAudioCaptureClient, IAudioClient2, IAudioEffectsManager, IAudioSessionControl,
+        IAudioSessionControl2, IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT,
+        AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMOPTIONS_NONE, AUDIO_EFFECT, AUDIO_EFFECT_STATE_ON,
+        WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
     };
     use windows::Win32::Media::KernelStreaming::{
         AUDIO_EFFECT_TYPE_ACOUSTIC_ECHO_CANCELLATION, WAVE_FORMAT_EXTENSIBLE,
@@ -166,6 +201,20 @@ mod imp {
         on
     }
 
+    /// Asks Windows not to turn other sounds - Jarvis's own voice among
+    /// them - down while this communications stream is open. Best effort.
+    unsafe fn opt_out_of_ducking(client: &IAudioClient2) -> Result<(), String> {
+        let session: IAudioSessionControl = client
+            .GetService()
+            .map_err(err("could not reach the audio session"))?;
+        let session: IAudioSessionControl2 = session
+            .cast()
+            .map_err(err("this Windows has no ducking preference"))?;
+        session
+            .SetDuckingPreference(true)
+            .map_err(err("Windows refused the ducking opt-out"))
+    }
+
     /// A WASAPI error, in words, prefixed with what was being tried.
     fn err(what: &'static str) -> impl Fn(windows::core::Error) -> String {
         move |e| format!("{what}: {e}")
@@ -184,9 +233,12 @@ mod imp {
         let enumerator: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
                 .map_err(err("could not list the microphones"))?;
+        // eConsole: the same default microphone cpal opens for the ordinary
+        // capture (cpal's wasapi default_input_device), so both paths hear
+        // the same one. See the module doc, "WHICH MICROPHONE".
         let device = enumerator
-            .GetDefaultAudioEndpoint(eCapture, eCommunications)
-            .map_err(err("no communications microphone"))?;
+            .GetDefaultAudioEndpoint(eCapture, eConsole)
+            .map_err(err("no microphone"))?;
         let client: IAudioClient2 = device
             .Activate(CLSCTX_ALL, None)
             .map_err(err("could not open the microphone"))?;
@@ -225,6 +277,11 @@ mod imp {
 
         if !echo_cancelling_on(&client) {
             return Err("Windows does not report echo cancelling on this microphone".to_string());
+        }
+        if let Err(why) = opt_out_of_ducking(&client) {
+            crate::logfile::log(&format!(
+                "[voice] other sounds may be turned down while listening: {why}"
+            ));
         }
         let capture: IAudioCaptureClient = client
             .GetService()
@@ -286,6 +343,26 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::to_i16;
+
+    /// A failure before the stream started reaches `ready`; one after it
+    /// (ready already read, as start_echo_cancelled does) reaches `died`.
+    #[test]
+    fn a_failure_reaches_whoever_is_still_listening() {
+        use super::report_failure;
+        use std::sync::mpsc;
+
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (died_tx, died_rx) = mpsc::channel::<String>();
+        drop(died_rx); // before start: nobody is listening on `died` yet
+        report_failure(&ready_tx, &died_tx, "no microphone".to_string());
+        assert!(matches!(ready_rx.try_recv(), Ok(Err(w)) if w == "no microphone"));
+
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (died_tx, died_rx) = mpsc::channel::<String>();
+        drop(ready_rx); // after start: `ready` was read once and dropped
+        report_failure(&ready_tx, &died_tx, "the microphone stopped".to_string());
+        assert_eq!(died_rx.try_recv().as_deref(), Ok("the microphone stopped"));
+    }
 
     #[test]
     fn packets_convert_like_the_cpal_path() {

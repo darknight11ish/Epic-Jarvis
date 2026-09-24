@@ -580,7 +580,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "start_automatic_listening":
             window.__voiceCalls.push("auto-start");
             if (window.__autoListenFails) throw new Error(window.__autoListenFails);
-            return null;
+            // voice.rs ListenInfo, when a scenario sets it; an older build's
+            // nothing otherwise.
+            return window.__listenInfo || null;
           case "stop_automatic_listening":
             window.__voiceCalls.push("auto-stop");
             return null;

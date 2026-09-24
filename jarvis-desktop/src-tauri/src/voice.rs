@@ -131,7 +131,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::{jarvis_base, jarvis_client, jarvis_headers};
-use crate::events::{VOICE_HEARD, VOICE_SPEECH_STARTED};
+use crate::events::{VOICE_HEARD, VOICE_LISTENING, VOICE_SPEECH_STARTED};
 
 /// Total round-trip budget for one utterance: speaker verification plus a
 /// whole-clip transcription is not instant, but it is also not a chat
@@ -981,13 +981,96 @@ fn busy_error(auto: bool, manual: bool) -> Option<String> {
     None
 }
 
-/// What `start_automatic_listening` tells the page.
+/// What `start_automatic_listening` tells the page, and what
+/// `VOICE_LISTENING` tells it when that changes while listening.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListenInfo {
     /// The microphone is open through Windows' echo cancelling, so "stop"
     /// and "hey Jarvis" can be heard over Jarvis's own voice.
     pub echo_cancelling: bool,
+    /// Windows' name for the microphone being listened to, when it gave
+    /// one - both paths open the default microphone (aec.rs, "WHICH
+    /// MICROPHONE"), so the page can say which one that is.
+    pub microphone: Option<String>,
+    /// Something to say about a change, in words; `None` when starting.
+    pub note: Option<String>,
+}
+
+/// Windows' name for the default microphone - the one both the ordinary
+/// capture (cpal) and the echo-cancelled one (aec.rs) open.
+fn default_microphone_name() -> Option<String> {
+    cpal::default_host()
+        .default_input_device()
+        .and_then(|d| d.name().ok())
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+}
+
+/// How the listening loop ended.
+#[derive(Debug, PartialEq)]
+pub(crate) enum VadEnd {
+    /// Told to stop, or its stop channel went away.
+    Stopped,
+    /// Refused to send (see [`wake_audio_refusal`]); listening is already
+    /// stopped and the page told.
+    Refused,
+    /// The echo-cancelled microphone stopped under it, for this reason.
+    MicFailed(String),
+}
+
+/// Whether the microphone feeding the loop has died: a message on `died`,
+/// or `died` gone without one (its thread ended - it only ends on its own
+/// when something went wrong, since the loop stops it, not the other way).
+pub(crate) fn mic_died(died: Option<&mpsc::Receiver<String>>) -> Option<String> {
+    match died?.try_recv() {
+        Ok(why) => Some(why),
+        Err(mpsc::TryRecvError::Empty) => None,
+        Err(mpsc::TryRecvError::Disconnected) => {
+            Some("the echo-cancelled microphone stopped without saying why".to_string())
+        }
+    }
+}
+
+/// The echo-cancelled microphone stopped while listening: carry on through
+/// the ordinary one, on the same stop channel, and tell the page - or, if
+/// that cannot be opened either, stop listening and say why. Never carries
+/// on deaf while the page still says "listening".
+fn continue_without_echo_cancelling(
+    app: &AppHandle,
+    stop_rx: &mpsc::Receiver<()>,
+    use_turn: bool,
+    why: String,
+) {
+    crate::logfile::log(&format!(
+        "[voice] the echo-cancelled microphone stopped ({why}); carrying on with the ordinary one"
+    ));
+    let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+    match open_input_stream(Arc::clone(&samples)) {
+        Ok((spec, stream)) => {
+            let _ = app.emit(
+                VOICE_LISTENING,
+                ListenInfo {
+                    echo_cancelling: false,
+                    microphone: default_microphone_name(),
+                    note: Some(
+                        "Echo cancelling stopped working, so Jarvis is listening through the \
+                         ordinary microphone now. \"Stop\" may not be heard while Jarvis talks."
+                            .to_string(),
+                    ),
+                },
+            );
+            let _ = run_vad_loop(app, &samples, spec, stop_rx, use_turn, None);
+            drop(stream); // stops the microphone
+        }
+        Err(e) => stop_listening_because(
+            app,
+            format!(
+                "The microphone stopped ({why}), and it could not be opened again ({e}). \
+                 Listening for \"hey Jarvis\" is off."
+            ),
+        ),
+    }
 }
 
 /// Opens the microphone through Windows' echo cancelling (aec.rs) and runs
@@ -1001,8 +1084,10 @@ fn start_echo_cancelled(
 ) -> Option<AutoListenHandle> {
     let (ready_tx, ready_rx) = mpsc::channel();
     let (mic_stop_tx, mic_stop_rx) = mpsc::channel();
+    let (died_tx, died_rx) = mpsc::channel();
     let mic_samples = Arc::clone(samples);
-    let mic = std::thread::spawn(move || crate::aec::run(mic_samples, ready_tx, mic_stop_rx));
+    let mic =
+        std::thread::spawn(move || crate::aec::run(mic_samples, ready_tx, mic_stop_rx, died_tx));
     match ready_rx.recv_timeout(STREAM_READY_TIMEOUT) {
         Ok(Ok(opened)) => {
             let (stop_tx, stop_rx) = mpsc::channel();
@@ -1011,11 +1096,23 @@ fn start_echo_cancelled(
             // The microphone has its own thread (it must be drained every
             // few milliseconds, which the listener - blocking on a POST -
             // cannot promise); the listener runs here, and stopping it
-            // stops the microphone.
+            // stops the microphone. If the microphone's thread fails first,
+            // the listener hears it (`died`) and carries on through the
+            // ordinary microphone rather than listening to nothing.
             let join = std::thread::spawn(move || {
-                run_vad_loop(&app, &vad_samples, opened.spec, &stop_rx, use_turn);
+                let end = run_vad_loop(
+                    &app,
+                    &vad_samples,
+                    opened.spec,
+                    &stop_rx,
+                    use_turn,
+                    Some(&died_rx),
+                );
                 let _ = mic_stop_tx.send(());
                 let _ = mic.join();
+                if let VadEnd::MicFailed(why) = end {
+                    continue_without_echo_cancelling(&app, &stop_rx, use_turn, why);
+                }
             });
             Some(AutoListenHandle { stop_tx, join })
         }
@@ -1061,10 +1158,13 @@ pub async fn start_automatic_listening(
     }
 
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+    let microphone = default_microphone_name();
     if let Some(handle) = start_echo_cancelled(&app, &samples, use_turn) {
         *guard = Some(handle);
         return Ok(ListenInfo {
             echo_cancelling: true,
+            microphone,
+            note: None,
         });
     }
     let (ready_tx, ready_rx) = mpsc::channel();
@@ -1074,7 +1174,9 @@ pub async fn start_automatic_listening(
         Arc::clone(&samples),
         ready_tx,
         stop_rx,
-        move |samples, spec, stop_rx| run_vad_loop(&app, samples, spec, stop_rx, use_turn),
+        move |samples, spec, stop_rx| {
+            let _ = run_vad_loop(&app, samples, spec, stop_rx, use_turn, None);
+        },
     );
 
     match wait_for_ready(ready_rx, stop_tx.clone()) {
@@ -1082,6 +1184,8 @@ pub async fn start_automatic_listening(
             *guard = Some(AutoListenHandle { stop_tx, join });
             Ok(ListenInfo {
                 echo_cancelling: false,
+                microphone,
+                note: None,
             })
         }
         Err(reason) => {
@@ -1094,14 +1198,17 @@ pub async fn start_automatic_listening(
 /// The trigger's state machine. Runs on the dedicated capture thread - NOT
 /// the realtime audio callback, which only ever appends samples - so
 /// blocking here on `tauri::async_runtime::block_on` to post a finished
-/// utterance is safe. Returns when `stop_rx` fires or disconnects.
+/// utterance is safe. Returns when `stop_rx` fires or disconnects, when a
+/// send is refused, or - with `died` given (the echo-cancelled microphone,
+/// which runs on a thread of its own) - when that microphone stops.
 fn run_vad_loop(
     app: &AppHandle,
     samples: &Arc<Mutex<Vec<i16>>>,
     spec: hound::WavSpec,
     stop_rx: &mpsc::Receiver<()>,
     mut use_turn: bool,
-) {
+    died: Option<&mpsc::Receiver<String>>,
+) -> VadEnd {
     let samples_per_ms = (spec.sample_rate as u128 * spec.channels as u128) / 1000;
     let ms_to_samples = |d: Duration| (d.as_millis() * samples_per_ms) as usize;
     let preroll = ms_to_samples(VAD_PREROLL);
@@ -1114,9 +1221,14 @@ fn run_vad_loop(
 
     loop {
         match stop_rx.recv_timeout(VAD_POLL_INTERVAL) {
-            Ok(()) => return,
-            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            Ok(()) => return VadEnd::Stopped,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return VadEnd::Stopped,
             Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        // The echo-cancelled microphone's thread failed: nothing more will
+        // arrive in `samples`, so listening on would be listening to nothing.
+        if let Some(why) = mic_died(died) {
+            return VadEnd::MicFailed(why);
         }
 
         // Recovered, not bailed on. The old comment here said a poisoned lock
@@ -1194,7 +1306,7 @@ fn run_vad_loop(
                             if let Some(why) = wake_audio_refusal(&base) {
                                 drop(buf);
                                 stop_listening_because(app, why);
-                                return;
+                                return VadEnd::Refused;
                             }
                             *asked = true;
                             analysed_to = Some(buf.len());
@@ -1235,7 +1347,7 @@ fn run_vad_loop(
                     if let Some(why) = wake_audio_refusal(&base) {
                         drop(buf);
                         stop_listening_because(app, why);
-                        return;
+                        return VadEnd::Refused;
                     }
                     let clip: Vec<i16> = buf[*started_at_index..buf.len()].to_vec();
                     // Reset for the next utterance. Everything captured
@@ -1381,6 +1493,26 @@ mod wake_tests {
         assert!(!reply.available);
         assert_eq!(reply.reason, "why");
         assert!(!reply.wake_heard && !reply.is_owner && reply.text.is_empty());
+    }
+
+    /// T9: the echo-cancelled microphone's thread failing is seen by the
+    /// listener, not ignored while it listens to nothing.
+    #[test]
+    fn a_dead_echo_cancelled_microphone_is_noticed() {
+        assert_eq!(mic_died(None), None, "the ordinary path has no such thread");
+        let (tx, rx) = mpsc::channel::<String>();
+        assert_eq!(mic_died(Some(&rx)), None, "alive and quiet");
+        tx.send("the microphone stopped: device invalidated".to_string())
+            .unwrap();
+        assert_eq!(
+            mic_died(Some(&rx)).as_deref(),
+            Some("the microphone stopped: device invalidated")
+        );
+        drop(tx);
+        assert!(
+            mic_died(Some(&rx)).is_some(),
+            "its thread ended without a word"
+        );
     }
 
     #[test]

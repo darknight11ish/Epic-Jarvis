@@ -132,6 +132,10 @@ pub mod events {
     /// [`crate::voice::summon_push_to_talk`] (the HUD's mic button): put
     /// focus on the mic and say how to talk. Starts no recording.
     pub const VOICE_SUMMON: &str = "voice-summon";
+    /// Payload: [`crate::voice::ListenInfo`]. "Hey Jarvis" listening changed
+    /// how it hears while still on: the echo-cancelled microphone stopped
+    /// and it carries on through the ordinary one (`note` says so).
+    pub const VOICE_LISTENING: &str = "voice-listening";
 
     // ---- the fanned-out event stream -----------------------------------
     //

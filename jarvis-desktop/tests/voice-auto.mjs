@@ -160,7 +160,7 @@ await check("CONTROL (Rust): every wake-word clip and turn check is re-checked f
     assert.ok(check > -1 && read > -1 && read < check, `${send} is not preceded by its own loopback check`);
     // Nothing between the check and the send may read the address again.
     assert.doesNotMatch(before.slice(check), /jarvis_base\(/, `${send} re-reads the address after the check`);
-    assert.match(before.slice(check), /stop_listening_because\(app, why\);\s*return;/);
+    assert.match(before.slice(check), /stop_listening_because\(app, why\);\s*return VadEnd::Refused;/);
   }
   assert.match(loop, /ask_turn\(\s*app, &base,/);
   assert.match(loop, /post_utterance\(\s*&app,\s*&base,/);
@@ -196,6 +196,49 @@ await check("CONTROL (Rust): changing the server address in Settings stops \"hey
   // And the stop reaches the quickbar in the shape it already acts on.
   const stopFn = fnBody(rustSrc("voice.rs"), "pub(crate) fn stop_listening_because(");
   assert.match(stopFn, /app\.emit\(VOICE_HEARD, HeardReply::unavailable\(why\)\)/);
+});
+
+// T9 (audit 3): which microphone is listened to, and what happens when the
+// echo-cancelled one dies while listening.
+const spoken = (page) => page.evaluate(() =>
+  [...document.querySelectorAll("[aria-live]")].map((n) => n.textContent).join(" | "));
+
+await check("the listening line names the microphone, and says when echo cancelling stops", async () => {
+  const page = await quickbar({});
+  await page.evaluate(() => {
+    window.__listenInfo = { echoCancelling: true, microphone: "Microphone (USB Headset)", note: null };
+  });
+  await page.locator("#voice-auto").click();
+  await page.waitForTimeout(200);
+  const first = await spoken(page);
+  await page.evaluate(() => window.__emit("voice-listening", {
+    echoCancelling: false, microphone: "Microphone (USB Headset)",
+    note: "Echo cancelling stopped working, so Jarvis is listening through the ordinary microphone now.",
+  }));
+  await page.waitForTimeout(200);
+  const after = await spoken(page);
+  const pressed = await page.locator("#voice-auto").getAttribute("aria-pressed");
+  await page.close();
+  assert.match(first, /Listening for "hey Jarvis" on Microphone \(USB Headset\)\. Say "stop"/);
+  assert.match(after, /Echo cancelling stopped working/);
+  assert.match(after, /Listening for "hey Jarvis" on Microphone \(USB Headset\)\.(?! Say)/);
+  assert.equal(pressed, "true", "still listening - through the ordinary microphone");
+});
+
+await check("CONTROL (Rust): a failed echo-cancelled microphone is noticed, and listening falls back or stops", async () => {
+  const voice = rustSrc("voice.rs");
+  const loop = fnBody(voice, "fn run_vad_loop(");
+  assert.match(loop, /if let Some\(why\) = mic_died\(died\) \{\s*return VadEnd::MicFailed\(why\);/);
+  const echo = fnBody(voice, "fn start_echo_cancelled(");
+  assert.match(echo, /Some\(&died_rx\)/, "the echo path does not hand the loop its `died` channel");
+  assert.match(echo, /if let VadEnd::MicFailed\(why\) = end \{\s*continue_without_echo_cancelling\(/);
+  const fallback = fnBody(voice, "fn continue_without_echo_cancelling(");
+  assert.match(fallback, /open_input_stream\(/);
+  assert.match(fallback, /Err\(e\) => stop_listening_because\(/, "no visible stop when the fallback fails");
+  const aec = rustSrc("aec.rs");
+  assert.match(aec, /GetDefaultAudioEndpoint\(eCapture, eConsole\)/, "not the same microphone as cpal's");
+  assert.match(aec, /SetDuckingPreference\(true\)/);
+  assert.match(aec, /report_failure\(&ready, &died, e\)/);
 });
 
 await check("CONTROL: no page error from any of the above", async () => {
