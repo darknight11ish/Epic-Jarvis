@@ -150,6 +150,12 @@ In order, it:
 It is safe to run again - after a `git pull`, run the same line. It works out
 what is already done and does the rest.
 
+**Update the desktop app at the same time** (build and install it again,
+Part 2). The first time the patched backend starts, it moves its pairing
+token out of the old plain-text file into Windows Credential Manager and
+deletes the file. A desktop app built before 2026-09-24 only knows that old
+file, so it would be locked out of its own backend until it is updated.
+
 **If you ran this script before, it will recognise the older patches and
 replace them.** Some patches were changed after they were first published.
 The script keeps every earlier version (in `backend\patch-history`), finds
@@ -223,8 +229,11 @@ Read what it prints at the top. Three lines matter:
 - A `token` line saying `in Windows Credential Manager` - the pairing token
   was made and saved (step 1.5 applied the patches that do it). If it says
   `NOT SAVED` or `STILL IN THE OLD PLAIN-TEXT FILE` instead, the lines under
-  it say why. No token line at all means `jarvis_token_store.py` is missing
-  from the backend folder; run step 1.5 again.
+  it say why. If it says `token NONE - jarvis_token_store.py is missing from
+  this folder`, that file was not copied in; run step 1.5 again. No token
+  line at all - or one that only shows a file path ending in
+  `.openjarvis\token` - means `token-store.patch` is not applied yet; run
+  step 1.5 again and read what it says about that patch.
 - `routing off - jarvis_router.py / jarvis_recall.py not found` — **this
   message names the wrong file.** It prints both names whichever is missing.
   Check which one you actually lack.
@@ -561,12 +570,18 @@ with Advanced Security → Inbound Rules** (search the Start menu for
 
 If you start the backend yourself rather than letting the desktop supervise
 it, the desktop's setting does not apply — set the environment variables by
-hand instead, in the same window, from your backend folder (one line; put in
-your own long random token and your own `100.x` address):
+hand instead. One line (put in your own `100.x` address, and change the path
+if your backend folder is elsewhere):
 
 ```powershell
-$env:HUD_TOKEN = "<a long random string you invent>"; $env:JARVIS_HUD_BIND = "<your 100.x address>"; $env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"; py -3 jarvis_hud.py
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:JARVIS_HUD_BIND = "<your 100.x address>"; $env:JARVIS_HUD_ORIGINS = "http://tauri.localhost"; py -3 jarvis_hud.py
 ```
+
+**Do not set `HUD_TOKEN` here.** This page used to tell you to invent one,
+and that was wrong: a `HUD_TOKEN` you set wins over the token saved in
+Credential Manager, and the desktop app and the phone only know the saved
+one - so both would be locked out. Leave it unset and the backend uses the
+saved token.
 
 `JARVIS_HUD_ORIGINS` is the one the desktop also sets for a backend it starts
 itself. Without it the server refuses every request from the desktop's HUD
@@ -602,8 +617,11 @@ If an older backend left the token in the plain file
 moves it into Credential Manager, checks it arrived, and deletes the file - so
 the phone stays paired. The banner says `moved out of the plain-text file`.
 
-Setting `HUD_TOKEN` yourself still wins and nothing is saved in that case —
-useful if you would rather choose it. To get a new token (which is also how
+Setting `HUD_TOKEN` yourself still wins over the saved token, and nothing new
+is made in that case (an old token file is still moved into Credential
+Manager, as above). Only do it if you want to choose the token yourself -
+and then type that same token into the desktop app (**Settings →
+Connection**) and into the phone, or neither can connect. To get a new token (which is also how
 you unpair a device you no longer have), run
 `py -3 jarvis_token_store.py forget` in the backend folder and start Jarvis
 again; every device then has to pair again.
@@ -611,7 +629,8 @@ again; every device then has to pair again.
 If the banner says `NOT SAVED`, Credential Manager refused the token: Jarvis
 uses it for that run only and writes nothing to disk, so the phone would need
 pairing again after every restart. The lines under it give the Windows error.
-Setting `HUD_TOKEN` yourself avoids it.
+Setting `HUD_TOKEN` yourself avoids it (with the same catch as above: type it
+into both apps too).
 
 ### 3.3 Pair
 
@@ -651,8 +670,11 @@ absent private network. Check the bind first — it is the
 more likely cause.
 
 *"The desktop refused that token"* can also mean the **server has no token at
-all**: with `HUD_TOKEN` unset the server accepts only loopback callers, so your
-phone gets a 401 that looks like a token mismatch.
+all**: when its banner says `token NONE`, the server accepts only callers on
+the PC itself, so your phone gets a 401 that looks like a token mismatch.
+(Normally the backend makes and saves a token for itself; `NONE` almost
+always means `jarvis_token_store.py` is missing - see step 1.8. The lines
+under it say why.)
 
 ---
 
@@ -683,6 +705,28 @@ Open **Settings → Startup and logs → Open the log folder**. Two files:
 
 Both roll over at 4 MB, keeping one previous copy as `.1`. Neither is
 redacted, so read before you share.
+
+**"Cannot reach" errors while everything is running: check for a proxy.**
+A proxy is a go-between server some workplaces, VPNs or "privacy" apps set
+up for internet traffic. Windows keeps two separate proxy settings, and a
+third can come from environment variables:
+
+- **Settings → Network & internet → Proxy.** The one browsers and most apps
+  use. For Jarvis you want "Automatically detect settings" and nothing under
+  "Manual proxy setup", or, if a proxy is needed there, the box
+  "Don't use the proxy server for local (intranet) addresses" ticked.
+- **The WinHTTP proxy**, used by some programs and services, and the
+  `HTTP_PROXY` / `HTTPS_PROXY` environment variables, which Python reads.
+  This one line shows both (it changes nothing):
+
+```powershell
+netsh winhttp show proxy; Get-ChildItem Env: | Where-Object { $_.Name -like '*proxy*' } | Format-Table Name, Value
+```
+
+`Direct access (no proxy server).` and no rows under it mean there is no
+proxy there. Jarvis's calls to programs on this PC (the backend, Ollama) are
+being changed to never use a proxy at all; until that is done, a proxy set in
+any of these places can get between them.
 
 **"Jarvis got slow."** Open the Brain → Models. If the model has fallen off
 the graphics card onto the CPU, there is now a yellow line at the top of that
@@ -726,5 +770,4 @@ rather than your fault.
     Credential Manager for either token, just as it could read the old
     file. What changes is that neither sits on disk as readable text - in a
     backup, a copied or synced folder, or a file search.
-    On Linux and macOS the backend also sets the file to owner-only.
 - **Do not run the OpenJarvis copy you downloaded.** It writes into the same `%USERPROFILE%\.openjarvis\` folder as Jarvis, including a `documents` table in `memory.db`; with `documents-owned.patch` applied Jarvis ignores that table, but nothing stops OpenJarvis changing the folder.

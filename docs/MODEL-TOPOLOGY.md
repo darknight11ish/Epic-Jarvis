@@ -11,13 +11,26 @@ Read this if you are about to change models, change context length, or wonder
 why a long conversation gets strange.
 
 **Also read [HARDWARE-PROFILES.md](HARDWARE-PROFILES.md)** (2026-09-24, a
-design, calculated not measured). It generalises this page to any 8 GB card
-and up to two cards, and found that parts of this page are out of date
-against current Ollama and llama.cpp source: llama.cpp now keeps 1 GiB of
-each card free (so the 16K budget below is probably ~0.6 GiB over),
-"flash attention off" with `q8_0` now makes the model fail to load rather
-than spill, and Ollama's own estimate now over-counts a `q8_0` cache rather
-than under-counting it. Its section 3 lists each item with the evidence.
+design, calculated not measured). **Where the two disagree, it has the
+current numbers.** It generalises this page to any 8 GB card and up to two
+cards, and found that parts of this page are out of date against current
+Ollama and llama.cpp source:
+
+- llama.cpp now keeps an empty gap on each card - **1 GB by default**. The
+  owner has decided on **0.75 GB** (HARDWARE-PROFILES section 5, decision 1),
+  but nothing applies that yet, so today the default 1 GB is in force. With
+  1 GB, the 16K budget below is calculated to be ~0.6 GiB over; at 0.75 GB
+  the 8 GB card holds about 11,000 tokens of chat (calculated, not measured).
+- `q8_0` with flash attention: llama.cpp now switches flash attention ON by
+  itself for a `q8_0` cache when it is on "auto", and refuses to load the
+  model when flash attention is forced off. The "silently ignored, then
+  spills" failure this page used to warn about no longer happens. The
+  verify step below has been updated to match.
+- Ollama's own estimate now over-counts a `q8_0` cache rather than
+  under-counting it.
+
+Its section 3 lists each item with the evidence; section 2.2 cites the
+llama.cpp lines for the flash-attention change.
 
 ---
 
@@ -94,7 +107,8 @@ which is Jetson Xavier. It passes.
 
 This matters because llama.cpp reaches the **`q8_0` KV cache** only through the
 fused-attention path. With it, an 8B goes from 8K to 16–20K of context on this
-card. Without it, everything below reverts to the f16 columns.
+card (before the empty gap described at the top; HARDWARE-PROFILES has the
+current figure). Without it, a `q8_0` cache does not load at all.
 
 ---
 
@@ -118,24 +132,36 @@ default is five minutes. With one resident model there is nothing an idle timer
 can make room *for*; its only effect is a ~6 second stall on the first word
 after you step away, which in the voice loop is the worst possible moment.
 
-Do **not** set `OLLAMA_FLASH_ATTENTION` — to `0` or to `1`. Auto is correct;
-forcing `1` removes llama.cpp's per-model fallback.
+Do **not** set `OLLAMA_FLASH_ATTENTION` — to `0` or to `1`. Auto is correct:
+with a `q8_0` cache, llama.cpp switches flash attention on by itself, and
+forcing `0` makes the model refuse to load.
 
 ## Then verify, before trusting any of it
 
+Send Jarvis one message, then run this one line in PowerShell. It only reads
+Ollama's log file (the same check as HARDWARE-PROFILES section 4.7):
+
 ```powershell
-$env:OLLAMA_DEBUG=1; ollama run jarvis-primary "hi"
+Select-String -Path "$env:LOCALAPPDATA\Ollama\server.log" -Pattern 'offloaded \d+/\d+ layers to GPU|flash_attn|starting llama-server' | Select-Object -Last 4 | ForEach-Object { $_.Line }
 ```
 
-Find the `llama-server` argv in the log and look for `--flash-attn`.
+What to look for:
 
-- Reads **auto** or **on** → you are running the configuration below.
-- Reads **off** → `q8_0` KV is being silently ignored, the KV term is 2.25 GiB
-  instead of 1.19 GiB, and `jarvis-primary` **spills into system RAM**, where
-  it runs at roughly a fifth of the speed and nothing tells you. Take the
-  fallback.
+- `enabling flash_attn since it is required for quantized V cache` → flash
+  attention is on and the `q8_0` cache is in use. This is the configuration
+  below.
+- `quantized V cache requires flash_attn to be enabled`, and the model does
+  not load → flash attention is forced off (usually `OLLAMA_FLASH_ATTENTION`
+  set to `0`). Remove that setting and restart Ollama; if it still fails,
+  take the fallback. This used to fail silently - the cache was ignored and
+  the model spilled into system memory - but current llama.cpp refuses
+  instead (HARDWARE-PROFILES section 2.2 has the source lines).
+- `offloaded 37/37 layers to GPU` → the whole model is on the card. A
+  smaller first number means part of it runs on the processor, about five
+  times slower, with no other warning. With llama.cpp's 1 GB default gap,
+  16K is calculated to do exactly that (HARDWARE-PROFILES section 3, item 1).
 
-**Fallback if it reads off:** `qwen2.5:7b` at `num_ctx 16384` on a plain f16
+**Fallback if the `q8_0` cache will not load:** `qwen2.5:7b` at `num_ctx 16384` on a plain f16
 cache — 5.85 GiB, no `q8_0` dependency. Qwen 2.5 7B has the cheapest KV cache
 of anything considered here, **56 KiB/token**, less than half of Llama 3.1 8B
 and less than a 3B, because it has only 4 KV heads across 28 layers. It is the
@@ -154,10 +180,18 @@ runtime  CUDA context ~330 MiB + compute buffer @ nb512     = 0.63 GiB
 ceiling  8 GiB card − ~1.1 GiB DWM and the Tauri shell       = 6.90 GiB
 ```
 
-`q8_0` is 34 bytes per 32 values — **1.0625** bytes per element, not 1.0. Worth
-knowing because Ollama's own pre-flight estimator rounds it to 1.0, so it
-under-counts a quantised cache by about 6%. On a 6.9 GiB ceiling at 16K that
-is ~70 MiB of optimism.
+**This ceiling is out of date.** It leaves out llama.cpp's empty gap on the
+card (1 GB by default; the owner's chosen 0.75 GB once applied) and the
+per-process cost HARDWARE-PROFILES counts. With those, the room on this card
+is 5.57 GiB at 1 GB, not 6.90, so 16K no longer fits. Use
+[HARDWARE-PROFILES.md](HARDWARE-PROFILES.md) sections 3 and 8.1 for the
+current room and context sizes; the arithmetic below is kept because the
+per-model figures in it still hold.
+
+`q8_0` is 34 bytes per 32 values — **1.0625** bytes per element, not 1.0.
+Ollama's own pre-flight estimator used to round it to 1.0, under-counting a
+quantised cache by about 6%. It no longer does: it now assumes `f16` and
+over-counts (HARDWARE-PROFILES section 3, item 4).
 
 ### `num_batch 512` is not a tuning preference
 

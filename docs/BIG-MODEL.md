@@ -179,10 +179,28 @@ C:\colibri\coli.cmd doctor --model D:\models\qwen36_i4_gs64
 
 ## Step 3 - tell Jarvis where everything is
 
-Open `jarvis-framework.toml` (in your Jarvis settings folder, usually
-`C:\Users\<you>\.openjarvis\`) in Notepad. Your copy was made before this
-feature, so the lines are not in it yet: add these at the end, with your real
-folders and drive letters.
+**First, find the right file.** Run `apply-patches.ps1` as usual (it copies
+`jarvis_big_model.py` in and applies `big-model.patch`). After the patches
+it prints the settings file it found, on a line naming `jarvis-framework.toml`
+("yours is kept, untouched: ..." or "... is now at ..."). That path is the
+file to edit. It is normally **beside `jarvis_hud.py` in your backend
+folder**; only if you once put one in `C:\Users\<you>\.openjarvis\` is it
+there. Open that file in Notepad.
+
+**Then look for a `[big_model]` line in it** (Ctrl+F in Notepad).
+
+- **If there is one**, fill it in - do NOT add a second one. A settings file
+  copied from this repository already has the section, with every setting
+  commented. A second `[big_model]` line breaks the whole file (the backend
+  prints `Cannot declare ('big_model',) twice`), and then EVERY setting in
+  it - not just these - falls back to its default, with only one warning
+  line in the backend's window to say so. Set `coli_path`,
+  and `wiki_model` / `deep_model` if you like; then, in the two
+  `[[big_model.models]]` blocks under it, remove the `#` at the start of
+  each line and put in your real folders.
+- **If there is none** (your file is older than this feature), add the
+  block below at the end of the file, with your real folders and drive
+  letters.
 
 **Use single quotes around Windows folders** (`'D:\models\x'`). In double
 quotes a backslash means something else, and the whole file then fails to
@@ -211,14 +229,19 @@ dir = 'E:\models\DeepSeek-V4-Flash'
 kind = "giant"
 ```
 
-And under `[autonomy.tiers]` (search for `wiki_update` and add the line
-under it):
+**Then the approval rule.** Search the file for `big_model_enable`. If it is
+there, leave it as it is (it should say `"ask"`). If it is missing, find the
+line `[autonomy.tiers]` and add this on the line right under it:
 
 ```toml
 big_model_enable          = "ask"
 ```
 
 It must be `"ask"`: anything else and the switches refuse to turn on at all.
+(If the line is missing, the backend treats it as `"ask"` anyway - unless
+you set `unknown_action_tier = "never"` under `[autonomy]` - so adding it is
+mostly for your own clarity - but never add it twice: a repeated line breaks
+the file the same way a repeated section does.)
 
 What the settings mean: `port` is where colibri listens (on this PC only; not
 11434 or 11435, which are the two Ollamas). `idle_minutes` is how long it
@@ -229,8 +252,10 @@ first giant one. The shipped settings file (`backend/rebuilt/jarvis-framework.to
 section 9c) has every setting with a comment, including `giant_ram_gb`,
 `deep_max_tokens`, `load_minutes` and `answer_minutes`.
 
-Then run `apply-patches.ps1` as usual (it copies `jarvis_big_model.py` in
-and applies `big-model.patch`) and restart Jarvis.
+Save the file and restart Jarvis. If the backend's window then prints a line
+starting `jarvis_framework:` saying the file `could not be parsed`, the file
+has a mistake (usually a repeated section or a folder in double quotes);
+until it is fixed, every setting is at its default.
 
 ---
 
@@ -306,8 +331,10 @@ questions can be waiting or running at once; they are answered one at a time.
 
 **Where the answers are kept:** `deep-questions.jsonl` in your Jarvis settings
 folder, on this PC - your own question and answer, like a chat you chose to
-keep. The last 100 are kept; older ones drop off. Delete the file to forget
-them all. Note the difference from chat: the apps keep chat history in memory
+keep. The last 100 are kept, or fewer when the answers are long: the file is
+held to 2 MB in total, and the oldest drop off first. To forget them all,
+delete the file **and restart Jarvis** - the questions asked since Jarvis
+last started are also held in its memory, and still show until then. Note the difference from chat: the apps keep chat history in memory
 only and never write it to disk. These are written to disk because an answer
 can take an hour and should survive a restart.
 

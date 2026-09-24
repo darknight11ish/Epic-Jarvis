@@ -313,21 +313,31 @@ are architectural rather than configuration:
 
 ## 8. The clients
 
-**Desktop** (`jarvis-desktop/`): Tauri 2, six windows, per-window ACL
-capabilities. The Rust commands are the real API — buttons are a courtesy, and
+**Desktop** (`jarvis-desktop/`): Tauri 2, seven windows (quickbar, widget,
+HUD, Brain, Faces, onboarding, Settings - one capability file each in
+`src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
 any window holding the capability can call them, so a check that lives only in
 the webview is not a check. `decide_approval` consults link staleness in Rust
 for exactly that reason.
 
-**Android** (`claude/android-apk-build-q435fi`): Kotlin, native, over
-Tailscale. It is a remote, not a second brain. It renders, it decides one
-thing at a time, it does not hold its own copy of state.
+**Android** (`jarvis-client/`): Kotlin, native, over Tailscale. It is a
+remote, not a second brain. It renders, it decides one thing at a time, it
+does not hold its own copy of state.
 
-`jarvis-android` is retired; capabilities port later.
+`jarvis-android/` is the older app, kept for reference only: it speaks a
+protocol the backend does not have, so it cannot talk to Jarvis. Its safe
+parts (the approval widget, a quick-link widget) are already in
+`jarvis-client`; see `CLAUDE.md` before copying anything else from it.
 
 ### Talking to the other branch — do this, it keeps going wrong
 
-The two clients are worked by two sessions that **cannot message each other**.
+**Now that both apps live in this one repository** (`jarvis-desktop/` and
+`jarvis-client/` on the same branch), the fetch commands below only matter
+for old work still sitting on the two former branches. The lesson does not
+expire: read the other side's code before claiming anything about it. The
+history is kept because it is why that rule exists.
+
+The two clients were worked by two sessions that **cannot message each other**.
 Communication is a committed document. That much was already understood. What
 was not: *each session only ever sees its own branch*, so a document written
 as a message sits unread on the branch of whoever wrote it, and **silence
@@ -361,7 +371,7 @@ git show origin/<other-branch>:docs/<the-doc>.md
 concluding a message went unanswered.** A reply you cannot see is not absence
 of a reply.
 
-Current cross-branch documents, both directions:
+The cross-branch documents from that time (all in `docs/` now):
 
 | on the desktop branch | on the client branch |
 |---|---|
@@ -393,6 +403,42 @@ owns the code do the diagnosing.** Fetching the other branch catches a stale
 file. It does nothing about a claim that was never verified — and confidence
 added in transit is indistinguishable, at the far end, from evidence.
 
+### One-sided on purpose
+
+The two apps are meant to do the same things. These are the exceptions, each
+with its reason, so a gap is never mistaken for an oversight (or an
+oversight for a decision). `tools/check_parity.py` checks the ones that are
+backend routes, in both directions; the rest are listed here only.
+
+**On the desktop, kept off the phone:**
+
+| what | why |
+|---|---|
+| The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
+| Rewording or forgetting a stored fact (`/api/memory/edit`, `/api/memory/forget`) | Deep memory editing. It stays on the desktop's Brain → Memory tab. |
+| Exporting all memory (`/api/memory/export`) | A copy of everything Jarvis knows does not belong on a phone that can be lost. |
+| Shutting the backend down (`/api/shutdown`) | The phone would then have nothing to reach and no way to undo it. |
+| Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
+| Fetching the look spec (`/api/visual-spec`) | The phone ships its own copy and checks it in a unit test (`SpecDriftTest`); `JARVIS-API.md` says the phone never fetches it. |
+| "Finished, or only paused?" (`/api/voice/turn`) | The phone runs the same Smart Turn model itself (`voice/SmartTurn.kt`), so its audio never leaves it just to ask. The desktop asks its own PC over loopback. |
+| Screen capture | Nothing earlier wrote a reason down; this one is written 2026-09-24 from the code. The phone attaches a picture through Android's photo picker (`MainActivity.kt`, `PickVisualMedia`), which already offers the phone's own screenshots - one picture, chosen by the owner. Capturing the screen live on Android needs a separate system permission every session and shows a "casting" icon, for no gain over the picker. |
+| Global hotkeys (`hotkeys.rs`) | Keyboard shortcuts for a PC. A phone has no equivalent. |
+| The tray icon (`tray.rs`) | Part of Windows' taskbar. |
+| Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
+| The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
+| **Update notice** | **Undecided - the owner's call.** The desktop checks GitHub for a newer version and says so in Settings (`update.rs`; it never installs on its own). The phone has no such notice: a new APK is published to the `client-latest` release and installed with adb. Whether the phone should say "a newer version exists" has not been decided. |
+
+**On the phone, kept off the desktop:**
+
+| what | why |
+|---|---|
+| The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
+
+**On the phone, NOT on purpose** (the desktop should get it, and nobody has
+built it): "Train my voice" (`/api/voice/enroll`). The PC's microphone has a
+voice print of its own on the backend, but with no training screen on the
+desktop it uses the phone's print (`backend/README.md`).
+
 ---
 
 ## 9. Where the backend lives
@@ -414,20 +460,24 @@ That asymmetry is worth stating once: **this repo is version-controlled and the
 thing it patches is not.** A patch here can always be recovered. The file it
 edits cannot.
 
-Eleven patches. They commute (five touch `jarvis_hud.py`, in separated
-regions), but `memory-safety` must land first: without it the first accepted
-proposal retires a roughly-matching unrelated fact, permanently, and `retire()`
-has no way back. `backend/README.md` has the table and a section per patch.
+Forty-five patches (counted in `scripts/apply-patches.ps1`'s list on
+2026-09-24), applied in that list's order. The order matters: many patches
+edit lines an earlier one wrote, and the list's comments say which. Above
+all, `memory-safety` must land first: without it the first accepted proposal
+retires a roughly-matching unrelated fact, permanently, and `retire()` has
+no way back. `backend/README.md` has the table and a section per patch.
 
-New capability that is a whole module — `jarvis_research.py` — ships as a
-file, not a patch, because there is nothing on the owner's machine to patch.
+New capability that is a whole module — `jarvis_research.py` and most of the
+newer ones, like `jarvis_second_card.py` and `jarvis_big_model.py` — ships
+as a file, not a patch, because there is nothing on the owner's machine to
+patch. `apply-patches.ps1` copies them in.
 
 ---
 
 ## 10. Things that do not exist
 
 Say so rather than designing around imagined code. This list was last checked
-against the repository on 2026-09-23; an item moves off it only when the file
+against the repository on 2026-09-24; an item moves off it only when the file
 that makes it true is named.
 
 **No longer missing** (this section used to list them, and was wrong once
@@ -469,8 +519,9 @@ they landed):
   Ollama runs on `127.0.0.1:11435`, pinned to that card by its id; chat,
   pictures, the learner and browser control reach it only through
   `lane_for()`, which is None - "do what you did before" - in every other
-  state. `GET`/`POST /api/second-card` (`second-card.patch`). Not measured on
-  real cards; the apps' screens for it are not built yet.
+  state. `GET`/`POST /api/second-card` (`second-card.patch`). Both apps have
+  its screen: the desktop's Settings ("Second graphics card", `settings.js`)
+  and the phone's Mind (`SecondCardPlate.kt`). Not measured on real cards.
   [`SECOND-CARD.md`](SECOND-CARD.md) is the owner's guide.
 
 - **The wiki builder** (added 2026-09-24). Documents the owner puts in the
@@ -502,9 +553,12 @@ they landed):
   switch was the approval; a question acts on nothing), answers kept in
   `deep-questions.jsonl` on the PC with their measured speed.
   `GET`/`POST /api/big-model`, `GET /api/deep`, `POST /api/deep/ask`
-  (`big-model.patch`). Not run against a real colibri or on the owner's PC;
-  none of colibri's speed claims checked there; the apps' screens for it are
-  not built yet. [`BIG-MODEL.md`](BIG-MODEL.md) is the owner's guide.
+  (`big-model.patch`). Both apps have its screens: the three switches in the
+  desktop's Settings ("Big model (slow)", `settings.js`) and the phone's Mind
+  (`BigModelPlate.kt`), and deep questions in the desktop's Brain → Memory
+  (`deep.js`) and the phone's Mind (`DeepQuestionsSection`, same file). Not
+  run against a real colibri or on the owner's PC; none of colibri's speed
+  claims checked there. [`BIG-MODEL.md`](BIG-MODEL.md) is the owner's guide.
 
 **Still missing:**
 
@@ -532,9 +586,10 @@ they landed):
   The fix is BUILT but off: the second card's "Pictures" switch sends a
   picture turn to `qwen2.5vl:7b` there (`jarvis_second_card.py`, below), and
   nothing changes until that card is installed and the switch approved. The
-  desktop's check does not know about it yet (it asks Ollama about the
-  everyday model only; `docs/JARVIS-API.md` section 12 says what to read
-  instead). Pictures never go to a cloud lane (`jarvis_router.choose()`
+  desktop's check knows about it: `vision.rs` reads `GET /api/second-card`
+  first, and says yes (naming that model) when the Pictures switch is on and
+  its model is there; otherwise it asks Ollama about the everyday model, as
+  before. Pictures never go to a cloud lane (`jarvis_router.choose()`
   keeps any turn with an image local, and the second card is on this PC).
 - **A reasoning trace.** Brain → Live shows each tool Jarvis starts and
   finishes (the `step` event, from `jarvis_agent.py`, only when tools are

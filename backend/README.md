@@ -202,7 +202,7 @@ broken. If you have an older copy of the script, this one line does the same
 job by hand (take everything off, then put everything on):
 
 ```powershell
-.\scripts\apply-patches.ps1 -Revert; .\scripts\apply-patches.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program" -Revert; powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 ```
 
 **If you ran this script before, it will recognise the older patches and
@@ -4156,7 +4156,7 @@ patch script. It applies `voice-enroll.patch` and copies in
 up any older copies first:
 
 ```powershell
-.\scripts\apply-patches.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 ```
 
 **4. Check the PC sees the model.** This prints the voice check's status.
@@ -4644,7 +4644,7 @@ in `jarvis_speech.py` and the new `jarvis_wakeword.py` (backing up older
 copies first):
 
 ```powershell
-.\scripts\apply-patches.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 ```
 
 **7. Check it works.** Jarvis speaks a sentence with its new voice, listens
@@ -4824,8 +4824,15 @@ settings folder (normally `C:\Users\pcadmin\.openjarvis\voice-models\turn`):
 $ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path (Join-Path $base 'voice-models') 'turn'; New-Item -ItemType Directory -Force -Path $d | Out-Null; $w = Join-Path ([IO.Path]::GetTempPath()) 'jarvis-pipecat.zip'; Write-Host 'Downloading Smart Turn (12 MB; the model is inside the pipecat-ai package)...'; Invoke-WebRequest -UseBasicParsing -Uri 'https://files.pythonhosted.org/packages/4f/cb/940ed11839a5236bfeca67e629ddd1b67919e20d1ecfdd5804a8132e9c8c/pipecat_ai-1.11.0-py3-none-any.whl' -OutFile $w; if ((Get-FileHash $w -Algorithm SHA256).Hash -ne '0126B81D453687573DDCC26AA29E2C9509E21D8A8BF9B8C266DA9DE68B6DF70D') { Remove-Item $w; Write-Host 'That is not the expected file, so nothing was installed. Run this line again.' -ForegroundColor Red } else { Add-Type -AssemblyName System.IO.Compression.FileSystem; $p = Join-Path $d 'smart-turn-v3.2-cpu.onnx'; $z = [IO.Compression.ZipFile]::OpenRead($w); try { [IO.Compression.ZipFileExtensions]::ExtractToFile($z.GetEntry('pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx'), $p, $true) } finally { $z.Dispose() }; Remove-Item $w; if ((Get-FileHash $p -Algorithm SHA256).Hash -ne '2BB026316B14A660486A75B1733CD3FBAB8C2FD0314DC9AF7BE49F8CCA967E4F') { Remove-Item $p; Write-Host 'The model inside was not the expected file, so it was deleted. Run this line again.' -ForegroundColor Red } else { Write-Host "OK - Smart Turn is in $d" -ForegroundColor Green } }
 ```
 
-Then run `.\scripts\apply-patches.ps1` (it copies in `jarvis_turn.py` and
-applies `voice-turn.patch`) and restart Jarvis.
+Then run the patch script (it copies in `jarvis_turn.py` and applies
+`voice-turn.patch`) - one line, in PowerShell, from this repository's folder
+(change the path if your backend folder is elsewhere):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+and restart Jarvis.
 
 **What was measured, and how honest the numbers are.** All with speech
 **synthesised by Kokoro** (5 of its voices, 8 sentences each) in the dev
@@ -4974,9 +4981,16 @@ because a stricter setting would then refuse you too. The phone only
 offers this when the PC says it understands it: an older PC would read
 those clips as a training and ask to make the other person "you".
 
-**Owner steps:** run `.\scripts\apply-patches.ps1` (it copies the new
+**Owner steps:** run the patch script (it copies the new
 `jarvis_voice.py`, `jarvis_voice_enroll.py` and `jarvis_speech.py`, and
-applies `voice-mic.patch`), restart Jarvis, update the phone app, then on
+applies `voice-mic.patch`) - one line, in PowerShell, from this repository's
+folder (change the path if your backend folder is elsewhere):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+Then restart Jarvis, update the phone app, then on
 the phone: Checks -> Your voice -> Train my voice, and approve the card.
 
 **Not checked:** a real voice, a real phone, the desktop microphone with a
@@ -5042,9 +5056,16 @@ described in the training script.
 bytes). No download on the PC: `jarvis_stopword.py` is copied by the
 script like any other module.
 
-**Owner steps:** run `.\scripts\apply-patches.ps1` (it copies
+**Owner steps:** run the patch script (it copies
 `jarvis_stopword.py` and the new `jarvis_wakeword.py` and `jarvis_speech.py`),
-restart Jarvis, update the phone app and the desktop app. On the phone,
+one line, in PowerShell, from this repository's folder (change the path if
+your backend folder is elsewhere):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+Then restart Jarvis, update the phone app and the desktop app. On the phone,
 Checks shows the new switch on the wake word card.
 
 **Not checked - said plainly:**
@@ -5315,9 +5336,11 @@ touches those lines. Needs `jarvis_token_store.py` copied in (the script does).
 
 ## Test it
 
+One line, in PowerShell, from this repository's folder (change the path if
+your backend folder is elsewhere):
+
 ```powershell
-python test_token_store.py
-python test_token_file.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_token_store.py; py -3 backend\test_token_file.py
 ```
 
 `test_token_store.py` runs anywhere: every branch of `resolve()` against a
@@ -5410,9 +5433,11 @@ prints the difference. Without the tier line the unknown-action default,
 
 ## Test it
 
+One line, in PowerShell, from this repository's folder (change the path if
+your backend folder is elsewhere):
+
 ```powershell
-python test_second_card.py
-python ..\tools\gen_second_card_cases.py --check
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_second_card.py; py -3 tools\gen_second_card_cases.py --check
 ```
 
 Runs anywhere, with nvidia-smi's output replayed in its real format (made-up
@@ -5505,9 +5530,11 @@ is the proof against the real file.
 
 ## Test it
 
+One line, in PowerShell, from this repository's folder (change the path if
+your backend folder is elsewhere):
+
 ```powershell
-python test_wiki.py
-python ..\tools\gen_wiki_cases.py --check
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_wiki.py; py -3 tools\gen_wiki_cases.py --check
 ```
 
 Runs anywhere: a real vault folder made for each test, a stand-in lane on
@@ -5625,9 +5652,11 @@ run is the proof against the real file.
 
 ## Test it
 
+One line, in PowerShell, from this repository's folder (change the path if
+your backend folder is elsewhere):
+
 ```powershell
-python test_big_model.py
-python ..\tools\gen_big_model_cases.py --check
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_big_model.py; py -3 tools\gen_big_model_cases.py --check
 ```
 
 Runs anywhere: the PC (folders, memory, disk, drive type, starting a
