@@ -232,6 +232,17 @@ class ChatLogTest {
         assertFalse(ChatLog.keepNeedsConfirm(30, 90))
         assertFalse(ChatLog.keepNeedsConfirm(30, 0))
         assertFalse(ChatLog.keepNeedsConfirm(null, 0))
+        // The desktop asks the same sentence (one wording for both apps).
+        assertEquals(
+            "Delete every conversation older than 30 days from your PC now, and from then on? " +
+                "This cannot be undone.",
+            ChatLog.keepConfirm(30),
+        )
+        assertEquals(
+            "Delete every conversation older than 1 year from your PC now, and from then on? " +
+                "This cannot be undone.",
+            ChatLog.keepConfirm(365),
+        )
     }
 
     @Test

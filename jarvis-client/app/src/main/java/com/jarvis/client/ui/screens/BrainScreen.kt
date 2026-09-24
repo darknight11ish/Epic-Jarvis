@@ -195,7 +195,7 @@ fun BrainScreen(
      */
     autoRefreshMs: Long = 0L,
     /**
-     * "Hide memory lists" (Security) is on and not yet shown: the memory
+     * "Hide memory lists and chat history" (Security) is on and not yet shown: the memory
      * review list, "What did I believe on this date?" and the wiki's list
      * are replaced by [HiddenSection] until [onShowPrivate] is confirmed.
      */

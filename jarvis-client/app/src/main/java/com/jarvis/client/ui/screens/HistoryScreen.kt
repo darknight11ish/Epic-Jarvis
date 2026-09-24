@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
@@ -59,7 +60,7 @@ import java.time.ZoneId
  * Everything is read from the PC when the screen opens and dropped when it
  * is left. The phone keeps no history of its own.
  *
- * "Hide memory lists" (Security) hides the list and any open conversation
+ * "Hide memory lists and chat history" (Security) hides the list and any open conversation
  * until Show is confirmed, the same as Mind's memory lists. The settings
  * stay visible: they say nothing about what was said.
  */
@@ -377,6 +378,10 @@ private fun ConversationRow(row: ChatLog.Summary, onOpen: () -> Unit) {
  * One conversation, read-only, with Delete behind a confirm. Read from the
  * PC when opened; nothing of it is kept once it is closed.
  */
+// FlowRow: a turn's marks ("said aloud, but not confirmed by this PC",
+// "read outside text") wrap to a new line instead of being squeezed. The
+// opt-in is kept for the reason BrainScreen's FlowChips gives.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Conversation(
     id: String,
@@ -456,7 +461,10 @@ private fun Conversation(
             val turn = turns[i]
             val mine = turn.role == "user"
             Column(Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Kicker(if (mine) "You" else "Jarvis")
                     if (mine) {
                         ChatLog.provenanceMark(turn.provenance)?.let { Pill(it) }
@@ -484,7 +492,7 @@ private fun Conversation(
 
 /**
  * Mind's way in: one plate that opens History. Hidden like the memory lists
- * when "Hide memory lists" is on - what was said in a chat is at least as
+ * when "Hide memory lists and chat history" is on - what was said in a chat is at least as
  * private as what Jarvis remembers.
  */
 @Composable

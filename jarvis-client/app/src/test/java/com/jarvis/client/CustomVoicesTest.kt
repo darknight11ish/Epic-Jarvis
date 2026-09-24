@@ -75,7 +75,7 @@ class CustomVoicesTest {
         val s = status("fallback")
         assertEquals("kokoro", s.speakingWith)
         assertEquals(
-            "Using the built-in voice instead, because ZipVoice could not be loaded (RuntimeError).",
+            "Jarvis is using its built-in voice instead, because ZipVoice could not be loaded (RuntimeError).",
             CustomVoices.fallbackLine(s),
         )
         assertEquals(
@@ -146,6 +146,41 @@ class CustomVoicesTest {
         assertFalse(a.accepted)
         val line = CustomVoices.answerLine(a)
         assertTrue(line, line.startsWith("This sounds like you, so Jarvis won't copy it. This recording sounds too much like YOUR voice"))
+    }
+
+    @Test
+    fun `when the PC could not check whose voice it is, it says so first`() {
+        // Hand-built: the fixture has no such case. The shape is
+        // backend/jarvis_voices.py's own refusal ("refused" plus the PC's
+        // sentence), carried in `error` like the owner_voice one above.
+        for (why in listOf("owner_check_failed", "no_voice_check")) {
+            val a = CustomVoices.Answer(
+                code = 409, ok = false, pending = false,
+                error = "the recording could not be compared with your voice print (too quiet or too short), so it was refused",
+                message = "", refused = why, active = "",
+            )
+            assertEquals(
+                why,
+                "Jarvis could not make sure this is not your own voice, so it won't copy it. " +
+                    "The recording could not be compared with your voice print (too quiet or too short), so it was refused.",
+                CustomVoices.answerLine(a),
+            )
+            assertEquals(
+                why,
+                CustomVoices.OWNER_CHECK_FAILED,
+                CustomVoices.answerLine(a.copy(error = "")),
+            )
+        }
+    }
+
+    @Test
+    fun `the add form and the timings use the desktop's words`() {
+        assertEquals(
+            "Only add the voice of someone who has agreed to it. A recording that sounds like you is refused. " +
+                "The recording stays on your PC; nothing is sent anywhere else.",
+            CustomVoices.CONSENT,
+        )
+        assertEquals("How long speaking took", CustomVoices.TIMINGS_TITLE)
     }
 
     @Test

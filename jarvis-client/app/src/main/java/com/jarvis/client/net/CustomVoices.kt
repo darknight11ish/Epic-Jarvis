@@ -289,15 +289,29 @@ object CustomVoices {
     /** The head line for the "it sounds like you" refusal - the owner's wording. */
     const val SOUNDS_LIKE_YOU = "This sounds like you, so Jarvis won't copy it."
 
+    /**
+     * The head line when the PC could not run the "is this your own voice?"
+     * check at all (`owner_check_failed`: the recording could not be
+     * compared; `no_voice_check`: the voice check is not installed). The
+     * recording is refused either way. The desktop's words.
+     */
+    const val OWNER_CHECK_FAILED =
+        "Jarvis could not make sure this is not your own voice, so it won't copy it."
+
     /** What to show after a POST, from the PC's answer. The PC's words are kept as they are. */
     fun answerLine(a: Answer): String = when {
-        a.refused == "owner_voice" -> SOUNDS_LIKE_YOU + " " + sentence(a.error)
+        a.refused == "owner_voice" -> headed(SOUNDS_LIKE_YOU, a.error)
+        a.refused == "owner_check_failed" || a.refused == "no_voice_check" -> headed(OWNER_CHECK_FAILED, a.error)
         a.error.isNotBlank() -> sentence(a.error)
         a.pending -> a.message.ifBlank { "A card is waiting." }.let {
             if (it.contains("Approve", ignoreCase = true)) it else "$it " + Approvals.WHERE
         }
         else -> a.message.ifBlank { "Done." }
     }
+
+    /** [head], then the PC's own sentence when it sent one. */
+    private fun headed(head: String, pc: String): String =
+        sentence(pc).let { if (it.isEmpty()) head else "$head $it" }
 
     // --------------------------------------------------------------- rules --
 
@@ -426,10 +440,13 @@ object CustomVoices {
         else -> null
     }
 
-    /** The warning on the add form - what the PC's card says too. */
+    /** Said beside "Add a voice", always - the same words as the desktop's. */
     const val CONSENT =
-        "A copied voice sounds like a real person. Only add the voice of someone who has agreed " +
-            "to it. A voice that sounds like yours is refused."
+        "Only add the voice of someone who has agreed to it. A recording that sounds like you is " +
+            "refused. The recording stays on your PC; nothing is sent anywhere else."
+
+    /** The heading over the recent timings ([timingLines]) - the desktop's words. */
+    const val TIMINGS_TITLE = "How long speaking took"
 
     // --------------------------------------------------------------- words --
 
@@ -454,7 +471,7 @@ object CustomVoices {
     /** Why the built-in voice is used instead of the chosen one, or null. */
     fun fallbackLine(s: Status): String? =
         s.fallback.takeIf { it.isNotBlank() && s.active != BUILTIN }
-            ?.let { "Using the built-in voice instead, because " + it.trimEnd('.') + "." }
+            ?.let { "Jarvis is using its built-in voice instead, because " + it.trim().trimEnd('.') + "." }
 
     /** A card is waiting: one line, or null. */
     fun pendingLine(s: Status): String? {
