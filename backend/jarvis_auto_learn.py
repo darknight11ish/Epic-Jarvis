@@ -70,6 +70,7 @@ import re
 import sys
 import threading
 import time
+import unicodedata
 import uuid as _uuid
 from contextlib import closing
 from pathlib import Path
@@ -125,7 +126,10 @@ AUTO_TEXT = ("Jarvis saves facts about you and your projects from what you type 
              "You can forget any of them here.")
 SENSITIVE_TEXT = ("Health, money, passwords and account details, and private "
                   "details about other people. When this is off, Jarvis asks you first.")
-NEEDS_LEARNING = ("Learn automatically only works while background learning is on.")
+#: The note under "Learn automatically" while background learning is off -
+#: the desktop's sentence, which both apps now show (fit audit item 10).
+NEEDS_LEARNING = ("Background learning is off, so nothing is saved automatically. "
+                  "Start learning above to use this.")
 
 
 # --------------------------------------------------------------------------
@@ -161,6 +165,13 @@ def settings_path() -> Path:
 
 _SETTINGS_LOCK = threading.Lock()
 
+#: A damaged settings file reads as OFF. The switch then shows off, so the
+#: one thing to do is turn it on: that card, approved, rewrites the file
+#: (fit audit item 1 - it used to say "off and on again", but it already
+#: shows off).
+_DAMAGED = ("the automatic learning settings file is damaged, so nothing is saved "
+            "automatically. Turn \"Learn automatically\" on again to rewrite it")
+
 
 def settings() -> dict:
     """{"auto", "auto_sensitive", "why"}.
@@ -184,15 +195,12 @@ def settings() -> dict:
             raise ValueError
     except Exception:
         return {"auto": False, "auto_sensitive": False,
-                "why": "the automatic learning settings file is damaged, so nothing is "
-                       "saved automatically. Turn \"Learn automatically\" off and on "
-                       "again to rewrite it"}
+                "why": _DAMAGED}
     auto = doc.get("auto", True)
     sens = doc.get("auto_sensitive", False)
     why = ""
     if not isinstance(auto, bool):
-        auto, why = False, ("the automatic learning setting is damaged, so nothing is "
-                            "saved automatically")
+        auto, why = False, _DAMAGED
     if not isinstance(sens, bool):
         sens = False
     return {"auto": auto, "auto_sensitive": sens, "why": why}
@@ -241,6 +249,25 @@ def action_for(kind: str) -> str:
 
 _LOCK = threading.Lock()
 _STATE = {k: {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}} for k in KINDS}
+#: One lock per switch, held from an approved card's "was it withdrawn?"
+#: check through writing the setting, and from OFF's withdrawing through
+#: writing "off". Without it an OFF landing between the check and the write
+#: was answered "off" and then overwritten by the card's "on" (red team R5,
+#: reproduced before the fix). Always taken BEFORE _LOCK, never inside it.
+_SWITCH = {k: threading.Lock() for k in KINDS}
+
+#: What each way a card can end means, in plain words for the apps - the
+#: `message` beside the technical `why` in auto_last / sensitive_last (fit
+#: audit item 28).
+LAST_WORDS = {
+    "enabled": "You approved the card, so it is on.",
+    "denied": "The card was turned down, so it stayed off.",
+    "timed_out": "Nobody answered the card in time, so it stayed off.",
+    "refused": "Your PC's settings do not let this be approved, so it stayed off.",
+    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the setting could not be saved, so it stayed off.",
+}
+GATE_FAILED_WORDS = "The approval card could not be raised, so it stayed off."
 
 
 def _card_text(kind: str) -> str:
@@ -286,7 +313,8 @@ def _audit(event: str, detail: dict) -> None:
         pass
 
 
-def _finish(kind: str, pid: str, outcome: str, why: str = "") -> None:
+def _finish(kind: str, pid: str, outcome: str, why: str = "",
+            message: Optional[str] = None) -> None:
     s = _STATE[kind]
     with _LOCK:
         if s["pending"].get("id") == pid:
@@ -295,7 +323,8 @@ def _finish(kind: str, pid: str, outcome: str, why: str = "") -> None:
         if s["latest"].get("id") not in (None, pid):
             return
         s["last"].clear()
-        s["last"].update(outcome=outcome, why=why, at=time.time())
+        s["last"].update(outcome=outcome, why=why, at=time.time(),
+                         message=message or LAST_WORDS.get(outcome, ""))
     _audit(f"learning.{kind}.card", {"outcome": outcome})
 
 
@@ -307,7 +336,7 @@ def _decide(kind: str, pid: str, apply: Callable[[bool], dict], gate: Callable,
         v = gate(action, {"text": text, "what": _what(kind), "leaves_this_pc": False}, text)
     except Exception as exc:
         return _finish(kind, pid, "refused",
-                       f"the approval gate failed ({type(exc).__name__})")
+                       f"the approval gate failed ({type(exc).__name__})", GATE_FAILED_WORDS)
     vtier = getattr(v, "tier", "unknown")
     allowed = getattr(v, "allowed", False) is True
     outcome = getattr(v, "outcome", None)
@@ -320,18 +349,21 @@ def _decide(kind: str, pid: str, apply: Callable[[bool], dict], gate: Callable,
         if outcome in ("denied", "timed_out"):
             return _finish(kind, pid, outcome)
         return _finish(kind, pid, "refused", str(getattr(v, "reason", "refused")))
-    with _LOCK:
-        withdrawn = pid in _STATE[kind]["withdrawn"]
-    if withdrawn:
-        return _finish(kind, pid, "withdrawn",
-                       "you turned it off while the card was waiting")
-    try:
-        out = apply(True) or {}
-    except Exception as exc:
-        return _finish(kind, pid, "failed", type(exc).__name__)
-    if out.get("ok") is False:
-        return _finish(kind, pid, "failed", str(out.get("error", "")))
-    _finish(kind, pid, "enabled")
+    with _SWITCH[kind]:
+        # Held until the setting is written and `last` says so: an OFF
+        # pressed meanwhile waits, then turns it off (red team R5).
+        with _LOCK:
+            withdrawn = pid in _STATE[kind]["withdrawn"]
+        if withdrawn:
+            return _finish(kind, pid, "withdrawn",
+                           "you turned it off while the card was waiting")
+        try:
+            out = apply(True) or {}
+        except Exception as exc:
+            return _finish(kind, pid, "failed", type(exc).__name__)
+        if out.get("ok") is False:
+            return _finish(kind, pid, "failed", str(out.get("error", "")))
+        _finish(kind, pid, "enabled")
 
 
 def request(kind: str, enabled, *, gate: Optional[Callable] = None,
@@ -350,16 +382,20 @@ def request(kind: str, enabled, *, gate: Optional[Callable] = None,
     if not isinstance(enabled, bool):
         return 400, {"error": 'need {"enabled": true|false}'}
     if not enabled:
-        with _LOCK:
-            if s["pending"]:
-                # Withdrawn AND no longer the waiting card: approving it does
-                # nothing, and a later ON raises a fresh card.
-                s["withdrawn"].add(s["pending"]["id"])
-                s["pending"].clear()
-        try:
-            apply(False)
-        except Exception as exc:
-            return 500, {"ok": False, "error": f"could not save the setting ({type(exc).__name__})"}
+        with _SWITCH[kind]:
+            # The same lock an approved card holds from its withdrawn check
+            # to its write: OFF is never overwritten by that card (R5).
+            with _LOCK:
+                if s["pending"]:
+                    # Withdrawn AND no longer the waiting card: approving it
+                    # does nothing, and a later ON raises a fresh card.
+                    s["withdrawn"].add(s["pending"]["id"])
+                    s["pending"].clear()
+            try:
+                apply(False)
+            except Exception as exc:
+                return 500, {"ok": False,
+                             "error": f"could not save the setting ({type(exc).__name__})"}
         _audit(f"learning.{kind}.off", {})
         out = learning_status()
         out.update(ok=True, waiting=False, message=(
@@ -558,10 +594,78 @@ def check_taint(entry: dict) -> str:
 
 _LINK = re.compile(r"https?://|\bwww\.|\]\([^)]*\)|\[[^\]]*\]\s*\[[^\]]*\]"
                    r"|<\s*/?\s*[a-z][a-z0-9-]*(?:\s[^>]*)?>|<!--|&[a-z]+;|&#\d+;", re.I)
-_HIDDEN = re.compile("[\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u202a-\u202e"
-                     "\u2060-\u2064\u2066-\u206f\u3164\ufeff\ufff9-\ufffb]"
-                     "|[\U000e0000-\U000e007f]")
+#: Characters that show as nothing, or as a blank, and are not in the
+#: Unicode "format" / "private use" / "unassigned" groups _hidden() reads by
+#: category: variation selectors (both blocks - enough to smuggle whole
+#: sentences, one byte per selector), the combining grapheme joiner, the
+#: Hangul and half-width fillers, the Braille blank, Khmer and Mongolian
+#: invisibles, and the line and paragraph separators (red team R4).
+_HIDDEN = re.compile("[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f"
+                     "\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u2066-\u206f"
+                     "\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffb]"
+                     "|[\U000e0000-\U000e01ef]")
+#: Cf format, Co private use, Cn unassigned, Cs lone surrogates.
+_HIDDEN_CATEGORIES = ("Cf", "Co", "Cn", "Cs")
+
+
+def _hidden(text: str) -> bool:
+    """Is any character in it invisible, or not a character at all? Control
+    characters count too, except tab and the two line ends."""
+    if _HIDDEN.search(text):
+        return True
+    for ch in text:
+        cat = unicodedata.category(ch)
+        if cat in _HIDDEN_CATEGORIES or (cat == "Cc" and ch not in "\t\n\r"):
+            return True
+    return False
+
+
 _ENCODED = re.compile(r"[A-Za-z0-9+/=_-]{48,}")
+#: One piece of an encoded block split up to hide it: 8+ characters of the
+#: base64 / hex alphabet that mix digits with letters, or have a capital
+#: after the first letter ("SWdub3Jl", "aGVsbG8K"). Ordinary words do not.
+_CHUNK = re.compile(r"[A-Za-z0-9+/=_-]+")
+_ENCODED_JOINED = 48
+
+
+def _chunky(tok: str) -> bool:
+    if len(tok) < 8:
+        return False
+    digit = any(c.isdigit() for c in tok)
+    letter = any(c.isalpha() for c in tok)
+    inner_cap = any(c.isupper() for c in tok[1:]) and any(c.islower() for c in tok)
+    return (digit and letter) or inner_cap or any(c in "+/=" for c in tok[1:-1])
+
+
+def _encoded(text: str) -> bool:
+    """A long encoded block, whole or cut into pieces with spaces or
+    punctuation between them (red team R4: 40-character pieces got
+    through): pieces next to each other, 48 characters or more in all."""
+    if _ENCODED.search(text):
+        return True
+    run, end = 0, -10
+    for m in _CHUNK.finditer(text):
+        tok = m.group(0)
+        if not _chunky(tok):
+            run = 0
+            continue
+        gap = text[end:m.start()] if end >= 0 else ""
+        run = run + len(tok) if (run and len(gap) <= 3 and not gap.strip(" \t\r\n.,;:-_|")) \
+            else len(tok)
+        end = m.end()
+        if run >= _ENCODED_JOINED:
+            return True
+    return False
+
+
+#: A web address without http:// or www.: "evil.example/owner-facts", or a
+#: name ending in a well-known top-level domain (red team R4).
+_DOMAIN = re.compile(
+    r"\b[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*"
+    r"\.[a-z]{2,24}/[^\s]*"
+    r"|\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|io|co|uk|de|fr|ru|cn|info"
+    r"|biz|app|dev|ai|xyz|top|site|online|gov|edu|example|test|ly|gg|tv|eu|link|click"
+    r"|sh|gl|page|cloud|tech|store|shop|zip|mov|onion)\b", re.I)
 _EMAIL_HEAD = re.compile(r"(?im)^\s*(?:from|to|subject|cc|bcc|date|sent|reply-to|"
                          r"return-path|received|message-id)\s*:"
                          r"|-{2,}\s*(?:original|forwarded)\s+message"
@@ -575,11 +679,11 @@ def outside_signs(text: str) -> str:
         return "not text"
     if len(text) > TURN_MAX_CHARS:
         return f"longer than {TURN_MAX_CHARS} characters, which reads as pasted text"
-    if _LINK.search(text):
+    if _LINK.search(text) or _DOMAIN.search(text):
         return "it has a link or web-page code in it"
-    if _HIDDEN.search(text):
+    if _hidden(text):
         return "it has hidden characters in it"
-    if _ENCODED.search(text):
+    if _encoded(text):
         return "it has a long encoded block in it"
     if _EMAIL_HEAD.search(text):
         return "it looks like an email"
@@ -595,10 +699,41 @@ def check_outside(text: str) -> str:
     return ""
 
 
+#: Cyrillic and Greek letters that look like Latin ones. "іgnore previous
+#: instructions" with a Cyrillic і read as nothing to injection_flags() (red
+#: team R4), so it also reads the text with these swapped for the Latin
+#: letter, after NFKC (which already folds full-width and styled letters).
+_LOOKALIKE = str.maketrans({
+    # Cyrillic
+    "а": "a", "в": "b", "е": "e", "ё": "e", "з": "3", "к": "k", "м": "m", "н": "h",
+    "о": "o", "р": "p", "с": "c", "т": "t", "у": "y", "х": "x", "ѕ": "s", "і": "i",
+    "ї": "i", "ј": "j", "ԁ": "d", "ԛ": "q", "ԝ": "w", "һ": "h", "ӏ": "l", "ɡ": "g",
+    "А": "A", "В": "B", "Е": "E", "Ё": "E", "К": "K", "М": "M", "Н": "H", "О": "O",
+    "Р": "P", "С": "C", "Т": "T", "У": "Y", "Х": "X", "Ѕ": "S", "І": "I", "Ї": "I",
+    "Ј": "J", "Ԛ": "Q", "Ԝ": "W", "Һ": "H", "Ӏ": "I",
+    # Greek
+    "α": "a", "ο": "o", "ρ": "p", "ν": "v", "ι": "i", "κ": "k", "τ": "t", "υ": "u",
+    "χ": "x", "ε": "e", "ς": "c", "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H",
+    "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y",
+    "Χ": "X",
+})
+
+
+def plain_letters(text: str) -> str:
+    """The text as injection_flags() should read it: NFKC, look-alike
+    letters swapped for Latin ones, invisible characters taken out."""
+    t = unicodedata.normalize("NFKC", str(text or "")).translate(_LOOKALIKE)
+    return "".join(ch for ch in _HIDDEN.sub("", t)
+                   if unicodedata.category(ch) not in _HIDDEN_CATEGORIES)
+
+
 def _injection(text: str) -> bool:
     try:
         import jarvis_intake
-        return bool(jarvis_intake.injection_flags(text))
+        if jarvis_intake.injection_flags(text):
+            return True
+        plain = plain_letters(text)
+        return plain != text and bool(jarvis_intake.injection_flags(plain))
     except Exception:
         return True                  # cannot check: not saved automatically
 
@@ -701,15 +836,153 @@ def ungrounded(fact: str, turns: list) -> list:
                 out.append(w)
         elif _stem(w) not in stems and w not in exact:
             out.append(w)
+        elif w not in exact and _bare(w) and all(
+                x.endswith(("ed", "ing")) for x in exact if _stem(x) == _stem(w)):
+            # A plain word matched only by a past or -ing form: "hated"
+            # does not ground "hat" (red team R2, "stem clash").
+            out.append(w)
     return out
+
+
+def _bare(w: str) -> bool:
+    """A word with no ending _stem() takes off (bar a final e)."""
+    s = _stem(w)
+    return s == w or (w.endswith("e") and s == w[:-1])
 
 
 def check_grounded(fact: str, turns: list) -> str:
     """GUARDS L5: every content word and every number of the fact is in
-    what the owner said."""
+    what the owner said - and the fact leaves out nothing that changed what
+    it meant (check_meaning, red team R2)."""
     if not _fact_words(fact):
         return "not in your own words"
-    return "not in your own words" if ungrounded(fact, turns) else ""
+    if ungrounded(fact, turns):
+        return "not in your own words"
+    return check_meaning(fact, turns)
+
+
+# ---- what a fact leaves out (red team R2) ----------------------------------
+#
+# Grounding asks only whether each of the fact's words was said. It cannot
+# see a word the fact LEFT OUT: "I don't drink coffee any more" grounds
+# "Owner drinks coffee" word for word, and "My sister works at Google"
+# grounds "Owner works at Google". So each sentence the fact came from is
+# also read for the words that change what it means - a "not", a "used to",
+# an "if", a "sister", a "she" - and a fact that drops one is a card.
+
+#: (the word as the card says it, the pattern on _meaning_text()).
+_QUALIFIERS = (
+    ("not", r"\bnot\b"),
+    ("no", r"\b(?:no|none|nobody|nothing|neither|nor|without)\b"),
+    ("never", r"\bnever\b"),
+    ("no longer", r"\bno longer\b"),
+    ("any more", r"\bany ?more\b"),
+    ("used to", r"\bused to\b"),
+    ("quit", r"\bquit(?:s|ting)?\b"),
+    ("stopped", r"\bstop(?:s|ped|ping)?\b"),
+    ("gave up", r"\b(?:give|gives|gave|given|giving) up\b"),
+    ("former", r"\b(?:former|formerly|ex)\b"),
+    ("if", r"\b(?:if|unless|whether)\b"),
+    ("would", r"\b(?:would|could|should)\b"),
+    ("might", r"\bmight\b"),
+    ("maybe", r"\b(?:maybe|perhaps|probably)\b"),
+    ("planning", r"\bplan(?:s|ned|ning)?\b"),
+    ("thinking of", r"\bthink(?:s|ing)? (?:of|about)\b|\bconsider(?:s|ed|ing)?\b"),
+    ("hope to", r"\bhop(?:e|es|ed|ing) to\b|\bwish(?:es|ed|ing)?\b"),
+    ("want to", r"\bwant(?:s|ed|ing)? to\b"),
+)
+_QUALIFIER_RX = [(label, re.compile(rx)) for label, rx in _QUALIFIERS]
+
+#: Other people. A fact that drops one ("my sister works at Google" ->
+#: "the owner works at Google") has moved between people.
+_RELATIONS = {
+    "sister", "brother", "sibling", "wife", "husband", "spouse", "partner",
+    "girlfriend", "boyfriend", "fiance", "fiancee", "boss", "manager", "friend",
+    "mum", "mom", "mother", "dad", "father", "parent", "son", "daughter", "kid",
+    "child", "baby", "colleague", "coworker", "cousin", "aunt", "uncle", "niece",
+    "nephew", "grandma", "grandmother", "grandad", "granddad", "grandpa",
+    "grandfather", "grandson", "granddaughter", "grandchild", "neighbour",
+    "neighbor", "flatmate", "roommate", "housemate", "stepmum", "stepmom",
+    "stepdad", "stepson", "stepdaughter", "law",       # "in-law"
+}
+_RELATION_FORMS = {"children": "child", "wives": "wife", "sisters": "sister"}
+#: Someone else, by a pronoun: the fact does not get to say who it was.
+_THIRD_PERSON = {"he", "she", "him", "her", "his", "hers", "himself", "herself",
+                 "they", "them", "their", "theirs", "themselves"}
+#: The owner, in the owner's own words.
+_FIRST_PERSON = {"i", "me", "my", "mine", "myself", "we", "us", "our", "ours",
+                 "im", "ive", "id", "ill"}
+_NAMES_OWNER = {"owner", "owners", "user", "users"}
+
+
+def _meaning_text(text: str) -> str:
+    t = str(text or "").lower().replace("’", "'")
+    t = re.sub(r"'d\b", " would", t)           # "I'd like to" keeps its "would"
+    t = re.sub(r"^\s*(?:no|nope|nah)\s*[,!.:;-]+", " ", t)   # "No, I live in Leeds"
+    return " ".join(_words(t))
+
+
+def _relations(words) -> set:
+    out = set()
+    for w in words:
+        w = _RELATION_FORMS.get(w, w)
+        if w not in _RELATIONS and w.endswith("s") and w[:-1] in _RELATIONS:
+            w = w[:-1]
+        if w in _RELATIONS:
+            out.add(w)
+    return out
+
+
+def _sentences(turns: list) -> list:
+    out = []
+    for t in turns:
+        out += [s for s in re.split(r"(?<=[.!?;])\s+|[\r\n]+", str(t or "")) if s.strip()]
+    return out
+
+
+def source_sentences(fact: str, turns: list) -> list:
+    """The sentences of the owner's turns that share a content word or a
+    number with the fact - all of them when none does (fail closed)."""
+    want = {_stem(w) for w in _fact_words(fact)
+            if not any(ch.isdigit() for ch in w) and w not in _NEGATION}
+    nums = {w for w in _fact_words(fact) if any(ch.isdigit() for ch in w)}
+    every = _sentences(turns)
+    out = []
+    for s in every:
+        ws = _words(s)
+        if want & {_stem(w) for w in ws} or nums & set(ws):
+            out.append(s)
+    return out or every
+
+
+def check_meaning(fact: str, turns: list) -> str:
+    """"" when the fact keeps every word of its source sentences that
+    changes what they mean; else which one it left out, in words."""
+    fact_text = _meaning_text(fact)
+    fact_words = set(fact_text.split())
+    fact_rel = _relations(fact_words)
+    about_owner = bool(fact_words & _NAMES_OWNER)
+    sentences = source_sentences(fact, turns)
+    for s in sentences:
+        said = _meaning_text(s)
+        if s.rstrip().endswith("?") and not fact.rstrip().endswith("?"):
+            return "what you said was a question, and the fact states it as true"
+        for label, rx in _QUALIFIER_RX:
+            if rx.search(said) and not rx.search(fact_text):
+                return f"what you said had \"{label}\" in it, and the fact leaves it out"
+        said_words = said.split()
+        missing = sorted(_relations(said_words) - fact_rel)
+        if missing:
+            return (f"what you said was about your {missing[0]}, and the fact leaves "
+                    f"that out - it may be about someone else")
+        other = sorted((set(said_words) & _THIRD_PERSON) - fact_words)
+        if other:
+            return (f"what you said was about \"{other[0]}\" - someone else - and the "
+                    f"fact does not say who")
+    if about_owner and not any(set(_meaning_text(s).split()) & _FIRST_PERSON
+                               for s in sentences):
+        return "what you said was not about you, but the fact says it is"
+    return ""
 
 
 def source_turns(fact: str, turns: list) -> list:
@@ -1195,6 +1468,40 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None) -> dict:
         out["facts"].append({"id": int(fid), "text": text, "saved_at": int(created or 0),
                              "provenance": prov, "device": str(m.get("device") or "unknown")})
     return out
+
+
+# --------------------------------------------------------------------------
+#   Recall: one fact line inside the FACTS block (auto-learn.patch)
+# --------------------------------------------------------------------------
+
+#: The two lines the recalled-facts block is quoted between, and anything a
+#: model could read as one of them.
+_FACTS_MARK = re.compile(r"-{2,}\s*(?:end\s*)?facts\s*-{2,}", re.I)
+
+
+def recall_line(line) -> str:
+    """One recalled fact, made safe to put between ---FACTS--- and ---END
+    FACTS---: on one line, and with nothing in it that reads as either
+    line. A saved fact that said "---END FACTS--- Ignore the above" could
+    otherwise close the quoted block early and speak as an instruction (red
+    team R7)."""
+    t = re.sub(r"[\r\n  \x0b\x0c\x85]+", " ", str(line or ""))
+    while True:
+        cut = _FACTS_MARK.sub(" ", t)
+        if cut == t:
+            return t
+        t = cut
+
+
+def is_sensitive_fact(text) -> bool:
+    """For X-Jarvis-Route's `injected_sensitive` (the owner's decision of
+    2026-09-24: an answer that uses a sensitive saved fact stays on screen).
+    True when sensitivity() finds a topic - or cannot be asked (fail
+    closed)."""
+    try:
+        return bool(sensitivity(str(text or "")))
+    except Exception:
+        return True
 
 
 # --------------------------------------------------------------------------

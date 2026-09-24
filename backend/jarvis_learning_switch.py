@@ -56,6 +56,24 @@ _PENDING: dict = {}          # {"id", "since"} while an ON card waits
 _WITHDRAWN: set = set()
 _LAST: dict = {}             # {"outcome", "why", "at"} - how the last card ended
 _LATEST: dict = {}           # {"id"} - the card raised most recently; only it sets _LAST
+#: Held from an approved card's "was it withdrawn?" check through
+#: set_learning(True), and from OFF's withdrawing through set_learning(False):
+#: an OFF pressed in between used to be answered "Learning is off." and then
+#: overwritten by the card (red team R5). Always taken BEFORE _LOCK.
+_SWITCH = threading.Lock()
+
+#: How the last card ended, in plain words for the apps - `message` beside
+#: the technical `why` in learning_last (fit audit item 28).
+LAST_WORDS = {
+    "enabled": "You approved the card, so learning is on.",
+    "denied": "The card was turned down, so learning stayed off.",
+    "timed_out": "Nobody answered the card in time, so learning stayed off.",
+    "refused": "Your PC's settings do not let this be approved, so it stayed off.",
+    "withdrawn": "You turned learning off while the card waited, so approving it changed "
+                 "nothing.",
+    "failed": "It was approved, but learning could not be started, so it stayed off.",
+}
+GATE_FAILED_WORDS = "The approval card could not be raised, so learning stayed off."
 
 
 def _gate(action: str, detail: dict, prompt: str):
@@ -83,7 +101,7 @@ def _audit(event: str, detail: dict) -> None:
         pass
 
 
-def _finish(pid: str, outcome: str, why: str = "") -> None:
+def _finish(pid: str, outcome: str, why: str = "", message: Optional[str] = None) -> None:
     with _LOCK:
         if _PENDING.get("id") == pid:
             _PENDING.clear()
@@ -93,7 +111,8 @@ def _finish(pid: str, outcome: str, why: str = "") -> None:
             # its outcome must not be shown as the newer card's.
             return
         _LAST.clear()
-        _LAST.update(outcome=outcome, why=why, at=time.time())
+        _LAST.update(outcome=outcome, why=why, at=time.time(),
+                     message=message or LAST_WORDS.get(outcome, ""))
     _audit("learning.card", {"outcome": outcome})
 
 
@@ -103,7 +122,8 @@ def _decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
         v = gate(ACTION, {"text": CARD_TEXT, "what": "turn on learning",
                           "leaves_this_pc": False}, CARD_TEXT)
     except Exception as exc:
-        return _finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})")
+        return _finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})",
+                       GATE_FAILED_WORDS)
     vtier = getattr(v, "tier", "unknown")
     allowed = getattr(v, "allowed", False) is True
     outcome = getattr(v, "outcome", None)
@@ -116,17 +136,20 @@ def _decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
         if outcome in ("denied", "timed_out"):
             return _finish(pid, outcome)
         return _finish(pid, "refused", str(getattr(v, "reason", "refused")))
-    with _LOCK:
-        withdrawn = pid in _WITHDRAWN
-    if withdrawn:
-        return _finish(pid, "withdrawn", "you turned learning off while the card was waiting")
-    try:
-        out = apply(True) or {}
-    except Exception as exc:
-        return _finish(pid, "failed", f"{type(exc).__name__}")
-    if out.get("ok") is False:
-        return _finish(pid, "failed", str(out.get("error", "")))
-    _finish(pid, "enabled")
+    with _SWITCH:
+        # Held until learning is on and _LAST says so: an OFF pressed
+        # meanwhile waits for it, then turns learning off (R5).
+        with _LOCK:
+            withdrawn = pid in _WITHDRAWN
+        if withdrawn:
+            return _finish(pid, "withdrawn", "you turned learning off while the card was waiting")
+        try:
+            out = apply(True) or {}
+        except Exception as exc:
+            return _finish(pid, "failed", f"{type(exc).__name__}")
+        if out.get("ok") is False:
+            return _finish(pid, "failed", str(out.get("error", "")))
+        _finish(pid, "enabled")
 
 
 def request(enabled, apply: Callable[[bool], dict], *, gate: Optional[Callable] = None,
@@ -140,14 +163,17 @@ def request(enabled, apply: Callable[[bool], dict], *, gate: Optional[Callable] 
     if not isinstance(enabled, bool):
         return 400, {"error": 'need {"enabled": true|false}'}
     if not enabled:
-        with _LOCK:
-            if _PENDING:
-                # Withdrawn AND no longer the waiting card: approving it does
-                # nothing, and a later ON raises a fresh card instead of
-                # pointing at this one (chat history audit, 2026-09-24).
-                _WITHDRAWN.add(_PENDING["id"])
-                _PENDING.clear()
-        out = dict(apply(False) or {})
+        with _SWITCH:
+            # The lock an approved card holds from its withdrawn check to
+            # set_learning(True): this OFF is never overwritten by it (R5).
+            with _LOCK:
+                if _PENDING:
+                    # Withdrawn AND no longer the waiting card: approving it
+                    # does nothing, and a later ON raises a fresh card instead
+                    # of pointing at this one (chat history audit, 2026-09-24).
+                    _WITHDRAWN.add(_PENDING["id"])
+                    _PENDING.clear()
+            out = dict(apply(False) or {})
         out.setdefault("ok", True)
         out.update(waiting=False, message="Learning is off.")
         _audit("learning.off", {})

@@ -119,6 +119,54 @@ def t_off_while_waiting_withdraws_it():
           (w.applied, L.state()))
 
 
+def t_off_pressed_while_an_approved_card_writes_wins():
+    """Red team R5 (2026-09-24): OFF landing between the approved card's
+    "was it withdrawn?" check and its set_learning(True) was answered
+    "Learning is off." - and then the card turned learning back on."""
+    import threading
+    w = World()
+    entered, release = threading.Event(), threading.Event()
+    state = {"on": False}
+
+    def apply(on):
+        if on:
+            entered.set()
+            release.wait(2)
+        state["on"] = on
+        return {"ok": True, "enabled": on}
+
+    L.request(True, apply, gate=w.gate, tier_of=w.tier_of, spawn=w.later.append)
+    card = threading.Thread(target=w.run_card)
+    card.start()
+    entered.wait(2)
+    off = []
+    t = threading.Thread(target=lambda: off.append(L.request(False, apply)))
+    t.start()
+    t.join(0.3)
+    early = bool(off)
+    release.set()
+    card.join(2)
+    t.join(2)
+    check("OFF waits for the card's write, then learning is OFF",
+          off and off[0][0] == 200 and state["on"] is False and not early,
+          (off, state, early))
+
+
+def t_the_last_card_in_plain_words():
+    """Fit audit item 28: `message` beside the technical `why`."""
+    for verdict, outcome, words in (
+            (V("approved", tier="auto"), "refused",
+             "Your PC's settings do not let this be approved, so it stayed off."),
+            (V("denied"), "denied", "The card was turned down, so learning stayed off."),
+            (V("approved"), "enabled", "You approved the card, so learning is on.")):
+        w = World(verdict)
+        w.req(True)
+        w.run_card()
+        last = L.state()["last"]
+        check(f"{outcome}: {words}", last["outcome"] == outcome and last["message"] == words
+              and "why" in last, last)
+
+
 def t_one_card_at_a_time():
     w = World()
     w.req(True)

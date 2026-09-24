@@ -621,6 +621,44 @@ def t_off_while_waiting_withdraws_it():
         w.done()
 
 
+def t_off_pressed_while_an_approved_card_writes_wins():
+    """Red team R5 (2026-09-24): OFF landing between the approved card's
+    "was it withdrawn?" check and its set_enabled(True) was answered "off" -
+    and then the card turned chat history back on."""
+    import threading as _th
+    w = World()
+    try:
+        w.log.set_enabled(False)
+        entered, release = _th.Event(), _th.Event()
+        real = w.log.set_enabled
+
+        def slow(on):
+            if on:
+                entered.set()
+                release.wait(2)
+            return real(on)
+
+        w.log.set_enabled = slow
+        c = Card(w)
+        c.req({"enabled": True})
+        card = _th.Thread(target=c.run)
+        card.start()
+        entered.wait(2)
+        off = []
+        t = _th.Thread(target=lambda: off.append(c.req({"enabled": False})))
+        t.start()
+        t.join(0.3)
+        early = bool(off)
+        release.set()
+        card.join(2)
+        t.join(2)
+        check("OFF waits for the card's write, then chat history is OFF",
+              off and off[0][0] == 200 and w.log.settings()["enabled"] is False and not early,
+              (off, w.log.settings(), early))
+    finally:
+        w.done()
+
+
 def t_audit_fixes_2026_09_24():
     """The chat history audit's findings, each reproduced before the fix."""
     # 1. Two requests on first use: one key, the one Credential Manager kept.

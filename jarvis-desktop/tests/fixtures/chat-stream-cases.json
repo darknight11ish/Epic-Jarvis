@@ -177,7 +177,7 @@
   "route_headers": [
     {
       "name": "local answer",
-      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 1, \"injected_ids\": [\"fact_1\"], \"memory_side\": \"hud\", \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"local\"}",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 1, \"injected_ids\": [\"fact_1\"], \"memory_side\": \"hud\", \"injected_sensitive\": 0, \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"local\"}",
       "expect": {
         "where": "local",
         "lane": "jarvis-primary",
@@ -186,7 +186,7 @@
     },
     {
       "name": "local answer, older backend without `where`",
-      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 1, \"injected_ids\": [\"fact_1\"], \"memory_side\": \"hud\", \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 1, \"injected_ids\": [\"fact_1\"], \"memory_side\": \"hud\", \"injected_sensitive\": 0, \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
       "expect": {
         "where": "local",
         "lane": "jarvis-primary",
@@ -195,7 +195,7 @@
     },
     {
       "name": "cloud answer",
-      "header": "{\"lane\": \"jarvis-escalate\", \"reason\": \"complexity 0.9, budget available, and you said yes for this question\", \"gate\": \"escalate\", \"complexity\": 0.9, \"inject_memory\": false, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 0, \"injected_ids\": [], \"memory_side\": \"none\", \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"cloud\"}",
+      "header": "{\"lane\": \"jarvis-escalate\", \"reason\": \"complexity 0.9, budget available, and you said yes for this question\", \"gate\": \"escalate\", \"complexity\": 0.9, \"inject_memory\": false, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 0, \"injected_ids\": [], \"injected_sensitive\": 0, \"memory_side\": \"none\", \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"cloud\"}",
       "expect": {
         "where": "cloud",
         "lane": "jarvis-escalate",
@@ -204,7 +204,7 @@
     },
     {
       "name": "cloud answer, older backend without `where`",
-      "header": "{\"lane\": \"jarvis-escalate\", \"reason\": \"complexity 0.9, budget available, and you said yes for this question\", \"gate\": \"escalate\", \"complexity\": 0.9, \"inject_memory\": false, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 0, \"injected_ids\": [], \"memory_side\": \"none\", \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
+      "header": "{\"lane\": \"jarvis-escalate\", \"reason\": \"complexity 0.9, budget available, and you said yes for this question\", \"gate\": \"escalate\", \"complexity\": 0.9, \"inject_memory\": false, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 0, \"injected_ids\": [], \"injected_sensitive\": 0, \"memory_side\": \"none\", \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
       "expect": {
         "where": "cloud",
         "lane": "jarvis-escalate",
@@ -213,7 +213,7 @@
     },
     {
       "name": "local answer, cloud offered",
-      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"complexity 0.9: jarvis-escalate could answer this, but the cloud is used only when you say yes for this question\", \"gate\": \"offer\", \"complexity\": 0.9, \"inject_memory\": true, \"tainted\": false, \"offer\": \"jarvis-escalate\", \"injected_facts\": 0, \"injected_ids\": [], \"memory_side\": \"hud\", \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"local\"}",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"complexity 0.9: jarvis-escalate could answer this, but the cloud is used only when you say yes for this question\", \"gate\": \"offer\", \"complexity\": 0.9, \"inject_memory\": true, \"tainted\": false, \"offer\": \"jarvis-escalate\", \"injected_facts\": 0, \"injected_ids\": [], \"memory_side\": \"hud\", \"injected_sensitive\": 0, \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"local\"}",
       "expect": {
         "where": "local",
         "lane": "jarvis-primary",
@@ -222,7 +222,43 @@
     },
     {
       "name": "local answer, cloud offered, older backend without `where`",
-      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"complexity 0.9: jarvis-escalate could answer this, but the cloud is used only when you say yes for this question\", \"gate\": \"offer\", \"complexity\": 0.9, \"inject_memory\": true, \"tainted\": false, \"offer\": \"jarvis-escalate\", \"injected_facts\": 0, \"injected_ids\": [], \"memory_side\": \"hud\", \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"complexity 0.9: jarvis-escalate could answer this, but the cloud is used only when you say yes for this question\", \"gate\": \"offer\", \"complexity\": 0.9, \"inject_memory\": true, \"tainted\": false, \"offer\": \"jarvis-escalate\", \"injected_facts\": 0, \"injected_ids\": [], \"memory_side\": \"hud\", \"injected_sensitive\": 0, \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
+      "expect": {
+        "where": "local",
+        "lane": "jarvis-primary",
+        "turn_id": "0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "name": "local answer that used a sensitive saved fact",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 2, \"injected_ids\": [\"fact_1\", \"fact_2\"], \"memory_side\": \"hud\", \"injected_sensitive\": 1, \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"local\"}",
+      "expect": {
+        "where": "local",
+        "lane": "jarvis-primary",
+        "turn_id": "0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "name": "local answer that used a sensitive saved fact, older backend without `where`",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 2, \"injected_ids\": [\"fact_1\", \"fact_2\"], \"memory_side\": \"hud\", \"injected_sensitive\": 1, \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
+      "expect": {
+        "where": "local",
+        "lane": "jarvis-primary",
+        "turn_id": "0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "name": "local answer from a PC older than injected_sensitive",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 1, \"injected_ids\": [\"fact_1\"], \"memory_side\": \"hud\", \"turn_id\": \"0123456789abcdef0123456789abcdef\", \"where\": \"local\"}",
+      "expect": {
+        "where": "local",
+        "lane": "jarvis-primary",
+        "turn_id": "0123456789abcdef0123456789abcdef"
+      }
+    },
+    {
+      "name": "local answer from a PC older than injected_sensitive, older backend without `where`",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"the question matches the private-topic backstop\", \"gate\": \"private\", \"complexity\": 0.05, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"injected_facts\": 1, \"injected_ids\": [\"fact_1\"], \"memory_side\": \"hud\", \"turn_id\": \"0123456789abcdef0123456789abcdef\"}",
       "expect": {
         "where": "local",
         "lane": "jarvis-primary",

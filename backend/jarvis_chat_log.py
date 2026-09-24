@@ -843,6 +843,11 @@ _PENDING: dict = {}          # {"id", "since"} while an ON card waits
 _WITHDRAWN: set = set()
 _LAST: dict = {}             # {"outcome", "why", "at"} - how the last card ended
 _LATEST: dict = {}           # {"id"} - the card raised most recently; only it sets _LAST
+#: Held from an approved card's "was it withdrawn?" check through
+#: set_enabled(True), and from OFF's withdrawing through set_enabled(False):
+#: an OFF pressed in between used to be answered "off" and then overwritten
+#: by the card (red team R5). Always taken BEFORE _LOCK.
+_SWITCH = threading.Lock()
 
 
 def _gate(action: str, detail: dict, prompt: str):
@@ -903,17 +908,21 @@ def _decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
         if outcome in ("denied", "timed_out"):
             return _finish(pid, outcome)
         return _finish(pid, "refused", str(getattr(v, "reason", "refused")))
-    with _LOCK:
-        withdrawn = pid in _WITHDRAWN
-    if withdrawn:
-        return _finish(pid, "withdrawn", "you turned chat history off while the card was waiting")
-    try:
-        out = apply(True) or {}
-    except Exception as exc:
-        return _finish(pid, "failed", f"{type(exc).__name__}")
-    if out.get("ok") is False:
-        return _finish(pid, "failed", str(out.get("error", "")))
-    _finish(pid, "enabled")
+    with _SWITCH:
+        # Held until history is on and _LAST says so: an OFF pressed
+        # meanwhile waits for it, then turns history off (R5).
+        with _LOCK:
+            withdrawn = pid in _WITHDRAWN
+        if withdrawn:
+            return _finish(pid, "withdrawn",
+                           "you turned chat history off while the card was waiting")
+        try:
+            out = apply(True) or {}
+        except Exception as exc:
+            return _finish(pid, "failed", f"{type(exc).__name__}")
+        if out.get("ok") is False:
+            return _finish(pid, "failed", str(out.get("error", "")))
+        _finish(pid, "enabled")
 
 
 def _keep_words(days: int) -> str:
@@ -954,17 +963,21 @@ def request_settings(body, *, gate: Optional[Callable] = None,
     if key != "enabled" or not isinstance(value, bool):
         return 400, {"error": 'need {"enabled": true|false} or {"keep_days": 0|30|90|365}'}
     if not value:
-        with _LOCK:
-            if _PENDING:
-                # Withdrawn AND no longer the waiting card: approving it does
-                # nothing, and a later ON raises a fresh card instead of
-                # pointing at this one (chat history audit, 2026-09-24).
-                _WITHDRAWN.add(_PENDING["id"])
-                _PENDING.clear()
-        try:
-            log.set_enabled(False)
-        except Exception as exc:
-            return 500, {"ok": False, "error": f"could not save the setting ({type(exc).__name__})"}
+        with _SWITCH:
+            # The lock an approved card holds from its withdrawn check to
+            # set_enabled(True): this OFF is never overwritten by it (R5).
+            with _LOCK:
+                if _PENDING:
+                    # Withdrawn AND no longer the waiting card: approving it
+                    # does nothing, and a later ON raises a fresh card instead
+                    # of pointing at this one (chat history audit, 2026-09-24).
+                    _WITHDRAWN.add(_PENDING["id"])
+                    _PENDING.clear()
+            try:
+                log.set_enabled(False)
+            except Exception as exc:
+                return 500, {"ok": False,
+                             "error": f"could not save the setting ({type(exc).__name__})"}
         _audit("history.off", {})
         out = log.status()
         out.update(ok=True, enabled=False, waiting=False, message=OFF_TEXT)
@@ -982,7 +995,7 @@ def request_settings(body, *, gate: Optional[Callable] = None,
         pid = None if _PENDING else _uuid.uuid4().hex
         if pid is not None:
             _PENDING.update(id=pid, since=time.time())
-        _LATEST["id"] = pid
+            _LATEST["id"] = pid
     if pid is None:
         # status() reads the card state under _LOCK, so not inside it.
         out = log.status()

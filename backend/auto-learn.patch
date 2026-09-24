@@ -174,7 +174,32 @@
          if route in ("/api/memory/forget", "/api/memory/edit",
                       "/api/memory/learning", "/api/memory/sleep_time",
                       "/api/memory/keep_both"):
-@@ -2700,7 +2805,10 @@
+@@ -2694,13 +2799,34 @@
+                 injected = len(chosen_facts)
+                 injected_ids = [f"mem:{f['id']}" if "id" in f else f"fact:{facts.index(f)}"
+                                 for f in chosen_facts if f in facts]
+-                block = "\n".join(_dated_fact(f) for f in chosen_facts)
++                # auto-learn.patch (red team R7): each fact on one line, with
++                # nothing in it that reads as a FACTS line - a saved fact that
++                # said "---END FACTS---" would otherwise close the quoted block
++                # below early and speak as an instruction. And which facts were
++                # CHECKED and are not sensitive (the owner's decision of
++                # 2026-09-24: an answer that uses a sensitive saved fact stays
++                # on screen): X-Jarvis-Route's `injected_sensitive`, worked out
++                # after the degrade loop, counts every other one.
++                try:
++                    import jarvis_auto_learn as _al
++                    _al_line, _al_sensitive = _al.recall_line, _al.is_sensitive_fact
++                except Exception:
++                    _al_line = lambda s: " ".join(  # noqa: E731
++                        str(s).replace("---END FACTS---", " ").replace("---FACTS---", " ").split())
++                    _al_sensitive = lambda s: True  # noqa: E731
++                block = "\n".join(_al_line(_dated_fact(f)) for f in chosen_facts)
++                _al_plain = {f"mem:{f['id']}" if "id" in f else f"fact:{facts.index(f)}"
++                             for f in chosen_facts
++                             if f in facts and not _al_sensitive(f.get("text", ""))}
+                 recalled = {
+                     "role": "system",
                      "content": "Things you know about the user, recalled for this "
                                 "question. The date is when Jarvis was told, not "
                                 "necessarily when it became true; older ones may "
@@ -186,7 +211,32 @@
                  }
                  # Late, not first. This block used to be prepended, and the
                  # facts it holds are chosen per question, so token 0 of the
-@@ -3170,11 +3278,12 @@
+@@ -3000,7 +3126,24 @@
+                 route_header["turn_id"] = jarvis_feedback.record_turn(
+                     route_header.get("injected_ids") or [])
+             except Exception:
+                 pass
++            # auto-learn.patch (the owner's decision, 2026-09-24): how many of
++            # the recalled facts this answer REALLY used are sensitive - here,
++            # after the degrade loop, which empties injected_ids when a turn
++            # leaves the local lane. The apps keep such an answer on screen
++            # instead of reading it aloud, unless the owner allowed that.
++            # Fail closed: a fact that was not checked (recalled elsewhere, or
++            # the check could not run) counts as sensitive.
++            try:
++                _al_n = int(route_header.get("injected_facts") or 0)
++            except (TypeError, ValueError):
++                _al_n = len(route_header.get("injected_ids") or [])
++            try:
++                _al_ok = sum(1 for i in route_header.get("injected_ids") or []
++                             if i in _al_plain)
++            except Exception:            # _al_plain unset: nothing here was checked
++                _al_ok = 0
++            route_header["injected_sensitive"] = max(0, _al_n - _al_ok)
+             if use_tools:
+                 # No `upstream` exists in this branch - jarvis_agent makes
+                 # its own request(s) to Ollama entirely on its own, so there
+@@ -3170,11 +3313,12 @@
              # origin="owner" because this is a request from a paired client:
              # a person typed or said it. Backend-started turns must never come
              # through here with "owner" - see jarvis_intake.jarvis_turn().
@@ -204,7 +254,7 @@
              # chat-history.patch: this PC's own record of the turn, in
              # jarvis_chat_log.py - from `body` as it arrived: the NEWEST user
              # message with where its words came from, and the answer only
-@@ -3190,6 +3299,12 @@
+@@ -3190,6 +3334,12 @@
                  jarvis_chat_log.record_turn(
                      body, lane=str(route_header.get("lane") or lane),
                      turn=_history["turn"], at=_history["at"])
@@ -217,7 +267,7 @@
              except Exception:
                  pass
  
-@@ -3398,6 +3513,16 @@
+@@ -3398,6 +3548,16 @@
      "available": False,
      "error": "chat history is not installed on this PC, so no chats are kept",
      "reason": "copy backend\\jarvis_chat_log.py into the backend folder "

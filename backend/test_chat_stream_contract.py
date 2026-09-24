@@ -216,16 +216,39 @@ def build_route_headers() -> list:
         assert re.fullmatch(r"[0-9a-f]{32}", tid), tid
         return FIXED_TURN_ID
 
+    # auto-learn.patch's `injected_sensitive`: how many of the recalled facts
+    # the answer used are sensitive, by the real jarvis_auto_learn check the
+    # patch calls (is_sensitive_fact). The owner's decision, 2026-09-24: the
+    # apps keep such an answer on screen.
+    import jarvis_auto_learn as AL
+
+    def sensitive(*texts):
+        return sum(1 for t in texts if AL.is_sensitive_fact(t))
+
     local.update({"injected_facts": 1, "injected_ids": ["fact_1"], "memory_side": "hud",
+                  "injected_sensitive": sensitive("Owner likes green tea"),
                   "turn_id": turn_id(), "lane": "jarvis-primary", "where": "local"})
     cloud.update({"inject_memory": False, "injected_facts": 0, "injected_ids": [],
+                  "injected_sensitive": 0,
                   "memory_side": "none", "turn_id": turn_id(), "lane": "jarvis-escalate",
                   "where": "cloud"})
     offered.update({"injected_facts": 0, "injected_ids": [], "memory_side": "hud",
+                    "injected_sensitive": 0,
                     "turn_id": turn_id(), "lane": "jarvis-primary", "where": "local"})
+    used_sensitive = dict(local, injected_facts=2, injected_ids=["fact_1", "fact_2"],
+                          injected_sensitive=sensitive("Owner likes green tea",
+                                                       "Owner's blood pressure is high"),
+                          turn_id=turn_id())
+    assert local["injected_sensitive"] == 0 and used_sensitive["injected_sensitive"] == 1, \
+        (local, used_sensitive)
+    # A PC older than auto-learn.patch's injected_sensitive: the apps count
+    # every injected fact as sensitive (fail closed).
+    no_count = {k: v for k, v in local.items() if k != "injected_sensitive"}
     out = []
     for name, h in (("local answer", local), ("cloud answer", cloud),
-                    ("local answer, cloud offered", offered)):
+                    ("local answer, cloud offered", offered),
+                    ("local answer that used a sensitive saved fact", used_sensitive),
+                    ("local answer from a PC older than injected_sensitive", no_count)):
         exp = {"where": h["where"], "lane": h["lane"], "turn_id": FIXED_TURN_ID}
         out.append({"name": name, "header": json.dumps(h), "expect": exp})
         old = {k: v for k, v in h.items() if k != "where"}
