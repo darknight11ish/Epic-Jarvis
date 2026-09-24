@@ -459,12 +459,23 @@ def t_an_older_jarvis_voice_still_works():
     check("hear() works with a verify() that has no sample_rate", ok, f"{heard}")
 
 
+def t_the_desktop_fixture_is_fresh():
+    """jarvis-desktop/tests/fixtures/voice-status-cases.json is what the
+    desktop's Settings -> Voice is tested against (tests/voice-settings.mjs,
+    and voice.rs's own tests). It must be this backend's real output, so a
+    renamed or dropped field fails here rather than as a quiet blank line."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_voice_status_cases as G
+    check("voice-status-cases.json equals a fresh run of the producer",
+          G.main(["--check"]) == 0, "run python3 tools/gen_voice_status_cases.py")
+
+
 if __name__ == "__main__":
     for fn in (t_the_client_files_are_readable, t_status_has_every_field_the_phone_reads,
                t_push_to_talk_means_it_can_work, t_training_state_in_every_shape,
                t_the_utterance_reply_serves_both_clients, t_the_turn_answer_serves_the_desktop,
                t_the_someone_else_reply_serves_the_phone,
-               t_an_older_jarvis_voice_still_works):
+               t_an_older_jarvis_voice_still_works, t_the_desktop_fixture_is_fresh):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

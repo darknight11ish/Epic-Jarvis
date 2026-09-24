@@ -156,10 +156,10 @@ CLASSIFICATION = {
     "/api/task/stop": ("ported", ""),
     "/api/undo": ("ported", ""),
     "/api/undo/revert": ("ported", ""),
-    "/api/version": ("ported", ""),
+    "/api/version": ("ported", "The handshake. Both apps also list its capabilities by name: desktop Settings, \"What this backend supports\" (its own card, after About) (get_backend_capabilities); phone, \"This backend\"."),
     "/api/visual-spec": ("deliberate", "The phone bundles its own copy of the spec and checks it in a unit test (SpecDriftTest); JARVIS-API.md: the phone never fetches it."),
     "/api/voice/say": ("ported", ""),
-    "/api/voice/status": ("ported", ""),
+    "/api/voice/status": ("ported", "What the PC's voice can do. Desktop: \"hey Jarvis\" listening reads it (voice.rs), and Settings, Voice shows it read-only (get_voice_status). Phone: Platform checks, Your voice and the wake-word card."),
     "/api/voice/turn": ("deliberate", "Smart Turn, 'finished or only paused?'. The phone runs the same model "
                         "itself (assets/turn/, voice/SmartTurn.kt), so its audio never leaves it to ask; "
                         "the desktop asks its own PC over loopback."),
@@ -171,7 +171,7 @@ CLASSIFICATION = {
     "/api/voice/voices/active": ("planned", "Speak in a custom voice (one approval card) or back in the built-in one (immediate)."),
     "/api/voice/voices/delete": ("planned", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use."),
     "/api/voice/voices/better": ("planned", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate."),
-    "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card."),
+    "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card, turning it off is immediate. Both apps can do both: desktop Settings, Voice (set_wake_word; ON also from the Jarvis bar's listen button), phone Platform checks."),
     "/api/watch": ("ported", "Watches - the GitHub topics Jarvis keeps an eye on. Desktop: Brain, Watch tab. Phone: Mind, Watches (WatchPlate.kt, net/Watch.kt)."),
     "/api/watch/add": ("ported", "Watch a topic. The phone holds it on a stale link (it turns something on) and shows a card if the PC raises one."),
     "/api/watch/remove": ("ported", "Forget a topic, after a warning. Never held on a stale link."),

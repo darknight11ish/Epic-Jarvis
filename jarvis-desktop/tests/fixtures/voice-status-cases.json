@@ -1,0 +1,1244 @@
+{
+  "_about": "Real output of backend/jarvis_speech.status() (GET /api/voice/status) in named cases, and of set_wake_enabled() (POST /api/voice/wake) under `answers`, made by tools/gen_voice_status_cases.py. Voice prints are trained from synthesised tones with the basic check; model files are empty stand-ins. Folders and times are made the same on every machine. Do not edit by hand: re-run the tool.",
+  "answers": {
+    "wake_off": {
+      "applied": true,
+      "enabled": false,
+      "message": "The wake word is off. Nothing listens for it now.",
+      "ok": true,
+      "pending": false
+    },
+    "wake_on_pending": {
+      "applied": false,
+      "enabled": false,
+      "message": "Approve the card on your PC or phone to turn it on. Nothing changes until you do.",
+      "ok": true,
+      "pending": true
+    }
+  },
+  "cases": {
+    "needs_retraining": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "gate": {
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "mode": "owner",
+        "needs_retraining": true,
+        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices. your voice was trained with a different voice check than the one installed now, so it will be refused until you train it again",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": true,
+            "samples": 5,
+            "threshold": 0.35,
+            "trained": true
+          },
+          "phone": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          }
+        },
+        "samples": 5,
+        "speaker_model": false,
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "min_clips": 3,
+            "min_seconds": 1.0
+          },
+          "pending": false
+        }
+      },
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC's voice check changed since you trained it. Train your voice again.",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "mode": "owner",
+      "needs_retraining": true,
+      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices. your voice was trained with a different voice check than the one installed now, so it will be refused until you train it again sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": true,
+          "samples": 5,
+          "threshold": 0.35,
+          "trained": true
+        },
+        "phone": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        }
+      },
+      "profile_embedder": "sherpa-onnx:0123456789ab",
+      "samples": 5,
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet"
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "not_trained": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": false,
+      "gate": {
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": false,
+        "mode": "owner",
+        "needs_retraining": false,
+        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          }
+        },
+        "samples": 0,
+        "speaker_model": false,
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "min_clips": 3,
+            "min_seconds": 1.0
+          },
+          "pending": false
+        }
+      },
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "Jarvis has not learned your voice yet. Use Train my voice on the Checks screen.",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "mode": "owner",
+      "needs_retraining": false,
+      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        }
+      },
+      "profile_embedder": "",
+      "samples": 0,
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet"
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "older_single_print": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "gate": {
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "mode": "owner",
+        "needs_retraining": false,
+        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 4,
+            "threshold": 0.35,
+            "trained": true
+          },
+          "phone": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          }
+        },
+        "samples": 4,
+        "speaker_model": false,
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "min_clips": 3,
+            "min_seconds": 1.0
+          },
+          "pending": false
+        }
+      },
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "mode": "owner",
+      "needs_retraining": false,
+      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 4,
+          "threshold": 0.35,
+          "trained": true
+        },
+        "phone": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        }
+      },
+      "profile_embedder": "spectral-v1",
+      "samples": 4,
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet"
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "phone_trained": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "gate": {
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "mode": "owner",
+        "needs_retraining": false,
+        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "samples": 3,
+        "speaker_model": false,
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "min_clips": 3,
+            "min_seconds": 1.0
+          },
+          "pending": false
+        }
+      },
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "mode": "owner",
+      "needs_retraining": false,
+      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "profile_embedder": "spectral-v1",
+      "samples": 3,
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet"
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "ready_wake_on": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "gate": {
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "mode": "owner",
+        "needs_retraining": false,
+        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "prints": {
+          "desktop": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 4,
+            "threshold": 0.35,
+            "trained": true
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "samples": 3,
+        "speaker_model": false,
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "min_clips": 3,
+            "min_seconds": 1.0
+          },
+          "pending": false
+        }
+      },
+      "listening": {
+        "push_to_talk": true,
+        "push_to_talk_why": "",
+        "wake_word": true,
+        "wake_word_pending": false,
+        "wake_word_why": "switched on"
+      },
+      "local_stt_on_client_allowed": false,
+      "mode": "owner",
+      "needs_retraining": false,
+      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+      "prints": {
+        "desktop": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 4,
+          "threshold": 0.35,
+          "trained": true
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "profile_embedder": "spectral-v1",
+      "samples": 3,
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "stt": {
+        "available": true,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "ready (nemo_transducer)"
+      },
+      "stt_available": true,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": true,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "ready"
+      },
+      "tts_available": true,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": true,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": ""
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": true,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": true,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": ""
+        },
+        "stop_word": {
+          "available": true,
+          "threshold": 0.5,
+          "why": ""
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 4,
+          "trained": true,
+          "why": ""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": true
+    },
+    "trained_by_card": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "gate": {
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "mode": "owner",
+        "needs_retraining": false,
+        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "samples": 3,
+        "speaker_model": false,
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "last": {
+            "at": 1790000000.0,
+            "outcome": "enrolled",
+            "samples": 3,
+            "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+          },
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "min_clips": 3,
+            "min_seconds": 1.0
+          },
+          "pending": false
+        }
+      },
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "mode": "owner",
+      "needs_retraining": false,
+      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "profile_embedder": "spectral-v1",
+      "samples": 3,
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet"
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "wake_off_after_waiting": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "gate": {
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "mode": "owner",
+        "needs_retraining": false,
+        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "samples": 3,
+        "speaker_model": false,
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "min_clips": 3,
+            "min_seconds": 1.0
+          },
+          "pending": false
+        }
+      },
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "wake_word": false,
+        "wake_word_pending": false,
+        "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
+      },
+      "local_stt_on_client_allowed": false,
+      "mode": "owner",
+      "needs_retraining": false,
+      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "profile_embedder": "spectral-v1",
+      "samples": 3,
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet"
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "pending": false,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    },
+    "wake_waiting": {
+      "audio_in": {
+        "client_stt_allowed": false,
+        "format": "WAV, 16-bit mono PCM",
+        "max_seconds": 30.0,
+        "sample_rate": 16000,
+        "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
+      },
+      "available": true,
+      "embedder": "spectral-v1",
+      "enabled": true,
+      "enrolled": true,
+      "gate": {
+        "embedder": "spectral-v1",
+        "enabled": true,
+        "enrolled": true,
+        "mode": "owner",
+        "needs_retraining": false,
+        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "prints": {
+          "desktop": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "general": {
+            "created": 0.0,
+            "needs_retraining": false,
+            "samples": 0,
+            "threshold": 0.0,
+            "trained": false
+          },
+          "phone": {
+            "created": 1790000000.0,
+            "needs_retraining": false,
+            "samples": 3,
+            "threshold": 0.35,
+            "trained": true
+          }
+        },
+        "samples": 3,
+        "speaker_model": false,
+        "threshold": 0.35,
+        "training": {
+          "available": true,
+          "calibrate": true,
+          "limits": {
+            "max_clips": 12,
+            "max_seconds": 10.0,
+            "max_total_seconds": 80.0,
+            "min_clips": 3,
+            "min_seconds": 1.0
+          },
+          "pending": false
+        }
+      },
+      "listening": {
+        "push_to_talk": false,
+        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "wake_word": false,
+        "wake_word_pending": true,
+        "wake_word_why": "waiting for you to approve the card"
+      },
+      "local_stt_on_client_allowed": false,
+      "mode": "owner",
+      "needs_retraining": false,
+      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "prints": {
+        "desktop": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "general": {
+          "created": 0.0,
+          "needs_retraining": false,
+          "samples": 0,
+          "threshold": 0.0,
+          "trained": false
+        },
+        "phone": {
+          "created": 1790000000.0,
+          "needs_retraining": false,
+          "samples": 3,
+          "threshold": 0.35,
+          "trained": true
+        }
+      },
+      "profile_embedder": "spectral-v1",
+      "samples": 3,
+      "speaker_model": false,
+      "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "stt": {
+        "available": false,
+        "client_fallback_ok": false,
+        "engine": "sherpa-onnx",
+        "status": "sherpa-onnx is selected but its model files are not on disk yet"
+      },
+      "stt_available": false,
+      "stt_engine": "sherpa-onnx",
+      "threshold": 0.35,
+      "tts": {
+        "available": false,
+        "client_fallback_ok": true,
+        "engine": "sherpa-onnx",
+        "status": "no Kokoro model files on disk yet"
+      },
+      "tts_available": false,
+      "tts_engine": "sherpa-onnx",
+      "turn": {
+        "ask_after_ms": 200,
+        "available": false,
+        "enabled": true,
+        "engine": "Smart Turn v3.2 (ONNX Runtime)",
+        "max_pause_ms": 2000,
+        "threshold": 0.5,
+        "why": "the Smart Turn model is not on disk yet (looked for ~/.openjarvis/voice-models/turn/smart-turn-v3.2-cpu.onnx)"
+      },
+      "vad": {
+        "available": false,
+        "engine": "silero (sherpa-onnx)",
+        "status": "not installed (looked for ~/.openjarvis/voice-models/vad/silero_vad.onnx)"
+      },
+      "wake": {
+        "awake_seconds": 8.0,
+        "enabled": false,
+        "expires_in": 170,
+        "pending": true,
+        "phrase": "hey_jarvis",
+        "spotter": {
+          "available": false,
+          "engine": "openWakeWord (ONNX Runtime)",
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "stop_word": {
+          "available": false,
+          "threshold": 0.5,
+          "why": "the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
+        },
+        "threshold": 0.5,
+        "verifier": {
+          "positives": 0,
+          "trained": false,
+          "why": "not trained yet - it is built when you train your voice, from the sentences that start with \"hey Jarvis\""
+        }
+      },
+      "wake_phrase": "hey_jarvis",
+      "wake_word_enabled": false
+    }
+  }
+}

@@ -93,6 +93,10 @@ fn main() {
             // Settings' "Second graphics card": read what was found and the
             // switches, and turn ONE switch on or off. ON only raises an
             // approval card. Settings window only.
+            // Settings' "What this backend supports": the capability NAMES
+            // GET /api/version reports, as the phone lists them. Read only.
+            // Settings window only.
+            "get_backend_capabilities",
             "get_second_card",
             "set_second_card",
             // Settings' "Big model (slow)" (backend/big-model.patch): read
@@ -100,6 +104,15 @@ fn main() {
             // or off. ON only raises an approval card. Settings window only.
             "get_big_model",
             "set_big_model",
+            // Settings' "Voice": what the PC's voice settings are (GET
+            // /api/voice/status) - whether each microphone's voice print is
+            // trained, the wake word, the stop word, Smart Turn. Read only.
+            // Settings window only.
+            "get_voice_status",
+            // Settings' "Voice": the PC's "hey Jarvis" switch. OFF at once
+            // (and this PC stops listening); ON only raises an approval card,
+            // and is held while the event stream is stale. Settings only.
+            "set_wake_word",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

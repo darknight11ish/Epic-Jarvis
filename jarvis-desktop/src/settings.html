@@ -302,6 +302,66 @@
         </div>
       </section>
 
+      <!-- ── Voice ─────────────────────────────────────────────────────────
+           Read from GET /api/voice/status (settings.js, voice part; the
+           words are in voice-settings.js). The same facts the phone shows
+           on Platform checks, under "Your voice" and the wake word. Training
+           a voice is on the phone for now, and this says so. -->
+      <section class="card" id="voice">
+        <h2>Voice</h2>
+        <p class="note">
+          What Jarvis on this PC says about listening to you: whether it
+          knows your voice, and what it can hear.
+        </p>
+        <p class="note" id="voice-train-where">
+          To teach Jarvis your voice, use your phone for now: open Platform
+          checks and tap Train my voice on the Your voice card.
+        </p>
+
+        <p class="state" id="voice-state" role="status">Asking Jarvis about voice…</p>
+
+        <div id="voice-body" hidden>
+          <h3 class="subhead">Your voice</h3>
+          <p class="sc-line" id="voice-summary"></p>
+          <ul class="sc-cards" id="voice-prints"></ul>
+          <p class="sc-line" id="voice-check"></p>
+          <p class="sc-line" id="voice-last" hidden></p>
+          <p class="sc-line" id="voice-talk"></p>
+
+          <h3 class="subhead">"Hey Jarvis"</h3>
+          <p class="sc-line" id="voice-wake"></p>
+          <div class="row">
+            <button class="btn" id="voice-wake-off" type="button" hidden>Turn the wake word off</button>
+            <button class="btn" id="voice-wake-on" type="button" hidden>Turn on "hey Jarvis"</button>
+            <span class="status" id="voice-wake-status" role="status"></span>
+          </div>
+          <p class="note" id="voice-wake-on-note" hidden>
+            This raises an approval card. Nothing changes until you approve
+            it, and then nothing listens until you switch listening on in the
+            Jarvis bar or on your phone. Turning it off happens at once.
+          </p>
+          <p class="sc-line" id="voice-verifier" hidden></p>
+          <p class="sc-line" id="voice-stop-word" hidden></p>
+          <p class="sc-line" id="voice-turn" hidden></p>
+        </div>
+
+        <!-- A setting of this PC's, not the server's, so it works whether
+             or not Jarvis answered above (barge-in.js; the phone has its
+             own switch for its own microphone). -->
+        <h3 class="subhead">Interrupting Jarvis</h3>
+        <label class="toggle">
+          <input id="voice-barge-in" type="checkbox" />
+          <span>
+            Interrupt Jarvis while it talks
+            <span class="toggle-detail" id="voice-barge-in-detail"></span>
+          </span>
+        </label>
+        <p class="note">
+          This PC only; your phone has its own switch. It matters only while
+          this PC is listening for "hey Jarvis".
+        </p>
+      </section>
+
       <!-- ── Second graphics card ─────────────────────────────────────────
            Read from GET /api/second-card (settings.js, second-card part).
            Every switch is OFF until the owner turns it on, and can only be
@@ -715,6 +775,36 @@
             </dd>
           </div>
         </dl>
+
+      </section>
+
+      <section class="card" id="backend-supports">
+      <!-- What the Jarvis server says it has: GET /api/version's
+           capabilities, by name (settings.js, "This backend supports"). The
+           same list the phone shows under "This backend". -->
+      <h2 id="caps-heading">What this backend supports</h2>
+      <p class="note">
+        The parts the Jarvis server this app talks to says it has, by the
+        names it uses for them. Your phone lists the same names, so the
+        two can be compared.
+      </p>
+      <p class="state" id="caps-state" role="status">Asking Jarvis…</p>
+      <div id="caps-body" hidden>
+        <dl class="about-facts">
+          <div class="about-fact" id="caps-server-row">
+            <dt>Server</dt>
+            <dd id="caps-server">—</dd>
+          </div>
+          <div class="about-fact">
+            <dt>API</dt>
+            <dd id="caps-api">—</dd>
+          </div>
+        </dl>
+        <ul class="caps" id="caps-on" aria-labelledby="caps-heading"></ul>
+        <p class="note" id="caps-none" hidden>None reported.</p>
+        <h3 class="subhead" id="caps-off-heading" hidden>Not on this backend</h3>
+        <ul class="caps" id="caps-off" data-muted="true" aria-labelledby="caps-off-heading" hidden></ul>
+      </div>
       </section>
 
       <footer class="page-foot">

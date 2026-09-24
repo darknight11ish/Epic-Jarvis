@@ -32,6 +32,7 @@ import {
   followTheme,
   followZoom,
   linkWords,
+  onEvent,
   onLink,
   onQueue,
   reconnect,
@@ -40,6 +41,19 @@ import {
   THEME_INFO,
   THEMES,
 } from "./jarvis-link.js";
+import { BARGE_IN_KEY, describeBargeIn, loadBargeIn, saveBargeIn } from "./barge-in.js";
+import {
+  checkLine as voiceCheckLine,
+  isTrained as voiceIsTrained,
+  lastTrainingLine,
+  printLines as voicePrintLines,
+  stopWordLine,
+  summaryLine as voiceSummaryLine,
+  talkLine as voiceTalkLine,
+  turnLine as voiceTurnLine,
+  verifierLine as voiceVerifierLine,
+  wakeInfo,
+} from "./voice-settings.js";
 import {
   FRAME_RATES,
   loadFaceTuning,
@@ -2011,5 +2025,282 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) loadBigModel();
 });
 loadBigModel();
+
+/* ==========================================================================
+   Voice
+   --------------------------------------------------------------------------
+   What the PC says about listening to the owner: `get_voice_status` (GET
+   /api/voice/status, jarvis_speech.status() - its real shape is
+   tests/fixtures/voice-status-cases.json). The same facts the phone shows on
+   Platform checks under "Your voice" and the wake word, in the phone's words
+   where it has them (voice-settings.js). Training a voice is on the phone for
+   now; the section says so and offers no button for it.
+
+   The one thing it changes is the PC's "hey Jarvis" switch (`set_wake_word`,
+   POST /api/voice/wake), as the phone's wake-word card does. Turning it OFF
+   is immediate, is never held, and stops this PC's own listening too.
+   Turning it ON approves nothing: the server raises ONE approval card, and
+   the Rust holds the request while the event stream is stale. The switch
+   shows what Jarvis last said, never what was clicked.
+
+   Re-read when the window comes back into view, when the approval queue
+   changes while a voice card waits (there is no event for the decision), and
+   on the `voice` doorbell.
+   ========================================================================== */
+
+const vc = {
+  card: $("voice"),
+  state: $("voice-state"),
+  body: $("voice-body"),
+  summary: $("voice-summary"),
+  prints: $("voice-prints"),
+  check: $("voice-check"),
+  last: $("voice-last"),
+  talk: $("voice-talk"),
+  wake: $("voice-wake"),
+  verifier: $("voice-verifier"),
+  stopWord: $("voice-stop-word"),
+  turn: $("voice-turn"),
+  wakeOff: $("voice-wake-off"),
+  wakeOn: $("voice-wake-on"),
+  wakeOnNote: $("voice-wake-on-note"),
+  wakeStatus: $("voice-wake-status"),
+};
+
+const VC_UPDATE =
+  "This PC's Jarvis does not report its voice settings yet. Update the backend by running apply-patches.ps1, then open this again.";
+
+let vcReadSeq = 0;
+let vcBusy = false;
+/** A voice card (the wake word's, or a training) was waiting at the last read. */
+let vcWaiting = false;
+
+/** A `{text, tone}` line, or hidden when there is nothing to say. */
+function vcLine(node, line) {
+  if (!node) return;
+  const text = line && typeof line === "object" ? line.text : line;
+  node.hidden = !text;
+  node.textContent = text || "";
+  const tone = line && typeof line === "object" ? line.tone : "";
+  if (tone) node.dataset.tone = tone;
+  else delete node.dataset.tone;
+}
+
+function vcShowProblem(words) {
+  vc.body.hidden = true;
+  vc.state.hidden = false;
+  vc.state.dataset.tone = "bad";
+  vc.state.textContent = words;
+  vcWaiting = false;
+  // Nothing to switch when Jarvis could not say what is on.
+  vc.wakeOff.hidden = true;
+  vc.wakeOn.hidden = true;
+  vc.wakeOnNote.hidden = true;
+}
+
+function vcPrintItem(line) {
+  const item = scNode("li", "sc-gpu");
+  item.dataset.mic = line.id;
+  if (line.tone) item.dataset.tone = line.tone;
+  item.append(scNode("span", "sc-gpu-name", line.name));
+  item.append(scNode("span", "sc-gpu-role", line.text.charAt(0).toUpperCase() + line.text.slice(1)));
+  return item;
+}
+
+function vcPaint(status) {
+  vc.state.hidden = true;
+  delete vc.state.dataset.tone;
+  vc.body.hidden = false;
+
+  vcLine(vc.summary, { text: voiceSummaryLine(status, APPROVE_WHERE),
+                       tone: voiceIsTrained(status) ? "ok" : "warn" });
+  vc.prints.replaceChildren(...voicePrintLines(status).map(vcPrintItem));
+  vcLine(vc.check, voiceCheckLine(status));
+  vcLine(vc.last, lastTrainingLine(((status.gate || {}).training || {}).last));
+  vcLine(vc.talk, voiceTalkLine(status));
+
+  const wake = wakeInfo(status, APPROVE_WHERE);
+  vc.card.dataset.wake = wake.state;
+  vcLine(vc.wake, { text: wake.text, tone: wake.state === "waiting" ? "warn" : "" });
+  // The phone's buttons: off while it is on, on while it is off and no card
+  // waits. While a card waits there is nothing to press here - the card is
+  // the decision.
+  vc.wakeOff.hidden = wake.state !== "on";
+  vc.wakeOn.hidden = wake.state !== "off";
+  vc.wakeOnNote.hidden = wake.state !== "off";
+  vcLine(vc.verifier, voiceVerifierLine(status));
+  vcLine(vc.stopWord, stopWordLine(status));
+  vcLine(vc.turn, voiceTurnLine(status));
+
+  const gate = status.gate || {};
+  vcWaiting = wake.state === "waiting" || (gate.training || {}).pending === true;
+}
+
+async function loadVoice() {
+  if (!IS_TAURI || !vc.card) return;
+  const seq = ++vcReadSeq;
+  let answer;
+  try {
+    answer = await invoke("get_voice_status");
+  } catch (error) {
+    if (seq !== vcReadSeq) return;
+    vcShowProblem(`Jarvis could not be asked about voice. ${scProblemWords(error)}`);
+    return;
+  }
+  if (seq !== vcReadSeq) return;
+  if (answer && answer.available === false) {
+    vcShowProblem(typeof answer.why === "string" && answer.why ? answer.why : VC_UPDATE);
+    return;
+  }
+  if (!answer || typeof answer !== "object" || !answer.gate || !answer.listening) {
+    vcShowProblem(`Jarvis's answer about voice could not be read. ${VC_UPDATE}`);
+    return;
+  }
+  vcPaint(answer);
+}
+
+/** The PC's "hey Jarvis" switch: one request, one direction. */
+async function vcSetWake(enabled) {
+  if (vcBusy) return;
+  vcBusy = true;
+  const button = enabled ? vc.wakeOn : vc.wakeOff;
+  button.disabled = true;
+  report(vc.wakeStatus, enabled ? "Asking…" : "Turning it off…");
+  try {
+    const out = await invoke("set_wake_word", { enabled });
+    if (out && out.ok === false) {
+      report(vc.wakeStatus, scSentence(out.error) || "Jarvis did not change it.", "bad");
+    } else if (enabled && out && out.pending === true) {
+      report(vc.wakeStatus, SC_WAITING, "ok");
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(vc.wakeStatus, out.message, "ok");
+    } else {
+      report(vc.wakeStatus, enabled ? "\"Hey Jarvis\" is on." : "\"Hey Jarvis\" is off.", "ok");
+    }
+    announce(vc.wakeStatus.textContent);
+  } catch (error) {
+    report(vc.wakeStatus, scProblemWords(error), "bad");
+    announce(vc.wakeStatus.textContent, "assertive");
+  } finally {
+    vcBusy = false;
+    button.disabled = false;
+  }
+  await loadVoice();
+}
+
+if (vc.wakeOff) vc.wakeOff.addEventListener("click", () => vcSetWake(false));
+if (vc.wakeOn) vc.wakeOn.addEventListener("click", () => vcSetWake(true));
+
+/* "Interrupt Jarvis while it talks" - this PC's own setting (barge-in.js),
+   read by the Jarvis bar each time the listener hears something while
+   Jarvis is talking. Not the server's, so it works whatever Jarvis answered
+   above. */
+const bargeIn = $("voice-barge-in");
+const bargeInDetail = $("voice-barge-in-detail");
+
+function paintBargeIn() {
+  if (!bargeIn) return;
+  const on = loadBargeIn();
+  bargeIn.checked = on;
+  bargeInDetail.textContent = describeBargeIn(on);
+}
+
+if (bargeIn) {
+  bargeIn.addEventListener("change", () => {
+    if (!saveBargeIn(bargeIn.checked)) {
+      announce("That could not be saved on this PC.", "assertive");
+    }
+    paintBargeIn();
+    announce(bargeInDetail.textContent);
+  });
+  // Kept right if the value is changed from another window.
+  window.addEventListener("storage", (event) => {
+    if (event.key === BARGE_IN_KEY) paintBargeIn();
+  });
+  paintBargeIn();
+}
+
+onQueue(() => {
+  if (vcWaiting) loadVoice();
+});
+onEvent((frame) => {
+  if (frame && frame.kind === "voice") loadVoice();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadVoice();
+});
+loadVoice();
+
+/* ==========================================================================
+   What this backend supports
+   --------------------------------------------------------------------------
+   `get_backend_capabilities`: GET /api/version's `capabilities`, as two
+   sorted lists of NAMES - what the server says it has, and what it says it
+   does not - decided the phone's way (ApiModels.kt `asCapabilityFlag`, ported
+   to commands.rs `capability_present`). The phone shows the same list under
+   "This backend". Names only; nothing a capability carries reaches the page.
+   Read when the window opens, when it comes back into view, and when the
+   link connects again (a restarted backend may have gained a part).
+   ========================================================================== */
+
+const caps = {
+  state: $("caps-state"),
+  body: $("caps-body"),
+  server: $("caps-server"),
+  serverRow: $("caps-server-row"),
+  api: $("caps-api"),
+  on: $("caps-on"),
+  none: $("caps-none"),
+  offHeading: $("caps-off-heading"),
+  off: $("caps-off"),
+};
+let capsSeq = 0;
+
+function capsNames(list) {
+  return (Array.isArray(list) ? list : []).filter((n) => typeof n === "string" && n);
+}
+
+async function loadCapabilities() {
+  if (!IS_TAURI || !caps.state) return;
+  const seq = ++capsSeq;
+  let answer;
+  try {
+    answer = await invoke("get_backend_capabilities");
+  } catch (error) {
+    if (seq !== capsSeq) return;
+    caps.body.hidden = true;
+    caps.state.hidden = false;
+    caps.state.dataset.tone = "bad";
+    caps.state.textContent = `Jarvis could not be asked what it supports. ${scProblemWords(error)}`;
+    return;
+  }
+  if (seq !== capsSeq) return;
+  const on = capsNames(answer && answer.on);
+  const off = capsNames(answer && answer.off);
+  caps.state.hidden = true;
+  delete caps.state.dataset.tone;
+  caps.body.hidden = false;
+  const server = answer && typeof answer.server === "string" ? answer.server.trim() : "";
+  caps.serverRow.hidden = !server;
+  caps.server.textContent = server;
+  caps.api.textContent = answer && Number.isInteger(answer.api) ? String(answer.api) : "not reported";
+  caps.on.replaceChildren(...on.map((n) => scNode("li", "", n)));
+  caps.on.hidden = !on.length;
+  caps.none.hidden = on.length > 0;
+  caps.off.replaceChildren(...off.map((n) => scNode("li", "", n)));
+  caps.off.hidden = !off.length;
+  caps.offHeading.hidden = !off.length;
+}
+
+let capsConnected = null;
+onLink((l) => {
+  const connected = Boolean(l && l.connected);
+  if (connected && capsConnected === false) loadCapabilities();
+  capsConnected = connected;
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadCapabilities();
+});
+loadCapabilities();
 
 loadUpdate();

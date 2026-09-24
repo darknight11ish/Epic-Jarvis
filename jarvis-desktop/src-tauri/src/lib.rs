@@ -691,6 +691,7 @@ pub fn run() {
             commands::reveal_pairing_token,
             commands::get_second_card,
             commands::set_second_card,
+            commands::get_backend_capabilities,
             commands::get_big_model,
             commands::set_big_model,
             appearance::get_appearance,
@@ -737,6 +738,8 @@ pub fn run() {
             voice::stop_automatic_listening,
             voice::speak_reply,
             voice::summon_push_to_talk,
+            voice::get_voice_status,
+            voice::set_wake_word,
             vision::local_model_vision,
         ]);
 
