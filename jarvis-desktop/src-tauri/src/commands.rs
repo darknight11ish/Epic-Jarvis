@@ -2085,8 +2085,9 @@ pub fn prefill_quickbar(app: AppHandle, target: String) -> Result<(), String> {
 pub(crate) fn note_target(target: &str) -> Result<&'static str, String> {
     match target.trim().to_ascii_lowercase().as_str() {
         "logseq" | "log" | "journal" => Ok("logseq"),
-        "joplin" | "jop" | "vault" => Ok("joplin"),
-        "obsidian" | "obs" | "daily" => Ok("obsidian"),
+        "joplin" | "jop" => Ok("joplin"),
+        // "vault" meant Joplin until 2026-09-24; it is Obsidian's word.
+        "obsidian" | "obs" | "daily" | "vault" => Ok("obsidian"),
         other => Err(format!(
             "\"{other}\" is not a note app Jarvis knows - Logseq, Joplin or Obsidian"
         )),
@@ -2271,7 +2272,8 @@ mod note_target_tests {
     #[test]
     fn targets_map_and_an_unknown_one_is_refused() {
         assert_eq!(note_target("OBS"), Ok("obsidian"));
-        assert_eq!(note_target("vault"), Ok("joplin"));
+        assert_eq!(note_target("vault"), Ok("obsidian"));
+        assert_eq!(note_target("jop"), Ok("joplin"));
         assert_eq!(note_target(" log "), Ok("logseq"));
         assert!(note_target("evernote").is_err());
     }

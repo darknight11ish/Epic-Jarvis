@@ -331,8 +331,11 @@ Jarvis anything, and shows a chip beside the reactor while you type:
 | Prefix | Target | Chip |
 |--------|--------|------|
 | `#log`, `#logseq`, `#journal` | today's Logseq journal (`append_logseq_journal`) | cyan **Logseq Journal** |
-| `#joplin`, `#jop`, `#vault` | a new Joplin note (`create_joplin_note`) | violet **Joplin Vault** |
-| `#obs`, `#obsidian`, `#daily` | today's Obsidian daily note (`append_obsidian_daily`) | violet **Obsidian Daily Note** |
+| `#joplin`, `#jop` | a new Joplin note (`create_joplin_note`) | violet **Joplin Note** |
+| `#obs`, `#obsidian`, `#daily`, `#vault` | today's Obsidian daily note (`append_obsidian_daily`) | violet **Obsidian Daily Note** |
+
+`#vault` meant Joplin until 2026-09-24; it moved to Obsidian, whose own word
+it is.
 
 The prefix is stripped, and the rest goes to `/api/notes/capture` through the
 `capture_note` command — no chat turn and no model. The backend writes it

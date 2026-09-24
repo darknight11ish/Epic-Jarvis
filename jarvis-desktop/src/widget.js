@@ -701,7 +701,7 @@ function setCaptureTarget(target) {
   dom.captureTarget.textContent = (TARGETS[target] || TARGETS.logseq).prefix;
   const where = {
     logseq: "the Logseq journal",
-    joplin: "the Joplin vault",
+    joplin: "Joplin",
     obsidian: "today's Obsidian daily note",
   }[target] || targetName(target);
   const more = readyTargets().length > 1;

@@ -145,8 +145,9 @@ ACTIONS = {"logseq": "append_logseq_journal", "joplin": "create_joplin_note",
 #: The names people see, in one place.
 NAMES = {"logseq": "Logseq", "joplin": "Joplin", "obsidian": "Obsidian"}
 _ALIASES = {"log": "logseq", "journal": "logseq", "jop": "joplin",
-            # "#vault" has meant Joplin on the desktop since before Obsidian.
-            "vault": "joplin", "obs": "obsidian", "daily": "obsidian"}
+            # "#vault" meant Joplin until 2026-09-24; the owner moved it to
+            # Obsidian, whose own word it is.
+            "vault": "obsidian", "obs": "obsidian", "daily": "obsidian"}
 _BAD_TARGET = "the target must be Logseq, Joplin or Obsidian"
 _EMPTY = "the note is empty"
 
