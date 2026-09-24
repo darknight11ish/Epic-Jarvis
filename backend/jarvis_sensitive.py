@@ -38,7 +38,7 @@ which rule fired, never the words that fired it.
 THE OTHER-PERSON RULE, AND WHY IT IS SO BROAD
 Any fact whose subject is someone other than the owner is flagged: a
 relation word ("sister", "boss", "my friend", in eight languages), a common
-first name (a list of about 1,200), a title ("Mr Patel"), or "he"/"she".
+first name (a list of about 840), a title ("Mr Patel"), or "he"/"she".
 "My sister lives in Leeds" is flagged (where another person lives), and so
 is "My sister likes jazz" - harmless, but it is still a fact about someone
 who never agreed to be remembered, and the owner's rule says "when unsure:

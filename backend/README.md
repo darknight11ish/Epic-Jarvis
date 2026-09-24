@@ -5951,7 +5951,7 @@ a card.
      and routines that say when a home is empty.
    - The **other-person rule**: any fact about someone other than you -
      a relation word ("sister", "my boss", "mi hermano", "meine Frau"),
-     one of about 1,200 common first names, a title ("Mr Patel"), or
+     one of about 840 common first names, a title ("Mr Patel"), or
      "he"/"she". **Decided, and broad on purpose:** "My sister likes jazz"
      and "My sister's name is Anna" are flagged too - harmless, but still
      facts about someone who never agreed to be remembered, and your rule
@@ -6029,7 +6029,7 @@ the model can be wrong too. **How good the model layer is has not been
 measured**: no model runs in the container. The command below measures it
 on your PC.
 
-**Speed.** The pattern layer takes well under a millisecond per fact. The
+**Speed.** The pattern layer takes about half a millisecond per fact (measured here). The
 model question is asked only when the patterns find nothing, once per fact,
 at most 8 seconds (usually much less with the model already loaded - not
 measured here). For a background learning pass that is fine. For
