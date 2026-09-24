@@ -506,7 +506,7 @@ def t_the_gate():
         check("GET /api/wiki says what is running",
               W.status(lane_for=lambda: LANE)["running"]["source"] == "meeting.md")
     with Vault() as v:
-        for bad in ("", "../x.md", "a/b.md", ".hidden.md", None, 5):
+        for bad in ("", "../x.md", "a/b.md", ".hidden.md", "C:x.md", "a\\b.md", None, 5):
             code, body = W.ingest(bad, lane_for=lambda: LANE)
             if code != 400:
                 break

@@ -366,7 +366,7 @@ def read_source(w: Where, name: str, *, num_ctx: int, index_tokens: int,
                 cache: Optional[dict] = None) -> Source:
     """One file in Sources/, read and judged. Writes nothing."""
     s = Source(name=name)
-    if not name or "/" in name or "\\" in name or name.startswith(".") or ".." in name:
+    if not name or any(c in name for c in "/\\:\x00") or name.startswith(".") or ".." in name:
         s.state, s.why = "unreadable", "that is not the name of a file in Sources"
         return s
     path = w.sub(SOURCES_DIR, name)
@@ -1217,7 +1217,7 @@ def ingest(source, *, lane_for: Optional[Callable] = None, call: Optional[Callab
         return 400, {"ok": False, "state": "refused", "error": "say which document: {\"source\": \"<name in "
                                            "Sources>\"}"}
     source = source.strip()
-    if "/" in source or "\\" in source or source.startswith(".") or ".." in source:
+    if any(c in source for c in "/\\:\x00") or source.startswith(".") or ".." in source:
         return 400, {"ok": False, "state": "refused", "error": "that is not the name of a file in Sources"}
     lane = (lane_for or (lambda: _lane()))()
     if lane is None:
