@@ -1,27 +1,29 @@
 /* The upright (1080x1920) layout. Loaded after film.css; only positions and
-   sizes change. Minimum text on screen: 44px. */
+   sizes change. Minimum text on screen: 40px, except inside the real app screens. */
 body.tall #hero-wrap { left: 40px; top: 360px; }
 body.tall .cap { bottom: 300px; max-width: 960px; font-size: 52px; }
 body.tall .cap b { font-size: 52px; }
-body.tall .cap.big, body.tall .cap.big b { font-size: 84px; }
-body.tall .cap.prev { bottom: 450px; font-size: 44px; }
+body.tall .cap.big, body.tall .cap.big b { font-size: 110px; }
+body.tall .cap.prev { bottom: 470px; font-size: 44px; }
 body.tall .cap.prev b { font-size: 44px; }
 
-body.tall #h-ask { left: 70px; top: 190px; font-size: 76px; }
-body.tall #desk { left: 220px; top: 330px; width: 640px; }
-body.tall #desk .where { font-size: 28px; }
-body.tall #desk-card { width: 640px; }
-body.tall #browser { width: 640px; }
-body.tall #b-note { display: none; }
-body.tall .ready-chip { left: 220px; top: 290px; font-size: 26px; }
-body.tall #phone { left: 325px; top: 700px; }
+body.tall #h-ask { left: 70px; top: 200px; font-size: 80px; }
+body.tall .task-note { left: 70px; top: 400px; width: 940px; font-size: 40px; }
+body.tall #phone { left: 235px; top: 367px; zoom: 1.2; }
+body.tall #desk { left: 70px; top: 520px; width: 940px; }
+body.tall #browser { width: 940px; }
+body.tall #browser .bh { font-size: 32px; }
+body.tall #browser .brow { font-size: 32px; padding: 22px 0; }
+body.tall #browser .bd { font-size: 28px; }
+body.tall #browser .bb { font-size: 28px; }
+body.tall #browser .url { font-size: 26px; }
+body.tall #b-step { top: 560px; font-size: 26px; }
 
-body.tall #m-sept { left: 70px; top: 230px; font-size: 140px; }
-body.tall #h-keep { left: 70px; top: 420px; font-size: 80px; }
-body.tall #ask-wrap { left: 70px; top: 700px; width: 940px; padding: 10px 0 24px; border-radius: 22px; background: #090f18;
-                      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(56, 240, 255, 0.08); }
-body.tall #ask-text { display: block; width: 940px; }
-body.tall #ask-buttons { display: block; width: 470px; margin: 0 24px 0 auto; }
-body.tall #rip-keep { left: 563px; top: 371px; }
+body.tall #h-keep { left: 70px; top: 260px; font-size: 80px; }
+body.tall #ask-wrap { left: 70px; top: 520px; width: 940px; }
+body.tall #ask-text { width: 940px; }
+body.tall #ask-buttons { width: 470px; }
+body.tall #press-keep { left: 493px; top: 327px; width: 163px; height: 88px; }
 
-body.tall .outro { top: 330px; flex-direction: column; align-items: center; gap: 18px; font-size: 118px; }
+body.tall .outro { top: 300px; flex-direction: column; align-items: center; gap: 18px; font-size: 118px; }
+body.tall #small1 { top: 1470px; font-size: 40px; }

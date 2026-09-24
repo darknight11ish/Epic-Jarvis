@@ -1,4 +1,4 @@
-"""Original score for the Jarvis v3 launch video: landscape (35 s) and upright (15 s).
+"""Original score for the Jarvis v3 launch video: landscape (32 s) and upright (15 s).
 
 Run from the composition folder:   python3 tools/score.py
 
@@ -10,7 +10,7 @@ stops dead until `resume`.
 
 Everything is synthesised here (numpy + ffmpeg, fixed seeds), so a run is repeatable
 and depends on nothing outside this folder. Reads:
-  assets/timing.json            (landscape, 35 s)
+  assets/timing.json            (landscape, 32 s)
   assets/timing-vertical.json   (upright, 15 s)
 Writes:
   assets/music/score.mp3            assets/audio-data.js
@@ -307,34 +307,34 @@ def render(timing, kind):
     keys, pads, bass, beat, ui = E.bus(), E.bus(), E.bus(), E.bus(), E.bus()
     hall_extra = E.bus()
 
+    YES = H["approved"] + 0.2          # the "✓ Approved" pill lands 0.2 s after `approved` (film.js p-done)
     if kind == "land":
-        CHANGES = [(0.0, "Dm9"), (H["cards"], "Bb9"), (H["approved"], "F/A"), (H["private"], "Dm9"),
-                   (H["june"], "Gm9"), (H["sept"], "Bb9"), (H["keep"], "F/A"), (H["drink"], "C9/E"),
-                   (H["reply"], "Dm9"), (H["outro"], "Bb9"), (H["rules"], "F")]
+        CHANGES = [(0.0, "Dm9"), (H["cards"], "Bb9"), (YES, "F/A"), (H["june"], "Gm9"), (H["sept"], "Bb9"),
+                   (H["keep"], "F/A"), (H["drink"], "C9/E"), (H["reply"], "Dm9"), (H["outro"], "Bb9"),
+                   (H["rules"], "F")]
         # arp density: 0 none, 1 quarters, 2 eighths, 3 eighths + ghosts, 4 sixteenths with rests
-        DENS = [(0.0, 0), (H["think"], 1), (H["cards"], 2), (H["tap"], 1), (H["approved"], 2), (H["browser"], 1),
-                (H["done"], 2), (H["private"], 0),
+        DENS = [(0.0, 0), (H["cards"], 2), (H["tap"], 1), (YES, 2), (H["browser"], 1), (H["done"], 2),
                 (H["june"], 2), (H["sept"], 3), (H["drink"], 4), (STOP, 0)]
         PULSE = [(H["june"], STOP)]
-        pad_lvl = curve([(0, 0.32), (H["cards"], 0.5), (H["private"], 0.3), (H["june"], 0.45), (H["drink"], 0.55),
+        pad_lvl = curve([(0, 0.32), (H["cards"], 0.5), (H["june"], 0.42), (H["sept"], 0.45), (H["drink"], 0.55),
                          (STOP, 0.55), (RESUME, 0.0), (H["outro"], 0.55), (H["rules"], 0.8), (H["logo"], 0.5), (dur, 0.3)])
-        pad_fc = curve([(0, 520), (H["think"], 700), (H["cards"], 900), (H["tap"], 750), (H["approved"], 1300),
-                        (H["private"], 650), (H["june"], 900), (H["sept"], 1300), (H["drink"], 1700), (STOP, 2200),
+        pad_fc = curve([(0, 520), (H["cards"], 900), (H["tap"], 750), (YES, 1300), (H["june"], 900),
+                        (H["sept"], 1300), (H["drink"], 1700), (STOP, 2200),
                         (RESUME, 400), (H["outro"], 1500), (H["rules"], 2600), (H["logo"], 1100), (dur, 600)])
-        bass_lvl = [(0.0, 0.0), (H["cards"], 0.22), (H["private"], 0.0), (H["june"], 0.26), (H["drink"], 0.3),
+        bass_lvl = [(0.0, 0.0), (H["cards"], 0.22), (H["june"], 0.24), (H["drink"], 0.3),
                     (STOP, 0.0), (H["outro"], 0.18), (H["rules"], 0.34), (H["logo"], 0.2)]
     else:
-        CHANGES = [(0.0, "Bb9"), (H["approved"], "F/A"), (H["sept"], "Gm9"), (H["keep"], "F/A"),
+        CHANGES = [(0.0, "Bb9"), (YES, "F/A"), (H["memory"], "Gm9"), (H["keep"], "F/A"),
                    (H["drink"], "C9/E"), (H["reply"], "Dm9"), (H["outro"], "Bb9"), (H["rules"], "Bb9")]
-        DENS = [(0.0, 2), (H["tap"], 1), (H["approved"], 2), (H["browser"], 1), (H["renewed"], 2), (H["sept"], 3),
+        DENS = [(0.0, 2), (H["tap"], 1), (YES, 2), (H["browser"], 1), (H["renewed"], 2), (H["memory"], 3),
                 (H["drink"], 4), (STOP, 0),
                 (H["rules"] + 0.5, 2)]                     # plucks come back so the loop runs on into frame 0
-        PULSE = [(H["sept"], STOP)]
-        pad_lvl = curve([(0, 0.5), (H["sept"], 0.48), (H["drink"], 0.55), (STOP, 0.55), (RESUME, 0.0),
+        PULSE = [(H["memory"], STOP)]
+        pad_lvl = curve([(0, 0.5), (H["memory"], 0.48), (H["drink"], 0.55), (STOP, 0.55), (RESUME, 0.0),
                          (H["outro"], 0.5), (H["rules"], 0.75), (dur, 0.5)])
-        pad_fc = curve([(0, 900), (H["tap"], 750), (H["approved"], 1300), (H["sept"], 1300), (H["drink"], 1700),
+        pad_fc = curve([(0, 900), (H["tap"], 750), (YES, 1300), (H["memory"], 1300), (H["drink"], 1700),
                         (STOP, 2200), (RESUME, 400), (H["outro"], 1400), (H["rules"], 2400), (dur, 900)])
-        bass_lvl = [(0.0, 0.22), (H["sept"], 0.26), (H["drink"], 0.3), (STOP, 0.0), (H["outro"], 0.16),
+        bass_lvl = [(0.0, 0.22), (H["memory"], 0.26), (H["drink"], 0.3), (STOP, 0.0), (H["outro"], 0.16),
                     (H["rules"], 0.3), (H["rules"] + 0.8, 0.22)]
 
     def chord_at(t):
@@ -453,7 +453,7 @@ def render(timing, kind):
             E.place(ui, n, at); E.place(hall_extra, n, at, 0.5)
 
     def browser(land, click_at, renewed):
-        E.place(ui, E.swish(0.34, 600, 4200, peak=0.9, width=0.6, pan_path=(0.4, 0.0)), land - 0.31, 0.2)   # window lands
+        E.place(ui, E.swish(0.34, 600, 4200, peak=0.9, width=0.6, pan_path=(0.4, 0.0)), land - 0.31, 0.2)   # peaks at `land`
         E.place(ui, E.click(0.4), click_at)
         piano(69, renewed, 0.4, 0.1, 3.0, 0.5)                                                               # one warm A4
 
@@ -465,16 +465,12 @@ def render(timing, kind):
 
     if kind == "land":
         piano(62, H["hey"], 0.27, 0.2, 3.5, 0.5)              # D4, alone: it's listening
-        piano(69, H["listenNote"], 0.24, -0.25, 3.0, 0.4)     # A4 answers
         card_land(H["cards"], 81)                             # A5 over Bb: both cards land
         piano(50, H["every"], 0.3, 0.0, 2.5)                  # "Every time." gets a low D, not a hit
         E.place(ui, E.click(0.45), H["tap"])
-        fingerprint(H["touch"], H["ok"], H["approved"], H["sheet"])
+        fingerprint(H["touch"], H["ok"], YES, H["sheet"])
         E.place(ui, E.swish(0.25, 3000, 900, peak=0.3, width=0.5, pan_path=(0.3, -0.2)), H["clear"], 0.05)
-        browser(H["browser"], H["click"], H["renewed"])
-        rolled([38, 53, 57, 64], H["private"], 0.24)          # calm: a rolled Dm9, then single notes
-        for j, (dt, m) in enumerate([(1.0, 69), (2.0, 72), (2.5, 69)]):
-            piano(m, H["private"] + dt, 0.17, 0.3 - 0.3 * j, 2.5, 0.3)
+        browser(H["browser"] + 0.2, H["click"], H["renewed"])   # the window is fully in ~0.2 s after `browser`
         piano(70, H["juneCard"], 0.26, 0.2, 2.2)              # June card: one note, no swish
         card_land(H["askCard"], 81, 0.8)                      # the "keep this?" card
         E.place(ui, E.click(0.4), H["keep"])
@@ -494,8 +490,8 @@ def render(timing, kind):
     else:
         card_land(0.0, 81, 0.6)                               # cards are already there: the note only rings
         E.place(ui, E.click(0.45), H["tap"])
-        fingerprint(H["touch"], H["ok"], H["approved"], H["sheet"])
-        browser(H["browser"], H["click"], H["renewed"])
+        fingerprint(H["touch"], H["ok"], YES, H["sheet"])
+        browser(H["browser"] + 0.2, H["click"], H["renewed"])
         card_land(H["askCard"], 81, 0.8)
         E.place(ui, E.click(0.4), H["keep"])
         piano(65, H["keep"], 0.42, 0.0, 3.0, 0.5)
@@ -592,16 +588,20 @@ def ebur128(x):
     return (float(tail.split("I:")[1].split("LUFS")[0]), float(tail.split("Peak:")[1].split("dBFS")[0]),
             float(tail.split("LRA:")[1].split("LU")[0]))
 
+STOP_LEAD = 0.020    # seconds of silence before the stop frame (less than one 30 fps frame)
+
+
 def master(mix, s0, s1, fade_out=None, edge=0.004):
     N = mix.shape[1]
     x = mix / np.abs(mix).max()
     gain = 1.0
     for _ in range(5):
         y = limit(x * gain)
-        # the dead stop: a 4 ms ramp that ends 3 ms before the stop frame (so the MP3 codec's own
-        # smear has died below -60 dBFS by the frame), then digital zero until resume
-        r = int(edge * SR); e0 = s0 - int(0.003 * SR)
-        y[:, e0 - r:e0] *= np.linspace(1, 0, r)
+        # the dead stop: an 8 ms raised-cosine ramp that ends STOP_LEAD before the stop frame, then digital
+        # zero until resume. The video's AAC encoder smears a hard cut forward by up to ~16 ms; a 12 ms lead
+        # still left the upright cut at -51 dBFS just after its stop frame, 20 ms clears both (tested).
+        r = int(edge * SR); rs = int(0.008 * SR); e0 = s0 - int(STOP_LEAD * SR)
+        y[:, e0 - rs:e0] *= 0.5 + 0.5 * np.cos(np.linspace(0, np.pi, rs))
         y[:, e0:s1] = 0
         y[:, s1:s1 + r] *= np.linspace(0, 1, r)
         y[:, :r] *= np.linspace(0, 1, r)
@@ -647,7 +647,7 @@ def main():
     for kind, tj, mp3, ad in jobs:
         timing = json.load(open(os.path.join(ASSETS, tj)))
         E, mix, s0, s1, _ = render(timing, kind)
-        fade = (34.3, 35.0) if kind == "land" else None
+        fade = (E.dur - 0.7, E.dur) if kind == "land" else None      # fade to black with the picture
         y, (I, TP, LRA) = master(mix, s0, s1, fade)
         write(y, os.path.join(ASSETS, "music", mp3))
         audio_data(y, E.dur, os.path.join(ASSETS, ad), s0, s1)

@@ -130,8 +130,8 @@
         capPrevText.textContent = typedAt(typeCap, typeCap[1]) + "—";
       } else if (capPrev) capPrev.style.opacity = "0";
       if (!c) { cap.style.opacity = "0"; return; }
-      var who = c[2] === "you" ? "You:" : "Jarvis:";
-      capWho.textContent = who; capWho.className = c[2];
+      var who = c[2] === "you" ? "You:" : c[2] === "jarvis" ? "Jarvis:" : "";
+      capWho.textContent = who; capWho.className = c[2]; capWho.style.display = who ? "" : "none";
       cap.classList.toggle("big", c[4] === "big");
       var text = c[3];
       if (c[4] === "words") {
@@ -142,7 +142,8 @@
         text += Math.floor(t * 4) % 2 ? "▌" : " ";
       }
       capText.textContent = text;
-      var k = prog(t, c[0], 0.18, E.out2);
+      // "Stop." cuts in on its frame; everything else fades in over 0.18 s.
+      var k = c[4] === "big" ? 1 : prog(t, c[0], 0.18, E.out2);
       cap.style.opacity = k.toFixed(3);
     }
     function typedAt(c, t) { return c[3].slice(0, Math.floor(clamp((t - c[0]) / c[5], 0, 1) * c[3].length)); }
@@ -169,41 +170,40 @@
     }
 
     /* ---------- scene 2-3: the approval, on the PC and the phone ---------- */
-    var ripOk = $("rip-ok"), pOk = $("p-ok");
-    if (ripOk && pOk) {           // centre the tap ring on the real button position
-      var x = pOk.offsetLeft + pOk.offsetWidth / 2, y = pOk.offsetTop + pOk.offsetHeight / 2, el = pOk.offsetParent;
-      while (el && el.className !== "screen") { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; }
-      ripOk.style.left = x + "px"; ripOk.style.top = y + "px";
+    // A press is shown on the button itself (a brief accent outline), never a grey dot.
+    function press(el, t, at) {
+      if (!el || !has(at)) return;
+      var on = t >= at - 0.12 && t < at + 0.45;
+      el.style.opacity = on ? (t < at ? prog(t, at - 0.12, 0.12, E.out2) : 1 - prog(t, at + 0.2, 0.25, E.in2)).toFixed(3) : "0";
     }
-    function ripple(el, t, at) {
-      if (!el) return;
-      var d = t - at;
-      if (d < -0.2 || d > 0.6) { el.style.opacity = "0"; return; }
-      var o = d < 0 ? prog(t, at - 0.2, 0.2, E.out2) : 1 - prog(t, at + 0.15, 0.4, E.out2);
-      var s = d < 0 ? 1 : 1 + 0.6 * prog(t, at, 0.45, E.out3);
-      el.style.opacity = o.toFixed(3);
-      el.style.transform = "scale(" + (d < 0 ? 1 : s).toFixed(3) + ")";
-    }
+    var pOk = $("p-ok");
     var RING = 2 * Math.PI * 54;
     var fpRing = $("fp-ring"), fpPrint = $("fp-print");
     if (fpRing) fpRing.setAttribute("stroke-dasharray", RING.toFixed(2));
     function approval(t) {
       if (!has(H.cards)) return;
-      appear($("desk"), t, H.cards, { d: 0.55, dy: 60, e: E.settle });
-      appear($("phone"), t, H.cards - (H.phoneIn || 0.25), { d: 0.6, dy: 120, e: E.out3, out: cfg.phoneOut, outD: 0.4, outDy: -80 });
+      // cardsLead: the upright cut starts with the cards already in place.
+      var C = H.cards - (cfg.cardsLead || 0);
+      appear($("desk"), t, C, { d: 0.55, dy: 60, e: E.settle });
+      appear($("phone"), t, C - 0.25, { d: 0.6, dy: 120, e: E.out3, out: cfg.phoneOut, outD: 0.4, outDy: -80 });
       appear($("phone-where"), t, H.cards + 0.3, { d: 0.4, dy: 10 });
-      appear($("pcard"), t, H.cards + 2 / FPS, { d: 0.5, dy: 60, e: E.settle, out: H.approved, outD: 0.3, outDy: 30 });
-      appear($("h-ask1"), t, H.ask, { d: 0.5, out: H.shout - 0.25, outD: 0.25 });
+      appear($("pcard"), t, C + 2 / FPS, { d: 0.5, dy: 60, e: E.settle, out: H.approved, outD: 0.3, outDy: 30 });
+      if (cfg.staticHead) appear($("h-ask1"), t, -1, { d: 0.01, dy: 0, out: H.browser, outD: 0.3 });
+      else appear($("h-ask1"), t, H.ask, { d: 0.5, out: H.shout - 0.25, outD: 0.25 });
       appear($("h-ask2"), t, H.every, { d: 0.5, out: H.shout - 0.25, outD: 0.25 });
       appear($("h-shout1"), t, H.shout, { d: 0.5 });
-      appear($("h-shout2"), t, H.tapLine, { d: 0.5 });
+      appear($("h-shout2"), t, H.checks, { d: 0.5 });
+      appear($("task-note"), t, H.taskNote, { d: 0.5, dy: 10 });
       // countdown: EXPIRES IN 00:47, down once a second (ApprovalCard.kt clockCountdown)
       var left = 47 - Math.floor(clamp(t - H.cards, 0, 40));
       var n = $("exp-n"); if (n) n.textContent = "00:" + String(left).padStart(2, "0");
       var f = $("exp-fill"); if (f) f.style.transform = "scaleX(" + (left / 60).toFixed(3) + ")";
       // tap Approve, then Android's fingerprint sheet
-      ripple(ripOk, t, H.tap);
-      if (pOk) pOk.style.transform = "scale(" + (t >= H.tap && t < H.tap + 0.16 ? 0.95 : 1) + ")";
+      if (pOk) {
+        var down = t >= H.tap && t < H.tap + 0.18;
+        pOk.style.transform = "scale(" + (down ? 0.95 : 1) + ")";
+        pOk.style.boxShadow = down ? "0 0 0 4px #0b1016, 0 0 0 7px var(--accent)" : "none";
+      }
       var sheet = $("sheet");
       if (sheet) {
         var kin = prog(t, H.sheet, 0.35, E.out3), kout = prog(t, H.ok + 0.12, 0.28, E.in2);
@@ -215,9 +215,15 @@
         fpPrint.style.stroke = t >= H.ok ? "var(--verdant)" : "";
         Array.prototype.forEach.call(fpPrint.children, function (p) { p.style.stroke = t >= H.ok ? "#3ddc97" : ""; });
       }
-      appear($("p-done"), t, H.approved + 0.1, { d: 0.35, dy: 0, s0: 0.8, e: E.settle });
+      appear($("p-done"), t, H.approved + 0.25, { d: 0.35, dy: 0, s0: 0.8, e: E.settle });
       appear($("desk-card"), t, H.cards, { d: 0.01, dy: 0, out: H.clear, outD: 0.3, outDy: 24 });
-      appear($("ready-chip"), t, H.ready, { d: 0.5, dy: 10 });
+      // The real PC card, then a slow zoom so its allowed site and steps can be read.
+      var z = cfg.deskZoom, img = $("desk-img");
+      if (z && img) {
+        var kz = prog(t, z.at, z.len, E.io) * (1 - prog(t, z.out, 0.6, E.io));
+        img.style.transformOrigin = z.origin;
+        img.style.transform = "scale(" + lerp(1, z.to, kz).toFixed(4) + ")";
+      }
       browser(t);
     }
 
@@ -227,9 +233,9 @@
       if (!has(H.browser)) return;
       appear($("browser"), t, H.browser, { d: 0.55, dy: 50, e: E.settle });
       appear($("b-note"), t, H.browser + 0.6, { d: 0.5, dy: 10 });
-      var u = $("b-url"); if (u) u.textContent = URL.slice(0, Math.floor(clamp((t - H.step1) / 0.35, 0, 1) * URL.length));
+      var u = $("b-url"); if (u) u.textContent = t < H.step1 ? "" : URL;
       var page = document.querySelector("#browser .bpage");
-      if (page) page.style.opacity = t < H.step1 + 0.3 ? "0" : prog(t, H.step1 + 0.3, 0.25, E.out2).toFixed(3);
+      if (page) page.style.opacity = "1";
       appear($("b-step"), t, H.step2, { d: 0.3, dy: 8, out: H.renewed + 0.4, outD: 0.3 });
       var btn = $("b-renew1"), due = $("b-due1");
       if (btn) {
@@ -246,15 +252,16 @@
     }
 
     /* ---------- scenes 4-6 ---------- */
-    var ripKeep = $("rip-keep");
+    var pressKeep = $("press-keep");
     function memory(t) {
       appear($("h-private"), t, H.private, { d: 0.7, dy: 20 });
+      if (has(H.memory)) { appear($("h-keep"), t, H.memory, { d: 0.01, dy: 0 }); }
       appear($("m-june"), t, H.june, { d: 0.6, dy: 30 });
       appear($("june-card"), t, H.juneCard, { d: 0.6, dy: 50 });
       appear($("m-sept"), t, H.sept, { d: 0.6, dy: 30 });
       appear($("ask-wrap"), t, H.askCard, { d: 0.55, dy: 60, e: E.settle, out: H.list - 0.25, outD: 0.3, outDy: 40 });
       appear($("h-keep"), t, H.keepLine, { d: 0.5 });
-      ripple(ripKeep, t, H.keep);
+      press(pressKeep, t, H.keep);
       appear($("facts-wrap"), t, H.list, { d: 0.55, dy: 40 });
       appear($("retired-box"), t, H.retired, { d: 0.35, dy: 0 });
       appear($("retired-note"), t, H.retired + 0.2, { d: 0.4, dx: 16, dy: 0 });

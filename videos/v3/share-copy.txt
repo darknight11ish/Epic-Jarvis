@@ -7,5 +7,7 @@ Say "stop" and it stops.
 Your email, your files and what it knows about you stay on your PC. No subscription.
 
 Will my PC run it? Today it needs an NVIDIA graphics card (the part that runs games) with 8 GB of memory. To check, press Ctrl+Shift+Esc, open Performance, then click GPU: the card's name is at the top right, and "Dedicated GPU memory" is its memory.
+Does the PC have to be on? Yes: Jarvis runs on it, and the phone app talks to it.
+Can it forget something for good? "Forget" stops Jarvis using a fact, and keeps it in the history on your PC.
 Is it always listening? No. "Hey Jarvis" is off until you switch it on, and the phone shows when it is listening.
 One tap on Standby frees the graphics card when you want it back.

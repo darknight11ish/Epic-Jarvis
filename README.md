@@ -8,14 +8,15 @@ Non-commercial, for one owner.
 
 [![Jarvis launch video v3: it asks first](videos/v3/jarvis-launch-v3.jpg)](videos/v3/jarvis-launch-v3.mp4)
 
-**Tap the picture to watch v3** (35 seconds; it has captions, so sound is
+**Tap the picture to watch v3** (32 seconds; it has captions, so sound is
 optional). It opens the video file, and GitHub plays it in the browser. On a
 phone held upright, watch [the 15-second cut](videos/v3/jarvis-launch-v3-vertical.mp4).
 
 What it shows:
-- Jarvis asks before it runs a command on your PC, on the desktop and the
-  phone at once, and the phone wants your fingerprint for anything that
-  can't be undone.
+- Jarvis asks before it acts, on the desktop and the phone at once, and the
+  phone checks it's you before a risky yes. The example is a visible browser
+  renewing a library book, only on the one site you approved. That part is
+  built and switches on once a second graphics card is in.
 - It asks before it remembers something about you, and keeps a history of
   what changed.
 - It stops when you say "stop".

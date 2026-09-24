@@ -1,7 +1,7 @@
 # Hyperframes composition brief: Jarvis v3
 
 ## Output
-- `composition/index.html` → `jarvis-launch-v3.mp4`: 1920×1080, 30 fps, 35 s.
+- `composition/index.html` → `jarvis-launch-v3.mp4`: 1920×1080, 30 fps, 32 s.
 - `composition/vertical.html` → `jarvis-launch-v3-vertical.mp4`: 1080×1920, 30 fps, 15 s.
   Render it with `npx hyperframes render -c vertical.html`.
 - `jarvis-launch-v3.jpg`: the poster.
@@ -10,6 +10,7 @@
 `brag-plan.md`: what changed from v2 and why, plus the evidence table that ties every line on screen to the code and gives each one a status.
 
 ## Implementation
+- `tools/build_html.py` writes both HTML files from one template, so the phone, the browser and the scenes are defined once.
 - **One engine for both cuts**, `assets/film.js`:
   - One paused GSAP timeline drives a clock, and `render(t)` sets every visible value as a pure function of t. A seek always equals playback.
   - Scenes and captions key off one timing table: `assets/timing.json` and `timing-vertical.json`, mirrored in the `.js` files. The score is written from the same table.

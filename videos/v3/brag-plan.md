@@ -2,7 +2,7 @@
 
 Two cuts from one project:
 
-- `jarvis-launch-v3.mp4`: 1920×1080, 35 s, for the README and GitHub.
+- `jarvis-launch-v3.mp4`: 1920×1080, 32 s, for the README and GitHub.
 - `jarvis-launch-v3-vertical.mp4`: 1080×1920, 15 s, for a phone held upright.
 
 ## How this version was made
@@ -40,19 +40,19 @@ B = the owner's working branch, `claude/admiring-ritchie-5urg5h`.
 | on screen | status | evidence |
 |---|---|---|
 | "Hey Jarvis" only listens once you switch it on. | today | B `backend/README.md`, "Hey Jarvis", steps 1-2: off until approved. |
-| You: "Hey Jarvis, renew my library book." A card for a browser plan appears on the PC and the phone. | **ready**, labelled on screen "switches on with a second graphics card" | Browser control is built (B `backend/jarvis_browser_control.py`) and ships off: it needs the second card and "Longer conversations" (B `docs/SECOND-CARD.md`). The card text on screen is the module's own `describe()`, run on the plan: the allowed site, every step with its reason, and "If you say no". The same card shows on both apps (`docs/JARVIS-API.md`). |
+| You: "Hey Jarvis, renew my library book." A card for a browser plan appears on the PC and the phone. | **ready**, labelled on screen "Browser control is ready, but off until a second graphics card is in." | Browser control is built (B `backend/jarvis_browser_control.py`) and ships off: it needs the second card and "Longer conversations" (B `docs/SECOND-CARD.md`). The card text on screen is the module's own `describe()`, run on the plan: the allowed site, every step with its reason, and "If you say no". The same card shows on both apps (`docs/JARVIS-API.md`). |
 | The browser is visible, and does only the approved steps on the one allowed site. | ready | `_HEADLESS = False`: "Launched NOT headless on purpose: the owner should be able to see the tab Jarvis is driving." `run()` executes only the enumerated steps, re-checking each one, and stops if the page leaves the allowed sites, asks a question, opens a tab or starts a download. The library site is sample data. |
 | An AI assistant that asks before it acts. Every time. | today | Nothing is ever auto-approved: `docs/ARCHITECTURE.md` and CLAUDE.md rule 4. |
 | The phone asks for a fingerprint. | today, **phone only** | B `jarvis-client/.../BiometricGate.kt` `required()`: anything unclassified, outbound or irreversible. `control_browser`'s risk entry is in the owner's gate and not in this repo, so the card shows it unclassified, which asks for a fingerprint by itself. The sheet is Android's own BiometricPrompt: the card's title, then "Check the card before you confirm." The desktop fingerprint is still being built and is not shown. |
-| Nobody can shout "yes" at it. You tap to approve. | today, by code; no test yet | The chat tool list has no approve or decide tool (B `backend/jarvis_agent.py`). The phone's voice path approves nothing (B `VoiceSession.kt:176`). |
+| Nobody can shout "yes" at it. Your phone checks it's you. | today, by code; no test yet (the owner is asked to try "Hey Jarvis, approve" once) | The chat tool list has no approve or decide tool (B `backend/jarvis_agent.py`). The phone's voice path approves nothing (B `VoiceSession.kt:176`). |
 | Your email, your files, and what it knows about you stay on your PC. | today | B `docs/ARCHITECTURE.md` §4. The router only *offers* a cloud model, never takes one without a yes, and private turns get no offer at all (B `backend/rebuilt/jarvis_router.py:366`, e68c04a). |
 | June: "You drink coffee." September: "You're off coffee this month.", with **Keep / Discard**. | today | Real captures of Brain › Memory (`jarvis-desktop/src/brain.html`): the "What did you know on…" view and the proposal card. |
 | It asks before it remembers, too. | today | Nothing enters memory until you press Keep (the Learning panel's own words). Turning learning on asks first too (B c7e17c8). |
-| The old fact is set aside, not deleted. | today | Brain › Memory: "Retired facts are shown, greyed. Nothing here is deleted." |
+| The old fact: "No longer used. Still in its history, on your PC." | today | Brain › Memory: "Retired facts are shown, greyed. Nothing here is deleted." Forget only retires a fact; there is an export but no wipe from the app. |
+| Jarvis: "Done. I pressed Renew for The Quiet Orchard." | ready | A browser run reports which steps it did; it reads page text only for a read step (B `jarvis_browser_control.py`). The new due date is the website's own page, not something Jarvis says. |
 | You: "Stop." Jarvis stops mid-word. | today, **while "Hey Jarvis" is on** | B 311739e, `voice.rs`. Tested on computer voices, not yet on a real phone. Cutting in just by talking is "coming soon" and is **not** shown. |
-| Runs on a PC with an 8 GB NVIDIA graphics card. | today | `docs/MODEL-TOPOLOGY.md`. B `backend/rebuilt/jarvis_compute.py` reads the card through NVIDIA's `nvidia-smi`, so today it has to be NVIDIA. |
-| Ready for a second graphics card. | ready | B `docs/SECOND-CARD.md`: built, and switched off until the card is there. |
-| No subscription. | today | Ollama and the models are free. No paid service is needed. |
+| Needs a PC with an 8 GB NVIDIA graphics card. Phone app: Android. No subscription. | today | `docs/MODEL-TOPOLOGY.md`. B `backend/rebuilt/jarvis_compute.py` reads the card through NVIDIA's `nvidia-smi`, so today it has to be NVIDIA. |
+| (No subscription, above.) | today | Ollama and the models are free. No paid service is needed. The phone app is optional, and Android only. |
 
 ## Deliberately not claimed
 
@@ -62,6 +62,27 @@ B = the owner's working branch, `claude/admiring-ritchie-5urg5h`.
 - **The smart home.** It is built, but the owner does not want it advertised.
 - **"Any 8 GB card".** It is only a design (B `docs/HARDWARE-PROFILES.md`), with no card to test it on and no date, so the owner took it out.
 - **Speeds, scores or accuracy numbers, competitor names, and the Play Store.** The brief's hard rules forbid them.
+
+## The second review, of v3 itself
+
+After v3 was first rendered, every reviewer watched it again, joined by a busy
+college student, and they answered each other. What changed as a result:
+
+- The "ready" label moved onto the browser, in plain words at caption size. It
+  had read as "the asking doesn't work yet".
+- A plain line says what the phone is asking: "Jarvis wants to open your
+  library's website and press Renew." "Control browser" alone sounded like a
+  scam caller.
+- "Done. It's renewed until 5 November." became "Done. I pressed Renew for The
+  Quiet Orchard.", because Jarvis does not read the page back after a click.
+- The screens are cropped and zoomed so the proof can be read, and the grey tap
+  dot is gone.
+- There is less time on the reactor alone. It is 32 s, not 35. "Stop." cuts in
+  big.
+- The end card is one readable line: an 8 GB NVIDIA graphics card, the Android
+  phone app, and no subscription.
+- The upright cut opens with the hook and the phone card already on screen. It
+  holds Jarvis's reply, and it no longer shows "September." without a "June.".
 
 ## Honest limits of the picture
 

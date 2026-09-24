@@ -2,20 +2,21 @@
 
 Every version is kept. The newest is at the top. Tap a picture to watch.
 
-## v3 — "It asks first" (35 s, plus a 15 s upright cut)
+## v3 — "It asks first" (32 s, plus a 15 s upright cut)
 
 [![Jarvis launch video v3](v3/jarvis-launch-v3.jpg)](v3/jarvis-launch-v3.mp4)
 
 One idea: Jarvis does nothing, and keeps nothing, until you say so. It asks
-before it runs a command on your PC, and your phone wants a fingerprint for
-it. It asks before it remembers something about you, and it keeps a history
+before it acts, and your phone checks it's you. The example is a visible
+browser renewing a library book, only on the one site you approved (built,
+and switched on once a second graphics card is in). It asks before it remembers something about you, and it keeps a history
 of what changed. And when you say "stop", it stops. Every screen is the real
 desktop app, and every spoken line is captioned.
 
 For a phone held upright: [the 15-second cut](v3/jarvis-launch-v3-vertical.mp4).
 
 Made after a team review of v2: editors, an AI developer, a music producer, an
-ad specialist, and four everyday viewers. `v3/brag-plan.md` has what changed
+ad specialist, and five everyday viewers, who then reviewed v3 itself too. `v3/brag-plan.md` has what changed
 and why, and where each claim is in the code.
 
 ## v2 — "It learns. It adapts. It scales." (35 s)
