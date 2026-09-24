@@ -551,6 +551,18 @@ function paintSettings() {
       say($("vt-sensitive-note"), sensitiveNote);
     }
   }
+  // The fifth: how far "Hey Jarvis" is trusted (the owner's decision,
+  // 2026-09-24). Offered only when the PC reports it. "Only trust the talk
+  // button" applies at once; "Same as the talk button" is the looser one,
+  // held on a stale link (changeSetting, VT.loosens).
+  const handsBox = $("vt-handsfree-box");
+  if (handsBox) {
+    handsBox.hidden = !view.handsFree;
+    if (view.handsFree) {
+      group($("vt-handsfree"), VT.HANDS_FREE, view.handsFree, "hands_free");
+      say($("vt-handsfree-note"), VT.HANDS_FREE.find((c) => c.id === view.handsFree).detail);
+    }
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;

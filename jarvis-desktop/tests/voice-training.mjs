@@ -633,6 +633,100 @@ await check("sensitive saved facts: keeping them on screen is at once; Read alou
   assert.match(rust, /\("sensitive_memory", "sensitive_on_screen"\) => \{?\s*Ok\(\("sensitive_memory", "sensitive_on_screen", false\)\)/);
 });
 
+/** The same status with the fifth setting ("hands_free") at `value`, or,
+ *  with `value` undefined, from a PC older than it. */
+const withHandsFree = (st, value, where = "settings") => {
+  const c = JSON.parse(JSON.stringify(st));
+  delete c.gate.settings.hands_free;
+  delete c.gate.hands_free;
+  if (value === undefined) return c;
+  if (where === "settings") c.gate.settings.hands_free = value;
+  else c.gate.hands_free = value;
+  return c;
+};
+
+await check("hands-free (\"Hey Jarvis\"): same as the talk button by default, the agreed words, and only when the PC has it", async () => {
+  assert.deepEqual(VT.HANDS_FREE.map(VT.choiceText), ["Same as the talk button (default)", "Only trust the talk button"]);
+  assert.equal(VT.HANDS_FREE[0].detail,
+    "A question started with \"Hey Jarvis\" is trusted like one where you press the button.");
+  assert.equal(VT.HANDS_FREE[1].detail,
+    "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.");
+  assert.equal(VT.loosens("hands_free", "same_as_button"), true);
+  assert.equal(VT.loosens("hands_free", "button_only"), false);
+  // The REAL status (the backend's own, regenerated) carries it.
+  assert.equal(VT.settingsView(S.strong_ready).handsFree, "same_as_button");
+  assert.equal(VT.settingsView(withHandsFree(S.strong_ready, "button_only", "gate")).handsFree, "button_only");
+  assert.equal(VT.settingsView(withHandsFree(S.strong_ready, "everyone")).handsFree, "");
+  assert.equal(VT.settingsView(withHandsFree(S.strong_ready)).handsFree, "");
+
+  const page = await open(S.strong_ready);
+  const got = await page.evaluate(() => ({
+    shown: !document.getElementById("vt-handsfree-box").hidden,
+    title: document.querySelector("#vt-handsfree-box h3").textContent,
+    labels: [...document.querySelectorAll("#vt-handsfree button")].map((b) => b.textContent),
+    pressed: document.querySelector('#vt-handsfree button[aria-pressed="true"]').dataset.value,
+  }));
+  const note = await text(page, "vt-handsfree-note");
+  await page.close();
+  assert.equal(got.shown, true, "not offered by a PC that reports it");
+  assert.equal(got.title, "Hands-free (\"Hey Jarvis\")");
+  assert.deepEqual(got.labels, ["Same as the talk button (default)", "Only trust the talk button"]);
+  assert.equal(got.pressed, "same_as_button");
+  assert.equal(note, VT.HANDS_FREE[0].detail);
+  // A PC without it: not offered at all.
+  const old = await open(withHandsFree(S.strong_ready));
+  const hidden = await old.evaluate(() => document.getElementById("vt-handsfree-box").hidden);
+  await old.close();
+  assert.equal(hidden, true);
+});
+
+await check("hands-free: \"only trust the talk button\" is at once; going back asks, and is held on a stale link", async () => {
+  // Same -> button only: sent at once, even on a stale link.
+  const tighten = await open(S.strong_ready, { link: { stale: true } });
+  await tighten.click('#vt-handsfree button[data-value="button_only"]');
+  await tighten.waitForTimeout(150);
+  const sentTight = await calls(tighten, "set_voice_setting");
+  await tighten.close();
+  assert.deepEqual(sentTight, [{ setting: "hands_free", value: "button_only" }]);
+  // Button only -> same, on a stale link: nothing sent, and it says why.
+  const strict = withHandsFree(S.strong_ready, "button_only");
+  const held = await open(strict, { link: { stale: true } });
+  await held.click('#vt-handsfree button[data-value="same_as_button"]');
+  await held.waitForTimeout(150);
+  const none = await calls(held, "set_voice_setting");
+  const said = await text(held, "vt-setting-status");
+  const note = await text(held, "vt-handsfree-note");
+  await held.close();
+  assert.deepEqual(none, []);
+  assert.match(said, /catching up/);
+  assert.equal(note, VT.HANDS_FREE[1].detail);
+  // On a live link it is sent - the PC answers with the card.
+  const live = await open(strict);
+  await live.click('#vt-handsfree button[data-value="same_as_button"]');
+  await live.waitForTimeout(150);
+  const sent = await calls(live, "set_voice_setting");
+  await live.close();
+  assert.deepEqual(sent, [{ setting: "hands_free", value: "same_as_button" }]);
+  // The waiting line and the last-card lines name it, in the same shape.
+  assert.match(VT.settingWaitingLine({ setting: "hands_free", value: "same_as_button" }, WHERE),
+    /^Waiting for your approval to change how far "Hey Jarvis" is trusted to "Same as the talk button"\./);
+  const card = { ...S.balanced.gate.training.last, setting: "hands_free", value: "same_as_button" };
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, strict),
+    "Approved: \"Same as the talk button\" is on now.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, strict),
+    "You said no, so \"Only trust the talk button\" stays.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "timed_out" }, strict),
+    "Nobody answered the card in time, so nothing changed.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "withdrawn" }, strict),
+    "You made it stricter while the card waited, so approving it changed nothing.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "refused", reason: "no" }, strict),
+    "Your PC refused the change to how far \"Hey Jarvis\" is trusted: no.");
+  // CONTROL: the Rust knows the setting, and holds only its loosening.
+  const rust = read("src-tauri/src/voice_training.rs");
+  assert.match(rust, /\("hands_free", "same_as_button"\) => \{?\s*Ok\(\("hands_free", "same_as_button", true\)\)/);
+  assert.match(rust, /\("hands_free", "button_only"\) => \{?\s*Ok\(\("hands_free", "button_only", false\)\)/);
+});
+
 await check("the guided test: 20 sentences, one request, the result in words", async () => {
   const page = await open(S.strong_ready);
   await click(page, "vt-test", "Start the test");

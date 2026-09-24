@@ -419,6 +419,24 @@ def strict_cases():
         answers["sensitive_on_screen"] = scrub(answer(post(
             {"mode": "sensitive_memory", "value": "sensitive_on_screen"})), w)
         heard["sensitive_back_on_screen"] = hear("What time is it?")
+        # The owner's decision (2026-09-24): hands-free voice is as trusted
+        # as the talk button by default. "Only trust the talk button" is
+        # immediate; going back is the voice card. Under it, a clip from the
+        # talk button (hear()'s default source) still reads memory answers
+        # aloud - a "hey Jarvis" clip would not (backend/test_voice_strict.py).
+        answers["hands_free_button_only"] = scrub(answer(post(
+            {"mode": "hands_free", "value": "button_only"})), w)
+        status["hands_free_button_only"] = scrub(S.status(), w)
+        heard["button_only_talk_button"] = hear("What time is it?")
+        answers["hands_free_back_waiting"] = scrub(answer(post(
+            {"mode": "hands_free", "value": "same_as_button"}, spawn=never)), w)
+        E._reset_for_tests()
+        answers["hands_free_back_denied"] = scrub(answer(post(
+            {"mode": "hands_free", "value": "same_as_button"}, g=gate("denied"))), w)
+        status["hands_free_back_denied"] = scrub(S.status(), w)
+        answers["hands_free_back_approved"] = scrub(answer(post(
+            {"mode": "hands_free", "value": "same_as_button"})), w)
+        status["hands_free_back_approved"] = scrub(S.status(), w)
         answers["heard"] = heard
 
     # The router's decision for a chat turn (jarvis_router.choose), which

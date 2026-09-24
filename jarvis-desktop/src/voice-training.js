@@ -384,6 +384,7 @@ const SETTING_NAMES = {
   privacy: "private answers",
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
+  hands_free: "how far \"Hey Jarvis\" is trusted",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -451,9 +452,32 @@ export const SENSITIVE_MEMORY = Object.freeze([
   },
 ]);
 
+/**
+ * The owner's decision of 2026-09-24: a question started hands-free ("Hey
+ * Jarvis") is as trusted as one where the talk button is pressed, by
+ * default, with this setting to make it stricter. "Only trust the talk
+ * button" applies at once; going back is the looser choice - the voice
+ * card, and held on a stale link. The default is marked "(default)", not
+ * "(recommended)": it is the owner's choice, not the safer one.
+ */
+export const HANDS_FREE = Object.freeze([
+  {
+    id: "same_as_button",
+    label: "Same as the talk button",
+    isDefault: true,
+    detail: "A question started with \"Hey Jarvis\" is trusted like one where you press the button.",
+  },
+  {
+    id: "button_only",
+    label: "Only trust the talk button",
+    detail: "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
+  },
+]);
+
 function choiceWords(setting, value) {
   const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
-    : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY : [];
+    : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY
+      : setting === "hands_free" ? HANDS_FREE : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -463,10 +487,11 @@ export function settingLabel(setting, value) {
   return c ? c.label : "";
 }
 
-/** A choice as its button shows it: "Very strict (recommended)". Every
- *  sentence that names a choice uses the plain `label`. */
+/** A choice as its button shows it: "Very strict (recommended)", "Same as
+ *  the talk button (default)". Every sentence that names a choice uses the
+ *  plain `label`. */
 export function choiceText(c) {
-  return c ? `${c.label}${c.recommended ? " (recommended)" : ""}` : "";
+  return c ? `${c.label}${c.recommended ? " (recommended)" : c.isDefault ? " (default)" : ""}` : "";
 }
 
 /** Under the privacy choices while the check is not very strict. */
@@ -502,14 +527,16 @@ export function currentSetting(status, setting) {
   const view = settingsView(status);
   if (!view) return "";
   return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
-    : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory : "";
+    : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory
+      : setting === "hands_free" ? view.handsFree : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
 export function loosens(setting, value) {
   return (setting === "strictness" && value === "balanced") || (setting === "privacy" && value === "voice_is_enough")
     || (setting === "memory" && value === "memory_aloud")
-    || (setting === "sensitive_memory" && value === "sensitive_aloud");
+    || (setting === "sensitive_memory" && value === "sensitive_aloud")
+    || (setting === "hands_free" && value === "same_as_button");
 }
 
 /**
@@ -534,11 +561,16 @@ export function settingsView(status) {
   const rawSensitive = s.sensitive_memory !== undefined ? s.sensitive_memory : gate.sensitive_memory;
   const sensitiveMemory = rawSensitive === "sensitive_on_screen" || rawSensitive === "sensitive_aloud"
     ? rawSensitive : "";
+  // The fifth, how far "Hey Jarvis" is trusted: `gate.settings.hands_free`
+  // (or `gate.hands_free`). "" from a PC that does not have it - not offered.
+  const rawHandsFree = s.hands_free !== undefined ? s.hands_free : gate.hands_free;
+  const handsFree = rawHandsFree === "same_as_button" || rawHandsFree === "button_only" ? rawHandsFree : "";
   return {
     strictness,
     privacy,
     memory,
     sensitiveMemory,
+    handsFree,
     voiceIsEnoughAllowed: yes(s.voice_is_enough_allowed) && strictness === "very_strict",
     minSeconds: min,
     waiting: waiting && waiting.name ? { setting: String(waiting.name), value: String(waiting.value || "") } : null,

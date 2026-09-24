@@ -1482,6 +1482,9 @@ strict description with those two sentences, word for word
 `tests/voice-training.mjs` and `VoiceStrictTest.kt`). Approvals do not rest
 on the voice check (a card is always a tap), but reading memory or private
 answers aloud and automatic learning from a voice turn (§19.2 item 5) do.
+The fifth setting, `hands_free` (below), lets the owner trust only the
+talk button for those, because the hands-free microphone is the one a
+recording can reach without anyone touching a device.
 
 **Check before you send.** An older PC reads a body it does not know as a
 plain training (any body with clips in it) or answers 400. Offer each new
@@ -1491,7 +1494,7 @@ mode only when `gate.training` says the PC understands it:
 |---|---|
 | `calibrate: true` | `calibrate`, `threshold` (since 2026-09-24, earlier) |
 | `rounds: true` | `train` (rounds, `add`, `finish`, `cancel`) |
-| `settings: true` | `strictness`, `privacy`; and `memory` when `gate.settings.memory` is present (an older PC answers `mode: "memory"` with 503) |
+| `settings: true` | `strictness`, `privacy`; and `memory`, `sensitive_memory` or `hands_free` when `gate.settings` has it (an older PC answers that mode with 503) |
 | `measure: true` | `measure` |
 
 ### What changed for every app, even one that changes nothing
@@ -1541,6 +1544,17 @@ mode only when `gate.training` says the PC understands it:
                             reply, refusals included. Missing (an older PC) = false.
 ```
 
+**Hands-free (2026-09-24).** With `hands_free: button_only`, a clip whose
+`?source=` is not `push_to_talk` - `wake_word`, or anything the PC does not
+know - gets `private_aloud`, `memory_aloud` and `sensitive_aloud` all
+**false**, whatever the other settings say; the answer is still given, and
+the apps' rule below keeps it on screen. Under the default,
+`same_as_button`, nothing changes. The utterance route itself still reads a
+request with no `?source=` as `push_to_talk` (that line is in the owner's
+`jarvis_hud.py`), so **send `source` on every clip**: `push_to_talk` for
+the talk button, `wake_word` for everything the "hey Jarvis" listener
+sends (both apps do).
+
 ### `/api/voice/status` - new in `gate`
 
 ```
@@ -1548,15 +1562,18 @@ mode only when `gate.training` says the PC understands it:
 "privacy": "private_on_screen" | "voice_is_enough",
 "memory": "memory_aloud" | "memory_on_screen",
 "sensitive_memory": "sensitive_on_screen" | "sensitive_aloud",   "" from an older PC: do not offer it
-"settings": {"strictness", "privacy", "memory", "sensitive_memory", "changed": epoch,
+"hands_free": "same_as_button" | "button_only",                   "" from an older PC: do not offer it
+"settings": {"strictness", "privacy", "memory", "sensitive_memory", "hands_free", "changed": epoch,
              "voice_is_enough_allowed": bool,        true only while very strict
              "min_command_seconds": 2.0 | 1.5,
              "choices": {"strictness": ["very_strict", "balanced"],
                          "privacy": ["private_on_screen", "voice_is_enough"],
                          "memory": ["memory_aloud", "memory_on_screen"],
-                         "sensitive_memory": ["sensitive_on_screen", "sensitive_aloud"]},
+                         "sensitive_memory": ["sensitive_on_screen", "sensitive_aloud"],
+                         "hands_free": ["same_as_button", "button_only"]},
              "defaults": {"strictness": "very_strict", "privacy": "private_on_screen",
-                          "memory": "memory_aloud", "sensitive_memory": "sensitive_on_screen"}},
+                          "memory": "memory_aloud", "sensitive_memory": "sensitive_on_screen",
+                          "hands_free": "same_as_button"}},
 "models": {"small":  {"installed", "name", "label": "the small voice-ID model", "bars_measured", "path"},
            "strong": {"installed", "name", "label": "the stronger voice-ID model", "bars_measured",
                       "path", "why"},
@@ -1641,7 +1658,31 @@ as it is.
 {"mode": "privacy",    "value": "private_on_screen" | "voice_is_enough"}
 {"mode": "memory",     "value": "memory_aloud" | "memory_on_screen"}
 {"mode": "sensitive_memory", "value": "sensitive_on_screen" | "sensitive_aloud"}
+{"mode": "hands_free", "value": "same_as_button" | "button_only"}
 ```
+
+`hands_free` (added 2026-09-24, the owner's decision: "hands-free voice is
+as trusted as the talk button by default, with a setting to make it
+stricter"): how far a question started with "Hey Jarvis" is trusted.
+`same_as_button` is the default and the looser value; `button_only` is the
+stricter one and applies at once. Under `button_only`, a clip that did not
+come from the talk button reads nothing private, remembered or sensitive
+aloud (the reply's three `*_aloud` are false, above), and automatic
+learning never saves a fact from that turn without a card (§19.2 item 5).
+Going back to `same_as_button` raises the voice card, which reads: "Let a
+question started with "Hey Jarvis" count the same as pressing the talk
+button? / Then a recording or a copy of your voice played near the
+microphone could have Jarvis remember things, or read memory and private
+answers aloud. / If you did not just do this, say no. / If you say no:
+nothing changes - "Hey Jarvis" questions stay on the stricter setting." A
+settings file with no `hands_free` in it (every file from before) reads as
+`same_as_button`; a damaged value, or an unreadable file, as
+`button_only`. An older PC answers `mode: "hands_free"` with **503**, and
+its `/api/voice/status` has `gate.hands_free: ""` - the apps then do not
+offer the setting. Both apps show it as "Hands-free ("Hey Jarvis")", with
+"Same as the talk button (default)" and "Only trust the talk button", and
+name it "how far "Hey Jarvis" is trusted" in the waiting and last-card
+lines.
 
 `sensitive_memory` (added 2026-09-24, the owner's decision: an answer that
 uses a sensitive saved fact stays on screen by default, even under "Read
@@ -1669,7 +1710,7 @@ A settings file with no `memory` in it (every file from before) reads as
 | `200 {"ok": true, "changed": true, "pending": false, "settings": {"strictness", "privacy", "voice_is_enough_allowed"}, "message": "Done - that applies now."}` | tightening (`very_strict`, `private_on_screen`): immediate, no card. It also makes a waiting card that would loosen the same setting do nothing (`last.outcome = "withdrawn"`). |
 | `200 {"ok": true, "changed": false, ...}` | it was already that |
 | `202 {"ok": true, "pending": true, "setting", "value", "message"}` | loosening: ONE card (`change_own_config`). **Nothing changes until it is approved.** `last.outcome` becomes `"setting_changed"`, `"denied"`, `"timed_out"`, `"refused"`, `"withdrawn"` or `"failed"`. |
-| `503` | this PC's voice check is too old for that setting (`memory` or `sensitive_memory` on a PC from before them) |
+| `503` | this PC's voice check is too old for that setting (`memory`, `sensitive_memory` or `hands_free` on a PC from before them) |
 | `409` | `voice_is_enough` while balanced ("private answers can only be read aloud while the voice check is very strict"), a voice card already waiting, or the tier is not `ask` |
 
 Choosing `balanced` also puts private answers back on screen
@@ -1736,6 +1777,9 @@ for a question that came by VOICE and reply `private_aloud: false`:
    `memory_aloud` or `private_aloud` is true**.
 4. Treat a reply from an older PC (no `private_aloud`, no `memory_aloud` or
    no `sensitive_aloud` field) as `false`.
+5. Nothing more is needed for `hands_free`: under `button_only` the PC
+   sends the three `*_aloud` as false for a hands-free clip, and steps 2-4
+   keep its answer on screen.
 
 **Said plainly about `memory_aloud`:** a remembered fact can be about
 something sensitive (health, money) while the question is not ("what
@@ -2028,7 +2072,9 @@ For each `/api/chat` request, while history is on and encryption works:
 
 `voice` is recorded as `voice` only when the words match a transcript the
 PC's own speech route produced in the last 10 minutes (only a hash of it is
-held, with the voice check's strictness, model and mode). Otherwise a claimed
+held, with the voice check's strictness, model and mode, and - since the
+`hands_free` setting - how the clip started, `source`: `push_to_talk`,
+`wake_word`, or `""` when the speech route did not say). Otherwise a claimed
 `voice` is recorded as `voice_unverified`.
 
 **Not kept:** tool output, system or context messages, deep questions,
@@ -2268,6 +2314,12 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    "said aloud, but the voice check was not at its strictest ...".
    (`jarvis_speech.py` now tells the history which model DECIDED - it used to
    pass the small model's name even when the stronger one decided.)
+   **And, when the owner chose `hands_free: button_only`** (§16), only when
+   the clip came from the talk button (`source: push_to_talk`, recorded
+   with the transcript). A "hey Jarvis" turn - or one whose start was not
+   recorded, or is not known - is a card: "said hands-free - your setting
+   only trusts the talk button". Under the default, `same_as_button`,
+   nothing changes. A damaged setting reads as `button_only`.
 6. **No sign of outside text** in any of those turns (GUARDS L4): a link or
    web-page code (`http`, `www.`, markdown links, HTML tags, comments,
    entities) or a bare web address (`evil.example/page`, or a name ending in
@@ -2527,7 +2579,11 @@ sensitive topics automatically. ..." (`jarvis_auto_learn.AUTO_CARD`,
   ongoing conversation is cards (the earlier turns are "not seen arrive"). An
   app that sends no `conversation_id` gets cards only.
 - **Voice** is saved automatically only at `very_strict` with the stronger
-  voice model installed and in mode `owner`.
+  voice model installed and in mode `owner`. The voice check cannot tell
+  the owner's voice from a recording or a copy of it: under the default,
+  a recording played near a "hey Jarvis" microphone could have a fact
+  saved. `hands_free: button_only` (§16) closes that path; the talk button
+  still trusts the voice alone.
 - **The attack phrasings.** The memory audit's sensitive-topic red-team
   script holds 38 phrasings (the brief said 42); all 38, the auto-learning
   red team's list (lupus, the alarm code, the Netflix password, "Estoy

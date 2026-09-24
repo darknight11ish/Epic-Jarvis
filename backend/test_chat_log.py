@@ -287,7 +287,7 @@ def t_voice_is_voice_only_when_the_pc_heard_it():
     w = World()
     try:
         w.log.note_transcript("turn the lights off", strictness="strict", model="3dspeaker",
-                              mode="push_to_talk")
+                              mode="owner", source="wake_word")
         w.log.record_turn(req("turn the lights off", cid="conv-voice01", prov="voice"), turn=None)
         w.log.record_turn(req("something else", cid="conv-voice02", prov="voice"), turn=None)
         check("a transcript the PC's speech route made: recorded as voice",
@@ -299,9 +299,19 @@ def t_voice_is_voice_only_when_the_pc_heard_it():
         facts = c.execute("SELECT voice_check FROM turns WHERE conversation_id='conv-voice01'"
                           ).fetchone()[0]
         c.close()
-        check("the voice check's facts are kept with the turn",
+        check("the voice check's facts are kept with the turn, with how the clip started",
               json.loads(facts) == {"strictness": "strict", "model": "3dspeaker",
-                                    "mode": "push_to_talk"}, facts)
+                                    "mode": "owner", "source": "wake_word"}, facts)
+        live = w.log.live_turn("conv-voice01", "turn the lights off")
+        check("...and the live-turn registry has the source too (for automatic learning)",
+              live and live["voice_check"]["source"] == "wake_word", live)
+        # A speech route that did not say how the clip started: "" (which
+        # automatic learning treats as hands-free).
+        w.log.note_transcript("lights on please", strictness="very_strict", model="m",
+                              mode="owner")
+        w.log.record_turn(req("lights on please", cid="conv-voice04", prov="voice"), turn=None)
+        live = w.log.live_turn("conv-voice04", "lights on please")
+        check("no source said: kept as \"\"", live and live["voice_check"]["source"] == "", live)
         check("only a hash of the transcript is held in memory",
               all(len(h) == 64 for h in w.log._heard) and "turn the lights off"
               not in repr(w.log._heard))

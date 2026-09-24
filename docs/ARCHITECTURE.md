@@ -299,7 +299,11 @@ listed in both apps with Forget; the `memory_saved` event carries ids only.
 Turning either switch ON is an approval card; OFF is immediate. An answer
 that uses a sensitive saved fact is kept on screen, not read aloud, unless
 the owner turned on the voice setting `sensitive_memory` (X-Jarvis-Route's
-`injected_sensitive`, JARVIS-API §16).
+`injected_sensitive`, JARVIS-API §16). A "Hey Jarvis" voice turn is trusted
+like the talk button by default; with the voice setting `hands_free:
+button_only` it is never learned from without a card, and its memory,
+sensitive and private answers stay on screen (the speech route records how
+each clip started, `source`, with the transcript).
 
 ### Chat history — a second store, kept apart from memory
 

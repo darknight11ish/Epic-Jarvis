@@ -133,12 +133,13 @@ export function checkLine(status) {
   };
 }
 
-/** The four settings a card can loosen, as a sentence names them. */
+/** The five settings a card can loosen, as a sentence names them. */
 const SETTING_NAMES = {
   strictness: "how strict the voice check is",
   privacy: "private answers",
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
+  hands_free: "how far \"Hey Jarvis\" is trusted",
 };
 
 /**

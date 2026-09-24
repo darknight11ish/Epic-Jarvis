@@ -6493,6 +6493,23 @@ the training fails and says to record again somewhere quieter.
   that raises an approval card, and even then only after a real voice
   check. Said plainly: it is a word list, so a sensitive fact worded in a
   way it misses is treated as ordinary.
+- **Hands-free ("Hey Jarvis")**: a question started with "Hey Jarvis" is
+  trusted the same as one where you press the talk button - your default
+  (2026-09-24). The fifth setting, `hands_free`, can make it stricter:
+  "Only trust the talk button" (`button_only`) applies at once. Then a
+  "Hey Jarvis" question still works, but automatic learning never saves a
+  fact from it without a card ("said hands-free - your setting only trusts
+  the talk button"), and its memory, sensitive and private answers stay on
+  screen. Going back to "Same as the talk button" raises an approval card.
+  Why it exists: the voice check tells your voice from other people's, but
+  not from a recording or a copy of it, and the hands-free microphone is
+  the one a recording can reach without anyone touching your phone or PC.
+  To tell the two apart, the speech route now keeps how each clip started
+  (`source`) with the transcript it notes for chat history. Under the
+  stricter setting, a transcript noted without its start, or with a start
+  Jarvis does not know, counts as hands-free. Said plainly: the utterance
+  route in your `jarvis_hud.py` still reads a request with no `?source=`
+  as the talk button, as it always has; both apps always send it.
 
 Also new: training in **three rounds** (normal and close; further away or
 quieter; another time or room), all kept in memory until one card at the
