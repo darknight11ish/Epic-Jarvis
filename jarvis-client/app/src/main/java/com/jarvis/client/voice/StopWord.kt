@@ -132,8 +132,16 @@ object BargeIn {
 
     /**
      * "Hey Jarvis" wins over "stop" (it stops the speech too, and then
-     * listens). "Stop" is not trusted while the sentence Jarvis is saying
-     * contains the word itself - its own voice may be what was heard.
+     * listens). "Stop" is not trusted while Jarvis's own recent speech
+     * contains the word - its own voice may be what was heard.
+     *
+     * "Recent", not only "now": [speakingText] is the sentence playing at
+     * this moment, but the stop head scores a window that reaches about two
+     * seconds back, and it fires only after the quiet that follows the word
+     * - by which time the NEXT sentence is usually the one playing. So
+     * [recentlySaid] (from [RecentSpeech]) carries every sentence spoken in
+     * the last few seconds as well, and any of them saying "stop" is enough
+     * to distrust the score.
      */
     fun decide(
         stopScore: Float,
@@ -141,13 +149,24 @@ object BargeIn {
         stopThreshold: Float,
         wakeThreshold: Float,
         speakingText: String?,
+        recentlySaid: List<String> = emptyList(),
     ): Action = when {
         wakeScore >= wakeThreshold -> Action.WAKE
-        stopScore >= stopThreshold && !saysStop(speakingText) -> Action.STOP_SPEAKING
+        stopScore >= stopThreshold && !saysStop(speakingText) && recentlySaid.none { saysStop(it) } ->
+            Action.STOP_SPEAKING
         else -> Action.NONE
     }
 
-    fun saysStop(text: String?): Boolean = text != null && Regex("(?i)\\bstop").containsMatchIn(text)
+    /**
+     * A word starting with "stop" - "stop", "stops", "stopped", "stopping" -
+     * but not one that only has it inside, like "nonstop". Deliberately a
+     * little wider than the bare word: the
+     * head hears sound, not spelling, and "stopped" starts with the sound it
+     * was trained on.
+     */
+    fun saysStop(text: String?): Boolean = text != null && STOP_WORD.containsMatchIn(text)
+
+    private val STOP_WORD = Regex("(?i)\\bstop")
 
     /** The switch's line on the Checks screen. */
     fun describe(enabled: Boolean, echoCancellerAvailable: Boolean): String = when {
@@ -163,5 +182,62 @@ object BargeIn {
         else ->
             "Off: this phone has no echo canceller, so it would mostly hear Jarvis's own " +
                 "voice. You can still stop a reply from the screen."
+    }
+}
+
+/**
+ * What Jarvis said aloud in the last few seconds, for [BargeIn.decide].
+ *
+ * WHY A WINDOW. The stop head scores the last 16 embeddings (16 x 80 ms =
+ * 1.28 s of steps), and each embedding itself looks back 76 mel frames
+ * (0.76 s), so a "stop" in Jarvis's own voice can still move the score about
+ * two seconds after it was said - and the head's score peaks after the word,
+ * when the next sentence may already be playing. [WINDOW_MS] is that, plus
+ * margin for the speaker-to-microphone path. A sentence still playing is
+ * always included.
+ *
+ * Thread-safe: sentences are recorded by the voice turn and read by the
+ * barge-in listener on another thread. Times are whatever monotonic clock
+ * the caller uses (`SystemClock.elapsedRealtime()` on the phone).
+ */
+class RecentSpeech(
+    private val windowMs: Long = WINDOW_MS,
+    private val keep: Int = KEEP,
+) {
+    private class Said(val text: String, var endedAt: Long?)
+
+    private val said = ArrayDeque<Said>()
+
+    /** A sentence has started playing. */
+    @Synchronized
+    fun started(text: String) {
+        said.addLast(Said(text, null))
+        while (said.size > keep) said.removeFirst()
+    }
+
+    /** Whatever was playing has finished (or was stopped) at [now]. */
+    @Synchronized
+    fun ended(now: Long) {
+        for (s in said) if (s.endedAt == null) s.endedAt = now
+    }
+
+    /** Every sentence playing now, or finished within the window before [now]. */
+    @Synchronized
+    fun texts(now: Long): List<String> {
+        said.removeAll { s -> s.endedAt.let { it != null && now - it > windowMs } }
+        return said.map { it.text }
+    }
+
+    @Synchronized
+    fun clear() {
+        said.clear()
+    }
+
+    companion object {
+        /** ~2 s the head can still hear a word, plus margin. */
+        const val WINDOW_MS = 3_000L
+
+        /** More sentences than fit in the window; a bound, not a tuning knob. */
+        const val KEEP = 8
     }
 }

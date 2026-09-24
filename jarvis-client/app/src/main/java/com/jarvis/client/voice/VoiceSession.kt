@@ -1,6 +1,7 @@
 package com.jarvis.client.voice
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.jarvis.client.audio.Recorder
 import com.jarvis.client.audio.Speaker
@@ -121,6 +122,17 @@ class VoiceSession(
      * voice from the speaker must not count as the owner's stop word.
      */
     val speakingText: StateFlow<String?> = _speakingText.asStateFlow()
+
+    private val recentSpeech = RecentSpeech()
+
+    /**
+     * Every sentence Jarvis is saying now or said in the last few seconds
+     * ([RecentSpeech.WINDOW_MS]). Read by the barge-in listener alongside
+     * [speakingText]: the stop head fires after the quiet that follows a
+     * word, when Jarvis may already be on its next sentence, so "is the
+     * current sentence saying stop" alone missed its own voice.
+     */
+    fun recentlySpoken(): List<String> = recentSpeech.texts(SystemClock.elapsedRealtime())
 
     /**
      * Silences the reply being spoken - and nothing else. The turn carries
@@ -614,10 +626,12 @@ class VoiceSession(
      */
     private suspend fun speak(turn: Turn, text: String) {
         _speakingText.value = text
+        recentSpeech.started(text)
         try {
             speakNow(turn, text)
         } finally {
             _speakingText.value = null
+            recentSpeech.ended(SystemClock.elapsedRealtime())
         }
     }
 

@@ -422,6 +422,9 @@ class WakeWordService : Service() {
                 stops.clear()
                 val wakes = spotter.feed(buf, buf.size) { w -> stops.add(stopHead?.score(w) ?: 0f) }
                 val wakeThreshold = WakeRules.threshold(voice.status.value)
+                // Read once per buffer: the sentences of the last few seconds,
+                // not only the one playing now (see BargeIn.decide).
+                val recentlySaid = if (stops.any { it >= StopHead.THRESHOLD }) voice.recentlySpoken() else emptyList()
                 for (k in wakes.indices) {
                     when (
                         BargeIn.decide(
@@ -430,6 +433,7 @@ class WakeWordService : Service() {
                             stopThreshold = StopHead.THRESHOLD,
                             wakeThreshold = wakeThreshold,
                             speakingText = voice.speakingText.value,
+                            recentlySaid = recentlySaid,
                         )
                     ) {
                         BargeIn.Action.STOP_SPEAKING -> {
