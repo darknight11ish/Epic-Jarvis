@@ -4,12 +4,13 @@ import java.io.ByteArrayOutputStream
 import kotlin.math.ceil
 
 /**
- * WAV encoding and resampling — the two things the server refuses to do.
+ * WAV encoding and resampling, done on the phone.
  *
- * `/api/voice/utterance` takes 16-bit mono PCM at exactly 16 kHz and rejects
- * anything else, deliberately: a resampler on that side would be running on
- * bytes from the network, before the owner gate, in the most exposed code the
- * server has. So it happens here.
+ * `/api/voice/utterance` asks for 16-bit mono PCM at 16 kHz (`audio_in` in
+ * /api/voice/status), so the phone sends exactly that. (This used to say the
+ * server rejects anything else. It does not: it averages extra channels and
+ * passes another rate on to its speech models, which resample. Sending the
+ * asked-for format keeps the phone off that path.)
  *
  * Pure functions with no Android types, so they are unit-testable — which
  * matters, because a wrong header or an off-by-one in the decimator produces
