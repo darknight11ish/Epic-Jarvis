@@ -131,6 +131,10 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Callable, Optional
 
+#: Every request here goes straight to the address, never through a proxy
+#: (bug audit 3, CONN-1): see jarvis_local_http.py.
+import jarvis_local_http
+
 LOGSEQ_GRAPH_ENV = "JARVIS_LOGSEQ_GRAPH"
 JOPLIN_URL_ENV = "JARVIS_JOPLIN_URL"       # the same names jarvis_notes.py reads
 JOPLIN_TOKEN_ENV = "JARVIS_JOPLIN_TOKEN"
@@ -558,8 +562,8 @@ def _joplin_call(method: str, base: str, path: str, query: dict, body=None,
     req = urllib.request.Request(url, data=data, method=method,
                                  headers={"Content-Type": "application/json",
                                           "Accept": "application/json"})
-    opener = urllib.request.build_opener(_RefuseRedirect)
-    with opener.open(req, timeout=timeout) as r:
+    # No proxy (jarvis_local_http), and still no redirect (_RefuseRedirect).
+    with jarvis_local_http.urlopen(req, timeout, _RefuseRedirect) as r:
         return json.loads(r.read().decode("utf-8", "replace") or "null")
 
 

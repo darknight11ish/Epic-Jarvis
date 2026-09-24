@@ -307,6 +307,7 @@ $SHIPPED = @(
     'jarvis_turn.py'             # voice-turn.patch: Smart Turn, "finished, or only paused?"
     'jarvis_wakebank.py'         # other voices' "hey Jarvis" (numbers): the owner's wake-word verifier trains against it
     'jarvis_stopword.py'         # the "stop" word's numbers: jarvis_wakeword.spot_stop, to interrupt Jarvis while it talks
+    'jarvis_local_http.py'       # HTTP to this PC's own services (Ollama, Joplin, the second card) never through a proxy
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

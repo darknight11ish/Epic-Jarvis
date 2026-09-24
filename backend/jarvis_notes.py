@@ -116,6 +116,10 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Callable, Optional
 
+#: Every request here goes straight to the address, never through a proxy
+#: (bug audit 3, CONN-1): see jarvis_local_http.py.
+import jarvis_local_http
+
 BACKEND_ENV = "JARVIS_NOTES_BACKEND"       # "vault" | "joplin" | "obsidian", optional
 JOPLIN_URL_ENV = "JARVIS_JOPLIN_URL"
 JOPLIN_TOKEN_ENV = "JARVIS_JOPLIN_TOKEN"
@@ -383,8 +387,8 @@ def _default_fetch(p: Plan):
         key = os.environ.get(OBSIDIAN_KEY_ENV, "")
         headers["Authorization"] = f"Bearer {key}"
     req = urllib.request.Request(url, headers=headers)
-    opener = urllib.request.build_opener(_RefuseRedirect)
-    with opener.open(req, timeout=20.0) as r:
+    # No proxy (jarvis_local_http), and still no redirect (_RefuseRedirect).
+    with jarvis_local_http.urlopen(req, 20.0, _RefuseRedirect) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
