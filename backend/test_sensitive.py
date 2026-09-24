@@ -134,9 +134,9 @@ def t_the_development_corpus():
 
 def _numbers(path, label):
     rows = S._load_cases(str(path))
-    t0 = time.time()
+    t0 = time.process_time()  # CPU time: other programs on a busy machine do not count
     res = S.measure(rows, with_model=False)
-    took = time.time() - t0
+    took = time.process_time() - t0
     import io
     buf = io.StringIO()
     got = S.report(res, with_model=False, show=True, out=buf)
@@ -164,7 +164,7 @@ def t_the_first_held_out_set():
         g = [r for r in res["results"] if r["sensitive"] and r["category"] == cat]
         hit = sum(1 for r in g if r["by_patterns"])
         check(f"heldout1: recall for {cat} >= 95% ({hit}/{len(g)})", g and hit / len(g) >= 0.95)
-    check(f"heldout1: all 963 lines measure in about a second ({took:.2f} s; limit 3 s for a "
+    check(f"heldout1: all 963 lines take about a second of CPU time ({took:.2f} s; limit 3 s for a "
           "slower PC)", took < 3.0, took)
 
 
