@@ -439,6 +439,16 @@ built it): "Train my voice" (`/api/voice/enroll`). The PC's microphone has a
 voice print of its own on the backend, but with no training screen on the
 desktop it uses the phone's print (`backend/README.md`).
 
+**On the backend, in neither app yet, NOT on purpose** (2026-09-24, both
+apps should get it): the stricter voice check's controls - very strict /
+balanced, private answers on screen / read aloud, training in rounds and
+"train more", the guided repeat test, and the reply fields that say when a
+command was too short or a private answer must stay on screen
+(`docs/JARVIS-API.md` §16). They are new modes and fields on routes that
+already exist (`/api/voice/enroll`, which only the phone calls today;
+`/api/voice/status` and `/api/voice/utterance`), so `tools/check_parity.py`
+cannot see the gap; this line is the record of it.
+
 ---
 
 ## 9. Where the backend lives

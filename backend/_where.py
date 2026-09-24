@@ -120,6 +120,7 @@ SHIPPED = (
     "jarvis_local_http.py", "jarvis_child_env.py",
     "jarvis_voices.py", "jarvis_f5_worker.py",
     "jarvis_learning_switch.py",
+    "jarvis_voicebank.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",

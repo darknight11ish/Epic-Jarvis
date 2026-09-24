@@ -1265,13 +1265,30 @@ class Voice(unittest.TestCase):
 
     def test_a_different_voice_is_refused(self):
         class Fixed(VO.Embedder):
+            # A speaker model, as far as verify() is concerned: since
+            # 2026-09-24 the basic (semantic = False) check lets nobody in.
+            semantic = True
             def __init__(self, v): self.v = list(v)
             def embed(self, audio): return self.v
 
         VO.VoiceProfile(centroid=[1.0, 0.0, 0.0, 0.0], threshold=0.5,
                         samples=3).save(self.prof)
-        self.assertFalse(VO.verify(b"x", Fixed([0.0, 1.0, 0.0, 0.0])).is_owner)
-        self.assertTrue(VO.verify(b"x", Fixed([1.0, 0.0, 0.0, 0.0])).is_owner)
+        # strong=False: no stronger model, whatever this PC has installed.
+        self.assertFalse(VO.verify(b"x", Fixed([0.0, 1.0, 0.0, 0.0]), strong=False).is_owner)
+        self.assertTrue(VO.verify(b"x", Fixed([1.0, 0.0, 0.0, 0.0]), strong=False).is_owner)
+
+    def test_the_basic_check_never_lets_anyone_in(self):
+        """Hole 1 (2026-09-24): the spectral stand-in cannot tell two people
+        apart, and it used to answer is_owner=True for a close enough clip."""
+        class Fixed(VO.Embedder):
+            def __init__(self, v): self.v = list(v)
+            def embed(self, audio): return self.v
+
+        VO.VoiceProfile(centroid=[1.0, 0.0, 0.0, 0.0], threshold=0.5,
+                        samples=3).save(self.prof)
+        v = VO.verify(b"x", Fixed([1.0, 0.0, 0.0, 0.0]), strong=False)
+        self.assertFalse(v.is_owner)
+        self.assertIn("install the voice-ID model", v.reason)
 
     def test_broad_mode_is_always_visible_in_the_verdict(self):
         VO._cfg = lambda k, d=None: {"enabled": True, "mode": "broad"}.get(k, d)

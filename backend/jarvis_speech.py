@@ -41,6 +41,12 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
        else - the desktop silences Jarvis's reply. Stopping speech is
        harmless, so it needs no voice check; it is never transcribed, never
        sent to the chat, and does nothing but stop the speaking.
+       3b, since 2026-09-24 (the stricter check): less speech than a
+       command needs (jarvis_voice.MIN_COMMAND_SECONDS: 2 s very strict,
+       1.5 s balanced) -> refused, not checked, not transcribed: "say a
+       little more". A short wake-word clip that is only "hey Jarvis"
+       still goes on (it opens the listening window, step 6); a short one
+       with a command in it is refused after step 5, its words dropped.
     4. the owner check (jarvis_voice)    not the owner   -> refused, not transcribed
     5. speech-to-text
     6. wake word only: does the transcript START with "hey Jarvis"? The
@@ -772,13 +778,35 @@ def _prints(voice: dict) -> dict:
     """gate.prints: {phone, desktop, general}, each {trained, samples,
     threshold, created, needs_retraining}. Never raises."""
     blank = {"trained": False, "samples": 0, "threshold": 0.0, "created": 0.0,
-             "needs_retraining": False}
+             "needs_retraining": False,
+             # Since 2026-09-24 (the stricter check): the recording
+             # conditions in the print, whether the stronger model has a
+             # print of its own in it, and the owner's own bar for it.
+             "subprints": [], "strong_trained": False, "strong_threshold": 0.0}
     got = voice.get("prints") if isinstance(voice.get("prints"), dict) else {}
     out = {}
     for k in ("phone", "desktop", "general"):
         p = got.get(k) if isinstance(got.get(k), dict) else {}
         out[k] = {**blank, **{f: p[f] for f in blank if f in p}}
     return out
+
+
+def _strict_state(voice: dict) -> dict:
+    """gate.strictness / privacy / settings / models / cohort / repeat, from
+    jarvis_voice.status(); the strict defaults, and `models` saying nothing
+    is known, for a jarvis_voice.py older than them. Never raises."""
+    st = voice.get("settings") if isinstance(voice.get("settings"), dict) else {}
+    strict = str(voice.get("strictness") or "very_strict")
+    return {
+        "strictness": strict,
+        "privacy": str(voice.get("privacy") or "private_on_screen"),
+        "settings": st or {"strictness": strict, "privacy": "private_on_screen",
+                           "voice_is_enough_allowed": strict == "very_strict",
+                           "min_command_seconds": 0.0},
+        "models": voice.get("models") if isinstance(voice.get("models"), dict) else {},
+        "cohort": voice.get("cohort") if isinstance(voice.get("cohort"), dict) else {},
+        "repeat": voice.get("repeat") if isinstance(voice.get("repeat"), dict) else {},
+    }
 
 
 def _verifier_state() -> dict:
@@ -887,6 +915,12 @@ def _push_to_talk(voice: dict, stt_ok: bool, voice_loaded: bool):
     if not voice.get("enabled", False):
         return False, "Voice is switched off in the PC's settings ([voice] enabled)."
     broad = str(voice.get("mode", "owner")).strip().lower() == "broad"
+    if not broad and voice.get("speaker_model") is False:
+        # Since 2026-09-24 the basic check refuses every voice in owner mode
+        # (jarvis_voice, hole 1), so a button would only ever say no.
+        return False, ("The PC has no voice-ID model installed, so it cannot tell your "
+                       "voice from anyone else's. Install it (backend/README.md, "
+                       "\"Install the better voice check\").")
     if not broad and voice.get("needs_retraining"):
         return False, ("The PC's voice check changed since you trained it. "
                        "Train your voice again.")
@@ -1066,6 +1100,8 @@ def status() -> dict:
             # PRINT PER MICROPHONE"); every one untrained from an older
             # jarvis_voice.py that does not report them.
             "prints": _prints(voice),
+            # The stricter check (2026-09-24) - see _strict_state().
+            **_strict_state(voice),
         },
     }
 
@@ -1162,6 +1198,21 @@ class Heard:
     #: just said the word itself, so it was NOT acted on. `reason` says so,
     #: in words an app can show as they are.
     stop_ignored: bool = False
+    #: Since 2026-09-24 (the stricter voice check). The clip had less speech
+    #: than a command needs (`min_seconds`, jarvis_voice.MIN_COMMAND_SECONDS)
+    #: and was refused before any voice check - "say a little more".
+    too_short: bool = False
+    min_seconds: float = 0.0
+    #: The strictness the voice was checked at: "very_strict" or "balanced"
+    #: ("" when no check ran).
+    strictness: str = ""
+    #: May an answer that draws on email, calendar, notes or memory be READ
+    #: ALOUD for this request? (jarvis_voice.may_speak, from the owner's
+    #: "private answers" setting.) False: show such an answer on screen only.
+    private_aloud: bool = False
+    #: The words asked about something private (the router's private-topic
+    #: backstop). A hint for the app, not a guarantee - see JARVIS-API.md.
+    question_private: bool = False
 
     def as_dict(self) -> dict:
         """What /api/voice/utterance sends back - assuming, as the desktop's
@@ -1197,6 +1248,55 @@ def _takes_rate(fn) -> bool:
     return _takes(fn, "sample_rate")
 
 
+def _min_command_seconds() -> float:
+    """The least speech a command needs (jarvis_voice, "MIN_COMMAND_SECONDS"),
+    or 0 - no minimum - for a jarvis_voice.py older than it, or in broad
+    mode, where no voice is being checked."""
+    if jarvis_voice is None or not hasattr(jarvis_voice, "min_command_seconds"):
+        return 0.0
+    if str(_cfg("mode", "owner") or "owner").strip().lower() == "broad":
+        return 0.0
+    try:
+        return float(jarvis_voice.min_command_seconds())
+    except Exception:
+        return 0.0
+
+
+def _has_print(mic: str) -> bool:
+    try:
+        return jarvis_voice.find_profile(mic)[0] is not None
+    except Exception:
+        return False
+
+
+def _note_short(mic: str) -> None:
+    """Counts a too-short clip towards the owner's repeat rate."""
+    try:
+        jarvis_voice.note_outcome(False, jarvis_voice.settings()["strictness"], mic,
+                                  too_short=True)
+    except Exception:
+        pass
+
+
+def _private_aloud() -> bool:
+    try:
+        return bool(jarvis_voice.may_speak(True, "voice")["speak"])
+    except Exception:
+        return False
+
+
+def _question_private(text: str) -> bool:
+    try:
+        return bool(jarvis_voice.looks_private(text))
+    except Exception:
+        return False
+
+
+def _too_short_reason(spoken: float, need: float) -> str:
+    return (f"that was too short to be sure it was you ({spoken:.1f} seconds of "
+            f"speech; a command needs at least {need:.1f}) - say a little more")
+
+
 def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
     """One complete WAV utterance in. Never transcribes before the speaker
     is checked - see the module docstring for the whole order and why it is
@@ -1224,6 +1324,13 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
                      reason="no speech in that recording")
     if span != "skip":
         samples = samples[span[0]:span[1]]
+    # How much was said: the VAD's span, or (no VAD installed) the whole
+    # clip, which the client already cut at a pause.
+    spoken = len(samples) / float(sample_rate or 16000)
+    need = _min_command_seconds()
+    # Only once there is a print to check against: with none, the owner
+    # needs "train your voice first", not "say a little more".
+    short = need > 0 and spoken < need and _has_print(mic)
 
     # 3. The wake word. Switched on? Then: is "hey Jarvis" in it?
     via_window = False
@@ -1234,9 +1341,6 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
             # PC takes no wake-word clips" - both clients stop listening on it.
             return Heard(False, source=source, available=False, seconds=seconds,
                          reason="the wake word is switched off on the PC")
-        # How much was said: the VAD's span, or (no VAD installed) the whole
-        # clip, which the client already cut at a pause.
-        spoken = len(samples) / float(sample_rate or 16000)
         if spoken <= STOP_MAX_SECONDS and jarvis_wakeword is not None \
                 and hasattr(jarvis_wakeword, "spot_stop"):
             stop = jarvis_wakeword.spot_stop(samples, sample_rate)
@@ -1274,6 +1378,18 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
                              wake_score=spot.score,
                              reason="no \"hey Jarvis\" in that recording")
 
+    # 3b. Long enough to be sure it is the owner? (2026-09-24.) A speaker
+    #     model has little to go on in a second of speech, so a command
+    #     that short is refused HERE - before the owner check, never
+    #     transcribed - and the owner is asked to say a little more. The one
+    #     exception is a "hey Jarvis" clip, which is the wake path, not a
+    #     command: it may open the listening window (step 6), and nothing
+    #     more - a command inside a clip that short is refused after all.
+    if short and (not wake or via_window):
+        _note_short(mic)
+        return Heard(False, source=source, seconds=seconds, too_short=True,
+                     min_seconds=need, reason=_too_short_reason(spoken, need))
+
     if jarvis_voice is None:
         return Heard(False, source=source, available=False, seconds=seconds,
                       reason="jarvis_voice is not importable; refusing "
@@ -1298,7 +1414,9 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
     common = dict(score=verdict.score, threshold=verdict.threshold,
                   source=source, mode=verdict.mode, seconds=seconds,
                   wake_score=spot.score if spot else 0.0,
-                  voice_print=str(getattr(verdict, "voice_print", "") or ""))
+                  voice_print=str(getattr(verdict, "voice_print", "") or ""),
+                  strictness=str(getattr(verdict, "strictness", "") or ""),
+                  private_aloud=_private_aloud())
 
     if not verdict.is_owner:
         return Heard(False, reason=verdict.reason, **common)
@@ -1319,7 +1437,8 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
     engine = f"{STT_ENGINE}:{_stt_files()[0]}"
 
     if not wake or via_window:
-        return Heard(True, text=text, engine=engine, wake_heard=wake, **common)
+        return Heard(True, text=text, engine=engine, wake_heard=wake,
+                     question_private=_question_private(text), **common)
 
     # 6. Wake word: the transcript must start with it. The words are the
     #    owner's own (step 4 passed); a clip that was not addressed to
@@ -1333,7 +1452,14 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
         secs = _open_awake()
         return Heard(True, text="", engine=engine, wake_heard=True, awake=True,
                      awake_seconds=secs, reason="listening", **common)
-    return Heard(True, text=rest, engine=engine, wake_heard=True, **common)
+    if short:
+        # "Hey Jarvis" was allowed through as the wake path only (step 3b);
+        # a command in a clip this short is not taken.
+        _note_short(mic)
+        return Heard(True, text="", engine=engine, wake_heard=True, too_short=True,
+                     min_seconds=need, reason=_too_short_reason(spoken, need), **common)
+    return Heard(True, text=rest, engine=engine, wake_heard=True,
+                 question_private=_question_private(rest), **common)
 
 
 def say(text: str, mic: str = "") -> Optional[bytes]:

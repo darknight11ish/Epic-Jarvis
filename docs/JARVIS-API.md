@@ -448,7 +448,7 @@ only what Jarvis itself said it did.
 | `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop` | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
-| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"` | **no** | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
+| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"`, and since 2026-09-24 `"train"` / `"strictness"` / `"privacy"` / `"measure"` (§16, neither app yet) | **no** | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
 | `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
 | `/api/voice/voices` (+ `/create`, `/active`, `/delete`, `/better`) | GET / POST | see section 15 | **not yet** | **not yet** | Custom voices (2026-09-24, `voices.patch`). Built on the backend first; both apps to build against section 15. |
 
@@ -1365,3 +1365,214 @@ voice switch with `state_why` under it, and `fallback` wherever the active
 voice is shown. Recording on the phone sends the clip; **the phone must not
 transcribe it** (CLAUDE.md): the words come from the sentence shown or from
 the owner's typing.
+## 16. The stricter voice check (added 2026-09-24)
+
+Backend only so far: `backend/rebuilt/jarvis_voice.py`,
+`backend/jarvis_voice_enroll.py`, `backend/jarvis_speech.py`, and the
+shipped bank `backend/jarvis_voicebank.py`. **Neither app uses any of it
+yet** - this section is what they build against. **No new route and no new
+patch**: everything below is on routes the apps already call
+(`/api/voice/status`, `/api/voice/enroll`, `/api/voice/utterance`), so
+`tools/check_parity.py` has nothing new to classify. The owner's guide and
+every measured number are in `backend/README.md`, "The stricter voice
+check".
+
+**Check before you send.** An older PC reads a body it does not know as a
+plain training (any body with clips in it) or answers 400. Offer each new
+mode only when `gate.training` says the PC understands it:
+
+| flag in `gate.training` | the modes it allows |
+|---|---|
+| `calibrate: true` | `calibrate`, `threshold` (since 2026-09-24, earlier) |
+| `rounds: true` | `train` (rounds, `add`, `finish`, `cancel`) |
+| `settings: true` | `strictness`, `privacy` |
+| `measure: true` | `measure` |
+
+### What changed for every app, even one that changes nothing
+
+- **No voice-ID model, no voice commands.** With only the basic check
+  installed, owner mode refuses every clip: the utterance reply says
+  "no voice-ID model is installed, ... install the voice-ID model";
+  `listening.push_to_talk` is false with `push_to_talk_why` saying the
+  same; a training (any mode that would raise a card) answers
+  **409** `{"error": "<that sentence>", "pending": false, "needs_model": true}`
+  before any card. Show the sentence as it is.
+- **A command needs enough speech.** 2.0 s at very strict, 1.5 s at
+  balanced (`gate.settings.min_command_seconds`), measured the way the
+  server measures it (the VAD's span, which includes 0.3 s of quiet either
+  side). A shorter clip is refused BEFORE the voice check and never
+  transcribed; the reply has `too_short: true`, `min_seconds`, `threshold:
+  0` and a `reason` like "that was too short to be sure it was you (1.2
+  seconds of speech; a command needs at least 2.0) - say a little more".
+  Show `reason`; do not show "that didn't sound like you" for it (the phone
+  tells them apart by `threshold > 0` today, which still works). A
+  `wake_word` clip that is only "hey Jarvis" may be short: it still opens
+  the listening window (`awake: true`). A short `wake_word` clip that has a
+  command in it answers `too_short: true`, `wake_heard: true`, `text: ""`.
+  Only once a voice is trained - with none, the reply is "no enrolled voice
+  profile", as before.
+- **The one-shot training still works** (`{"clips": [...]}`, as today): it
+  becomes round 1 ("close"), replacing the print, with one card.
+
+### The utterance reply: five new fields
+
+```
+"too_short": bool, "min_seconds": float,     see above
+"strictness": "very_strict" | "balanced" | ""   the setting the voice was checked at ("" = not checked)
+"private_aloud": bool       may an answer that uses email, calendar, notes or memory be READ ALOUD
+                            for this request? (jarvis_voice.may_speak(True, "voice"))
+"question_private": bool    the words asked about something private (the router's private-topic
+                            list plus notes and memory) - a hint, see below
+```
+
+### `/api/voice/status` - new in `gate`
+
+```
+"strictness": "very_strict" | "balanced",
+"privacy": "private_on_screen" | "voice_is_enough",
+"settings": {"strictness", "privacy", "changed": epoch,
+             "voice_is_enough_allowed": bool,        true only while very strict
+             "min_command_seconds": 2.0 | 1.5,
+             "choices": {"strictness": ["very_strict", "balanced"],
+                         "privacy": ["private_on_screen", "voice_is_enough"]},
+             "defaults": {"strictness": "very_strict", "privacy": "private_on_screen"}},
+"models": {"small":  {"installed", "name", "label": "the small voice-ID model", "bars_measured", "path"},
+           "strong": {"installed", "name", "label": "the stronger voice-ID model", "bars_measured",
+                      "path", "why"},
+           "very_strict_uses": 0 | 1 | 2,           how many models very strict asks right now
+           "balanced_uses": "strong" | "small" | ""},
+"cohort": {"small":  null | {"speakers": 300, "source": "...", "where": "shipped with Jarvis" |
+                            "built on this PC", "matches": bool},
+           "strong": null | {...}},
+"repeat": {"window_seconds": 10.0, "since": epoch,
+           "very_strict": {"accepted", "refused", "too_short", "refused_then_accepted", "repeat_rate"},
+           "balanced":    {...}},
+"prints": {"phone" | "desktop" | "general": {... as before ...,
+           "subprints": [{"condition": "close" | "far" | "room" | "general", "samples": int}],
+           "strong_trained": bool,        the stronger model has a print of its own in it
+           "strong_threshold": float}},   the owner's own bar for it (0 = the measured one)
+"training": {... as before ..., "rounds": true, "settings": true, "measure": true,
+             "session": null | {"mic", "add", "rounds": [{"round", "condition", "clips", "seconds"}],
+                                "clips", "seconds", "expires_in"},
+             "measure_last": {"at", "clips", "strong_model",
+                              "very_strict": {"passed", "of", "too_short", "repeat_rate"},
+                              "balanced": {...}},              only after a guided test
+             "kind": "enroll" | "threshold" | "setting",       while a card waits
+             "setting": {"name", "value"},                      while a setting card waits
+             "last": {... as before ..., "outliers": [{"round", "clip"}], "added": bool,
+                      "subprints": ["close", ...], "setting", "value", "model"},
+             "limits": {... as before ..., "rounds": 3, "session_seconds": 900.0,
+                        "measure_max_clips": 20},
+             "round_asks": {"1": "normal, close to the microphone",
+                            "2": "further away from the microphone, or quieter",
+                            "3": "at another time of day, or in another room"}}
+```
+
+`gate.note` says, in words, when very strict is using one model, when the
+print was made before the stronger model was installed (then
+`needs_retraining` is true and the talk button hides), and when the model
+installed is not one whose bars were measured. Show it.
+`gate.repeat` counts since the backend started; nothing is kept on disk.
+`repeat_rate` = `refused_then_accepted / accepted` - how often the owner had
+to say it again within 10 s.
+
+### `POST /api/voice/enroll` - the new modes
+
+Every answer below is JSON; every refusal has `error`, a sentence to show
+as it is.
+
+**Training in rounds** (`rounds: true`):
+
+```
+{"mode": "train", "round": 1 | 2 | 3, "mic": "phone" | "desktop", "clips": [<base64 WAV>, ...],
+ "add": false, "finish": false}
+```
+
+| answer | when |
+|---|---|
+| `200 {"ok": true, "pending": false, "held": <session>, "round": 1, "next_round": 2, "next_ask": "further away from the microphone, or quieter", "message"}` | the round is held in memory; **no card, nothing changed** |
+| `202 {"ok": true, "pending": true, "clips": 30, "seconds": 104.0, "rounds": 3, "message"}` | `"finish": true` (with the last round's clips, or with no `clips` at all): ONE card for every held round |
+| `400` | a clip is wrong (as today, with `"round"`), `round` is not 1-3, or `finish` with nothing held |
+| `409 {"error", "session": <session>}` | another training (another mic, or `add` differs) is held - finish or cancel it |
+| `409 {"error", "pending": true, "expires_in"}` | a voice card is already waiting |
+
+- Each round is 3-12 clips and 80 s at most (the same limits as today).
+  Sending a round again replaces that round's clips.
+- Held clips are dropped, all of them, on `{"mode": "train", "cancel":
+  true}` (`200 {"ok": true, "cancelled": bool, "message"}`), on a denied or
+  timed-out card, and 15 minutes (`limits.session_seconds`) after the last
+  round. `last.outcome` is then `"cancelled"` or `"expired"`.
+- `"add": true` keeps the print that is there and adds these recordings
+  to it (the card says "Add the recordings ... Nothing it had is
+  deleted"). Without it the print is replaced, as today.
+- The card's outcome: `last.outcome = "enrolled"`, with `outliers` - the
+  clips left out because they did not sound like the rest, as
+  `[{"round": 2, "clip": 5}]` (clip counted from 1 within its round). **Ask
+  the owner to record exactly those again** (another `train` round with
+  `"add": true`). `"failed"` with `outliers` means most clips were like
+  that: record them again somewhere quieter.
+
+**Strictness and private answers** (`settings: true`):
+
+```
+{"mode": "strictness", "value": "very_strict" | "balanced"}
+{"mode": "privacy",    "value": "private_on_screen" | "voice_is_enough"}
+```
+
+| answer | when |
+|---|---|
+| `200 {"ok": true, "changed": true, "pending": false, "settings": {"strictness", "privacy", "voice_is_enough_allowed"}, "message": "Done - that applies now."}` | tightening (`very_strict`, `private_on_screen`): immediate, no card. It also makes a waiting card that would loosen the same setting do nothing (`last.outcome = "withdrawn"`). |
+| `200 {"ok": true, "changed": false, ...}` | it was already that |
+| `202 {"ok": true, "pending": true, "setting", "value", "message"}` | loosening: ONE card (`change_own_config`). **Nothing changes until it is approved.** `last.outcome` becomes `"setting_changed"`, `"denied"`, `"timed_out"`, `"refused"`, `"withdrawn"` or `"failed"`. |
+| `409` | `voice_is_enough` while balanced ("private answers can only be read aloud while the voice check is very strict"), a voice card already waiting, or the tier is not `ask` |
+
+Choosing `balanced` also puts private answers back on screen
+(`privacy` becomes `private_on_screen`), and the card says so.
+
+**The guided repeat test** (`measure: true`):
+
+```
+{"mode": "measure", "mic": "phone", "clips": [up to 20 of the owner's own sentences]}
+-> 200 {"ok": true, "clips": 20, "print": "phone", "strong_model": true,
+        "very_strict": {"passed": 15, "too_short": 2, "of": 20, "repeat_rate": 0.25},
+        "balanced":    {"passed": 19, "too_short": 0, "of": 20, "repeat_rate": 0.05},
+        "per_clip": [{"seconds": 2.4, "very_strict": true, "balanced": true, "score": 0.71}, ...],
+        "message": "Very strict let 15 of 20 through; balanced 19 of 20."}
+```
+
+No card, nothing stored but the counts (`measure_last`), and not counted in
+`repeat`. 80 s in all per request, as for training; send two halves if the
+sentences are long, and add the counts up.
+
+**"Someone else"** (`calibrate`, unchanged request): the reply adds
+`"passed": [bool, ...]` (would each clip have been let in, with everything
+the current setting uses), `"passed_count"`, `"strictness"`, and
+`"model": "small" | "strong"` - which model `scores` and `suggested` are
+for. Send that `model` back with the threshold card:
+`{"mode": "threshold", "mic": "phone", "threshold": 0.55, "model": "strong"}`
+(default: the stronger model when the print has it). A bar below that
+model's measured floor is a **400** naming the lowest allowed.
+
+### What the apps must do about private answers
+
+The owner's rule: with `private_on_screen` (the default), an answer drawn
+from email, the calendar, notes or what Jarvis remembers is **not read
+aloud** unless the question was typed or tapped on the owner's own unlocked
+device. So, for a question that came by VOICE and reply `private_aloud:
+false`:
+
+1. Show the answer on screen as usual.
+2. Read it aloud only when nothing says it is private: `question_private`
+   is false, the chat reply's `X-Jarvis-Route` has no `gate: "private"` and
+   no `injected_facts` above 0 (both fields §4 describes; the route that
+   fills them is on the PC and was not read for this), and no tool ran
+   while it was being written. Otherwise say one fixed line instead, such
+   as "It's on your screen."
+3. Treat a reply from an older PC (no `private_aloud` field) as `false`.
+
+**Known gap, said plainly:** the server cannot yet label a finished answer
+as private. `X-Jarvis-Route` is sent before the model starts, so it cannot
+know that the model will call the email or calendar tool; the rule above is
+the apps' best information until the chat route says so at the end of the
+answer. `jarvis_voice.may_speak(private, origin)` is the helper that route
+should call when it does.

@@ -45,6 +45,7 @@ require_shipped("jarvis_speech.py", "jarvis_voice_enroll.py")
 import jarvis_speech as S  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
+from _voice_test import semantic_voice  # noqa: E402
 
 KT = REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client" / "net" / "VoiceModels.kt"
 RS = REPO / "jarvis-desktop" / "src-tauri" / "src" / "voice.rs"
@@ -152,14 +153,23 @@ class Env:
         d = Path(self.tmp.name)
         self.profile = d / "owner.json"
         self.patches = [mock.patch.object(S, "_config_dir", return_value=d),
-                        mock.patch.object(V, "PROFILE_PATH", self.profile)]
+                        mock.patch.object(V, "PROFILE_PATH", self.profile),
+                        # These are shapes, not the minimum length (that is
+                        # test_voice_strict.py): no minimum, so the suite's
+                        # one-second tones reach the voice check.
+                        mock.patch.object(S, "_min_command_seconds", return_value=0.0)]
         for p in self.patches:
             p.start()
+        # A stand-in speaker model (_voice_test.py): since 2026-09-24 the
+        # basic check lets nobody in, so "the owner" needs a real-ish one.
+        self._voice = semantic_voice(V, settings_dir=d)
+        self.voiceish = self._voice.__enter__()
         S.reload_engines()
         E._reset_for_tests()
         return self
 
     def __exit__(self, *a):
+        self._voice.__exit__(None, None, None)
         for p in reversed(self.patches):
             p.stop()
         self.tmp.cleanup()
@@ -218,7 +228,7 @@ def t_push_to_talk_means_it_can_work():
 
         clip = tone(220.0)
         samples, _ = S._read_wav(clip)
-        V.enroll([samples] * 3, embedder=V.Embedder(), path=env.profile)
+        V.enroll([samples] * 3, embedder=env.voiceish(), path=env.profile)
         st = S.status()
         check("trained: the gate says so", st["gate"]["enrolled"] is True and st["gate"]["samples"] == 3,
               st["gate"])
@@ -311,7 +321,7 @@ def t_the_utterance_reply_serves_both_clients():
         cases = {"garbage": S.hear(b"not a wav"),
                  "no profile": S.hear(tone(440.0))}
         samples, _ = S._read_wav(tone(220.0))
-        V.enroll([samples] * 3, embedder=V.Embedder(), path=env.profile)
+        V.enroll([samples] * 3, embedder=env.voiceish(), path=env.profile)
         cases["the owner, no engine"] = S.hear(tone(220.0))
         cases["a stranger"] = S.hear(tone(880.0))
         with mock.patch.object(S, "_stt_engine", return_value=object()), \
@@ -402,7 +412,7 @@ def t_the_someone_else_reply_serves_the_phone():
     classes = kotlin_classes(KT)
     with Env() as env:
         samples, _ = S._read_wav(tone(220.0, 2.0))
-        V.enroll([samples, samples * 0.9, samples * 0.8], embedder=V.Embedder(),
+        V.enroll([samples, samples * 0.9, samples * 0.8], embedder=env.voiceish(),
                  path=env.profile)
         body = json.dumps({"mode": "calibrate", "mic": "phone",
                            "clips": [base64.b64encode(tone(700.0, 2.0)).decode()]}).encode()

@@ -200,11 +200,16 @@ class HearNeverTranscribesAStranger(ReloadsBetweenTests):
 
     def test_an_enrolled_voice_passes_the_gate_and_is_reported_owner(self):
         import jarvis_voice as V
-        clip = _tone_wav(440.0, seconds=1.0)
+        from _voice_test import semantic_voice
+        # 2.5 s: since 2026-09-24 a command needs at least 2 s of speech at
+        # the default (very strict) setting - see test_voice_strict.py.
+        clip = _tone_wav(440.0, seconds=2.5)
         samples, _sr = S._read_wav(clip)
         profile_path = Path(self._tmp.name) / "owner.json"
-        V.enroll([samples, samples, samples], embedder=V.Embedder(), path=profile_path)
-        with mock.patch.object(V, "PROFILE_PATH", profile_path):
+        # A stand-in speaker model: the basic check lets nobody in now.
+        with semantic_voice(V) as voiceish, \
+                mock.patch.object(V, "PROFILE_PATH", profile_path):
+            V.enroll([samples, samples, samples], embedder=voiceish(), path=profile_path)
             heard = S.hear(clip, source="push_to_talk")
         self.assertTrue(heard.is_owner, heard.reason)
         # No STT model is installed anywhere in this container, so the
@@ -216,12 +221,14 @@ class HearNeverTranscribesAStranger(ReloadsBetweenTests):
 
     def test_a_different_voice_than_the_enrolled_one_is_refused(self):
         import jarvis_voice as V
-        enroll_clip = _tone_wav(220.0, seconds=1.0)
-        stranger_clip = _tone_wav(880.0, seconds=1.0)
+        from _voice_test import semantic_voice
+        enroll_clip = _tone_wav(220.0, seconds=2.5)
+        stranger_clip = _tone_wav(880.0, seconds=2.5)
         enroll_samples, _ = S._read_wav(enroll_clip)
         profile_path = Path(self._tmp.name) / "owner.json"
-        V.enroll([enroll_samples] * 3, embedder=V.Embedder(), path=profile_path)
-        with mock.patch.object(V, "PROFILE_PATH", profile_path):
+        with semantic_voice(V) as voiceish, \
+                mock.patch.object(V, "PROFILE_PATH", profile_path):
+            V.enroll([enroll_samples] * 3, embedder=voiceish(), path=profile_path)
             heard = S.hear(stranger_clip, source="push_to_talk")
         self.assertFalse(heard.is_owner)
         self.assertEqual(heard.text, "")

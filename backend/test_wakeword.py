@@ -54,6 +54,7 @@ import numpy as np  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
 import jarvis_speech as S  # noqa: E402
 import jarvis_voice as V  # noqa: E402
+from _voice_test import semantic_voice  # noqa: E402
 
 FAILED, PASSED, SKIPPED = [], [], []
 
@@ -94,14 +95,23 @@ class Env:
         d = Path(self.tmp.name)
         self.patches = [mock.patch.object(S, "_config_dir", return_value=d),
                         mock.patch.object(W, "_config_dir", return_value=d),
-                        mock.patch.object(V, "PROFILE_PATH", d / "owner.json")]
+                        mock.patch.object(V, "PROFILE_PATH", d / "owner.json"),
+                        # The order of the checks, not the minimum length of a
+                        # command (test_voice_strict.py has that, with the
+                        # wake word): no minimum for these one-second tones.
+                        mock.patch.object(S, "_min_command_seconds", return_value=0.0)]
         for p in self.patches:
             p.start()
+        # A stand-in speaker model (_voice_test.py): since 2026-09-24 the
+        # basic check lets nobody in. V.EcapaEmbedder() is it, in here.
+        self._voice = semantic_voice(V, settings_dir=d)
+        self._voice.__enter__()
         S.reload_engines()
         S._reset_wake_for_tests()
         return self
 
     def __exit__(self, *a):
+        self._voice.__exit__(None, None, None)
         S._reset_wake_for_tests()
         for p in reversed(self.patches):
             p.stop()
@@ -216,7 +226,7 @@ def t_order_not_the_owner_is_never_transcribed():
     with Env():
         turn_on()
         samples, _ = S._read_wav(tone(220.0))
-        V.enroll([samples] * 3, embedder=V.Embedder(), path=V.PROFILE_PATH)
+        V.enroll([samples] * 3, embedder=V.EcapaEmbedder(), path=V.PROFILE_PATH)
         with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.99)), \
                 mock.patch.object(S, "_transcribe", boom("speech-to-text")):
             h = S.hear(tone(880.0), source="wake_word")
@@ -228,7 +238,7 @@ def t_order_the_owner_is_heard_and_the_phrase_removed():
     with Env():
         turn_on()
         samples, _ = S._read_wav(tone(220.0))
-        V.enroll([samples] * 3, embedder=V.Embedder(), path=V.PROFILE_PATH)
+        V.enroll([samples] * 3, embedder=V.EcapaEmbedder(), path=V.PROFILE_PATH)
         order = []
         real_verify = V.verify
 
@@ -267,7 +277,7 @@ def t_follow_up_window():
     with Env():
         turn_on()
         samples, _ = S._read_wav(tone(220.0))
-        V.enroll([samples] * 3, embedder=V.Embedder(), path=V.PROFILE_PATH)
+        V.enroll([samples] * 3, embedder=V.EcapaEmbedder(), path=V.PROFILE_PATH)
         with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.9)), \
                 mock.patch.object(S, "_stt_engine", return_value=object()), \
                 mock.patch.object(S, "_transcribe", return_value="Hey Jarvis."):

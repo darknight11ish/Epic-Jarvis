@@ -59,6 +59,7 @@ require_shipped("jarvis_voice_enroll.py")
 import jarvis_voice_enroll as E  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import _skeleton  # noqa: E402
+from _voice_test import semantic_voice  # noqa: E402
 
 SRC = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
@@ -379,7 +380,9 @@ def t_nothing_logs_audio_or_tokens():
     check("the card says what refusing costs", "If you say no" in prompt)
     check("no token anywhere", TOKEN not in blob + card + printed)
     st = json.dumps(E.state())
-    check("status carries no audio either", not any(s[:40] in st for s in b64) and len(st) < 600, st)
+    # A clip is ~85,000 characters of base64; the status is counts and
+    # words (1,500 since the stricter check added its limits and flags).
+    check("status carries no audio either", not any(s[:40] in st for s in b64) and len(st) < 1500, st)
 
     # The module's source: no print, no logging, no file writes. The clips
     # live in memory only - "never written to disk" is checked, not claimed.
@@ -574,12 +577,20 @@ def _pcm(clip):
 
 
 def t_one_print_per_microphone():
+    # A speaker model that separates voices (_voice_test.py): since
+    # 2026-09-24 the basic check lets nobody in, so it cannot show which
+    # print decided.
+    with semantic_voice(V) as voiceish:
+        _one_print_per_microphone(voiceish)
+
+
+def _one_print_per_microphone(voiceish):
     fresh()
     keep = V.PROFILE_PATH
     d = Path(tempfile.mkdtemp(prefix="jarvis-mics-"))
     V.PROFILE_PATH = d / "owner.json"
     try:
-        emb = V.Embedder()
+        emb = voiceish()
         # Before this change: one print, made from the phone.
         V.enroll([_pcm(c) for c in _voice(180)], embedder=emb, path=V.PROFILE_PATH,
                  sample_rate=16000)
@@ -636,6 +647,11 @@ def t_one_print_per_microphone():
 # --------------------------------------------------- 12. someone else --
 
 def t_someone_else():
+    with semantic_voice(V) as voiceish:
+        _someone_else(voiceish)
+
+
+def _someone_else(voiceish):
     fresh()
     keep = V.PROFILE_PATH
     d = Path(tempfile.mkdtemp(prefix="jarvis-check-"))
@@ -643,7 +659,7 @@ def t_someone_else():
     try:
         check("no print yet: said, not guessed",
               E.stage(_mic_body([wav(2.0, 500)], "phone", mode="calibrate"))[0] == 409)
-        V.enroll([_pcm(c) for c in _voice(180)], embedder=V.Embedder(), mic="phone",
+        V.enroll([_pcm(c) for c in _voice(180)], embedder=voiceish(), mic="phone",
                  sample_rate=16000)
         gate = Gate(Verdict(True, outcome="approved"))
         before = (d / "owner-phone.json").read_text()

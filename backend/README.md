@@ -4205,6 +4205,9 @@ Windows (PowerShell could not be run by the session that wrote them), and how
 well the model tells real people apart - there was no recording of several
 real people to try it on. Its bar is still the config's `threshold = 0.35`;
 after training, it is worth having someone else try the talk button once.
+*Since 2026-09-24:* it has been measured on real voices, and alone it lets
+too many other people in - see "The stricter voice check", at the end of
+this file, for the second, stronger model to install beside it.
 
 ## Test it
 
@@ -5934,3 +5937,223 @@ the patches before them, not on your real `jarvis_hud.py`. If the big model
 is set to use the second card (`[big_model] cuda = "on"`), the better voice
 will not start while the big model runs there, but the big model does not
 yet check for the better voice before it starts.
+---
+
+# The stricter voice check (2026-09-24) — only your voice, and more sure of it
+
+**What it is, in one paragraph.** Jarvis only takes spoken commands from
+your voice. The part that decides "is this you?" is a *voice-ID model*: a
+file that turns a voice into numbers, so two recordings of the same person
+come out close together and two different people come out far apart. This
+change makes that check stricter in the ways you asked for, and closes two
+holes that let it be much looser than it looked. There is **no new patch**:
+it is three updated modules (`rebuilt\jarvis_voice.py`,
+`jarvis_voice_enroll.py`, `jarvis_speech.py`) and one new one
+(`jarvis_voicebank.py`), which the patch script copies in.
+
+**Neither app has the new buttons yet.** Everything below works on the PC
+now and is described for the apps in `docs/JARVIS-API.md` §16. Until the
+apps are updated, the phone's existing "Train my voice" still works (it
+becomes one round of the new training).
+
+## The two holes, and what closes them
+
+**1. With no voice-ID model installed, a stranger could still get in.**
+Without the model file, Jarvis falls back to a "basic check" (how loud each
+band of pitch is). It cannot tell two people apart - section "Found while
+building it - read these", item 3, above measured every voice passing as
+every other - yet it could still answer "yes, that's you". Checked on the
+code before this change: a 200 Hz tone, against a print made from 180-190
+Hz tones, was "recognised" (0.445 against a bar of 0.35). **Now**, in the
+normal owner mode, the basic check never lets anyone in. The talk button
+hides, and the phone says "install the voice-ID model". A training is
+refused before any card, with the same words. (`broad` mode - "anyone may
+talk to Jarvis" - is unchanged; that is your explicit choice.)
+
+**2. One noisy training recording could quietly make the check very
+loose.** Training used to lower the bar to fit your loosest recording,
+down to 0.05. Checked on the code before this change: one odd clip among
+four took the bar to 0.05, and a stranger scoring 0.66 got in. **Now** no
+bar is ever below the model's own measured floor - not by training, and
+not by an approval card either. A recording that does not sound like the
+others is left out and reported by number (round 2, clip 5), so the app
+can ask you to record just that one again. If most of them are like that,
+the training fails and says to record again somewhere quieter.
+
+## What you can choose
+
+| setting | choices | default | changing it |
+|---|---|---|---|
+| How strict | **very strict**, balanced | very strict | Stricter: at once. Looser: an approval card. |
+| Private answers by voice | **on screen only**, read aloud ("your voice is enough") | on screen only | The same. "Read aloud" is only possible while very strict; choosing balanced turns it off again. |
+
+- **Very strict** needs a longer sentence (2 seconds of speech) and asks
+  two voice-ID models, which must BOTH agree it is you: the small one you
+  have (`model.onnx`) and a stronger one (`strong.onnx`, below).
+- **Balanced** takes shorter sentences (1.5 seconds) and asks the stronger
+  model alone, at a lower bar. You repeat yourself less, and someone whose
+  voice is close to yours gets in more easily. (If the stronger model is
+  not installed, both settings use the small one, and the status says so.)
+- **Private answers**: email, calendar, notes and what Jarvis remembers
+  about you. With "on screen only", an answer like that is shown, not read
+  out loud, when you asked by voice. Asking by typing on your own phone or
+  PC is not affected.
+
+Also new: training in **three rounds** (normal and close; further away or
+quieter; another time or room), all kept in memory until one card at the
+end - deny it, let it time out, cancel, or wait 15 minutes, and every
+recording is deleted. **"Train more"** adds to your voice print instead of
+replacing it. Each round becomes its own "sub-print", and a new clip is
+compared with the closest one. A **guided test** reads 20 of your
+sentences and says how many each setting would have let through. And the
+PC counts, in memory only, how often it refused you and let you in within
+10 seconds - your real "had to say it twice" rate. No recording is ever
+written to disk: `test_voice_strict.py` scans every file a whole session
+writes for the recordings' bytes.
+
+## Owner steps
+
+Paste each line into PowerShell, one at a time. Change the backend path if
+yours is elsewhere.
+
+**1. Put the new code on the PC** (from this repository's folder):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Download the stronger voice-ID model** (101 MB; NVIDIA NeMo
+TitaNet-Large, from the same sherpa-onnx releases page as the first one).
+It lands next to the first model as `voice-models\speaker\strong.onnx`
+inside your `.openjarvis` folder, and the line checks it is the right file:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path $base 'voice-models\speaker'; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_large.onnx' -OutFile (Join-Path $d 'strong.onnx'); if ((Get-FileHash (Join-Path $d 'strong.onnx') -Algorithm SHA256).Hash -eq 'D51ABCF31717EF28162F26ACB9D44DD4127C3D44C9B8624F699F3425DACA8E77') { Write-Host "OK - the stronger voice-ID model is at $d\strong.onnx" -ForegroundColor Green } else { Write-Host "That is not the expected file. Delete $d\strong.onnx and run this line again." -ForegroundColor Red }
+```
+
+**3. Check the PC sees both models.** Look for `models` with
+`'very_strict_uses': 2`, and read the `note` line:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_voice.py
+```
+
+**4. Restart Jarvis, then train your voice again** on the phone (Checks →
+Your voice → Train my voice) and approve the card. This is needed once:
+a voice print made before the stronger model was installed has nothing
+from it, so very strict refuses it and says "train your voice again"
+until you do.
+
+**5. Optional - real voices to compare against.** Jarvis ships a bank of
+300 other people's voices (numbers only). This builds a better one from
+LibriSpeech (a free collection of people reading aloud, CC BY 4.0): it
+downloads 337 MB into your temporary folder, turns it into numbers, and
+deletes the recordings again. The numbers land in the `voice\cohort`
+folder inside your `.openjarvis` folder:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $t = Join-Path $env:TEMP 'jarvis-voices'; New-Item -ItemType Directory -Force -Path $t | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri 'https://www.openslr.org/resources/12/dev-clean.tar.gz' -OutFile (Join-Path $t 'dev-clean.tar.gz'); tar -xzf (Join-Path $t 'dev-clean.tar.gz') -C $t; py -3 -m pip install soundfile; Push-Location "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_voice.py --build-cohort (Join-Path $t 'LibriSpeech\dev-clean'); Pop-Location; Remove-Item -Recurse -Force $t; Write-Host "Done. The comparison voices (numbers only) are in the voice\cohort folder inside your .openjarvis folder; the downloaded recordings were deleted."
+```
+
+This one is **untested end to end**: openslr.org was blocked from the
+container that wrote it, so the download and the `tar` step have not run.
+`--build-cohort` itself was run here on FLAC files laid out the same way
+(20 speakers), with both real models.
+
+## What was measured, and on what
+
+**Speed** (this container: a shared 4-core Xeon at 2.1 GHz, often busy with
+other work, so treat these as rough; one processor thread per model, as
+Jarvis runs them):
+
+| | per clip |
+|---|---|
+| small model (CAM++), 3 s clip | 33 ms |
+| stronger model (TitaNet-Large), 3 s clip | 107 ms |
+| (tried, not used) WeSpeaker ResNet34 | 78 ms |
+| (tried, not used) WeSpeaker ResNet293 | 566 ms |
+| the whole check, very strict, 2.8 s clips | 162 ms on average, 189 ms at most |
+| the whole check, balanced | 114 ms on average |
+| training 12 clips with both models | 1.8 s |
+| loading both models the first time | 0.7 s |
+
+**How well it tells people apart.** There was no recording of you, and
+the usual collections of people talking (LibriSpeech, VoxCeleb) could not
+be downloaded here. What could: **Google's Speech Commands** (CC BY 4.0) -
+thousands of real people, each saying single words ("yes", "left",
+"seven") into their own computer or phone. Four of one person's words
+were joined into a "sentence" (about 2.1 s, of which about 1.5 s is
+speech), and some were made to sound further away or in another room with
+added echo and noise. 108 people acted as "you" (12 training sentences,
+13 test sentences each); 300 others tried to get in (129,600 tries). The
+comparison bank that ships was made from a different 300 people.
+
+These are **not your numbers**. Words joined together carry less of a
+voice than a real sentence, and the "far" and "room" versions were made
+up. Your real numbers come from the guided test and the "said it twice"
+counter.
+
+| setting | you refused | other people let in |
+|---|---|---|
+| before this change (small model, one print, bar 0.35) | 16.0% | **52.4%** |
+| balanced (stronger model alone) | 0.4% | 3.0% |
+| very strict (both models) | 10.5% | 0.40% |
+| very strict, stronger model not installed | 34.3% | 16.9% |
+| balanced, stronger model not installed | 24.1% | 26.9% |
+
+By length, very strict refused "you" 59% of the time at 2 words (~1.1 s),
+32% at 3 words (~1.6 s) and 10.5% at 4 words (~2.1 s); balanced 10.6%, 2.4%
+and 0.4%. That is why a command needs 2 s (very strict) or 1.5 s
+(balanced) of speech, counted the way the PC counts it (0.3 s of quiet
+either side included).
+
+**Four things the measurements say that you should know:**
+
+1. **The small model you have now is weak.** On these recordings it let
+   in more than half of the other people at its usual bar, and on
+   synthetic voices it scored different people as nearly the same (EER
+   40%, against 1.5% for the stronger model). The reason was not found -
+   it is measured with the same software Jarvis runs, not explained.
+   **Install the stronger model (step 2).**
+2. **Asking the small model as well (very strict) costs more than it
+   buys.** The stronger model alone at a higher bar (0.50) refused you
+   5.8% and let in 0.49% - better on the first count than very strict's
+   10.5% / 0.40%. Very strict still asks both, as you decided; the small
+   one is held to a gentle bar (0.30) when paired so it costs as little as
+   possible.
+3. **The comparison with other voices made almost no difference with the
+   stronger model** at these bars (its own bar already refuses those
+   clips). With the small model alone it halved the other people let in
+   (59% to 27%, with sub-prints) and refused you more often (8% to 24%).
+   It is kept, as
+   decided, and it cannot make the check looser: it is an extra "no",
+   never a "yes".
+4. **Sub-prints (one per condition, nearest wins) refused you less but let
+   twice as many others in** than one averaged print at the same bar
+   (stronger model at 0.45: 2.3% / 1.3% against 3.4% / 0.64%). The made-up
+   "far" and "room" recordings may flatter or wrong them; the guided test
+   on your own voice is the real answer.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_voice_strict.py; py -3 backend\test_voice_enroll.py; py -3 backend\test_voice_contract.py
+```
+
+`test_voice_strict.py` proves both holes are closed, the settings and
+their cards (a looser setting changes nothing until approved; deny and
+timeout change nothing; balanced turns "read aloud" off), both models
+having to agree, the comparison maths against a hand calculation, rounds
+with one card and every clip dropped on deny, timeout, cancel and expiry,
+sub-prints and "train more", the repeat counter, the guided test, the
+shortest command and "hey Jarvis" as the wake path, and that no recording
+reaches the disk. With the two model files on your PC, add
+`$env:JARVIS_TEST_SPEAKER_MODEL = "<...>\model.onnx"; $env:JARVIS_TEST_STRONG_MODEL = "<...>\strong.onnx";`
+to the start of the line to run the real-model checks too.
+
+**Not checked, said plainly:** your voice, your microphones, a real room;
+anything on Windows (the PowerShell lines above could not be run from the
+container that wrote them - `pwsh` was refused there - and were read by
+hand for Windows PowerShell 5.1 problems); the LibriSpeech step's
+download; the apps (they have not been changed); and how the stronger
+model's licence reads on its NGC page.
