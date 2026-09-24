@@ -24,8 +24,8 @@ THE FEATURES (the ids are the API contract - both apps build against them):
     browser_control  "Browser control": the browser tool is offered only
                      while this lane is running, and its turns continue on
                      it. Needs long_context (it uses that lane's model).
-    wiki             "Wiki builder": a switch and a lane for a separate
-                     builder that does not exist yet (lane_for("wiki")).
+    wiki             "Wiki builder": the lane jarvis_wiki.py's builder
+                     runs on (lane_for("wiki")); it runs nowhere else.
 
 THE INTERFACE other modules use - kept exactly:
 
@@ -186,8 +186,9 @@ FEATURES = (
      "what": ("Jarvis can work a web page for you, one approved step at a time, "
               "using the second card's extra room for long pages.")},
     {"id": "wiki", "name": "Wiki builder", "needs": [],
-     "what": ("Lets the wiki builder use the second card. The builder itself is "
-              "not made yet, so this switch does nothing on its own today.")},
+     "what": ("Lets the wiki builder use the second card: documents you put in "
+              "your vault's Jarvis Wiki/Sources folder become linked pages, each one "
+              "after its own approval card.")},
 )
 FEATURE_IDS = tuple(f["id"] for f in FEATURES)
 _BY_ID = {f["id"]: f for f in FEATURES}

@@ -109,7 +109,7 @@
           "model_installed": true,
           "name": "Wiki builder",
           "needs": [],
-          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Off."
         }
       ],
@@ -230,7 +230,7 @@
           "model_installed": true,
           "name": "Wiki builder",
           "needs": [],
-          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Off."
         }
       ],
@@ -336,7 +336,7 @@
           "model_installed": null,
           "name": "Wiki builder",
           "needs": [],
-          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         }
       ],
@@ -451,7 +451,7 @@
           "model_installed": null,
           "name": "Wiki builder",
           "needs": [],
-          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
         }
       ],
@@ -555,7 +555,7 @@
           "model_installed": null,
           "name": "Wiki builder",
           "needs": [],
-          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         }
       ],
@@ -676,7 +676,7 @@
           "model_installed": true,
           "name": "Wiki builder",
           "needs": [],
-          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Off."
         }
       ],
