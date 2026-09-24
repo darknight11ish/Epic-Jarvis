@@ -43,6 +43,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Optional
@@ -283,6 +284,51 @@ def primary(devs: list, configured=None) -> tuple:
         return shown[0], note + "a monitor is plugged into it"
     first = min(devs, key=lambda d: d.index)
     return first, note + "it is nvidia-smi's first card (no monitor was seen on any card)"
+
+
+# --------------------------------------------------------------------------
+#   Who is starting a process on which card (added 2026-09-24)
+#
+#   jarvis_second_card.py (the second Ollama) and jarvis_big_model.py
+#   (colibri with [big_model] cuda = "on") can both want the second card.
+#   Each checks the other before starting, but a check and a start are two
+#   steps, so both could pass the check at the same moment. The claim below
+#   closes that gap: a module takes the card's claim BEFORE it starts a
+#   process on it and gives it back when that process is stopped. Only one
+#   owner holds a card at a time. In this process only (both modules live
+#   in the one backend); nothing is written anywhere.
+# --------------------------------------------------------------------------
+
+_CLAIMS_LOCK = threading.Lock()
+_CLAIMS: dict = {}            # card id, lower case -> owner
+
+
+def claim_card(uuid: str, owner: str) -> Optional[str]:
+    """Take the card for `owner`. None when it is now `owner`'s (taken, or
+    already held); otherwise the owner that holds it, and nothing changes."""
+    key = str(uuid or "").strip().lower()
+    if not key:
+        return None
+    with _CLAIMS_LOCK:
+        holder = _CLAIMS.get(key)
+        if holder is not None and holder != owner:
+            return holder
+        _CLAIMS[key] = owner
+    return None
+
+
+def release_card(uuid: str, owner: str) -> None:
+    """Give the card back, only if `owner` holds it."""
+    key = str(uuid or "").strip().lower()
+    with _CLAIMS_LOCK:
+        if _CLAIMS.get(key) == owner:
+            del _CLAIMS[key]
+
+
+def card_holder(uuid: str) -> Optional[str]:
+    """Who holds the card's claim, or None. Reads only."""
+    with _CLAIMS_LOCK:
+        return _CLAIMS.get(str(uuid or "").strip().lower())
 
 
 def plan(model: Optional[str] = None) -> Plan:

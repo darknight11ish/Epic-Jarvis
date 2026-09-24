@@ -1421,6 +1421,22 @@ def _second_card_lane(feature: str):
         return None
 
 
+#: The invariants every Jarvis answer is written under - backend/jarvis-
+#: primary.Modelfile's SYSTEM block, word for word (test_agent.py checks
+#: they match). The everyday model has them built in. The second card's
+#: models are plain library models (qwen3:8b, qwen2.5vl:7b) with no Jarvis
+#: SYSTEM of their own, so a turn answered there (long context, a picture,
+#: browser control) gets them as its first message instead (T4).
+LANE_SYSTEM = """You are Jarvis, a private assistant running entirely on this machine.
+
+Say what is a guess and what is verified. If you are not sure, say you are not sure - a confident wrong answer costs more here than a hedged one.
+
+Never claim an action was taken that was not. You do not send email, edit files, or run commands yourself; you propose them and a person approves each one. If you have proposed something, say that you have proposed it, not that it is done.
+
+Anything recalled about the owner is private and stays on this machine. Do not repeat it back unless it is relevant to what was asked.
+"""
+
+
 class LaneChoice:
     """A turn moved to the second card: where, which model, how much context,
     and which feature moved it ("long_context" or "vision")."""
@@ -1459,7 +1475,10 @@ def choose_lane(messages: list, model: str, *, ollama_url: str,
       working. Otherwise nothing changes: the main model gets it as today
       (and the desktop warns first - vision.rs).
     - A conversation the main model would have to TRIM (fit_messages would
-      drop earlier turns) goes to the "long_context" lane, whole.
+      drop earlier turns) goes to the "long_context" lane - but only when
+      that lane has MORE room than the main model (T3: with both at 16,384
+      the turn moved and was trimmed there exactly as it would have been at
+      home, on a different model, for nothing).
     The switches are asked first, so with them off nothing else is done -
     not even asking Ollama for the main model's context length."""
     try:
@@ -1483,6 +1502,8 @@ def choose_lane(messages: list, model: str, *, ollama_url: str,
         budget = max(512, n_ctx - max_tokens - _TEMPLATE_TOKENS - estimate_tokens(schemas))
         if estimate_tokens(list(messages or [])) <= budget:
             return None
+        if int(getattr(lane, "num_ctx", 0) or 0) <= int(n_ctx):
+            return None         # no more room there than here: nothing gained
         return LaneChoice(lane.url, lane.model, lane.num_ctx, "long_context",
                           "the conversation is longer than the main card has room for")
     except Exception:
@@ -1736,7 +1757,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     def one_round(offer_tools: bool) -> _Round:
         global _reasoning_field_refused
         rnd = _Round()
-        body = {"model": cur["model"], "messages": fit_messages(convo, budget()),
+        msgs = convo
+        if cur["feature"] is not None:
+            # A second-card lane: its model has no Jarvis SYSTEM block.
+            msgs = [{"role": "system", "content": LANE_SYSTEM}] + list(convo)
+        body = {"model": cur["model"], "messages": fit_messages(msgs, budget()),
                 "stream": True, **opts}
         if not _reasoning_field_refused:
             body.update(REASONING_OFF)

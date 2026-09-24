@@ -60,7 +60,8 @@ this starts `ollama serve` with:
     OLLAMA_VULKAN=0                  no Vulkan route (see below)
 
 and NOT OLLAMA_FLASH_ATTENTION, unless `[second_card] flash_attention` says
-"on". I checked Ollama's source (llm/llama_server.go,
+"on". "off" is refused with a plain reason (_flash_refusal): with the q8_0
+cache, llama.cpp will not load a model with flash attention off. I checked Ollama's source (llm/llama_server.go,
 LlamaServerFlashAttention, main branch, 2026-09-24): unset means llama.cpp's
 "auto", which falls back per model; set to 1 it passes `--flash-attn on`,
 which removes that fallback. MODEL-TOPOLOGY.md already says not to set it, for
@@ -143,6 +144,13 @@ except Exception:
 # --------------------------------------------------------------------------
 
 ACTION = "second_card_enable"
+#: "Browser control" has its own action (AP-9). Every other switch only
+#: starts a model on this PC; this one also lets Jarvis offer its browser
+#: tool, which works real web pages on the internet. Its own action gives
+#: it its own tier line in the toml and its own words on the lock-screen
+#: notice (second-card.patch's _RISK line: "outbound"), instead of
+#: borrowing second_card_enable's "nothing leaves this PC".
+BROWSER_ACTION = "second_card_browser_enable"
 HOST = "127.0.0.1"
 DEFAULT_PORT = 11435
 MAIN_OLLAMA_PORT = 11434
@@ -153,26 +161,39 @@ MIN_COMPUTE = 7.5
 MIN_TOTAL_MB = 10240
 #: A card sold as "12 GB". 11.5 GiB rather than exactly 12,288 MiB, because
 #: a card can report a little under its label; an 11 GB 2080 Ti (11,264 MiB)
-#: stays below it, which is the point (see LONG_CONTEXT below).
+#: stays below it. Since 2026-09-24 both sizes get the same lane (below);
+#: the line is kept so a bigger plan for 12 GB can be put back in one place.
 BIG_TOTAL_MB = 11776
 
-# What the long-context lane holds, by the second card's memory. The same
-# arithmetic as MODEL-TOPOLOGY.md "The budget" and "The planned second card":
+# What the long-context lane holds, by the second card's memory.
+#
+# CHANGED 2026-09-24 (bug audit T3). This used to be Qwen 3 14B at 16K on a
+# 12 GB card. The everyday model, jarvis-primary, also has 16,384 tokens of
+# room (backend/jarvis-primary.Modelfile, num_ctx 16384), so a conversation
+# too long for the main card was moved to a lane with NO more room, and was
+# trimmed there exactly as it would have been at home. The lane is only
+# worth having if it holds more than the main card, so 12 GB now gets what
+# docs/HARDWARE-PROFILES.md section 4.4 gives a 12 GB long-context lane
+# ("8 + 12 GB, monitor on the 12" and "12 + 12 GB": qwen3:8b, 32K), with
+# the owner's 0.75 GB gap (section 5, decision 1):
 #
 #   KV per token, q8_0 = 2 (K and V) x layers x kv_heads x 128 x 1.0625 bytes
-#     Qwen 3 8B : 2 x 36 x 8 x 128 x 1.0625 = 78,336 B
-#     Qwen 3 14B: 2 x 40 x 8 x 128 x 1.0625 = 87,040 B
+#     Qwen 3 8B : 2 x 36 x 8 x 128 x 1.0625 = 78,336 B   (section 2.8)
 #
-#   Qwen 3 14B Q4_K_M @ 16K : 8.42 + 87,040 x 16,384 = 1.33 + 0.63 = 10.38 GiB
-#   Qwen 3 8B  Q4_K_M @ 32K : 4.67 + 78,336 x 32,768 = 2.39 + 0.63 =  7.69 GiB
-#                            (weights)  (cache)             (runtime)
+#   Qwen 3 8B Q4_K_M @ 32K: 4.67 + 2.39 + 0.30 = 7.36 GiB   (section 8.2's "need")
+#                           (weights) (cache) (compute)
+#   + 0.33 GiB CUDA start-up, which section 4.2 counts on the card's side
+#   = 7.69 GiB, the figure the approval card shows.
 #
-#   ceiling, no monitor on the card, about 0.6 GiB kept by the driver:
-#     12 GB card (2060 12 GB)  ~11.4 GiB  -> 14B @ 16K fits, 1 GiB spare
-#     11 GB card (2080 Ti)     ~10.4 GiB  -> 14B @ 16K would have 0.02 spare:
-#                                            no. 8B @ 32K, 2.7 GiB spare.
-#     10 GB card               ~ 9.4 GiB  -> 8B @ 32K, 1.7 GiB spare.
-LONG_BIG = ("qwen3:14b", 16384, 10.38)
+#   room on the card, no monitor: total - 0.60 desktop - 0.33 - 0.75 gap
+#     12 GB card (2060 12 GB)  10.32 GiB  -> 8B @ 32K (7.36), 2.96 spare
+#     11 GB card (2080 Ti)      9.32 GiB  -> 8B @ 32K, 1.96 spare
+#     10 GB card                8.32 GiB  -> 8B @ 32K, 0.96 spare
+#
+# Qwen 3 14B at 16K (10.10 needed) would fit a 12 GB card, but gives no more
+# room than the main card; 14B at 32K (11.43) does not fit. Measure on the
+# PC before changing this (HARDWARE-PROFILES section 4.7).
+LONG_BIG = ("qwen3:8b", 32768, 7.69)
 LONG_SMALL = ("qwen3:8b", 32768, 7.69)
 
 # Pictures. NOT CHECKED against ollama.com: the library page could not be
@@ -193,7 +214,7 @@ RUNTIME_GIB = 0.63
 FEATURES = (
     {"id": "long_context", "name": "Longer conversations", "needs": [],
      "what": ("When a conversation grows past what the main card has room for, "
-              "that answer is written on the second card, which can read all of it.")},
+              "that answer is written on the second card, which has room for more of it.")},
     {"id": "vision", "name": "Pictures", "needs": [],
      "what": ("A message with a picture goes to a picture-reading model on the "
               "second card, on this PC, so Jarvis can see what you attached.")},
@@ -201,8 +222,9 @@ FEATURES = (
      "what": ("Jarvis learns from your conversations on the second card, so it "
               "never slows the main card down and does not wait long for a pause.")},
     {"id": "browser_control", "name": "Browser control", "needs": ["long_context"],
-     "what": ("Jarvis can work a web page for you, one approved step at a time, "
-              "using the second card's extra room for long pages.")},
+     "what": ("Jarvis can work a web page for you in your browser, one approved step at a "
+              "time, using the second card's extra room for long pages. The pages are on "
+              "the internet: what it types or clicks there reaches that website.")},
     {"id": "wiki", "name": "Wiki builder", "needs": [],
      "what": ("Lets the wiki builder use the second card: documents you put in "
               "your vault's Jarvis Wiki/Sources folder become linked pages, each one "
@@ -305,6 +327,62 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def _big_model():
+    """jarvis_big_model, or None. Imported when asked, never at load."""
+    try:
+        import jarvis_big_model
+        return jarvis_big_model
+    except Exception:
+        return None
+
+
+def _claim_card(uuid: str) -> Optional[str]:
+    """jarvis_compute.claim_card for this lane: None when the card is ours,
+    else who holds it."""
+    if compute is None or not hasattr(compute, "claim_card"):
+        return None
+    try:
+        return compute.claim_card(uuid, "second_card")
+    except Exception:
+        return None
+
+
+def _release_card(uuid: str) -> None:
+    if compute is None or not uuid or not hasattr(compute, "release_card"):
+        return
+    try:
+        compute.release_card(uuid, "second_card")
+    except Exception:
+        pass
+
+
+def big_model_holds(uuid: str, name: str) -> Optional[str]:
+    """Why the second Ollama must not start on this card because the big
+    model (colibri, with [big_model] cuda = "on") is using it, in plain
+    words; None when it is not. Reads only."""
+    if not uuid:
+        return None
+    bm = _big_model()
+    ec = None
+    if bm is not None and hasattr(bm, "engine_card"):
+        try:
+            ec = bm.engine_card()
+        except Exception:
+            ec = None
+    held = bool(ec and str(ec.get("uuid") or "").lower() == str(uuid).lower())
+    if not held and compute is not None and hasattr(compute, "card_holder"):
+        try:
+            held = compute.card_holder(uuid) == "big_model"
+        except Exception:
+            held = False
+    if not held:
+        return None
+    mins = (ec or {}).get("idle_minutes")
+    after = (f"it stops after {mins} idle minutes" if mins
+             else "it stops when it has been idle for a while")
+    return f"the big model is using the {name}; {after}"
+
+
 # --------------------------------------------------------------------------
 #   Settings: the toml for how, a small file for the owner's switches
 # --------------------------------------------------------------------------
@@ -351,6 +429,21 @@ def _keep_alive() -> str:
 def _flash_setting() -> str:
     v = str(_cfg("flash_attention", "auto") or "auto").strip().lower()
     return v if v in ("auto", "on", "off") else "auto"
+
+
+def _flash_refusal() -> Optional[str]:
+    """Why the lane must not start with this [second_card] flash_attention,
+    or None. "off" cannot work with the lane's q8_0 cache: llama.cpp
+    refuses to create the model's context ("quantized V cache requires
+    flash_attn to be enabled", src/llama-context.cpp ~3737-3741, b11081 -
+    docs/HARDWARE-PROFILES.md 2.2), so every model on the lane would fail
+    to load. Refused here, in words, instead."""
+    if _flash_setting() != "off":
+        return None
+    return ("[second_card] flash_attention is \"off\" in jarvis-framework.toml, which cannot "
+            "work: the second copy of Ollama keeps the conversation in the compact q8_0 "
+            "format, and llama.cpp refuses to load a model that way with flash attention "
+            "off. Delete that line (or set it to \"auto\"), and the second card starts")
 
 
 def _main_ollama_url() -> str:
@@ -640,6 +733,7 @@ class _LaneProcess:
         self.num_ctx = 0
         self.failed_at = -1e9
         self.gen = 0
+        self.claimed = ""          # the card id whose claim this lane holds
 
     def url(self) -> str:
         return f"http://{HOST}:{self.port}"
@@ -660,6 +754,7 @@ class _LaneProcess:
             if self.state == "running" and same and not self.alive():
                 code = self._exit_code()
                 self._clear()
+                self._drop_card()
                 self._fail(f"the second Ollama stopped by itself (exit code {code}); "
                            f"Jarvis will try again in a minute. Its log: {_log_path()}")
                 return
@@ -682,6 +777,19 @@ class _LaneProcess:
     def _fail(self, why: str) -> None:
         self.state, self.why, self.failed_at = "failed", why, time.monotonic()
 
+    def _drop_card(self) -> None:
+        """Gives back the card's claim once no process of ours is on it."""
+        card, self.claimed = self.claimed, ""
+        _release_card(card)
+
+    def hold(self, why: str) -> None:
+        """Not started, and not a failure: something else (the big model)
+        is using the card. Tried again on the next look."""
+        with self.lock:
+            if self.proc is not None:
+                self._stop_proc()
+            self.state, self.why = "off", why
+
     def _start(self, uuid: str, card: str, num_ctx: int, port: int) -> None:
         self.uuid, self.card, self.num_ctx, self.port = uuid, card, num_ctx, port
         exe = _which("ollama")
@@ -697,11 +805,23 @@ class _LaneProcess:
                     f"jarvis-framework.toml")
             return self._fail(f"another program is already using {HOST}:{port}; set "
                               f"another port under [second_card] in jarvis-framework.toml")
+        refused = _flash_refusal()
+        if refused:
+            return self._fail(refused)
         try:
             env = lane_env(uuid, port=port, num_ctx=num_ctx, flash=_flash_setting(),
                            keep_alive=_keep_alive())
         except ValueError as exc:
             return self._fail(str(exc))
+        # The card's claim, taken BEFORE the process starts. jarvis_big_model
+        # takes the same claim before it starts colibri on this card, so the
+        # two can never both be starting here, whatever the timing.
+        if _claim_card(uuid) is not None:
+            self.state = "off"
+            self.why = (big_model_holds(uuid, card)
+                        or f"the big model is starting on the {card}")
+            return None
+        self.claimed = uuid
         kwargs: dict = {"env": env, "stdin": subprocess.DEVNULL}
         log = None
         try:
@@ -721,6 +841,7 @@ class _LaneProcess:
             self.proc = _popen([exe, "serve"], **kwargs)
         except Exception as exc:
             self.proc = None
+            self._drop_card()
             return self._fail(f"the second Ollama could not be started ({type(exc).__name__})")
         finally:
             if log is not None:
@@ -744,6 +865,7 @@ class _LaneProcess:
                 if not self.alive():
                     code = self._exit_code()
                     self._clear()
+                    self._drop_card()
                     return self._fail(f"the second Ollama stopped straight away (exit code "
                                       f"{code}). Its log: {_log_path()}")
             if _version_at(self.port) is not None:
@@ -763,6 +885,7 @@ class _LaneProcess:
     def _stop_proc(self) -> None:
         p, self.proc = self.proc, None
         self.gen += 1
+        self._drop_card()
         if p is None:
             return
         try:
@@ -888,6 +1011,16 @@ def _reconcile(sw: dict, det: dict) -> None:
         if _wanted(sw, det):
             second = det["_second"]
             _, ctx, _ = _long_context_plan(second.total_mb)
+            ours = (_LANE.state in ("starting", "running") and _LANE.uuid == second.uuid
+                    and _LANE.alive())
+            if not ours:
+                # The big model (colibri with [big_model] cuda = "on") may be
+                # on this very card. It will not start while this lane runs
+                # (jarvis_big_model._cuda_plan); this is the other direction.
+                held = big_model_holds(second.uuid, second.name)
+                if held:
+                    _LANE.hold(held)
+                    return
             _LANE.ensure(second.uuid, second.name, ctx)
         elif _LANE.state != "off" or _LANE.proc is not None:
             if not det.get("capable"):
@@ -959,15 +1092,34 @@ def lane_for(feature: str) -> Optional[Lane]:
         return None
 
 
+#: After the learning lane fails to answer, how long the learner goes back
+#: to exactly what it did before this module: the main card, after the full
+#: quiet wait (K13).
+LEARN_RETRY_SECONDS = 600.0
+_LEARN: dict = {"failed_at": -1e9, "short": False}
+
+
+def _learning_lane() -> Optional[Lane]:
+    """lane_for("learning"), unless it failed to answer in the last
+    LEARN_RETRY_SECONDS."""
+    if time.monotonic() - _LEARN["failed_at"] < LEARN_RETRY_SECONDS:
+        return None
+    return lane_for("learning")
+
+
 def learning_idle_seconds(default: float) -> float:
     """How long the learner waits for a quiet spell. With the learner on the
     second card it no longer competes with chat, so a short pause is enough
-    (10 s, never longer than it already was)."""
+    (10 s, never longer than it already was). Not while the lane has lately
+    failed to answer: then the pass will run on the main card, which needs
+    the full wait."""
     try:
-        if lane_for("learning") is not None:
+        if _learning_lane() is not None:
+            _LEARN["short"] = float(default) > 10.0
             return min(float(default), 10.0)
     except Exception:
         pass
+    _LEARN["short"] = False
     return default
 
 
@@ -996,21 +1148,51 @@ def generate(lane: Lane, prompt: str, *, timeout: float = 120.0) -> Optional[str
     return None
 
 
+def _skip_pass(prompt: str) -> Optional[str]:
+    return None
+
+
+def _say_skipped() -> None:
+    print("  ! learning: the second card did not answer, so this pass was skipped rather "
+          "than run on the main card after only a short pause. The next passes use the "
+          "main card after the full wait; the second card is tried again in "
+          f"{LEARN_RETRY_SECONDS / 60:.0f} minutes. What was said is looked at again on the "
+          "pass after your next message.", file=sys.stderr)
+
+
 def learning_llm(llm: Callable[[str], Optional[str]]) -> Callable[[str], Optional[str]]:
     """The learner's model call, moved to the second card when the
-    "learning" feature is working there; `llm` itself otherwise. If the
-    second card does not answer, the original call is made, which is
-    exactly what happened before this module existed."""
+    "learning" feature is working there; `llm` itself otherwise.
+
+    If the second card does not answer, and this pass waited only the short
+    pause (learning_idle_seconds), the pass is SKIPPED - `llm` is not called
+    - because the main card was never given the full quiet it needs (K13:
+    it used to fall back to the main card after 10 seconds). For the next
+    LEARN_RETRY_SECONDS the learner then does exactly what it did before
+    this module existed: the full wait, then `llm`."""
+    short, _LEARN["short"] = _LEARN["short"], False
     try:
-        lane = lane_for("learning")
+        lane = _learning_lane()
     except Exception:
         lane = None
     if lane is None:
+        if short:
+            # The pause was shortened for a lane that is gone now.
+            _say_skipped()
+            return _skip_pass
         return llm
 
     def ask(prompt: str) -> Optional[str]:
         out = generate(lane, prompt)
-        return out if out is not None else llm(prompt)
+        if out is not None:
+            return out
+        first = time.monotonic() - _LEARN["failed_at"] >= LEARN_RETRY_SECONDS
+        _LEARN["failed_at"] = time.monotonic()
+        if short:
+            if first:
+                _say_skipped()
+            return None
+        return llm(prompt)
     return ask
 
 
@@ -1145,6 +1327,7 @@ def status() -> dict:
     with _PENDING_LOCK:
         pending = [f for f in ("master",) + FEATURE_IDS
                    if f in _PENDING and not _PENDING[f].get("withdrawn")]
+        last = dict(_LAST_ANY) or None
     feats = [_feature_row(f, sw, det, lane_state, lane_why, pending) for f in FEATURES]
     pinned, note = main_pin(det)
     prim = det.get("primary") or {}
@@ -1160,6 +1343,9 @@ def status() -> dict:
         "pin_note": note,
         "pin_command": cmd,
         "features": feats,
+        # How the last approval card ended (AP-6): {feature, outcome, why,
+        # at}, or null when none has ended since Jarvis started.
+        "last": last,
     }
 
 
@@ -1170,10 +1356,42 @@ def status() -> dict:
 _PENDING_LOCK = threading.Lock()
 _PENDING: dict = {}        # feature -> {"id", "since", "withdrawn"}
 _LAST: dict = {}           # feature -> how its last card ended
+#: Every card switched off while it waited and not yet answered, by its id.
+#: A SET, not a flag on _PENDING: a new ON replaces _PENDING[feature], and
+#: the flag went with it - after two ON/OFF rounds, approving the FIRST
+#: card turned the switch on although the owner's last word was OFF.
+_WITHDRAWN: set = set()
+#: The last card to end, whichever switch it was for: status()["last"].
+_LAST_ANY: dict = {}
+
+
+def _last_words(label: str, outcome: str, reason: str) -> str:
+    """How the last card ended, in words the apps can show as they are.
+    `outcome` is one of: enabled, denied, timed_out, refused, failed,
+    withdrawn (timed_out is jarvis_gate's own word for a card nobody
+    answered in time)."""
+    reason = str(reason or "").strip().rstrip(".")
+    if outcome == "enabled":
+        return f"{label} was turned on."
+    if outcome == "denied":
+        return f"You said no, so {label} stays off."
+    if outcome == "timed_out":
+        return f"Nobody answered the card in time, so {label} stays off."
+    if outcome == "withdrawn":
+        return (f"You turned {label} off while its card was waiting, so approving that "
+                f"card changed nothing.")
+    if outcome == "failed":
+        return f"{label} could not be turned on: {reason or 'an unexpected error'}."
+    return f"{label} was not turned on: {reason or 'refused'}."
 
 
 def _tier(action: str) -> str:
     return str(fw.action_tier(action)) if fw is not None else "unknown"
+
+
+def action_for(feature: str) -> str:
+    """The gate action a switch's ON card is raised under."""
+    return BROWSER_ACTION if feature == "browser_control" else ACTION
 
 
 def _gate(action: str, detail: dict, prompt: str):
@@ -1189,21 +1407,82 @@ def _audit(event: str, detail: dict) -> None:
         pass
 
 
-def describe_on(feature: str, det: dict) -> str:
-    """The approval card. Every word from here; what refusing costs is on it."""
+def _shares_with_big_model() -> str:
+    """One line for the card when the big model may use this card too, or
+    ""."""
+    bm = _big_model()
+    try:
+        on = bm is not None and bm._cuda_setting() == "on"
+    except Exception:
+        on = False
+    if not on:
+        return ""
+    return ("\n\nThe big model is set to use this card too ([big_model] cuda = \"on\"). "
+            "They never share it: while the big model is using the card, this waits "
+            "until it stops.")
+
+
+def _would_work(feature: str, sw: dict) -> list:
+    """The features that are working once `feature` is turned on, given the
+    owner's other switches as they are - every choice is kept while the
+    main switch or a feature it needs is off, so approving one card can
+    bring back others. In the apps' order."""
+    after = {"master": sw["master"], "features": dict(sw["features"])}
+    if feature == "master":
+        after["master"] = True
+    else:
+        after["features"][feature] = True
+    ok = {"capable": True}
+    return [f for f in FEATURE_IDS if _feature_active(f, after, ok)]
+
+
+def _brings_browser(feature: str, sw: dict) -> bool:
+    """Does saying yes to `feature`'s card start "Browser control" working
+    (it was not before)? Then the card must not say nothing leaves."""
+    return ("browser_control" in _would_work(feature, sw)
+            and not _feature_active("browser_control", sw, {"capable": True}))
+
+
+def _names(ids: list) -> str:
+    names = [f"\"{_BY_ID[i]['name']}\"" for i in ids]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
+    """The approval card. Every word from here; what refusing costs is on it.
+    It says exactly what starts if the owner says yes (AP-4)."""
+    sw = sw if sw is not None else _read_switches()
     s = det["second"]
     p = det.get("primary") or {}
     card = f"the {s['name']} ({_gb(s['total_mb'])}, id {s['uuid']})"
     lane = (f"Jarvis starts a second copy of Ollama that uses only that card and "
             f"listens on {HOST}:{_port()} - this PC only, not your network or the "
-            f"internet. Nothing leaves this PC.")
+            f"internet.")
+    if _brings_browser(feature, sw):
+        # AP-9: not "Nothing leaves this PC". The model stays here; the
+        # browser tool it offers works real web pages.
+        lane += (" \"Browser control\" also lets Jarvis offer to work web pages in your "
+                 "browser: those pages are on the internet, so what it types or clicks "
+                 "there reaches that website. Each thing it would do there is shown to you "
+                 "on its own card first.")
+    else:
+        lane += " Nothing leaves this PC."
+    lane += _shares_with_big_model()
     if feature == "master":
+        back = _would_work("master", sw)
+        if back:
+            yes = (f"If you say yes: {_names(back)} start{'s' if len(back) == 1 else ''} "
+                   f"working again at once - you left "
+                   f"{'it' if len(back) == 1 else 'them'} switched on. {lane} Every other "
+                   "feature stays off; each has its own switch and its own card.")
+        else:
+            yes = ("If you say yes: nothing starts yet. Each feature (Longer conversations, "
+                   "Pictures, Learning in the background, Browser control, Wiki builder) has "
+                   f"its own switch and its own card. Once one of them is on, {lane}")
         return (
             "Let Jarvis use the second graphics card?\n\n"
             f"Which card: {card}.\n\n"
-            "If you say yes: nothing starts yet. Each feature (Longer conversations, "
-            "Pictures, Learning in the background, Browser control, Wiki builder) has its "
-            f"own switch and its own card. Once one of them is on, {lane}\n\n"
+            f"{yes}\n\n"
             "If you did not just ask for this, say no.\n\n"
             f"If you say no: nothing changes. Everything keeps running on the "
             f"{p.get('name', 'main card')}.")
@@ -1217,6 +1496,14 @@ def describe_on(feature: str, det: dict) -> str:
     if installed is False:
         inst = (f"\n\n{model} is not installed yet. The switch will be on, but the "
                 f"feature waits until it is installed.")
+    ok = {"capable": True}
+    also = [x for x in _would_work(feature, sw)
+            if x != feature and not _feature_active(x, sw, ok)]
+    if also:
+        one = len(also) == 1
+        inst += (f"\n\nAlso: {_names(also)} {'is' if one else 'are'} still switched on from "
+                 f"before, so {'it starts' if one else 'they start'} working again too, "
+                 f"at once.")
     return (
         f"Turn on \"{f['name']}\" on the second graphics card?\n\n"
         f"What it does: {f['what']}\n\n"
@@ -1233,7 +1520,13 @@ def _finish(feature: str, pid: str, outcome: str, reason: str = "",
     with _PENDING_LOCK:
         if feature in _PENDING and _PENDING[feature]["id"] == pid:
             del _PENDING[feature]
+        _WITHDRAWN.discard(pid)
         _LAST[feature] = {"outcome": outcome, "reason": reason[:200]}
+        label = ("The second graphics card" if feature == "master"
+                 else f"\"{_BY_ID[feature]['name']}\"" if feature in _BY_ID else feature)
+        _LAST_ANY.clear()
+        _LAST_ANY.update(feature=feature, outcome=outcome,
+                         why=_last_words(label, outcome, reason[:200]), at=int(time.time()))
     _audit("second_card.decided", {"feature": feature, "outcome": outcome,
                                    **({"request_id": request_id} if request_id else {})})
 
@@ -1245,12 +1538,13 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
         return _finish(feature, pid, "refused", det.get("why", ""))
     text = describe_on(feature, det)
     model, ctx, gib = _feature_model(feature, det) if feature != "master" else (None, None, None)
+    web = _brings_browser(feature, _read_switches())
     detail = {"text": text, "what": f"turn on the second graphics card: {feature}",
               "feature": feature, "card": det["second"]["name"],
               "card_id": det["second"]["uuid"], "model": model, "memory_gib": gib,
-              "listens_on": f"{HOST}:{_port()}", "leaves_this_pc": False}
+              "listens_on": f"{HOST}:{_port()}", "leaves_this_pc": web}
     try:
-        v = gate(ACTION, detail, text)
+        v = gate(action_for(feature), detail, text)
     except Exception as exc:
         return _finish(feature, pid, "refused",
                        f"the approval gate failed ({type(exc).__name__})")
@@ -1269,11 +1563,23 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
             return _finish(feature, pid, outcome, "", rid)
         return _finish(feature, pid, "refused", str(getattr(v, "reason", "refused")), rid)
     with _PENDING_LOCK:
-        withdrawn = bool(_PENDING.get(feature, {}).get("id") == pid
-                         and _PENDING[feature].get("withdrawn"))
+        withdrawn = pid in _WITHDRAWN
     if withdrawn:
         return _finish(feature, pid, "withdrawn",
                        "you turned it off while the card was waiting", rid)
+    if feature != "master":
+        # Checked again now, not only when the card went up: the main switch
+        # (or a feature this one needs) may have been turned off meanwhile.
+        cur = _read_switches()
+        if not cur["master"]:
+            return _finish(feature, pid, "refused",
+                           "the main second-card switch was turned off while the card "
+                           "waited", rid)
+        gone = [d for d in _BY_ID[feature]["needs"] if not cur["features"].get(d)]
+        if gone:
+            return _finish(feature, pid, "refused",
+                           f"it needs {_names(gone)}, which was turned off while the card "
+                           f"waited", rid)
     if not detect(fresh=True).get("capable"):
         return _finish(feature, pid, "refused", "the second card is not there any more", rid)
     err = _write_switch(feature, True)
@@ -1303,6 +1609,7 @@ def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = No
         with _PENDING_LOCK:
             if feature in _PENDING:
                 _PENDING[feature]["withdrawn"] = True
+                _WITHDRAWN.add(_PENDING[feature]["id"])
         err = _write_switch(feature, False)
         if err:
             return 500, {"error": err}
@@ -1332,14 +1639,21 @@ def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = No
         if missing:
             names = ", ".join(f"\"{_BY_ID[d]['name']}\"" for d in missing)
             return 400, {"error": f"{label} needs {names} on first."}
+    if feature != "master" or any(sw["features"].values()):
+        # This ON would start the second Ollama. Not while the big model is
+        # on the card: the approval would turn on something that cannot run.
+        held = big_model_holds(det["second"]["uuid"], det["second"]["name"])
+        if held:
+            return 409, {"error": f"Not now: {held}."}
+    action = action_for(feature)
     try:
-        tier = tier_of(ACTION)
+        tier = tier_of(action)
     except Exception as exc:
         tier = f"unreadable ({type(exc).__name__})"
     if tier != "ask":
         # Checked BEFORE a card is raised: a card that could not end in a
         # person deciding should not be raised at all.
-        return 503, {"error": (f"{ACTION} is tier {tier!r} in jarvis-framework.toml; "
+        return 503, {"error": (f"{action} is tier {tier!r} in jarvis-framework.toml; "
                                f"turning this on needs a person to say yes, so it must "
                                f"be 'ask'")}
     pid = _uuid.uuid4().hex
@@ -1378,7 +1692,10 @@ def _reset_for_tests() -> None:
     with _PENDING_LOCK:
         _PENDING.clear()
         _LAST.clear()
+        _WITHDRAWN.clear()
+        _LAST_ANY.clear()
     _TAGS.clear()
+    _LEARN.update(failed_at=-1e9, short=False)
     try:
         _LANE.stop("reset")
     except Exception:

@@ -50,12 +50,12 @@
           "available": false,
           "enabled": false,
           "id": "long_context",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Longer conversations",
           "needs": [],
-          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
           "why": "Off."
         },
         {
@@ -63,7 +63,7 @@
           "available": false,
           "enabled": false,
           "id": "vision",
-          "memory_gib": 6.68,
+          "memory_gib": 7.15,
           "model": "qwen2.5vl:7b",
           "model_installed": false,
           "name": "Pictures",
@@ -76,8 +76,8 @@
           "available": false,
           "enabled": false,
           "id": "learning",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Learning in the background",
           "needs": [],
@@ -89,14 +89,14 @@
           "available": false,
           "enabled": false,
           "id": "browser_control",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Browser control",
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Off. Needs Longer conversations on first."
         },
         {
@@ -104,8 +104,8 @@
           "available": false,
           "enabled": false,
           "id": "wiki",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Wiki builder",
           "needs": [],
@@ -117,6 +117,7 @@
         "state": "off",
         "why": "nothing on the second card is switched on"
       },
+      "last": null,
       "main_ollama_pinned": false,
       "pending": [],
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
@@ -171,12 +172,12 @@
           "available": false,
           "enabled": false,
           "id": "long_context",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Longer conversations",
           "needs": [],
-          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
           "why": "Off. A card to turn it on is waiting for your answer."
         },
         {
@@ -184,7 +185,7 @@
           "available": false,
           "enabled": false,
           "id": "vision",
-          "memory_gib": 6.68,
+          "memory_gib": 7.15,
           "model": "qwen2.5vl:7b",
           "model_installed": false,
           "name": "Pictures",
@@ -197,8 +198,8 @@
           "available": false,
           "enabled": false,
           "id": "learning",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Learning in the background",
           "needs": [],
@@ -210,14 +211,14 @@
           "available": false,
           "enabled": false,
           "id": "browser_control",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Browser control",
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Off. Needs Longer conversations on first."
         },
         {
@@ -225,8 +226,8 @@
           "available": false,
           "enabled": false,
           "id": "wiki",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Wiki builder",
           "needs": [],
@@ -238,6 +239,7 @@
         "state": "off",
         "why": "nothing on the second card is switched on"
       },
+      "last": null,
       "main_ollama_pinned": true,
       "pending": [
         "long_context"
@@ -282,7 +284,7 @@
           "model_installed": null,
           "name": "Longer conversations",
           "needs": [],
-          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
           "why": "On, but it cannot run: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER). Your choice is kept; it works again once a capable second card is back."
         },
         {
@@ -323,7 +325,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         },
         {
@@ -344,6 +346,7 @@
         "state": "off",
         "why": "no capable second card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
       },
+      "last": null,
       "main_ollama_pinned": null,
       "pending": [],
       "pin_command": null,
@@ -397,7 +400,7 @@
           "model_installed": null,
           "name": "Longer conversations",
           "needs": [],
-          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
           "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
         },
         {
@@ -438,7 +441,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
         },
         {
@@ -459,6 +462,7 @@
         "state": "off",
         "why": "no capable second card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need"
       },
+      "last": null,
       "main_ollama_pinned": false,
       "pending": [],
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
@@ -501,7 +505,7 @@
           "model_installed": null,
           "name": "Longer conversations",
           "needs": [],
-          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         },
         {
@@ -542,7 +546,7 @@
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         },
         {
@@ -563,6 +567,7 @@
         "state": "off",
         "why": "no capable second card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
       },
+      "last": null,
       "main_ollama_pinned": null,
       "pending": [],
       "pin_command": null,
@@ -617,20 +622,20 @@
           "available": true,
           "enabled": true,
           "id": "long_context",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Longer conversations",
           "needs": [],
-          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
-          "why": "Working: qwen3:14b on the NVIDIA GeForce RTX 2060, with room for 16,384 tokens of conversation."
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
+          "why": "Working: qwen3:8b on the NVIDIA GeForce RTX 2060, with room for 32,768 tokens of conversation."
         },
         {
           "active": false,
           "available": false,
           "enabled": false,
           "id": "vision",
-          "memory_gib": 6.68,
+          "memory_gib": 7.15,
           "model": "qwen2.5vl:7b",
           "model_installed": false,
           "name": "Pictures",
@@ -643,8 +648,8 @@
           "available": false,
           "enabled": false,
           "id": "learning",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Learning in the background",
           "needs": [],
@@ -656,14 +661,14 @@
           "available": false,
           "enabled": false,
           "id": "browser_control",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Browser control",
           "needs": [
             "long_context"
           ],
-          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
           "why": "Off."
         },
         {
@@ -671,8 +676,8 @@
           "available": false,
           "enabled": false,
           "id": "wiki",
-          "memory_gib": 10.38,
-          "model": "qwen3:14b",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
           "model_installed": true,
           "name": "Wiki builder",
           "needs": [],
@@ -684,6 +689,7 @@
         "state": "running",
         "why": "running on 127.0.0.1:11435 (this PC only), using only the NVIDIA GeForce RTX 2060"
       },
+      "last": null,
       "main_ollama_pinned": true,
       "pending": [],
       "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",

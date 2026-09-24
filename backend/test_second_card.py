@@ -27,6 +27,8 @@ never done):
     reverses; the install lists have it.
   - the committed jarvis-desktop fixture equals a fresh run.
 """
+import contextlib
+import io
 import json
 import os
 import re
@@ -191,16 +193,18 @@ def t_capable_and_not():
           det["capable"] is False and "id" in det["why"], det["why"])
     with G.World(G.SMI["2080s_2060"]):
         det = SC.detect(fresh=True)
-    check("the 12 GB card gets qwen3:14b at 16K (10.38 GiB)",
-          SC._feature_model("long_context", det) == ("qwen3:14b", 16384, 10.38))
+    check("the 12 GB card gets qwen3:8b at 32K (7.69 GiB): HARDWARE-PROFILES 4.4, and more "
+          "room than the main card's 16K (T3)",
+          SC._feature_model("long_context", det) == ("qwen3:8b", 32768, 7.69))
     with G.World(G.SMI["2080s_2080ti"]):
         det = SC.detect(fresh=True)
     check("the 11 GB 2080 Ti gets qwen3:8b at 32K (7.69 GiB)",
           SC._feature_model("long_context", det) == ("qwen3:8b", 32768, 7.69))
-    check("the arithmetic in the comment holds: 14B cache at 16K is 1.33 GiB, 8B at 32K 2.39",
-          round(2 * 40 * 8 * 128 * 1.0625 * 16384 / 2 ** 30, 2) == 1.33
-          and round(2 * 36 * 8 * 128 * 1.0625 * 32768 / 2 ** 30, 2) == 2.39
-          and round(8.42 + 1.33 + 0.63, 2) == 10.38 and round(4.67 + 2.39 + 0.63, 2) == 7.69)
+    check("the arithmetic in the comment holds: 8B cache at 32K is 2.39 GiB; 7.36 needed "
+          "(HARDWARE-PROFILES 8.2) + 0.33 start-up = 7.69; it fits a 12 GB card's 10.32",
+          round(2 * 36 * 8 * 128 * 1.0625 * 32768 / 2 ** 30, 2) == 2.39
+          and round(4.67 + 2.39 + 0.30, 2) == 7.36 and round(7.36 + 0.33, 2) == 7.69
+          and round(12 - 0.60 - 0.33 - 0.75, 2) == 10.32)
 
 
 # ------------------------------------------------------------ switches --
@@ -238,8 +242,8 @@ def t_switches():
               code == 400 and "Longer conversations" in out["error"] and not seen, out)
         code, out = SC.request_change("long_context", True, gate=gate)
         check("long_context: one card, with the model and memory on it",
-              code == 200 and len(seen) == 1 and "qwen3:14b" in seen[0][2]
-              and "10.4 GB" in seen[0][2] and seen[0][1]["model"] == "qwen3:14b")
+              code == 200 and len(seen) == 1 and "qwen3:8b" in seen[0][2]
+              and "7.7 GB" in seen[0][2] and seen[0][1]["model"] == "qwen3:8b")
         check("long_context is on", SC._read_switches()["features"]["long_context"] is True)
         # A "yes" that is not a person: refused.
         for label, v in (("tier notify", Verdict(True, "notify", "notify")),
@@ -258,6 +262,19 @@ def t_switches():
         held[0]()
         check("OFF while waiting, then approved: the later OFF wins",
               SC._read_switches()["features"]["vision"] is False)
+        # AP-5: two full rounds; the first card is answered last.
+        cards = []
+        yes = lambda a, dd, p: Verdict(True, "ask", "approved")
+        SC.request_change("vision", True, gate=yes, spawn=cards.append)
+        SC.request_change("vision", False)
+        SC.request_change("vision", True, gate=yes, spawn=cards.append)
+        SC.request_change("vision", False)
+        cards[0]()
+        check("two ON/OFF rounds, the FIRST card approved: the later OFF still wins",
+              len(cards) == 2 and SC._read_switches()["features"]["vision"] is False)
+        cards[1]()
+        check("... and the second card too",
+              SC._read_switches()["features"]["vision"] is False)
         code, out = SC.request_change("vision", True, gate=gate, tier_of=lambda a: "auto")
         check("tier not 'ask': refused before any card", code == 503 and "must" in out["error"]
               and "be 'ask'" in out["error"])
@@ -272,6 +289,46 @@ def t_switches():
     with G.World(G.SMI["2080s_1080"]):
         code, out = SC.request_change("master", True, gate=lambda *a: None)
         check("ON with an old second card: 503, says why", code == 503 and "older than Turing" in out["error"])
+    # AP-4: the cards say exactly what starts if the owner says yes.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        seen = []
+        gate = lambda a, d, p: seen.append(p) or Verdict(True, "ask", "approved")
+        w.switches(master=True, long_context=True, browser_control=True)
+        SC.request_change("master", False)
+        check("master OFF keeps the owner's feature choices",
+              SC._read_switches()["features"]["long_context"] is True
+              and SC._read_switches()["features"]["browser_control"] is True)
+        SC.request_change("master", True, gate=gate)
+        check("master card with features left on: names them, never 'nothing starts yet'",
+              seen and "nothing starts yet" not in seen[0]
+              and "\"Longer conversations\" and \"Browser control\" start working again at once"
+              in seen[0], seen)
+        check("... and approving it really starts the lane (the card was true)",
+              len(w.started) == 1 and w.running())
+        seen.clear()
+        SC.request_change("long_context", False)
+        check("Longer conversations OFF keeps Browser control's choice",
+              SC._read_switches()["features"]["browser_control"] is True)
+        SC.request_change("long_context", True, gate=gate)
+        check("the long_context card says Browser control comes back too",
+              seen and "\"Browser control\" is still switched on from before, so it starts "
+              "working again too" in seen[0], seen)
+        seen.clear()
+        w.switches(master=False)
+        SC.request_change("master", True, gate=gate)
+        check("master card with nothing left on: 'nothing starts yet'",
+              seen and "nothing starts yet" in seen[0], seen)
+        # A feature's card answered after the main switch went off.
+        held = []
+        SC.request_change("vision", True, gate=lambda a, dd, p: Verdict(True, "ask", "approved"),
+                          spawn=held.append)
+        SC.request_change("master", False)
+        held[0]()
+        check("feature approved after master went OFF: stays off, refused with the reason",
+              SC._read_switches()["features"]["vision"] is False
+              and SC._LAST["vision"]["outcome"] == "refused"
+              and "main second-card switch was turned off" in SC._LAST["vision"]["reason"],
+              SC._LAST.get("vision"))
     # The approval must never be automatic: the module never calls approve.
     src = (HERE / "jarvis_second_card.py").read_text(encoding="utf-8")
     code_only = re.sub(r'(?s)""".*?"""', "", src)
@@ -293,16 +350,16 @@ def t_the_second_ollama():
         check("it listens on 127.0.0.1:11435 only", env["OLLAMA_HOST"] == "127.0.0.1:11435")
         check("it sees only the second card, by its id",
               env["CUDA_VISIBLE_DEVICES"] == G.U_2060 and G.U_2080S not in env["CUDA_VISIBLE_DEVICES"])
-        check("PCI order, q8_0 cache, one model, one conversation, 16K",
+        check("PCI order, q8_0 cache, one model, one conversation, 32K",
               env["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID" and env["OLLAMA_KV_CACHE_TYPE"] == "q8_0"
               and env["OLLAMA_MAX_LOADED_MODELS"] == "1" and env["OLLAMA_NUM_PARALLEL"] == "1"
-              and env["OLLAMA_CONTEXT_LENGTH"] == "16384")
+              and env["OLLAMA_CONTEXT_LENGTH"] == "32768")
         check("flash attention left to Ollama's auto (MODEL-TOPOLOGY: do not force it)",
               "OLLAMA_FLASH_ATTENTION" not in env)
         lane = SC.lane_for("long_context")
-        check("lane_for: the loopback lane, the model, 16K",
+        check("lane_for: the loopback lane, the model, 32K",
               lane is not None and lane.url == "http://127.0.0.1:11435"
-              and lane.model == "qwen3:14b" and lane.num_ctx == 16384, repr(lane))
+              and lane.model == "qwen3:8b" and lane.num_ctx == 32768, repr(lane))
         check("asking again does not start a second one", len(w.started) == 1)
         SC.request_change("long_context", False)
         check("everything off: it is stopped - that one, and only that one",
@@ -349,6 +406,24 @@ def t_the_second_ollama():
                       base={"OLLAMA_VULKAN": "1"}).get("OLLAMA_VULKAN") == "0")
     check("flash attention 'on' in the toml is honoured",
           SC.lane_env(G.U_2060, port=11435, num_ctx=1, base={}, flash="on")["OLLAMA_FLASH_ATTENTION"] == "1")
+    # flash_attention = "off" with the lane's q8_0 cache: llama.cpp refuses
+    # to load the model (llama-context.cpp ~3737-3741). Refused, in words.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, long_context=True)
+        cfg = {"flash_attention": "off"}
+        with mock.patch.object(SC, "_cfg", lambda key, default=None: cfg.get(key, default)):
+            st = SC.status()
+        check("flash_attention 'off': not started, and says why and what to do",
+              not w.started and st["lane"]["state"] == "failed"
+              and "flash_attention is \"off\"" in st["lane"]["why"]
+              and "q8_0" in st["lane"]["why"] and "Delete that line" in st["lane"]["why"],
+              st["lane"])
+        cfg["flash_attention"] = "on"
+        SC._LANE.failed_at = -1e9
+        with mock.patch.object(SC, "_cfg", lambda key, default=None: cfg.get(key, default)):
+            st = SC.status()
+        check("flash_attention 'on' still starts it",
+              len(w.started) == 1 and st["lane"]["state"] == "running", st["lane"])
     with G.World(G.SMI["2080s_2060"], foreign_on_port=True) as w:
         w.switches(master=True, long_context=True)
         st = SC.status()
@@ -383,6 +458,151 @@ def t_the_second_ollama():
               and "choice is kept" in st["features"][0]["why"])
 
 
+class _FakeColibri:
+    """A colibri process as jarvis_big_model records one: alive, never real."""
+    pid = 900003
+
+    def poll(self):
+        return None
+
+
+def _colibri_on(uuid):
+    """jarvis_big_model's engine, loaded on `uuid` with cuda = "on", the way
+    _Engine._start leaves it (the claim included)."""
+    import jarvis_big_model as BM
+    BM._reset_for_tests()
+    BM._ENGINE.state, BM._ENGINE.card, BM._ENGINE.proc = "ready", uuid, _FakeColibri()
+    CP.claim_card(uuid, "big_model")
+    return BM
+
+
+def t_big_model_holds_the_card():
+    # AP-1: the lane used to start on the card colibri was using. Only the
+    # reverse (colibri refusing while the lane runs) was guarded.
+    import jarvis_big_model as BM
+    kill = BM._kill_tree
+    BM._kill_tree = lambda p: None
+    try:
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True, long_context=True)
+            _colibri_on(G.U_2060)
+            st = SC.status()
+            check("colibri on the second card: the lane is not started on it",
+                  not w.started and st["lane"]["state"] == "off", st["lane"])
+            check("and says why, in words",
+                  st["lane"]["why"] == ("the big model is using the NVIDIA GeForce RTX 2060; "
+                                        "it stops after 10 idle minutes"), st["lane"]["why"])
+            check("engine_card() names the card, and reads only",
+                  BM.engine_card() == {"uuid": G.U_2060, "state": "ready", "idle_minutes": 10})
+            check("lane_for is None meanwhile", SC.lane_for("long_context") is None
+                  and not w.started)
+            code, out = SC.request_change("vision", True, gate=lambda *a: Verdict(True))
+            check("ON while colibri holds it: 409 with the same sentence, no card",
+                  code == 409 and out["error"] == ("Not now: the big model is using the NVIDIA "
+                                                   "GeForce RTX 2060; it stops after 10 idle "
+                                                   "minutes."), (code, out))
+            BM._reset_for_tests()          # colibri stopped: the claim goes with it
+            check("colibri stopped: its claim is given back", CP.card_holder(G.U_2060) is None)
+            st = SC.status()
+            check("and the lane starts on the next look",
+                  len(w.started) == 1 and st["lane"]["state"] == "running", st["lane"])
+            check("the lane holds the card's claim while it runs",
+                  CP.card_holder(G.U_2060) == "second_card")
+            SC.request_change("long_context", False)
+            check("the lane stopped: its claim is given back", CP.card_holder(G.U_2060) is None)
+        # The race: colibri has taken the claim and is starting, but its state
+        # is not yet readable. The claim alone keeps the lane off the card.
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True, long_context=True)
+            BM._reset_for_tests()
+            CP.claim_card(G.U_2060, "big_model")
+            try:
+                st = SC.status()
+                check("the claim alone (colibri mid-start): the lane does not start",
+                      not w.started and st["lane"]["state"] == "off"
+                      and "big model" in st["lane"]["why"], st["lane"])
+            finally:
+                CP.release_card(G.U_2060, "big_model")
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True)
+            seen = []
+            with mock.patch.object(BM, "_cuda_setting", lambda: "on"):
+                SC.request_change("long_context", True,
+                                  gate=lambda a, d, p: seen.append(p) or Verdict(True))
+            check("with [big_model] cuda = \"on\", the card says they never share it",
+                  seen and "They never share it" in seen[0], seen)
+    finally:
+        BM._kill_tree = kill
+        BM._reset_for_tests()
+
+
+def t_browser_control_card_is_honest():
+    # AP-9: the Browser control card said "Nothing leaves this PC", but the
+    # feature drives web pages. It now has its own action and true words.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, long_context=True)
+        seen = []
+        gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
+        code, out = SC.request_change("browser_control", True, gate=gate)
+        check("Browser control's card is raised under its own action",
+              code == 200 and seen and seen[0][0] == "second_card_browser_enable", seen[:1])
+        a, d, text = seen[0]
+        check("its card does not say 'Nothing leaves this PC', and says the pages are online",
+              "Nothing leaves this PC" not in text and "reaches that website" in text
+              and d["leaves_this_pc"] is True, text)
+        check("and it is on", SC._read_switches()["features"]["browser_control"] is True)
+        row = next(r for r in SC.status()["features"] if r["id"] == "browser_control")
+        check("its 'what' says the pages are on the internet", "on the internet" in row["what"])
+        seen.clear()
+        SC.request_change("vision", True, gate=gate)
+        check("the other switches keep second_card_enable and 'Nothing leaves this PC'",
+              seen[0][0] == "second_card_enable" and "Nothing leaves this PC" in seen[0][2]
+              and seen[0][1]["leaves_this_pc"] is False)
+        SC.request_change("browser_control", False)
+        tiers = {"second_card_enable": "ask", "second_card_browser_enable": "notify"}
+        code, out = SC.request_change("browser_control", True, gate=gate,
+                                      tier_of=lambda act: tiers[act])
+        check("its own tier is the one checked: not 'ask' -> 503 naming that action",
+              code == 503 and "second_card_browser_enable is tier 'notify'" in out["error"], out)
+        # The master card, with Browser control left on, says so too.
+        seen.clear()
+        w.switches(master=False, long_context=True, browser_control=True)
+        SC.request_change("master", True, gate=gate)
+        check("the master card with Browser control left on does not say nothing leaves",
+              "Nothing leaves this PC" not in seen[0][2] and "reaches that website" in seen[0][2]
+              and seen[0][0] == "second_card_enable")
+
+
+def t_last_card():
+    # AP-6: _LAST was written and never read. status()["last"] says how the
+    # most recent card ended, so the apps can say what really happened.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        check("no card has ended yet: last is null", SC.status()["last"] is None)
+        SC.request_change("master", True, gate=lambda *a: Verdict(True, "ask", "approved"))
+        last = SC.status()["last"]
+        check("approved: enabled, with the switch and a sentence",
+              set(last) == {"feature", "outcome", "why", "at"} and last["feature"] == "master"
+              and last["outcome"] == "enabled" and last["why"] == "The second graphics card "
+              "was turned on." and isinstance(last["at"], int), last)
+        for v, want, words in ((Verdict(False, "ask", "denied"), "denied", "You said no"),
+                               (Verdict(False, "ask", "timed_out"), "timed_out",
+                                "Nobody answered the card in time"),
+                               (Verdict(True, "auto", "auto"), "refused", "not a person saying yes")):
+            SC.request_change("vision", True, gate=lambda *a, v=v: v)
+            last = SC.status()["last"]
+            check(f"{want}: said as {want}, in words",
+                  last["feature"] == "vision" and last["outcome"] == want and words in last["why"],
+                  last)
+        held = []
+        SC.request_change("vision", True, gate=lambda *a: Verdict(True, "ask", "approved"),
+                          spawn=held.append)
+        SC.request_change("vision", False)
+        held[0]()
+        last = SC.status()["last"]
+        check("withdrawn: said as withdrawn", last["outcome"] == "withdrawn"
+              and "while its card was waiting" in last["why"], last)
+
+
 def t_lane_for_is_none_when_not_ready():
     def ready(**kw):
         return G.World(G.SMI["2080s_2060"], **kw)
@@ -409,13 +629,13 @@ def t_lane_for_is_none_when_not_ready():
         w.switches(master=True, long_context=True)
         check("never answered: None, and failed", SC.lane_for("long_context") is None
               and SC._LANE.state == "failed")
-    with ready(installed=("qwen3:8b",)) as w:
+    with ready(installed=("qwen3:14b",)) as w:
         w.switches(master=True, long_context=True)
         check("model not installed: None", SC.lane_for("long_context") is None)
         st = SC.status()
         check("and status says how to install it",
               st["features"][0]["model_installed"] is False
-              and "ollama pull qwen3:14b" in st["features"][0]["why"])
+              and "ollama pull qwen3:8b" in st["features"][0]["why"])
     with ready(tags_answer=False) as w:
         w.switches(master=True, long_context=True)
         check("cannot ask whether it is installed: None", SC.lane_for("long_context") is None)
@@ -435,7 +655,7 @@ def t_status_shape_and_no_secrets():
             os.environ.pop("HUD_TOKEN_TEST_PROBE", None)
     check("status() has exactly the contract's keys",
           set(st) == {"detected", "enabled", "active", "pending", "lane", "main_ollama_pinned",
-                      "pin_note", "pin_command", "features"}, sorted(st))
+                      "pin_note", "pin_command", "features", "last"}, sorted(st))
     check("detected has exactly its keys",
           set(st["detected"]) == {"capable", "why", "primary", "second", "cards"})
     check("each feature row has exactly its keys",
@@ -554,12 +774,80 @@ def t_hooks_are_no_ops_when_off():
         check("and the quiet wait is unchanged", SC.learning_idle_seconds(45.0) == 45.0)
 
 
+def t_long_context_needs_more_room():
+    # T3: a long turn moved to the second card although its lane had the
+    # SAME room as the main model (16,384 each), and was trimmed there just
+    # the same. The audit's shape, at the real 16,384.
+    msgs = [{"role": "system", "content": "recalled facts"}]
+    for i in range(10):
+        msgs.append({"role": "user", "content": f"q{i} " + "word " * 1100})
+        msgs.append({"role": "assistant", "content": f"a{i} " + "word " * 1100})
+    msgs.append({"role": "user", "content": "and now?"})
+    same = SC.Lane("http://127.0.0.1:11435", "qwen3:14b", 16384, "test")
+    bigger = SC.Lane("http://127.0.0.1:11435", "qwen3:8b", 32768, "test")
+    lc = AG.choose_lane(msgs, "jarvis-primary", ollama_url="x", context_length=16384,
+                        lane_for=lambda f: same if f == "long_context" else None)
+    check("lane with the same 16,384 as the main model: the turn stays on the main card",
+          lc is None, repr(lc))
+    lc = AG.choose_lane(msgs, "jarvis-primary", ollama_url="x", context_length=16384,
+                        lane_for=lambda f: bigger if f == "long_context" else None)
+    check("lane with 32,768 against the main model's 16,384: the turn moves",
+          lc is not None and lc.feature == "long_context" and lc.context_length == 32768, repr(lc))
+    sent = _turn(msgs, context_length=16384,
+                 lane_for=lambda f: same if f == "long_context" else None)
+    check("... and the request really goes to the main card",
+          sent[0][0] == "http://127.0.0.1:11434/v1/chat/completions")
+    with G.World(G.SMI["2080s_2060"]):
+        det = SC.detect(fresh=True)
+    check("the 12 GB card's planned lane has more room than jarvis-primary's 16,384",
+          SC._feature_model("long_context", det)[1] > 16384)
+
+
+def t_learning_on_a_lane_that_does_not_answer():
+    # K13: the pause was cut to 10 s because the lane existed, and when the
+    # lane then failed (here a stand-in second Ollama answering 404) the
+    # pass fell back to the MAIN card after only those 10 s.
+    import urllib.error
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, learning=True)
+        real = w.http_json
+
+        def http(url, payload=None, timeout=2.0):
+            if url.endswith("/api/generate"):
+                w.http.append((url, payload))
+                raise urllib.error.HTTPError(url, 404, "model not found", None, None)
+            return real(url, payload, timeout)
+        SC._http_json = http
+        main = []
+        llm = lambda p: main.append(p) or "from the main card"
+        check("the lane is there: the pause is shortened to 10 s",
+              SC.learning_idle_seconds(45.0) == 10.0)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out = SC.learning_llm(llm)("remember this")
+        check("the lane answers 404 after that short pause: the pass is skipped, the main "
+              "card is NOT asked", out is None and main == [], (out, main))
+        check("... and it says so", "this pass was skipped" in err.getvalue())
+        check("the next pass waits the full time", SC.learning_idle_seconds(45.0) == 45.0)
+        check("... and then uses the main card, exactly as before the second card",
+              SC.learning_llm(llm) is llm)
+        SC._LEARN["failed_at"] -= SC.LEARN_RETRY_SECONDS + 1
+        check("after LEARN_RETRY_SECONDS the second card is tried again",
+              SC.learning_idle_seconds(45.0) == 10.0)
+        SC._LEARN["short"] = False
+        main.clear()
+        out = SC.learning_llm(llm)("x")
+        check("a pass that had the full wait may still fall back to the main card",
+              out == "from the main card" and main == ["x"], (out, main))
+
+
 def t_hooks_when_on():
     msgs = _long_history()
     sent = _turn(msgs, lane_for=lambda f: LANE14 if f == "long_context" else None)
     check("long history, long_context working: sent to the second card, whole",
           sent[0][0] == "http://127.0.0.1:11435/v1/chat/completions"
-          and sent[0][1]["model"] == "qwen3:14b" and sent[0][1]["messages"] == msgs)
+          and sent[0][1]["model"] == "qwen3:14b"
+          and sent[0][1]["messages"] == [{"role": "system", "content": AG.LANE_SYSTEM}] + msgs)
     short = [{"role": "user", "content": "hi"}]
     sent = _turn(short, lane_for=lambda f: LANE14 if f == "long_context" else None)
     check("a short conversation stays on the main card", sent[0][0].startswith("http://127.0.0.1:11434"))
@@ -582,7 +870,7 @@ def t_hooks_when_on():
               and out == '{"facts": []}', (gen, asked, out))
         body = [p for (u, p) in w.http if u.endswith("/api/generate")][0]
         check("with the lane's context size, so the model is never reloaded",
-              body["options"]["num_ctx"] == 16384 and body["model"] == "qwen3:14b")
+              body["options"]["num_ctx"] == 32768 and body["model"] == "qwen3:8b")
         check("and the learner's quiet wait shortens to 10 s", SC.learning_idle_seconds(45.0) == 10.0)
     # jarvis_intake.propose() goes through it.
     seen = []
@@ -724,6 +1012,8 @@ def t_the_patch():
           and "self._woken.wait(_idle)" in after)
     check("the approval notice knows the action stays on this PC",
           '"second_card_enable": ("yes", "local",' in gate_after)
+    check("... and that Browser control's action reaches the internet (AP-9)",
+          '"second_card_browser_enable": ("yes", "outbound",' in gate_after)
     # The patched chat block still compiles as Python (the ** in the call).
     i = after.index("_turn = jarvis_agent.run_local_turn(")
     call = after[i:after.index("announce=lambda text", i)] + "announce=None)"
@@ -752,6 +1042,8 @@ def t_the_toml():
     toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
     check("the shipped toml has second_card_enable = \"ask\"",
           re.search(r'^second_card_enable\s*=\s*"ask"', toml, re.M) is not None)
+    check("the shipped toml has second_card_browser_enable = \"ask\" (AP-9)",
+          re.search(r'^second_card_browser_enable\s*=\s*"ask"', toml, re.M) is not None)
     check("the shipped toml has a [second_card] section", "\n[second_card]\n" in toml)
     check("and no switch lives in it (the switches are in second-card.json)",
           not re.search(r"^\s*(master|long_context|vision|learning|browser_control|wiki)\s*=",

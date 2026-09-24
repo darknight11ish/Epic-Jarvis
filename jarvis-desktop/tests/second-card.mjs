@@ -151,10 +151,10 @@ await check("each feature says its model, whether it is installed, the exact nam
   const vision = row(s, "vision").text;
   assert.match(vision, /Model: qwen2\.5vl:7b, not installed yet\./);
   assert.match(vision, /open the Brain window, go to Faculties, then Models, type qwen2\.5vl:7b in the Install box/);
-  assert.match(vision, /Uses about 6\.7 GB of the second card's memory\./);
+  assert.match(vision, /Uses about 7\.2 GB of the second card's memory\./);
   const long = row(s, "long_context").text;
-  assert.match(long, /Model: qwen3:14b, installed\./);
-  assert.match(long, /Uses about 10\.4 GB/);
+  assert.match(long, /Model: qwen3:8b, installed\./);
+  assert.match(long, /Uses about 7\.7 GB/);
   assert.doesNotMatch(long, /Install box/);
   // Browser control needs Longer conversations: the backend's own line says so.
   const browserText = row(s, "browser_control").text;
@@ -236,7 +236,7 @@ await check("when the approval queue changes, the page re-reads and shows what t
   const long = row(s, "long_context");
   assert.equal(long.checked, true);
   assert.equal(long.state, "on");
-  assert.match(long.text, /Working: qwen3:14b on the NVIDIA GeForce RTX 2060/);
+  assert.match(long.text, /Working: qwen3:8b on the NVIDIA GeForce RTX 2060/);
   assert.match(s.status, /"Longer conversations" is on\./);
   assert.match(s.lane, /^Running\. Running on 127\.0\.0\.1:11435 \(this PC only\)/);
   assert.match(s.pinned, /Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER/);

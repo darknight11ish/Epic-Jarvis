@@ -939,11 +939,51 @@ def _cuda_plan() -> tuple:
         return None, (f"[big_model] cuda is \"on\", but there is no capable second card "
                       f"({sc['why']}). colibri is never put on the main card: that one is "
                       f"everyday chat"), False
-    if sc["lane"] in ("starting", "running"):
+    if sc["lane"] in ("starting", "running") or _card_holder(sc["uuid"]) == "second_card":
         return None, (f"[big_model] cuda is \"on\", but the second card's own features are "
                       f"running on the {sc['name']} right now, so colibri will not share "
                       f"it"), False
     return sc["uuid"], (f"the {sc['name']} (the second card), and only that card"), True
+
+
+def _compute():
+    try:
+        import jarvis_compute
+        return jarvis_compute
+    except Exception:
+        return None
+
+
+def _card_holder(uuid: Optional[str]) -> Optional[str]:
+    cp = _compute()
+    if cp is None or not uuid or not hasattr(cp, "card_holder"):
+        return None
+    try:
+        return cp.card_holder(uuid)
+    except Exception:
+        return None
+
+
+def _claim_card(uuid: str) -> Optional[str]:
+    """jarvis_compute.claim_card for colibri: None when the card is ours,
+    else who holds it. Without jarvis_compute there is nothing to share."""
+    cp = _compute()
+    if cp is None or not hasattr(cp, "claim_card"):
+        return None
+    try:
+        return cp.claim_card(uuid, "big_model")
+    except Exception:
+        return None
+
+
+def _release_card(uuid: Optional[str]) -> None:
+    cp = _compute()
+    if cp is None or not uuid or not hasattr(cp, "release_card"):
+        return
+    try:
+        cp.release_card(uuid, "big_model")
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -951,10 +991,22 @@ def _cuda_plan() -> tuple:
 # --------------------------------------------------------------------------
 
 class _Engine:
-    """The one `coli serve` this module started, or none."""
+    """The one `coli serve` this module started, or none.
+
+    ONE JOB AT A TIME (K2). The wiki and deep questions may want different
+    models (by default a medium one and a giant one), and colibri holds one.
+    Each job's lane_for() used to restart the engine for its own model, so
+    two jobs waiting at once took turns killing each other's load and
+    neither ever finished. Now the first job to ask holds the engine
+    (`holder`) until it ends (release()), and another job's lane_for()
+    does not restart it meanwhile: that job waits, and job_state() says
+    "busy" and why. A hold its job stopped refreshing (no lane_for() and no
+    answer in progress for HOLD_SECONDS) lapses, so a job that died without
+    release() cannot keep the engine forever."""
 
     RETRY_SECONDS = 60.0
     PROBE_EVERY = 2.0
+    HOLD_SECONDS = 120.0
 
     def __init__(self) -> None:
         self.lock = threading.RLock()
@@ -971,6 +1023,8 @@ class _Engine:
         self.failed_at = -1e9
         self.card: Optional[str] = None
         self.reaper = False
+        self.holder: Optional[str] = None      # the job holding the engine
+        self.held_at = -1e9
 
     def url(self) -> str:
         return f"http://{HOST}:{self.port}"
@@ -998,14 +1052,50 @@ class _Engine:
     def _fail(self, why: str) -> None:
         self.state, self.why, self.failed_at = "failed", why, _mono()
 
-    def ensure(self, row: dict, det: dict) -> None:
-        """Start colibri with `row`'s model if it is not running it."""
+    def other_holder(self, job: Optional[str]) -> Optional[str]:
+        """The job, other than `job`, that holds the engine now, or None.
+        A hold only counts while colibri is loading or running: with it
+        off or failed, starting it for another job interrupts nothing."""
         with self.lock:
+            h = self.holder
+            if h is None or h == job:
+                return None
+            if self.state not in ("loading", "ready") or not self.alive():
+                return None
+            if self.busy or _mono() - self.held_at < self.HOLD_SECONDS:
+                return h
+            self.holder = None          # lapsed: its job stopped asking
+            return None
+
+    def retry_now(self) -> None:
+        """Lets the next ensure() try a failed start again at once, instead
+        of after RETRY_SECONDS. For a person asking again (a new deep
+        question), not for a loop."""
+        with self.lock:
+            if self.state == "failed":
+                self.failed_at = -1e9
+
+    def hold(self, job: str) -> None:
+        with self.lock:
+            self.holder, self.held_at = job, _mono()
+
+    def release(self, job: str) -> None:
+        with self.lock:
+            if self.holder == job:
+                self.holder = None
+
+    def ensure(self, row: dict, det: dict, job: Optional[str] = None) -> None:
+        """Start colibri with `row`'s model if it is not running it. Never
+        restarts it for `job` while another job holds it."""
+        with self.lock:
+            if self.model_id != row["id"] and self.other_holder(job) is not None:
+                return          # another job's model; this one waits its turn
             if self.model_id == row["id"] and self.state in ("loading", "ready") and self.alive():
                 return
             if self.state == "ready" and self.model_id == row["id"] and not self.alive():
                 code = self._exit_code()
                 self.proc = None
+                self._drop_card()
                 self._fail(f"colibri stopped by itself (exit code {code}). Its log: "
                            f"{_log_path()}")
                 return
@@ -1055,6 +1145,15 @@ class _Engine:
             env = engine_env(key, cuda_uuid=uuid)
         except ValueError as exc:
             return self._fail(str(exc))
+        if uuid:
+            # Taken BEFORE the process starts. jarvis_second_card takes the
+            # same claim before its own start, so only one of the two can
+            # start on the card, whatever the timing.
+            holder = _claim_card(uuid)
+            if holder is not None:
+                return self._fail(f"[big_model] cuda is \"on\", but the second card's own "
+                                  f"features are starting on it right now, so colibri will "
+                                  f"not share it")
         kwargs: dict = {"env": env, "stdin": subprocess.DEVNULL, "cwd": col.get("dir") or None}
         log = None
         try:
@@ -1073,6 +1172,7 @@ class _Engine:
             self.proc = _popen(argv, **kwargs)
         except Exception as exc:
             self.proc = None
+            _release_card(uuid)
             return self._fail(f"colibri could not be started ({type(exc).__name__})")
         finally:
             if log is not None:
@@ -1114,6 +1214,7 @@ class _Engine:
                 if not self.alive():
                     code = self._exit_code()
                     self.proc = None
+                    self._drop_card()
                     return self._fail(f"colibri stopped while loading (exit code {code}). "
                                       f"Its log: {_log_path()}")
             if self._probe():
@@ -1132,10 +1233,16 @@ class _Engine:
                 self._fail(f"colibri did not finish loading within {_load_minutes()} minutes "
                            f"([big_model] load_minutes). Its log: {_log_path()}")
 
+    def _drop_card(self) -> None:
+        """Gives back the card's claim (jarvis_compute) once no process of
+        ours is on it."""
+        card, self.card = self.card, None
+        _release_card(card)
+
     def _stop_proc(self) -> None:
         p, self.proc = self.proc, None
         self.gen += 1
-        self.card = None
+        self._drop_card()
         if p is None:
             return
         try:
@@ -1203,6 +1310,7 @@ def _reconcile(sw: dict) -> None:
             if _ENGINE.state == "ready" and not _ENGINE.alive():
                 code = _ENGINE._exit_code()
                 _ENGINE.proc = None
+                _ENGINE._drop_card()
                 _ENGINE._fail(f"colibri stopped by itself (exit code {code}). Its log: "
                               f"{_log_path()}")
     except Exception as exc:
@@ -1218,6 +1326,22 @@ def shutdown() -> None:
 
 
 atexit.register(shutdown)
+
+
+def engine_card() -> Optional[dict]:
+    """The graphics card colibri is on right now, or None: {"uuid",
+    "state", "idle_minutes"}. There is only ever one with [big_model] cuda =
+    "on", and it is only ever the SECOND card. Reads only; starts and stops
+    nothing. jarvis_second_card asks this before it starts its own Ollama on
+    that card (it does not while colibri is loading or running there).
+    Never raises."""
+    try:
+        state, card = _ENGINE.state, _ENGINE.card
+        if card and state in ("loading", "ready"):
+            return {"uuid": card, "state": state, "idle_minutes": _idle_minutes()}
+    except Exception:
+        pass
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -1248,8 +1372,16 @@ def lane_for(job: str) -> Optional[Lane]:
         row = _model_for(job, det)
         if not det.get("capable") or row is None or not row["usable"]:
             return None
-        _ENGINE.check_idle()
-        _ENGINE.ensure(row, det)
+        with _ENGINE.lock:
+            # One step under the engine's lock, so two jobs asking at the
+            # same moment cannot both take it.
+            other = _ENGINE.other_holder(job)
+            if other is not None and _ENGINE.model_id != row["id"]:
+                return None     # another job holds the engine for its model
+            if other is None:
+                _ENGINE.hold(job)
+            _ENGINE.check_idle()
+            _ENGINE.ensure(row, det, job)
         if _ENGINE.state == "ready" and _ENGINE.model_id == row["id"] and _ENGINE.alive():
             _ENGINE.touch()
             url = _ENGINE.url()
@@ -1260,6 +1392,16 @@ def lane_for(job: str) -> Optional[Lane]:
         return None
     except Exception:
         return None
+
+
+def release(job: str) -> None:
+    """A job is done with the big model: another job may now have it (and
+    colibri may be restarted for that job's model). The wiki builder and
+    deep questions call this when a job ends. Never raises."""
+    try:
+        _ENGINE.release(job)
+    except Exception:
+        pass
 
 
 def job_state(job: str) -> tuple:
@@ -1290,6 +1432,11 @@ def job_state(job: str) -> tuple:
             return "loading", why
         if st == "failed" and mid == row["id"]:
             return "failed", why
+        other = _ENGINE.other_holder(job)
+        if other is not None and mid != row["id"]:
+            return "busy", (f"the big model is working on the {JOB_NAMES.get(other, other)} "
+                            f"job ({_ENGINE.model_name}); this one waits until that job is "
+                            f"done, then starts {row['name']}")
         if st in ("loading", "ready") and alive and _ENGINE.busy:
             return "busy", (f"the big model is busy with another job ({_ENGINE.model_name}); "
                             f"this one waits for it")
@@ -1452,6 +1599,7 @@ def status() -> dict:
     _reconcile(sw)
     with _PENDING_LOCK:
         pending = [s for s in SWITCHES if s in _PENDING and not _PENDING[s].get("withdrawn")]
+        last = dict(_LAST_ANY) or None
     with _ENGINE.lock:
         eng = {"state": _ENGINE.state, "why": _ENGINE.why, "model": _ENGINE.model_id
                if _ENGINE.state != "off" else None,
@@ -1471,6 +1619,10 @@ def status() -> dict:
         "measured": {j: _last_measured(j) for j in JOBS},
         "verified": False,
         "unverified": UNVERIFIED,
+        # How the last approval card ended (AP-6): {feature, outcome, why,
+        # at} - `feature` is the switch's id - or null when none has ended
+        # since Jarvis started.
+        "last": last,
     }
 
 
@@ -1492,10 +1644,39 @@ def _last_measured(job: str) -> Optional[dict]:
 _PENDING_LOCK = threading.Lock()
 _PENDING: dict = {}
 _LAST: dict = {}
+#: Every card switched off while it waited and not yet answered, by its id.
+#: A SET, not a flag on _PENDING: a new ON replaces _PENDING[switch], and the
+#: flag went with it - after two ON/OFF rounds, approving the FIRST card
+#: turned the switch on although the owner's last word was OFF.
+_WITHDRAWN: set = set()
+#: The last card to end, whichever switch it was for: status()["last"].
+_LAST_ANY: dict = {}
 
 
-def describe_on(switch: str, det: dict) -> str:
-    """The approval card. Every word from here; what refusing costs is on it."""
+def _last_words(label: str, outcome: str, reason: str) -> str:
+    """How the last card ended, in words the apps can show as they are.
+    `outcome` is one of: enabled, denied, timed_out, refused, failed,
+    withdrawn (timed_out is jarvis_gate's own word for a card nobody
+    answered in time)."""
+    reason = str(reason or "").strip().rstrip(".")
+    if outcome == "enabled":
+        return f"{label} was turned on."
+    if outcome == "denied":
+        return f"You said no, so {label} stays off."
+    if outcome == "timed_out":
+        return f"Nobody answered the card in time, so {label} stays off."
+    if outcome == "withdrawn":
+        return (f"You turned {label} off while its card was waiting, so approving that "
+                f"card changed nothing.")
+    if outcome == "failed":
+        return f"{label} could not be turned on: {reason or 'an unexpected error'}."
+    return f"{label} was not turned on: {reason or 'refused'}."
+
+
+def describe_on(switch: str, det: dict, sw: Optional[dict] = None) -> str:
+    """The approval card. Every word from here; what refusing costs is on it.
+    It says exactly what comes back if the owner says yes (AP-4)."""
+    sw = sw if sw is not None else _read_switches()
     ram = det.get("ram") or {}
     lines = []
     if switch == "master":
@@ -1504,6 +1685,15 @@ def describe_on(switch: str, det: dict) -> str:
         lines.append("")
         lines.append("Which models: " + "; ".join(
             f"{r['name']} ({r['kind']}), in {r['dir']}" for r in rows) + ".")
+        back = [JOB_NAMES[j] for j in JOBS if sw.get(j)]
+        if back:
+            lines.append(
+                "If you say yes: " + " and ".join(f"\"{n}\"" for n in back)
+                + (" works" if len(back) == 1 else " work") + " again at once - you left "
+                + ("it" if len(back) == 1 else "them") + " switched on.")
+        else:
+            lines.append("If you say yes: no job uses it yet. \"Wiki builder\" and \"Deep "
+                         "questions\" each have their own switch and their own card.")
     else:
         r = _model_for(switch, det)
         lines.append(f"Use the big model for \"{JOB_NAMES[switch]}\"?")
@@ -1545,7 +1735,13 @@ def _finish(switch: str, pid: str, outcome: str, reason: str = "", request_id=No
     with _PENDING_LOCK:
         if switch in _PENDING and _PENDING[switch]["id"] == pid:
             del _PENDING[switch]
+        _WITHDRAWN.discard(pid)
         _LAST[switch] = {"outcome": outcome, "reason": reason[:200]}
+        label = ("The big model" if switch == "master"
+                 else f"\"{JOB_NAMES[switch]}\"" if switch in JOB_NAMES else switch)
+        _LAST_ANY.clear()
+        _LAST_ANY.update(feature=switch, outcome=outcome,
+                         why=_last_words(label, outcome, reason[:200]), at=int(_now()))
     _audit("big_model.decided", {"switch": switch, "outcome": outcome,
                                  **({"request_id": request_id} if request_id else {})})
 
@@ -1594,11 +1790,14 @@ def _decide(switch: str, pid: str, gate: Callable) -> None:
             return _finish(switch, pid, outcome, "", rid)
         return _finish(switch, pid, "refused", str(getattr(v, "reason", "refused")), rid)
     with _PENDING_LOCK:
-        withdrawn = bool(_PENDING.get(switch, {}).get("id") == pid
-                         and _PENDING[switch].get("withdrawn"))
+        withdrawn = pid in _WITHDRAWN
     if withdrawn:
         return _finish(switch, pid, "withdrawn", "you turned it off while the card was waiting",
                        rid)
+    if switch != "master" and not _read_switches()["master"]:
+        # Checked again now, not only when the card went up.
+        return _finish(switch, pid, "refused",
+                       "the big-model switch was turned off while the card waited", rid)
     why = _can_turn_on(switch, detect(fresh=True))
     if why:
         return _finish(switch, pid, "refused", f"no longer possible: {why}", rid)
@@ -1627,6 +1826,7 @@ def request_change(switch: str, enabled, *, gate: Optional[Callable] = None,
         with _PENDING_LOCK:
             if switch in _PENDING:
                 _PENDING[switch]["withdrawn"] = True
+                _WITHDRAWN.add(_PENDING[switch]["id"])
         err = _write_switch(switch, False)
         if err:
             return 500, {"error": err}
@@ -1817,6 +2017,11 @@ def ask(question, *, spawn: Optional[Callable] = None) -> tuple:
     avail, why = deep_available()
     if not avail:
         return 503, {"ok": False, "state": "refused", "error": why}
+    if job_state("deep_questions")[0] == "failed":
+        # deep_available() promises "A new question tries again": without
+        # this, the engine's one-minute retry wait failed the new question
+        # at once with the old reason (K8).
+        _ENGINE.retry_now()
     with _DEEP_LOCK:
         waiting = [j for j in _DEEP.values() if j["state"] in ("queued", "loading", "thinking")]
         if len(waiting) >= MAX_QUEUED:
@@ -1863,6 +2068,8 @@ def _deep_worker() -> None:
             _run_deep(nxt)
         except Exception as exc:
             _fail_deep(nxt, f"an unexpected {type(exc).__name__}")
+        finally:
+            release("deep_questions")
 
 
 def _fail_deep(jid: str, why: str) -> None:
@@ -1920,16 +2127,32 @@ def _run_deep(jid: str) -> None:
     except Exception as exc:
         return _fail_deep(jid, f"the big model could not be asked ({type(exc).__name__})")
     secs = max(_mono() - t0, 0.001)
+    cut = finish == "length"
+    if re.search(r"(?s)<think>(?!.*</think>)", text):
+        # The reasoning never closed: the model was stopped mid-thought, and
+        # everything it wrote is reasoning, not an answer. Kept as nothing
+        # rather than saved as if it were the answer.
+        if cut:
+            return _fail_deep(jid, f"the big model reached the {_deep_max_tokens():,}-token "
+                                   f"limit ([big_model] deep_max_tokens) while still thinking, "
+                                   f"before it wrote any answer. Raise the limit, or ask a "
+                                   f"narrower question")
+        return _fail_deep(jid, "the big model stopped while still thinking, before it wrote "
+                               "any answer")
+    # Speed counts every word the model wrote, its reasoning included: the
+    # time was spent on all of it (K5). Counting only the answer made a
+    # model that reasoned for ten minutes look a hundred times slower.
+    words = len(re.sub(r"</?think>", " ", text).split())
     text = re.sub(r"(?s)<think>.*?</think>", "", text).strip()
     if not text:
         return _fail_deep(jid, "the big model gave an empty answer")
-    cut = finish == "length"
     text = text[:MAX_ANSWER_CHARS]
     tokens = usage.get("completion_tokens")
-    m = _measure("deep_questions", lane.model, tokens, secs, len(text.split()))
+    m = _measure("deep_questions", lane.model, tokens, secs, words)
     why = (f"Answered in {m['seconds']:.0f} s by {name}"
            + (f", {m['tokens_per_s']} tokens a second" if m["tokens_per_s"] else "")
-           + (f" ({m['words_per_s']} words a second)" if m["words_per_s"] else "")
+           + (f" (about {m['words_per_s']} words a second, its reasoning included)"
+              if m["words_per_s"] else "")
            + ". The time includes reading the question.")
     if cut:
         why += (f" The answer stopped at the {_deep_max_tokens():,}-token limit "
@@ -1956,6 +2179,8 @@ def _reset_for_tests() -> None:
     with _PENDING_LOCK:
         _PENDING.clear()
         _LAST.clear()
+        _WITHDRAWN.clear()
+        _LAST_ANY.clear()
     try:
         _ENGINE.stop("reset")
     except Exception:

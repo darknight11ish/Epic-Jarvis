@@ -388,6 +388,22 @@ def t_the_switch_is_one_card():
               not S._wake_enabled() and S.wake_state()["last"]["outcome"] == "withdrawn",
               S.wake_state())
 
+    # AP-5: two full rounds. The second ON replaced the pending record and
+    # the first card's "withdrawn" flag went with it.
+    with Env():
+        cards = []
+        ask = lambda: S.set_wake_enabled(True, gate=lambda *a: verdict(),
+                                         tier_of=lambda a: "ask", spawn=cards.append)
+        ask(); S.set_wake_enabled(False); ask(); S.set_wake_enabled(False)
+        check("two ON/OFF rounds: two cards were raised", len(cards) == 2)
+        cards[0]()
+        check("two rounds, the FIRST card approved last: the later OFF still wins",
+              not S._wake_enabled() and S.wake_state()["last"]["outcome"] == "withdrawn",
+              S.wake_state())
+        cards[1]()
+        check("... and the second card too", not S._wake_enabled()
+              and S.wake_state()["last"]["outcome"] == "withdrawn")
+
 
 # ------------------------------------------------------------ 6. quiet --
 

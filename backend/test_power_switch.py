@@ -148,6 +148,71 @@ def t_a_waiting_card_answers_202():
     release.set()
 
 
+def t_one_power_card_at_a_time():
+    # AP-8: with power_manage at tier "ask", three changes raised three cards,
+    # and the one answered LAST decided the mode, not the one asked for last.
+    import threading
+    for _ in range(100):                      # the previous test's card ends
+        if not getattr(S, "_PENDING", None):
+            break
+        __import__("time").sleep(0.02)
+    reset()
+    release, asked = threading.Event(), []
+
+    def slow(action, detail, prompt):
+        asked.append(prompt)
+        release.wait(3)
+        return Verdict(True, "approved")
+    code, out = S.set_mode("standby", gate_check=slow, models=FakeModels(), wait_s=0.05)
+    check("the first change: 202, a card waits, and it says 'your PC or phone'",
+          code == 202 and "on your PC or phone" in out["message"]
+          and "desktop" not in out["message"], repr(out))
+    code2, out2 = S.set_mode("quiet", gate_check=slow, wait_s=0.05)
+    check("a second change while it waits: 409, no second card",
+          code2 == 409 and len(asked) == 1 and "already waiting" in out2["error"]
+          and "standby" in out2["error"], repr(out2))
+    release.set()
+    for _ in range(100):
+        if not S._PENDING:
+            break
+        __import__("time").sleep(0.02)
+    check("once it is answered, a new change may raise a card", not S._PENDING)
+    code3, _ = S.set_mode("active", gate_check=lambda *a: Verdict(True, "auto"))
+    check("... and does", code3 == 200 and P.current() == "active")
+
+
+def t_standby_rechecks_tasks_after_the_card():
+    # AP-8: the running-task check ran only BEFORE the card. A task that
+    # started while the card waited then had its model unloaded under it.
+    import threading
+    reset()
+    release = threading.Event()
+    m = FakeModels()
+    done = {}
+
+    def slow(action, detail, prompt):
+        release.wait(3)
+        return Verdict(True, "approved")
+    real = S._running_tasks
+    tasks = []
+    S._running_tasks = lambda: list(tasks)
+    try:
+        box = {}
+        t = threading.Thread(target=lambda: box.update(r=S.set_mode(
+            "standby", gate_check=slow, models=m, wait_s=3)))
+        t.start()
+        __import__("time").sleep(0.1)
+        tasks.append("task-1")                # a task starts while the card waits
+        release.set()
+        t.join(5)
+        code, out = box["r"]
+    finally:
+        S._running_tasks = real
+    check("approved after a task started: nothing unloaded, mode unchanged, 409 with why",
+          m.unloaded == [] and P.current() == "active" and code == 409
+          and "task started while the card waited" in out["message"], repr((code, out)))
+
+
 def t_the_patch():
     import test_task_control as TT
     ok, out = TT.rehearse(["task-control.patch", "note-capture.patch", "power-mode.patch"],
