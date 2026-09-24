@@ -142,7 +142,13 @@ await check("the note explains this is Tailscale-only, never the whole network",
 await check("CONTROL: Rust refuses the wildcard before it is persisted", async () => {
   const rust = read("src-tauri/src/commands.rs");
   assert.match(rust, /fn validate_bind_address/, "no validate_bind_address function");
-  assert.match(rust, /validate_bind_address\(&bind_address\)\?;\s*\n\s*store\.set/,
+  // Everything refusable is checked before ANYTHING is written - so a refused
+  // address cannot leave a half-saved token (or base) behind either.
+  const set = rust.slice(rust.indexOf("pub fn set_api_settings"));
+  const body = set.slice(0, set.indexOf("\n}\n"));
+  const check = body.indexOf("validate_bind_address(");
+  const firstWrite = body.search(/store\.(set|delete)\(|token_store::(write|delete)\(/);
+  assert.ok(check > -1 && firstWrite > -1 && check < firstWrite,
     "validation does not happen before the write");
   // It used to compare against the exact strings "0.0.0.0" and "::" only,
   // and "0", "0x0" and "000.000.000.000" bind every interface too.

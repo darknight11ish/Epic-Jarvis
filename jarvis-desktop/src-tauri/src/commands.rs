@@ -98,6 +98,11 @@ pub struct ServiceStatus {
     /// Parsed JSON body, when the service returned one and it was small enough
     /// to be worth forwarding (the Ollama model list, for instance).
     pub payload: Option<serde_json::Value>,
+    /// Only needed for something the owner may not use. LiteLLM is the cloud
+    /// lane's proxy: with no cloud lane set up, nothing runs on :4000, and
+    /// that is the normal state, not a fault. An optional service counts in
+    /// the totals only when it answers - see [`summarise_health`].
+    pub optional: bool,
 }
 
 /// The structured report returned by [`check_server_health`].
@@ -1048,6 +1053,7 @@ async fn probe(
                     format!("reachable but unhealthy — HTTP {}", status.as_u16())
                 },
                 payload,
+                optional: false,
             }
         }
         Err(err) => {
@@ -1067,6 +1073,7 @@ async fn probe(
                 latency_ms: started.elapsed().as_millis(),
                 detail,
                 payload: None,
+                optional: false,
             }
         }
     }
@@ -1109,30 +1116,60 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
         ),
     );
 
-    let services = vec![jarvis, ollama, litellm];
-    let online_count = services.iter().filter(|s| s.online).count();
-    let total_count = services.len();
-    let offline: Vec<&str> = services
-        .iter()
-        .filter(|s| !s.online)
-        .map(|s| s.name)
-        .collect();
+    // The cloud lane's proxy. Not running is the normal state when no cloud
+    // lane is set up - which is the default, and today's setup - so it no
+    // longer turns every status check into "2/3 online - offline: LiteLLM".
+    let mut litellm = litellm;
+    litellm.optional = true;
+    if !litellm.online {
+        litellm.detail = format!(
+            "not running — only needed if you set up a cloud model ({})",
+            litellm.detail
+        );
+    }
 
+    let services = vec![jarvis, ollama, litellm];
+    let (online_count, total_count, summary) = summarise_health(&services);
     Ok(HealthReport {
         checked_at: now_ms(),
         all_online: online_count == total_count,
         online_count,
         total_count,
-        summary: if offline.is_empty() {
-            format!("All {total_count} services online.")
-        } else {
-            format!(
-                "{online_count}/{total_count} online — offline: {}",
-                offline.join(", ")
-            )
-        },
+        summary,
         services,
     })
+}
+
+/// The counts and the one-line summary. An optional service (LiteLLM) is
+/// counted only when it answers; when it does not, the summary says so in a
+/// separate, calm sentence instead of listing it as offline.
+pub(crate) fn summarise_health(services: &[ServiceStatus]) -> (usize, usize, String) {
+    let counted: Vec<&ServiceStatus> = services
+        .iter()
+        .filter(|s| !s.optional || s.online)
+        .collect();
+    let online_count = counted.iter().filter(|s| s.online).count();
+    let total_count = counted.len();
+    let offline: Vec<&str> = counted
+        .iter()
+        .filter(|s| !s.online)
+        .map(|s| s.name)
+        .collect();
+    let mut summary = if offline.is_empty() {
+        format!("All {total_count} services online.")
+    } else {
+        format!(
+            "{online_count}/{total_count} online — offline: {}",
+            offline.join(", ")
+        )
+    };
+    for s in services.iter().filter(|s| s.optional && !s.online) {
+        summary.push_str(&format!(
+            " {} is not running, which is fine unless you use a cloud model.",
+            s.name
+        ));
+    }
+    (online_count, total_count, summary)
 }
 
 // ---------------------------------------------------------------------------
@@ -2513,6 +2550,63 @@ pub fn quit_app(app: AppHandle) {
         let _ = hud.destroy();
     }
     app.exit(0);
+}
+
+#[cfg(test)]
+mod health_tests {
+    use super::{summarise_health, ServiceStatus};
+
+    fn svc(id: &'static str, name: &'static str, online: bool, optional: bool) -> ServiceStatus {
+        ServiceStatus {
+            id,
+            name,
+            url: String::new(),
+            online,
+            http_status: None,
+            latency_ms: 0,
+            detail: String::new(),
+            payload: None,
+            optional,
+        }
+    }
+
+    /// The everyday state: no cloud lane, so nothing on :4000. That is not
+    /// "2/3 online - offline: LiteLLM".
+    #[test]
+    fn litellm_not_running_is_not_an_outage() {
+        let (online, total, summary) = summarise_health(&[
+            svc("jarvis", "Jarvis Core", true, false),
+            svc("ollama", "Ollama", true, false),
+            svc("litellm", "LiteLLM", false, true),
+        ]);
+        assert_eq!((online, total), (2, 2));
+        assert!(summary.starts_with("All 2 services online."), "{summary}");
+        assert!(!summary.contains("offline"), "{summary}");
+        assert!(summary.contains("LiteLLM is not running"), "{summary}");
+    }
+
+    /// When it does run, it counts like anything else.
+    #[test]
+    fn litellm_running_is_counted() {
+        let (online, total, _) = summarise_health(&[
+            svc("jarvis", "Jarvis Core", true, false),
+            svc("ollama", "Ollama", true, false),
+            svc("litellm", "LiteLLM", true, true),
+        ]);
+        assert_eq!((online, total), (3, 3));
+    }
+
+    /// CONTROL: a required service being down is still reported as down.
+    #[test]
+    fn ollama_down_is_still_an_outage() {
+        let (online, total, summary) = summarise_health(&[
+            svc("jarvis", "Jarvis Core", true, false),
+            svc("ollama", "Ollama", false, false),
+            svc("litellm", "LiteLLM", false, true),
+        ]);
+        assert_eq!((online, total), (1, 2));
+        assert!(summary.contains("offline: Ollama"), "{summary}");
+    }
 }
 
 #[cfg(test)]

@@ -861,6 +861,17 @@ html[data-state="error"] .pulse {
   box-shadow: 0 0 7px var(--bad-fill);
 }
 
+/* Optional and not running (LiteLLM with no cloud model set up): normal, so
+   an empty ring, not the red square. */
+.service[data-online="false"][data-optional="true"] i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border-color: var(--text-faint);
+  background: transparent;
+  box-shadow: none;
+}
+
 .keys {
   display: inline-flex;
   align-items: center;

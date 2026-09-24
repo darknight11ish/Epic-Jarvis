@@ -384,7 +384,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { expanded: true, always_on_top: true, x: null, y: null, ...prefs };
           case "check_server_health":
             return { services: [{ name: "ollama", online: true },
-                                { name: "litellm", online: false }] };
+                                { name: "litellm", online: false, optional: true }] };
           case "get_api_settings": {
             // Mirrors commands.rs pick_token: typed (Credential Manager),
             // then the environment, then the backend's own file; empty is

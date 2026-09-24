@@ -967,12 +967,16 @@ function applyHealth(report) {
     const dot = dom.services.querySelector(`[data-service="${service.id}"]`);
     if (!dot) continue;
     dot.dataset.online = String(Boolean(service.online));
+    // LiteLLM (the cloud lane's proxy) is optional: not running is normal
+    // with no cloud model set up, so its dot is drawn quiet, not red.
+    dot.dataset.optional = String(Boolean(service.optional));
     dot.title = `${service.name}: ${service.detail}`;
     // Shape and hue are for the eye; this is the same fact for a screen
     // reader, which was previously told only the service's name.
     dot.setAttribute(
       "aria-label",
-      `${service.name}: ${service.online ? "online" : "not answering"}`
+      `${service.name}: ${service.online ? "online" : service.optional
+        ? "not running, only needed for a cloud model" : "not answering"}`
     );
   }
 

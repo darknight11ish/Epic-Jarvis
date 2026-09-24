@@ -416,12 +416,16 @@ function applyLane(lane) {
 /** Paints the connection dot from a health report. */
 function applyHealth(report) {
   if (!report || !Array.isArray(report.services)) return;
-  const online = report.services.filter((s) => s.online).length;
-  dom.netDot.classList.toggle("online", online === report.services.length);
-  dom.netDot.classList.toggle("partial", online > 0 && online < report.services.length);
+  // An optional service (LiteLLM, the cloud lane's proxy) counts only when it
+  // answers - not running is normal with no cloud model set up. Same rule as
+  // commands.rs summarise_health.
+  const counted = report.services.filter((s) => s.online || !s.optional);
+  const online = counted.filter((s) => s.online).length;
+  dom.netDot.classList.toggle("online", online === counted.length);
+  dom.netDot.classList.toggle("partial", online > 0 && online < counted.length);
   dom.netDot.title = report.summary || "Core connection";
   // The shape and the hue are for the eye. This is the same fact in words.
-  const word = online === report.services.length
+  const word = online === counted.length
     ? "all local services answered"
     : online > 0
       ? "some local services answered"
