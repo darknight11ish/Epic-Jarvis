@@ -3,12 +3,94 @@
   "strict": {
     "answers": {
       "heard": {
+        "memory_on_screen": {
+          "available": true,
+          "awake": false,
+          "awake_seconds": 0.0,
+          "engine": "sherpa-onnx:sense_voice",
+          "is_owner": true,
+          "memory_aloud": false,
+          "min_seconds": 0.0,
+          "mode": "owner",
+          "ok": true,
+          "owner": true,
+          "private_aloud": false,
+          "question_private": false,
+          "reason": "",
+          "score": 0.9982,
+          "seconds": 0.5,
+          "source": "push_to_talk",
+          "stop": false,
+          "stop_ignored": false,
+          "strictness": "very_strict",
+          "text": "What time is it?",
+          "threshold": 0.5,
+          "too_short": false,
+          "voice_print": "phone",
+          "wake_heard": false,
+          "wake_score": 0.0
+        },
+        "memory_question": {
+          "available": true,
+          "awake": false,
+          "awake_seconds": 0.0,
+          "engine": "sherpa-onnx:sense_voice",
+          "is_owner": true,
+          "memory_aloud": true,
+          "min_seconds": 0.0,
+          "mode": "owner",
+          "ok": true,
+          "owner": true,
+          "private_aloud": false,
+          "question_private": false,
+          "reason": "",
+          "score": 0.9982,
+          "seconds": 0.5,
+          "source": "push_to_talk",
+          "stop": false,
+          "stop_ignored": false,
+          "strictness": "very_strict",
+          "text": "What do you remember about my sister?",
+          "threshold": 0.5,
+          "too_short": false,
+          "voice_print": "phone",
+          "wake_heard": false,
+          "wake_score": 0.0
+        },
+        "memory_question_on_screen": {
+          "available": true,
+          "awake": false,
+          "awake_seconds": 0.0,
+          "engine": "sherpa-onnx:sense_voice",
+          "is_owner": true,
+          "memory_aloud": false,
+          "min_seconds": 0.0,
+          "mode": "owner",
+          "ok": true,
+          "owner": true,
+          "private_aloud": false,
+          "question_private": true,
+          "reason": "",
+          "score": 0.9982,
+          "seconds": 0.5,
+          "source": "push_to_talk",
+          "stop": false,
+          "stop_ignored": false,
+          "strictness": "very_strict",
+          "text": "What do you remember about my sister?",
+          "threshold": 0.5,
+          "too_short": false,
+          "voice_print": "phone",
+          "wake_heard": false,
+          "wake_score": 0.0
+        },
         "plain_question": {
           "available": true,
           "awake": false,
           "awake_seconds": 0.0,
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
+          "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
           "ok": true,
@@ -35,6 +117,7 @@
           "awake_seconds": 0.0,
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
+          "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
           "ok": true,
@@ -61,6 +144,7 @@
           "awake_seconds": 0.0,
           "engine": "",
           "is_owner": false,
+          "memory_aloud": false,
           "min_seconds": 2.0,
           "mode": "owner",
           "ok": false,
@@ -87,6 +171,7 @@
           "awake_seconds": 0.0,
           "engine": "sherpa-onnx:sense_voice",
           "is_owner": true,
+          "memory_aloud": true,
           "min_seconds": 0.0,
           "mode": "owner",
           "ok": true,
@@ -285,6 +370,7 @@
           "ok": true,
           "pending": false,
           "settings": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict",
             "voice_is_enough_allowed": true
@@ -362,6 +448,7 @@
           "ok": true,
           "pending": false,
           "settings": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict",
             "voice_is_enough_allowed": true
@@ -376,6 +463,7 @@
           "ok": true,
           "pending": false,
           "settings": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict",
             "voice_is_enough_allowed": true
@@ -568,6 +656,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": true,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -586,6 +782,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": true,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -677,6 +874,10 @@
           "settings": {
             "changed": 1790000000.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -687,9 +888,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 1.5,
             "privacy": "private_on_screen",
             "strictness": "balanced",
@@ -737,6 +940,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -829,6 +1033,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -839,9 +1047,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 1.5,
           "privacy": "private_on_screen",
           "strictness": "balanced",
@@ -939,6 +1149,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": false,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": false,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -957,6 +1275,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": false,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -1035,6 +1354,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -1045,9 +1368,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -1093,6 +1418,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -1172,6 +1498,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -1182,9 +1512,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -1282,6 +1614,235 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": false,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": false,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": 0.0,
+              "step": "vad_ms",
+              "turns": 6,
+              "worst_ms": 0.0
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": 5.1,
+              "step": "owner_check_ms",
+              "turns": 6,
+              "worst_ms": 5.2
+            },
+            {
+              "label": "speech to text",
+              "median_ms": 0.0,
+              "step": "stt_ms",
+              "turns": 6,
+              "worst_ms": 0.0
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.7,
+              "mic": "phone",
+              "owner_check_ms": 5.1,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.6,
+              "mic": "phone",
+              "owner_check_ms": 5.2,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.6,
+              "mic": "phone",
+              "owner_check_ms": 5.1,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.6,
+              "mic": "phone",
+              "owner_check_ms": 5.1,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.7,
+              "mic": "phone",
+              "owner_check_ms": 5.2,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.4,
+              "mic": "phone",
+              "owner_check_ms": 5.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            }
+          ],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -1300,6 +1861,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": false,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -1378,6 +1940,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -1388,9 +1954,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -1463,6 +2031,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -1542,6 +2111,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -1552,9 +2125,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -1652,6 +2227,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": true,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -1670,6 +2353,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": true,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -1761,6 +2445,10 @@
           "settings": {
             "changed": 1790000000.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -1771,9 +2459,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -1821,6 +2511,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -1913,6 +2604,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -1923,9 +2618,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -2023,6 +2720,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": true,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -2041,6 +2846,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": true,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -2132,6 +2938,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -2142,9 +2952,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -2216,6 +3028,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -2308,6 +3121,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -2318,9 +3135,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -2408,6 +3227,114 @@
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": false,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": false,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": null,
@@ -2416,6 +3343,7 @@
           "embedder": "spectral-v1",
           "enabled": true,
           "enrolled": false,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "",
@@ -2494,6 +3422,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -2504,9 +3436,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -2548,6 +3482,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "",
@@ -2627,6 +3562,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -2637,9 +3576,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -2737,6 +3678,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": false,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": false,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -2755,6 +3804,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": false,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -2833,6 +3883,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -2843,9 +3897,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -2901,6 +3957,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -2980,6 +4037,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -2990,9 +4051,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -3090,6 +4153,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": true,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -3108,6 +4279,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": true,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -3199,6 +4371,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -3209,9 +4385,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -3290,6 +4468,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -3382,6 +4561,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -3392,9 +4575,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -3487,6 +4672,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": true,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -3500,6 +4793,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": true,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "small",
@@ -3583,6 +4877,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -3593,9 +4891,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -3648,6 +4948,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "small",
@@ -3732,6 +5033,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -3742,9 +5047,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -3842,6 +5149,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": false,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": false,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -3860,6 +5275,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": false,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -3938,6 +5354,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -3948,9 +5368,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -3992,6 +5414,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -4071,6 +5494,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -4081,9 +5508,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -4181,6 +5610,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": true,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -4199,6 +5736,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": true,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -4290,6 +5828,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -4300,9 +5842,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -4357,6 +5901,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -4449,6 +5994,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -4459,9 +6008,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -4559,6 +6110,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": true,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -4577,6 +6236,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": true,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -4668,6 +6328,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -4678,9 +6342,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -4740,6 +6406,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -4832,6 +6499,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -4842,9 +6513,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -4942,6 +6615,235 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": false,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": false,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": 0.0,
+              "step": "vad_ms",
+              "turns": 6,
+              "worst_ms": 0.0
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": 5.1,
+              "step": "owner_check_ms",
+              "turns": 6,
+              "worst_ms": 5.2
+            },
+            {
+              "label": "speech to text",
+              "median_ms": 0.0,
+              "step": "stt_ms",
+              "turns": 6,
+              "worst_ms": 0.0
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.7,
+              "mic": "phone",
+              "owner_check_ms": 5.1,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.6,
+              "mic": "phone",
+              "owner_check_ms": 5.2,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.6,
+              "mic": "phone",
+              "owner_check_ms": 5.1,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.6,
+              "mic": "phone",
+              "owner_check_ms": 5.1,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.7,
+              "mic": "phone",
+              "owner_check_ms": 5.2,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            },
+            {
+              "at": 1790000000.0,
+              "chat_ms": null,
+              "cold": true,
+              "end_wait_ms": null,
+              "first_audio_ms": null,
+              "first_sentence_ms": null,
+              "first_token_ms": null,
+              "heard_ms": 6.4,
+              "mic": "phone",
+              "owner_check_ms": 5.0,
+              "say_ms": null,
+              "say_start_ms": null,
+              "source": "push_to_talk",
+              "stt_ms": 0.0,
+              "total_ms": null,
+              "turn_ms": null,
+              "vad_ms": 0.0,
+              "wake_ms": null
+            }
+          ],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -4960,6 +6862,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": false,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -5038,6 +6941,10 @@
           "settings": {
             "changed": 0.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -5048,9 +6955,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "private_on_screen",
             "strictness": "very_strict",
@@ -5095,6 +7004,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -5174,6 +7084,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -5184,9 +7098,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -5284,6 +7200,114 @@
         "embedder": "sherpa-onnx:357a834f702b",
         "enabled": true,
         "enrolled": true,
+        "flow": {
+          "available": true,
+          "barge_in": {
+            "available": true,
+            "bar": "balanced",
+            "enabled": true,
+            "min_seconds": 1.0,
+            "stop_word": false,
+            "why": ""
+          },
+          "moment": {
+            "after_ms": 1000,
+            "enabled": true,
+            "engine": "kokoro",
+            "key": "34c972a65e5f",
+            "ready": false,
+            "seconds": null,
+            "text": "One moment.",
+            "voice": "builtin",
+            "why": ""
+          },
+          "summary": [
+            {
+              "label": "waiting for you to finish (in the app)",
+              "median_ms": null,
+              "step": "end_wait_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "Smart Turn on this PC",
+              "median_ms": null,
+              "step": "turn_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "finding the speech",
+              "median_ms": null,
+              "step": "vad_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "checking it is you",
+              "median_ms": null,
+              "step": "owner_check_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "speech to text",
+              "median_ms": null,
+              "step": "stt_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the app passing the words to the chat",
+              "median_ms": null,
+              "step": "to_chat_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the model's first word",
+              "median_ms": null,
+              "step": "model_first_word_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "the rest of the first sentence",
+              "median_ms": null,
+              "step": "first_sentence_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "making the first sentence's sound",
+              "median_ms": null,
+              "step": "say_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "on this PC: from your words arriving to the first sound ready",
+              "median_ms": null,
+              "step": "first_audio_ms",
+              "turns": 0,
+              "worst_ms": null
+            },
+            {
+              "label": "in all: from you finishing to the first sound ready",
+              "median_ms": null,
+              "step": "total_ms",
+              "turns": 0,
+              "worst_ms": null
+            }
+          ],
+          "timings": [],
+          "warm": {
+            "enabled": true,
+            "seconds": null,
+            "state": "waiting",
+            "steps": {}
+          }
+        },
         "gate": {
           "cohort": {
             "small": {
@@ -5302,6 +7326,7 @@
           "embedder": "sherpa-onnx:357a834f702b",
           "enabled": true,
           "enrolled": true,
+          "memory": "memory_aloud",
           "mode": "owner",
           "models": {
             "balanced_uses": "strong",
@@ -5393,6 +7418,10 @@
           "settings": {
             "changed": 1790000000.0,
             "choices": {
+              "memory": [
+                "memory_aloud",
+                "memory_on_screen"
+              ],
               "privacy": [
                 "private_on_screen",
                 "voice_is_enough"
@@ -5403,9 +7432,11 @@
               ]
             },
             "defaults": {
+              "memory": "memory_aloud",
               "privacy": "private_on_screen",
               "strictness": "very_strict"
             },
+            "memory": "memory_aloud",
             "min_command_seconds": 2.0,
             "privacy": "voice_is_enough",
             "strictness": "very_strict",
@@ -5453,6 +7484,7 @@
           "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
         },
         "local_stt_on_client_allowed": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -5545,6 +7577,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -5555,9 +7591,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "voice_is_enough",
           "strictness": "very_strict",
@@ -5825,7 +7863,7 @@
           "kind": "create",
           "outcome": "denied",
           "voice": "aunt-may",
-          "why": "You said no, so nothing changed (the voice \"aunt may\" was not added)."
+          "why": "You said no, so nothing changed (the voice \"Aunt May\" was not added)."
         },
         "limits": {
           "max_clip_bytes": 2900000,
@@ -5914,7 +7952,7 @@
           "kind": "create",
           "outcome": "denied",
           "voice": "aunt-may",
-          "why": "You said no, so nothing changed (the voice \"aunt may\" was not added)."
+          "why": "You said no, so nothing changed (the voice \"Aunt May\" was not added)."
         },
         "limits": {
           "max_clip_bytes": 2900000,
@@ -5999,7 +8037,7 @@
           "kind": "create",
           "outcome": "denied",
           "voice": "aunt-may",
-          "why": "You said no, so nothing changed (the voice \"aunt may\" was not added)."
+          "why": "You said no, so nothing changed (the voice \"Aunt May\" was not added)."
         },
         "limits": {
           "max_clip_bytes": 2900000,
@@ -6447,7 +8485,7 @@
           "kind": "create",
           "outcome": "denied",
           "voice": "aunt-may",
-          "why": "You said no, so nothing changed (the voice \"aunt may\" was not added)."
+          "why": "You said no, so nothing changed (the voice \"Aunt May\" was not added)."
         },
         "limits": {
           "max_clip_bytes": 2900000,

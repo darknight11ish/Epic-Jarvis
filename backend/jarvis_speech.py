@@ -804,7 +804,7 @@ def _prints(voice: dict) -> dict:
 
 
 def _strict_state(voice: dict) -> dict:
-    """gate.strictness / privacy / settings / models / cohort / repeat, from
+    """gate.strictness / privacy / memory / settings / models / cohort / repeat, from
     jarvis_voice.status(); the strict defaults, and `models` saying nothing
     is known, for a jarvis_voice.py older than them. Never raises."""
     st = voice.get("settings") if isinstance(voice.get("settings"), dict) else {}
@@ -812,6 +812,9 @@ def _strict_state(voice: dict) -> dict:
     return {
         "strictness": strict,
         "privacy": str(voice.get("privacy") or "private_on_screen"),
+        # "" from a jarvis_voice.py older than the memory setting: the apps
+        # then do not offer it.
+        "memory": str(voice.get("memory") or ""),
         "settings": st or {"strictness": strict, "privacy": "private_on_screen",
                            "voice_is_enough_allowed": strict == "very_strict",
                            "min_command_seconds": 0.0},

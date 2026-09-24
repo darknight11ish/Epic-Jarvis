@@ -72,8 +72,29 @@ class PrivateAloudTest {
     }
 
     @Test
-    fun `remembered facts in the answer are not`() {
-        assertFalse(may(heard("plain_question"), header("plain", injected = 3)))
+    fun `remembered facts are read aloud by default - the owner's choice`() {
+        assertTrue(heard("plain_question").memoryAloud)
+        assertTrue(may(heard("plain_question"), header("plain", injected = 3)))
+        // Asking about memory is not a private question while memory is aloud.
+        assertFalse(heard("memory_question").questionPrivate)
+        assertTrue(may(heard("memory_question"), header("plain", injected = 2)))
+    }
+
+    @Test
+    fun `with memory kept on screen, remembered facts in the answer are not`() {
+        val h = heard("memory_on_screen")
+        assertFalse(h.memoryAloud)
+        assertFalse(may(h, header("plain", injected = 3)))
+        assertTrue(may(h, header("plain")))
+        assertTrue(heard("memory_question_on_screen").questionPrivate)
+        assertFalse(may(heard("memory_question_on_screen"), header("plain")))
+    }
+
+    @Test
+    fun `memory aloud never opens email, notes or a tool`() {
+        assertFalse(may(heard("private_question"), header("no_cloud_lane")))
+        assertFalse(may(heard("plain_question"), header("private", injected = 1)))
+        assertFalse(may(heard("plain_question"), header("plain", injected = 1), live.copy(runs = 5)))
     }
 
     @Test
@@ -102,8 +123,11 @@ class PrivateAloudTest {
     @Test
     fun `an older PC's reply - no fields - counts as not allowed aloud`() {
         val o = answers["heard"]!!.jsonObject["plain_question"]!!.jsonObject
-        val older = JarvisJson.decodeFromJsonElement(Heard.serializer(), JsonObject(o - setOf("private_aloud", "question_private")))
+        val older = JarvisJson.decodeFromJsonElement(
+            Heard.serializer(), JsonObject(o - setOf("private_aloud", "question_private", "memory_aloud")),
+        )
         assertFalse(older.privateAloud)
+        assertFalse(older.memoryAloud)
         // ...and is then held to the same rule: read only when nothing says private.
         assertFalse(may(older, header("plain", injected = 1)))
         assertTrue(may(older, header("plain")))

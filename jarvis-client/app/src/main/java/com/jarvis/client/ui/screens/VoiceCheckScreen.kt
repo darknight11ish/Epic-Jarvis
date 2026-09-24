@@ -296,6 +296,18 @@ private fun CheckPlates(
                     note = note?.takeIf { it.first == VoiceStrict.PRIVACY }?.second,
                     onPick = onPick,
                 )
+                // Only when the PC reports it (a PC from before 2026-09-24 does not).
+                if (strict.memory.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.MEMORY_TITLE,
+                        setting = VoiceStrict.MEMORY,
+                        choices = StrictVoice.MEMORY,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.MEMORY }?.second,
+                        onPick = onPick,
+                    )
+                }
                 Text(
                     "Making it stricter applies at once. Making it looser asks first: an approval " +
                         "card on your PC or this phone's Home screen, and nothing changes until you " +

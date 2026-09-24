@@ -39,10 +39,14 @@ object VoiceStrict {
     const val BALANCED = "balanced"
     const val PRIVATE_ON_SCREEN = "private_on_screen"
     const val VOICE_IS_ENOUGH = "voice_is_enough"
+    /** Answers that use what Jarvis remembers (the owner's choice, 2026-09-24): aloud by default. */
+    const val MEMORY_ALOUD = "memory_aloud"
+    const val MEMORY_ON_SCREEN = "memory_on_screen"
 
     /** The two `mode`s that change a setting, and what each value is called on the wire. */
     const val STRICTNESS = "strictness"
     const val PRIVACY = "privacy"
+    const val MEMORY = "memory"
 
     /** `repeat.very_strict` / `repeat.balanced` - since the PC's voice module started. */
     data class Counts(
@@ -107,6 +111,8 @@ object VoiceStrict {
         /** "very_strict", "balanced", or "" from a PC older than the stricter check. */
         val strictness: String = "",
         val privacy: String = "",
+        /** "memory_aloud", "memory_on_screen", or "" from a PC older than that setting. */
+        val memory: String = "",
         val voiceIsEnoughAllowed: Boolean = false,
         /** A spoken command needs at least this many seconds of speech (0 = not said). */
         val minCommandSeconds: Double = 0.0,
@@ -211,6 +217,7 @@ object VoiceStrict {
         return View(
             strictness = gate.str("strictness"),
             privacy = gate.str("privacy"),
+            memory = gate.str("memory"),
             voiceIsEnoughAllowed = settings?.flag("voice_is_enough_allowed") ?: false,
             minCommandSeconds = settings?.num("min_command_seconds") ?: 0.0,
             rounds = training?.flag("rounds") ?: false,
@@ -289,16 +296,19 @@ object VoiceStrict {
     /** Drops every round the PC is holding. Never raises a card, so it is never held back. */
     const val CANCEL_BODY = "{\"mode\":\"train\",\"cancel\":true}"
 
-    /** `{"mode": "strictness" | "privacy", "value": ...}`. Only this app's fixed words go in. */
+    /** `{"mode": "strictness" | "privacy" | "memory", "value": ...}`. Only this app's fixed words go in. */
     fun settingBody(setting: String, value: String): String {
-        require(setting == STRICTNESS || setting == PRIVACY) { "not a voice setting: $setting" }
-        require(value in setOf(VERY_STRICT, BALANCED, PRIVATE_ON_SCREEN, VOICE_IS_ENOUGH)) { "not a value: $value" }
+        require(setting == STRICTNESS || setting == PRIVACY || setting == MEMORY) { "not a voice setting: $setting" }
+        require(
+            value in setOf(VERY_STRICT, BALANCED, PRIVATE_ON_SCREEN, VOICE_IS_ENOUGH, MEMORY_ALOUD, MEMORY_ON_SCREEN),
+        ) { "not a value: $value" }
         return "{\"mode\":\"$setting\",\"value\":\"$value\"}"
     }
 
     /** Whether choosing [value] for [setting] LOOSENS it - which is the one that asks first. */
     fun isLoosening(setting: String, value: String): Boolean =
-        (setting == STRICTNESS && value == BALANCED) || (setting == PRIVACY && value == VOICE_IS_ENOUGH)
+        (setting == STRICTNESS && value == BALANCED) || (setting == PRIVACY && value == VOICE_IS_ENOUGH) ||
+            (setting == MEMORY && value == MEMORY_ALOUD)
 
     // ------------------------------------------------------------ answers --
 

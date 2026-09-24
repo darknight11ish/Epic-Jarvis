@@ -11,16 +11,20 @@ import kotlinx.serialization.json.doubleOrNull
  * when it SPEAKS (docs/JARVIS-API.md section 16, "What the apps must do
  * about private answers").
  *
- * An answer drawn from email, the calendar, notes or what Jarvis remembers
- * is not read aloud unless the question was typed or tapped on the owner's
- * own unlocked device - or the owner chose "voice check is enough". For a
+ * An answer drawn from email, the calendar or notes is not read aloud
+ * unless the question was typed or tapped on the owner's own unlocked
+ * device - or the owner chose "voice check is enough". An answer that uses
+ * what Jarvis remembers is read aloud by default (the owner's choice,
+ * 2026-09-24), unless the owner keeps those on screen too (`memory_aloud`
+ * false). For a
  * question that came by VOICE, with the PC's `private_aloud` false (and a
  * PC that does not send it counts as false), the phone reads the answer
  * aloud only when NOTHING says it is private:
  *
  *  1. the PC did not mark the question private (`question_private`);
- *  2. the chat answer's `X-Jarvis-Route` header has no `gate: "private"`
- *     and no `injected_facts` above 0 (remembered facts went into it);
+ *  2. the chat answer's `X-Jarvis-Route` header has no `gate: "private"`,
+ *     and - only when `memory_aloud` is false - no `injected_facts` above 0
+ *     (remembered facts went into it);
  *  3. no tool ran while it was being written (the `step` event,
  *     `tool_started` / `tool_finished`) - and that is only known while the
  *     event stream is live, so an unknown counts as "a tool may have run".
@@ -87,9 +91,13 @@ object PrivateAloud {
      * @param toolRan a `step` event said a tool ran since the question was asked
      * @param toolsKnown the event stream was live the whole time, so a tool
      *   that ran would have been heard of
+     * @param memoryAloud the utterance reply's `memory_aloud` (false when missing)
      */
     fun mayRead(heard: com.jarvis.client.net.Heard, route: Route?, start: Watch, now: Watch): Boolean =
-        mayRead(heard.privateAloud, heard.questionPrivate, route, toolRan(start, now), toolsKnown(start, now))
+        mayRead(
+            heard.privateAloud, heard.questionPrivate, route, toolRan(start, now), toolsKnown(start, now),
+            memoryAloud = heard.memoryAloud,
+        )
 
     fun mayRead(
         privateAloud: Boolean,
@@ -97,13 +105,14 @@ object PrivateAloud {
         route: Route?,
         toolRan: Boolean,
         toolsKnown: Boolean,
+        memoryAloud: Boolean = false,
     ): Boolean = when {
         // The owner chose "voice check is enough", and this voice passed it.
         privateAloud -> true
         questionPrivate -> false
         route == null -> false
         route.privateGate -> false
-        route.injectedFacts > 0 -> false
+        route.injectedFacts > 0 && !memoryAloud -> false
         toolRan -> false
         !toolsKnown -> false
         else -> true

@@ -382,6 +382,13 @@ def strict_cases():
         heard["private_question"] = hear("What is on my calendar today?")
         heard["plain_question"] = hear("What time is it?")
         heard["too_short"] = hear("Lights off.", seconds=1.2)
+        # The owner's "keep answers that use memories on screen" (2026-09-24):
+        # memory_aloud false, and a question about memory counts as private.
+        post({"mode": "memory", "value": "memory_on_screen"})
+        heard["memory_on_screen"] = hear("What time is it?")
+        heard["memory_question_on_screen"] = hear("What do you remember about my sister?")
+        post({"mode": "memory", "value": "memory_aloud"})
+        heard["memory_question"] = hear("What do you remember about my sister?")
         post({"mode": "privacy", "value": "voice_is_enough"})
         heard["voice_is_enough"] = hear("What is on my calendar today?")
         answers["heard"] = heard

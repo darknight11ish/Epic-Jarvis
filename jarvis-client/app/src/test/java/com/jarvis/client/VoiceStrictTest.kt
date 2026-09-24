@@ -310,11 +310,39 @@ class VoiceStrictTest {
 
     @Test
     fun `now line`() {
-        assertEquals("Voice check: Very strict; private answers stay on screen.",
+        val remembers = "; answers using what Jarvis remembers are read aloud."
+        assertEquals("Voice check: Very strict; private answers stay on screen$remembers",
             StrictVoice.nowLine(view("trained_three_rounds")))
-        assertEquals("Voice check: Balanced; private answers stay on screen.", StrictVoice.nowLine(view("balanced")))
+        assertEquals("Voice check: Balanced; private answers stay on screen$remembers",
+            StrictVoice.nowLine(view("balanced")))
         assertEquals("Voice check: Very strict; private answers may be read aloud.",
             StrictVoice.nowLine(view("voice_is_enough")))
+        assertEquals("Voice check: Very strict; private answers stay on screen; answers using what " +
+            "Jarvis remembers stay on screen.",
+            StrictVoice.nowLine(view("trained_three_rounds").copy(memory = VoiceStrict.MEMORY_ON_SCREEN)))
+        // An older PC (no memory setting): the line says nothing about it.
+        assertEquals("Voice check: Very strict; private answers stay on screen.",
+            StrictVoice.nowLine(view("trained_three_rounds").copy(memory = "")))
+    }
+
+    @Test
+    fun `the memory setting - aloud by default, keeping on screen is immediate, back to aloud asks`() {
+        val v = view("trained_three_rounds")
+        assertEquals(VoiceStrict.MEMORY_ALOUD, v.memory)
+        assertTrue(StrictVoice.isCurrent(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ALOUD, v))
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ON_SCREEN))
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ALOUD))
+        // Keeping on screen goes even on a stale link; back to aloud is held.
+        assertNull(StrictVoice.blocker(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ON_SCREEN, v, "stale"))
+        val onScreen = v.copy(memory = VoiceStrict.MEMORY_ON_SCREEN)
+        assertEquals("stale", StrictVoice.blocker(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ALOUD, onScreen, "stale"))
+        assertNull(StrictVoice.blocker(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ALOUD, onScreen, null))
+        // An older PC does not offer it.
+        assertEquals(StrictVoice.NOT_ON_THIS_PC,
+            StrictVoice.blocker(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ON_SCREEN, v.copy(memory = ""), null))
+        assertEquals("{\"mode\":\"memory\",\"value\":\"memory_on_screen\"}",
+            VoiceStrict.settingBody(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ON_SCREEN))
+        assertEquals("Keep on screen", StrictVoice.label(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ON_SCREEN))
         assertNotNull(StrictVoice.label(VoiceStrict.STRICTNESS, VoiceStrict.VERY_STRICT))
     }
 }

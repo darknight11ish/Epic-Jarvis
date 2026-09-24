@@ -16,9 +16,13 @@ import kotlin.math.roundToInt
  *   other people away more reliably and asks for a little more speech;
  *   balanced asks the owner to repeat less.
  * - Private answers: STAY ON SCREEN (the default) or VOICE CHECK IS ENOUGH -
- *   read an answer from email, the calendar, notes or memory aloud when the
- *   voice passed. The second is only offered while the check is very
- *   strict; choosing balanced puts private answers back on screen.
+ *   read an answer from email, the calendar or notes aloud when the voice
+ *   passed. The second is only offered while the check is very strict;
+ *   choosing balanced puts private answers back on screen.
+ * - What Jarvis remembers (added 2026-09-24, the owner's choice: "looser
+ *   now, with a setting to make it more strict"): answers that use it are
+ *   READ ALOUD by default, or KEPT ON SCREEN. Offered only when the PC
+ *   reports the setting.
  *
  * The same shape as every other switch that widens what Jarvis does:
  * LOOSENING (balanced, voice is enough) raises one approval card on the PC
@@ -49,8 +53,8 @@ object StrictVoice {
         Choice(
             VoiceStrict.PRIVATE_ON_SCREEN,
             "Private answers stay on screen (recommended)",
-            "When you ask by voice, answers from your email, calendar, notes or what Jarvis " +
-                "remembers are shown, not read aloud.",
+            "When you ask by voice, answers from your email, calendar or notes are shown, " +
+                "not read aloud.",
         ),
         Choice(
             VoiceStrict.VOICE_IS_ENOUGH,
@@ -60,6 +64,23 @@ object StrictVoice {
         ),
     )
 
+    val MEMORY: List<Choice> = listOf(
+        Choice(
+            VoiceStrict.MEMORY_ALOUD,
+            "Read aloud (recommended)",
+            "When you ask by voice, answers that use what Jarvis remembers about you are read " +
+                "aloud. Anyone near the speaker will hear them. Questions about email, your " +
+                "calendar, notes, health or money still stay on screen.",
+        ),
+        Choice(
+            VoiceStrict.MEMORY_ON_SCREEN,
+            "Keep on screen",
+            "Those answers are shown, not read aloud, like email and notes.",
+        ),
+    )
+
+    const val MEMORY_TITLE = "Answers that use what Jarvis remembers"
+
     const val PRIVACY_ONLY_VERY_STRICT =
         "Only while the voice check is very strict."
 
@@ -68,7 +89,11 @@ object StrictVoice {
 
     /** The label for [value], in the same words as the choices above. */
     fun label(setting: String, value: String): String {
-        val list = if (setting == VoiceStrict.STRICTNESS) STRICTNESS else PRIVACY
+        val list = when (setting) {
+            VoiceStrict.STRICTNESS -> STRICTNESS
+            VoiceStrict.MEMORY -> MEMORY
+            else -> PRIVACY
+        }
         return list.firstOrNull { it.value == value }?.label?.removeSuffix(" (recommended)") ?: value
     }
 
@@ -81,7 +106,13 @@ object StrictVoice {
         } else {
             "private answers stay on screen"
         }
-        return "Voice check: $how; $priv."
+        // "Voice check is enough" already reads every private answer aloud.
+        val mem = if (view.privacy == VoiceStrict.VOICE_IS_ENOUGH) "" else when (view.memory) {
+            VoiceStrict.MEMORY_ALOUD -> "; answers using what Jarvis remembers are read aloud"
+            VoiceStrict.MEMORY_ON_SCREEN -> "; answers using what Jarvis remembers stay on screen"
+            else -> ""
+        }
+        return "Voice check: $how; $priv$mem."
     }
 
     /**
@@ -96,6 +127,7 @@ object StrictVoice {
         val loosening = VoiceStrict.isLoosening(setting, value)
         return when {
             !view.settings -> NOT_ON_THIS_PC
+            setting == VoiceStrict.MEMORY && view.memory.isBlank() -> NOT_ON_THIS_PC
             loosening && linkBlocker != null -> linkBlocker
             setting == VoiceStrict.PRIVACY && value == VoiceStrict.VOICE_IS_ENOUGH && !view.isVeryStrict ->
                 PRIVACY_ONLY_VERY_STRICT
@@ -107,7 +139,11 @@ object StrictVoice {
 
     /** Whether [value] is what the PC has now - pressing it does nothing. */
     fun isCurrent(setting: String, value: String, view: VoiceStrict.View): Boolean =
-        (if (setting == VoiceStrict.STRICTNESS) view.strictness else view.privacy) == value
+        when (setting) {
+            VoiceStrict.STRICTNESS -> view.strictness
+            VoiceStrict.MEMORY -> view.memory
+            else -> view.privacy
+        } == value
 
     /** A card to loosen [setting] is waiting: one line saying so, or null. */
     fun waitingLine(setting: String, view: VoiceStrict.View): String? {

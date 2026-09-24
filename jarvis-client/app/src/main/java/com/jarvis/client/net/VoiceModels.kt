@@ -439,8 +439,18 @@ data class Heard(
      * only when nothing says it is private (voice/PrivateAloud.kt).
      */
     @SerialName("private_aloud") val privateAloud: Boolean = false,
-    /** The words asked about something private (email, calendar, notes, memory). A hint. */
+    /**
+     * The words asked about something private (email, calendar, notes; and
+     * memory only while the owner keeps memory answers on screen). A hint.
+     */
     @SerialName("question_private") val questionPrivate: Boolean = false,
+    /**
+     * May an answer that uses what Jarvis REMEMBERS be read aloud, when
+     * nothing else about it is private? True by default on the PC (the
+     * owner's choice, 2026-09-24); false with "keep them on screen" - and
+     * false when missing, from an older PC.
+     */
+    @SerialName("memory_aloud") val memoryAloud: Boolean = false,
 ) {
     enum class Outcome {
         /** Verified, transcribed. Feed [text] to the chat. */
