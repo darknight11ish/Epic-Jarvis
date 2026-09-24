@@ -986,7 +986,9 @@ private fun MemoryAsOfPlate(
             java.time.LocalDate.now(),
         )
     }
-    val rows = remember(result) { result?.let { flatten(it) }.orEmpty() }
+    // The facts themselves. This used to go through `flatten()`, which shows
+    // an array of objects as its length: "Facts: 2" and nothing else.
+    val answer = remember(result) { result?.let { com.jarvis.client.net.MemoryAsOf.parse(it) } }
     Plate {
         Text(
             "Read-only. Not the memory graph - one moment's worth of facts, " +
@@ -1021,16 +1023,43 @@ private fun MemoryAsOfPlate(
             Gap(12)
             Rule()
             Gap(10)
-            if (rows.isEmpty()) {
-                Text(
+            when {
+                answer == null -> Text(
+                    "The desktop answered, but not with a list of facts, so nothing is shown.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = chrome.warnInk,
+                )
+                answer.facts.isEmpty() -> Text(
                     "Nothing on record for that date.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = chrome.textMid,
                 )
-            } else {
-                rows.forEachIndexed { i, (label, value) ->
-                    if (i > 0) Rule()
-                    Field(label, value, machine = value.looksMachine())
+                else -> {
+                    answer.note?.let { note ->
+                        Text(
+                            note.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                        Gap(8)
+                    }
+                    answer.facts.forEachIndexed { i, fact ->
+                        if (i > 0) Rule()
+                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Text(
+                                fact.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = chrome.textHi,
+                            )
+                            com.jarvis.client.net.MemoryAsOf.tag(fact)?.let { tag ->
+                                Gap(4)
+                                Pill(
+                                    tag,
+                                    color = if (fact.trueThen == true) chrome.okInk else chrome.textMid,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
