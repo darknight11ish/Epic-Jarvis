@@ -235,6 +235,7 @@
           "window_seconds": 10.0
         },
         "samples": 5,
+        "sensitive_memory": "sensitive_on_screen",
         "settings": {
           "changed": 0.0,
           "choices": {
@@ -246,6 +247,10 @@
               "private_on_screen",
               "voice_is_enough"
             ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
             "strictness": [
               "very_strict",
               "balanced"
@@ -254,11 +259,13 @@
           "defaults": {
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
         },
@@ -380,6 +387,7 @@
         "window_seconds": 10.0
       },
       "samples": 5,
+      "sensitive_memory": "sensitive_on_screen",
       "settings": {
         "changed": 0.0,
         "choices": {
@@ -391,6 +399,10 @@
             "private_on_screen",
             "voice_is_enough"
           ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
           "strictness": [
             "very_strict",
             "balanced"
@@ -399,11 +411,13 @@
         "defaults": {
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "voice_is_enough_allowed": true
       },
@@ -681,6 +695,7 @@
           "window_seconds": 10.0
         },
         "samples": 0,
+        "sensitive_memory": "sensitive_on_screen",
         "settings": {
           "changed": 0.0,
           "choices": {
@@ -692,6 +707,10 @@
               "private_on_screen",
               "voice_is_enough"
             ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
             "strictness": [
               "very_strict",
               "balanced"
@@ -700,11 +719,13 @@
           "defaults": {
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
         },
@@ -821,6 +842,7 @@
         "window_seconds": 10.0
       },
       "samples": 0,
+      "sensitive_memory": "sensitive_on_screen",
       "settings": {
         "changed": 0.0,
         "choices": {
@@ -832,6 +854,10 @@
             "private_on_screen",
             "voice_is_enough"
           ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
           "strictness": [
             "very_strict",
             "balanced"
@@ -840,11 +866,13 @@
         "defaults": {
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "voice_is_enough_allowed": true
       },
@@ -1127,6 +1155,7 @@
           "window_seconds": 10.0
         },
         "samples": 4,
+        "sensitive_memory": "sensitive_on_screen",
         "settings": {
           "changed": 0.0,
           "choices": {
@@ -1138,6 +1167,10 @@
               "private_on_screen",
               "voice_is_enough"
             ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
             "strictness": [
               "very_strict",
               "balanced"
@@ -1146,11 +1179,13 @@
           "defaults": {
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
         },
@@ -1272,6 +1307,7 @@
         "window_seconds": 10.0
       },
       "samples": 4,
+      "sensitive_memory": "sensitive_on_screen",
       "settings": {
         "changed": 0.0,
         "choices": {
@@ -1283,6 +1319,10 @@
             "private_on_screen",
             "voice_is_enough"
           ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
           "strictness": [
             "very_strict",
             "balanced"
@@ -1291,11 +1331,13 @@
         "defaults": {
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "voice_is_enough_allowed": true
       },
@@ -1578,6 +1620,7 @@
           "window_seconds": 10.0
         },
         "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
         "settings": {
           "changed": 0.0,
           "choices": {
@@ -1589,6 +1632,10 @@
               "private_on_screen",
               "voice_is_enough"
             ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
             "strictness": [
               "very_strict",
               "balanced"
@@ -1597,11 +1644,13 @@
           "defaults": {
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
         },
@@ -1723,6 +1772,7 @@
         "window_seconds": 10.0
       },
       "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
       "settings": {
         "changed": 0.0,
         "choices": {
@@ -1734,6 +1784,10 @@
             "private_on_screen",
             "voice_is_enough"
           ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
           "strictness": [
             "very_strict",
             "balanced"
@@ -1742,11 +1796,13 @@
         "defaults": {
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "voice_is_enough_allowed": true
       },
@@ -2034,6 +2090,7 @@
           "window_seconds": 10.0
         },
         "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
         "settings": {
           "changed": 0.0,
           "choices": {
@@ -2045,6 +2102,10 @@
               "private_on_screen",
               "voice_is_enough"
             ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
             "strictness": [
               "very_strict",
               "balanced"
@@ -2053,11 +2114,13 @@
           "defaults": {
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
         },
@@ -2184,6 +2247,7 @@
         "window_seconds": 10.0
       },
       "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
       "settings": {
         "changed": 0.0,
         "choices": {
@@ -2195,6 +2259,10 @@
             "private_on_screen",
             "voice_is_enough"
           ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
           "strictness": [
             "very_strict",
             "balanced"
@@ -2203,11 +2271,13 @@
         "defaults": {
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "voice_is_enough_allowed": true
       },
@@ -2490,6 +2560,7 @@
           "window_seconds": 10.0
         },
         "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
         "settings": {
           "changed": 0.0,
           "choices": {
@@ -2501,6 +2572,10 @@
               "private_on_screen",
               "voice_is_enough"
             ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
             "strictness": [
               "very_strict",
               "balanced"
@@ -2509,11 +2584,13 @@
           "defaults": {
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
         },
@@ -2646,6 +2723,7 @@
         "window_seconds": 10.0
       },
       "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
       "settings": {
         "changed": 0.0,
         "choices": {
@@ -2657,6 +2735,10 @@
             "private_on_screen",
             "voice_is_enough"
           ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
           "strictness": [
             "very_strict",
             "balanced"
@@ -2665,11 +2747,13 @@
         "defaults": {
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "voice_is_enough_allowed": true
       },
@@ -2952,6 +3036,7 @@
           "window_seconds": 10.0
         },
         "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
         "settings": {
           "changed": 0.0,
           "choices": {
@@ -2963,6 +3048,10 @@
               "private_on_screen",
               "voice_is_enough"
             ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
             "strictness": [
               "very_strict",
               "balanced"
@@ -2971,11 +3060,13 @@
           "defaults": {
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
         },
@@ -3097,6 +3188,7 @@
         "window_seconds": 10.0
       },
       "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
       "settings": {
         "changed": 0.0,
         "choices": {
@@ -3108,6 +3200,10 @@
             "private_on_screen",
             "voice_is_enough"
           ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
           "strictness": [
             "very_strict",
             "balanced"
@@ -3116,11 +3212,13 @@
         "defaults": {
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "voice_is_enough_allowed": true
       },
@@ -3403,6 +3501,7 @@
           "window_seconds": 10.0
         },
         "samples": 3,
+        "sensitive_memory": "sensitive_on_screen",
         "settings": {
           "changed": 0.0,
           "choices": {
@@ -3414,6 +3513,10 @@
               "private_on_screen",
               "voice_is_enough"
             ],
+            "sensitive_memory": [
+              "sensitive_on_screen",
+              "sensitive_aloud"
+            ],
             "strictness": [
               "very_strict",
               "balanced"
@@ -3422,11 +3525,13 @@
           "defaults": {
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
+            "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
         },
@@ -3548,6 +3653,7 @@
         "window_seconds": 10.0
       },
       "samples": 3,
+      "sensitive_memory": "sensitive_on_screen",
       "settings": {
         "changed": 0.0,
         "choices": {
@@ -3559,6 +3665,10 @@
             "private_on_screen",
             "voice_is_enough"
           ],
+          "sensitive_memory": [
+            "sensitive_on_screen",
+            "sensitive_aloud"
+          ],
           "strictness": [
             "very_strict",
             "balanced"
@@ -3567,11 +3677,13 @@
         "defaults": {
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
+          "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
+        "sensitive_memory": "sensitive_on_screen",
         "strictness": "very_strict",
         "voice_is_enough_allowed": true
       },

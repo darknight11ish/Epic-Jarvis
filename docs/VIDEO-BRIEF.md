@@ -42,8 +42,7 @@ your voice, and never sends your private life to anyone else's cloud.
    desktop. One card, one decision. Nothing is ever approved automatically,
    voice can never approve anything, and it refuses to act if its live
    connection to the PC goes stale.
-3. **It learns you, with permission.** Jarvis proposes facts it has learned
-   about you, and remembers only the ones you accept.
+3. **It learns you, and shows you everything.** From your own words only, Jarvis saves facts about you and lists every one with a Forget button; sensitive topics still wait for your yes.
 
 ## Works today - choose the 2-3 highlights from here
 Strong candidates for the video are marked with a star.
@@ -93,6 +92,12 @@ Strong candidates for the video are marked with a star.
   a History view in both apps.
 - **Update notices that ask:** both apps say when a new version exists; the
   desktop installs one only when you press the button.
+- **Automatic learning:** Jarvis saves facts about you from your own words
+  (never from web pages, emails or documents) without asking about each
+  one, and lists every one in both apps with a Forget button. Sensitive
+  topics - health, money, passwords, other people - still wait for your
+  yes, and an answer that uses one is shown on screen rather than read
+  aloud unless you choose otherwise.
 
 ## Built and switched off, waiting for hardware - say "ready for", never "does"
 - A **second graphics card** mode (planned: an RTX 2060 12 GB): longer

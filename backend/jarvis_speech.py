@@ -804,7 +804,8 @@ def _prints(voice: dict) -> dict:
 
 
 def _strict_state(voice: dict) -> dict:
-    """gate.strictness / privacy / memory / settings / models / cohort / repeat, from
+    """gate.strictness / privacy / memory / sensitive_memory / settings / models /
+    cohort / repeat, from
     jarvis_voice.status(); the strict defaults, and `models` saying nothing
     is known, for a jarvis_voice.py older than them. Never raises."""
     st = voice.get("settings") if isinstance(voice.get("settings"), dict) else {}
@@ -815,6 +816,10 @@ def _strict_state(voice: dict) -> dict:
         # "" from a jarvis_voice.py older than the memory setting: the apps
         # then do not offer it.
         "memory": str(voice.get("memory") or ""),
+        # The same for the fourth setting (answers that use a SENSITIVE saved
+        # fact, the owner's decision of 2026-09-24): "" from an older
+        # jarvis_voice.py, and the apps then do not offer it.
+        "sensitive_memory": str(voice.get("sensitive_memory") or ""),
         "settings": st or {"strictness": strict, "privacy": "private_on_screen",
                            "voice_is_enough_allowed": strict == "very_strict",
                            "min_command_seconds": 0.0},
@@ -1240,6 +1245,13 @@ class Heard:
     #: choice, 2026-09-24), no with the "memory_on_screen" setting. An app
     #: that finds no such field (an older PC) treats it as false.
     memory_aloud: bool = False
+    #: May an answer that uses a SENSITIVE saved fact (the chat route's
+    #: `injected_sensitive` > 0) be read aloud? True only when the owner chose
+    #: "sensitive_aloud" (jarvis_voice.sensitive_aloud()) AND this voice
+    #: passed a real check - never in broad mode. Not implied by
+    #: memory_aloud or private_aloud (the owner's decision, 2026-09-24). An
+    #: app that finds no such field treats it as false.
+    sensitive_aloud: bool = False
     #: The words asked about something private (the router's private-topic
     #: backstop). A hint for the app, not a guarantee - see JARVIS-API.md.
     question_private: bool = False
@@ -1359,6 +1371,13 @@ def _memory_aloud() -> bool:
         return bool(jarvis_voice.memory_aloud())
     except Exception:
         return False
+
+
+def _sensitive_aloud() -> bool:
+    try:
+        return bool(jarvis_voice.sensitive_aloud())
+    except Exception:
+        return False                # an older jarvis_voice.py: on screen
 
 
 def _private_aloud() -> bool:
@@ -1529,7 +1548,8 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                   # read aloud to a voice nobody checked (voice audit,
                   # 2026-09-24).
                   private_aloud=_private_aloud() and _really_checked(verdict, very=True),
-                  memory_aloud=_memory_aloud() and _really_checked(verdict))
+                  memory_aloud=_memory_aloud() and _really_checked(verdict),
+                  sensitive_aloud=_sensitive_aloud() and _really_checked(verdict))
 
     if not verdict.is_owner:
         return Heard(False, reason=verdict.reason, **common)

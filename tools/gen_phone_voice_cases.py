@@ -401,6 +401,24 @@ def strict_cases():
         heard["memory_question"] = hear("What do you remember about my sister?")
         post({"mode": "privacy", "value": "voice_is_enough"})
         heard["voice_is_enough"] = hear("What is on my calendar today?")
+        # The owner's decision (2026-09-24): an answer that uses a SENSITIVE
+        # saved fact stays on screen by default - sensitive_aloud is false
+        # above even with memory_aloud and voice_is_enough. "Read aloud"
+        # raises the voice card; approved, a checked voice gets true.
+        # Keeping them on screen again is immediate.
+        answers["sensitive_aloud_waiting"] = scrub(answer(post(
+            {"mode": "sensitive_memory", "value": "sensitive_aloud"}, spawn=never)), w)
+        E._reset_for_tests()
+        answers["sensitive_aloud_denied"] = scrub(answer(post(
+            {"mode": "sensitive_memory", "value": "sensitive_aloud"}, g=gate("denied"))), w)
+        heard["sensitive_on_screen"] = hear("What time is it?")
+        answers["sensitive_aloud_approved"] = scrub(answer(post(
+            {"mode": "sensitive_memory", "value": "sensitive_aloud"})), w)
+        status["sensitive_aloud"] = scrub(S.status(), w)
+        heard["sensitive_aloud"] = hear("What time is it?")
+        answers["sensitive_on_screen"] = scrub(answer(post(
+            {"mode": "sensitive_memory", "value": "sensitive_on_screen"})), w)
+        heard["sensitive_back_on_screen"] = hear("What time is it?")
         answers["heard"] = heard
 
     # The router's decision for a chat turn (jarvis_router.choose), which

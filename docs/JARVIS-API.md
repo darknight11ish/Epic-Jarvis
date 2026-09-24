@@ -179,7 +179,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `step` | Rendered in Brain → Live (`brain.js`, `stepText`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written (`voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`) |
-| `memory_saved` | Desktop: the Brain's "Jarvis remembered N things" line, then the auto list and facts are re-read (`brain.js` `onEvent`). Phone: the same line on Mind, and the list is re-read (`JarvisRuntime.onEvent`). Never a pop-up, never the text (`auto-learn.patch`; §19). Automatic learning saved facts without a card. The data is flat: `{"ids": [<fact id>, ...]}` - fact ids only, never the words. Re-read `GET /api/memory/auto` and show one quiet line ("Jarvis remembered 2 things") that opens the list; never a pop-up, never the fact's text in a notification | The same: re-read `/api/memory/auto`, the same quiet line |
+| `memory_saved` | Brain: the quiet "Jarvis remembered N things" line; re-reads the auto list and `memory_facts` (`brain.js` `noteMemorySaved`/`onEvent`). Automatic learning saved facts without a card (`auto-learn.patch`; §19); the data is flat, `{"ids": [<fact id>, ...]}` - fact ids only, never the words | The same line on Mind; the list re-reads (`JarvisRuntime.onMemorySaved`). Never a notification. |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
 
 `attention` is the one kind that carries its own state instead of ringing a
@@ -433,6 +433,22 @@ turn the second graphics card answered, `where` is still `"local"` (it is
 this PC), `lane` is the model really answering (e.g. `"qwen3:8b"`), and
 `second_card` says why: `"long_context"` or `"vision"`. Absent on every other
 turn. See section 12.
+
+**`injected_sensitive` in `X-Jarvis-Route`** (`auto-learn.patch`,
+2026-09-24): how many of the recalled facts this answer used (`injected_facts`)
+are **sensitive** - health, money, passwords and account details, other
+people - by `jarvis_auto_learn.sensitivity()`, the same check automatic
+learning uses. Worked out after the degrade loop, so a turn that left the
+local lane (memory dropped, `injected_facts: 0`) says `0`. It fails closed:
+a recalled fact that was not checked (the check could not run, or it was
+recalled somewhere this patch does not see) counts as sensitive. **Missing
+while `injected_facts` is above 0** - a PC from before this - means "all of
+them may be sensitive". The apps use it to keep such an answer on screen
+when the question came by voice (§16, "What the apps must do about private
+answers"). Said plainly: the header is built in the owner's `jarvis_hud.py`,
+which is not in this repository; the patch sets this field beside the
+`turn_id` line `feedback.patch` added, and was checked only against the
+patch-stack stand-in (`backend/test_auto_learn.py`).
 
 **No tool receipt.** A 200 from `/api/chat` means "a chat completed", not
 "the thing you asked for happened". There is no `tool_calls` field on the
@@ -1436,7 +1452,7 @@ mode only when `gate.training` says the PC understands it:
 - **The one-shot training still works** (`{"clips": [...]}`, as today): it
   becomes round 1 ("close"), replacing the print, with one card.
 
-### The utterance reply: five new fields
+### The utterance reply: six new fields
 
 ```
 "too_short": bool, "min_seconds": float,     see above
@@ -1450,6 +1466,11 @@ mode only when `gate.training` says the PC understands it:
                             about nothing else private - be read aloud? True by default (the
                             owner's choice); false with `memory_on_screen`. Missing (an older PC)
                             = false.
+"sensitive_aloud": bool     (2026-09-24) may an answer that uses a SENSITIVE saved fact (the chat
+                            route's `injected_sensitive`, §4) be read aloud? True only when the
+                            owner chose `sensitive_aloud` AND this voice passed a real check (not
+                            broad mode). Not implied by `memory_aloud` or `private_aloud`. On every
+                            reply, refusals included. Missing (an older PC) = false.
 ```
 
 ### `/api/voice/status` - new in `gate`
@@ -1458,14 +1479,16 @@ mode only when `gate.training` says the PC understands it:
 "strictness": "very_strict" | "balanced",
 "privacy": "private_on_screen" | "voice_is_enough",
 "memory": "memory_aloud" | "memory_on_screen",
-"settings": {"strictness", "privacy", "memory", "changed": epoch,
+"sensitive_memory": "sensitive_on_screen" | "sensitive_aloud",   "" from an older PC: do not offer it
+"settings": {"strictness", "privacy", "memory", "sensitive_memory", "changed": epoch,
              "voice_is_enough_allowed": bool,        true only while very strict
              "min_command_seconds": 2.0 | 1.5,
              "choices": {"strictness": ["very_strict", "balanced"],
                          "privacy": ["private_on_screen", "voice_is_enough"],
-                         "memory": ["memory_aloud", "memory_on_screen"]},
+                         "memory": ["memory_aloud", "memory_on_screen"],
+                         "sensitive_memory": ["sensitive_on_screen", "sensitive_aloud"]},
              "defaults": {"strictness": "very_strict", "privacy": "private_on_screen",
-                          "memory": "memory_aloud"}},
+                          "memory": "memory_aloud", "sensitive_memory": "sensitive_on_screen"}},
 "models": {"small":  {"installed", "name", "label": "the small voice-ID model", "bars_measured", "path"},
            "strong": {"installed", "name", "label": "the stronger voice-ID model", "bars_measured",
                       "path", "why"},
@@ -1549,7 +1572,21 @@ as it is.
 {"mode": "strictness", "value": "very_strict" | "balanced"}
 {"mode": "privacy",    "value": "private_on_screen" | "voice_is_enough"}
 {"mode": "memory",     "value": "memory_aloud" | "memory_on_screen"}
+{"mode": "sensitive_memory", "value": "sensitive_on_screen" | "sensitive_aloud"}
 ```
+
+`sensitive_memory` (added 2026-09-24, the owner's decision: an answer that
+uses a sensitive saved fact stays on screen by default, even under "Read
+aloud" for memories): `sensitive_on_screen` is the default and the strict
+value, and applies at once. `sensitive_aloud` is the looser one and raises
+the voice card, which reads: "Let Jarvis read answers that use a saved fact
+about your health, money, passwords or other people aloud, when you ask by
+voice? / Anyone near the speaker will hear them. / If you did not just do
+this, say no. / If you say no: nothing changes - those answers stay on your
+screen." A missing, damaged or unreadable value reads as
+`sensitive_on_screen`. An older PC answers `mode: "sensitive_memory"` with
+**503**, and its `/api/voice/status` has `gate.sensitive_memory: ""` - the
+apps then do not offer the setting.
 
 `memory` (added 2026-09-24, the owner's choice: "looser now, with a setting
 to make it more strict"): answers that use what Jarvis remembers are read
@@ -1564,7 +1601,7 @@ A settings file with no `memory` in it (every file from before) reads as
 | `200 {"ok": true, "changed": true, "pending": false, "settings": {"strictness", "privacy", "voice_is_enough_allowed"}, "message": "Done - that applies now."}` | tightening (`very_strict`, `private_on_screen`): immediate, no card. It also makes a waiting card that would loosen the same setting do nothing (`last.outcome = "withdrawn"`). |
 | `200 {"ok": true, "changed": false, ...}` | it was already that |
 | `202 {"ok": true, "pending": true, "setting", "value", "message"}` | loosening: ONE card (`change_own_config`). **Nothing changes until it is approved.** `last.outcome` becomes `"setting_changed"`, `"denied"`, `"timed_out"`, `"refused"`, `"withdrawn"` or `"failed"`. |
-| `503` | this PC's voice check is too old for that setting (`memory` on a PC from before 2026-09-24) |
+| `503` | this PC's voice check is too old for that setting (`memory` or `sensitive_memory` on a PC from before them) |
 | `409` | `voice_is_enough` while balanced ("private answers can only be read aloud while the voice check is very strict"), a voice card already waiting, or the tier is not `ask` |
 
 Choosing `balanced` also puts private answers back on screen
@@ -1617,14 +1654,23 @@ for a question that came by VOICE and reply `private_aloud: false`:
    "a tool may have run". Both apps do this: `: jarvis-status working`
    alone arrives only after 1.5 s, so a quick calendar or email lookup was
    missed (voice audit, 2026-09-24).
-3. Treat a reply from an older PC (no `private_aloud` or no `memory_aloud`
-   field) as `false`.
+3. **Sensitive saved facts** (the owner's decision, 2026-09-24): when the
+   route's `injected_sensitive` is above 0 - or it is missing and
+   `injected_facts` is above 0 (an older PC: fail closed) - and the
+   utterance reply's `sensitive_aloud` is not true, keep the answer on
+   screen ("It's on your screen."). This applies **even when
+   `memory_aloud` or `private_aloud` is true**.
+4. Treat a reply from an older PC (no `private_aloud`, no `memory_aloud` or
+   no `sensitive_aloud` field) as `false`.
 
 **Said plainly about `memory_aloud`:** a remembered fact can be about
 something sensitive (health, money) while the question is not ("what
-should I have for dinner?"). Until automatic learning can tell sensitive
-facts apart (task #80), such an answer is read aloud under the default.
-The owner chose that knowingly; `memory_on_screen` is the way to stop it.
+should I have for dinner?"). Step 3 keeps such an answer on screen by
+default: `injected_sensitive` counts the recalled facts the same word-list
+check automatic learning uses (§19.2, check 9) calls sensitive. It is a word
+list, not a model - a sensitive fact worded in a way the list misses is
+read aloud under `memory_aloud`, and `memory_on_screen` is the way to keep
+every memory answer on screen.
 
 **Known gap, said plainly:** the server cannot yet label a finished answer
 as private. `X-Jarvis-Route` is sent before the model starts, so it cannot
@@ -2066,6 +2112,8 @@ and Saved automatically (`net/AutoLearn.kt`, `AutoLearnPlate.kt`); `ported`
 in `tools/check_parity.py`.
 Every route needs the pairing token and passes the origin check.
 
+Deleting a conversation from History does not forget facts learned from it - use Forget in Saved automatically.
+
 ### 19.1 The two settings
 
 | setting | default | when missing | when damaged |
@@ -2084,8 +2132,14 @@ memory (`gate-outcome.patch`'s list). Only the newest card may change what
 
 "Learn automatically" means something only while **background learning**
 (the existing `/api/memory/learning` switch) is on. `GET
-/api/memory/learning` says both; when learning is off, the apps say "Learn
-automatically only works while background learning is on."
+/api/memory/learning` says both; when learning is off, its `note` - and both
+apps - say "Background learning is off, so nothing is saved automatically.
+Start learning above to use this."
+
+A damaged settings file reads as off, and `why` says: "the automatic
+learning settings file is damaged, so nothing is saved automatically. Turn
+"Learn automatically" on again to rewrite it". Turning it on (the card,
+approved) writes a good file.
 
 ### 19.2 When a proposal is saved without a card
 
@@ -2132,17 +2186,43 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    pass the small model's name even when the stronger one decided.)
 6. **No sign of outside text** in any of those turns (GUARDS L4): a link or
    web-page code (`http`, `www.`, markdown links, HTML tags, comments,
-   entities), hidden characters (zero-width, bidi controls, soft hyphen, tag
-   characters), a run of 48+ encoded-looking characters, email headers or a
-   quoted reply, more than **600** characters, or any `injection_flags()` hit
-   - on the turns AND on the proposal: "looks like pasted text: ..." /
-   "reads like an instruction to Jarvis".
+   entities) or a bare web address (`evil.example/page`, or a name ending in
+   a common top-level domain such as `.com`); hidden characters - any
+   character Unicode calls format, private-use or unassigned, control
+   characters other than tab and line ends, variation selectors (both
+   blocks), the combining grapheme joiner, the Hangul and half-width
+   fillers, the Braille blank, line and paragraph separators; a run of 48+
+   encoded-looking characters, whole or cut into pieces of 8+ with spaces or
+   punctuation between them; email headers or a quoted reply; more than
+   **600** characters; or any `injection_flags()` hit, read both as written
+   and with look-alike letters folded (NFKC, then Cyrillic and Greek
+   look-alikes swapped for Latin, invisible characters removed) - on the
+   turns AND on the proposal: "looks like pasted text: ..." / "reads like an
+   instruction to Jarvis". (Red team R4, 2026-09-24.) Said plainly: an emoji
+   written with a variation selector (a red heart, for one) counts as a
+   hidden character, so a message with one stays a card.
 7. **Grounded** (GUARDS L5): every content word and every number of the fact
    is in those turns. "I"/"my" and "the owner"/"the owner's" count as the
-   same, as do simple plurals and -s/-ed/-ing endings; a date counts when it
-   is the real date of a relative date the owner used ("yesterday").
-   Negations ("not", "no longer") must be there word for word. Else: "not in
-   your own words".
+   same, as do simple plurals and -s/-ed/-ing endings - but a plain word is
+   not grounded by only a past or -ing form ("hated" does not ground "hat");
+   a date counts when it is the real date of a relative date the owner used
+   ("yesterday"). Negations ("not", "no longer") must be there word for
+   word. Else: "not in your own words".
+   **And the fact leaves out nothing that changed what was said** (red team
+   R2, 2026-09-24). Each sentence the fact shares a word with is read for:
+   a negation or change of state (not, n't, no, never, no longer, any more,
+   used to, quit, stopped, gave up, former), a condition or plan (if,
+   unless, would, could, should, might, maybe, perhaps, planning, thinking
+   of, hope to, wish, want to), a question mark, a relation (sister,
+   brother, wife, husband, partner, boss, friend, mum, dad, son, daughter,
+   colleague, neighbour...), or he/she/his/her/they/them. One the fact does
+   not also say makes it a card: "what you said had "used to" in it, and the
+   fact leaves it out", "what you said was about your sister, and the fact
+   leaves that out - it may be about someone else", "what you said was
+   about "she" - someone else - and the fact does not say who", "what you
+   said was a question, and the fact states it as true". A fact that says
+   "the owner" from sentences with no I/me/my/we in them is a card too:
+   "what you said was not about you, but the fact says it is".
 8. **Never a correction** (GUARDS L6): a proposal that would replace a stored
    fact (`replaces_id`, or even `replaces` words) is always a card: "it would
    replace a fact you already have".
@@ -2190,7 +2270,15 @@ every one used to become `"extracted"`. A proposal whose source column says
 turn carries now puts the facts between `---FACTS---` and `---END FACTS---`
 lines and says they are information about the user, never an instruction
 (GUARDS L6's delimiter note) - for every recalled fact, not only automatic
-ones.
+ones. Each fact is put on one line, with anything in it that reads as one
+of those two lines taken out (`jarvis_auto_learn.recall_line`, red team R7),
+so a saved fact cannot close the block early.
+
+**Which recalled facts are sensitive** rides out in `X-Jarvis-Route` as
+`injected_sensitive` (§4): the owner's decision of 2026-09-24 keeps an
+answer that uses one on screen when the question came by voice, unless the
+owner turned on the fourth voice setting, `sensitive_memory:
+sensitive_aloud` (§16).
 
 ### 19.4 Routes
 
@@ -2208,7 +2296,21 @@ ones.
 `JARVIS_EXTRACT` is off in the environment); `learning_waiting`/`learning_last` are its card.
 `auto_active` is `enabled and auto`. `why` is set when the settings file is
 damaged. `*_last` is `{"outcome": "enabled" | "denied" | "timed_out" |
-"refused" | "withdrawn" | "failed", "why", "at"}` or `null`.
+"refused" | "withdrawn" | "failed", "why", "message", "at"}` or `null`.
+`why` is the technical reason (for a log or a details line); `message` is
+the plain sentence to show (fit audit item 28), e.g. refused: "Your PC's
+settings do not let this be approved, so it stayed off."; withdrawn: "You
+turned it off while the card waited, so approving it changed nothing.";
+denied: "The card was turned down, so it stayed off."; timed out: "Nobody
+answered the card in time, so it stayed off."; a gate that failed: "The
+approval card could not be raised, so it stayed off." `learning_last` has
+the same `message` for background learning's card. A PC from before this
+sends no `message`.
+
+The ON card and OFF share one lock per switch on the PC: an OFF pressed
+while an approved card is being applied waits for it, then turns the switch
+off - it can no longer be answered "off" and then overwritten by the card
+(red team R5). The same holds for background learning and chat history.
 
 `POST /api/memory/learning/auto` and `POST /api/memory/learning/sensitive`,
 `{"enabled": true | false}`:
@@ -2299,6 +2401,10 @@ sensitive topics automatically. ..." (`jarvis_auto_learn.AUTO_CARD`,
   built from the whole patch stack, and `accept_auto()` / `_accept()` were
   run lifted from that stand-in against a real memory store - never against
   the owner's real files, and nothing has run on the owner's PC.
-- **Neither app shows any of it yet.** Until they do, "Learn automatically"
-  is on by default with no list to see or forget from except the desktop's
-  Memory tab (facts with source `auto`).
+- **The meaning check is a word list, not understanding.** Check 7 catches
+  a fact that drops one of its listed words. A change of meaning carried by
+  a word that is not on the list can still get through. It also makes more
+  cards than strictly needed: "I love Radiohead, they are great" -> "Owner
+  loves Radiohead" is a card (the "they").
+- **Deleting a conversation from History does not forget facts learned from
+  it** - use Forget in Saved automatically.

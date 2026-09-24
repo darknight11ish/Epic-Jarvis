@@ -327,9 +327,11 @@ and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
 Brain reads `GET /api/deep` again (`brain.js`, Deep questions), and the
 phone's `JarvisRuntime.onEvent` re-reads `/api/deep` and `/api/big-model`.
 `memory_saved` is automatic learning saving facts, `{"ids": [...]}` only -
-`jarvis_auto_learn.py`; added 2026-09-24 on the backend, and both apps'
-handlers (re-read `GET /api/memory/auto`, a quiet line) are planned, not
-built - JARVIS-API §19.)
+`jarvis_auto_learn.py`; added 2026-09-24. Both apps handle it: the desktop's
+Brain shows the quiet "Jarvis remembered N things" line and re-reads the
+auto list and `memory_facts` (`brain.js` `noteMemorySaved`), and the phone
+shows the same line on Mind and re-reads the list
+(`JarvisRuntime.onMemorySaved`) - never a notification. JARVIS-API §19.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. This bus reaches a phone that surfaces notifications with the

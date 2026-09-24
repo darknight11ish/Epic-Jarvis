@@ -449,6 +449,87 @@ def t_memory_answers_aloud_by_default():
         check("set_setting refuses to loosen memory without approval", ok)
 
 
+def t_sensitive_saved_facts_stay_on_screen_by_default():
+    """The owner's decision, 2026-09-24: an answer that uses a SENSITIVE
+    saved fact stays on screen by default - even when memory answers and
+    private answers are read aloud. The fourth setting, sensitive_memory,
+    lets it be read aloud after the voice card."""
+    with Temp():
+        check("no settings file: sensitive_on_screen", V.settings()["sensitive_memory"]
+              == "sensitive_on_screen" and not V.sensitive_aloud())
+        V.settings_path().write_text(json.dumps({"strictness": "very_strict",
+                                                 "memory": "memory_aloud"}))
+        check("a file from before this setting: sensitive_on_screen",
+              V.settings()["sensitive_memory"] == "sensitive_on_screen")
+        V.settings_path().write_text(json.dumps({"sensitive_memory": "shout_it"}))
+        check("a damaged value: the strict one",
+              V.settings()["sensitive_memory"] == "sensitive_on_screen")
+        V.settings_path().write_text("{not json", encoding="utf-8")
+        check("an unreadable file: the strict one",
+              V.settings()["sensitive_memory"] == "sensitive_on_screen" and not V.sensitive_aloud())
+        V.settings_path().unlink()
+        V.set_setting("privacy", "voice_is_enough", approved=True)
+        check("memory aloud and voice_is_enough do NOT read sensitive facts aloud",
+              V.memory_aloud() and not V.sensitive_aloud())
+        V.set_setting("privacy", "private_on_screen")
+        st = V.status()
+        check("status: sensitive_memory at the top, in settings, choices and defaults",
+              st["sensitive_memory"] == "sensitive_on_screen"
+              and st["settings"]["sensitive_memory"] == "sensitive_on_screen"
+              and st["settings"]["choices"]["sensitive_memory"]
+              == ["sensitive_on_screen", "sensitive_aloud"]
+              and st["settings"]["defaults"]["sensitive_memory"] == "sensitive_on_screen", st)
+        check("is_loosening: aloud loosens, on screen does not",
+              V.is_loosening("sensitive_memory", "sensitive_aloud")
+              and not V.is_loosening("sensitive_memory", "sensitive_on_screen"))
+        E._reset_for_tests()
+        code, out, gate = _setting("sensitive_memory", "sensitive_aloud",
+                                   Verdict(False, outcome="denied"))
+        check("Read aloud raises ONE card; denied: stays on screen",
+              code == 202 and len(gate.calls) == 1
+              and V.settings()["sensitive_memory"] == "sensitive_on_screen", (code, out))
+        check("the card: the agreed words", gate.calls and gate.calls[0][2] == (
+            "Let Jarvis read answers that use a saved fact about your health, money, "
+            "passwords or other people aloud, when you ask by voice?\n\n"
+            "Anyone near the speaker will hear them.\n\n"
+            "If you did not just do this, say no.\n\n"
+            "If you say no: nothing changes - those answers stay on your screen."),
+              gate.calls)
+        E._reset_for_tests()
+        code, out, gate = _setting("sensitive_memory", "sensitive_aloud", Verdict(True))
+        check("approved: read aloud", V.settings()["sensitive_memory"] == "sensitive_aloud"
+              and V.sensitive_aloud(), (code, out))
+        check("the other settings are kept when it is written",
+              V.settings()["memory"] == "memory_aloud"
+              and V.settings()["strictness"] == "very_strict")
+        E._reset_for_tests()
+        code, out, gate = _setting("sensitive_memory", "sensitive_on_screen")
+        check("Keep on screen: immediate, no card", code == 200 and out["changed"]
+              and not gate.calls and V.settings()["sensitive_memory"] == "sensitive_on_screen"
+              and out["settings"]["sensitive_memory"] == "sensitive_on_screen", out)
+        try:
+            V.set_setting("sensitive_memory", "sensitive_aloud")
+            ok = False
+        except ValueError:
+            ok = True
+        check("set_setting refuses to loosen it without approval", ok)
+        E._reset_for_tests()
+        with mock.patch.object(V, "_CHOICES", {k: c for k, c in V._CHOICES.items()
+                                               if k != "sensitive_memory"}):
+            code, out, gate = _setting("sensitive_memory", "sensitive_on_screen")
+        check("a voice module older than the setting: 503 in words, no card",
+              code == 503 and "too old" in out["error"] and not gate.calls, (code, out))
+        code, out, gate = _setting("sensitive_memory", "loud")
+        check("an unknown value: 400", code == 400, (code, out))
+        gate_state = S._strict_state({"strictness": "very_strict"})
+        check("an older PC's status: sensitive_memory is \"\" (the apps do not offer it)",
+              gate_state["sensitive_memory"] == "", gate_state)
+        gate_state = S._strict_state(V.status())
+        check("gate.sensitive_memory is the PC's setting",
+              gate_state["sensitive_memory"] == "sensitive_on_screen"
+              and gate_state["settings"]["sensitive_memory"] == "sensitive_on_screen", gate_state)
+
+
 def t_nothing_private_aloud_without_a_real_check():
     """Broad mode lets every voice in without checking it. "Voice check is
     enough" and "read memories aloud" must then read nothing private aloud:
@@ -459,6 +540,7 @@ def t_nothing_private_aloud_without_a_real_check():
         V.enroll(["a", "b", "c"], embedder=Table(small.name, {"a": OWNER, "b": OWNER,
                                                                "c": OWNER}))
         V.set_setting("privacy", "voice_is_enough", approved=True)
+        V.set_setting("sensitive_memory", "sensitive_aloud", approved=True)
         cfg = lambda k, d=None: "broad" if k == "mode" else d  # noqa: E731
         with mock.patch.object(V, "EcapaEmbedder", lambda: small), \
                 mock.patch.object(V, "strong_embedder", lambda *a: None), \
@@ -469,7 +551,7 @@ def t_nothing_private_aloud_without_a_real_check():
             h = S.hear(_clip("stranger", 2.5)).as_dict()
         check("broad mode: a stranger is let in, but nothing private is read aloud",
               h["ok"] and h["mode"] == "broad" and h["private_aloud"] is False
-              and h["memory_aloud"] is False, h)
+              and h["memory_aloud"] is False and h["sensitive_aloud"] is False, h)
 
 
 # --------------------------------------- 5. two models: the stronger decides --
@@ -1001,6 +1083,16 @@ def t_private_fields_on_the_reply():
             V.set_setting("memory", "memory_on_screen")
             h = S.hear(_clip("owner", 2.5)).as_dict()
             check("memory_on_screen: memory_aloud false", h["memory_aloud"] is False, h)
+            check("sensitive_aloud is on the reply, false by default",
+                  h["sensitive_aloud"] is False, h)
+            V.set_setting("sensitive_memory", "sensitive_aloud", approved=True)
+            h = S.hear(_clip("owner", 2.5)).as_dict()
+            check("sensitive_aloud setting + a real check: sensitive_aloud true",
+                  h["sensitive_aloud"] is True, h)
+            with mock.patch.object(V, "sensitive_aloud", side_effect=RuntimeError):
+                h = S.hear(_clip("owner", 2.5)).as_dict()
+            check("a voice module that cannot answer: false", h["sensitive_aloud"] is False, h)
+            V.set_setting("sensitive_memory", "sensitive_on_screen")
             # Chat history is told which words THIS PC heard from the owner's
             # voice, so the chat turn carrying them is recorded as "voice".
             import jarvis_chat_log
@@ -1091,7 +1183,8 @@ def t_real_models():
 if __name__ == "__main__":
     for fn in (t_hole_one_the_basic_check_lets_nobody_in, t_hole_two_one_noisy_clip,
                t_settings_tighten_now_loosen_with_a_card, t_may_speak,
-               t_memory_answers_aloud_by_default, t_nothing_private_aloud_without_a_real_check,
+               t_memory_answers_aloud_by_default, t_sensitive_saved_facts_stay_on_screen_by_default,
+               t_nothing_private_aloud_without_a_real_check,
                t_the_stronger_model_decides, t_cohort_maths,
                t_a_bank_of_the_wrong_width_is_not_used, t_building_a_bank_on_this_pc,
                t_the_shipped_bank,

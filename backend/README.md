@@ -5895,10 +5895,43 @@ words.
 **Not checked, said plainly.** The patch was applied only to stand-ins of
 the three files built from the whole patch stack, never to your real files;
 `accept_auto()` and `_accept()` were run lifted from that stand-in against a
-real memory store. Nothing here has run on your PC. **Neither app shows the
-new switches or the "Saved automatically" list yet** - until they do,
-automatically saved facts show up in the desktop's Memory tab with source
-`auto`, where Forget already works.
+real memory store. Nothing here has run on your PC. **Both apps have the
+switches and the "Saved automatically" list** (desktop: Brain -> Memory;
+phone: Mind), each fact with a Forget.
+
+Deleting a conversation from History does not forget facts learned from it - use Forget in Saved automatically.
+
+**Fixed after the audits of 2026-09-24** (`backend/test_auto_learn.py`,
+`test_learning_switch.py`, `test_chat_log.py`, each check shown failing
+before the fix):
+
+- **A fact that drops a word that changed its meaning is a card** (red team
+  R2). "I used to smoke" no longer saves "Owner smokes"; "My sister works at
+  Google" no longer saves "Owner works at Google". The sentence a fact came
+  from is read for not / never / used to / quit / if / would / might /
+  planning / want to ..., a question mark, a relation (sister, boss...), or
+  he / she / they; one the fact leaves out makes it a card.
+- **More kinds of hidden or pasted text are caught** (R4): every invisible
+  or unassigned character (variation selectors, which can carry a whole
+  hidden sentence, among them), encoded text cut into pieces, bare web
+  addresses like `evil.example/page`, and "іgnore" spelled with a Cyrillic
+  і. Said plainly: an emoji written with a variation selector (a red heart)
+  now makes that message a card too.
+- **Turning a switch off while its card is being approved can no longer be
+  undone by the card** (R5) - automatic learning, background learning and
+  chat history. OFF now waits the moment it takes, then wins.
+- **A saved fact cannot close the recalled-facts block early** (R7): a fact
+  containing "---END FACTS---" has it taken out before it is recalled.
+- **The words**: a damaged settings file now says turn it on again (it
+  already shows off); the learning-off note is the desktop's sentence; each
+  finished card carries a plain `message` beside the technical `why`.
+- **Sensitive saved facts stay on screen** (the owner's decision): the chat
+  route's `X-Jarvis-Route` now says how many of the recalled facts it used
+  are sensitive (`injected_sensitive`), and the voice check has a fourth
+  setting, `sensitive_memory`, to allow reading them aloud (with a card).
+  The route header is built in your `jarvis_hud.py`, which this repository
+  does not hold: the new lines sit next to `feedback.patch`'s `turn_id`
+  line and were checked only on the patch-stack stand-in.
 
 **Where it goes.** Last in the order, after `chat-history.patch`. Its context
 is chat-history's lines (the learner call it moves, both route blocks,
@@ -6165,6 +6198,7 @@ the training fails and says to record again somewhere quieter.
 | How strict | **very strict**, balanced | very strict | Stricter: at once. Looser: an approval card. |
 | Private answers by voice | **on screen only**, read aloud ("your voice is enough") | on screen only | The same. "Read aloud" is only possible while very strict; choosing balanced turns it off again. |
 | Answers that use what Jarvis remembers, by voice | **read aloud**, on screen only | read aloud (your choice, 2026-09-24) | On screen: at once. Back to aloud: an approval card. |
+| Answers that use a sensitive saved fact, by voice | **on screen only**, read aloud | on screen only (your decision, 2026-09-24) | On screen: at once. Read aloud: an approval card. |
 
 - **Very strict** needs a longer sentence (2 seconds of speech) and asks
   the stronger voice-ID model (`strong.onnx`, below) alone, at its
@@ -6181,12 +6215,16 @@ the training fails and says to record again somewhere quieter.
   Asking by typing on your own phone or PC is not affected.
 - **Answers that use what Jarvis remembers** are read aloud by default
   (your choice: "looser now, with a setting to make it more strict").
-  "On screen only" keeps them on screen too. Said plainly: a remembered
-  fact can be about your health or money while the question is not, and
-  under the default such an answer is read aloud. A QUESTION about health,
+  "On screen only" keeps them on screen too. A QUESTION about health,
   money, email, the calendar or notes still stays on screen either way.
-  When automatic learning can tell sensitive facts apart, those will stay
-  on screen by default.
+- **Answers that use a sensitive saved fact** (health, money, passwords,
+  other people) stay on screen by default - even while memory answers are
+  read aloud (your decision, 2026-09-24). The chat route counts them
+  (`injected_sensitive`) with the same word list automatic learning uses.
+  The fourth setting, `sensitive_memory`, can allow reading them aloud:
+  that raises an approval card, and even then only after a real voice
+  check. Said plainly: it is a word list, so a sensitive fact worded in a
+  way it misses is treated as ordinary.
 
 Also new: training in **three rounds** (normal and close; further away or
 quieter; another time or room), all kept in memory until one card at the

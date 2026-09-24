@@ -578,15 +578,26 @@ PRIVACY = (PRIVATE_ON_SCREEN, VOICE_IS_ENOUGH)
 MEMORY_ALOUD = "memory_aloud"
 MEMORY_ON_SCREEN = "memory_on_screen"
 MEMORY = (MEMORY_ALOUD, MEMORY_ON_SCREEN)
-#: The default of each setting. For strictness and privacy it is the strict
-#: value, also used for a missing, unreadable or unknown one. For memory the
-#: default is the owner's looser choice; an unknown VALUE (a damaged file)
-#: still falls back to the strict one - see settings().
+#: Answers that use a SENSITIVE saved fact - health, money, passwords and
+#: account details, other people (jarvis_auto_learn.sensitivity(); the chat
+#: route's `injected_sensitive`) - asked by voice. The owner's decision,
+#: 2026-09-24: kept on screen by default, EVEN when memory answers or
+#: private answers are read aloud; `sensitive_aloud` lets them be read aloud
+#: after a real voice check, and choosing it raises the voice approval card.
+SENSITIVE_ON_SCREEN = "sensitive_on_screen"
+SENSITIVE_ALOUD = "sensitive_aloud"
+SENSITIVE_MEMORY = (SENSITIVE_ON_SCREEN, SENSITIVE_ALOUD)
+#: The default of each setting. For strictness, privacy and sensitive_memory
+#: it is the strict value, also used for a missing, unreadable or unknown
+#: one. For memory the default is the owner's looser choice; an unknown VALUE
+#: (a damaged file) still falls back to the strict one - see settings().
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
-            "memory": MEMORY_ALOUD}
-_CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY}
+            "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN}
+_CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
+            "sensitive_memory": SENSITIVE_MEMORY}
 #: The LOOSER value of each: choosing it needs an approval card.
-LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD}
+LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
+          "sensitive_memory": SENSITIVE_ALOUD}
 _SETTINGS_LOCK = threading.Lock()
 
 #: The least speech a COMMAND must have, in seconds (the VAD's span, which
@@ -605,8 +616,9 @@ def settings_path() -> Path:
 
 
 def settings() -> dict:
-    """{"strictness", "privacy", "memory", "changed"}. The strict value for
-    anything missing, unreadable or unknown - except that a file with no
+    """{"strictness", "privacy", "memory", "sensitive_memory", "changed"}.
+    The strict value for anything missing, unreadable or unknown - except
+    that a file with no
     "memory" in it (every file written before 2026-09-24, and no file at
     all) gets the owner's default for memory, MEMORY_ALOUD. The one rule
     applied on every read as well as every write: private answers may be
@@ -663,7 +675,8 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
             raise ValueError("private answers can only be read aloud while the voice "
                              "check is very strict")
         new = {"strictness": cur["strictness"], "privacy": cur["privacy"],
-               "memory": cur["memory"], key: value}
+               "memory": cur["memory"], "sensitive_memory": cur["sensitive_memory"],
+               key: value}
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -1843,6 +1856,14 @@ def memory_aloud() -> bool:
     return s["memory"] == MEMORY_ALOUD
 
 
+def sensitive_aloud() -> bool:
+    """May an answer that uses a SENSITIVE saved fact be read aloud when
+    asked by voice? Only with the `sensitive_aloud` setting - not implied by
+    `memory_aloud` or `voice_is_enough` (the owner's decision, 2026-09-24).
+    jarvis_speech adds the other half: only after a real voice check."""
+    return settings()["sensitive_memory"] == SENSITIVE_ALOUD
+
+
 def may_speak(private: bool, origin: str = "voice") -> dict:
     """{"speak": bool, "why": str} - may an answer be read aloud?
 
@@ -1973,14 +1994,16 @@ def status() -> dict:
         "strictness": s["strictness"],
         "privacy": s["privacy"],
         "memory": s["memory"],
+        "sensitive_memory": s["sensitive_memory"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
-            "memory": s["memory"],
+            "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
             "choices": {"strictness": list(STRICTNESS), "privacy": list(PRIVACY),
-                        "memory": list(MEMORY)},
+                        "memory": list(MEMORY),
+                        "sensitive_memory": list(SENSITIVE_MEMORY)},
             "defaults": dict(DEFAULTS),
         },
         "models": {
