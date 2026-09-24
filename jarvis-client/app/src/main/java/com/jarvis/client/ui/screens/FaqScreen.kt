@@ -112,14 +112,43 @@ private val FAQS = listOf(
     ),
     Faq(
         "Why does approving something ask for my fingerprint, but denying doesn't?",
-        "Your fingerprint is asked only for the actions where it matters most " +
-            "— ones that leave this machine, cannot be undone, or arrived " +
-            "flagged as rushed. A phone is the device most likely to be " +
-            "picked up by someone who is not you, so approving one of those " +
-            "actions checks that whoever is holding it right now is really " +
-            "the owner. Denying is always the safe direction, so it is never " +
-            "gated behind anything — the cautious answer should never be the " +
-            "slow one.",
+        // Kept in step with SecurityScreen.kt and data/Security.kt.
+        "Out of the box, your fingerprint (or phone PIN) is asked only for " +
+            "the risky ones: actions that leave your PC, cannot be undone, " +
+            "were not labelled by Jarvis, or arrived flagged as rushed. A phone " +
+            "is the device most likely to be picked up by someone who is not " +
+            "you, so approving one of those checks that whoever is holding it " +
+            "right now is really the owner. If you want it for every approval, " +
+            "open Platform checks, then Lock and fingerprint settings, and " +
+            "choose Every approval. Denying is always the safe direction, so it " +
+            "is never gated behind anything — the cautious answer should never " +
+            "be the slow one.",
+    ),
+    Faq(
+        "Can I lock Jarvis itself, or hide what it remembers?",
+        "Yes, in Platform checks, then Lock and fingerprint settings. Lock " +
+            "Jarvis makes opening the app need your fingerprint or phone PIN, " +
+            "and you choose how long it can be out of sight before it asks " +
+            "again. Hide memory lists keeps Mind's memory lists and the wiki's " +
+            "list of your notes hidden until you tap Show and confirm. Chat " +
+            "answers are not hidden, because your PC does not say which ones " +
+            "used your email, calendar, notes or memory. Fingerprint only " +
+            "leaves out the PIN; only a fingerprint or face that Android rates " +
+            "as strong counts, and many phones' face unlock does not. Turning " +
+            "something on is instant; turning it off asks for your fingerprint " +
+            "or PIN first. These settings stay on this phone and are never " +
+            "sent to your PC.",
+    ),
+    Faq(
+        "My phone has no screen lock. Does the fingerprint check still work?",
+        "Not really, because there is nothing for Jarvis to check against. " +
+            "With every lock setting off, Jarvis still lets you approve, the " +
+            "same as always. Once you turn any of them on, approvals that need " +
+            "the check are refused, and the app lock and hidden lists stay " +
+            "shut, with a message saying to set a screen lock in Android's " +
+            "Settings (Security, Screen lock). Jarvis will not let you turn a " +
+            "lock on while the phone has no screen lock, so this only happens " +
+            "if the screen lock is removed later.",
     ),
     Faq(
         "What does a Jarvis notification show on my lock screen?",
@@ -127,9 +156,10 @@ private val FAQS = listOf(
             "content of what it wants to do. The real details stay hidden " +
             "until you unlock the phone and open the app. The notification " +
             "can have a Deny button, when refusing without reading is safe, " +
-            "but never an Approve button, on purpose: saying yes is gated " +
-            "behind your fingerprint inside the app, and that is not a " +
-            "decision to make from a locked screen.",
+            "but never an Approve button, on purpose: saying yes happens " +
+            "inside the app, where the risky ones ask for your fingerprint, " +
+            "and that is not a decision to make from a locked screen. The " +
+            "home-screen widget follows the same rule.",
     ),
     Faq(
         "Does Jarvis's spoken voice ever get sent to a company like Google?",
@@ -330,7 +360,7 @@ private fun AboutCard() {
                 modifier = Modifier.width(64.dp),
             )
             Text(
-                "github.com/darknight111/Epic-Jarvis",
+                "github.com/darknight11ish/Epic-Jarvis",
                 style = MaterialTheme.typography.bodySmall,
                 color = LocalAccent.current,
                 modifier = Modifier.pressable(onClick = {
@@ -340,7 +370,7 @@ private fun AboutCard() {
                     // render a web page.
                     val intent = Intent(
                         Intent.ACTION_VIEW,
-                        Uri.parse("https://github.com/darknight111/Epic-Jarvis"),
+                        Uri.parse("https://github.com/darknight11ish/Epic-Jarvis"),
                     )
                     context.startActivity(intent)
                 }),

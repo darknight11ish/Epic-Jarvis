@@ -194,6 +194,16 @@ fun BrainScreen(
      * age on the freshness line is always shown either way.
      */
     autoRefreshMs: Long = 0L,
+    /**
+     * "Hide memory lists" (Security) is on and not yet shown: the memory
+     * review list, "What did I believe on this date?" and the wiki's list
+     * are replaced by [HiddenSection] until [onShowPrivate] is confirmed.
+     */
+    privateHidden: Boolean = false,
+    /** Asks for the fingerprint or PIN, then shows them. */
+    onShowPrivate: () -> Unit = {},
+    /** True while that check is up. */
+    showPrivateBusy: Boolean = false,
 ) {
     val chrome = LocalChrome.current
     // The same test ModelsPlate always had, now shared by every control on this
@@ -417,7 +427,11 @@ fun BrainScreen(
             // How much Jarvis remembers, and whether it is learning - the
             // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
             item(key = "memory-counts") { MemoryCountsSection() }
-            item(key = "memory") {
+            if (privateHidden) {
+                item(key = "memory-hidden") {
+                    HiddenSection("Memory awaiting review", busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else item(key = "memory") {
                 // The QUEUE, not the corpus. /api/graph is desktop-only by the
                 // contract's own instruction, and a memory graph is not a thing
                 // to read on a phone; what belongs here is the short list of
@@ -441,11 +455,19 @@ fun BrainScreen(
             }
             // backend/wiki.patch - its own plate, reading and acting through
             // JarvisRuntime directly (WikiPlate.kt), so this is its only line.
-            item(key = "wiki") { WikiSection(canAct = canAct) }
+            if (privateHidden) {
+                item(key = "wiki-hidden") { HiddenSection("Wiki", busy = showPrivateBusy, onShow = onShowPrivate) }
+            } else {
+                item(key = "wiki") { WikiSection(canAct = canAct) }
+            }
             // The GitHub watch list (WatchPlate.kt) - it reads and acts
             // through JarvisRuntime directly, so this is its only line.
             item(key = "watch") { WatchSection(canAct = canAct) }
-            item(key = "memory-as-of") {
+            if (privateHidden) {
+                item(key = "memory-as-of-hidden") {
+                    HiddenSection("What did I believe on this date?", busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else item(key = "memory-as-of") {
                 Section("What did I believe on this date?") {
                     MemoryAsOfPlate(
                         busy = memoryAsOfBusy,

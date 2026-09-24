@@ -126,6 +126,10 @@ fun ReadinessScreen(
     voiceAnswered: Boolean = false,
     /** Opens "Train my voice". Null hides the button. */
     onTrainVoice: (() -> Unit)? = null,
+    /** One line on what Security has on (`SecurityRules.summary`). Null hides the card. */
+    securitySummary: String? = null,
+    /** Opens Security. */
+    onOpenSecurity: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     // Split rather than re-sorted, so within each group the order stays the
@@ -200,6 +204,9 @@ fun ReadinessScreen(
                     bargeInEchoCanceller = bargeInEchoCanceller,
                     onBargeIn = onBargeIn,
                 )
+            }
+            if (securitySummary != null) {
+                item(key = "security") { SecurityCard(securitySummary, onOpenSecurity) }
             }
             items(others, key = { it.title }) { ReadinessCard(it, fixFor(it)) }
             item(key = "frame-rate") { FrameRateCard() }
@@ -761,5 +768,27 @@ private fun ago(ms: Long): String {
         s < 60L -> "$s s ago"
         s < 3_600L -> "${s / 60L} min ago"
         else -> "${s / 3_600L} h ago"
+    }
+}
+
+/**
+ * What Security has on, and the way there. The settings themselves are on
+ * their own screen (SecurityScreen.kt); this is where the phone's other
+ * settings already live, so it is where the owner will look.
+ */
+@Composable
+private fun SecurityCard(summary: String, onOpen: () -> Unit) {
+    val chrome = LocalChrome.current
+    Plate {
+        Text("Security", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        Gap(6)
+        Text(summary, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        Gap(12)
+        Secondary(
+            text = "Lock and fingerprint settings",
+            color = chrome.textMid,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onOpen,
+        )
     }
 }

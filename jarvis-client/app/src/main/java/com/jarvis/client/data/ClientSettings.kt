@@ -56,6 +56,21 @@ class ClientSettings(context: Context) {
         _bargeIn.value = value
     }
 
+    private val _security = MutableStateFlow(SecurityRules.fromStored { prefs.getString(it, null) })
+
+    /**
+     * The lock and fingerprint settings (Checks, Security). On this phone
+     * only: nothing here is ever sent to the PC. Only [setSecurity] writes
+     * them, and the caller checks the fingerprint first for any loosening
+     * (`SecurityRules.loosens`) - this class does not know how to ask.
+     */
+    val security: StateFlow<Security> = _security.asStateFlow()
+
+    fun setSecurity(value: Security) {
+        prefs.edit { SecurityRules.toStored(value).forEach { (k, v) -> putString(k, v) } }
+        _security.value = value
+    }
+
     /**
      * The base URL. `http` rather than `https`: the desktop serves plain HTTP
      * over the tailnet, which is why the network security config exists at all.
