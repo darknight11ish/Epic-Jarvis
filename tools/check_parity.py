@@ -166,11 +166,15 @@ CLASSIFICATION = {
     "/api/voice/utterance": ("ported", ""),
     # Custom voices (backend/voices.patch, 2026-09-24): built on the backend
     # first; both apps are to build against docs/JARVIS-API.md section 15.
-    "/api/voice/voices": ("planned", "Custom voices: the list, which one Jarvis speaks in and why the built-in voice is used instead, the better voice's state, and say() timings (docs/JARVIS-API.md section 15)."),
-    "/api/voice/voices/create": ("planned", "Add a custom voice: a recording and its exact words. One approval card (custom_voice); a voice that sounds like the owner's is refused."),
-    "/api/voice/voices/active": ("planned", "Speak in a custom voice (one approval card) or back in the built-in one (immediate)."),
-    "/api/voice/voices/delete": ("planned", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use."),
-    "/api/voice/voices/better": ("planned", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate."),
+    # The PHONE calls all five since 2026-09-24 (Platform checks -> Jarvis's
+    # voice, ui/screens/VoicesScreen.kt, net/CustomVoices.kt); the desktop
+    # half is being built. Kept "planned" until the desktop calls them too,
+    # then "ported" - the tool warns (not fails) meanwhile.
+    "/api/voice/voices": ("planned", "Custom voices: the list, which one Jarvis speaks in and why the built-in voice is used instead, the better voice's state, and say() timings (docs/JARVIS-API.md section 15). Phone: Platform checks, Jarvis's voice (VoicesScreen.kt), re-read on the `voices` event."),
+    "/api/voice/voices/create": ("planned", "Add a custom voice: a recording and its exact words. One approval card (custom_voice); a voice that sounds like the owner's is refused. Phone: record a sentence it shows (the words are that sentence - no speech-to-text) or pick a WAV and type its words; held on a stale link."),
+    "/api/voice/voices/active": ("planned", "Speak in a custom voice (one approval card) or back in the built-in one (immediate). Phone: the custom voice is held on a stale link, the built-in one always goes."),
+    "/api/voice/voices/delete": ("planned", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use. Phone: asks first on the phone, never held."),
+    "/api/voice/voices/better": ("planned", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate. Phone: offered only when a capable second card is there; ON held on a stale link, OFF always goes."),
     "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card, turning it off is immediate. Both apps can do both: desktop Settings, Voice (set_wake_word; ON also from the Jarvis bar's listen button), phone Platform checks."),
     "/api/watch": ("ported", "Watches - the GitHub topics Jarvis keeps an eye on. Desktop: Brain, Watch tab. Phone: Mind, Watches (WatchPlate.kt, net/Watch.kt)."),
     "/api/watch/add": ("ported", "Watch a topic. The phone holds it on a stale link (it turns something on) and shows a card if the PC raises one."),
