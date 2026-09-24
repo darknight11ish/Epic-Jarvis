@@ -777,6 +777,12 @@ stt_engine = "sherpa-onnx"
 # f5_python = ''                        # a Python with PyTorch + f5-tts; default: the one running Jarvis
 # f5_idle_minutes = 10                  # the better voice stops after this long with nothing to say
 # f5_steps = 32                         # F5-TTS's steps per sentence
+#
+# The voice flow (jarvis_voice_flow.py, 2026-09-24). All on unless set false
+# here; the apps cannot change these, only use them or not.
+# barge_in_enabled = true               # while Jarvis talks, YOUR voice (or "stop") stops it - never the TV, never its own voice; never transcribed
+# one_moment_enabled = true             # make a short "One moment." clip, in the voice in use, for the apps to play while you wait
+# warm_engines = true                   # load the voice engines in the background before your first spoken turn needs them
 
 
 # ------------------------------------------------------------------------
