@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.net.ChatHistory.Exchange
+import com.jarvis.client.net.Provenance
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -24,7 +25,7 @@ import org.junit.Test
 class ChatHistoryTest {
 
     private fun body(window: List<Exchange>, question: String): JsonObject =
-        Json.parseToJsonElement(ChatHistory.requestBody(window, question)).jsonObject
+        Json.parseToJsonElement(ChatHistory.requestBody(window, ChatHistory.asking(question))).jsonObject
 
     private fun messages(obj: JsonObject): JsonArray = obj["messages"]!!.jsonArray
 
@@ -53,8 +54,11 @@ class ChatHistoryTest {
         assertEquals(JsonPrimitive(false), obj["has_image"])
         assertEquals(JsonPrimitive(true), obj["stream"])
         assertEquals(JsonPrimitive(true), obj["auto"])
-        // No field the backend has never read - `message` was one, once.
-        assertEquals(setOf("messages", "has_image", "stream", "auto"), obj.keys)
+        // No field the backend does not read - `message` was one, once.
+        // `device` is section 18's (chat history); `conversation_id` goes
+        // only when there is one.
+        assertEquals(setOf("messages", "has_image", "stream", "auto", "device"), obj.keys)
+        assertEquals(JsonPrimitive("phone"), obj["device"])
     }
 
     @Test
@@ -69,11 +73,18 @@ class ChatHistoryTest {
     }
 
     @Test
-    fun `only role and content, and only user and assistant turns, ever go`() {
+    fun `only user and assistant turns go - the answers with role and content, the questions with where they came from too`() {
         val window = build("a" to "b", "c" to "d")
         val obj = body(window, "e")
         assertTrue(roles(obj).all { it == "user" || it == "assistant" })
-        assertTrue(messages(obj).all { it.jsonObject.keys == setOf("role", "content") })
+        for (m in messages(obj).map { it.jsonObject }) {
+            val want = if (m["role"]!!.jsonPrimitive.content == "user") {
+                setOf("role", "content", "provenance")
+            } else {
+                setOf("role", "content")
+            }
+            assertEquals(want, m.keys)
+        }
     }
 
     @Test
@@ -172,5 +183,99 @@ class ChatHistoryTest {
         assertTrue(ChatHistory.MAX_CHARS / 3 <= room)
         assertTrue(ChatHistory.KEEP_CHARS < ChatHistory.MAX_CHARS)
         assertTrue(ChatHistory.KEEP_EXCHANGES < ChatHistory.MAX_EXCHANGES)
+    }
+
+    // ------------------------------- chat history on the PC (API sec. 18) ---
+
+    private fun tags(obj: JsonObject): List<String?> =
+        messages(obj).map { it.jsonObject["provenance"]?.jsonPrimitive?.content }
+
+    private fun send(
+        window: List<Exchange>,
+        asking: List<ChatHistory.UserTurn>,
+        picture: String? = null,
+        conversationId: String? = null,
+    ): JsonObject =
+        Json.parseToJsonElement(ChatHistory.requestBody(window, asking, picture, conversationId)).jsonObject
+
+    @Test
+    fun `every user message says where it came from, and the answers say nothing`() {
+        val obj = send(emptyList(), ChatHistory.asking("hello", Provenance.TYPED))
+        assertEquals(listOf<String?>("typed"), tags(obj))
+        val after = ChatHistory.commit(emptyList(), ChatHistory.asking("hello", Provenance.VOICE), "Hi.")
+        assertEquals(listOf("voice", null, "typed"), tags(send(after, ChatHistory.asking("and?"))))
+    }
+
+    @Test
+    fun `a tag survives being sent again, turn after turn`() {
+        var w = emptyList<Exchange>()
+        w = ChatHistory.commit(w, ChatHistory.asking("spoken", Provenance.VOICE), "a1")
+        w = ChatHistory.commit(w, ChatHistory.asking("a long paste", Provenance.PASTED), "a2")
+        w = ChatHistory.commit(w, ChatHistory.asking("typed", Provenance.TYPED), "a3")
+        val obj = send(w, ChatHistory.asking("now"))
+        assertEquals(listOf("user", "assistant", "user", "assistant", "user", "assistant", "user"), roles(obj))
+        assertEquals(listOf("voice", null, "pasted", null, "typed", null, "typed"), tags(obj))
+        assertEquals(listOf("spoken", "a1", "a long paste", "a2", "typed", "a3", "now"), contents(obj))
+    }
+
+    @Test
+    fun `shared text goes as its own message, tagged shared, right before the typed one`() {
+        val asking = ChatHistory.asking("what do you make of this?", Provenance.TYPED, shared = "A long article…")
+        val obj = send(emptyList(), asking, conversationId = "abcdef12")
+        assertEquals(listOf("user", "user"), roles(obj))
+        assertEquals(listOf("A long article…", "what do you make of this?"), contents(obj))
+        assertEquals(listOf<String?>("shared", "typed"), tags(obj))
+        // Never glued into the owner's words.
+        assertTrue(contents(obj).none { it.contains("article") && it.contains("make of") })
+    }
+
+    @Test
+    fun `shared text with nothing typed goes alone`() {
+        val obj = send(emptyList(), ChatHistory.asking("   ", Provenance.TYPED, shared = "just this"))
+        assertEquals(listOf("just this"), contents(obj))
+        assertEquals(listOf<String?>("shared"), tags(obj))
+    }
+
+    @Test
+    fun `a shared message is kept with its turn and sent again in front of it`() {
+        val w = ChatHistory.commit(
+            emptyList(),
+            ChatHistory.asking("summarise it", Provenance.TYPED, shared = "the text"),
+            "It says hello.",
+        )
+        assertEquals(1, w.size)
+        assertEquals("summarise it", w.single().question)
+        val obj = send(w, ChatHistory.asking("thanks"))
+        assertEquals(listOf("user", "user", "assistant", "user"), roles(obj))
+        assertEquals(listOf("shared", "typed", null, "typed"), tags(obj))
+        // Both messages count against the budget.
+        assertEquals("the text".length + "summarise it".length + "It says hello.".length, ChatHistory.chars(w))
+    }
+
+    @Test
+    fun `a picture's words are a picture caption, whatever the box said`() {
+        val pic = "data:image/jpeg;base64,AAAA"
+        val asking = ChatHistory.asking("what is this?", Provenance.PASTED, picture = true)
+        assertEquals(listOf(ChatHistory.UserTurn("what is this?", Provenance.PICTURE_CAPTION)), asking)
+        val obj = send(emptyList(), asking, picture = pic)
+        assertEquals(listOf<String?>("picture_caption"), tags(obj))
+        assertEquals(JsonPrimitive(true), obj["has_image"])
+        // A picture with no words still sends its (empty) caption message.
+        assertEquals(1, ChatHistory.asking("", picture = true).size)
+    }
+
+    @Test
+    fun `the conversation id goes when it is one the PC accepts, and device always`() {
+        val id = ChatHistory.newConversationId()
+        assertTrue(id, ChatHistory.validConversationId(id))
+        assertTrue(ChatHistory.newConversationId() != id)
+        val obj = send(emptyList(), ChatHistory.asking("hi"), conversationId = id)
+        assertEquals(JsonPrimitive(id), obj["conversation_id"])
+        assertEquals(JsonPrimitive("phone"), obj["device"])
+        for (bad in listOf("short", "has space in it", "x".repeat(65), "semi;colon12")) {
+            assertTrue(bad, send(emptyList(), ChatHistory.asking("hi"), conversationId = bad)["conversation_id"] == null)
+        }
+        assertTrue(ChatHistory.validConversationId("A-b_9".repeat(2)))
+        assertTrue(ChatHistory.validConversationId("x".repeat(64)))
     }
 }

@@ -148,8 +148,8 @@ fun SecurityScreen(
                         SwitchRow(
                             title = "Hide memory lists",
                             detail = "On Mind, what Jarvis wants to remember, what it believed on a " +
-                                "date, and the wiki's list of your notes stay hidden until you tap " +
-                                "Show and confirm it is you.",
+                                "date, the wiki's list of your notes and your chat history stay " +
+                                "hidden until you tap Show and confirm it is you.",
                             checked = security.privateLists,
                             enabled = !busy,
                             onChange = { onChange(security.copy(privateLists = it)) },

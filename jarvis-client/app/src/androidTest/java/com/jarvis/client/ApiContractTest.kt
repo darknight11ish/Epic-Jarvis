@@ -440,6 +440,82 @@ class ApiContractTest {
         assertEquals(listOf("user:hi"), roles(server.takeRequest(10, TimeUnit.SECONDS)!!))
     }
 
+    /**
+     * Chat history on the PC (docs/JARVIS-API.md section 18), read off the
+     * wire from the real ChatSession: every request says which conversation
+     * it belongs to and that it came from the phone, each question says
+     * where its words came from - and keeps saying so when it is sent again -
+     * and shared text goes as its own message, before the typed one. "New
+     * conversation" means a new id.
+     */
+    @Test
+    fun everyChatSaysItsConversationAndWhereEachQuestionCameFrom() = runBlocking {
+        fun body(req: RecordedRequest): org.json.JSONObject = org.json.JSONObject(req.body.readUtf8())
+        fun tags(o: org.json.JSONObject): List<String> {
+            val msgs = o.getJSONArray("messages")
+            return (0 until msgs.length()).map { msgs.getJSONObject(it).optString("provenance") }
+        }
+        routes["/api/chat"] = MockResponse().setResponseCode(200)
+            .setHeader("Content-Type", "text/plain").setBody("Noted.")
+        val chat = ChatSession(api)
+
+        chat.send("what is this about?", shared = "an article from another app")
+        val first = body(server.takeRequest(10, TimeUnit.SECONDS)!!)
+        val id = first.getString("conversation_id")
+        assertEquals("phone", first.getString("device"))
+        assertEquals(listOf("shared", "typed"), tags(first))
+        assertEquals(
+            "an article from another app",
+            first.getJSONArray("messages").getJSONObject(0).getString("content"),
+        )
+
+        chat.send("and this?", provenance = "voice")
+        val second = body(server.takeRequest(10, TimeUnit.SECONDS)!!)
+        assertEquals(id, second.getString("conversation_id"))
+        // The earlier turn's tags ride along with it; the answer has none.
+        assertEquals(listOf("shared", "typed", "", "voice"), tags(second))
+
+        chat.newConversation()
+        chat.send("hi")
+        val third = body(server.takeRequest(10, TimeUnit.SECONDS)!!)
+        assertFalse("a new conversation kept the old id", third.getString("conversation_id") == id)
+        assertEquals(listOf("typed"), tags(third))
+    }
+
+    /**
+     * The History routes (section 18), with the token and the client header
+     * like every other: one page, one conversation, and one delete - by id,
+     * in the body, never in bulk.
+     */
+    @Test
+    fun theHistoryRoutesAreTheContracts() = runBlocking {
+        routes["/api/history"] = ok(
+            """{"enabled":true,"recording":true,"why_not":"","waiting":false,"keep_days":0,
+               "encrypted":true,"conversations":[{"id":"abcd1234","title":"Dentist","started":1,
+               "updated":2,"turns":2,"device":"phone","has_voice":false,"tainted":false}]}""",
+        )
+        routes["/api/history/delete"] = ok("""{"ok":true}""")
+
+        val page = api.history()
+        assertTrue(page is ApiResult.Ok)
+        val list = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("/api/history?limit=30", list.path)
+        assertEquals("hud", list.getHeader("X-Jarvis-Client"))
+        assertEquals(TOKEN, list.getHeader("X-Jarvis-Token"))
+
+        val gone = api.deleteHistory("abcd1234")
+        assertTrue(gone is ApiResult.Ok)
+        val del = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("POST", del.method)
+        assertEquals("abcd1234", org.json.JSONObject(del.body.readUtf8()).getString("id"))
+        assertEquals("hud", del.getHeader("X-Jarvis-Client"))
+
+        // Gone already: 404, said as such.
+        val missing = api.historyConversation("nope1234")
+        assertEquals(ApiResult.Failed(ApiError.NotFound), missing)
+        assertEquals("/api/history/conversation?id=nope1234", server.takeRequest(10, TimeUnit.SECONDS)!!.path)
+    }
+
     // ------------------------------------------------------------- voice ---
 
     /**

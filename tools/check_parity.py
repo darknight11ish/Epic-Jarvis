@@ -118,21 +118,7 @@ CLASSIFICATION = {
     "/api/digest/seen": ("ported", ""),
     "/api/events": ("ported", ""),
     "/api/feedback/mark": ("ported", ""),
-    # Chat history on the PC (JARVIS-API.md section 18, 2026-09-24). Built for
-    # both apps at once; `todo` on the desktop branch until the phone's
-    # History screen merges, then `ported`.
-    "/api/history": ("todo", "Chat history kept on the PC: the list, the switch and the keep setting (backend/chat-history.patch). Desktop: the Brain's History tab (brain_history_list). Phone: a History screen, being built to the same contract."),
-    "/api/history/conversation": ("todo", "One conversation, read-only (chat-history.patch). Desktop: History, Open (brain_history_open). Phone: History screen."),
-    "/api/history/delete": ("todo", "Delete ONE conversation, after a confirm; no delete-all route exists (chat-history.patch). Desktop: History, Delete (brain_history_delete, held on a stale link). Phone: History screen."),
-    "/api/history/settings": ("todo", "\"Keep chat history on this PC\" (ON raises a history_enable card, OFF immediate) and \"Delete conversations older than\" (chat-history.patch). Desktop: History (brain_history_settings, ON held on a stale link). Phone: History screen."),
     "/api/graph": ("deliberate", "The memory graph is explicitly out of scope on the phone (CLAUDE.md)."),
-    # Chat history kept on the PC (backend/chat-history.patch, 2026-09-24):
-    # built on the backend first; both apps are to build against
-    # docs/JARVIS-API.md section 18.
-    "/api/history": ("planned", "Chat history: the conversations this PC has kept, newest first, with the switch's state and why nothing is being kept when it is not (docs/JARVIS-API.md section 18). Desktop: the Brain window's History section. Phone: a History screen next to Mind's other sections."),
-    "/api/history/conversation": ("planned", "One kept conversation, read-only, with where each of your messages came from."),
-    "/api/history/delete": ("planned", "Delete one conversation, after a confirm step. There is no delete-all."),
-    "/api/history/settings": ("planned", "\"Keep chat history on this PC\": OFF is immediate; ON raises one approval card (history_enable) and both apps say \"Waiting for your approval\" while it waits. Also how long to keep conversations."),
     "/api/holds/cancel": ("ported", ""),
     "/api/initiative": ("ported", "Brain screen, read-only."),
     "/api/jobs": ("ported", ""),
@@ -200,6 +186,12 @@ CLASSIFICATION = {
     "/api/watch/remove": ("ported", "Forget a topic, after a warning. Never held on a stale link."),
     "/api/watch/report": ("ported", "What is new - a peek that marks nothing read."),
     "/api/watch/seen": ("ported", "Mark these read - a POST on purpose, so opening a link cannot clear the list."),
+    # Chat history on the PC (docs/JARVIS-API.md section 18, 2026-09-24):
+    # built on the backend and both apps at once.
+    "/api/history": ("ported", "Chat history kept on the PC, encrypted (docs/JARVIS-API.md section 18): the switch, why nothing is being kept (if so), how long it is kept, and conversations newest first with Load older. Desktop: the Brain's History tab (brain_history_list). Phone: Mind, Chat history (HistoryScreen.kt, net/ChatLog.kt)."),
+    "/api/history/conversation": ("ported", "One conversation, read-only, with where each of the owner's messages came from (shared, pasted, from clipboard). Desktop: History, Open (brain_history_open). Phone: History screen."),
+    "/api/history/delete": ("ported", "Delete ONE conversation, after a confirm. There is no delete-all route, on purpose. Both apps hold it on a stale link (it cannot be undone), like Forget on the desktop."),
+    "/api/history/settings": ("ported", "\"Keep chat history on this PC\": ON is one approval card (history_enable), OFF is immediate; and \"Delete conversations older than\" (keep_days). Both apps hold ON and every keep change on a stale link; OFF is never held."),
     "/api/wiki": ("ported", "The wiki builder's documents and their state (backend/wiki.patch, 2026-09-24). Both apps list them; neither browses files or reads pages - the vault reaches the phone through Syncthing."),
     "/api/wiki/ingest": ("ported", "\"Add to wiki\" for one document, then its job. Raises one approval card (wiki_update); nothing is written before it is answered."),
 }

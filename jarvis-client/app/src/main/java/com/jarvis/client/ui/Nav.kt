@@ -68,9 +68,10 @@ import kotlinx.coroutines.CancellationException
  *
  * `VOICE_CHECK` (how strict the voice check is, private answers, the repeat
  * test) and `VOICES` (custom voices) are opened from the voice card on
- * `CHECKS`. Last again.
+ * `CHECKS`. `HISTORY` is chat history on the PC (docs/JARVIS-API.md
+ * section 18), opened from Mind. Last again, for the same reason.
  */
-enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY, VOICE_CHECK, VOICES }
+enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY, VOICE_CHECK, VOICES, HISTORY }
 
 /**
  * A back stack, because there was not one.

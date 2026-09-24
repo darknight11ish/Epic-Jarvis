@@ -529,7 +529,11 @@ object JarvisRuntime {
             // not a subscription to that shared flow - see ChatSession.send's
             // own doc for why that distinction is the whole point. `onRoute`
             // is the same kind of callback, for the answer's header.
-            chatSession.send(text, onDelta, onRoute = onRoute)?.takeIf { it.isNotBlank() }
+            // Tagged "voice": this is the transcript the PC's speech route
+            // gave back (chat history, docs/JARVIS-API.md section 18).
+            chatSession.send(
+                text, onDelta, onRoute = onRoute, provenance = com.jarvis.client.net.Provenance.VOICE,
+            )?.takeIf { it.isNotBlank() }
         }
 
         settings = clientSettings
@@ -2622,6 +2626,67 @@ object JarvisRuntime {
         return when (val r = writeNoticingCards { api.setLearning(on) }) {
             is ApiResult.Ok -> com.jarvis.client.net.MemoryCounts.learningSaid(on, r.value)
             is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
+    // ---------------------------------------------------- chat history ----
+    // docs/JARVIS-API.md section 18 (2026-09-24) - see
+    // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The
+    // phone reads all of it from the PC and keeps none of it.
+
+    /** `GET /api/history`, one page, newest first. A read: never held. */
+    suspend fun history(before: Long? = null): ApiResult<JsonObject> = api.history(before)
+
+    /** `GET /api/history/conversation` - one conversation, read-only. */
+    suspend fun historyConversation(id: String): ApiResult<JsonObject> = api.historyConversation(id)
+
+    /**
+     * The chat history switch - the same shape as [setLearning]. ON is held
+     * on a stale link (rule 4) and raises an approval card on the PC; OFF is
+     * never held - it only stops something. @return the sentence to show.
+     */
+    suspend fun setHistory(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setHistory(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.enableSaid(on, r.value)
+            is ApiResult.Failed -> "Not changed. " +
+                (com.jarvis.client.net.ChatLog.failure(r.error) ?: describe(r.error))
+        }
+    }
+
+    /**
+     * "Delete conversations older than". Held on a stale link (rule 4), the
+     * same as the desktop: a shorter limit deletes at once, cannot be
+     * undone, and was chosen from a list this phone may not have seen the
+     * latest of. @return the sentence to show.
+     */
+    suspend fun setHistoryKeepDays(days: Int): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.ChatLog.keepDaysBody(days)
+            ?: return "Not changed. Pick Never, 30 days, 90 days or 1 year."
+        return when (val r = api.setHistoryKeepDays(body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.keepSaid(days, r.value)
+            is ApiResult.Failed -> "Not changed. " +
+                (com.jarvis.client.net.ChatLog.failure(r.error) ?: describe(r.error))
+        }
+    }
+
+    /**
+     * Deletes ONE conversation from the PC, after the History screen's
+     * confirm. Held on a stale link (rule 4), the same as the desktop's
+     * History and its Forget: it cannot be undone, and it acts on a list read
+     * over a link that cannot be confirmed live. One already gone counts as
+     * deleted. @return whether it is gone now, and the sentence to show.
+     */
+    suspend fun deleteHistory(id: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.deleteHistory(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.deleteSaid(r.value)
+            is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
+                true to com.jarvis.client.net.ChatLog.ALREADY_GONE
+            } else {
+                false to "Not deleted. " + describe(r.error)
+            }
         }
     }
 
