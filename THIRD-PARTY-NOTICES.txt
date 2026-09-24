@@ -102,6 +102,20 @@ stop_head.bin - generated numbers, not audio (the same bytes in both)
   (https://huggingface.co/hexgrad/Kokoro-82M, Apache-2.0, via the
   sherpa-onnx kokoro-en-v0_19 release). Neither voice is shipped by it.
 
+backend/jarvis_voicebank.py - generated numbers, not audio
+  Voice prints (one averaged vector per speaker, per model) of 300 real
+  speakers from Speech Commands v0.02, made by tools/gen_voicebank.py.
+  Attribution: Pete Warden, "Speech Commands: A Dataset for
+  Limited-Vocabulary Speech Recognition", 2018,
+  https://storage.googleapis.com/download.tensorflow.org/data/speech_commands_v0.02.tar.gz,
+  CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Changes: each
+  speaker's word clips were trimmed, joined into two 8-word sentences, and
+  turned into numbers by the two voice-ID models below; no audio, word or
+  speaker id is kept. The models' own licences apply to their output as
+  they state them: 3D-Speaker CAM++ (Apache-2.0) and NVIDIA NeMo
+  TitaNet-Large (its NGC model card states the licence; not re-checked
+  from the container that generated this file).
+
 ONNX Runtime 1.22.0 (Microsoft), MIT - https://github.com/microsoft/onnxruntime
   The Android library runs the models on the phone
   (com.microsoft.onnxruntime:onnxruntime-android, from Maven Central); the
@@ -111,7 +125,8 @@ sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
   The PC's speech-to-text, spoken replies and Silero VAD. The model files
   the owner downloads carry their own licences: NVIDIA Parakeet TDT 0.6B v2
   (CC-BY-4.0), Kokoro-82M v0.19 (Apache-2.0), Silero VAD (MIT), 3D-Speaker
-  CAM++ (Apache-2.0).
+  CAM++ (Apache-2.0), and - for "very strict" - NVIDIA NeMo TitaNet-Large
+  (the licence its NGC model card states).
 
 Smart Turn v3.2 (Daily / Pipecat), BSD 2-Clause -
 https://github.com/pipecat-ai/smart-turn

@@ -704,10 +704,18 @@ enabled = true
 mode = "owner"
 wake_phrase = "hey_jarvis"
 wake_threshold = 0.5
-# Cosine-similarity bar for accepting a voice as yours. Enrolment lowers it
-# automatically if your own sample clips are loosely clustered, so a strict
-# value here cannot lock you out.
+# Similarity bar for accepting a voice as yours, on the small voice-ID model.
+# Since 2026-09-24 nothing lowers it below that model's own measured floor
+# (training used to lower it to fit your loosest recording - one noisy clip
+# could make Jarvis accept almost anyone). Each model has its own measured
+# bars in jarvis_voice.py (MODEL_BARS); this can only make them stricter.
 threshold = 0.35
+# How strict ("very_strict", the default, or "balanced") and whether private
+# answers may be read aloud are NOT set here: they live in
+# voice\voice-settings.json, and are changed from the apps - tightening at
+# once, loosening only through an approval card. Very strict needs a second,
+# stronger voice-ID model beside the first:
+# speaker_model_strong = "C:/path/to/strong.onnx"   # default: voice-models/speaker/strong.onnx
 awake_timeout_s = 8            # a wake with no speech goes back to sleep
 
 # --- The PHONE's ears -----------------------------------------------------

@@ -32,3 +32,7 @@ tomli; python_version < "3.11"         # reading jarvis-framework.toml on Python
 #   torch        used only if sherpa-onnx's speaker model is not set up. The
 #                sherpa-onnx route above does the same job without PyTorch;
 #                backend\README.md "Install the better voice check" has it.
+#   soundfile    only for building the "other voices" bank from LibriSpeech's
+#                FLAC files on this PC (`py -3 jarvis_voice.py --build-cohort
+#                <folder>`, rebuilt jarvis_voice.py). Nothing else reads FLAC;
+#                backend\README.md "The stricter voice check" has the line.

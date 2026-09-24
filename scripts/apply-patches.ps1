@@ -309,6 +309,7 @@ $SHIPPED = @(
     'jarvis_stopword.py'         # the "stop" word's numbers: jarvis_wakeword.spot_stop, to interrupt Jarvis while it talks
     'jarvis_local_http.py'       # HTTP to this PC's own services (Ollama, Joplin, the second card) never through a proxy
     'jarvis_child_env.py'        # what the second Ollama and colibri inherit: an allowlist, so no token or key goes with them
+    'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

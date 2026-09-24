@@ -70,6 +70,7 @@ THIRD_PARTY = {
     "playwright": "playwright",
     "speechbrain": "speechbrain",
     "torch": "torch",
+    "soundfile": "soundfile",
 }
 
 # Files in backend/ that are NOT shipped, on purpose. Tools run from this
@@ -84,6 +85,7 @@ NOT_SHIPPED = {
     "import_history.py": "run from this repository against the backend",
     "grade-peers.py": "a research tool, not part of the backend",
     "_ollama_wire.py": "test fixture: Ollama's real /v1 stream format, for the chat tests",
+    "_voice_test.py": "test plumbing: a stand-in speaker model for the voice suites",
 }
 
 
