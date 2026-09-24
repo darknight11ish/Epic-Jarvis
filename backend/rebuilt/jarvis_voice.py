@@ -671,8 +671,8 @@ def min_command_seconds(strictness: Optional[str] = None) -> float:
 #:
 #: Why the small model is asked so gently when paired, and is not asked at
 #: all in balanced when the stronger one is installed: measured here, it
-#: tells people apart poorly (at 0.35 it let in 59% of the other speakers'
-#: clips; the stronger model at 0.40, 3%). Its comparison with other voices
+#: tells people apart poorly (at 0.35 it let in more than half of the other
+#: speakers' clips; the stronger model at 0.40, 3%). Its comparison with other voices
 #: cost the owner more than it caught, so when paired it is not asked to do
 #: that - the stronger model does it.
 MODEL_BARS = {
