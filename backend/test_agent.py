@@ -276,9 +276,12 @@ def t_arguments_as_a_json_scalar_does_not_crash_the_loop():
                 [{"role": "user", "content": "x"}], "qwen3:8b", ollama_url="http://x",
                 stream_out=lambda b: None, post=post, gate_check=allow,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
-        check("a bare JSON scalar is treated as empty args, not crashed on",
-              '"value": {}' in calls[1]["messages"][-1]["content"],
-              repr(calls[1]["messages"][-1]))
+        # Since 2026-09-24 it is not turned into {} either (that is how a
+        # shell_exec card with an EMPTY command reached the owner): the
+        # model is told the arguments must be an object, and nothing runs.
+        said = calls[1]["messages"][-1]["content"]
+        check("a bare JSON scalar is refused back to the model, not run with {}",
+              "must be one JSON object" in said and '"value"' not in said, said)
     finally:
         AG.TOOLS["calculator"].execute = real
 
@@ -433,6 +436,25 @@ def t_github_search_resolves_to_an_auto_tier_in_the_shipped_config():
     check("web_research is 'auto' in the shipped config", tier == "auto", tier)
 
 
+def _valid_args(tname):
+    """The smallest arguments TOOLS[tname]'s own schema accepts. Tests about
+    the gate must not be refused earlier, for their arguments: since
+    2026-09-24 a call is checked against its schema before prepare() and the
+    gate (jarvis_agent.check_call), and `{}` for a tool with required fields
+    is now told what is missing instead of reaching a card."""
+    sample = {"string": "x", "integer": 1, "number": 1, "boolean": False, "object": {}}
+    def build(schema):
+        if schema.get("type") == "array":
+            item = schema.get("items") or {}
+            return [build(item)] if item.get("type") else ["x"]
+        if schema.get("type") == "object" and "properties" in schema:
+            return {k: build(schema["properties"][k]) for k in schema.get("required") or []}
+        if "enum" in schema:
+            return schema["enum"][0]
+        return sample.get(schema.get("type"), "x")
+    return build(AG.TOOLS[tname].parameters)
+
+
 def t_every_outbound_tool_is_refused_unless_a_person_approved():
     """ARCHITECTURE §3: `allowed` is not "a human decided". For every tool in
     NEEDS_A_PERSON, a verdict the gate would give at tier auto or notify
@@ -459,7 +481,8 @@ def t_every_outbound_tool_is_refused_unless_a_person_approved():
                 del v.outcome
             responses = [
                 {"choices": [{"message": {"role": "assistant", "tool_calls": [
-                    {"id": "1", "function": {"name": tname, "arguments": "{}"}}]}}]},
+                    {"id": "1", "function": {"name": tname,
+                     "arguments": json.dumps(_valid_args(tname))}}]}}]},
                 {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
             ]
             post, calls = scripted_post(responses)
@@ -495,7 +518,8 @@ def _one_call_turn(tname, plan_text, gate):
         return gate(action, detail, prompt)
     post, calls = scripted_post([
         {"choices": [{"message": {"role": "assistant", "tool_calls": [
-            {"id": "1", "function": {"name": tname, "arguments": "{}"}}]}}]},
+            {"id": "1", "function": {"name": tname,
+             "arguments": json.dumps(_valid_args(tname))}}]}}]},
         {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
     ])
     try:
@@ -933,7 +957,8 @@ def t_the_default_recorder_is_used_when_none_is_passed():
     try:
         responses = [
             {"choices": [{"message": {"role": "assistant", "tool_calls": [
-                {"id": "1", "function": {"name": "calculator", "arguments": "{}"}}]}}]},
+                {"id": "1", "function": {"name": "calculator",
+                 "arguments": json.dumps({"expression": "1+1"})}}]}}]},
             {"choices": [{"message": {"role": "assistant", "content": "ok"}}]},
         ]
         post, _ = scripted_post(responses)

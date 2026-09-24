@@ -161,6 +161,25 @@ https://github.com/pipecat-ai/smart-turn
   Copyright (c) 2024-2026, Daily), itself a port of Hugging Face
   transformers' WhisperFeatureExtractor (Apache-2.0).
 
+AgentDojo (ethz-spylab), MIT - https://github.com/ethz-spylab/agentdojo
+  Test data only, never shipped to the PC's backend folder:
+  backend/agentdojo_injections.json holds the injection-task goal strings
+  of its default suites (src/agentdojo/default_suites/*/injection_tasks.py),
+  its fixed attack templates (src/agentdojo/attacks/), and its benign
+  environment strings (src/agentdojo/data/suites/*/environment.yaml), read
+  out at commit 089ed468cf3ed0322acc66b0211f26d9d90dbf60 for
+  backend/test_injection_cases.py. No AgentDojo code is used.
+  Copyright (c) 2024 Edoardo Debenedetti, Jie Zhang, Mislav Balunovic,
+  Luca Beurer-Kellner, Marc Fischer, and Florian Tramèr. Licensed under
+  the MIT License, whose full text is the one given for browser-use above
+  with this copyright line in place of that one.
+
+SecAlign / Meta SecAlign (Sizhe Chen et al.) - the IDEA only
+  backend/jarvis_agent.py's strip_chat_markers removes chat-control markers
+  from tool output, repeating until none are left - the idea of
+  Meta_SecAlign's recursive_filter. That code is CC-BY-NC 4.0; none of it
+  was copied. Written here so the origin of the idea is on record.
+
 SUMMARY BY LICENCE
 ------------------
 (Apache-2.0 OR MIT) AND BSD-3-Clause (1): encoding_rs

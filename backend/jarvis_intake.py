@@ -979,7 +979,11 @@ _FLAG_RULES = [
     ("markup",
      "It contains chat-format markers or hidden characters that people do not type.",
      re.compile(r"<\|[^|>]{1,20}\|>|\[/?INST\]|<<\s*/?SYS\s*>>|^\s*#{2,}\s*(?:system|instruction)|(?:^|\n)\s*(?:system|assistant)\s*:"
-                r"|[​-‏‪-‮⁠-⁤﻿]|<\s*/?\s*(?:script|iframe|img|svg)\b",
+                r"|[​-‏‪-‮⁠-⁤﻿]|<\s*/?\s*(?:script|iframe|img|svg)\b"
+                # Unicode "tag" characters (U+E0000-E007F): invisible to a
+                # person, readable by a model. jarvis_auto_learn.outside_signs
+                # already caught them; this rule did not (2026-09-24).
+                r"|[\U000E0000-\U000E007F]",
                 re.I)),
     ("encoded",
      "It contains a long encoded-looking block.",
