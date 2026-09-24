@@ -1,0 +1,235 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -530,6 +530,82 @@
+ #   The decision
+ # --------------------------------------------------------------------------
+ 
++# Every way a gate decision can end. The DB already distinguished these -
++# approvals.state is pending|approved|denied|expired - but Verdict did not, so
++# by the time a caller saw the answer the only difference between "a person
++# said no" and "nobody was there" was the wording of a sentence.
++#
++# They are not the same and they want different handling. A denial is an
++# answer: do not retry, do not ask again, the person decided. A timeout is the
++# absence of an answer: it is worth retrying when the owner is back, it is
++# worth counting (a run of them means notifications are broken, not that the
++# owner is refusing things), and it should read differently on a screen.
++# Matching a reason string to tell them apart is what this replaces.
++OUTCOMES = frozenset({
++    "auto",        # tier auto: ran, no human involved, none required
++    "notify",      # tier notify: ran, the human was told afterwards
++    "approved",    # a human said yes
++    "denied",      # a human said no
++    "timed_out",   # NOBODY ANSWERED. Not a refusal. Refused anyway.
++    "refused",     # the gate itself refused: never-tier, protected file,
++                   # unreadable policy, no queue. No human was ever asked.
++})
++
++
++# Actions whose "no" answers one card, not a standing wish, so a denial
++# proposes nothing for them. The proposal reads "I do not want Jarvis to X
++# without asking me first" - and each of these ALWAYS asks, and the owner
++# started it with a button, so for them every "no" put a sentence in the
++# Memory tab that says nothing. How each one comes to ask:
++_NO_RULE_FROM_DENIAL = frozenset({
++    "second_card_enable",     # jarvis_second_card.py acts only on tier "ask"
++    "big_model_enable",       # jarvis_big_model.py: the same
++    "change_own_config",      # jarvis_voice_enroll.py, jarvis_speech.py: the same
++    "modify_own_code",        # jarvis_skill_discovery.py: the same
++    "wiki_update",            # shipped "ask"; the owner pressed Add in the wiki
++    "download_model",         # shipped "ask"; the owner typed the model's name
++    "switch_model",           # shipped "ask"; the owner picked the model
++    "power_manage",           # shipped "auto": a card means the owner chose "ask"
++    "append_obsidian_daily",  # shipped "auto": the same
++})
++
++
++def _propose_constraint_from_denial(action: str, detail: dict) -> None:
++    """Turns a "no" into a candidate standing rule - never an applied one.
++
++    Called from the two DENIED branches below, never from timed_out: a
++    timeout is the absence of an answer, and proposing a rule from silence
++    would teach Jarvis something nobody actually decided.
++
++    Goes through propose(), the one choke point this project already has
++    for every fact it ever learns - memory-safety.patch removed the single
++    auto-accept path that used to exist inside it, for exactly this reason.
++    A denial writing straight to memory would be a second, parallel door
++    into the same room: the shape of bug no-auto-approve.patch found and
++    fixed for tier confirmation, one module over. So this only ever
++    PROPOSES - the same review queue that already holds every extracted
++    fact, "Keep" or "Discard" in the Brain window's Memory tab, one at a
++    time, same as always.
++
++    Best-effort by design: a failed or skipped proposal must never turn a
++    completed denial into an error the owner has to do something about.
++    """
++    if action in _NO_RULE_FROM_DENIAL:
++        return  # see _NO_RULE_FROM_DENIAL: this "no" was about one card
++    try:
++        import jarvis_extract
++    except Exception:
++        return  # memory layer not importable - nothing to propose into
++    readable = str(action or "an action").replace("_", " ").strip() or "an action"
++    turns = [{"role": "user", "content":
++              f"Remember this: I do not want Jarvis to {readable} without "
++              f"asking me first. I just said no when it asked."}]
++    try:
++        jarvis_extract.propose(turns, source="gate_denial")
++    except Exception:
++        pass
++
++
+ @dataclass
+ class Verdict:
+     allowed: bool
+@@ -537,6 +613,30 @@
+     action: str
+     reason: str
+     request_id: Optional[str] = None
++    # Defaults to "refused", never to anything permissive. codex does the same
++    # thing at the type level - `impl Default for ReviewDecision` returns
++    # Denied - and the reasoning carries: a field that is forgotten at a new
++    # construction site must fail closed, and a default of "approved" would
++    # make forgetting it silently grant. See docs/PEERS.md.
++    outcome: str = "refused"
++
++    def __post_init__(self) -> None:
++        # A typo in an outcome must not become a new, unhandled state that
++        # every `if outcome == ...` silently falls through. Coerced rather
++        # than raised: this runs on the path that decides whether a tool may
++        # act, and an exception here would fail the action in a way that looks
++        # like a crash rather than a refusal.
++        if self.outcome not in OUTCOMES:
++            self.outcome = "refused"
++        # The invariant that matters more than any of the above: only two
++        # outcomes may carry allowed=True, and "timed_out" is not one of them.
++        if self.allowed and self.outcome not in ("auto", "notify", "approved"):
++            self.allowed = False
++
++    @property
++    def timed_out(self) -> bool:
++        """Nobody answered. Distinct from being told no."""
++        return self.outcome == "timed_out"
+ 
+     def as_dict(self) -> dict:
+         return asdict(self)
+@@ -656,7 +756,8 @@
+         # Cannot read the policy -> cannot claim the action is permitted.
+         _audit("gate.policy_unreadable", {"action": action, "error": str(exc)})
+         return Verdict(False, "unknown", action,
+-                       f"autonomy policy could not be read ({exc})")
++                       f"autonomy policy could not be read ({exc})",
++                       outcome="refused")
+ 
+     # The one rule above the tier table: nothing gets to edit the tier table.
+     hit = _touches_protected(prompt, detail)
+@@ -664,7 +765,7 @@
+         _audit("gate.refused_protected", {"action": action, "file": hit})
+         return Verdict(False, "never", action,
+                        f"this touches {hit}, which no tool may modify; "
+-                       f"edit it by hand")
++                       f"edit it by hand", outcome="refused")
+ 
+     # Outside text that tried to rush the reader raises the effective tier of
+     # whatever comes next. One direction only: this can turn auto into ask, it
+@@ -679,7 +780,8 @@
+         _audit("gate.refused", {"action": action, "tier": tier, "detail": detail})
+         return Verdict(False, tier, action,
+                        "this action is set to 'never' in jarvis-framework.toml; "
+-                       "changing it means editing that file, not asking here")
++                       "changing it means editing that file, not asking here",
++                       outcome="refused")
+ 
+     # Any joplin action at all - including a read on the "auto" tier - pins
+     # the conversation local. Done before the tier branches so it happens even
+@@ -689,7 +791,7 @@
+ 
+     if tier == "auto":
+         _audit("gate.auto", {"action": action, "detail": detail})
+-        return Verdict(True, tier, action, "tier is auto")
++        return Verdict(True, tier, action, "tier is auto", outcome="auto")
+ 
+     if tier == "notify":
+         _audit("gate.notify", {"action": action, "detail": detail})
+@@ -703,7 +805,8 @@
+         # knows or guesses the string reads every message. On this tier there
+         # is no human in the loop at all, so nothing else was going to catch it.
+         _push(f"Jarvis did: {action}", _safe_detail(detail, 400))
+-        return Verdict(True, tier, action, "tier is notify; you were told after")
++        return Verdict(True, tier, action, "tier is notify; you were told after",
++                       outcome="notify")
+ 
+     # ---- "ask", and anything unrecognised, waits for a human ----
+     try:
+@@ -719,7 +822,8 @@
+     except Exception as exc:
+         _audit("gate.queue_unavailable", {"action": action, "error": str(exc)})
+         return Verdict(False, tier, action,
+-                       f"approval queue unavailable, so the action is refused ({exc})")
++                       f"approval queue unavailable, so the action is refused ({exc})",
++                       outcome="refused")
+ 
+     _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
+     # An unclassified action is safe (it became "ask") but opaque: you cannot
+@@ -772,11 +876,14 @@
+             if row["state"] == "approved":
+                 _audit("gate.approved", {"id": rid, "action": action,
+                                          "by": row["decided_by"]})
+-                return Verdict(True, tier, action, "approved by a human", rid)
++                return Verdict(True, tier, action, "approved by a human", rid,
++                               outcome="approved")
+             if row["state"] == "denied":
+                 _audit("gate.denied", {"id": rid, "action": action,
+                                        "by": row["decided_by"]})
+-                return Verdict(False, tier, action, "denied by a human", rid)
++                _propose_constraint_from_denial(action, detail)
++                return Verdict(False, tier, action, "denied by a human", rid,
++                               outcome="denied")
+     finally:
+         if watch is not None:
+             try:
+@@ -799,16 +906,24 @@
+                 if row and row["state"] == "approved":
+                     _audit("gate.approved", {"id": rid, "action": action,
+                                              "by": row["decided_by"], "late": True})
+-                    return Verdict(True, tier, action, "approved by a human", rid)
++                    return Verdict(True, tier, action, "approved by a human", rid,
++                                   outcome="approved")
+                 if row and row["state"] == "denied":
+                     _audit("gate.denied", {"id": rid, "action": action,
+                                            "by": row["decided_by"], "late": True})
+-                    return Verdict(False, tier, action, "denied by a human", rid)
++                    _propose_constraint_from_denial(action, detail)
++                    return Verdict(False, tier, action, "denied by a human", rid,
++                                   outcome="denied")
+     except Exception:
+         pass
+     _audit("gate.expired", {"id": rid, "action": action})
++    # Refused, because an unanswered request must not run. But recorded as
++    # timed_out rather than denied: nobody decided anything here, and a caller
++    # that retries on the owner's return is behaving correctly where retrying
++    # a denial would not be.
+     return Verdict(False, tier, action,
+-                   "nobody answered in time, so it was refused", rid)
++                   "nobody answered in time, so it was refused", rid,
++                   outcome="timed_out")
+ 
+ 
+ def confirm(prompt: str) -> bool:
+@@ -860,6 +975,15 @@
+     v = check(action, detail, prompt=f"tool {name} {detail['args']}")
+     if v.allowed:
+         return None
++    if v.timed_out:
++        # Said differently from a denial ON PURPOSE. This string goes back to
++        # the model as the tool result, and "denied" tells it to find another
++        # way - which, for a tool the owner would have approved, means working
++        # around a gate that was never actually answered. "Nobody was there"
++        # tells it the truth and tells it what to do instead.
++        return (f"Not run: {name} needed your approval and nobody answered in "
++                f"time, so it was refused. Nothing was decided - ask again "
++                f"when the owner is at the machine.")
+     return (f"Refused by the autonomy gate: {name} is tier '{v.tier}' "
+             f"({v.action}) - {v.reason}")
+ 
