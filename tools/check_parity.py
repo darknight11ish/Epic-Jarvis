@@ -67,6 +67,9 @@ ROUTE = re.compile(r"/api/[a-zA-Z0-9/_-]+")
 # "planned"      - on the backend, for both apps, and neither calls it yet
 CLASSIFICATION = {
     "/api/appearance": ("ported", ""),
+    "/api/big-model": ("planned", "The big model (slow) with colibri: what was found and its three switches, each ON an approval card (backend/big-model.patch, 2026-09-24). Both apps, next."),
+    "/api/deep": ("planned", "Deep questions and their answers, newest first (backend/big-model.patch). Both apps, next."),
+    "/api/deep/ask": ("planned", "Queue one deep question for the big model; no card per question, the switch was approved (backend/big-model.patch). Both apps, next."),
     "/api/approve": ("ported", ""),
     "/api/attention": ("ported", ""),
     "/api/attention/mute": ("ported", ""),

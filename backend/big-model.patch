@@ -1,0 +1,81 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1959,6 +1959,26 @@
+             code, out = jarvis_wiki.ingest_status(wid)
+             return self._send(code, out)
+ 
++        if path in ("/api/big-model", "/api/deep"):
++            # big-model.patch - the optional big model (slow), run by colibri
++            # on this PC (jarvis_big_model.py). GET /api/big-model: what was
++            # found (colibri, Python, the models, memory, disk), the three
++            # switches and why each is or is not working, and the speed last
++            # measured. GET /api/deep: the deep questions and their answers.
++            # Neither starts colibri. Never the key colibri is started with.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_big_model
++                if path == "/api/big-model":
++                    return self._send(200, jarvis_big_model.status())
++                return self._send(200, jarvis_big_model.deep_status())
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++
+         if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
+                     "/api/compute", "/api/memory/facts", "/api/memory/export"):
+             if not _origin_ok(self):
+@@ -2365,6 +2385,35 @@
+             code, out = jarvis_wiki.handle_post(body)
+             return self._send(code, out)
+ 
++        if route in ("/api/big-model", "/api/deep/ask"):
++            # big-model.patch - POST /api/big-model {"switch": "master" |
++            # "wiki" | "deep_questions", "enabled": true|false}: ON is one
++            # approval card (big_model_enable, tier "ask") and changes
++            # nothing until it is approved; OFF is at once. POST
++            # /api/deep/ask {"question": "..."}: queues one background
++            # question for the big model - 202 {"id", "state": "queued"}, or
++            # 400/409/503 {"state": "refused", "error": "<a sentence>"}. No
++            # card per question: the switch was approved, and a question
++            # acts on nothing and leaves this PC for nowhere.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_big_model
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            if route == "/api/big-model":
++                code, out = jarvis_big_model.handle_post(body)
++            else:
++                code, out = jarvis_big_model.handle_deep_post(body)
++            return self._send(code, out)
++
+         if route in ("/api/memory/forget", "/api/memory/edit",
+                      "/api/memory/learning", "/api/memory/sleep_time",
+                      "/api/memory/keep_both"):
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -328,6 +328,13 @@
+     # action would be read as "unknown", and the notice would say it might
+     # leave the machine.
+     "wiki_update": ("yes", "local", "writes pages in the Jarvis Wiki folder of your vault on this PC; the earlier copy of any page it changes is kept in .versions"),
++    # big-model.patch (jarvis_big_model.py). Turning on a big-model switch
++    # lets Jarvis start colibri on THIS PC, only when a background job
++    # needs it, listening on 127.0.0.1 only, and nothing is sent anywhere;
++    # turning the switch off stops it. Without this line the action would
++    # be read as "unknown", and the notice would say it might leave the
++    # machine.
++    "big_model_enable": ("yes", "local", "lets Jarvis start colibri on this PC for background jobs, reachable from this PC only (127.0.0.1); turning the switch off stops it"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",

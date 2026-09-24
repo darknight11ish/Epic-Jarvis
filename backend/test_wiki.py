@@ -780,8 +780,12 @@ def t_the_patch():
     start = ps1.index("$PATCHES = @(")
     names = [l.strip().strip("'") for l in ps1[start:ps1.index("\n)", start)].splitlines()
              if l.strip().startswith("'")]
-    check("apply-patches.ps1 applies wiki.patch last, after second-card.patch",
-          names and names[-1] == "wiki.patch"
+    # Last until big-model.patch (2026-09-24), whose context is this patch's
+    # own route blocks, so it comes after this one - test_big_model.py checks
+    # that. What matters here: after second-card.patch, whose lines this
+    # patch's context is.
+    check("apply-patches.ps1 applies wiki.patch after second-card.patch",
+          names and "wiki.patch" in names
           and names.index("second-card.patch") < names.index("wiki.patch"))
     check("apply-patches.ps1 copies jarvis_wiki.py in",
           "'jarvis_wiki.py'" in ps1[ps1.index("$SHIPPED = @("):])

@@ -246,6 +246,14 @@ $PATCHES = @(
     # jarvis_gate.py line, so it goes after second-card. Needs jarvis_wiki.py
     # copied in; without it the routes answer 503.
     'wiki.patch'
+    # The big model (slow), run by colibri on this PC for background jobs:
+    # GET and POST /api/big-model, GET /api/deep, POST /api/deep/ask, and
+    # the approval notice's words for big_model_enable in jarvis_gate.py.
+    # Its context is wiki's own GET and POST route blocks and its
+    # jarvis_gate.py line, so it goes after wiki. Needs jarvis_big_model.py
+    # copied in; without it the routes answer 503 and the wiki keeps using
+    # the second card only.
+    'big-model.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -294,7 +302,8 @@ $SHIPPED = @(
     'jarvis_wakeword.py'         # "hey Jarvis": jarvis_speech.py calls it for wake-word clips
     'jarvis_token_store.py'      # token-store.patch; the pairing token in Credential Manager
     'jarvis_second_card.py'      # second-card.patch; the second graphics card's switches
-    'jarvis_wiki.py'             # wiki.patch; the wiki builder (runs only on the second card)
+    'jarvis_wiki.py'             # wiki.patch; the wiki builder (the second card, or the big model)
+    'jarvis_big_model.py'        # big-model.patch; the big model (slow) with colibri, background jobs only
     'jarvis_turn.py'             # voice-turn.patch: Smart Turn, "finished, or only paused?"
     'jarvis_wakebank.py'         # other voices' "hey Jarvis" (numbers): the owner's wake-word verifier trains against it
     'jarvis_stopword.py'         # the "stop" word's numbers: jarvis_wakeword.spot_stop, to interrupt Jarvis while it talks
