@@ -155,6 +155,15 @@ Also decided 2026-09-24, after the safety research
   to leave it as it is (the research's "only trust the button" option was
   offered and declined). The voice check's wording says plainly that it
   cannot tell a recording or a copy from the real voice.
+- **Spoken questions get spoken-style answers, and speech starts at the
+  first comma.** A voice turn tells the model its answer will be spoken
+  (short first sentence, 1-3 sentences unless asked for more, no lists or
+  markdown); typed turns are unchanged. Both apps start speaking at the
+  first comma of an answer once the phrase is long enough.
+- **Phone pairing by QR code, with a short typed code as the backup**,
+  confirmed by an approval card on the PC before any key is handed over.
+  Built together with per-device keys (task "more devices"), since both
+  change how a device gets its key.
 
 ## Every new feature gets its own audit, without being asked
 
