@@ -89,10 +89,14 @@ object MemoryCounts {
     /** `learning` off `/api/memory/facts`: true, false, or null when it is not there. */
     fun learning(facts: JsonObject): Boolean? = facts.prim("learning")?.booleanOrNull
 
-    /** The learning line. */
+    /**
+     * The learning line. Since automatic learning (docs/JARVIS-API.md section
+     * 19) not every fact needs a yes any more, so this no longer says so: the
+     * "Learn automatically" switch under it says which way that is.
+     */
     fun learningLine(on: Boolean?): String = when (on) {
-        true -> "Learning is on: Jarvis reads your conversations for facts, and each one still " +
-            "needs your yes."
+        true -> "Learning is on: Jarvis reads your conversations for facts. \"Learn automatically\", " +
+            "below, says whether it saves them without asking."
         false -> "Learning is off: nothing new is proposed. A message that starts " +
             "\"Remember:\" still makes a card. Turning it on asks you first, with an approval card."
         null -> "Couldn't tell whether learning is on."

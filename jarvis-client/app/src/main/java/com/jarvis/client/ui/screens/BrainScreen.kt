@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -65,6 +67,7 @@ import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -196,8 +199,8 @@ fun BrainScreen(
     autoRefreshMs: Long = 0L,
     /**
      * "Hide memory lists and chat history" (Security) is on and not yet shown: the memory
-     * review list, "What did I believe on this date?" and the wiki's list
-     * are replaced by [HiddenSection] until [onShowPrivate] is confirmed.
+     * review list, "Saved automatically", "What did I believe on this
+     * date?" and the wiki's list are replaced by [HiddenSection] until [onShowPrivate] is confirmed.
      */
     privateHidden: Boolean = false,
     /** Asks for the fingerprint or PIN, then shows them. */
@@ -244,8 +247,14 @@ fun BrainScreen(
             )
         }
 
+        // Held so "Jarvis remembered N things" can bring "Saved
+        // automatically" into view: it is the item right after the plate
+        // that line is on, and that plate is on screen when it is tapped.
+        val listState = rememberLazyListState()
+        val listScope = rememberCoroutineScope()
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -431,7 +440,28 @@ fun BrainScreen(
             }
             // How much Jarvis remembers, and whether it is learning - the
             // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
-            item(key = "memory-counts") { MemoryCountsSection() }
+            item(key = "memory-counts") {
+                MemoryCountsSection(
+                    canAct = canAct,
+                    onOpenAutoList = {
+                        val here = listState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.key == "memory-counts" }?.index
+                        if (here != null) listScope.launch { listState.animateScrollToItem(here + 1) }
+                    },
+                )
+            }
+            // What Jarvis saved without a card (automatic learning,
+            // docs/JARVIS-API.md section 19), each with a Forget. Right after
+            // the plate its switches are on - the line above scrolls to it.
+            // Hidden like the other memory lists (AutoLearnPlate.kt).
+            item(key = "memory-auto") {
+                SavedAutomaticallySection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
             // Chat history on the PC: its own screen (HistoryScreen.kt), next
             // to Memory, as the desktop puts it in the Brain window.
             if (onOpenHistory != null) {
@@ -1460,6 +1490,12 @@ private fun MemoryProposalRow(
             Pill("Your own words", color = chrome.textMid)
         }
         card.sourceLine?.let {
+            Gap(2)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        // Automatic learning left this one for a yes, and the PC said why
+        // (docs/JARVIS-API.md section 19) - one quiet line.
+        card.autoReasonLine?.let {
             Gap(2)
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }

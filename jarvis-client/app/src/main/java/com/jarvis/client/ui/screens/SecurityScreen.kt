@@ -147,7 +147,8 @@ fun SecurityScreen(
                     Plate {
                         SwitchRow(
                             title = "Hide memory lists and chat history",
-                            detail = "On Mind, what Jarvis wants to remember, what it believed on a " +
+                            detail = "On Mind, what Jarvis wants to remember, what it saved " +
+                                "automatically, what it believed on a " +
                                 "date, the wiki's list of your notes and your chat history stay " +
                                 "hidden until you tap Show and confirm it is you.",
                             checked = security.privateLists,

@@ -128,17 +128,15 @@ CLASSIFICATION = {
     "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
     "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
     "/api/memory/facts": ("ported", ""),
-    # Automatic learning (backend/auto-learn.patch, 2026-09-24): built on the
-    # backend first; both apps are to build against docs/JARVIS-API.md
-    # section 19. The owner's decision puts a one-tap Forget on every
-    # automatically saved fact in BOTH apps, so Forget is no longer
-    # desktop-only: the phone calls it for the "Saved automatically" list
-    # (one fact per request, held on a stale link, like the desktop's).
-    "/api/memory/auto": ("planned", "\"Saved automatically\": the facts automatic learning saved without a card, newest first, each with Forget, a \"said aloud\" mark and \"Load older\" (docs/JARVIS-API.md section 19). Both apps re-read it on the memory_saved event. Desktop: Brain, Memory. Phone: Mind, What Jarvis remembers."),
-    "/api/memory/forget": ("todo", "Was desktop-only (deep memory editing). Since 2026-09-24 every automatically saved fact gets a one-tap Forget in BOTH apps (the owner's decision; docs/JARVIS-API.md section 19): the phone calls it from the Saved automatically list, one fact per request, held on a stale link. Rewording (/api/memory/edit) stays desktop-only."),
-    "/api/memory/learning/auto": ("planned", "\"Learn automatically\" (on by default): OFF is immediate; ON raises one approval card (learning_auto_enable) and both apps say \"Waiting for your approval\" while it waits, including a card raised on the other device; ON is held on a stale link."),
-    "/api/memory/learning/sensitive": ("planned", "\"Also remember sensitive topics automatically\" (off by default): the same shape, card learning_sensitive_enable."),
+    "/api/memory/forget": ("ported", "Forget ONE fact (retired, not deleted; no undo). Desktop: Brain, Memory, every fact (brain_memory_forget, with an optional date). Phone, since automatic learning (owner, 2026-09-24: every auto-saved fact is listed in both apps with a one-tap Forget): Mind, Saved automatically, auto-saved facts only (AutoLearnPlate.kt, JarvisApi.forgetFact). Both ask first and hold it on a stale link. Rewording (/api/memory/edit) stays desktop-only."),
     "/api/memory/keep_both": ("ported", ""),
+    # Automatic learning (docs/JARVIS-API.md section 19, 2026-09-24): built
+    # on the backend and both apps at once. The phone calls these three
+    # (net/AutoLearn.kt, Mind, What Jarvis remembers and Saved automatically);
+    # reclassify as "ported" once the desktop calls them too.
+    "/api/memory/learning/auto": ("planned", "\"Learn automatically\": ON is one approval card (learning_auto_enable), OFF is immediate. Both apps hold ON on a stale link and say \"waiting\" while the card is in the queue, wherever it was raised. Its state rides on GET /api/memory/learning."),
+    "/api/memory/learning/sensitive": ("planned", "\"Also remember sensitive topics automatically\" (off by default): ON is one approval card (learning_sensitive_enable), OFF is immediate. The same holds as the other switch."),
+    "/api/memory/auto": ("planned", "\"Saved automatically\": the facts saved without a card, newest first, with Load older, a \"said aloud\" mark for voice and a Forget on each. Both apps read it again on the memory_saved event (ids only, never the text) and hide it under the phone's \"Hide memory lists and chat history\"."),
     "/api/memory/learning": ("ported", "The learning on/off switch on Mind (MemoryCountsSection). Turning learning ON raises an approval card on the PC (learning-asks.patch, 2026-09-24): the phone says \"waiting\" while a learning_enable card is in the queue, and holds ON on a stale link; OFF is immediate. GET /api/memory/learning (auto-learn.patch, planned for both apps) reads both switches and whether a card for either is waiting."),
     "/api/memory/pending": ("ported", "The review queue."),
     "/api/memory/sleep_time": ("ported", ""),
