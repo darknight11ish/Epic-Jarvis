@@ -105,6 +105,10 @@ fn main() {
             // trained, the wake word, the stop word, Smart Turn. Read only.
             // Settings window only.
             "get_voice_status",
+            // Settings' "Voice": the PC's "hey Jarvis" switch. OFF at once
+            // (and this PC stops listening); ON only raises an approval card,
+            // and is held while the event stream is stale. Settings only.
+            "set_wake_word",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",

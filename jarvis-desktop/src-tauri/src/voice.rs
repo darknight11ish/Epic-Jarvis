@@ -51,7 +51,10 @@
 //! It also refuses to start until the server says the wake word is ON - and
 //! if it is off, asking for it raises the ONE approval card
 //! (`POST /api/voice/wake`), exactly as the phone's switch does. Nothing
-//! here can turn it on without that card being approved.
+//! here can turn it on without that card being approved. Settings' Voice
+//! section has the phone's two buttons for the same switch
+//! ([`set_wake_word`]): OFF at once - never held, and it stops this
+//! listener too - and ON, which is the same one card.
 //!
 //! THE LOCAL DETECTOR IS A LOUDNESS TRIGGER; SILERO DECIDES
 //! What is here cuts the stream into utterances by loudness: root-mean-square
@@ -1572,7 +1575,8 @@ pub(crate) fn stop_listening_because(app: &AppHandle, why: String) {
 // (VoiceModels.kt reads the same JSON): whether each microphone's voice print
 // is trained, which voice check is installed, the owner's own "hey Jarvis"
 // check, the wake word, the stop word, Smart Turn and the talk button. READ
-// only; training stays on the phone for now.
+// here; training stays on the phone for now. The one write is the wake-word
+// switch: OFF at once and never held, ON only an approval card.
 
 /// What a backend without `/api/voice/status` (or too old to send the nested
 /// shape) is told to do about it. The page shows this sentence, never a
@@ -1622,6 +1626,27 @@ pub(crate) fn voice_status_answer(status: u16, body: &str) -> Result<serde_json:
     Err(crate::commands::backend_refusal(status, body))
 }
 
+/// [`set_wake_word`]'s reading of the server's answer. 200 is
+/// `jarvis_speech.set_wake_enabled()` as is: `{"ok", "enabled", "pending",
+/// "message"}`, or `{"ok": false, "error"}` for a refusal (a card already
+/// waiting, a tier other than `ask`). Anything else is a sentence.
+pub(crate) fn wake_change_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| "Jarvis answered, but not in a way this app can read.".to_string());
+    }
+    if status == 404 {
+        return Err(VOICE_UPDATE.to_string());
+    }
+    Err(crate::commands::backend_refusal(status, body))
+}
+
+/// The words for turning ON while the event stream is stale.
+pub(crate) const WAKE_ON_HELD: &str = "The connection to Jarvis is catching up, so \"hey Jarvis\" \
+     cannot be turned on until it does. Turning it off still works.";
+
 /// What the PC's voice settings are: `GET /api/voice/status`
 /// (`jarvis_speech.status()`).
 ///
@@ -1643,9 +1668,44 @@ pub async fn get_voice_status(app: AppHandle) -> Result<serde_json::Value, Strin
     voice_status_answer(status, &body)
 }
 
+/// The PC's "hey Jarvis" switch: `POST /api/voice/wake` with `{"enabled"}`.
+///
+/// OFF is immediate and is never held, not even on a stale link: it only
+/// narrows what listens. It also stops this PC's own "hey Jarvis" listening
+/// first, before the request, so the microphone closes even if the server
+/// cannot be reached. ON approves nothing: the server raises ONE approval
+/// card and answers `pending: true`, and ON is held while the event stream
+/// is stale - rule 4, the same one-direction hold as `ensure_wake_ready`,
+/// the second card and the big model. Settings window only.
+#[tauri::command]
+pub async fn set_wake_word(app: AppHandle, enabled: bool) -> Result<serde_json::Value, String> {
+    if enabled {
+        if app.state::<crate::stream::StreamState>().link().stale {
+            return Err(WAKE_ON_HELD.to_string());
+        }
+    } else {
+        stop_listening_because(
+            &app,
+            "\"Hey Jarvis\" was turned off in Settings, so this PC stopped listening for it."
+                .to_string(),
+        );
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(WAKE_CHECK_TIMEOUT))?
+        .post(format!("{base}/api/voice/wake"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "enabled": enabled }))
+        .send()
+        .await
+        .map_err(|e| crate::commands::backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    wake_change_answer(status, &body)
+}
+
 #[cfg(test)]
 mod voice_settings_tests {
-    use super::{voice_status_answer, VOICE_NOT_RUNNING, VOICE_UPDATE};
+    use super::{voice_status_answer, wake_change_answer, VOICE_NOT_RUNNING, VOICE_UPDATE};
 
     /// The real `jarvis_speech.status()` output, written by
     /// `tools/gen_voice_status_cases.py` - never hand-written here.
@@ -1684,6 +1744,22 @@ mod voice_settings_tests {
         }
         let odd = voice_status_answer(500, "<html>boom</html>").unwrap_err();
         assert!(odd.contains("500") && !odd.contains("boom"), "{odd}");
+    }
+
+    #[test]
+    fn the_wake_switch_answers_are_passed_on() {
+        let all = cases();
+        for name in ["wake_on_pending", "wake_off"] {
+            let body = all["answers"][name].to_string();
+            let got = wake_change_answer(200, &body).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(got, all["answers"][name], "{name}");
+        }
+        let busy =
+            r#"{"ok": false, "pending": true, "error": "a card to turn it on is already waiting"}"#;
+        assert_eq!(wake_change_answer(200, busy).expect("200")["ok"], false);
+        assert_eq!(wake_change_answer(404, "").unwrap_err(), VOICE_UPDATE);
+        let said = wake_change_answer(403, r#"{"error": "origin not allowed"}"#).unwrap_err();
+        assert_eq!(said, "Origin not allowed");
     }
 }
 

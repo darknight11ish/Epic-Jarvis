@@ -2035,6 +2035,13 @@ loadBigModel();
    where it has them (voice-settings.js). Training a voice is on the phone for
    now; the section says so and offers no button for it.
 
+   The one thing it changes is the PC's "hey Jarvis" switch (`set_wake_word`,
+   POST /api/voice/wake), as the phone's wake-word card does. Turning it OFF
+   is immediate, is never held, and stops this PC's own listening too.
+   Turning it ON approves nothing: the server raises ONE approval card, and
+   the Rust holds the request while the event stream is stale. The switch
+   shows what Jarvis last said, never what was clicked.
+
    Re-read when the window comes back into view, when the approval queue
    changes while a voice card waits (there is no event for the decision), and
    on the `voice` doorbell.
@@ -2053,12 +2060,17 @@ const vc = {
   verifier: $("voice-verifier"),
   stopWord: $("voice-stop-word"),
   turn: $("voice-turn"),
+  wakeOff: $("voice-wake-off"),
+  wakeOn: $("voice-wake-on"),
+  wakeOnNote: $("voice-wake-on-note"),
+  wakeStatus: $("voice-wake-status"),
 };
 
 const VC_UPDATE =
   "This PC's Jarvis does not report its voice settings yet. Update the backend by running apply-patches.ps1, then open this again.";
 
 let vcReadSeq = 0;
+let vcBusy = false;
 /** A voice card (the wake word's, or a training) was waiting at the last read. */
 let vcWaiting = false;
 
@@ -2079,6 +2091,10 @@ function vcShowProblem(words) {
   vc.state.dataset.tone = "bad";
   vc.state.textContent = words;
   vcWaiting = false;
+  // Nothing to switch when Jarvis could not say what is on.
+  vc.wakeOff.hidden = true;
+  vc.wakeOn.hidden = true;
+  vc.wakeOnNote.hidden = true;
 }
 
 function vcPrintItem(line) {
@@ -2105,6 +2121,12 @@ function vcPaint(status) {
   const wake = wakeInfo(status, APPROVE_WHERE);
   vc.card.dataset.wake = wake.state;
   vcLine(vc.wake, { text: wake.text, tone: wake.state === "waiting" ? "warn" : "" });
+  // The phone's buttons: off while it is on, on while it is off and no card
+  // waits. While a card waits there is nothing to press here - the card is
+  // the decision.
+  vc.wakeOff.hidden = wake.state !== "on";
+  vc.wakeOn.hidden = wake.state !== "off";
+  vc.wakeOnNote.hidden = wake.state !== "off";
   vcLine(vc.verifier, voiceVerifierLine(status));
   vcLine(vc.stopWord, stopWordLine(status));
   vcLine(vc.turn, voiceTurnLine(status));
@@ -2135,6 +2157,38 @@ async function loadVoice() {
   }
   vcPaint(answer);
 }
+
+/** The PC's "hey Jarvis" switch: one request, one direction. */
+async function vcSetWake(enabled) {
+  if (vcBusy) return;
+  vcBusy = true;
+  const button = enabled ? vc.wakeOn : vc.wakeOff;
+  button.disabled = true;
+  report(vc.wakeStatus, enabled ? "Asking…" : "Turning it off…");
+  try {
+    const out = await invoke("set_wake_word", { enabled });
+    if (out && out.ok === false) {
+      report(vc.wakeStatus, scSentence(out.error) || "Jarvis did not change it.", "bad");
+    } else if (enabled && out && out.pending === true) {
+      report(vc.wakeStatus, SC_WAITING, "ok");
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(vc.wakeStatus, out.message, "ok");
+    } else {
+      report(vc.wakeStatus, enabled ? "\"Hey Jarvis\" is on." : "\"Hey Jarvis\" is off.", "ok");
+    }
+    announce(vc.wakeStatus.textContent);
+  } catch (error) {
+    report(vc.wakeStatus, scProblemWords(error), "bad");
+    announce(vc.wakeStatus.textContent, "assertive");
+  } finally {
+    vcBusy = false;
+    button.disabled = false;
+  }
+  await loadVoice();
+}
+
+if (vc.wakeOff) vc.wakeOff.addEventListener("click", () => vcSetWake(false));
+if (vc.wakeOn) vc.wakeOn.addEventListener("click", () => vcSetWake(true));
 
 onQueue(() => {
   if (vcWaiting) loadVoice();

@@ -752,6 +752,27 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return JSON.parse(JSON.stringify(vs.status));
           }
+          // voice.rs set_wake_word. What jarvis_speech.set_wake_enabled does
+          // to status(): ON puts a card up (`pending`, NOTHING is on) and
+          // answers the real `wake_on_pending`; OFF turns it off at once, and
+          // withdraws a waiting card, with the real `wake_off`. `setFails` is
+          // the sentence the Rust rejects with (the stale-link hold, say).
+          case "set_wake_word": {
+            const vs = window.__voice;
+            vs.changes.push({ enabled: args.enabled });
+            if (vs.setFails) throw new Error(vs.setFails);
+            const st = vs.status;
+            if (args.enabled) {
+              st.listening.wake_word_pending = true;
+              st.wake.pending = true;
+              return JSON.parse(JSON.stringify(vs.onAnswer));
+            }
+            st.listening.wake_word = false;
+            st.listening.wake_word_pending = false;
+            st.wake.enabled = false;
+            st.wake.pending = false;
+            return JSON.parse(JSON.stringify(vs.offAnswer));
+          }
           // commands.rs get_big_model / set_big_model. `status` is a real
           // status() from BIG_MODEL; the Rust passes a 200 on as is.
           // `unavailable` is its answer for a 404, or the 503 `{"available":
@@ -989,7 +1010,8 @@ export async function open(browser, base, file, data, viewport) {
                 onAnswer: BIG_MODEL.post_master_on_pending.body, ...(data && data.bigModel) },
     deep: { status: BIG_MODEL.deep_off, askAnswers: [BIG_MODEL.ask_accepted.body],
             ...(data && data.deep) },
-    voice: { status: VOICE.cases.phone_trained, ...(data && data.voice) },
+    voice: { status: VOICE.cases.phone_trained, onAnswer: VOICE.answers.wake_on_pending,
+             offAnswer: VOICE.answers.wake_off, ...(data && data.voice) },
   });
   await page.goto(`${base}/${file}`);
   await page.waitForTimeout(500);

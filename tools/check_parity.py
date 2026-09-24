@@ -164,7 +164,7 @@ CLASSIFICATION = {
                         "itself (assets/turn/, voice/SmartTurn.kt), so its audio never leaves it to ask; "
                         "the desktop asks its own PC over loopback."),
     "/api/voice/utterance": ("ported", ""),
-    "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card."),
+    "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card, turning it off is immediate. Both apps can do both: desktop Settings, Voice (set_wake_word; ON also from the Jarvis bar's listen button), phone Platform checks."),
     "/api/watch": ("todo", "Watches - what Jarvis is keeping an eye on. Probably the single most useful unported feature."),
     "/api/watch/add": ("todo", "Creating a watch from the phone."),
     "/api/watch/remove": ("todo", "Removing a watch."),

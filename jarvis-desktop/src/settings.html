@@ -330,6 +330,16 @@
 
           <h3 class="subhead">"Hey Jarvis"</h3>
           <p class="sc-line" id="voice-wake"></p>
+          <div class="row">
+            <button class="btn" id="voice-wake-off" type="button" hidden>Turn the wake word off</button>
+            <button class="btn" id="voice-wake-on" type="button" hidden>Turn on "hey Jarvis"</button>
+            <span class="status" id="voice-wake-status" role="status"></span>
+          </div>
+          <p class="note" id="voice-wake-on-note" hidden>
+            This raises an approval card. Nothing changes until you approve
+            it, and then nothing listens until you switch listening on in the
+            Jarvis bar or on your phone. Turning it off happens at once.
+          </p>
           <p class="sc-line" id="voice-verifier" hidden></p>
           <p class="sc-line" id="voice-stop-word" hidden></p>
           <p class="sc-line" id="voice-turn" hidden></p>

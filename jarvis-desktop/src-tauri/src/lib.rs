@@ -738,6 +738,7 @@ pub fn run() {
             voice::speak_reply,
             voice::summon_push_to_talk,
             voice::get_voice_status,
+            voice::set_wake_word,
             vision::local_model_vision,
         ]);
 
