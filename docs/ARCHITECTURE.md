@@ -223,6 +223,7 @@ facts (bi-temporal)  TWO axes, and they are not the same question.
 facts_fts   FTS5, words
 facts_vec   sqlite-vec, meaning
             fused by reciprocal rank fusion, with a vector distance floor
+            and (2026-09-24) a word-share floor on the FTS list
 
 proposals   the review queue. Extraction writes here. NOTHING reaches `facts`
             without decide(id, accept) or decide_keep_both(id) — one integer
@@ -241,8 +242,28 @@ cannot touch. Cost it honestly or design around it.
 
 **The distance floor is inert on first boot.** It sits behind
 `self.embedder.semantic`, and until fastembed finishes downloading the
-embedder is `HashEmbedder` with `semantic=False`. On day one the tail *is*
-padded to `k` on any shared content word.
+embedder is `HashEmbedder` with `semantic=False`. Until 2026-09-24, on day
+one the tail *was* padded to `k` on any shared content word ("what is my dog
+called?" got the cat, on "called"). The word list now has its own floor:
+a hit must match `JARVIS_MEMORY_MIN_WORD_SHARE` (default 0.1) of the
+question's words, weighted by rarity, with framing words ("called", "name",
+"before", "last year") not counted. `find_one()` - which picks what a
+correction retires - passes `word_floor=0` and keeps its own stricter rule.
+The default was chosen by `backend/eval_memory.py`, the memory self-test (a
+made-up persona on a scratch store, never the owner's), on half its
+questions and reported on the other half; `backend/README.md`, "Memory wave
+1", has the numbers and the two right answers it costs with words alone.
+
+**Recall can look into the past, and only when asked** (`past-recall.patch`,
+`jarvis_past.py`). A chat question about the past - a fixed word check,
+English plus the commonest forms in the seven other languages - also
+recalls up to three retired facts that match, each labelled "(no longer
+true since <date>)"; a date in the question ("in June", "last year") is read
+by a fixed parser, never a model. "What did I tell you / believe ..." is
+searched on the *transaction* axis (`search(known_at=t)`, the same rule as
+`known_at()`); any other past question on the *valid* axis (true during
+that window). Every other question gets exactly the current-only search it
+always got. A bare month ("remind me in June") is not a past cue.
 
 **"Current" is `valid_to IS NULL OR valid_to > now`, never `valid_to IS
 NULL`.** A lease that ends in December is true today. Three places computed
@@ -529,8 +550,8 @@ That asymmetry is worth stating once: **this repo is version-controlled and the
 thing it patches is not.** A patch here can always be recovered. The file it
 edits cannot.
 
-Fifty patches (counted in `scripts/apply-patches.ps1`'s list on
-2026-09-24, after `chat-history.patch` and `auto-learn.patch`), applied in that list's order. The order matters: many patches
+Fifty-one patches (counted in `scripts/apply-patches.ps1`'s list on
+2026-09-24, after `chat-history.patch`, `auto-learn.patch` and `past-recall.patch`), applied in that list's order. The order matters: many patches
 edit lines an earlier one wrote, and the list's comments say which. Above
 all, `memory-safety` must land first: without it the first accepted proposal
 retires a roughly-matching unrelated fact, permanently, and `retire()` has

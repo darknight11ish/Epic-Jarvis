@@ -5,8 +5,8 @@
 > is the detail.
 
 
-Fifty patches against the Jarvis backend (counted 2026-09-24, after
-`chat-history.patch` and `auto-learn.patch`), each with an executable test
+Fifty-one patches against the Jarvis backend (counted 2026-09-24, after
+`chat-history.patch`, `auto-learn.patch` and `past-recall.patch`), each with an executable test
 (counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
 refuses to run if a `.patch` file here is missing from it). The paragraphs
 below were written as the list grew, so the counts in them are the count at
@@ -108,6 +108,7 @@ on a throwaway copy instead.
 | `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
 | `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them, and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
 | `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
+| `past-recall.patch` | `jarvis_hud.py` | **Questions about the past get the old facts, labelled** (memory wave 1, 2026-09-24). "Where did I live before?" also recalls the matching retired facts, each ending "(no longer true since <date>)"; every other question gets exactly the search it got before. One line of the chat turn's recall. Last in the list, after `auto-learn.patch`. Needs `jarvis_past.py` - without it the old search runs. See "Memory wave 1", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -381,6 +382,13 @@ and **no vote at all for a non-semantic embedder**. The hash stand-in measured
 AUC 0.73 where chance is 0.50 — giving it an equal vote is what guaranteed a
 full five results. On a machine with no model, search is now genuinely
 lexical-only, and returns nothing when nothing matches.
+
+**Added 2026-09-24 (memory wave 1): the word list has a floor too.** "Returns
+nothing when nothing matches" was true only when NO word matched. One shared
+word was enough, so "what is my dog called?" still brought back the cat on
+"called". Word hits now need a share of the question
+(`JARVIS_MEMORY_MIN_WORD_SHARE`, default 0.1, measured by the memory
+self-test) - see "Memory wave 1", at the end of this file.
 
 ### 5. The pre-queue filter discarded statements, not questions
 
@@ -764,6 +772,11 @@ fifth had anything to do with the question. It is now `MEMORY_K`, from
 With `memory-safety.patch` applied the store's search has a distance floor, so
 a lower `k` costs nothing on a query that genuinely has less to recall; it only
 stops the tail being padded out to five near-misses. Try 3.
+
+Since 2026-09-24 the word list has a floor as well (`JARVIS_MEMORY_MIN_WORD_SHARE`),
+and a question about the past may add up to three old facts, labelled, on
+top of the `MEMORY_K` current ones - never more than `MEMORY_K` itself, and
+none at 0 (`past-recall.patch`; "Memory wave 1", at the end of this file).
 
 ## And it puts the persona invariants back
 
@@ -6873,3 +6886,181 @@ the warning rate has not dropped, ordinary text raises no warning, broken
 requests raise no card and get one retry, and an unreadable request is asked
 again once. Every one of its eleven tests fails against the modules as they
 were before this change.
+
+---
+
+# Memory wave 1 (2026-09-24): the memory self-test, a floor for word search, and questions about the past
+
+Four things, all about finding the right fact. None of them adds a screen or
+a setting to either app: recall happens on the PC.
+
+- **`eval_memory.py` - the memory self-test.** It makes up a person (about
+  60 facts: people and what you call them, an address that changed, facts
+  that were replaced, "tea, not coffee", dates, preferences), asks about 125
+  questions whose right answers are known - about 25 of them have no answer
+  in memory - and scores how often search finds the right fact. Then it
+  buries the made-up person under 100, 1,000 and 10,000 filler facts and
+  asks again. **It never opens your memory**: it fills a new store in a
+  temporary folder and deletes it at the end. No chat model is asked
+  anything. The made-up data is in `backend/eval/`.
+- **A floor for word search** (finding F3 of the memory research). Word
+  search used to add every fact that shared any word with the question, so
+  "what is my dog called?" brought back "Owner's cat is called Biscuit" on
+  the word "called" alone. Now a fact must match a big enough share of the
+  question, with rare words counting for more than common ones, and with the
+  words that only frame a question ("called", "name", "before", "last year")
+  not counting at all. `JARVIS_MEMORY_MIN_WORD_SHARE` is **0.1** by default
+  (0 turns the floor off: the old behaviour). The meaning search keeps its
+  own floor, `JARVIS_MEMORY_MAX_DISTANCE`, unchanged. A correction still
+  finds the fact it replaces by its own stricter rule, with no floor.
+- **"What did Jarvis believe on this date?" in search.** `search(...,
+  known_at=t)` returns only facts Jarvis believed at that moment - the same
+  rule the memory pane's "as of" view uses. It is for code (the self-test
+  and the next item); no route changed.
+- **Questions about the past, in chat** (`past-recall.patch`,
+  `jarvis_past.py`). "Where did I live before?", "who was my manager last
+  year?", "what did I tell you in June?" now also bring back the old facts
+  that match - up to three - each ending "(no longer true since
+  2026-03-01)", so the model cannot mistake history for today. Any other
+  question gets exactly what it got before. Whether a question is about the
+  past is a fixed word check ("did I", "used to", "last year", "back in",
+  "before", "previously", "... ago", and the commonest forms in Spanish,
+  French, German, Italian, Portuguese, Dutch and Polish), and a date in it
+  ("in June", "last year", "in 2025", "June 2025") is read by a fixed parser.
+  No model is asked. A month on its own ("remind me in June") does **not**
+  count as the past: it is too often the future. It only narrows the dates
+  once something else in the question says past.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies the new `jarvis_memory.py` and
+`jarvis_past.py`, applies `past-recall.patch`), from this repository's
+folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Run the memory self-test.** It uses the real embedding model if your
+Python has fastembed (the one Jarvis uses; if its model is not downloaded
+yet, fastembed downloads it first, about 130 MB - none of your data is sent
+anywhere) and words only otherwise, and says which on its first line. It
+takes about 2-10 minutes. The two result files land in a folder called
+`jarvis-memory-eval` in your home folder, normally
+`C:\Users\pcadmin\jarvis-memory-eval`; the command opens that folder at the
+end. Open the `.md` file:
+
+```powershell
+py -3 "C:\Users\pcadmin\Epic-Jarvis\backend\eval_memory.py"; explorer "$env:USERPROFILE\jarvis-memory-eval"
+```
+
+Please send the `.md` file back. The numbers below were measured in the dev
+container, **with words-only search**, because fastembed's model cannot be
+downloaded there. Your PC's run is the first measurement of meaning search,
+and the first real distance-floor sweep: `JARVIS_MEMORY_MAX_DISTANCE = 1.0`
+is still a guess until then. The run also re-chooses the word floor with
+meaning search switched on, and prints its choice.
+
+## What was measured here (words only, dev container, not your PC)
+
+Recall@5 = the right fact is among the five a chat gets. "Don't know" =
+facts returned for a question memory cannot answer; each one is a wrong fact
+put in front of the model, and 0 is right. Before = floor off, after = 0.1.
+
+| Filler | Facts | Recall@5, before -> after | Replaced fact came back | "Don't know": facts per question, before -> after | "Don't know": none returned | Past questions found, labelled | As-of questions found | Search p50 / p95, before -> after | Database |
+|---|---|---|---|---|---|---|---|---|---|
+| none | 63 | 76.5% -> 74.1% | 0 | 1.07 -> 0.59 | 52% -> 70% | 8 of 8 | 6 of 6 | 0.6/0.8 -> 0.7/0.8 ms | 0.06 MB |
+| unrelated | 1,063 | 75.3% -> 72.9% | 0 | 1.26 -> 0.78 | 48% -> 67% | 7 of 8 | 5 of 6 | 0.6/0.8 -> 0.8/1.5 ms | 0.23 MB |
+| unrelated | 10,063 | 75.3% -> 72.9% | 0 | 1.26 -> 0.78 | 48% -> 67% | 7 of 8 | 5 of 6 | 0.7/1.4 -> 1.0/2.6 ms | 1.6 MB |
+| same topic | 1,063 | 72.9% -> 70.6% | 0 | 1.74 -> 1.63 | 48% -> 59% | 8 of 8 | 6 of 6 | 0.7/1.1 -> 0.9/2.9 ms | 0.26 MB |
+| same topic | 10,063 | 72.9% -> 70.6% | 0 | 1.74 -> 1.63 | 48% -> 59% | 7 of 8 | 6 of 6 | 0.8/2.2 -> 1.0/4.2 ms | 1.9 MB |
+
+**How the 0.1 was chosen, honestly.** The questions are split in two halves
+(alternating within each kind of question). The floor was chosen on the
+first half only: of the floors that lost **no** right fact there - at any
+size, with either filler - the one that brought back the fewest wrong facts
+for "don't know" questions (0.1 and 0.2 tied; the lower one wins a tie). On
+the second half, which played no part in choosing:
+
+| Filler | Filler facts | Right facts found, floor off -> 0.1 | "Don't know" facts, off -> 0.1 | "Don't know": none returned |
+|---|---|---|---|---|
+| unrelated | 0 | 38 -> 36 | 14 -> 13 | 46% -> 54% |
+| unrelated | 10,000 | 37 -> 35 | 19 -> 18 | 38% -> 46% |
+| same topic | 1,000 | 36 -> 34 | 29 -> 28 | 38% -> 46% |
+| same topic | 10,000 | 36 -> 34 | 29 -> 28 | 38% -> 46% |
+
+**Said plainly:**
+
+- **The floor costs two right answers on the second half, at every size.**
+  Both are reworded questions whose only word in common with the fact was a
+  framing word: "What's my **boss** called?" found "Owner's new manager is
+  called Tom" only through "called", and "What do I **usually** order for
+  dinner delivery?" found the takeaway fact only through "usual". That is
+  exactly the coincidence the floor exists to stop - "what is my **dog**
+  called?" finding the cat has the same shape - and with words alone the
+  two cannot be told apart. Meaning search is what finds "boss" = "manager",
+  and this floor does not touch it; your PC's run will show whether it does
+  find it. If you would rather have the old behaviour, set
+  `JARVIS_MEMORY_MIN_WORD_SHARE` to 0.
+- **The list of framing words was written by hand**, and while writing it I
+  looked at which questions went wrong in both halves. Only the number, 0.1,
+  was chosen on the first half alone. So the second half is not a perfectly
+  clean test of the word list.
+- **Most wrong facts for "don't know" questions are not fixable by words.**
+  With the same-topic filler, "what is my dog called?" finds "Owner's cousin
+  Grace Morgan has a dog called Rex": every word matches. Only the model
+  reading it can tell it is not your dog.
+- **Words-only search misses reworded questions** whatever the floor: about
+  a quarter of the answerable questions ("Should you offer me an espresso?"
+  for "tea, not coffee", "Am I afraid of heights?" for "scared") are only
+  findable by meaning.
+- **A replaced fact never came back** for a question about now, at any size.
+- **Past questions**: 8 of 8 found and labelled with no filler; one ("What
+  book was I reading in July?") is crowded out by filler that also says
+  "read" - with 1,000 unrelated facts, and with 10,000 same-topic ones.
+  As-of questions: 6 of 6 with no filler; one ("What book am I reading?",
+  as of 1 May) is crowded out the same way from 100 unrelated facts up.
+- **Speed and size are not a concern**: under 5 ms per search at 10,000
+  facts, and under 2 MB (words only; the research pilot measured about
+  18 MB with vectors). The floor adds up to about 2 ms at the slowest.
+
+## What the code does
+
+- `rebuilt/jarvis_memory.py`: `_MIN_WORD_SHARE` (from
+  `JARVIS_MEMORY_MIN_WORD_SHARE`; a typo or an empty value means the
+  default, never a failed start), `_FRAME` and `_floor_terms()` (the framing
+  words), `MemoryStore._word_floor()` (two small FTS5 queries per question
+  word, over the hits already found; if anything fails, the hits stand), and
+  `search(..., known_at=, word_floor=)`. `find_one()` passes `word_floor=0`.
+- `jarvis_past.py` (new, copied in by `apply-patches.ps1`):
+  `is_past_question()`, `is_belief_question()`, `when()` (the date parser),
+  `label()`, `past_hits()` and `recall()` - the one call the chat turn makes.
+  A question about what Jarvis *believed* ("what did I tell you in June?")
+  is searched as of the end of that window (`known_at`); any other past
+  question keeps the old facts that were true during it.
+- `past-recall.patch`: the chat turn's recall calls `jarvis_past.recall()`
+  instead of `store().search()`, and falls back to the old search if
+  `jarvis_past.py` is missing. The old facts' labels are in their text, so
+  they reach the quoted FACTS block, the sensitive-topic count
+  (`injected_sensitive`) and `injected_ids` like any other recalled fact.
+- `eval_memory.py`, `eval/golden_facts.jsonl`, `eval/golden_questions.jsonl`:
+  the self-test. Not copied to the backend folder. Its scoring (recall@k,
+  nDCG@k) follows LongMemEval's `src/retrieval/eval_utils.py` (MIT, credited
+  in `THIRD-PARTY-NOTICES.txt`); no LongMemEval data is used.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_recall.py
+```
+
+About 120 checks, no network, no model. The ones that matter most: "what is
+my dog called?" no longer brings back the cat (and did before); a correction
+still finds the fact it replaces, whatever the floor; `search(known_at=)`
+agrees with the memory pane's as-of list; "where did I live before?" brings
+the old address back labelled, while "where do I live?" gets exactly what it
+got before; the stacked chat-turn lines run, with and without
+`jarvis_past.py`; and the self-test runs on a scratch store without writing
+anything into the home folder's `.openjarvis`. Every check about the floor,
+`known_at` and the past fails on the code before this change; the checks
+marked "guard" pass on both, and must.

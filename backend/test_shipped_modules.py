@@ -85,6 +85,7 @@ NOT_SHIPPED = {
     "run_suites.py": "CI's test runner",
     "selftest.py": "run from this repository against the backend",
     "import_history.py": "run from this repository against the backend",
+    "eval_memory.py": "the memory self-test, run from this repository on a scratch store",
     "grade-peers.py": "a research tool, not part of the backend",
     "_ollama_wire.py": "test fixture: Ollama's real /v1 stream format, for the chat tests",
     "_voice_test.py": "test plumbing: a stand-in speaker model for the voice suites",

@@ -1,0 +1,63 @@
+{"id": "f01", "text": "Owner's sister is called Priya", "told": "2025-06-02", "kind": "person"}
+{"id": "f02", "text": "Priya's wedding is in Lisbon next May", "told": "2026-07-14", "kind": "person"}
+{"id": "f03", "text": "Owner's partner is called Jonas", "told": "2025-06-02", "kind": "person"}
+{"id": "f04", "text": "Jonas works as a nurse at the county hospital", "told": "2025-06-05", "kind": "person"}
+{"id": "f05", "text": "Owner's manager is called Marta", "told": "2025-07-01", "kind": "replaced", "retired": "2026-04-10", "replaced_by": "f06"}
+{"id": "f06", "text": "Owner's new manager is called Tom", "told": "2026-04-10", "kind": "update"}
+{"id": "f07", "text": "Owner's best friend Kofi lives in Glasgow", "told": "2025-08-19", "kind": "person"}
+{"id": "f08", "text": "Owner's mum is called Helen", "told": "2025-06-03", "kind": "person"}
+{"id": "f09", "text": "Owner's nephew Arlo was born in March 2024", "told": "2025-09-30", "kind": "date"}
+{"id": "f10", "text": "Owner lives in Harrogate", "told": "2025-06-20", "kind": "replaced", "retired": "2026-03-01", "replaced_by": "f11"}
+{"id": "f11", "text": "Owner lives in York", "told": "2026-03-01", "kind": "update"}
+{"id": "f12", "text": "Owner's flat in York is on Micklegate", "told": "2026-03-02", "kind": "place"}
+{"id": "f13", "text": "Owner's cat is called Biscuit", "told": "2025-08-01", "kind": "pet"}
+{"id": "f14", "text": "Biscuit is a ginger tabby who is scared of the hoover", "told": "2025-08-01", "kind": "pet"}
+{"id": "f15", "text": "Owner drinks tea, not coffee", "told": "2025-06-11", "kind": "negation"}
+{"id": "f16", "text": "Owner is vegetarian", "told": "2025-06-11", "kind": "preference"}
+{"id": "f17", "text": "Owner is allergic to peanuts", "told": "2025-06-12", "kind": "health"}
+{"id": "f18", "text": "Owner does not like spicy food", "told": "2025-10-04", "kind": "negation"}
+{"id": "f19", "text": "Owner's favourite meal is mushroom risotto", "told": "2025-10-04", "kind": "preference"}
+{"id": "f20", "text": "Owner works as a railway signal engineer", "told": "2025-06-15", "kind": "work"}
+{"id": "f21", "text": "Owner works night shifts on weekends", "told": "2025-06-15", "kind": "work"}
+{"id": "f22", "text": "Owner works for a company called Ridgeline Rail", "told": "2025-06-16", "kind": "work"}
+{"id": "f23", "text": "Owner is learning to play the cello", "told": "2025-11-08", "kind": "hobby"}
+{"id": "f24", "text": "Owner's cello teacher is called Mrs Okafor", "told": "2025-11-08", "kind": "person"}
+{"id": "f25", "text": "Owner plays five-a-side football on Thursday evenings", "told": "2025-07-20", "kind": "hobby"}
+{"id": "f26", "text": "Owner runs a 5k parkrun most Saturdays", "told": "2025-09-06", "kind": "hobby"}
+{"id": "f27", "text": "Owner's favourite band is Elbow", "told": "2025-07-03", "kind": "preference"}
+{"id": "f28", "text": "Owner is reading The Left Hand of Darkness", "told": "2026-03-05", "kind": "replaced", "retired": "2026-08-01", "replaced_by": "f29"}
+{"id": "f29", "text": "Owner finished The Left Hand of Darkness and is now reading Piranesi", "told": "2026-08-01", "kind": "update"}
+{"id": "f30", "text": "Owner supports Hull City", "told": "2025-08-23", "kind": "preference"}
+{"id": "f31", "text": "Owner drives a red Fiat Panda", "told": "2025-06-10", "kind": "replaced", "retired": "2026-02-20", "replaced_by": "f32"}
+{"id": "f32", "text": "Owner sold the Fiat Panda and now drives a grey Skoda Octavia", "told": "2026-02-20", "kind": "update"}
+{"id": "f33", "text": "Owner's birthday is on 14 November", "told": "2025-06-04", "kind": "date"}
+{"id": "f34", "text": "Owner and Jonas's anniversary is on 2 August", "told": "2025-07-30", "kind": "date"}
+{"id": "f35", "text": "Owner has a dentist appointment on 3 October", "told": "2026-07-20", "kind": "replaced", "retired": "2026-09-10", "replaced_by": "f63"}
+{"id": "f36", "text": "Owner's passport expires in January 2028", "told": "2026-01-12", "kind": "date"}
+{"id": "f37", "text": "Owner prefers short answers without bullet points", "told": "2025-06-01", "kind": "preference"}
+{"id": "f38", "text": "Owner likes the heating set to 19 degrees", "told": "2025-11-20", "kind": "preference"}
+{"id": "f39", "text": "Owner prefers trains to flying", "told": "2025-12-02", "kind": "preference"}
+{"id": "f40", "text": "Owner hates being called by their full name", "told": "2025-06-01", "kind": "preference"}
+{"id": "f41", "text": "Owner is short-sighted and wears glasses", "told": "2025-09-14", "kind": "health"}
+{"id": "f42", "text": "Owner is saving for a trip to Japan next spring", "told": "2026-05-02", "kind": "plan"}
+{"id": "f43", "text": "Owner visited Iceland in 2023", "told": "2025-10-19", "kind": "date"}
+{"id": "f44", "text": "Owner's laptop runs Ubuntu", "told": "2025-09-01", "kind": "replaced", "retired": "2026-05-15", "replaced_by": "f45"}
+{"id": "f45", "text": "Owner switched the laptop from Ubuntu to Fedora", "told": "2026-05-15", "kind": "update"}
+{"id": "f46", "text": "Owner does not drink alcohol", "told": "2025-12-24", "kind": "negation"}
+{"id": "f47", "text": "Owner has never been to America", "told": "2026-01-03", "kind": "negation"}
+{"id": "f48", "text": "Owner no longer plays the guitar", "told": "2025-11-08", "kind": "negation"}
+{"id": "f49", "text": "Owner's favourite colour is green", "told": "2025-07-07", "kind": "preference"}
+{"id": "f50", "text": "Owner is scared of heights", "told": "2025-08-30", "kind": "preference"}
+{"id": "f51", "text": "Owner's bike is a blue Brompton", "told": "2026-04-18", "kind": "thing"}
+{"id": "f52", "text": "Owner grew up in Sheffield", "told": "2025-06-20", "kind": "place"}
+{"id": "f53", "text": "Owner studied geography at university in Newcastle", "told": "2025-10-01", "kind": "past"}
+{"id": "f54", "text": "Owner goes to the climbing wall on Tuesdays", "told": "2026-02-03", "kind": "hobby"}
+{"id": "f55", "text": "Owner's neighbour Dave lends them his ladder", "told": "2026-03-20", "kind": "person"}
+{"id": "f56", "text": "Owner waters the plants on Sundays", "told": "2026-04-26", "kind": "routine"}
+{"id": "f57", "text": "Owner's doctor is Dr Singh at Priory Medical Centre", "told": "2026-03-10", "kind": "health"}
+{"id": "f58", "text": "Owner's usual takeaway is the Nepalese place on Gillygate", "told": "2026-03-27", "kind": "place"}
+{"id": "f59", "text": "Owner wants to learn Portuguese before Priya's wedding", "told": "2026-07-14", "kind": "plan"}
+{"id": "f60", "text": "Owner's Wi-Fi router is in the hallway cupboard", "told": "2026-03-04", "kind": "thing"}
+{"id": "f61", "text": "Owner used to work in a bookshop", "told": "2025-06-15", "kind": "past"}
+{"id": "f62", "text": "Owner gets paid on the 28th of each month", "told": "2025-06-30", "kind": "date"}
+{"id": "f63", "text": "Owner's dentist appointment moved to 10 October", "told": "2026-09-10", "kind": "update"}

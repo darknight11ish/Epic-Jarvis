@@ -180,6 +180,17 @@ SecAlign / Meta SecAlign (Sizhe Chen et al.) - the IDEA only
   Meta_SecAlign's recursive_filter. That code is CC-BY-NC 4.0; none of it
   was copied. Written here so the origin of the idea is on record.
 
+LongMemEval (Di Wu et al.), MIT - https://github.com/xiaowu0162/LongMemEval
+  backend/eval_memory.py (the memory self-test, run from this repository,
+  never shipped to the PC's backend folder) scores retrieval the way
+  LongMemEval's src/retrieval/eval_utils.py does: recall_any@k and nDCG@k
+  with binary relevance, dcg() and ndcg() re-written without numpy. Read
+  from its main branch on 2026-09-24. No LongMemEval data is used; the
+  made-up persona, questions and filler are written in this repository.
+  Copyright (c) 2024 Di Wu. Licensed under the MIT License, whose full text
+  is the one given for browser-use above with this copyright line in place
+  of that one.
+
 SUMMARY BY LICENCE
 ------------------
 (Apache-2.0 OR MIT) AND BSD-3-Clause (1): encoding_rs

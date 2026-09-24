@@ -1163,8 +1163,13 @@ def _stacks():
 
 def t_the_patch_is_last_and_builds():
     names = [str(p).replace("\\", "/").split("/")[-1] for p in _stack.order()]
-    check("auto-learn.patch is last in apply-patches.ps1's order, after chat-history",
-          names[-1] == "auto-learn.patch" and names[-2] == "chat-history.patch", names[-3:])
+    # Last when it was added; past-recall.patch (memory wave 1) now follows
+    # it, and touches none of its lines.
+    i = names.index("auto-learn.patch")
+    check("auto-learn.patch comes straight after chat-history in apply-patches.ps1's "
+          "order, and only past-recall.patch after it",
+          names[i - 1] == "chat-history.patch" and names[i + 1:] == ["past-recall.patch"],
+          names[-3:])
     for target, (text, log) in _stacks().items():
         check(f"{target}: the whole stack builds", text is not None, "\n".join(log[-2:]))
         check(f"{target}: every auto-learn hunk found its context (none made up)",
@@ -1186,7 +1191,8 @@ def t_the_patch_applies_forwards_and_backwards():
             if text is None:
                 return
             (d / target).write_text(text, encoding="utf-8", newline="\n")
-            fulls[target] = _stack.stand_in(target)[0]
+            fulls[target] = _stack.stand_in(
+                target, order[:order.index("auto-learn.patch") + 1])[0]
         (d / "p.patch").write_bytes((HERE / "auto-learn.patch").read_bytes()
                                     .replace(b"\r\n", b"\n"))
         for extra in (["--check"], [], ["--check", "--reverse"], ["--reverse"], []):
