@@ -238,20 +238,29 @@ await check("CONTROL: Clear never stores an empty token", async () => {
   const rust = read("src-tauri/src/commands.rs");
   const set = rust.slice(rust.indexOf("pub fn set_api_settings"));
   const body = set.slice(0, set.indexOf("\n}\n"));
-  assert.match(body, /if token\.is_empty\(\) \{[\s\S]*?store\.delete\("token"\)/,
+  // Setting or clearing, the plain key goes; "" clears Credential Manager.
+  assert.match(body, /if token\.is_some\(\) \{\s*store\.delete\("token"\);/,
     "clearing does not delete the key");
+  assert.match(body, /Some\(""\) => match token_store::delete\(\)/);
   // CLAUDE.md rule 3: no plain-text copy, not even as a fallback.
   assert.doesNotMatch(body, /store\.set\("token"/, "the token is written to the settings file");
-  assert.match(body, /Err\(e\) => \{\s*return Err\(/, "a refused token does not stop the save");
-  // The token is dealt with before anything else is put in the store, so a
-  // refused token cannot leave a half-saved change behind.
-  assert.ok(body.indexOf("token_store::write(&token)") < body.indexOf('store.set("base"'),
-    "the base is put in the store before the token is tried");
+  // CONN-7 (audit 3): the file first, THEN Credential Manager, and a refusal
+  // rolls the file back - so a refused token leaves nothing half-saved, and
+  // a failed save cannot leave an old plain copy on disk behind a new
+  // Credential Manager token for the next start's migration to restore.
+  assert.match(body, /save_file_then_token\(\s*\|\| store\.save\(\)/, "the file is not saved first");
+  const order = rust.slice(rust.indexOf("pub(crate) fn save_file_then_token("));
+  const orderBody = order.slice(0, order.indexOf("\n}\n"));
+  assert.ok(orderBody.indexOf("save_file()") < orderBody.indexOf("credential_manager()"),
+    "Credential Manager is written before the settings file");
+  assert.match(orderBody, /if let Err\(e\) = credential_manager\(\) \{\s*roll_back_file\(\);/,
+    "a refused token does not roll the file back");
+  assert.match(rust, /fn a_failed_file_save_never_lets_the_old_token_come_back/, "the Rust test is gone");
 });
 
 await check("CONTROL: the typed token goes to Windows Credential Manager", async () => {
   const rust = read("src-tauri/src/commands.rs");
-  assert.match(rust, /token_store::write\(&token\)/);
+  assert.match(rust, /token_store::write\(token\)/);
   const store = read("src-tauri/src/token_store.rs");
   assert.match(store, /CredWriteW/);
   assert.match(store, /CredReadW/);
