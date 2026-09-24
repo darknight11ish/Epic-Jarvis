@@ -2243,6 +2243,26 @@ def with_spoken_note(msgs: list) -> list:
     return list(msgs[:at]) + [dict(_SPOKEN_MSG)] + list(msgs[at:])
 
 
+def keep_rules_first(msgs: list) -> list:
+    """A new list whose first message is the Jarvis rules block.
+
+    Ollama puts the Modelfile's SYSTEM block in front only when the first
+    message is not a system message (ollama/server/routes.go; see
+    memory-prefix.patch). memory-prefix.patch places the recalled-facts block
+    just before the newest user message, which on a conversation's FIRST
+    question is position 0 - so on exactly the turns where the model holds
+    private facts, the rules ("say what is a guess...") were dropped. Any
+    other system message that ends up first (after trimming, say) does the
+    same. When that happens, the rules block goes first, word for word
+    (LANE_SYSTEM, which test_agent.py holds to the Modelfile): what Ollama
+    would have put there. A list already starting with it, or with a user or
+    assistant message, is returned as it is."""
+    if (msgs and isinstance(msgs[0], dict) and msgs[0].get("role") == "system"
+            and msgs[0].get("content") != LANE_SYSTEM):
+        return [{"role": "system", "content": LANE_SYSTEM}] + list(msgs)
+    return list(msgs)
+
+
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    stream_out: Callable[[bytes], None],
                    enabled_tools: Optional[set] = None,
@@ -2409,6 +2429,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         if watch.spoken:
             # After trimming, so trimming can never leave the note first.
             body["messages"] = with_spoken_note(body["messages"])
+        # Last, after trimming and the spoken note: the rules stay first.
+        body["messages"] = keep_rules_first(body["messages"])
         if not _reasoning_field_refused:
             body.update(REASONING_OFF)
         if offer_tools and tool_schemas:

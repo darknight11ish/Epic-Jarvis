@@ -1003,8 +1003,20 @@ def t_a_second_card_turn_carries_the_jarvis_system_block():
               got[0] == {"role": "system", "content": AG.LANE_SYSTEM} and got[1:] == msgs,
               got[:2])
     got, msgs = run(None)
-    check("a turn on the main card is unchanged (its model has the block built in)",
-          got == msgs, got[:2])
+    # memory-prefix.patch puts the recalled facts just before the newest
+    # question - on a conversation's FIRST question that is position 0, and
+    # Ollama then drops the Modelfile's SYSTEM block. The rules go first.
+    check("main card: recalled facts first (a first question) - the Jarvis rules go in front",
+          got[0] == {"role": "system", "content": AG.LANE_SYSTEM} and got[1:] == msgs,
+          got[:2])
+    check("keep_rules_first: a turn that starts with a user message is unchanged "
+          "(Ollama adds the Modelfile's block itself)",
+          AG.keep_rules_first([{"role": "user", "content": "hi"}])
+          == [{"role": "user", "content": "hi"}])
+    check("keep_rules_first: already first, not added twice",
+          AG.keep_rules_first([{"role": "system", "content": AG.LANE_SYSTEM},
+                               {"role": "system", "content": "facts"}])[1]
+          == {"role": "system", "content": "facts"})
 
 
 if __name__ == "__main__":

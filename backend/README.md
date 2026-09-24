@@ -811,6 +811,17 @@ and this block is at the tail, in the kept region. The one exception is a
 conversation truncated to its final message alone, where there is no prefix
 left to preserve anyway.
 
+**One case this edit missed (fixed 2026-09-24, in `jarvis_agent.py`).** On a
+conversation's *first* question there is no earlier turn, so "just before the
+newest question" IS index 0: the list is `[recalled facts, question]`, and
+the invariants were dropped on every first question that recalled a fact.
+`jarvis_agent.keep_rules_first()` now runs on every request to the local
+model, last: if message 0 is a system message other than the Jarvis rules
+block, it puts that block (`LANE_SYSTEM`, held word for word to the
+Modelfile by `test_agent.py`) in front - exactly what Ollama would have
+added. A request starting with a user message is left alone.
+`test_agent.py` checks both, and the first check fails on the code before.
+
 **One thing to check on the machine**, because it cannot be checked from here:
 the HUD posts to `JARVIS_URL/v1/chat/completions`, not to Ollama directly. All
 of the above is Ollama's behaviour. If the Jarvis backend normalises the
