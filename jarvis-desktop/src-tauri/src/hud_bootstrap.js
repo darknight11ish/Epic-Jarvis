@@ -553,9 +553,34 @@
    * from leaving through the wrong door.
    * ---------------------------------------------------------------- */
   var realFetch = window.fetch ? window.fetch.bind(window) : null;
+  // Memory is decided in the Brain window, and only there: its cards warn
+  // about text that reads like a slipped-in instruction, offer "Both are
+  // true", say "would replace" only when something really is replaced, and
+  // refuse while the link is stale. This page's own copy of those cards had
+  // none of that. The page no longer draws them (jarvis_hud.html), and a
+  // later copy of the page that brings them back still cannot send one:
+  // every memory write from this page is refused here, stale link or not.
+  // Reads (/api/memory/pending, /status, /facts) pass untouched.
+  var MEMORY_WRITE =
+    /\/api\/memory\/(decide|keep_both|forget|edit|learning|sleep_time)(\?|$)/;
   if (realFetch) {
     window.fetch = function (input, init) {
       var path = typeof input === "string" ? input : "";
+      // A Request or URL object too, not only a string, for the refusal.
+      var target = path || (input ? String(input.url || input) : "");
+      if (MEMORY_WRITE.test(target)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ok: false,
+              error:
+                "memory is decided in the Brain window's Memory tab, not here - " +
+                "nothing was sent",
+            }),
+            { status: 403, headers: { "Content-Type": "application/json" } }
+          )
+        );
+      }
       if (path === "/api/approve" || path === "/api/deny") {
         if (linkStale) {
           return Promise.resolve(

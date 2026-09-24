@@ -1978,26 +1978,32 @@ async function initPoll(){
         }
       }
     }
+    // Memory cards are NOT decided here. They used to be, with Keep/Forget
+    // buttons that skipped every safety the Brain window's Memory tab has:
+    // no warning on text that reads like a slipped-in instruction, no "Both
+    // are true", "(replaces: ...)" shown even on a card that replaces
+    // nothing, no check that the link was live, and a card removed even when
+    // the decision failed to send. One place decides memory, with all of
+    // that: the Brain. This page only says how many are waiting and where.
+    // (A plain read: it does not ask for the overnight-tidy card, so it does
+    // not use that card up - see memory-pane.patch.)
     const m = await jfetch("/api/memory/pending", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
     if(m.ok){
       const j = await m.json();
-      for(const p of (j.pending || [])){
-        if(INIT.shown.has(p.id)) continue;
-        INIT.shown.add(p.id);
+      const n = (j.pending || []).length;
+      const old = document.getElementById("init-memory");
+      if(old && (n === 0 || old.dataset.n !== String(n))) old.remove();
+      if(n > 0 && !document.getElementById("init-memory")){
         const el = initCard(
-          `<div class="hdr"><span class="who">Remember this?</span><span class="kind">memory</span></div>`
-          + `<div class="det">${apprEscape(p.text)}${p.replaces ? "\n(replaces: " + apprEscape(p.replaces) + ")" : ""}</div>`
-          + `<div class="btns"><button class="yes">Keep</button><button class="no">Forget</button></div>`);
-        if(!el) continue;
-        const decide = async (accept) => {
-          el.querySelectorAll("button").forEach(b => b.disabled = true);
-          try{ await jfetch("/api/memory/decide", {method:"POST",
-            headers:{"Content-Type":"application/json","X-Jarvis-Client":"hud"},
-            body: JSON.stringify({id:p.id, accept})}); }catch(e){}
-          el.remove();
-        };
-        el.querySelector(".yes").onclick = () => decide(true);
-        el.querySelector(".no").onclick  = () => decide(false);
+          `<div class="hdr"><span class="who">${n} memory card${n === 1 ? "" : "s"} waiting for you</span><span class="kind">memory</span></div>`
+          + `<div class="det">Review them in the Brain window's Memory tab (tray icon, then Open the Brain). `
+          + `Each card there shows what it would replace and warns about anything that looks slipped in. Nothing is kept until you say so.</div>`
+          + `<div class="btns"><button class="no">Dismiss</button></div>`);
+        if(el){
+          el.id = "init-memory";
+          el.dataset.n = String(n);
+          el.querySelector(".no").onclick = () => el.remove();
+        }
       }
     }
   }catch(e){}
