@@ -546,7 +546,9 @@ function paintSettings() {
     sensBox.hidden = !view.sensitiveMemory;
     if (view.sensitiveMemory) {
       group($("vt-sensitive"), VT.SENSITIVE_MEMORY, view.sensitiveMemory, "sensitive_memory");
-      say($("vt-sensitive-note"), VT.SENSITIVE_MEMORY.find((c) => c.id === view.sensitiveMemory).detail);
+      let sensitiveNote = VT.SENSITIVE_MEMORY.find((c) => c.id === view.sensitiveMemory).detail;
+      if (VT.sensitiveCovered(view)) sensitiveNote += ` ${VT.SENSITIVE_COVERED_NOTE}`;
+      say($("vt-sensitive-note"), sensitiveNote);
     }
   }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);

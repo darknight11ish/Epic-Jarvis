@@ -660,22 +660,25 @@ class VoiceSession(
         // when the queue is closed AND drained, never merely when it is
         // momentarily empty (a fast model can easily outrun TTS).
         //
-        // "Private answers stay on screen": before EVERY sentence the phone
-        // asks whether this answer may be read aloud (PrivateAloud). The
-        // first time it may not, it says the one fixed line instead and
-        // reads nothing more of this answer - which stays on the screen as
-        // always. Asked per sentence because a tool can start halfway.
+        // The NEXT sentence's sound is asked of the PC while the current one
+        // plays - one ahead, never more (SpeechAhead) - so there is no
+        // silence between sentences while the PC makes the next one.
+        //
+        // "Private answers stay on screen": for EVERY sentence the phone
+        // asks whether this answer may be read aloud (PrivateAloud) - before
+        // asking for its sound, and again right before playing it, because a
+        // tool can start while the sound is being made. The first time it
+        // may not, that sound is dropped, the one fixed line is said
+        // instead, and nothing more of this answer is read - it stays on the
+        // screen as always. "Stop" ([Turn.silenced]) drops a sound made
+        // ahead, too, and so does cancelling this job.
         val drainJob = scope.launch {
-            var hushed = false
-            for (sentence in queue) {
-                if (hushed) continue
-                if (!PrivateAloud.mayRead(heard, route.get(), asked, toolWatch())) {
-                    hushed = true
-                    speak(turn, PrivateAloud.ON_SCREEN)
-                    continue
-                }
-                speak(turn, sentence)
-            }
+            SpeechAhead<ApiResult<SaidAloud>>(
+                mayRead = { PrivateAloud.mayRead(heard, route.get(), asked, toolWatch()) },
+                stopped = { turn.silenced },
+                fetch = { sentence -> api.say(sentence) },
+                play = { sentence, said -> playClip(turn, sentence, said) },
+            ).speak(queue)
         }
 
         try {
@@ -733,24 +736,23 @@ class VoiceSession(
      * refused unless the server says otherwise. Silence with the reply on
      * screen is an acceptable outcome; uploading it is not.
      */
-    private suspend fun speak(turn: Turn, text: String) {
-        // Stopped this turn: not spoken, not even asked of the PC. The reply
-        // is still on screen; only the voice was told to stop.
+    private suspend fun playClip(turn: Turn, text: String, said: ApiResult<SaidAloud>) {
+        // Stopped this turn: not spoken. The reply is still on screen; only
+        // the voice was told to stop. (After "stop", SpeechAhead does not ask
+        // the PC for anything more either.)
         if (turn.silenced) return
         _speakingText.value = text
         recentSpeech.started(text)
         try {
-            speakNow(turn, text)
+            playNow(turn, text, said)
         } finally {
             _speakingText.value = null
             recentSpeech.ended(SystemClock.elapsedRealtime())
         }
     }
 
-    private suspend fun speakNow(turn: Turn, text: String) {
-        val said = api.say(text)
-        // "Stop" may have landed while the PC was making the audio.
-        if (turn.silenced) return
+    /** [said] is the PC's `/api/voice/say` answer for [text], asked for ahead of time by [SpeechAhead]. */
+    private suspend fun playNow(turn: Turn, text: String, said: ApiResult<SaidAloud>) {
         when (said) {
             is ApiResult.Ok -> when (val out = said.value) {
                 is SaidAloud.Audio -> speaker.play(out.wav)

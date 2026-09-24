@@ -136,6 +136,25 @@ object StrictVoice {
     fun settingOpen(setting: String, view: VoiceStrict.View): Boolean =
         !(setting == VoiceStrict.MEMORY && view.privacy == VoiceStrict.VOICE_IS_ENOUGH)
 
+    /**
+     * Under the sensitive-facts choices while answers that use memories are
+     * "Keep on screen": every answer that uses a saved fact already stays on
+     * screen, the sensitive ones included (PrivateAloud). The choices stay
+     * open - this one takes over if the memory choice changes. Not while
+     * private answers are "voice check is enough": that makes the memory
+     * choice moot, and then only this one holds them back.
+     */
+    const val SENSITIVE_COVERED_BY_MEMORY =
+        "\"Keep on screen\" above already keeps these answers on screen."
+
+    /** The one note shown under [setting]'s choices as a whole, or null. */
+    fun plateNote(setting: String, view: VoiceStrict.View): String? = when {
+        !settingOpen(setting, view) -> MEMORY_WHILE_VOICE_IS_ENOUGH
+        setting == VoiceStrict.SENSITIVE_MEMORY && view.memory == VoiceStrict.MEMORY_ON_SCREEN &&
+            view.privacy != VoiceStrict.VOICE_IS_ENOUGH -> SENSITIVE_COVERED_BY_MEMORY
+        else -> null
+    }
+
     const val NOT_ON_THIS_PC =
         "Your PC does not have these settings yet. Run the patch script on the PC first."
 

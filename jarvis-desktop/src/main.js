@@ -2038,7 +2038,7 @@ function showWaitStatus(word) {
   if (TOOL_WORDS.includes(word) && !state.toolRan) {
     state.toolRan = true;
     if (!speakableNow()) {
-      speechQueue = [];
+      dropAnswerSpeech();
       if (state.voiceTurn) sayPrivateLineOnce();
     }
   }
@@ -2367,6 +2367,13 @@ async function send(promptText, provenance = "typed") {
   // above, so a push-to-talk barge-in whose send() was refused because the
   // old answer is still streaming leaves that old answer muted.
   speechMuted = false;
+  // A new question supersedes whatever of the last answer was still
+  // waiting to be said: its queued sentences, and a clip already made
+  // ahead for it, are dropped (a clip playing right now finishes). Kept,
+  // they would be checked against THIS question's privacy - its route, its
+  // tools - not their own.
+  speechQueue = [];
+  aheadClip = null;
   // Nothing is known yet about whether this answer is private.
   state.turnRoute = null;
   state.toolRan = false;
@@ -2744,6 +2751,15 @@ let speechGeneration = 0;
 /** Settles the "wait for this clip to end" promise of whatever is playing,
  *  so a clip cut off by "stop" does not leave that wait pending forever. */
 let finishCurrentClip = null;
+/** True while a clip is actually playing (not while its sound is still
+ *  being made). Only then is the next sentence's sound asked for. */
+let clipPlaying = false;
+/** The next sentence, its sound already asked of the backend while the
+ *  current clip plays - `{ text, generation, request }`, or null. One
+ *  ahead, never more, so the PC makes one sentence's sound at a time.
+ *  Dropped by "stop", by a new question, and when the answer turns out to
+ *  be private; checked again right before it is played either way. */
+let aheadClip = null;
 
 /** A rough pass at making streamed markdown speakable. Not a renderer - just
  *  enough that "**bold**" is not read aloud as "asterisk asterisk bold
@@ -2808,10 +2824,19 @@ function speakableNow() {
  *  dropped and the fixed line said instead, once. */
 function recheckSpeech() {
   // Nothing queued and no voice answer still arriving: nothing to hold back.
-  if (!speechQueue.length && !state.voiceTurn) return;
+  if (!speechQueue.length && !aheadClip && !state.voiceTurn) return;
   if (speakableNow()) return;
-  speechQueue = [];
+  dropAnswerSpeech();
   sayPrivateLineOnce();
+}
+
+/** Drops what is queued of the answer, and a clip already being made for
+ *  it ahead of time - but never the fixed line, which may already be
+ *  queued or made (`privateLineSaid` is set when it is queued, so dropping
+ *  it here would mean it is never said at all). */
+function dropAnswerSpeech() {
+  speechQueue = speechQueue.filter((text) => text === PRIVATE_LINE);
+  if (aheadClip && aheadClip.text !== PRIVATE_LINE) aheadClip = null;
 }
 
 /** Instead of a private answer, one fixed line - once per answer. */
@@ -2822,35 +2847,110 @@ function sayPrivateLineOnce() {
   drainSpeechQueue();
 }
 
+/** The next queued line to ask a sound for, or undefined. Checked here, as
+ *  its sound is asked for: a tool may have run since it was queued - then
+ *  the rest of the answer is dropped and the fixed line comes instead. */
+function takeNextLine() {
+  for (;;) {
+    const next = speechQueue.shift();
+    if (next === undefined || next === PRIVATE_LINE || speakableNow()) return next;
+    dropAnswerSpeech();
+    if (!state.privateLineSaid) {
+      state.privateLineSaid = true;
+      return PRIVATE_LINE;
+    }
+    // Already said or queued: a queued fixed line survived the drop above.
+  }
+}
+
+/** Asks the backend for one line's sound. Never rejects: a missing voice
+ *  is logged, and the line is skipped, not shown as an error banner over a
+ *  perfectly good answer already on screen. */
+function requestClip(text) {
+  const request = invokeStrict("speak_reply", { text }).catch((error) => {
+    console.info("[quickbar] spoken reply unavailable:", error);
+    return null;
+  });
+  return { text, generation: speechGeneration, request };
+}
+
+/** One ahead: while a clip plays, the next line's sound is asked for, so
+ *  it is ready the moment this one ends instead of after a silence as long
+ *  as the backend takes to make it. Only while a clip is PLAYING, and only
+ *  one - never a second request while one is already on its way. */
+function prefetchNextClip() {
+  if (!clipPlaying || aheadClip || speechMuted) return;
+  const next = takeNextLine();
+  if (next === undefined) return;
+  aheadClip = requestClip(next);
+}
+
 /** Speaks whatever is queued, one clip at a time, through the backend's
- *  TTS. Best effort throughout: a missing voice is logged, not shown as an
- *  error banner over a perfectly good answer already on screen. */
+ *  TTS, asking for the next clip's sound while the current one plays. */
 async function drainSpeechQueue() {
-  if (speaking) return;
-  if (speechMuted) {
-    speechQueue = [];
+  if (speaking) {
+    // A line queued while a clip plays: its sound is made now.
+    prefetchNextClip();
     return;
   }
-  let next = speechQueue.shift();
-  if (next === undefined) return;
-  // Checked again as it is spoken: a tool may have run since it was queued.
-  if (next !== PRIVATE_LINE && !speakableNow()) {
+  if (speechMuted) {
     speechQueue = [];
-    if (state.privateLineSaid) return;
-    state.privateLineSaid = true;
-    next = PRIVATE_LINE;
+    aheadClip = null;
+    return;
   }
   speaking = true;
   const generation = speechGeneration;
   try {
-    const dataUri = await invokeStrict("speak_reply", { text: next });
-    // "Stop" may have landed while the backend was making this clip. If it
-    // did, the clip is dropped here - playing it now would be exactly the
-    // sentence the owner just asked Jarvis to stop saying.
-    if (generation !== speechGeneration || speechMuted) return;
-    const audio = new Audio(dataUri);
-    currentAudio = audio;
+    for (;;) {
+      let clip = aheadClip;
+      aheadClip = null;
+      if (!clip || clip.generation !== generation) {
+        const next = takeNextLine();
+        if (next === undefined) return;
+        clip = requestClip(next);
+      }
+      const dataUri = await clip.request;
+      // "Stop" may have landed while the backend was making this clip. If it
+      // did, the clip is dropped here - playing it now would be exactly the
+      // sentence the owner just asked Jarvis to stop saying.
+      if (generation !== speechGeneration || speechMuted) return;
+      // Checked again right before it is played, not only when its sound
+      // was asked for: a tool may have run, or the event stream dropped,
+      // while the sound was being made. Then this clip is dropped unplayed
+      // and the fixed line said instead, once.
+      if (clip.text !== PRIVATE_LINE && !speakableNow()) {
+        dropAnswerSpeech();
+        if (!state.privateLineSaid) {
+          state.privateLineSaid = true;
+          speechQueue.push(PRIVATE_LINE);
+        }
+        continue;
+      }
+      if (!dataUri) continue;
+      await playClip(dataUri, generation);
+      if (generation !== speechGeneration) return;
+    }
+  } finally {
+    // A drain that "stop" overtook leaves the bookkeeping alone: stopSpeaking
+    // already reset it, and a newer drain may own it by now.
+    if (generation === speechGeneration) {
+      currentAudio = null;
+      finishCurrentClip = null;
+      clipPlaying = false;
+      speaking = false;
+    }
+  }
+}
+
+/** Plays one clip to its end (or until "stop"), asking for the next
+ *  line's sound as it starts. */
+async function playClip(dataUri, generation) {
+  const audio = new Audio(dataUri);
+  currentAudio = audio;
+  clipPlaying = true;
+  try {
     await audio.play();
+    prefetchNextClip();
     await new Promise((resolve) => {
       if (currentAudio !== audio) return resolve();
       finishCurrentClip = resolve;
@@ -2860,13 +2960,10 @@ async function drainSpeechQueue() {
   } catch (error) {
     console.info("[quickbar] spoken reply unavailable:", error);
   } finally {
-    // A drain that "stop" overtook leaves the bookkeeping alone: stopSpeaking
-    // already reset it, and a newer drain may own it by now.
     if (generation === speechGeneration) {
+      clipPlaying = false;
       currentAudio = null;
       finishCurrentClip = null;
-      speaking = false;
-      drainSpeechQueue();
     }
   }
 }
@@ -2880,6 +2977,10 @@ function stopSpeaking() {
   speechMuted = true;
   speechGeneration += 1;
   speechQueue = [];
+  // A clip made ahead is dropped with the rest (its generation is old now,
+  // so it would not be played anyway).
+  aheadClip = null;
+  clipPlaying = false;
   if (currentAudio) {
     currentAudio.onended = null;
     currentAudio.onerror = null;
@@ -2897,7 +2998,7 @@ function stopSpeaking() {
 /** Whether Jarvis is talking: a clip is being made or played, or more are
  *  queued behind it. */
 function jarvisTalking() {
-  return speaking || speechQueue.length > 0;
+  return speaking || speechQueue.length > 0 || aheadClip !== null;
 }
 
 /** "Hey Jarvis" listening's barge-in hook: Rust sends this when a clip

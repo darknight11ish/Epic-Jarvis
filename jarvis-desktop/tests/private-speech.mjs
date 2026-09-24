@@ -44,6 +44,12 @@ const routeLine = (h) => {
 };
 /** The same route from a PC that counts sensitive facts (decision 13). */
 const counted = (h, sensitive) => ({ ...h, injected_sensitive: sensitive });
+/** The same route from a PC older than that: no `injected_sensitive` at
+ *  all. The real headers carry it (0) since the fixture was regenerated. */
+const uncounted = (h) => {
+  const { injected_sensitive: _, ...older } = h;
+  return older;
+};
 const PRIVATE_ROUTE = header("local answer");       // gate "private", 1 fact
 const OFFER_ROUTE = header("local answer, cloud offered"); // gate "offer", 0 facts
 const delta = (text) => JSON.stringify({ choices: [{ delta: { content: text } }] });
@@ -96,7 +102,7 @@ await check("the rule, from the real route headers", async () => {
 
 await check("decision 13: an answer that used a sensitive saved fact stays on screen, whatever else says aloud", async () => {
   const quiet = { privateAloud: false, questionPrivate: false, toolsKnown: true };
-  const MEM = { ...OFFER_ROUTE, injected_facts: 2 };
+  const MEM = uncounted({ ...OFFER_ROUTE, injected_facts: 2 });
   // Which routes used a sensitive fact: the count, or - from a PC that does
   // not send it - any fact at all (fail closed).
   assert.equal(usedSensitiveFact({ ...MEM, injected_sensitive: 1 }), true);
@@ -208,6 +214,44 @@ await check("a tool that starts halfway: reading stops there", async () => {
   assert.equal(said.at(-1), PRIVATE_LINE, JSON.stringify(said));
 });
 
+// The next sentence's sound is made while the current one plays (main.js
+// prefetchNextClip). The rule is asked when that sound is asked for AND
+// again right before it is played: the answer may have turned private in
+// between, and then the sound made ahead is dropped, never played.
+const filler = (n) => Array.from({ length: n }, () => delta(""));
+const spokenSlowly = async (heard, reply) => {
+  const page = await quickbar({ heard, chatReplies: [reply], speakDelayMs: 30 });
+  await K.slowSpeaker(page, 400);
+  await holdAndRelease(page);
+  await page.waitForTimeout(1600);
+  const log = await K.speechLog(page);
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(errors, []);
+  return log;
+};
+const playedOf = (log) => log.filter((l) => l.startsWith("play ")).map((l) => l.slice(5));
+
+await check("turns private while the next sentence's sound is made: checked again before playing, dropped", async () => {
+  // A second route line is not something the PC sends; it is here because
+  // nothing re-checks on it, so ONLY the check right before playing can
+  // catch it - the case where the sound was made while the answer still
+  // looked safe to read aloud.
+  const log = await spokenSlowly(QUIET, [routeLine(OFFER_ROUTE), delta("It is sunny. "), delta("Twenty degrees. "),
+    ...filler(60), routeLine(PRIVATE_ROUTE)]);
+  assert.ok(log.indexOf("speak Twenty degrees.") >= 0 && log.indexOf("speak Twenty degrees.") < log.indexOf("end It is sunny."),
+    `the scenario did not make the second sound ahead: ${JSON.stringify(log)}`);
+  assert.deepEqual(playedOf(log), ["It is sunny.", PRIVATE_LINE], JSON.stringify(log));
+});
+
+await check("a tool starts while the next sentence's sound is made: that sound is never played", async () => {
+  const log = await spokenSlowly(QUIET, [routeLine(OFFER_ROUTE), delta("It is sunny. "), delta("Twenty degrees. "),
+    ...filler(60), step({ phase: "tool_started", tool: "email_read" }), delta("Two new emails. ")]);
+  assert.ok(log.includes("speak Twenty degrees."), `the scenario did not make the second sound ahead: ${JSON.stringify(log)}`);
+  assert.deepEqual(playedOf(log), ["It is sunny.", PRIVATE_LINE], JSON.stringify(log));
+  assert.ok(!log.includes("speak Two new emails."), JSON.stringify(log));
+});
+
 await check("a refused tool did not run: read aloud", async () => {
   const said = await spoken(QUIET, [routeLine(OFFER_ROUTE), step({ phase: "tool_refused", tool: "email_send" }),
     delta("It is sunny. ")]);
@@ -244,7 +288,7 @@ await check("a sensitive saved fact went in: on screen even with \"voice check i
   assert.deepEqual(said, [PRIVATE_LINE]);
   // A PC that does not count them: the fact that went in may be sensitive.
   const older = await spoken({ ...QUIET, memoryAloud: true },
-    [routeLine({ ...OFFER_ROUTE, injected_facts: 1 }), delta("Your sister is unwell. ")]);
+    [routeLine(uncounted({ ...OFFER_ROUTE, injected_facts: 1 })), delta("Your sister is unwell. ")]);
   assert.deepEqual(older, [PRIVATE_LINE]);
 });
 

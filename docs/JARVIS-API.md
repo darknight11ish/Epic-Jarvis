@@ -1654,6 +1654,12 @@ for a question that came by VOICE and reply `private_aloud: false`:
    "a tool may have run". Both apps do this: `: jarvis-status working`
    alone arrives only after 1.5 s, so a quick calendar or email lookup was
    missed (voice audit, 2026-09-24).
+   Both apps ask `/api/voice/say` for the next sentence's sound while the
+   current one plays (one ahead, never more). So the rule is asked twice
+   per sentence: before its sound is asked for, and **again right before
+   it is played** - a sound made while the answer still looked safe is
+   dropped unplayed if a tool started, or the stream dropped, in the
+   meantime. "Stop", a barge-in or a new question drops it too.
 3. **Sensitive saved facts** (the owner's decision, 2026-09-24): when the
    route's `injected_sensitive` is above 0 - or it is missing and
    `injected_facts` is above 0 (an older PC: fail closed) - and the
@@ -1843,6 +1849,16 @@ Token and `X-Jarvis-Client: hud` as always; 401 / 403 as for any route.
   it is under a second) before the reply starts. Not after a refused clip,
   a barge-in, or a "stop". It is Jarvis's own voice, so the barge-in check
   above already counts it as Jarvis, not the owner.
+- **At today's speeds, `after_ms: 1000` would fire on most spoken turns.**
+  From the owner finishing to Jarvis's first sound is estimated at roughly
+  2.5-4 s with the voice on the PC's processor (making the first
+  sentence's sound alone takes about 1.3-1.6 s, measured in the dev
+  container; the model's part is not measured). So "no sound a second
+  later" is the usual case, not the exception. The suggestion is
+  unchanged; an app that builds this should look at the owner's own
+  `flow.summary` first. The voice research of 2026-09-24 suggests playing
+  it when a tool starts (a `step` event with `tool_started`, which both
+  apps already watch) rather than on a flat timer.
 
 **What an app should build** (suggested, for both): extend the existing
 "Interrupt Jarvis while it talks" switch so that, while Jarvis speaks,

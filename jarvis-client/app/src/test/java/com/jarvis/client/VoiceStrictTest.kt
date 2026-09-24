@@ -617,6 +617,36 @@ class VoiceStrictTest {
     }
 
     @Test
+    fun `memories kept on screen - the sensitive plate says that already covers it`() {
+        val note = "\"Keep on screen\" above already keeps these answers on screen."
+        assertEquals(note, StrictVoice.SENSITIVE_COVERED_BY_MEMORY)
+        val v = VoiceStrict.parse(withSensitive("trained_three_rounds", VoiceStrict.SENSITIVE_ALOUD))
+        assertEquals(VoiceStrict.PRIVATE_ON_SCREEN, v.privacy)
+        val covered = v.copy(memory = VoiceStrict.MEMORY_ON_SCREEN)
+        assertEquals(note, StrictVoice.plateNote(VoiceStrict.SENSITIVE_MEMORY, covered))
+        // Still open: it takes over if the memory choice changes.
+        assertTrue(StrictVoice.settingOpen(VoiceStrict.SENSITIVE_MEMORY, covered))
+        assertNull(StrictVoice.blocker(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ON_SCREEN, covered, null))
+        // Only on the sensitive plate.
+        assertNull(StrictVoice.plateNote(VoiceStrict.MEMORY, covered))
+        assertNull(StrictVoice.plateNote(VoiceStrict.PRIVACY, covered))
+        // CONTROL: memories read aloud - this choice is what holds them back.
+        assertNull(StrictVoice.plateNote(VoiceStrict.SENSITIVE_MEMORY, v.copy(memory = VoiceStrict.MEMORY_ALOUD)))
+        // CONTROL: "voice check is enough" makes the memory choice moot, so it covers nothing.
+        assertNull(
+            StrictVoice.plateNote(
+                VoiceStrict.SENSITIVE_MEMORY,
+                covered.copy(privacy = VoiceStrict.VOICE_IS_ENOUGH),
+            ),
+        )
+        // The memory plate's own note is unchanged.
+        assertEquals(
+            StrictVoice.MEMORY_WHILE_VOICE_IS_ENOUGH,
+            StrictVoice.plateNote(VoiceStrict.MEMORY, covered.copy(privacy = VoiceStrict.VOICE_IS_ENOUGH)),
+        )
+    }
+
+    @Test
     fun `the now line names the sensitive setting, even under voice check is enough`() {
         val v = VoiceStrict.parse(withSensitive("trained_three_rounds", VoiceStrict.SENSITIVE_ON_SCREEN))
         assertEquals(

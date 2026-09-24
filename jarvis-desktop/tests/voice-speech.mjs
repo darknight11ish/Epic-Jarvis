@@ -232,6 +232,99 @@ await check("CONTROL: after a \"stop\", the NEXT voice question is answered out 
   assert.ok(spoken.includes("Next answer."), `the next turn stayed muted: ${JSON.stringify(spoken)}`);
 });
 
+// The next sentence's sound is made while the current one plays (one
+// ahead), instead of only once it has ended - which left a silence between
+// sentences as long as the PC took to make the next one.
+const played = (log) => log.filter((l) => l.startsWith("play ")).map((l) => l.slice(5));
+const asked = (log) => log.filter((l) => l.startsWith("speak ")).map((l) => l.slice(6));
+const at = (log, line) => {
+  const i = log.indexOf(line);
+  assert.ok(i >= 0, `"${line}" never happened: ${JSON.stringify(log)}`);
+  return i;
+};
+
+await check("the next sentence's sound is asked for while the current one plays, not after it", async () => {
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("One. "), delta("Two. "), delta("Three. ")]],
+    speakDelayMs: 30,
+  });
+  await K.slowSpeaker(page, 300);
+  await holdAndRelease(page);
+  await page.waitForTimeout(1600);
+  const log = await K.speechLog(page);
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(errors, []);
+  assert.deepEqual(played(log), ["One.", "Two.", "Three."], JSON.stringify(log));
+  assert.ok(at(log, "speak Two.") > at(log, "play One.") && at(log, "speak Two.") < at(log, "end One."),
+    `Two was not asked for while One played: ${JSON.stringify(log)}`);
+  assert.ok(at(log, "speak Three.") < at(log, "end Two."), JSON.stringify(log));
+  // No gap: Two starts as One ends, its sound already made.
+  assert.equal(at(log, "play Two."), at(log, "end One.") + 1, JSON.stringify(log));
+});
+
+await check("only one ahead: never two sounds being made at once", async () => {
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("One. "), delta("Two. "), delta("Three. "), delta("Four. ")]],
+    speakDelayMs: 30,
+  });
+  await K.slowSpeaker(page, 250);
+  await holdAndRelease(page);
+  await page.waitForTimeout(1800);
+  const log = await K.speechLog(page);
+  const most = await page.evaluate(() => window.__mostAsking);
+  await page.close();
+  assert.deepEqual(played(log), ["One.", "Two.", "Three.", "Four."], JSON.stringify(log));
+  assert.equal(most, 1, "more than one speak_reply was in flight at once");
+  // Three is asked for once Two plays, not already while One plays.
+  assert.ok(at(log, "speak Three.") > at(log, "play Two."), JSON.stringify(log));
+  assert.ok(at(log, "speak Four.") > at(log, "play Three."), JSON.stringify(log));
+});
+
+await check("\"stop\" while one plays: the sound made ahead is dropped, never played", async () => {
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("One. "), delta("Two. "), delta("Three. ")]],
+    speakDelayMs: 30,
+  });
+  await K.slowSpeaker(page, 300);
+  await page.locator("#voice-auto").click();
+  await page.waitForTimeout(100);
+  await page.evaluate((heard) => window.__emit("voice-heard", heard), K.HEARD_OWNER);
+  await page.waitForTimeout(150); // One plays; Two's sound has been made
+  const before = await K.speechLog(page);
+  await page.evaluate(() => window.__emit("voice-speech-started", null));
+  await page.waitForTimeout(900);
+  const log = await K.speechLog(page);
+  await page.close();
+  assert.ok(before.includes("speak Two.") && !before.includes("end One."),
+    `the scenario did not have Two made ahead while One played: ${JSON.stringify(before)}`);
+  assert.deepEqual(played(log), ["One."], JSON.stringify(log));
+  assert.ok(!asked(log).includes("Three."), JSON.stringify(log));
+});
+
+await check("a new question supersedes the old answer: a sound made ahead for it is not played", async () => {
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("One. "), delta("Two. "), delta("Three. ")], [delta("Typed answer. ")]],
+    speakDelayMs: 30,
+  });
+  await K.slowSpeaker(page, 400);
+  await holdAndRelease(page);
+  await page.waitForTimeout(200); // One plays, Two is made ahead, the stream is over
+  const before = await K.speechLog(page);
+  await page.fill("#prompt", "a typed follow-up");
+  await page.press("#prompt", "Enter");
+  await page.waitForTimeout(1200);
+  const log = await K.speechLog(page);
+  await page.close();
+  assert.ok(before.includes("speak Two.") && !before.includes("end One."),
+    `the scenario did not have Two made ahead while One played: ${JSON.stringify(before)}`);
+  assert.deepEqual(played(log), ["One."], JSON.stringify(log));
+});
+
 await check("CONTROL: no page error from any of the above", async () => {
   const page = await quickbar({ heard: K.HEARD_OWNER, chatReplies: [[delta("Fine. ")]] });
   await holdAndRelease(page);
