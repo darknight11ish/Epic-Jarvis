@@ -28,10 +28,14 @@ import kotlinx.coroutines.launch
  * from a pulled-down shade - Standby unloads the model - is easy to get
  * wrong. Muting (`/api/attention/mute`, until tomorrow) is the one-tap job.
  *
- * The state is read from the event stream rather than inferred locally. That
- * matters for one specific reason: a Quiet the user set by hand survives being
- * spoken to and comes back `"held": true`, so a tile that assumed sending a
- * message made Jarvis active would disagree with the desktop.
+ * The state is read from the event stream rather than inferred locally, so
+ * the tile never assumes that sending a message made Jarvis active: a Quiet
+ * set by hand survives being spoken to (JARVIS-API §4; the desktop's tray
+ * says "set by hand" for it). This comment used to say such a Quiet "comes
+ * back `"held": true`". Nothing in this repository shows what sets
+ * `/api/status`'s `held` - its producer is the owner's jarvis_hud.py - and
+ * the Mind screen reads it as something held back from sending, so the two
+ * disagreed; this tile does not read `held` at all.
  */
 class LinkTileService : TileService() {
 

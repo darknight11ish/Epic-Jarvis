@@ -515,7 +515,29 @@ data class UndoEntry(
      */
     val category: String? = null,
     val detail: JsonObject? = null,
+    /*
+     * The desktop's names for the same row (brain.js renderUndo): `action` or
+     * `kind` for what happened, `target` for what it happened to, and
+     * `revertible`. jarvis_undo.py lives only on the owner's PC and neither
+     * app has seen it; the desktop's names match the config's own word
+     * ("non-revertible", jarvis-framework.toml), so they are at least as
+     * likely. Both sets are read, on both apps, and [title] / [canRevert]
+     * pick whichever the server sent.
+     */
+    val action: String? = null,
+    val kind: String? = null,
+    val target: String? = null,
+    val revertible: Boolean? = null,
 ) {
+    /** What happened, in whichever field the server used. */
+    val title: String
+        get() = label.ifBlank { what }.ifBlank { action.orEmpty() }.ifBlank { kind.orEmpty() }
+            .ifBlank { "(action)" }
+
+    /** Undoable, by either name. */
+    val canRevert: Boolean
+        get() = reversible || revertible == true
+
     /** The handle `/api/holds/cancel` takes, when this entry is a live hold. */
     val holdHandle: String?
         get() = if (category == "hold") {
@@ -540,7 +562,25 @@ data class JobRecord(
      */
     val capabilities: List<String> = emptyList(),
     val private: Boolean = false,
-)
+    /*
+     * The desktop's names (brain.js renderJobs): `handler`, `caps`,
+     * `tainted`. jarvis_jobs.py is only on the owner's PC, so both sets are
+     * read - see [UndoEntry]'s note. `tainted` is kept apart from `private`:
+     * the desktop says it means the job read private data and stays local,
+     * which is not the same promise.
+     */
+    val handler: String? = null,
+    val caps: List<String> = emptyList(),
+    val tainted: Boolean = false,
+) {
+    /** A name to show, by either field, falling back to the id. */
+    val title: String
+        get() = label.ifBlank { handler.orEmpty() }.ifBlank { id }
+
+    /** The frozen permissions, by either name. */
+    val frozen: List<String>
+        get() = capabilities.ifEmpty { caps }
+}
 
 /**
  * What `/api/voice/say` came back with.

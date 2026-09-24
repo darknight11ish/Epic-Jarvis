@@ -410,14 +410,19 @@ prefer = "speed"
 [initiative]
 enabled = true
 heartbeat_minutes = 30
-# HEARTBEAT.md in the config directory lists the checks in plain words;
-# it is created with sensible defaults the first time the engine runs.
-watch_folders = []                 # e.g. ["~/Downloads", "C:/Jarvis/inbox"]
-calendar_folder = ""               # a folder of .ics files (vdirsyncer/Radicale)
-calendar_lead_minutes = 10
-# Mail needs JARVIS_IMAP_HOST / _USER / _PASSWORD in the environment.
-# Subjects and senders only; bodies are never fetched by the watcher.
-mail_enabled = false
+# NOT BUILT YET (checked 2026-09-23). The engine runs and its timer ticks,
+# but it has NO checks: the original check list was lost and the rebuilt
+# jarvis_initiative.py deliberately does not invent unattended ones. Nothing
+# reads the four settings below, and no HEARTBEAT.md is created. This file
+# used to say "HEARTBEAT.md ... is created with sensible defaults the first
+# time the engine runs" - that was not true. So the apps' "What Jarvis
+# noticed" list stays empty, and the phone now says why.
+watch_folders = []                 # not read yet
+calendar_folder = ""               # not read yet
+calendar_lead_minutes = 10         # not read yet
+# (Planned: mail would need JARVIS_IMAP_HOST / _USER / _PASSWORD, and only
+# subjects and senders would be read.)
+mail_enabled = false               # not read yet
 
 # ------------------------------------------------------------------------
 # 11. MODEL STEWARD - finding, judging and adopting local models
@@ -626,9 +631,12 @@ stt_engine = "sherpa-onnx"
 # window ends rather than snapping back a moment later.
 [power]
 enabled = true
-# What "auto after idle" and "quiet hours" drop TO. "quiet" or "standby".
-schedule_mode = "quiet"
-idle_mode = "quiet"
+# What "auto after idle" and "quiet hours" were meant to drop TO. NOT READ
+# (checked 2026-09-23): in the rebuilt jarvis_power.py quiet hours always
+# mean Quiet, and the idle check (should_standby) always means Standby,
+# whatever these two say.
+schedule_mode = "quiet"            # not read
+idle_mode = "quiet"                # not read
 
 # Scheduled quiet hours. Local time, and a window may cross midnight.
 schedule_enabled = false

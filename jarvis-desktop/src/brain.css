@@ -705,6 +705,28 @@ body {
   padding: 6px 0;
 }
 
+/* Models: how fast answers have been, and "Install a model" (brain.js). */
+.model-speed {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.model-install {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: var(--stroke-hair) solid var(--border-strong);
+}
+
+.model-install .row-actions {
+  padding-top: 8px;
+}
+
+.model-install .field {
+  flex: 1;
+  min-width: 0;
+}
+
 /* A review card whose text reads like a planted instruction. */
 .row-warning {
   display: block;

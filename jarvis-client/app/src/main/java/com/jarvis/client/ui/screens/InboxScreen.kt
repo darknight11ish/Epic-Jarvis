@@ -278,7 +278,7 @@ fun InboxScreen(
                     Plate {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                job.label.ifBlank { job.id },
+                                job.title,
                                 style = MaterialTheme.typography.titleSmall,
                                 color = chrome.textHi,
                                 modifier = Modifier.weight(1f),
@@ -296,9 +296,10 @@ fun InboxScreen(
                             buildString {
                                 append(job.state.ifBlank { "running" })
                                 job.progress?.let { append(" · ${(it * 100).toInt()}%") }
-                                if (job.capabilities.isNotEmpty()) {
-                                    append(" · ${job.capabilities.size} frozen permissions")
+                                if (job.frozen.isNotEmpty()) {
+                                    append(" · ${job.frozen.size} frozen permissions")
                                 }
+                                if (job.tainted) append(" · read private data, stays on the PC")
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = chrome.textMid,
@@ -323,10 +324,17 @@ fun InboxScreen(
                 items(undo, key = { "u-" + it.id }) { entry ->
                     Plate {
                         Text(
-                            entry.label.ifBlank { entry.what },
+                            entry.title,
                             style = MaterialTheme.typography.titleSmall,
                             color = chrome.textHi,
                         )
+                        entry.target?.takeIf { it.isNotBlank() }?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.textMid,
+                            )
+                        }
                         if (entry.holdHandle != null) {
                             // Not sent yet: neither undoable nor final. The
                             // desktop's Brain window shows the same button.
@@ -338,7 +346,7 @@ fun InboxScreen(
                             )
                             Gap(8)
                             Action("Stop sending", chrome.badInk, enabled = canAct) { onCancelHold(entry) }
-                        } else if (entry.reversible) {
+                        } else if (entry.canRevert) {
                             Gap(8)
                             Action("Undo", chrome.okInk, enabled = canAct) { onRevert(entry) }
                         } else {

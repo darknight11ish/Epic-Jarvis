@@ -497,7 +497,7 @@ path ever appears in it (`routes.rs:67-101`).
 | Endpoint | Method | Desktop | Android | Notes |
 |---|---|---|---|---|
 | `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server. The desktop falls back to `/api/status` for anything an older server leaves out. |
-| `/api/status` | GET | `commands.rs:677`, `routes.rs:16` | `JarvisApi.kt:271` | Reports power mode; nothing writes it (`LinkTileService.kt:26`). |
+| `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Mind screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
 | `/api/graph` | GET | `routes.rs:15` | **no — by rule** | The memory graph stays off the phone. Gets its own longer timeout (`brain.rs:97`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
@@ -535,7 +535,11 @@ rollback button when `last_switch` is set. Numbers only - nothing in it is
 conversation text. **Android** does exactly those three things in Mind's Model
 section (`ModelSpeed.from` in `ApiModels.kt`, drawn by `BrainScreen.kt`'s
 `ModelsPlate`); `by_model` is matched to the running model by name, treating
-`name` and `name:latest` as the same.
+`name` and `name:latest` as the same. **The desktop** does the same three
+since 2026-09-23 (Brain → Faculties → Models, `brain.js` `modelSpeed`, a
+line-for-line port); before that it ignored the block. Both apps can also
+**install** a model there now - a typed name, one approval card, no
+catalogue.
 
 **`/api/graph` gains `sources.documents_not_ours`** (`documents-owned.patch`):
 true means a `documents` table made by another program (most likely

@@ -315,8 +315,15 @@ fun BrainScreen(
                         if (status?.held == true) {
                             Gap(4)
                             Text(
-                                "Something is held — a message inside its send window. " +
-                                    "If the Inbox's undo shelf lists it, Stop sending is there.",
+                                // `held` comes from the owner's jarvis_hud.py, whose
+                                // source is not in this repository; what exactly sets
+                                // it is not documented anywhere here. So this says
+                                // what is known and points where a held message would
+                                // be, rather than naming a cause (docs/JARVIS-API.md,
+                                // the /api/status row).
+                                "Jarvis reports something held back. If it is a message " +
+                                    "waiting in its send window, the Inbox's undo shelf lists " +
+                                    "it and Stop sending is there.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = chrome.warnInk,
                             )
@@ -399,6 +406,7 @@ fun BrainScreen(
                     "What Jarvis noticed on its own",
                     brain.initiativeRead,
                     retry,
+                    emptyNote = remember(brain.initiative) { initiativeNote(brain.initiative) },
                 )
             }
             item(key = "ledger") {
@@ -503,7 +511,10 @@ private fun RushBanner(rush: JsonObject, lastSeenAtMs: Long? = null) {
         }
         Gap(6)
         Text(text, style = MaterialTheme.typography.bodyLarge, color = chrome.badInk)
-        rush.str("quote")?.let {
+        // `quote` or `phrase`: jarvis_content_risk lives only on the owner's
+        // PC, the desktop read `phrase` and this read `quote`, and nothing
+        // here can say which one it sends - so both are read, on both apps.
+        (rush.str("quote") ?: rush.str("phrase"))?.let {
             Gap(8)
             // Quoted, because it is a quote — and never rendered as if Jarvis
             // said it.
@@ -851,7 +862,7 @@ private fun JobPlate(job: JobRecord) {
     Plate {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                job.label.ifBlank { job.id },
+                job.title,
                 style = MaterialTheme.typography.titleSmall,
                 color = chrome.textHi,
                 modifier = Modifier.weight(1f),
@@ -863,7 +874,7 @@ private fun JobPlate(job: JobRecord) {
             Gap(10)
             Meter(it)
         }
-        if (job.capabilities.isNotEmpty()) {
+        if (job.frozen.isNotEmpty()) {
             Gap(10)
             // Frozen for the job's life. A job can never gain more while it
             // runs: approving something on Tuesday is not approving it on
@@ -871,7 +882,15 @@ private fun JobPlate(job: JobRecord) {
             // checkable rather than merely stated.
             Kicker("Approved with")
             Gap(6)
-            FlowChips(job.capabilities)
+            FlowChips(job.frozen)
+        }
+        if (job.tainted) {
+            Gap(8)
+            Text(
+                "Read private data, so it stays on the PC.",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
         }
         if (job.private) {
             Gap(8)
@@ -992,6 +1011,8 @@ private fun Probed(
     blurb: String,
     read: SectionRead,
     onRetry: (() -> Unit)?,
+    /** Said above the rows (or instead of "Nothing to report."), in plain words. */
+    emptyNote: String? = null,
 ) {
     val chrome = LocalChrome.current
     // The expensive part of this composable, done once per payload instead of once
@@ -1012,12 +1033,18 @@ private fun Probed(
                 SectionUnread(read, blurb, onRetry)
                 return@Plate
             }
+            if (emptyNote != null) {
+                Text(emptyNote, style = MaterialTheme.typography.bodyMedium, color = chrome.textMid)
+                if (rows.isNotEmpty()) Gap(8)
+            }
             if (rows.isEmpty()) {
-                Text(
-                    "Nothing to report.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = chrome.textMid,
-                )
+                if (emptyNote == null) {
+                    Text(
+                        "Nothing to report.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = chrome.textMid,
+                    )
+                }
                 return@Plate
             }
             rows.forEachIndexed { i, (label, value) ->
@@ -1025,6 +1052,32 @@ private fun Probed(
                 Field(label, value, machine = value.looksMachine())
             }
         }
+    }
+}
+
+/**
+ * Why Findings is empty, when it is: Jarvis has no background checks.
+ *
+ * The rebuilt `jarvis_initiative.py` runs a timer with an EMPTY check list -
+ * the original list was not recoverable, and inventing unattended checks was
+ * refused on purpose (its own docstring) - and nothing registers one. So this
+ * list was always empty, and an empty list read as "nothing happened" rather
+ * than "nothing is looking". Said whenever the server reports zero checks, or
+ * sends no findings and no check count at all; a server that reports a real
+ * check count gets its list shown as it is.
+ */
+internal fun initiativeNote(body: JsonObject?): String? {
+    if (body == null) return null
+    fun count(o: JsonObject?, key: String): Int? =
+        (o?.get(key) as? JsonPrimitive)?.content?.toIntOrNull()
+    val checks = count(body, "checks") ?: count(body["status"] as? JsonObject, "checks")
+    val items = (body["items"] as? JsonArray) ?: (body["findings"] as? JsonArray)
+    val none = checks == 0 || (checks == null && items.isNullOrEmpty())
+    return if (none) {
+        "Jarvis doesn't watch anything on its own yet. No background checks have " +
+            "been built, so nothing will appear here until one is."
+    } else {
+        null
     }
 }
 

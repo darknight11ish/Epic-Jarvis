@@ -507,7 +507,10 @@ function renderRushStrip() {
       "A rush latch is active: outside text tried to hurry a decision. It expires on its own."
     );
     dom.rushStrip.append(line);
-    if (rush.phrase) dom.rushStrip.append(" ", el("span", "rush-quote", `“${rush.phrase}”`));
+    // `phrase` or `quote`: jarvis_content_risk is only on the owner's PC, the
+    // phone read `quote` and this read `phrase`, so both apps read both.
+    const said = rush.phrase || rush.quote;
+    if (said) dom.rushStrip.append(" ", el("span", "rush-quote", `“${said}”`));
     if (s.kind === "stale") {
       const mins = Math.max(0, Math.round((Date.now() - (state.readAt.content_risk || Date.now())) / 60000));
       dom.rushStrip.append(
@@ -667,7 +670,17 @@ function renderModels() {
     );
   }
 
+  // How fast answers have been (speed-record.patch). docs/JARVIS-API.md says
+  // show exactly three things: one line for the current model, the backend's
+  // own note only when it got slower, and its own old-vs-new sentence beside
+  // the rollback button. The phone does the same (ApiModels.kt ModelSpeed);
+  // this window ignored the block entirely.
+  const speed = modelSpeed(body.speed, current);
+  if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
+  if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+
   if (previous && previous !== current) {
+    if (speed.lastSwitch) dom.models.append(el("p", "model-speed", speed.lastSwitch));
     const back = el("div", "row-actions");
     back.style.paddingTop = "10px";
     back.append(
@@ -694,6 +707,92 @@ function renderModels() {
       )
     );
   }
+
+  dom.models.append(installForm());
+}
+
+/**
+ * "Install a model": the name typed by hand, the way it would be given to
+ * Ollama (`ollama pull <name>`). No catalogue, no list of what could be
+ * installed - the same shape the phone has (BrainScreen.kt ModelsPlate) and
+ * the owner's 2026-09-20 rule. Posting it only raises an approval card
+ * (tier `ask`); nothing downloads until that is approved.
+ */
+function installForm() {
+  const wrap = el("div", "model-install");
+  wrap.append(
+    el(
+      "p",
+      "model-speed",
+      "Install a model this computer does not have yet. Type its name the way you " +
+        "would give it to Ollama, for example llama3.1:8b. This only asks: a card " +
+        "appears in the Jarvis bar, and nothing downloads until you approve it there."
+    )
+  );
+  const line = el("div", "row-actions");
+  const input = el("input", "field");
+  input.id = "model-install-ref";
+  input.type = "text";
+  input.placeholder = "model:tag";
+  input.spellcheck = false;
+  input.autocomplete = "off";
+  input.setAttribute("aria-label", "Model to install");
+  const go = button(
+    "Install",
+    async () => {
+      const ref = input.value.trim();
+      if (!ref) {
+        toast("Type the model's name first, for example llama3.1:8b.", "bad");
+        return;
+      }
+      await modelAction("install", ref);
+    },
+    { title: "Ask to install this model. You approve it in the Jarvis bar.", live: true }
+  );
+  go.id = "model-install";
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") go.click();
+  });
+  line.append(input, go);
+  wrap.append(line);
+  return wrap;
+}
+
+/**
+ * The `speed` block of /api/models, in the same three pieces the phone shows
+ * (ApiModels.kt ModelSpeed.from, ported line for line). Numbers only - the
+ * block carries no conversation text.
+ */
+function modelSpeed(speed, current) {
+  const out = { line: "", slowdown: "", lastSwitch: "" };
+  if (!speed || typeof speed !== "object" || speed.available === false) return out;
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null);
+  const text = (v) => (typeof v === "string" && v.trim() ? v : "");
+  const byModel = speed.by_model && typeof speed.by_model === "object" ? speed.by_model : {};
+  const bare = (name) => String(name || "").replace(/:latest$/, "");
+  const key = current && (byModel[current] ? current
+    : Object.keys(byModel).find((k) => bare(k) === bare(current)));
+  const mine = key ? byModel[key] : null;
+  if (mine && typeof mine === "object") {
+    const parts = [];
+    const wps = num(mine.median_words_per_s);
+    const firstMs = num(mine.median_first_word_ms);
+    if (wps !== null) parts.push(`about ${Math.round(wps)} words a second`);
+    if (firstMs !== null) {
+      const tenths = Math.round(firstMs / 100);
+      parts.push(`first word after ${Math.floor(tenths / 10)}.${tenths % 10} s`);
+    }
+    if (parts.length) {
+      const n = num(mine.answers);
+      const over = n ? ` (middle of the last ${Math.round(n)} answers)` : "";
+      out.line = `Recent answers: ${parts.join(", ")}${over}.`;
+    }
+  }
+  if (speed.slowdown && speed.slowdown.slower === true) out.slowdown = text(speed.note);
+  if (speed.last_switch && typeof speed.last_switch === "object") {
+    out.lastSwitch = text(speed.last_switch_note);
+  }
+  return out;
 }
 
 async function modelAction(action, reference) {
@@ -1528,7 +1627,12 @@ function renderJobs() {
     (j) => {
       const jobState = String(j.state || "queued");
       const live = jobState === "running" || jobState === "queued";
-      const caps = Array.isArray(j.caps) ? j.caps : [];
+      // Either set of names: this window's (caps, tainted, created) or the
+      // phone's (capabilities, private, progress). jarvis_jobs.py is only on
+      // the owner's PC, so both apps read both.
+      const caps = Array.isArray(j.caps) && j.caps.length ? j.caps
+        : Array.isArray(j.capabilities) ? j.capabilities : [];
+      const progress = typeof j.progress === "number" ? `${Math.round(j.progress * 100)}% done` : "";
       return row({
         tag: jobState,
         state: jobState,
@@ -1538,7 +1642,8 @@ function renderJobs() {
           // fixed when the job was created and it cannot grow.
           caps.length ? `frozen capabilities: ${caps.join(", ")}` : "no capabilities",
           j.tainted ? "tainted — this job read private data and stays local" : "",
-          [ago(j.created), j.result_summary || j.error || ""].filter(Boolean).join(" · "),
+          j.private ? "private — the phone is not shown what this is working on" : "",
+          [ago(j.created), j.result_summary || j.error || "", progress].filter(Boolean).join(" · "),
         ],
         actions: live
           ? [
@@ -1583,7 +1688,11 @@ function renderUndo() {
     dom.undo,
     shelf,
     (e) => {
-      const revertible = e.revertible === true;
+      // Either set of names: this window's (action/kind, revertible, ts) or
+      // the phone's (label/what, reversible, at_ms). jarvis_undo.py is only on
+      // the owner's PC, so both apps read both.
+      const revertible = e.revertible === true || e.reversible === true;
+      const when = e.ts ?? (Number(e.at_ms) > 0 ? Number(e.at_ms) / 1000 : undefined);
       const actions = [];
       if (revertible) {
         actions.push(
@@ -1632,7 +1741,7 @@ function renderUndo() {
       return row({
         tag: holding ? "holding" : revertible ? "revertible" : "final",
         state: holding ? "warn" : revertible ? "ok" : "bad",
-        title: String(e.action || e.kind || "(action)"),
+        title: String(e.action || e.kind || e.label || e.what || "(action)"),
         meta: [
           e.target || "",
           holding
@@ -1640,7 +1749,7 @@ function renderUndo() {
             : revertible
               ? ""
               : e.reason || "cannot be undone",
-          [ago(e.ts), e.before_bytes ? `${bytes(e.before_bytes)} held` : ""]
+          [ago(when), e.before_bytes ? `${bytes(e.before_bytes)} held` : ""]
             .filter(Boolean)
             .join(" · "),
         ],
@@ -1681,7 +1790,8 @@ function renderContentRisk() {
       )
     );
     // The attacker's own words, quoted, because showing them is the point.
-    if (rush.phrase) main.append(el("span", "row-meta", `“${rush.phrase}”`));
+    const said = rush.phrase || rush.quote; // either name, as in the rush strip
+    if (said) main.append(el("span", "row-meta", `“${said}”`));
     if (rush.source) main.append(el("span", "row-meta", `from ${rush.source}`));
     main.append(
       el(
