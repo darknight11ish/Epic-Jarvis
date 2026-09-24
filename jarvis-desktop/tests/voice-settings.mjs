@@ -179,7 +179,9 @@ await check("the section shows the real status, with training pointed at the pho
   assert.match(print(s, "phone").text, /Your phone's microphone\s+Trained, from 3 samples\./);
   assert.match(print(s, "desktop").text, /This PC's microphone\s+Not trained on its own\. It uses your phone's voice print until it is\./);
   assert.match(s.check, /basic voice check/);
-  assert.match(s.talk, /not ready yet\. The PC has no speech-to-text set up yet/);
+  // With only the basic voice check, the stricter check (2026-09-24) refuses
+  // every voice, and that is the first reason the PC gives.
+  assert.match(s.talk, /not ready yet\. The PC has no voice-ID model installed/);
   assert.equal(s.wakeState, "off");
   assert.match(s.wake, /^Off\. Nothing can wake Jarvis by speaking a phrase/);
   assert.match(s.verifier, /not built\. Not trained yet/);

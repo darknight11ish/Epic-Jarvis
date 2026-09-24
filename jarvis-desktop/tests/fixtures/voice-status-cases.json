@@ -1,6 +1,11 @@
 {
   "_about": "Real output of backend/jarvis_speech.status() (GET /api/voice/status) in named cases, and of set_wake_enabled() (POST /api/voice/wake) under `answers`, made by tools/gen_voice_status_cases.py. Voice prints are trained from synthesised tones with the basic check; model files are empty stand-ins. Folders and times are made the same on every machine. Do not edit by hand: re-run the tool.",
   "answers": {
+    "train_needs_model": {
+      "error": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")",
+      "needs_model": true,
+      "pending": false
+    },
     "wake_off": {
       "applied": true,
       "enabled": false,
@@ -26,21 +31,51 @@
         "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
       },
       "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
       "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": true,
         "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_uses": 0
+        },
         "needs_retraining": true,
-        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices. your voice was trained with a different voice check than the one installed now, so it will be refused until you train it again",
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart). your voice was trained with a different voice check than the one installed now, so it will be refused until you train it again",
         "prints": {
           "desktop": {
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -48,6 +83,14 @@
             "created": 0.0,
             "needs_retraining": true,
             "samples": 5,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 5
+              }
+            ],
             "threshold": 0.35,
             "trained": true
           },
@@ -55,12 +98,56 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           }
         },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
         "samples": 5,
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "privacy": "private_on_screen",
+            "strictness": "very_strict"
+          },
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
         "speaker_model": false,
+        "strictness": "very_strict",
         "threshold": 0.35,
         "training": {
           "available": true,
@@ -69,28 +156,62 @@
             "max_clips": 12,
             "max_seconds": 10.0,
             "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
             "min_clips": 3,
-            "min_seconds": 1.0
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
           },
-          "pending": false
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
         }
       },
       "listening": {
         "push_to_talk": false,
-        "push_to_talk_why": "The PC's voice check changed since you trained it. Train your voice again.",
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
       "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_uses": 0
+      },
       "needs_retraining": true,
-      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices. your voice was trained with a different voice check than the one installed now, so it will be refused until you train it again sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart). your voice was trained with a different voice check than the one installed now, so it will be refused until you train it again sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -98,6 +219,14 @@
           "created": 0.0,
           "needs_retraining": true,
           "samples": 5,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 5
+            }
+          ],
           "threshold": 0.35,
           "trained": true
         },
@@ -105,14 +234,58 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         }
       },
+      "privacy": "private_on_screen",
       "profile_embedder": "sherpa-onnx:0123456789ab",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
       "samples": 5,
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "privacy": "private_on_screen",
+          "strictness": "very_strict"
+        },
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
       "speaker_model": false,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
       "stt": {
         "available": false,
         "client_fallback_ok": false,
@@ -185,21 +358,51 @@
         "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
       },
       "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": false,
       "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": false,
         "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_uses": 0
+        },
         "needs_retraining": false,
-        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
         "prints": {
           "desktop": {
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -207,6 +410,9 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -214,12 +420,56 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           }
         },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
         "samples": 0,
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "privacy": "private_on_screen",
+            "strictness": "very_strict"
+          },
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
         "speaker_model": false,
+        "strictness": "very_strict",
         "threshold": 0.35,
         "training": {
           "available": true,
@@ -228,28 +478,62 @@
             "max_clips": 12,
             "max_seconds": 10.0,
             "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
             "min_clips": 3,
-            "min_seconds": 1.0
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
           },
-          "pending": false
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
         }
       },
       "listening": {
         "push_to_talk": false,
-        "push_to_talk_why": "Jarvis has not learned your voice yet. Use Train my voice on the Checks screen.",
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
       "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_uses": 0
+      },
       "needs_retraining": false,
-      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -257,6 +541,9 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -264,14 +551,58 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         }
       },
+      "privacy": "private_on_screen",
       "profile_embedder": "",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
       "samples": 0,
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "privacy": "private_on_screen",
+          "strictness": "very_strict"
+        },
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
       "speaker_model": false,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
       "stt": {
         "available": false,
         "client_fallback_ok": false,
@@ -344,21 +675,51 @@
         "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
       },
       "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
       "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": true,
         "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_uses": 0
+        },
         "needs_retraining": false,
-        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
         "prints": {
           "desktop": {
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -366,6 +727,14 @@
             "created": 1790000000.0,
             "needs_retraining": false,
             "samples": 4,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 4
+              }
+            ],
             "threshold": 0.35,
             "trained": true
           },
@@ -373,12 +742,56 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           }
         },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
         "samples": 4,
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "privacy": "private_on_screen",
+            "strictness": "very_strict"
+          },
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
         "speaker_model": false,
+        "strictness": "very_strict",
         "threshold": 0.35,
         "training": {
           "available": true,
@@ -387,28 +800,62 @@
             "max_clips": 12,
             "max_seconds": 10.0,
             "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
             "min_clips": 3,
-            "min_seconds": 1.0
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
           },
-          "pending": false
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
         }
       },
       "listening": {
         "push_to_talk": false,
-        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
       "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_uses": 0
+      },
       "needs_retraining": false,
-      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -416,6 +863,14 @@
           "created": 1790000000.0,
           "needs_retraining": false,
           "samples": 4,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 4
+            }
+          ],
           "threshold": 0.35,
           "trained": true
         },
@@ -423,14 +878,58 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         }
       },
+      "privacy": "private_on_screen",
       "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
       "samples": 4,
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "privacy": "private_on_screen",
+          "strictness": "very_strict"
+        },
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
       "speaker_model": false,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
       "stt": {
         "available": false,
         "client_fallback_ok": false,
@@ -503,21 +1002,51 @@
         "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
       },
       "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
       "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": true,
         "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_uses": 0
+        },
         "needs_retraining": false,
-        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
         "prints": {
           "desktop": {
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -525,6 +1054,9 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -532,12 +1064,61 @@
             "created": 1790000000.0,
             "needs_retraining": false,
             "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 3
+              }
+            ],
             "threshold": 0.35,
             "trained": true
           }
         },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
         "samples": 3,
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "privacy": "private_on_screen",
+            "strictness": "very_strict"
+          },
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
         "speaker_model": false,
+        "strictness": "very_strict",
         "threshold": 0.35,
         "training": {
           "available": true,
@@ -546,28 +1127,62 @@
             "max_clips": 12,
             "max_seconds": 10.0,
             "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
             "min_clips": 3,
-            "min_seconds": 1.0
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
           },
-          "pending": false
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
         }
       },
       "listening": {
         "push_to_talk": false,
-        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
       "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_uses": 0
+      },
       "needs_retraining": false,
-      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -575,6 +1190,9 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -582,14 +1200,63 @@
           "created": 1790000000.0,
           "needs_retraining": false,
           "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 3
+            }
+          ],
           "threshold": 0.35,
           "trained": true
         }
       },
+      "privacy": "private_on_screen",
       "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
       "samples": 3,
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "privacy": "private_on_screen",
+          "strictness": "very_strict"
+        },
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
       "speaker_model": false,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
       "stt": {
         "available": false,
         "client_fallback_ok": false,
@@ -662,21 +1329,56 @@
         "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
       },
       "available": true,
-      "embedder": "spectral-v1",
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
+      "embedder": "sherpa-onnx:fixture00000",
       "enabled": true,
       "enrolled": true,
       "gate": {
-        "embedder": "spectral-v1",
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
+        "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
         "mode": "owner",
+        "models": {
+          "balanced_uses": "small",
+          "small": {
+            "bars_measured": false,
+            "installed": true,
+            "label": "a voice-ID model whose bars were not measured here",
+            "name": "sherpa-onnx:fixture00000",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_uses": 1
+        },
         "needs_retraining": false,
-        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "note": "only the small voice-ID model is installed, so very strict is using one model instead of two - and measured here, it alone does not reliably keep other people out. Install the stronger one (looked for ~/.openjarvis/voice-models/speaker/strong.onnx). the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
         "prints": {
           "desktop": {
             "created": 1790000000.0,
             "needs_retraining": false,
             "samples": 4,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 4
+              }
+            ],
             "threshold": 0.35,
             "trained": true
           },
@@ -684,6 +1386,9 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -691,12 +1396,61 @@
             "created": 1790000000.0,
             "needs_retraining": false,
             "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 3
+              }
+            ],
             "threshold": 0.35,
             "trained": true
           }
         },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
         "samples": 3,
-        "speaker_model": false,
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "privacy": "private_on_screen",
+            "strictness": "very_strict"
+          },
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
+        "speaker_model": true,
+        "strictness": "very_strict",
         "threshold": 0.35,
         "training": {
           "available": true,
@@ -705,10 +1459,22 @@
             "max_clips": 12,
             "max_seconds": 10.0,
             "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
             "min_clips": 3,
-            "min_seconds": 1.0
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
           },
-          "pending": false
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
         }
       },
       "listening": {
@@ -720,13 +1486,40 @@
       },
       "local_stt_on_client_allowed": false,
       "mode": "owner",
+      "models": {
+        "balanced_uses": "small",
+        "small": {
+          "bars_measured": false,
+          "installed": true,
+          "label": "a voice-ID model whose bars were not measured here",
+          "name": "sherpa-onnx:fixture00000",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_uses": 1
+      },
       "needs_retraining": false,
-      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+      "note": "only the small voice-ID model is installed, so very strict is using one model instead of two - and measured here, it alone does not reliably keep other people out. Install the stronger one (looked for ~/.openjarvis/voice-models/speaker/strong.onnx). the voice-ID model installed is not one whose bars were measured, so Jarvis cannot say how well it keeps other people out",
       "prints": {
         "desktop": {
           "created": 1790000000.0,
           "needs_retraining": false,
           "samples": 4,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 4
+            }
+          ],
           "threshold": 0.35,
           "trained": true
         },
@@ -734,6 +1527,9 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -741,14 +1537,63 @@
           "created": 1790000000.0,
           "needs_retraining": false,
           "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 3
+            }
+          ],
           "threshold": 0.35,
           "trained": true
         }
       },
-      "profile_embedder": "spectral-v1",
+      "privacy": "private_on_screen",
+      "profile_embedder": "sherpa-onnx:fixture00000",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
       "samples": 3,
-      "speaker_model": false,
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "privacy": "private_on_screen",
+          "strictness": "very_strict"
+        },
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
+      "speaker_model": true,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
       "stt": {
         "available": true,
         "client_fallback_ok": false,
@@ -821,21 +1666,51 @@
         "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
       },
       "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
       "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": true,
         "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_uses": 0
+        },
         "needs_retraining": false,
-        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
         "prints": {
           "desktop": {
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -843,6 +1718,9 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -850,48 +1728,136 @@
             "created": 1790000000.0,
             "needs_retraining": false,
             "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "close",
+                "samples": 3
+              }
+            ],
             "threshold": 0.35,
             "trained": true
           }
         },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
         "samples": 3,
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "privacy": "private_on_screen",
+            "strictness": "very_strict"
+          },
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
         "speaker_model": false,
+        "strictness": "very_strict",
         "threshold": 0.35,
         "training": {
           "available": true,
           "calibrate": true,
           "last": {
+            "added": false,
             "at": 1790000000.0,
             "outcome": "enrolled",
+            "outliers": [],
             "samples": 3,
+            "subprints": [
+              "close"
+            ],
             "wake_check": "not built: the wake-word model files are not on disk yet (looked in ~/.openjarvis/voice-models/wakeword)"
           },
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
             "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
             "min_clips": 3,
-            "min_seconds": 1.0
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
           },
-          "pending": false
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
         }
       },
       "listening": {
         "push_to_talk": false,
-        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
       "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_uses": 0
+      },
       "needs_retraining": false,
-      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -899,6 +1865,9 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -906,14 +1875,63 @@
           "created": 1790000000.0,
           "needs_retraining": false,
           "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "close",
+              "samples": 3
+            }
+          ],
           "threshold": 0.35,
           "trained": true
         }
       },
+      "privacy": "private_on_screen",
       "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
       "samples": 3,
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "privacy": "private_on_screen",
+          "strictness": "very_strict"
+        },
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
       "speaker_model": false,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
       "stt": {
         "available": false,
         "client_fallback_ok": false,
@@ -986,21 +2004,51 @@
         "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
       },
       "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
       "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": true,
         "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_uses": 0
+        },
         "needs_retraining": false,
-        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
         "prints": {
           "desktop": {
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -1008,6 +2056,9 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -1015,12 +2066,61 @@
             "created": 1790000000.0,
             "needs_retraining": false,
             "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 3
+              }
+            ],
             "threshold": 0.35,
             "trained": true
           }
         },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
         "samples": 3,
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "privacy": "private_on_screen",
+            "strictness": "very_strict"
+          },
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
         "speaker_model": false,
+        "strictness": "very_strict",
         "threshold": 0.35,
         "training": {
           "available": true,
@@ -1029,28 +2129,62 @@
             "max_clips": 12,
             "max_seconds": 10.0,
             "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
             "min_clips": 3,
-            "min_seconds": 1.0
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
           },
-          "pending": false
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
         }
       },
       "listening": {
         "push_to_talk": false,
-        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
         "wake_word": false,
         "wake_word_pending": false,
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
       "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_uses": 0
+      },
       "needs_retraining": false,
-      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -1058,6 +2192,9 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -1065,14 +2202,63 @@
           "created": 1790000000.0,
           "needs_retraining": false,
           "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 3
+            }
+          ],
           "threshold": 0.35,
           "trained": true
         }
       },
+      "privacy": "private_on_screen",
       "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
       "samples": 3,
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "privacy": "private_on_screen",
+          "strictness": "very_strict"
+        },
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
       "speaker_model": false,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
       "stt": {
         "available": false,
         "client_fallback_ok": false,
@@ -1145,21 +2331,51 @@
         "why": "the voice check can only check a voice if it is given the voice; a client that turned speech into text itself would send words, and there would be nothing left to check"
       },
       "available": true,
+      "cohort": {
+        "small": null,
+        "strong": null
+      },
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
       "gate": {
+        "cohort": {
+          "small": null,
+          "strong": null
+        },
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": true,
         "mode": "owner",
+        "models": {
+          "balanced_uses": "",
+          "small": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+          },
+          "strong": {
+            "bars_measured": false,
+            "installed": false,
+            "label": "",
+            "name": "",
+            "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+            "why": ""
+          },
+          "very_strict_uses": 0
+        },
         "needs_retraining": false,
-        "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices",
+        "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart)",
         "prints": {
           "desktop": {
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -1167,6 +2383,9 @@
             "created": 0.0,
             "needs_retraining": false,
             "samples": 0,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [],
             "threshold": 0.0,
             "trained": false
           },
@@ -1174,12 +2393,61 @@
             "created": 1790000000.0,
             "needs_retraining": false,
             "samples": 3,
+            "strong_threshold": 0.0,
+            "strong_trained": false,
+            "subprints": [
+              {
+                "condition": "general",
+                "samples": 3
+              }
+            ],
             "threshold": 0.35,
             "trained": true
           }
         },
+        "privacy": "private_on_screen",
+        "repeat": {
+          "balanced": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "since": 1790000000.0,
+          "very_strict": {
+            "accepted": 0,
+            "refused": 0,
+            "refused_then_accepted": 0,
+            "repeat_rate": 0.0,
+            "too_short": 0
+          },
+          "window_seconds": 10.0
+        },
         "samples": 3,
+        "settings": {
+          "changed": 0.0,
+          "choices": {
+            "privacy": [
+              "private_on_screen",
+              "voice_is_enough"
+            ],
+            "strictness": [
+              "very_strict",
+              "balanced"
+            ]
+          },
+          "defaults": {
+            "privacy": "private_on_screen",
+            "strictness": "very_strict"
+          },
+          "min_command_seconds": 2.0,
+          "privacy": "private_on_screen",
+          "strictness": "very_strict",
+          "voice_is_enough_allowed": true
+        },
         "speaker_model": false,
+        "strictness": "very_strict",
         "threshold": 0.35,
         "training": {
           "available": true,
@@ -1188,28 +2456,62 @@
             "max_clips": 12,
             "max_seconds": 10.0,
             "max_total_seconds": 80.0,
+            "measure_max_clips": 20,
             "min_clips": 3,
-            "min_seconds": 1.0
+            "min_seconds": 1.0,
+            "rounds": 3,
+            "session_seconds": 900.0
           },
-          "pending": false
+          "measure": true,
+          "pending": false,
+          "round_asks": {
+            "1": "normal, close to the microphone",
+            "2": "further away from the microphone, or quieter",
+            "3": "at another time of day, or in another room"
+          },
+          "rounds": true,
+          "session": null,
+          "settings": true
         }
       },
       "listening": {
         "push_to_talk": false,
-        "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
+        "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
         "wake_word": false,
         "wake_word_pending": true,
         "wake_word_why": "waiting for you to approve the card"
       },
       "local_stt_on_client_allowed": false,
       "mode": "owner",
+      "models": {
+        "balanced_uses": "",
+        "small": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/model.onnx"
+        },
+        "strong": {
+          "bars_measured": false,
+          "installed": false,
+          "label": "",
+          "name": "",
+          "path": "~/.openjarvis/voice-models/speaker/strong.onnx",
+          "why": ""
+        },
+        "very_strict_uses": 0
+      },
       "needs_retraining": false,
-      "note": "no speaker model installed: the fallback is a coarse spectral signature and will not reliably separate similar voices sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
+      "note": "no voice-ID model is installed: spoken commands are refused until it is (the basic check that stands in cannot tell two people apart) sherpa-onnx speech-to-text is selected but its model files are not on disk yet (looked in ~/.openjarvis/voice-models/stt). Kokoro TTS model files are not on disk yet (looked under ~/.openjarvis/voice-models/tts).",
       "prints": {
         "desktop": {
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -1217,6 +2519,9 @@
           "created": 0.0,
           "needs_retraining": false,
           "samples": 0,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [],
           "threshold": 0.0,
           "trained": false
         },
@@ -1224,14 +2529,63 @@
           "created": 1790000000.0,
           "needs_retraining": false,
           "samples": 3,
+          "strong_threshold": 0.0,
+          "strong_trained": false,
+          "subprints": [
+            {
+              "condition": "general",
+              "samples": 3
+            }
+          ],
           "threshold": 0.35,
           "trained": true
         }
       },
+      "privacy": "private_on_screen",
       "profile_embedder": "spectral-v1",
+      "repeat": {
+        "balanced": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "since": 1790000000.0,
+        "very_strict": {
+          "accepted": 0,
+          "refused": 0,
+          "refused_then_accepted": 0,
+          "repeat_rate": 0.0,
+          "too_short": 0
+        },
+        "window_seconds": 10.0
+      },
       "samples": 3,
+      "settings": {
+        "changed": 0.0,
+        "choices": {
+          "privacy": [
+            "private_on_screen",
+            "voice_is_enough"
+          ],
+          "strictness": [
+            "very_strict",
+            "balanced"
+          ]
+        },
+        "defaults": {
+          "privacy": "private_on_screen",
+          "strictness": "very_strict"
+        },
+        "min_command_seconds": 2.0,
+        "privacy": "private_on_screen",
+        "strictness": "very_strict",
+        "voice_is_enough_allowed": true
+      },
       "speaker_model": false,
       "speaker_model_path": "~/.openjarvis/voice-models/speaker/model.onnx",
+      "strictness": "very_strict",
       "stt": {
         "available": false,
         "client_fallback_ok": false,

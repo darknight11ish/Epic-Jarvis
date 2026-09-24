@@ -69,6 +69,18 @@ def tone(freq: float, seconds: float = 1.5) -> list:
     return samples
 
 
+class FixtureModel(V.Embedder):
+    """Stands in for an installed voice-ID model (a sherpa-onnx speaker
+    model) in the "everything installed" cases: the same arithmetic as the
+    basic check, under a real model's kind of name. Since the stricter voice
+    check (2026-09-24), the basic check alone refuses every voice, so the
+    talk button is only "ready" with a model installed."""
+
+    @property
+    def name(self):
+        return "sherpa-onnx:fixture00000"
+
+
 class World:
     """A temporary config folder for jarvis_speech, jarvis_wakeword and
     jarvis_turn, and a temporary folder for the voice prints."""
@@ -93,6 +105,9 @@ class World:
         for p in self.patches:
             p.start()
         if self.models:
+            p = mock.patch.object(V, "EcapaEmbedder", FixtureModel)
+            p.start()
+            self.patches.append(p)
             # Empty stand-ins: status() only checks that the files are there.
             for name in list(W.MODEL_FILES.values()) + list(W.PHRASE_MODELS.values()):
                 (wake_dir / name).parent.mkdir(parents=True, exist_ok=True)
@@ -102,10 +117,15 @@ class World:
         S.reload_engines()
         E._reset_for_tests()
         S._reset_wake_for_tests()
+        # The voice check's "asked again" counters are kept in memory for the
+        # whole process: a suite that ran before this (test_voice_contract.py
+        # runs this generator in-process) must not show up in them.
+        V._reset_repeat_for_tests()
         return self
 
     def train(self, mic: str, freq: float, clips: int = 3):
-        V.enroll([tone(freq + i) for i in range(clips)], embedder=V.Embedder(), mic=mic)
+        emb = FixtureModel() if self.models else V.Embedder()
+        V.enroll([tone(freq + i) for i in range(clips)], embedder=emb, mic=mic)
 
     def verifier(self, mic: str, positives: int):
         """A readable "hey Jarvis" check for `mic`, in the file format
@@ -141,7 +161,7 @@ def scrub(value, world: World):
     if isinstance(value, dict):
         out = {}
         for k, v in value.items():
-            if k in ("created", "at") and isinstance(v, (int, float)) and v:
+            if k in ("created", "at", "since") and isinstance(v, (int, float)) and v:
                 out[k] = FIXED_TIME
             elif k == "expires_in" and isinstance(v, int):
                 out[k] = FIXED_EXPIRES_IN
@@ -222,8 +242,16 @@ def cases() -> dict:
                                         "outcome": "approved", "request_id": "r"})()
         body = json.dumps({"mic": "phone", "clips": [
             base64.b64encode(tone_wav(210.0 + 7 * i, 2.0)).decode() for i in range(3)]})
+        # With only the basic voice check installed, training is refused
+        # before any card (the stricter check, 2026-09-24): kept as an answer.
+        code, refused = E.stage(body.encode(), gate=lambda *a: approved,
+                                tier_of=lambda a: "ask", spawn=lambda fn: fn(),
+                                ready=E._model_missing)
+        assert code == 409 and refused.get("needs_model") is True, (code, refused)
+        needs_model = scrub(refused, w)
+        # The same training with the voice-ID model installed.
         code, _ = E.stage(body.encode(), gate=lambda *a: approved, tier_of=lambda a: "ask",
-                          spawn=lambda fn: fn())
+                          spawn=lambda fn: fn(), ready=lambda: "")
         assert code == 202, code
         out["trained_by_card"] = scrub(S.status(), w)
 
@@ -231,7 +259,7 @@ def cases() -> dict:
         w.train("phone", 220.0)
         on = S.set_wake_enabled(True, **held_card())
         out["wake_waiting"] = scrub(S.status(), w)
-        answers = {"wake_on_pending": scrub(on, w)}
+        answers = {"wake_on_pending": scrub(on, w), "train_needs_model": needs_model}
         answers["wake_off"] = scrub(S.set_wake_enabled(False), w)
         out["wake_off_after_waiting"] = scrub(S.status(), w)
     return out, answers
