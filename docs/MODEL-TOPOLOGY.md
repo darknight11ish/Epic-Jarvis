@@ -10,6 +10,15 @@ changes.
 Read this if you are about to change models, change context length, or wonder
 why a long conversation gets strange.
 
+**Also read [HARDWARE-PROFILES.md](HARDWARE-PROFILES.md)** (2026-09-24, a
+design, calculated not measured). It generalises this page to any 8 GB card
+and up to two cards, and found that parts of this page are out of date
+against current Ollama and llama.cpp source: llama.cpp now keeps 1 GiB of
+each card free (so the 16K budget below is probably ~0.6 GiB over),
+"flash attention off" with `q8_0` now makes the model fail to load rather
+than spill, and Ollama's own estimate now over-counts a `q8_0` cache rather
+than under-counting it. Its section 3 lists each item with the evidence.
+
 ---
 
 ## The thing that is wrong right now
