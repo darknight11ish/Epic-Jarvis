@@ -617,8 +617,11 @@ const VAD_MAX_RMS: f32 = 0.05;
 const VAD_FLOOR_FACTOR: f32 = 3.0;
 /// Where the background estimate starts before the room has been heard.
 const VAD_INITIAL_FLOOR: f32 = 0.005;
-/// A burst of speech shorter than this is treated as noise (a cough, a
-/// click), not an utterance worth sending.
+/// A burst of speech with less VOICED time than this is treated as noise (a
+/// cough, a click), not an utterance worth sending: it is dropped when the
+/// pause after it is over. Voiced time, not time since the burst began - the
+/// pause itself used to count, so by the time the 900 ms hangover ended
+/// every cough had "lasted" 900 ms and was sent.
 const VAD_MIN_SPEECH: Duration = Duration::from_millis(250);
 /// How long the level must stay below the threshold after speech before the
 /// utterance is considered finished. Too short clips a mid-sentence
@@ -675,22 +678,32 @@ pub(crate) enum PauseStep {
     Ask,
     /// Cut here and send.
     Cut,
+    /// Too little of it was voice (a cough, a click): drop it, send nothing.
+    Discard,
 }
 
 /// The whole end-of-utterance rule, pure so it is tested: `silence` since
-/// the last loud chunk, `speech` since the utterance began, whether this
+/// the last loud chunk, `voiced` - how much of the utterance so far was
+/// loud enough to be speech - and `elapsed` since it began, whether this
 /// pause was already asked about, and whether Smart Turn is in use.
 pub(crate) fn pause_step(
     silence: Duration,
-    speech: Duration,
+    voiced: Duration,
+    elapsed: Duration,
     asked: bool,
     use_model: bool,
 ) -> PauseStep {
-    if speech >= VAD_MAX_UTTERANCE {
+    if elapsed >= VAD_MAX_UTTERANCE {
         return PauseStep::Cut;
     }
-    if speech < VAD_MIN_SPEECH {
-        return PauseStep::Listen;
+    if voiced < VAD_MIN_SPEECH {
+        // Never asked about, never sent: once the ordinary pause is over it
+        // is dropped, and until then more speech may still make it count.
+        return if silence >= VAD_SILENCE_HANGOVER {
+            PauseStep::Discard
+        } else {
+            PauseStep::Listen
+        };
     }
     let longest = if use_model {
         TURN_MAX_PAUSE
@@ -952,6 +965,9 @@ enum VadPhase {
         started_at_index: usize,
         started_at: Instant,
         last_voiced_at: Instant,
+        /// How much of the audio since `started_at` was loud enough to be
+        /// speech - what the minimum-speech rule counts.
+        voiced: Duration,
         /// Smart Turn was already asked about the current pause.
         asked: bool,
     },
@@ -1252,6 +1268,10 @@ fn run_vad_loop(
         let level = rms(&buf[read_to..]);
         let now = Instant::now();
         let voiced = level >= start_threshold(floor);
+        // How much audio this tick looked at: the new samples, as time.
+        let chunk = Duration::from_millis(
+            ((buf.len() - read_to) as u128 / samples_per_ms.max(1)).min(u64::MAX as u128) as u64,
+        );
         // Set when the buffer grew during a Smart Turn round trip, so the
         // next tick still looks at the audio that arrived meanwhile.
         let mut analysed_to: Option<usize> = None;
@@ -1263,6 +1283,7 @@ fn run_vad_loop(
                         started_at_index: read_to.saturating_sub(preroll),
                         started_at: now,
                         last_voiced_at: now,
+                        voiced: chunk,
                         asked: false,
                     };
                     // No barge-in here any more. In this mode the trigger
@@ -1284,61 +1305,78 @@ fn run_vad_loop(
                 started_at_index,
                 started_at,
                 last_voiced_at,
+                voiced: voiced_time,
                 asked,
             } => {
                 if voiced {
                     *last_voiced_at = now;
+                    *voiced_time += chunk;
                     // Speech again after a pause the model called
                     // unfinished: the next pause is a new question.
                     *asked = false;
                 }
                 let silence_elapsed = now.duration_since(*last_voiced_at);
                 let speech_elapsed = now.duration_since(*started_at);
-                let mut should_cut =
-                    match pause_step(silence_elapsed, speech_elapsed, *asked, use_turn) {
-                        PauseStep::Cut => true,
-                        PauseStep::Listen => false,
-                        PauseStep::Ask => {
-                            // Room audio is about to leave this thread: only
-                            // to this PC, checked now and not only when
-                            // listening started (see wake_audio_refusal).
-                            let base = jarvis_base(app);
-                            if let Some(why) = wake_audio_refusal(&base) {
-                                drop(buf);
-                                stop_listening_because(app, why);
-                                return VadEnd::Refused;
-                            }
-                            *asked = true;
-                            analysed_to = Some(buf.len());
-                            let from = buf.len().saturating_sub(turn_window).max(*started_at_index);
-                            let window: Vec<i16> = buf[from..].to_vec();
-                            // Not holding the lock through the round trip:
-                            // the microphone keeps filling the buffer.
+                let voiced_so_far = *voiced_time;
+                let mut should_cut = match pause_step(
+                    silence_elapsed,
+                    voiced_so_far,
+                    speech_elapsed,
+                    *asked,
+                    use_turn,
+                ) {
+                    PauseStep::Cut => true,
+                    PauseStep::Listen => false,
+                    PauseStep::Discard => {
+                        // A cough, a click: nothing is sent, and the
+                        // next utterance starts from a clean buffer.
+                        buf.clear();
+                        read_to = 0;
+                        phase = VadPhase::Silence;
+                        continue;
+                    }
+                    PauseStep::Ask => {
+                        // Room audio is about to leave this thread: only
+                        // to this PC, checked now and not only when
+                        // listening started (see wake_audio_refusal).
+                        let base = jarvis_base(app);
+                        if let Some(why) = wake_audio_refusal(&base) {
                             drop(buf);
-                            let answer =
-                                tauri::async_runtime::block_on(ask_turn(app, &base, spec, &window));
-                            buf = samples
-                                .lock()
-                                .unwrap_or_else(|poisoned| poisoned.into_inner());
-                            match answer {
-                                Ok(Some(finished)) => finished,
-                                Ok(None) | Err(_) => {
-                                    // No model after all, or it failed: the
-                                    // old fixed pause for the rest of this
-                                    // session, said once.
-                                    if let Err(reason) = answer {
-                                        eprintln!("[voice] Smart Turn off for now: {reason}");
-                                    }
-                                    use_turn = false;
-                                    false
+                            stop_listening_because(app, why);
+                            return VadEnd::Refused;
+                        }
+                        *asked = true;
+                        analysed_to = Some(buf.len());
+                        let from = buf.len().saturating_sub(turn_window).max(*started_at_index);
+                        let window: Vec<i16> = buf[from..].to_vec();
+                        // Not holding the lock through the round trip:
+                        // the microphone keeps filling the buffer.
+                        drop(buf);
+                        let answer =
+                            tauri::async_runtime::block_on(ask_turn(app, &base, spec, &window));
+                        buf = samples
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        match answer {
+                            Ok(Some(finished)) => finished,
+                            Ok(None) | Err(_) => {
+                                // No model after all, or it failed: the
+                                // old fixed pause for the rest of this
+                                // session, said once.
+                                if let Err(reason) = answer {
+                                    eprintln!("[voice] Smart Turn off for now: {reason}");
                                 }
+                                use_turn = false;
+                                false
                             }
                         }
-                    };
+                    }
+                };
                 if !should_cut && !use_turn {
                     // Just switched off above: judge this pause by the old rule.
                     should_cut =
-                        pause_step(silence_elapsed, speech_elapsed, true, false) == PauseStep::Cut;
+                        pause_step(silence_elapsed, voiced_so_far, speech_elapsed, true, false)
+                            == PauseStep::Cut;
                 }
                 if should_cut {
                     // The same check as before a Smart Turn question: this
@@ -1555,43 +1593,78 @@ mod wake_tests {
 
     #[test]
     fn without_smart_turn_the_old_hangover_holds() {
+        // 1.5 s of voice, then a pause: cut only once the pause is 900 ms.
+        let step = |silence| pause_step(silence, ms(1500), ms(1500) + silence, false, false);
+        assert_eq!(step(ms(300)), PauseStep::Listen);
+        assert_eq!(step(ms(899)), PauseStep::Listen);
+        assert_eq!(step(ms(900)), PauseStep::Cut);
         assert_eq!(
-            pause_step(ms(300), ms(2000), false, false),
-            PauseStep::Listen
-        );
-        assert_eq!(
-            pause_step(ms(899), ms(2000), false, false),
-            PauseStep::Listen
-        );
-        assert_eq!(pause_step(ms(900), ms(2000), false, false), PauseStep::Cut);
-        // A cough is not an utterance, however quiet it gets after.
-        assert_eq!(
-            pause_step(ms(900), ms(100), false, false),
-            PauseStep::Listen
-        );
-        assert_eq!(
-            pause_step(ms(0), VAD_MAX_UTTERANCE, false, false),
+            pause_step(ms(0), ms(2000), VAD_MAX_UTTERANCE, false, false),
             PauseStep::Cut
+        );
+    }
+
+    /// T12 (audit 3): the minimum-speech rule counted ELAPSED time, which
+    /// includes the pause - so when the 900 ms pause ended, a 100 ms cough
+    /// had "lasted" a whole second and was sent. The old test,
+    /// `pause_step(ms(900), ms(100))`, described a state the loop could
+    /// never reach (900 ms of silence inside 100 ms of utterance). These are
+    /// the states it does reach.
+    #[test]
+    fn a_cough_is_dropped_however_long_the_pause_after_it() {
+        // 100 ms of voice, then silence: 100 ms voiced, elapsed = 100 + pause.
+        let cough = |silence| pause_step(silence, ms(100), ms(100) + silence, false, false);
+        assert_eq!(
+            cough(ms(300)),
+            PauseStep::Listen,
+            "more voice may still come"
+        );
+        assert_eq!(cough(ms(899)), PauseStep::Listen);
+        assert_eq!(cough(ms(900)), PauseStep::Discard, "a cough was sent");
+        assert_eq!(cough(ms(3000)), PauseStep::Discard);
+        // With Smart Turn it is not asked about either - just dropped.
+        let cough_turn = |silence| pause_step(silence, ms(100), ms(100) + silence, false, true);
+        assert_eq!(
+            cough_turn(ms(200)),
+            PauseStep::Listen,
+            "a cough was asked about"
+        );
+        assert_eq!(cough_turn(ms(900)), PauseStep::Discard);
+        // The threshold is voiced time: 250 ms of it is an utterance.
+        assert_eq!(
+            pause_step(ms(900), ms(250), ms(1150), false, false),
+            PauseStep::Cut
+        );
+        assert_eq!(
+            pause_step(ms(900), ms(249), ms(1149), false, false),
+            PauseStep::Discard
         );
     }
 
     #[test]
     fn with_smart_turn_a_short_pause_is_asked_about_once() {
+        let voiced = ms(1800);
         assert_eq!(
-            pause_step(ms(100), ms(2000), false, true),
+            pause_step(ms(100), voiced, ms(2000), false, true),
             PauseStep::Listen
         );
-        assert_eq!(pause_step(ms(200), ms(2000), false, true), PauseStep::Ask);
+        assert_eq!(
+            pause_step(ms(200), voiced, ms(2000), false, true),
+            PauseStep::Ask
+        );
         // Asked already, answered "not finished": the old 900 ms no longer
         // cuts it...
-        assert_eq!(pause_step(ms(900), ms(2000), true, true), PauseStep::Listen);
+        assert_eq!(
+            pause_step(ms(900), voiced, ms(2700), true, true),
+            PauseStep::Listen
+        );
         // ...the long pause does, whatever the model said.
         assert_eq!(
-            pause_step(TURN_MAX_PAUSE, ms(4000), true, true),
+            pause_step(TURN_MAX_PAUSE, voiced, ms(4000), true, true),
             PauseStep::Cut
         );
         assert_eq!(
-            pause_step(ms(0), VAD_MAX_UTTERANCE, false, true),
+            pause_step(ms(0), voiced, VAD_MAX_UTTERANCE, false, true),
             PauseStep::Cut
         );
     }
