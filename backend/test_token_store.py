@@ -250,6 +250,61 @@ def t_errors_carry_codes_not_tokens():
           "write_text(" not in src and "open(" not in src, "a write_text/open crept in")
 
 
+
+# -------------------------------------------- the owner's show/where/forget
+
+def _run_main(cmd, *, store, environ, desktop=None):
+    """(exit code, standard output, standard error) of `_main([_, cmd])`."""
+    import contextlib
+    import io
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = ts._main(["jarvis_token_store.py", cmd], store=store,
+                        desktop_store=desktop, environ=environ)
+    return code, out.getvalue(), err.getvalue()
+
+
+def t_the_owner_is_told_about_the_other_token_sources():
+    # Bug audit 3, CONN-3. The desktop app starts the backend with the token
+    # typed into ITS Settings as HUD_TOKEN, and HUD_TOKEN wins. So the backend
+    # ran on a token these commands never mentioned: `show` and `where` said
+    # "no saved token", and `forget` unpaired nothing.
+    env = {"HUD_TOKEN": "hud-value-9"}
+    desk = FakeStore("typed-in-desktop-7")
+    for cmd in ("show", "where", "forget"):
+        code, out, err = _run_main(cmd, store=FakeStore("saved-token-1"), environ=env,
+                                   desktop=desk)
+        said = out + err
+        check(f"{cmd}: says HUD_TOKEN is set here and wins over the saved one",
+              "HUD_TOKEN is set" in said and "uses THAT token" in said, said)
+        check(f"{cmd}: says the desktop's typed token is a separate source forget cannot "
+              f"remove, and to clear it in the desktop's Settings first",
+              "desktop app has a token of its own saved" in said
+              and "'forget' cannot remove it" in said
+              and "clear it in the desktop app's Settings first" in said, said)
+        check(f"{cmd}: never prints HUD_TOKEN's value or the desktop's token",
+              "hud-value-9" not in said and "typed-in-desktop-7" not in said, said)
+    code, out, err = _run_main("show", store=FakeStore("saved-token-1"), environ=env,
+                               desktop=desk)
+    check("show: standard output is the token alone (so '| clip' still works)",
+          out == "saved-token-1\n" and code == 0, repr(out))
+    code, out, err = _run_main("show", store=FakeStore(None), environ=env, desktop=desk)
+    check("show with nothing saved: does not stop at 'no saved token' - names HUD_TOKEN",
+          code == 1 and "HUD_TOKEN is set" in err and out == "", repr((out, err)))
+    code, out, err = _run_main("where", store=FakeStore(None), environ={},
+                               desktop=FakeStore(None))
+    check("where, nothing saved anywhere: still says a desktop-typed token would win",
+          "When the desktop app starts Jarvis" in out and "HUD_TOKEN is set" not in out, out)
+    code, out, err = _run_main("forget", store=FakeStore("saved-token-1"), environ={},
+                               desktop=FakeStore(None))
+    check("forget, no HUD_TOKEN, no desktop token: deleted, and no false HUD_TOKEN claim",
+          code == 0 and "Deleted." in out and "HUD_TOKEN is set" not in out
+          and "desktop app has a token of its own" not in out, out)
+    code, out, err = _run_main("where", store=FakeStore("x"), environ={"HUD_TOKEN": "  "},
+                               desktop=FakeStore(None))
+    check("a blank HUD_TOKEN is not 'set' (resolve() ignores it too)",
+          "HUD_TOKEN is set" not in out, out)
+
 # ------------------------------------------------ backend and desktop agree
 
 def t_the_desktop_reads_the_same_name():
@@ -261,6 +316,9 @@ def t_the_desktop_reads_the_same_name():
     desk = re.search(r'pub const TARGET: &str = "([^"]+)";', rs)
     check("and it is NOT the desktop's own name (typed tokens stay separate)",
           bool(desk) and desk.group(1) != ts.TARGET)
+    check("the owner's commands look for the desktop's typed token under its real name",
+          bool(desk) and desk.group(1) == ts.DESKTOP_TARGET,
+          f"{desk and desk.group(1)!r} vs {ts.DESKTOP_TARGET!r}")
     # Same format both ways: UTF-8 bytes, generic, per user on this PC.
     check("both store a generic credential",
           "CRED_TYPE_GENERIC" in rs and ts._CRED_TYPE_GENERIC == 1)
@@ -393,7 +451,7 @@ if __name__ == "__main__":
                t_a_file_that_disagrees_wins, t_a_refusing_store_keeps_the_old_file,
                t_a_refusing_store_with_no_file_writes_nothing, t_the_environment_still_wins,
                t_blank_and_unreadable_files, t_the_old_file_in_any_encoding_windows_writes,
-               t_errors_carry_codes_not_tokens,
+               t_errors_carry_codes_not_tokens, t_the_owner_is_told_about_the_other_token_sources,
                t_the_desktop_reads_the_same_name, t_the_patch_applies_and_reverses,
                t_the_patched_function_runs, t_the_install_lists_have_it,
                t_live_windows_round_trip):
