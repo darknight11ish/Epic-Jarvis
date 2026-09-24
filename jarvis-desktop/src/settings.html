@@ -859,8 +859,15 @@
           <label class="field">
             <span class="label">Program</span>
             <input id="program" type="text" spellcheck="false" autocomplete="off"
-                   placeholder="python" />
+                   placeholder="C:\Users\you\AppData\Local\Programs\Python\Python312\python.exe" />
           </label>
+          <p class="note" id="program-hint">
+            The full path to the real <code>python.exe</code>, not the word
+            <code>python</code> on its own: on a fresh Windows that is a
+            Microsoft Store shortcut, not Python. To find the path, run this
+            in PowerShell:
+            <code>py -3 -c "import sys; print(sys.executable)"</code>
+          </p>
 
           <label class="field">
             <span class="label">Arguments <span class="hint">one per line</span></span>

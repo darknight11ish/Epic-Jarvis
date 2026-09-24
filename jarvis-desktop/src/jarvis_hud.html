@@ -559,7 +559,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 
     <div id="banner">
       <b>Demo data.</b>
-      <span id="banner-text">Jarvis is not answering yet — start Ollama and <span class="mono">python jarvis_hud.py</span>, then reload.</span>
+      <span id="banner-text">Jarvis is not answering yet — start Ollama and <span class="mono">py -3 jarvis_hud.py</span>, then reload.</span>
     </div>
 
     <div class="stage-bar">
@@ -1880,10 +1880,10 @@ async function boot(){
     $("banner").classList.add("on");
     $("banner-text").innerHTML = status
       ? 'The local model is not answering — open the Ollama app (or run <span class="mono">ollama serve</span>), then reload.'
-      : 'Serving without the HUD server — run <span class="mono">python jarvis_hud.py</span> on your desktop for live data.';
+      : 'Serving without the HUD server — run <span class="mono">py -3 jarvis_hud.py</span> on your desktop for live data.';
     addMessage("system", status
       ? "HUD server is up, but Ollama (the local model) is not answering yet. Everything below is sample data."
-      : "Running as a preview. On your desktop, start it with python jarvis_hud.py to connect to the real Jarvis.");
+      : "Running as a preview. On your desktop, start it with py -3 jarvis_hud.py to connect to the real Jarvis.");
   } else {
     addMessage("jarvis", "Systems online, sir. Local model loaded and the brain map is current. What are we working on?");
     if(S.jarvisMemory){

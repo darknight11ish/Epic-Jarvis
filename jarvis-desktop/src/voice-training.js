@@ -392,7 +392,7 @@ export const STRICTNESS = Object.freeze([
     id: "very_strict",
     label: "Very strict",
     recommended: true,
-    detail: "Needs about 2 seconds of speech and a close match. Best at turning other people away; now and then it may ask you to say it again.",
+    detail: "Needs about 2 seconds of speech and a close match. Best at turning other people away; now and then it may ask you to say it again. It tells your voice from other people's. It cannot tell your voice from a recording or a copy of it.",
   },
   {
     id: "balanced",

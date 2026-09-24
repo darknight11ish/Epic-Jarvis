@@ -6167,6 +6167,16 @@ it is three updated modules (`rebuilt\jarvis_voice.py`,
 Voice check and Train my voice (`docs/JARVIS-API.md` §16). Training works
 from either microphone, each into its own voice print.
 
+**What it cannot do.** It tells your voice from other people's. It cannot
+tell your voice from a recording or a copy of it. A recording of you played
+near the microphone, or a computer copy of your voice (a "voice clone"),
+can pass it, even at very strict. Both apps say this in the Very strict
+description, in the same words. Approvals are not at risk: a card always
+needs a tap on your own PC or phone. What a voice that passes can do on its
+own: have answers that use what Jarvis remembers read aloud (on by
+default), have private answers read aloud (only if you chose "Voice check
+is enough"), and have facts from what it said saved by automatic learning.
+
 ## The two holes, and what closes them
 
 **1. With no voice-ID model installed, a stranger could still get in.**

@@ -1415,6 +1415,15 @@ patch**: everything below is on routes the apps already call
 every measured number are in `backend/README.md`, "The stricter voice
 check".
 
+**What it cannot do.** It tells your voice from other people's. It cannot
+tell your voice from a recording or a copy of it: a replayed recording or
+a cloned voice can pass, even at very strict. Both apps end the Very
+strict description with those two sentences, word for word
+(`voice-training.js` `STRICTNESS`, `StrictVoice.kt` `STRICTNESS`; pinned by
+`tests/voice-training.mjs` and `VoiceStrictTest.kt`). Approvals do not rest
+on the voice check (a card is always a tap), but reading memory or private
+answers aloud and automatic learning from a voice turn (§19.2 item 5) do.
+
 **Check before you send.** An older PC reads a body it does not know as a
 plain training (any body with clips in it) or answers 400. Offer each new
 mode only when `gate.training` says the PC understands it:

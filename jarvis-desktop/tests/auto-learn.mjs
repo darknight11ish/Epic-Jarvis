@@ -724,6 +724,21 @@ await check("CONTROL: only the Brain holds the commands; ON and Forget are held 
   assert.ok(f.indexOf("require_link_live") < f.indexOf("post("), "Forget is not held on a stale link");
 });
 
+await check("the first-run walkthrough says what memory really does, and is shown again once", async () => {
+  // Version 1 said "Jarvis only remembers what you approve", which stopped
+  // being true when learning became automatic (2026-09-24).
+  const page = read("src/onboarding.html");
+  const screen = page.slice(page.indexOf('id="screen-3"'), page.indexOf("</section>", page.indexOf('id="screen-3"')));
+  assert.doesNotMatch(screen, /only remembers what you approve|doesn't save it right away/i);
+  assert.match(screen, /your own words/);
+  assert.match(screen, /Forget/);
+  assert.match(screen, /wait for your\s+yes/);
+  // The "seen" marker is a version, raised with that change (commands.rs).
+  const rust = read("src-tauri/src/commands.rs");
+  assert.match(rust, /pub const ONBOARDING_VERSION: u64 = 2;/);
+  assert.doesNotMatch(rust, /store\.set\("onboarding_seen"/, "the old yes/no marker is still written");
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nautomatic learning is shown, and forgettable one at a time");

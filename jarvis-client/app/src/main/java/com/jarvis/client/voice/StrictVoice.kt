@@ -52,7 +52,8 @@ object StrictVoice {
             VoiceStrict.VERY_STRICT,
             "Very strict (recommended)",
             "Needs about 2 seconds of speech and a close match. Best at turning other people " +
-                "away; now and then it may ask you to say it again.",
+                "away; now and then it may ask you to say it again. It tells your voice from " +
+                "other people's. It cannot tell your voice from a recording or a copy of it.",
         ),
         Choice(
             VoiceStrict.BALANCED,

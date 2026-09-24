@@ -542,25 +542,51 @@ pub fn open_faces(app: AppHandle) -> Result<(), String> {
     crate::windows::show_faces(&app)
 }
 
-/// True once the owner has closed the first-run walkthrough.
+/// Which version of the first-run walkthrough is on screen now.
 ///
-/// Not a command: `windows.rs` decides whether to build the onboarding window
+/// Raise this by one whenever `onboarding.html` changes in a way the owner
+/// should read again: the walkthrough then opens once more for everyone who
+/// closed an older one. The same idea as Ollama's versioned
+/// `onboarding-v1.completed` marker. Version 2 (2026-09-24) corrected the
+/// memory screen: version 1 said Jarvis only remembered what you approved,
+/// and Jarvis now learns automatically by default.
+pub const ONBOARDING_VERSION: u64 = 2;
+
+/// The store key holding the version of the walkthrough the owner last
+/// closed. The old key, `onboarding_seen`, was a plain yes/no, so it could
+/// not tell an old walkthrough from the current one. It is no longer read,
+/// so everyone who only saw version 1 sees version 2 once.
+const ONBOARDING_VERSION_KEY: &str = "onboarding_version";
+
+/// True when the stored value says the owner closed this walkthrough
+/// ([`ONBOARDING_VERSION`]) or a newer one. Anything else - nothing stored,
+/// an older number, or a value of the wrong kind - means "show it".
+fn walkthrough_is_current(stored: Option<&serde_json::Value>) -> bool {
+    stored
+        .and_then(serde_json::Value::as_u64)
+        .is_some_and(|seen| seen >= ONBOARDING_VERSION)
+}
+
+/// True once the owner has closed the current first-run walkthrough.
+///
+/// Not a command: `lib.rs` decides whether to build the onboarding window
 /// at all from this, before anything on screen could ask for it. The
 /// walkthrough itself never checks its own flag — it only exists to close
-/// itself, which is [`mark_onboarding_seen`] below.
+/// itself, which is [`finish_onboarding`] below.
 pub fn onboarding_seen(app: &AppHandle) -> bool {
     use tauri_plugin_store::StoreExt;
 
-    app.store(SETTINGS_STORE)
+    let stored = app
+        .store(SETTINGS_STORE)
         .ok()
-        .and_then(|store| store.get("onboarding_seen"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
+        .and_then(|store| store.get(ONBOARDING_VERSION_KEY));
+    walkthrough_is_current(stored.as_ref())
 }
 
-/// Persists that the walkthrough has been seen, so it never opens again, and
-/// closes it — one command rather than two, since the page has no reason to
-/// do either without the other.
+/// Persists that this version of the walkthrough has been seen, so it does
+/// not open again until [`ONBOARDING_VERSION`] is raised, and closes it — one
+/// command rather than two, since the page has no reason to do either
+/// without the other.
 #[tauri::command]
 pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_store::StoreExt;
@@ -568,7 +594,10 @@ pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("settings store unavailable: {e}"))?;
-    store.set("onboarding_seen", serde_json::Value::Bool(true));
+    store.set(
+        ONBOARDING_VERSION_KEY,
+        serde_json::Value::from(ONBOARDING_VERSION),
+    );
     store
         .save()
         .map_err(|e| format!("could not save onboarding state: {e}"))?;
@@ -4512,6 +4541,28 @@ mod token_tests {
         assert!(passes_as_hud_token(TokenSource::Environment));
         assert!(!passes_as_hud_token(TokenSource::BackendCredentialManager));
         assert!(!passes_as_hud_token(TokenSource::BackendFile));
+    }
+}
+
+#[cfg(test)]
+mod onboarding_tests {
+    use super::{walkthrough_is_current, ONBOARDING_VERSION};
+    use serde_json::json;
+
+    /// The owner sees the walkthrough again once after it changes: nothing
+    /// stored, an older version, or a value of the wrong kind all mean
+    /// "show it"; this version or a newer one means "seen".
+    #[test]
+    fn only_the_current_walkthrough_counts_as_seen() {
+        assert_eq!(ONBOARDING_VERSION, 2);
+        assert!(!walkthrough_is_current(None));
+        assert!(!walkthrough_is_current(Some(&json!(1))));
+        assert!(walkthrough_is_current(Some(&json!(2))));
+        assert!(walkthrough_is_current(Some(&json!(3))));
+        // The old yes/no marker, or a damaged value, is not a version.
+        assert!(!walkthrough_is_current(Some(&json!(true))));
+        assert!(!walkthrough_is_current(Some(&json!("2"))));
+        assert!(!walkthrough_is_current(Some(&json!(-1))));
     }
 }
 
