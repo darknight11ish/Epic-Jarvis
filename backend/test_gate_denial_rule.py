@@ -30,7 +30,7 @@ import _stack  # noqa: E402
 FAILED, PASSED = [], []
 PATCH = "gate-outcome.patch"
 #: The actions the audit named, each checked below against its module.
-LISTED = ("second_card_enable", "big_model_enable", "wiki_update", "change_own_config",
+LISTED = ("second_card_enable", "second_card_browser_enable", "big_model_enable", "wiki_update", "change_own_config",
           "power_manage", "append_obsidian_daily", "download_model", "switch_model")
 
 
@@ -124,11 +124,18 @@ def t_every_module_that_forces_ask_is_on_the_list():
     found = {}
     for f in sorted(HERE.glob("jarvis_*.py")):
         src = f.read_text(encoding="utf-8")
+        # A module either reads the tier of its constant directly, or (since
+        # the second card gave Browser control its own action) through
+        # `action_for()`, which returns one of its *ACTION constants.
+        via_action_for = re.search(r"tier_of\(action\)[\s\S]{0,200}?if tier != \"ask\"", src)
+        routed = set(re.findall(r"def action_for\([\s\S]{0,300}?(?=\ndef )", src))
         for const, action in re.findall(r'^(\w*ACTION) = "(\w+)"', src, re.M):
-            if re.search(rf"tier_of\({const}\)[\s\S]{{0,200}}?if tier != \"ask\"", src):
+            direct = re.search(rf"tier_of\({const}\)[\s\S]{{0,200}}?if tier != \"ask\"", src)
+            if direct or (via_action_for and any(re.search(rf"\b{const}\b", r) for r in routed)):
                 found.setdefault(action, []).append(f.name)
     check("the modules that force 'ask' were found (test setup)",
-          {"second_card_enable", "big_model_enable", "change_own_config"} <= set(found),
+          {"second_card_enable", "second_card_browser_enable", "big_model_enable",
+           "change_own_config"} <= set(found),
           repr(found))
     for action, files in sorted(found.items()):
         check(f"{action} ({', '.join(files)} acts only on 'ask') is on the list",
