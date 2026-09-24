@@ -361,6 +361,13 @@ data class HomeState(
      * `#obs` / `#joplin` line is typed ([NoteCapture.chip]).
      */
     val noteTargets: NoteCapture.Targets? = null,
+    /**
+     * "A newer build of this app is on GitHub", or null
+     * ([com.jarvis.client.net.UpdateCheck]). One quiet line under the status
+     * line, with a button to the release page. Never a failure: those are on
+     * Checks.
+     */
+    val updateLine: String? = null,
 )
 
 @Immutable
@@ -432,6 +439,8 @@ data class HomeActions(
     val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
+    /** Open the release page in the browser. Downloads nothing itself. */
+    val onOpenUpdate: () -> Unit = {},
 )
 
 @Composable
@@ -620,6 +629,7 @@ fun HomeScreen(
         ) {
             NavRow(state, actions)
         }
+        state.updateLine?.let { UpdateLine(it, actions.onOpenUpdate) }
 
         val listState = rememberLazyListState()
         // Where "Open the approval →" actually lands. The id used to be set and
@@ -1153,6 +1163,29 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/**
+ * A newer build of this app, when there is one (net/UpdateCheck.kt). Under
+ * the status line rather than in the conversation: it is about the app, not
+ * about Jarvis, and it must not push the approval cards down. Not inside
+ * [NavRow] either, which is hidden by default.
+ */
+@Composable
+private fun UpdateLine(line: String, onOpen: () -> Unit) {
+    val chrome = LocalChrome.current
+    Row(
+        Modifier.fillMaxWidth().background(chrome.surface1).padding(start = 16.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            line,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+            modifier = Modifier.weight(1f),
+        )
+        Quiet("Release page", onClick = onOpen)
     }
 }
 

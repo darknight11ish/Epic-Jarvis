@@ -35,6 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import com.jarvis.client.data.CheckMethod
+import com.jarvis.client.data.CheckOutcome
+import com.jarvis.client.data.LockSession
+import com.jarvis.client.data.Security
+import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.data.calmFace
 import com.jarvis.client.face.FaceBudget
 import com.jarvis.client.face.FaceQuality
@@ -45,6 +50,7 @@ import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.SecondCard
+import com.jarvis.client.net.UpdateCheck
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.PictureEncoder
@@ -72,8 +78,10 @@ import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
 import com.jarvis.client.ui.screens.HomeState
 import com.jarvis.client.ui.screens.InboxScreen
+import com.jarvis.client.ui.screens.LockedScreen
 import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
+import com.jarvis.client.ui.screens.SecurityScreen
 import com.jarvis.client.ui.screens.VoiceTrainingScreen
 import com.jarvis.client.ui.theme.JarvisTheme
 import com.jarvis.client.ui.theme.LocalChrome
@@ -136,6 +144,22 @@ class MainActivity : FragmentActivity() {
 
     /** The previous run's crash, read once at launch. */
     private val lastCrash = mutableStateOf<String?>(null)
+
+    /**
+     * Bumped whenever [lockSession] changes, so App() reads it again. The
+     * session itself lives for the whole process (bottom of this file): a
+     * rotation builds a new activity, and must neither unlock nor relock.
+     */
+    private val lockTick = mutableIntStateOf(0)
+
+    /** A fingerprint or PIN check for Unlock, Show or a Security change is up. */
+    private val ownerCheckBusy = mutableStateOf(false)
+
+    /** Why the lock screen did not open, or null. */
+    private val lockMessage = mutableStateOf<String?>(null)
+
+    /** Why a Security change was refused, or null. */
+    private val securityNotice = mutableStateOf<String?>(null)
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -509,6 +533,32 @@ class MainActivity : FragmentActivity() {
         // nothing changed.
         SideEffect { FaceQuality.configure(faceTuning, phoneSaver, phoneHeat) }
 
+        // The lock and fingerprint settings, and the lock clock. `lockTick`
+        // is read here so that every change to the clock recomposes.
+        val security by JarvisRuntime.settings.security.collectAsState()
+        val lockVersion = lockTick.intValue
+        val locked = remember(lockVersion, security) { lockSession.locked(security) }
+        val privateHidden = remember(lockVersion, security) { lockSession.privateHidden(security) }
+        // While anything is locked or hidden, the recent-apps picture of
+        // Jarvis is blank rather than a snapshot of what the lock hides.
+        LaunchedEffect(security.appLock, security.privateLists) {
+            setRecentsScreenshotEnabled(!security.appLock && !security.privateLists)
+        }
+
+        // "A newer version is available": asked when the app opens (at most
+        // every six hours) and once a day while it stays open. Never while
+        // "Check for new versions" is off. See UpdateCheck.
+        val updateState by JarvisRuntime.updates.state.collectAsState()
+        val updateChecks by JarvisRuntime.settings.updateChecks.collectAsState()
+        LaunchedEffect(updateChecks) {
+            if (!updateChecks) return@LaunchedEffect
+            JarvisRuntime.updates.checkIfDue(onStart = true)
+            while (true) {
+                delay(UPDATE_RECHECK_MS)
+                JarvisRuntime.updates.checkIfDue(onStart = false)
+            }
+        }
+
         val link by JarvisRuntime.link.collectAsState()
         val linkDetail by JarvisRuntime.linkDetail.collectAsState()
         val stale by JarvisRuntime.stale.collectAsState()
@@ -756,8 +806,11 @@ class MainActivity : FragmentActivity() {
         // list scrolls to that card and outlines it. It used to be cleared
         // right here, one line after being set, which is why nothing ever read
         // it: the tap navigated home and left you a list to hunt through.
-        LaunchedEffect(focusApproval.value) {
+        LaunchedEffect(focusApproval.value, locked) {
             val id = focusApproval.value ?: return@LaunchedEffect
+            // Behind the app lock, the card is kept until the owner unlocks,
+            // rather than scrolled to and dropped while nobody can see it.
+            if (locked) return@LaunchedEffect
             // A tap on an approval notification means "show me that card", and
             // the pairing screen would hide it. The desktop in use is the saved
             // one either way, so leaving re-pairing loses nothing but typing.
@@ -833,6 +886,26 @@ class MainActivity : FragmentActivity() {
             // theme's Motion already reads. Only ever slows the face.
             val calmMotion = look.motion.calmFace(LocalMotion.current.reduced)
 
+            // The app lock outranks everything, pairing included: nothing
+            // behind it is composed. Approving from the notification or the
+            // widget was never possible, and Deny there needs no unlock -
+            // refusing is never gated.
+            if (locked) {
+                // Back leaves Jarvis rather than walking a back stack nobody
+                // can see. Composed after NavBackHandler, so it wins.
+                BackHandler(onBack = { moveTaskToBack(true) })
+                LockedScreen(
+                    message = lockMessage.value,
+                    busy = ownerCheckBusy.value,
+                    onUnlock = ::unlockApp,
+                    modifier = root,
+                )
+                // Asked once as the lock screen appears. A dismissed prompt
+                // is an answer: it is not asked again until Unlock is tapped.
+                LaunchedEffect(Unit) { unlockApp() }
+                return@JarvisTheme
+            }
+
             // Pairing outranks the stack: there is nothing to show until there
             // is somewhere to talk to. Two screens are the exception. Checks,
             // because "why can I not connect" has to be answerable from here.
@@ -841,8 +914,11 @@ class MainActivity : FragmentActivity() {
             //
             // `repairing` shows this same screen to a phone that IS paired, so
             // the owner can change the desktop or the token.
+            // Security too: it is opened from Checks, and its settings are
+            // this phone's own, so there is no reason to pair first.
             if ((!paired || repairing) &&
-                nav.current != Screen.CHECKS && nav.current != Screen.FAQ
+                nav.current != Screen.CHECKS && nav.current != Screen.FAQ &&
+                nav.current != Screen.SECURITY
             ) {
                 val replacing = paired
                 // Leaves re-pairing and keeps the desktop in use. A "refused
@@ -1140,6 +1216,19 @@ class MainActivity : FragmentActivity() {
                             } else {
                                 null
                             },
+                            // Lock and fingerprint (SecurityScreen). On this
+                            // phone only; nothing here reaches the desktop.
+                            securitySummary = SecurityRules.summary(security),
+                            onOpenSecurity = { nav.go(Screen.SECURITY) },
+                            // "Check for new versions", and the one place a
+                            // failed check is mentioned.
+                            update = updateState,
+                            updateChecks = updateChecks,
+                            onUpdateChecks = { on ->
+                                JarvisRuntime.settings.setUpdateChecks(on)
+                                if (!on) JarvisRuntime.updates.cleared()
+                            },
+                            onOpenRelease = ::openReleasePage,
                         )
                     }
 
@@ -1370,6 +1459,12 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             },
+                            // Security's "Hide memory lists": hidden until
+                            // Show is confirmed, and hidden again whenever the
+                            // app would lock again.
+                            privateHidden = privateHidden,
+                            onShowPrivate = ::showPrivateLists,
+                            showPrivateBusy = ownerCheckBusy.value,
                         )
                     }
 
@@ -1377,6 +1472,28 @@ class MainActivity : FragmentActivity() {
                         onBack = { nav.back() },
                         modifier = root,
                     )
+
+                    Screen.SECURITY -> {
+                        // Asked again on every visit and every change, so the
+                        // "no screen lock" warning follows the phone's own
+                        // settings. A cheap system call.
+                        val availability = remember(tick, security) {
+                            BiometricGate.availability(this@MainActivity, security.method)
+                        }
+                        SecurityScreen(
+                            security = security,
+                            availability = availability,
+                            onChange = ::changeSecurity,
+                            onBack = {
+                                securityNotice.value = null
+                                nav.back()
+                            },
+                            busy = ownerCheckBusy.value,
+                            notice = securityNotice.value,
+                            onDismissNotice = { securityNotice.value = null },
+                            modifier = root,
+                        )
+                    }
 
                     Screen.APPEARANCE -> AppearanceScreen(
                         current = chrome,
@@ -1506,6 +1623,7 @@ class MainActivity : FragmentActivity() {
                             pictureLine = picture.value?.let { ChatPicture.attachedLine(it) },
                             pictureBusy = pictureBusy.value,
                             noteTargets = noteTargets,
+                            updateLine = updateState.newerLine.takeIf { updateChecks },
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1653,6 +1771,7 @@ class MainActivity : FragmentActivity() {
                                 // Only the note apps the desktop says are set up.
                                 onLoadNoteTargets = { JarvisRuntime.noteTargets() },
                                 onQuickNoteOpenChange = { open -> quickNoteOpen.value = open },
+                                onOpenUpdate = ::openReleasePage,
                             )
                         },
                         modifier = root,
@@ -1741,27 +1860,150 @@ class MainActivity : FragmentActivity() {
     /**
      * @return true when the decision may proceed.
      *
-     * An unavailable biometric is not a refusal: declining to let the owner
-     * answer their own desktop because no fingerprint is enrolled would be a
-     * lock on the wrong door, and the pairing token already authorises the
-     * request. A *dismissed* prompt is a refusal, and nothing is sent. A check
-     * that exists but could not be shown just now (even after a retry) holds
-     * the decision and says so - it is not waved through.
+     * Which approvals ask, and what each outcome means, is
+     * [SecurityRules.approvalNeedsCheck] and [SecurityRules.afterApprovalCheck],
+     * from the owner's Security settings. With those at their defaults it is
+     * exactly the old rule: an unavailable biometric is not a refusal
+     * (declining to let the owner answer their own desktop because no
+     * fingerprint is enrolled would be a lock on the wrong door), a
+     * *dismissed* prompt is, and a check that could not be shown just now
+     * holds the decision and says so. Once the owner turns any lock on, a
+     * phone that cannot check refuses instead, and says how to fix it.
      */
     private suspend fun confirmed(item: PendingItem): Boolean {
-        if (!BiometricGate.required(item)) return true
-        return when (BiometricGate.confirm(this, item)) {
-            BiometricGate.Outcome.CONFIRMED -> true
-            BiometricGate.Outcome.UNAVAILABLE -> true
-            BiometricGate.Outcome.CANCELLED -> false
-            BiometricGate.Outcome.FAILED -> {
-                JarvisRuntime.setNotice(
-                    "The fingerprint or PIN check could not be shown just now, so nothing was sent. " +
-                        "Try again in a moment.",
-                )
+        val s = currentSecurity()
+        if (!SecurityRules.approvalNeedsCheck(s, item)) return true
+        val outcome = withOwnerCheck { BiometricGate.confirm(this, item, s.method) }
+        return when (val verdict = SecurityRules.afterApprovalCheck(s, outcome)) {
+            SecurityRules.Verdict.Go -> true
+            is SecurityRules.Verdict.Stop -> {
+                verdict.say?.let { JarvisRuntime.setNotice(it) }
                 false
             }
         }
+    }
+
+    private fun currentSecurity(): Security = JarvisRuntime.settings.security.value
+
+    /**
+     * Runs one fingerprint or PIN check with the lock clock told about it:
+     * Android's PIN screen takes Jarvis out of sight, and that must not
+     * count as being away ([LockSession.endCheck]).
+     */
+    private suspend fun withOwnerCheck(check: suspend () -> CheckOutcome): CheckOutcome {
+        lockSession.beginCheck()
+        var outcome = CheckOutcome.CANCELLED
+        try {
+            outcome = check()
+            return outcome
+        } finally {
+            lockSession.endCheck(outcome, SystemClock.elapsedRealtime(), currentSecurity())
+            lockTick.intValue += 1
+        }
+    }
+
+    /**
+     * One check that is not an approval - Unlock, Show, or a loosened
+     * setting - with the owner's current method. [then] runs on a confirmed
+     * check; anything else ends with [onStop]'s sentence (null when the
+     * owner simply dismissed it).
+     */
+    private fun ownerCheck(
+        title: String,
+        method: CheckMethod,
+        whatStays: String,
+        onStop: (String?) -> Unit,
+        then: () -> Unit,
+    ) {
+        if (ownerCheckBusy.value) return
+        ownerCheckBusy.value = true
+        lifecycleScope.launch {
+            try {
+                val outcome = withOwnerCheck {
+                    BiometricGate.check(this@MainActivity, title, "Confirm it is you.", method)
+                }
+                when (val verdict = SecurityRules.afterOwnerCheck(method, outcome, whatStays)) {
+                    SecurityRules.Verdict.Go -> then()
+                    is SecurityRules.Verdict.Stop -> onStop(verdict.say)
+                }
+                lockTick.intValue += 1
+            } finally {
+                ownerCheckBusy.value = false
+            }
+        }
+    }
+
+    private fun unlockApp() {
+        ownerCheck(
+            title = "Open Jarvis",
+            method = currentSecurity().method,
+            whatStays = "Jarvis stays locked",
+            onStop = { lockMessage.value = it },
+        ) {
+            lockSession.unlock()
+            lockMessage.value = null
+        }
+    }
+
+    private fun showPrivateLists() {
+        ownerCheck(
+            title = "Show memory lists",
+            method = currentSecurity().method,
+            whatStays = "the lists stay hidden",
+            onStop = { say -> say?.let { JarvisRuntime.setNotice(it) } },
+        ) { lockSession.showPrivate() }
+    }
+
+    /**
+     * Every Security change comes through here. Tightening is saved at once,
+     * unless it would lock the owner out ([SecurityRules.refuseTightening]).
+     * Loosening waits for a check with the method in force NOW - the
+     * stricter one, when the method itself is what is being loosened.
+     */
+    private fun changeSecurity(to: Security) {
+        val from = currentSecurity()
+        if (to == from || ownerCheckBusy.value) return
+        securityNotice.value = null
+        if (!SecurityRules.loosens(from, to)) {
+            val refused = SecurityRules.refuseTightening(to, BiometricGate.availability(this, to.method))
+            if (refused != null) {
+                securityNotice.value = refused
+                return
+            }
+            // The owner is the one holding the phone: turning the lock on
+            // does not lock them out of the screen they are on.
+            if (to.appLock && !from.appLock) lockSession.lockTurnedOn()
+            JarvisRuntime.settings.setSecurity(to)
+            lockTick.intValue += 1
+            return
+        }
+        ownerCheck(
+            title = "Loosen security",
+            method = from.method,
+            whatStays = "nothing was changed",
+            onStop = { securityNotice.value = it },
+        ) {
+            // Only if nothing else changed them while the prompt was up.
+            if (currentSecurity() == from) JarvisRuntime.settings.setSecurity(to)
+        }
+    }
+
+    /**
+     * Jarvis came back into sight. The lock clock decides whether that
+     * was long enough away to lock again ([LockSession.returned]).
+     */
+    override fun onStart() {
+        super.onStart()
+        if (JarvisRuntime.isInitialized) {
+            lockSession.returned(SystemClock.elapsedRealtime(), currentSecurity())
+            lockTick.intValue += 1
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // A rotation stops and restarts the activity. That is not "away".
+        if (!isChangingConfigurations) lockSession.left(SystemClock.elapsedRealtime())
     }
 
     override fun onResume() {
@@ -1774,6 +2016,17 @@ class MainActivity : FragmentActivity() {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }
         }
+    }
+
+    /**
+     * The client-latest release page, in the phone's own browser. The
+     * address is fixed in [UpdateCheck.RELEASE_PAGE], never taken from
+     * GitHub's answer. Nothing is downloaded here: installing stays the
+     * owner's own step, as it always was.
+     */
+    private fun openReleasePage() {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(UpdateCheck.RELEASE_PAGE))) }
+            .onFailure { JarvisRuntime.setNotice("No browser on this phone could open the release page.") }
     }
 
     /**
@@ -1838,6 +2091,18 @@ class MainActivity : FragmentActivity() {
  * the work is gone and the flag starts `false` again.
  */
 private val pairingBusy = mutableStateOf(false)
+
+/**
+ * The app lock's clock ([LockSession]): whether Jarvis is unlocked and
+ * whether Mind's memory lists are showing. Process-wide for the same reason
+ * as [pairingBusy]: a rotation builds a new activity and must neither unlock
+ * nor relock. Never saved - a new process always starts locked when the
+ * app lock is on.
+ */
+private val lockSession = LockSession()
+
+/** How often, while the app stays open, the once-a-day update check is looked at. */
+private const val UPDATE_RECHECK_MS = 60 * 60 * 1000L
 
 /** How long to wait before re-offering a theme the dwell window refused. */
 private const val THEME_RETRY_MS = 600L

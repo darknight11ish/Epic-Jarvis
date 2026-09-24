@@ -62,8 +62,11 @@ import kotlinx.coroutines.CancellationException
  *
  * `VOICE` is "Train my voice", opened from the voice card on `CHECKS`. Added
  * last so a saved back stack from an older build still restores by name.
+ *
+ * `SECURITY` is the lock and fingerprint settings, opened from the Security
+ * card on `CHECKS`. Last, for the same reason.
  */
-enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE }
+enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY }
 
 /**
  * A back stack, because there was not one.

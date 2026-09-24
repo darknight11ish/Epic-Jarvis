@@ -4,6 +4,33 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+/**
+ * The commit this build is made from: CI's GITHUB_SHA, else `git rev-parse`,
+ * else "unknown". Through `providers`, so the configuration cache
+ * (gradle.properties) knows what it depends on. Only ever hex or "unknown",
+ * because it is pasted into generated Java as a string.
+ */
+fun gitSha(): String {
+    val fromCi = providers.environmentVariable("GITHUB_SHA").orNull?.trim().orEmpty()
+    val sha = fromCi.ifEmpty {
+        runCatching {
+            providers.exec {
+                commandLine("git", "rev-parse", "HEAD")
+                isIgnoreExitValue = true
+            }.standardOutput.asText.get().trim()
+        }.getOrDefault("")
+    }
+    return if (Regex("^[0-9a-f]{7,40}$").matches(sha)) sha else "unknown"
+}
+
+/** When [gitSha]'s commit was made, in seconds since 1970, or 0 when git cannot say. */
+fun gitCommitTime(): Long = runCatching {
+    providers.exec {
+        commandLine("git", "log", "-1", "--format=%ct", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().toLong()
+}.getOrDefault(0L)
+
 android {
     namespace = "com.jarvis.client"
     compileSdk = 36
@@ -35,6 +62,18 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
+
+        // Which commit this build is, for "a newer version is available"
+        // (net/UpdateCheck.kt): the phone compares it with the name of the
+        // APK on the client-latest release, jarvis-client-<first 7>.apk
+        // (.github/workflows/jarvis-client.yml). CI's own GITHUB_SHA first -
+        // it is the commit that release step names - and git otherwise.
+        // "unknown" if neither answers, and the phone then says it cannot
+        // compare rather than guessing.
+        buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
+        // When that commit was made, in seconds. A release published before
+        // it is older than this build, not newer. 0 when unknown.
+        buildConfigField("long", "GIT_COMMIT_TIME", "${gitCommitTime()}L")
     }
 
     // The shared debug key, at keystore/debug.keystore - written there by CI from
