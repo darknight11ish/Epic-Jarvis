@@ -93,6 +93,12 @@ pub struct LinkState {
     /// Activity: `idle`, `listening`, `thinking`, `speaking`, `working`,
     /// `error`. What Jarvis is doing. The visual spec binds colour to this one.
     pub activity: String,
+    /// What it is doing, in words - "Using calculator..." - when the backend
+    /// said, from the same `activity` event (`value.detail`). jarvis-link.js
+    /// reads this as `activity_detail` for the progress line; nothing carried
+    /// it before, so that line could never show.
+    #[serde(default)]
+    pub activity_detail: Option<String>,
     /// How many approvals are waiting on a human. Not the digest count —
     /// see [`crate::attention::Attention::pending`] for that one.
     pub approvals: usize,
@@ -118,6 +124,7 @@ impl Default for LinkState {
             power: "active".to_string(),
             power_set_by: None,
             activity: "idle".to_string(),
+            activity_detail: None,
             approvals: 0,
             attention: crate::attention::Attention::default(),
             error: None,
@@ -191,6 +198,7 @@ fn same_link(a: &LinkState, b: &LinkState) -> bool {
         && a.power == b.power
         && a.power_set_by == b.power_set_by
         && a.activity == b.activity
+        && a.activity_detail == b.activity_detail
         && a.approvals == b.approvals
         && a.attention == b.attention
         && a.error == b.error
@@ -605,7 +613,11 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
         "activity" => {
             if let Some(state) = activity_state(&event.data) {
                 let state = state.to_string();
-                publish_link(app, |link| link.activity = state.clone());
+                let detail = activity_detail(&event.data);
+                publish_link(app, |link| {
+                    link.activity = state.clone();
+                    link.activity_detail = detail.clone();
+                });
             }
         }
 
@@ -656,6 +668,19 @@ fn activity_state(data: &serde_json::Value) -> Option<&str> {
     data["state"]
         .as_str()
         .or_else(|| data["value"]["state"].as_str())
+}
+
+/// The sentence out of an `activity` event, if it has one: `value.detail` on
+/// the rebuilt bus (`set_activity`), or a top-level `detail` /
+/// `activity_detail`. Blank means nothing to say. Capped at 500 characters,
+/// the same cap jarvis-link.js applies.
+fn activity_detail(data: &serde_json::Value) -> Option<String> {
+    let text = data["value"]["detail"]
+        .as_str()
+        .or_else(|| data["detail"].as_str())
+        .or_else(|| data["activity_detail"].as_str())?
+        .trim();
+    (!text.is_empty()).then(|| text.chars().take(500).collect())
 }
 
 /// Reads the activity state and the power mode at connect time (and again
@@ -1209,6 +1234,33 @@ mod tests {
             let mut row = bad.clone();
             stamp_expiry(&mut row, 1_000_000);
             assert!(row.get("expires_at_ms").is_none(), "{bad}");
+        }
+    }
+
+    /// The `activity` events the real bus sends, captured by
+    /// backend/test_chat_stream_contract.py from rebuilt jarvis_events.py's
+    /// own `set_activity`.
+    #[test]
+    fn activity_detail_is_read_from_the_real_event() {
+        let doc: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/chat-stream-cases.json"))
+                .unwrap();
+        let events = doc["activity_events"].as_array().expect("activity_events");
+        assert!(!events.is_empty());
+        for case in events {
+            let data = &case["data"];
+            assert_eq!(
+                activity_state(data),
+                case["expect"]["state"].as_str(),
+                "{}",
+                case["name"]
+            );
+            assert_eq!(
+                activity_detail(data).as_deref(),
+                case["expect"]["detail"].as_str(),
+                "{}",
+                case["name"]
+            );
         }
     }
 

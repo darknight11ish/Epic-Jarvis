@@ -6,6 +6,7 @@ import android.util.Log
 import com.jarvis.client.data.AppearanceStore
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
+import com.jarvis.client.net.ActivityEvent
 import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.ApiError
@@ -49,7 +50,6 @@ import com.jarvis.client.voice.VoiceSession
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * The raw JSON behind the brain screen.
@@ -861,9 +861,9 @@ object JarvisRuntime {
                 // the doorbell itself. Absent means nothing to say, so the
                 // line clears - a stale "Step 2/3" under an idle face would
                 // be worse than none.
-                _activityDetail.value = (event.data as? JsonObject)
-                    ?.get("activity_detail")?.let { it as? JsonPrimitive }?.content
-                    ?.takeIf { it.isNotBlank() }?.take(ACTIVITY_DETAIL_MAX)
+                // `value.detail`, where the bus puts it - see ActivityEvent.
+                // This read `activity_detail`, which no backend sends.
+                _activityDetail.value = ActivityEvent.detail(event.data, ACTIVITY_DETAIL_MAX)
                 refreshStatus()
             }
             "power", "persona" -> refreshStatus()
