@@ -179,6 +179,42 @@ def t_a_tool_round_never_reaches_the_app():
           any(m.get("role") == "tool" for m in calls[1]["messages"]))
 
 
+def t_words_before_a_tool_call_are_kept_and_the_answer_follows_on():
+    opener, calls = opener_for([("content", "Let me check."), calc_call(), ("done", "stop")],
+                               [("content", "It is 4."), ("done", "stop")])
+    body, _ = turn(opener, enabled_tools={"calculator"})
+    asked = [m for m in calls[1]["messages"] if m.get("role") == "assistant"]
+    check("the model is shown the words it wrote before asking for the tool",
+          asked and asked[-1]["content"] == "Let me check." and asked[-1].get("tool_calls"),
+          repr(asked))
+    check("the app gets both, with a paragraph break between",
+          text_of(body) == "Let me check.\n\nIt is 4.", repr(text_of(body)))
+
+
+class _DiesHalfWay(W.FakeResponse):
+    def read1(self, n=1024):
+        if not self._body:
+            raise ConnectionResetError(104, "Connection reset by peer")
+        return super().read1(n)
+    read = read1
+
+
+def t_ollama_dying_mid_answer_is_said_plainly():
+    whole = W.stream([("content", "The first"), ("content", " part"), ("done", "stop")])
+    cut = whole[:whole.index(b'"finish_reason":"stop"') - 120]
+
+    def opener(url, payload):
+        return _DiesHalfWay(cut)
+    out = []
+    AG.run_local_turn([{"role": "user", "content": "x"}], "m", ollama_url="http://o",
+                      stream_out=out.append, open_stream=opener, context_length=4096,
+                      keepalive_seconds=1000)
+    objs = sse_objects(b"".join(out))
+    msg = (objs[-1].get("error") or {}).get("message", "") if objs else ""
+    check("the words so far arrive, then a plain sentence, not a Python error",
+          "stopped in the middle" in msg and "ConnectionReset" not in msg, repr(objs))
+
+
 def t_only_real_tools_are_offered():
     check("names the agent does not have are not offered",
           AG.offered_tools({"web_search", "ha_mcp", "calculator"}) == ["calculator"])
@@ -450,6 +486,8 @@ if __name__ == "__main__":
     for fn in (t_content_type_matches_the_body, t_stream_false_is_one_json_body,
                t_stream_false_keepalives_are_blank_lines_json_still_parses,
                t_a_plain_turn_is_one_streamed_request, t_a_tool_round_never_reaches_the_app,
+               t_words_before_a_tool_call_are_kept_and_the_answer_follows_on,
+               t_ollama_dying_mid_answer_is_said_plainly,
                t_only_real_tools_are_offered,
                t_the_app_hears_from_the_pc_while_a_card_waits,
                t_a_gate_that_answers_at_once_never_says_waiting,

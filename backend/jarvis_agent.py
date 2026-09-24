@@ -65,6 +65,7 @@ keepalives so a phone does not give up. See run_local_turn.
 from __future__ import annotations
 
 import ast
+import http.client
 import json
 import operator
 import re
@@ -1602,6 +1603,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         def on_text(piece: str) -> None:
             clean = stripper.feed(piece)
             if clean:
+                # Kept per round too: a round that then asks for a tool goes
+                # back to the model with the words it wrote before asking.
+                rnd.text.append(clean)
                 if first["text"]:
                     first["text"] = False
                     out.set_status(None)
@@ -1646,8 +1650,16 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 raise
             except (socket.timeout, TimeoutError) as exc:
                 raise UpstreamError(plain_error(exc, model)) from exc
+            except (http.client.HTTPException, OSError) as exc:
+                # Ollama stopped half way through (it crashed, or was
+                # restarted). Not a bug here, and not the app leaving - that
+                # is ClientGone, above.
+                raise UpstreamError(
+                    "The local model stopped in the middle of the answer. Try "
+                    "again; if it keeps happening, restart Ollama.") from exc
         tail = stripper.flush()
         if tail:
+            rnd.text.append(tail)
             if first["text"]:
                 first["text"] = False
                 say_step("answer")
