@@ -165,6 +165,17 @@ wiki_update               = "ask"
 # asks. Must stay "ask": anything else and the switch refuses to turn on.
 big_model_enable          = "ask"
 
+# --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
+# Adding a voice (a recording of someone reading a sentence, kept on this
+# PC) is one approval card, and switching Jarvis to speak in one is
+# another. Switching back to the built-in voice, or deleting a voice, never
+# asks. Must stay "ask": anything else and both refuse to go ahead.
+custom_voice              = "ask"
+# The better voice: F5-TTS on the second graphics card, started only when
+# Jarvis speaks in a custom voice. Turning it on is one card; off never
+# asks. Must stay "ask", the same as above.
+better_voice_enable       = "ask"
+
 
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES
@@ -743,6 +754,17 @@ stt_engine = "sherpa-onnx"
 # stt_threads = 2                       # CPU threads for speech-to-text
 # tts_speaker_id = 0                    # Kokoro voice: 0 = American female; 9 = British male (bm_george)
 # vad_enabled = true                    # Silero VAD trims silence and drops clips with no speech
+#
+# Custom voices (jarvis_voices.py). All optional; these are the defaults.
+# custom_voice_margin = 0.10            # refuse a voice scoring within this of YOUR voice print's bar
+# custom_voice_max_rtf = 1.5            # slower than this (seconds per second of speech), 3 times running: built-in voice for 10 minutes
+# zipvoice_threads = 4                  # processor threads for ZipVoice
+# zipvoice_steps = 4                    # more is slower and a little smoother
+# zipvoice_dir = ''                     # default: <this folder>\voice-models\zipvoice
+# f5_dir = ''                           # default: <this folder>\voice-models\f5-tts (the better voice)
+# f5_python = ''                        # a Python with PyTorch + f5-tts; default: the one running Jarvis
+# f5_idle_minutes = 10                  # the better voice stops after this long with nothing to say
+# f5_steps = 32                         # F5-TTS's steps per sentence
 
 
 # ------------------------------------------------------------------------

@@ -70,6 +70,7 @@ THIRD_PARTY = {
     "playwright": "playwright",
     "speechbrain": "speechbrain",
     "torch": "torch",
+    "f5_tts": "f5-tts",
 }
 
 # Files in backend/ that are NOT shipped, on purpose. Tools run from this

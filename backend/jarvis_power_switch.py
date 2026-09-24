@@ -14,9 +14,11 @@ WHAT THIS DOES (power-mode.patch adds `POST /api/power`)
     quiet     answers, but does not start things on its own.
     standby   also frees the graphics cards (what the desktop FAQ
               promises): the loaded model is unloaded, and so are the
-              second card's Ollama and the big model when they run
-              (jarvis_second_card.sleep, jarvis_big_model.sleep; a big-model
-              job already under way is left to finish). The next answer
+              second card's Ollama, the big model and the better voice
+              when they run (jarvis_second_card.sleep, jarvis_big_model.sleep,
+              jarvis_voices.sleep; a big-model job already under way is left
+              to finish; custom voices go on speaking from the processor).
+              The next answer
               takes 5-15 seconds while it loads again.
 
 PERMISSION - the one model, and why it does not ask by default
@@ -119,7 +121,8 @@ def _free_other_engines(others=None) -> list:
     sentence (empty when there was nothing to say). Never raises."""
     if others is None:
         others = []
-        for name in ("jarvis_second_card", "jarvis_big_model"):
+        # jarvis_voices: the better voice (F5-TTS) on the second card.
+        for name in ("jarvis_second_card", "jarvis_big_model", "jarvis_voices"):
             try:
                 others.append(__import__(name))
             except Exception:

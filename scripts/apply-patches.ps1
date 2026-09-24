@@ -254,6 +254,14 @@ $PATCHES = @(
     # copied in; without it the routes answer 503 and the wiki keeps using
     # the second card only.
     'big-model.patch'
+    # Custom voices: GET /api/voice/voices and POST /api/voice/voices/create,
+    # /active, /delete and /better, and the approval notice's words for
+    # custom_voice and better_voice_enable in jarvis_gate.py. Its context is
+    # big-model's own GET and POST route blocks and its jarvis_gate.py line,
+    # so it goes after big-model. Needs jarvis_voices.py (and, for the better
+    # voice, jarvis_f5_worker.py) copied in; without it the routes answer 503
+    # and Jarvis speaks in its built-in voice as before.
+    'voices.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -309,6 +317,8 @@ $SHIPPED = @(
     'jarvis_stopword.py'         # the "stop" word's numbers: jarvis_wakeword.spot_stop, to interrupt Jarvis while it talks
     'jarvis_local_http.py'       # HTTP to this PC's own services (Ollama, Joplin, the second card) never through a proxy
     'jarvis_child_env.py'        # what the second Ollama and colibri inherit: an allowlist, so no token or key goes with them
+    'jarvis_voices.py'           # voices.patch: custom voices (ZipVoice on the processor); jarvis_speech.say() asks it first
+    'jarvis_f5_worker.py'        # the better voice (F5-TTS) as its own program on the second card; jarvis_voices.py starts it
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

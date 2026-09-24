@@ -32,3 +32,10 @@ tomli; python_version < "3.11"         # reading jarvis-framework.toml on Python
 #   torch        used only if sherpa-onnx's speaker model is not set up. The
 #                sherpa-onnx route above does the same job without PyTorch;
 #                backend\README.md "Install the better voice check" has it.
+#                torch (the CUDA build) is also what the better voice runs on.
+#   f5-tts       the better voice for custom voices, on the SECOND graphics
+#                card (jarvis_f5_worker.py), which stays OFF until you turn
+#                it on and approve its card. About 3 GB with PyTorch; the
+#                model is for non-commercial use. backend\README.md, "The
+#                better voice", has the install. Custom voices work without
+#                it, on the processor (sherpa-onnx, above).
