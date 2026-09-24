@@ -128,9 +128,14 @@ object ChatHistory {
     /**
      * The user messages for one question, in the order they are sent:
      * [shared] text first, as its own message tagged "shared", then the
-     * owner's [question] tagged [provenance] - or "picture_caption" when a
-     * picture goes with it. With nothing typed and no picture, the shared
-     * text goes alone.
+     * owner's [question] tagged [provenance]. With nothing typed and no
+     * picture, the shared text goes alone.
+     *
+     * With a picture, only the owner's OWN words - typed or voice - become
+     * "picture_caption". Pasted, clipboard or shared words sent with a
+     * picture keep their less-trusted tag: the picture does not make them
+     * the owner's. The PC does the same when it keeps the turn
+     * (backend/jarvis_chat_log.py, `record_turn`), so both ends agree.
      */
     fun asking(
         question: String,
@@ -140,7 +145,8 @@ object ChatHistory {
     ): List<UserTurn> = buildList {
         if (!shared.isNullOrBlank()) add(UserTurn(shared, Provenance.SHARED))
         if (question.isNotBlank() || picture || isEmpty()) {
-            add(UserTurn(question, if (picture) Provenance.PICTURE_CAPTION else provenance))
+            val own = provenance == Provenance.TYPED || provenance == Provenance.VOICE
+            add(UserTurn(question, if (picture && own) Provenance.PICTURE_CAPTION else provenance))
         }
     }
 

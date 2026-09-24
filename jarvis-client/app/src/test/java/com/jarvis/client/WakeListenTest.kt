@@ -241,6 +241,40 @@ class WakeListenTest {
     }
 
     @Test
+    fun `a too-short command after the wake word shows the PC's own sentence`() {
+        // The shape jarvis_speech.hear() sends for "hey Jarvis, <short
+        // command>": the owner, the phrase heard, no text, too_short.
+        val reason = "that was too short to be sure it was you (1.2 seconds of speech; " +
+            "a command needs at least 2.0) - say a little more"
+        val short = heard(
+            """{"ok": true, "owner": true, "text": "", "wake_heard": true, "too_short": true,
+               "min_seconds": 2.0, "threshold": 0.4, "score": 0.7,
+               "reason": ${JarvisJson.encodeToString(kotlinx.serialization.serializer<String>(), reason)}}""",
+        )
+        assertTrue(short.tooShort)
+        assertEquals(WakeRules.Verdict.TOO_SHORT, WakeRules.verdict(short))
+        // Not a transcript: it used to fall through to "Nothing came back to send."
+        assertEquals(Heard.Outcome.REFUSED, short.outcome)
+        assertEquals(reason, short.message())
+        // No sentence from the PC: the desktop's own fallback words.
+        val bare = heard("""{"ok": true, "owner": true, "text": "", "wake_heard": true, "too_short": true}""")
+        assertEquals(Heard.TOO_SHORT, bare.message())
+        // Too short and NO phrase heard (a clip inside the listening window, or
+        // anyone in the room): dropped without a word, as on the desktop.
+        assertEquals(
+            WakeRules.Verdict.IGNORE,
+            WakeRules.verdict(heard("""{"ok": false, "owner": false, "too_short": true, "reason": "too short"}""")),
+        )
+        // Push-to-talk: refused before the voice check, the PC's words shown.
+        val ptt = heard("""{"ok": false, "owner": false, "too_short": true, "reason": "say a little more"}""")
+        assertEquals(Heard.Outcome.REFUSED, ptt.outcome)
+        assertEquals("say a little more", ptt.message())
+        // An older PC sends no too_short: read as false, nothing else changes.
+        assertFalse(heard("""{"ok": true, "owner": true, "text": "hi"}""").tooShort)
+        assertEquals(Heard.Outcome.TRANSCRIBED, heard("""{"ok": true, "owner": true, "text": "hi"}""").outcome)
+    }
+
+    @Test
     fun `asking to turn it on is never reported as it being on`() {
         assertEquals(null, WakeRules.afterRequest(enabled = true, nowOn = true, pending = false))
         val waiting = WakeRules.afterRequest(enabled = true, nowOn = false, pending = true)

@@ -418,7 +418,7 @@ private fun YourVoiceCard(
             Gap(4)
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }
-        VoiceTraining.lastLine(status.gate.training.last, strict.last)?.let {
+        VoiceTraining.lastLine(status.gate.training.last, strict.last, strict)?.let {
             Gap(4)
             Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         }

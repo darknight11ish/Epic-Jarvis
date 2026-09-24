@@ -34,27 +34,35 @@ object StrictVoice {
     /** One choice on the settings screen. */
     data class Choice(val value: String, val label: String, val detail: String)
 
+    // The words below are the desktop's too: one wording for both apps
+    // (fit audit, 2026-09-24). Change them on both sides or neither.
+
+    /** The three settings' titles, as the desktop's Settings -> Voice has them. */
+    const val STRICTNESS_TITLE = "How strict"
+    const val PRIVACY_TITLE = "Private answers asked by voice"
+
     val STRICTNESS: List<Choice> = listOf(
         Choice(
             VoiceStrict.VERY_STRICT,
             "Very strict (recommended)",
-            "Better at turning other people away. You may have to say things again now and " +
-                "then, and a command needs about two seconds of speech.",
+            "Needs about 2 seconds of speech and a close match. Best at turning other people " +
+                "away; now and then it may ask you to say it again.",
         ),
         Choice(
             VoiceStrict.BALANCED,
             "Balanced",
-            "You repeat yourself less, but a voice close to yours gets through more easily. " +
-                "Private answers then always stay on screen.",
+            "Takes shorter commands (about 1.5 seconds) at a lower bar. You repeat yourself " +
+                "less, but someone whose voice is close to yours gets in more easily. Private " +
+                "answers then always stay on screen.",
         ),
     )
 
     val PRIVACY: List<Choice> = listOf(
         Choice(
             VoiceStrict.PRIVATE_ON_SCREEN,
-            "Private answers stay on screen (recommended)",
-            "When you ask by voice, answers from your email, calendar or notes are shown, " +
-                "not read aloud.",
+            "Stay on screen (recommended)",
+            "When you ask by voice, answers from your email, calendar or notes are shown on " +
+                "screen, not read aloud. Typing on your own PC or phone is not affected.",
         ),
         Choice(
             VoiceStrict.VOICE_IS_ENOUGH,
@@ -82,7 +90,21 @@ object StrictVoice {
     const val MEMORY_TITLE = "Answers that use what Jarvis remembers"
 
     const val PRIVACY_ONLY_VERY_STRICT =
-        "Only while the voice check is very strict."
+        "\"Voice check is enough\" can only be chosen while the check is very strict."
+
+    /**
+     * Why both memory choices are greyed out while private answers are
+     * "voice check is enough": that already reads every private answer
+     * aloud, memory ones included, so neither memory choice would change
+     * what is spoken (voice audit V3, 2026-09-24).
+     */
+    const val MEMORY_WHILE_VOICE_IS_ENOUGH =
+        "\"Voice check is enough\" already reads these answers aloud. Choose \"Stay on screen\" " +
+            "above to use this setting."
+
+    /** Whether [setting]'s choices can be pressed at all right now (the memory one is not while voice is enough). */
+    fun settingOpen(setting: String, view: VoiceStrict.View): Boolean =
+        !(setting == VoiceStrict.MEMORY && view.privacy == VoiceStrict.VOICE_IS_ENOUGH)
 
     const val NOT_ON_THIS_PC =
         "Your PC does not have these settings yet. Run the patch script on the PC first."
@@ -128,6 +150,7 @@ object StrictVoice {
         return when {
             !view.settings -> NOT_ON_THIS_PC
             setting == VoiceStrict.MEMORY && view.memory.isBlank() -> NOT_ON_THIS_PC
+            !settingOpen(setting, view) -> MEMORY_WHILE_VOICE_IS_ENOUGH
             loosening && linkBlocker != null -> linkBlocker
             setting == VoiceStrict.PRIVACY && value == VoiceStrict.VOICE_IS_ENOUGH && !view.isVeryStrict ->
                 PRIVACY_ONLY_VERY_STRICT
@@ -161,20 +184,43 @@ object StrictVoice {
         else -> "Your PC did not say whether it changed."
     }
 
-    /** How the last setting card ended, or null when the last card was not a setting's. */
-    fun lastLine(last: VoiceStrict.Last?): String? {
+    /**
+     * How the last setting card ended (strictness, private answers or
+     * memory), or null when the last card was not a setting's. The same
+     * lines as the desktop's.
+     *
+     * "You said no" names what STAYS: the setting's value now, from [view]
+     * when there is one, or else the other of its two choices - a card only
+     * ever asks to loosen, so the other one is what it asked to leave.
+     */
+    fun lastLine(last: VoiceStrict.Last?, view: VoiceStrict.View? = null): String? {
         if (last == null || last.setting.isBlank()) return null
         val what = "\"${label(last.setting, last.value)}\""
         return when (last.outcome) {
             "setting_changed" -> "Approved: $what is on now."
-            "denied" -> "The change to $what was denied on the card. Nothing changed."
-            "timed_out" -> "Nobody answered the card for $what in time. Nothing changed."
-            "withdrawn" -> "You made it stricter again while the card for $what waited, so " +
-                "approving it changed nothing."
+            "denied" -> "You said no, so \"${label(last.setting, stays(last, view))}\" stays."
+            "timed_out" -> "Nobody answered the card in time, so nothing changed."
+            "withdrawn" -> "You made it stricter while the card waited, so approving it changed nothing."
             "refused", "failed" -> "Your PC did not change it to $what" +
                 (if (last.reason.isBlank()) "." else ": ${last.reason.trim().trimEnd('.')}.")
             else -> null
         }
+    }
+
+    /** The value a denied card for [last] left in place. */
+    private fun stays(last: VoiceStrict.Last, view: VoiceStrict.View?): String {
+        val now = when (last.setting) {
+            VoiceStrict.STRICTNESS -> view?.strictness
+            VoiceStrict.MEMORY -> view?.memory
+            else -> view?.privacy
+        }
+        if (!now.isNullOrBlank()) return now
+        val list = when (last.setting) {
+            VoiceStrict.STRICTNESS -> STRICTNESS
+            VoiceStrict.MEMORY -> MEMORY
+            else -> PRIVACY
+        }
+        return list.firstOrNull { it.value != last.value }?.value ?: last.value
     }
 
     /**
@@ -203,28 +249,33 @@ object StrictVoice {
      * speech very strict asks for a command - and none is one of the
      * training sentences, so the test asks "would it know me?" of words it
      * has not heard.
+     *
+     * ONE list for both apps (fit audit, 2026-09-24): the desktop's
+     * `TEST_SENTENCES` in jarvis-desktop/src/voice-training.js, word for
+     * word, so a result from either app means the same thing.
+     * `VoiceStrictTest` reads that file and fails if the two drift apart.
      */
     val MEASURE_SENTENCES: List<String> = listOf(
-        "What time is my first meeting tomorrow morning?",
-        "Remind me to take the bins out tonight.",
-        "How long would it take to walk to the station?",
-        "Read me the last message from my brother.",
+        "Hey Jarvis, what time is my first meeting tomorrow?",
+        "Can you read me the last message from my brother?",
         "Add bread, eggs and coffee to the shopping list.",
-        "Is it going to rain later this afternoon?",
+        "Hey Jarvis, how long until the next train into town?",
+        "Remind me to water the plants on Saturday morning.",
+        "What did I say I wanted to do this weekend?",
         "Turn the heating down by two degrees, please.",
-        "Set an alarm for half past six tomorrow.",
-        "What did I ask you to remember about the car?",
-        "Play something calm while I cook dinner.",
-        "When is the next bus into the city centre?",
-        "Make a note that the plumber comes on Friday.",
-        "How many steps have I walked so far today?",
-        "Tell me the news headlines in two minutes.",
-        "Switch off the lights in the living room.",
-        "What is on my calendar for the weekend?",
-        "Remind me to call the dentist after lunch.",
-        "How much battery does my phone have left?",
-        "Find the recipe I saved for lemon chicken.",
-        "Wake me up gently at seven on Saturday.",
+        "Hey Jarvis, set an alarm for half past six.",
+        "Find the notes I wrote about the garden last month.",
+        "How much rain is forecast for the afternoon?",
+        "Hey Jarvis, pause the music for a moment.",
+        "Put the dentist in my calendar for next Tuesday.",
+        "What was the name of that film we talked about?",
+        "Hey Jarvis, tell me the headlines in one minute.",
+        "Send me a reminder when I get home tonight.",
+        "Is there anything I need to do before Friday?",
+        "Hey Jarvis, start a timer for the pasta, eleven minutes.",
+        "Read my calendar for the rest of the week, please.",
+        "How far is it to the nearest petrol station?",
+        "Hey Jarvis, thank you, that is everything for now.",
     )
 
     /** What the guided test came to: the result in plain words, or why there is none. */

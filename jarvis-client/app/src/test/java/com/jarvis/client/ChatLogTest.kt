@@ -127,12 +127,34 @@ class ChatLogTest {
     fun `provenance is shown quietly only when it is not typed or spoken`() {
         assertNull(ChatLog.provenanceMark("typed"))
         assertNull(ChatLog.provenanceMark("voice"))
-        assertNull(ChatLog.provenanceMark(null))
-        assertEquals("shared", ChatLog.provenanceMark("shared"))
+        assertEquals("shared from another app", ChatLog.provenanceMark("shared"))
         assertEquals("pasted", ChatLog.provenanceMark("pasted"))
         assertEquals("from clipboard", ChatLog.provenanceMark("clipboard"))
-        assertEquals("with a picture", ChatLog.provenanceMark("picture_caption"))
-        assertEquals("voice, not checked", ChatLog.provenanceMark("voice_unverified"))
+        assertEquals("sent with a picture", ChatLog.provenanceMark("picture_caption"))
+        assertEquals("said aloud, but not confirmed by this PC", ChatLog.provenanceMark("voice_unverified"))
+    }
+
+    @Test
+    fun `a turn nobody knows the source of says so, never nothing`() {
+        // Silence would read as "you typed it" (fit audit, 2026-09-24).
+        assertEquals("not known where from", ChatLog.provenanceMark("unknown"))
+        assertEquals("not known where from", ChatLog.provenanceMark(null))
+        assertEquals("not known where from", ChatLog.provenanceMark("from_the_future"))
+        assertEquals("not known where from", ChatLog.provenanceMark(""))
+    }
+
+    @Test
+    fun `devices and the tainted line use the desktop's words`() {
+        assertEquals("PC", ChatLog.deviceWord("desktop"))
+        assertEquals("HUD", ChatLog.deviceWord("hud"))
+        assertEquals("phone", ChatLog.deviceWord("phone"))
+        assertEquals("unknown", ChatLog.deviceWord("toaster"))
+        assertEquals("unknown", ChatLog.deviceWord(null))
+        assertEquals(
+            "In this conversation Jarvis read text that did not come from you - a web page, a file, " +
+                "an email or another tool's output - from the marked message on.",
+            ChatLog.TAINT_LINE,
+        )
     }
 
     // ------------------------------------------------------------ switch ---
@@ -210,6 +232,17 @@ class ChatLogTest {
         assertFalse(ChatLog.keepNeedsConfirm(30, 90))
         assertFalse(ChatLog.keepNeedsConfirm(30, 0))
         assertFalse(ChatLog.keepNeedsConfirm(null, 0))
+        // The desktop asks the same sentence (one wording for both apps).
+        assertEquals(
+            "Delete every conversation older than 30 days from your PC now, and from then on? " +
+                "This cannot be undone.",
+            ChatLog.keepConfirm(30),
+        )
+        assertEquals(
+            "Delete every conversation older than 1 year from your PC now, and from then on? " +
+                "This cannot be undone.",
+            ChatLog.keepConfirm(365),
+        )
     }
 
     @Test
@@ -239,8 +272,8 @@ class ChatLogTest {
         assertEquals("3 Jan 2025", ChatLog.whenLine(LocalDate.of(2025, 1, 3).atStartOfDay(zone).toEpochSecond(), zone, today))
         assertEquals("When unknown", ChatLog.whenLine(null, zone, today))
         val row = ChatLog.page(obj(listBody)).conversations[1]
-        assertEquals("desktop", ChatLog.deviceWord(row.device))
-        assertTrue(ChatLog.rowLine(row, zone, today).endsWith("desktop · 2 messages"))
+        assertEquals("PC", ChatLog.deviceWord(row.device))
+        assertTrue(ChatLog.rowLine(row, zone, today).endsWith("PC · 2 messages"))
     }
 
     @Test

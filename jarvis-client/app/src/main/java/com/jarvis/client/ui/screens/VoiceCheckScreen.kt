@@ -258,7 +258,7 @@ private fun CheckPlates(
                     style = MaterialTheme.typography.bodySmall,
                     color = chrome.textMid,
                 )
-                StrictVoice.lastLine(strict.last)?.let {
+                StrictVoice.lastLine(strict.last, strict)?.let {
                     Gap(4)
                     Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                 }
@@ -279,7 +279,7 @@ private fun CheckPlates(
 
             if (strict.settings) {
                 SettingPlate(
-                    title = "How strict",
+                    title = StrictVoice.STRICTNESS_TITLE,
                     setting = VoiceStrict.STRICTNESS,
                     choices = StrictVoice.STRICTNESS,
                     strict = strict,
@@ -288,7 +288,7 @@ private fun CheckPlates(
                     onPick = onPick,
                 )
                 SettingPlate(
-                    title = "Private answers",
+                    title = StrictVoice.PRIVACY_TITLE,
                     setting = VoiceStrict.PRIVACY,
                     choices = StrictVoice.PRIVACY,
                     strict = strict,
@@ -410,6 +410,9 @@ private fun SettingPlate(
     onPick: (String, String) -> Unit,
 ) {
     val chrome = LocalChrome.current
+    // The memory setting while private answers are "voice check is enough":
+    // both choices greyed out, with one note saying why.
+    val open = StrictVoice.settingOpen(setting, strict)
     Plate {
         Text(title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
         choices.forEach { c ->
@@ -420,13 +423,21 @@ private fun SettingPlate(
                 label = c.label,
                 isSelected = StrictVoice.isCurrent(setting, c.value, strict),
                 modifier = Modifier.fillMaxWidth(),
-                enabled = busy == null && !onlyVeryStrict,
+                enabled = busy == null && !onlyVeryStrict && open,
                 onClick = { onPick(setting, c.value) },
             )
             Gap(4)
             Text(
                 if (onlyVeryStrict) c.detail + " " + StrictVoice.PRIVACY_ONLY_VERY_STRICT else c.detail,
                 style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+        }
+        if (!open) {
+            Gap(8)
+            Text(
+                StrictVoice.MEMORY_WHILE_VOICE_IS_ENOUGH,
+                style = MaterialTheme.typography.bodySmall,
                 color = chrome.textMid,
             )
         }

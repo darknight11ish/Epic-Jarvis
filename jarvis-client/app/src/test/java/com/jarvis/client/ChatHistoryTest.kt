@@ -253,15 +253,47 @@ class ChatHistoryTest {
     }
 
     @Test
-    fun `a picture's words are a picture caption, whatever the box said`() {
+    fun `only the owner's own words with a picture become its caption`() {
         val pic = "data:image/jpeg;base64,AAAA"
-        val asking = ChatHistory.asking("what is this?", Provenance.PASTED, picture = true)
+        val asking = ChatHistory.asking("what is this?", Provenance.TYPED, picture = true)
         assertEquals(listOf(ChatHistory.UserTurn("what is this?", Provenance.PICTURE_CAPTION)), asking)
         val obj = send(emptyList(), asking, picture = pic)
         assertEquals(listOf<String?>("picture_caption"), tags(obj))
         assertEquals(JsonPrimitive(true), obj["has_image"])
+        assertEquals(
+            listOf(ChatHistory.UserTurn("what is this?", Provenance.PICTURE_CAPTION)),
+            ChatHistory.asking("what is this?", Provenance.VOICE, picture = true),
+        )
         // A picture with no words still sends its (empty) caption message.
         assertEquals(1, ChatHistory.asking("", picture = true).size)
+        assertEquals(Provenance.PICTURE_CAPTION, ChatHistory.asking("", picture = true).single().provenance)
+    }
+
+    @Test
+    fun `pasted, clipboard and shared words keep their tag when a picture goes with them`() {
+        // The PC's record_turn keeps these too (backend/jarvis_chat_log.py):
+        // a picture does not make someone else's words the owner's.
+        val pic = "data:image/jpeg;base64,AAAA"
+        val pasted = ChatHistory.asking("what is this?", Provenance.PASTED, picture = true)
+        assertEquals(listOf(ChatHistory.UserTurn("what is this?", Provenance.PASTED)), pasted)
+        assertEquals(listOf<String?>("pasted"), tags(send(emptyList(), pasted, picture = pic)))
+        assertEquals(
+            listOf(ChatHistory.UserTurn("look", "clipboard")),
+            ChatHistory.asking("look", "clipboard", picture = true),
+        )
+        assertEquals(
+            listOf(ChatHistory.UserTurn("from an app", Provenance.SHARED)),
+            ChatHistory.asking("from an app", Provenance.SHARED, picture = true),
+        )
+        // Shared text plus the owner's typed words and a picture: the shared
+        // message stays "shared", the owner's words are the caption.
+        assertEquals(
+            listOf(
+                ChatHistory.UserTurn("the text", Provenance.SHARED),
+                ChatHistory.UserTurn("what is it?", Provenance.PICTURE_CAPTION),
+            ),
+            ChatHistory.asking("what is it?", Provenance.TYPED, shared = "the text", picture = true),
+        )
     }
 
     @Test

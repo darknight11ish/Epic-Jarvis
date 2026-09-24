@@ -129,7 +129,7 @@ private val FAQS = listOf(
         "Yes, in Platform checks, then Lock and fingerprint settings. Lock " +
             "Jarvis makes opening the app need your fingerprint or phone PIN, " +
             "and you choose how long it can be out of sight before it asks " +
-            "again. Hide memory lists keeps Mind's memory lists, the wiki's " +
+            "again. Hide memory lists and chat history keeps Mind's memory lists, the wiki's " +
             "list of your notes and your chat history hidden until you tap " +
             "Show and confirm. Chat " +
             "answers are not hidden, because your PC does not say which ones " +

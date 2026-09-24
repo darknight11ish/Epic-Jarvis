@@ -201,8 +201,8 @@ object VoiceTraining {
      * training was denied", and a changed one "Last training:
      * setting_changed."
      */
-    fun lastLine(last: VoiceTrainingLast?, strict: VoiceStrict.Last?): String? {
-        if (strict != null && strict.setting.isNotBlank()) return StrictVoice.lastLine(strict)
+    fun lastLine(last: VoiceTrainingLast?, strict: VoiceStrict.Last?, view: VoiceStrict.View? = null): String? {
+        if (strict != null && strict.setting.isNotBlank()) return StrictVoice.lastLine(strict, view)
         return when {
             last?.outcome == "enrolled" && strict?.added == true ->
                 "Your extra recordings were approved and added: the voice print now has " +

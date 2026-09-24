@@ -146,7 +146,7 @@ fun SecurityScreen(
                 Section("Fingerprint for private lists") {
                     Plate {
                         SwitchRow(
-                            title = "Hide memory lists",
+                            title = "Hide memory lists and chat history",
                             detail = "On Mind, what Jarvis wants to remember, what it believed on a " +
                                 "date, the wiki's list of your notes and your chat history stay " +
                                 "hidden until you tap Show and confirm it is you.",
@@ -249,7 +249,7 @@ fun LockedScreen(
 }
 
 /**
- * A Mind section whose contents are hidden by "Hide memory lists". The
+ * A Mind section whose contents are hidden by "Hide memory lists and chat history". The
  * title stays, so the owner knows what is there; the contents are not
  * composed at all until Show is confirmed.
  */

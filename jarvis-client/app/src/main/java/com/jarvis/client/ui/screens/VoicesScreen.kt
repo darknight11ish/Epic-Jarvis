@@ -328,7 +328,7 @@ fun VoicesScreen(
                         val times = CustomVoices.timingLines(s)
                         if (times.isNotEmpty()) {
                             Gap(6)
-                            Text("Recently", style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+                            Text(CustomVoices.TIMINGS_TITLE, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
                             times.forEach {
                                 Gap(4)
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)

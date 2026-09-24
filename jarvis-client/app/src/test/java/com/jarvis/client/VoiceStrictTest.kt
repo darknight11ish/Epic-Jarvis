@@ -203,13 +203,121 @@ class VoiceStrictTest {
             VoiceTraining.lastLine(trainingLast("balanced"), changed),
         )
         val denied = view("loosen_denied").last
+        // "You said no" names what stays: very strict, read from the view...
         assertEquals(
-            "The change to \"Balanced\" was denied on the card. Nothing changed.",
-            VoiceTraining.lastLine(trainingLast("loosen_denied"), denied),
+            "You said no, so \"Very strict\" stays.",
+            VoiceTraining.lastLine(trainingLast("loosen_denied"), denied, view("loosen_denied")),
         )
+        // ...or, with no view, the other of the two choices.
+        assertEquals("You said no, so \"Very strict\" stays.", StrictVoice.lastLine(denied))
         // Without the strict half the old line would have said "Last training".
         assertEquals("Last training was denied on the card. Nothing changed.",
             VoiceTraining.lastLine(trainingLast("loosen_denied")))
+    }
+
+    @Test
+    fun `the last setting card is said in the desktop's words, memory included`() {
+        fun last(setting: String, value: String, outcome: String) =
+            VoiceStrict.Last(outcome = outcome, setting = setting, value = value)
+        assertEquals(
+            "Approved: \"Voice check is enough\" is on now.",
+            StrictVoice.lastLine(view("voice_is_enough").last),
+        )
+        assertEquals(
+            "Approved: \"Read aloud\" is on now.",
+            StrictVoice.lastLine(last(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ALOUD, "setting_changed")),
+        )
+        assertEquals(
+            "You said no, so \"Stay on screen\" stays.",
+            StrictVoice.lastLine(last(VoiceStrict.PRIVACY, VoiceStrict.VOICE_IS_ENOUGH, "denied")),
+        )
+        assertEquals(
+            "You said no, so \"Keep on screen\" stays.",
+            StrictVoice.lastLine(last(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ALOUD, "denied")),
+        )
+        assertEquals(
+            "You said no, so \"Keep on screen\" stays.",
+            StrictVoice.lastLine(
+                last(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ALOUD, "denied"),
+                view("trained_three_rounds").copy(memory = VoiceStrict.MEMORY_ON_SCREEN),
+            ),
+        )
+        for (setting in listOf(VoiceStrict.STRICTNESS, VoiceStrict.PRIVACY, VoiceStrict.MEMORY)) {
+            assertEquals(
+                "Nobody answered the card in time, so nothing changed.",
+                StrictVoice.lastLine(last(setting, "x", "timed_out")),
+            )
+            assertEquals(
+                "You made it stricter while the card waited, so approving it changed nothing.",
+                StrictVoice.lastLine(last(setting, "x", "withdrawn")),
+            )
+        }
+    }
+
+    @Test
+    fun `the settings use the desktop's labels and details`() {
+        assertEquals("How strict", StrictVoice.STRICTNESS_TITLE)
+        assertEquals("Private answers asked by voice", StrictVoice.PRIVACY_TITLE)
+        assertEquals("Answers that use what Jarvis remembers", StrictVoice.MEMORY_TITLE)
+        assertEquals(
+            listOf("Very strict (recommended)", "Balanced"),
+            StrictVoice.STRICTNESS.map { it.label },
+        )
+        assertEquals(
+            "Needs about 2 seconds of speech and a close match. Best at turning other people away; " +
+                "now and then it may ask you to say it again.",
+            StrictVoice.STRICTNESS[0].detail,
+        )
+        assertEquals(
+            "Takes shorter commands (about 1.5 seconds) at a lower bar. You repeat yourself less, but " +
+                "someone whose voice is close to yours gets in more easily. Private answers then always " +
+                "stay on screen.",
+            StrictVoice.STRICTNESS[1].detail,
+        )
+        assertEquals(
+            listOf("Stay on screen (recommended)", "Voice check is enough"),
+            StrictVoice.PRIVACY.map { it.label },
+        )
+        assertEquals(
+            "When you ask by voice, answers from your email, calendar or notes are shown on screen, " +
+                "not read aloud. Typing on your own PC or phone is not affected.",
+            StrictVoice.PRIVACY[0].detail,
+        )
+        assertEquals(
+            "Jarvis reads those answers aloud when your voice passes the very strict check. Anyone " +
+                "near the speaker will hear them.",
+            StrictVoice.PRIVACY[1].detail,
+        )
+        assertEquals(
+            "\"Voice check is enough\" can only be chosen while the check is very strict.",
+            StrictVoice.PRIVACY_ONLY_VERY_STRICT,
+        )
+        assertEquals(listOf("Read aloud (recommended)", "Keep on screen"), StrictVoice.MEMORY.map { it.label })
+        assertEquals("Stay on screen", StrictVoice.label(VoiceStrict.PRIVACY, VoiceStrict.PRIVATE_ON_SCREEN))
+    }
+
+    @Test
+    fun `both memory choices wait while voice check is enough`() {
+        val loose = view("voice_is_enough")
+        assertEquals(VoiceStrict.VOICE_IS_ENOUGH, loose.privacy)
+        assertFalse(StrictVoice.settingOpen(VoiceStrict.MEMORY, loose))
+        val note = "\"Voice check is enough\" already reads these answers aloud. Choose " +
+            "\"Stay on screen\" above to use this setting."
+        assertEquals(note, StrictVoice.MEMORY_WHILE_VOICE_IS_ENOUGH)
+        // Both choices, tightening included, and whatever the link says.
+        for (value in listOf(VoiceStrict.MEMORY_ALOUD, VoiceStrict.MEMORY_ON_SCREEN)) {
+            assertEquals(value, note, StrictVoice.blocker(VoiceStrict.MEMORY, value, loose, null))
+            assertEquals(value, note, StrictVoice.blocker(VoiceStrict.MEMORY, value, loose, "stale"))
+            assertEquals(note, StrictVoice.blocker(VoiceStrict.MEMORY, value, loose.copy(memory = VoiceStrict.MEMORY_ON_SCREEN), null))
+        }
+        // The other two settings are not touched by it.
+        assertTrue(StrictVoice.settingOpen(VoiceStrict.PRIVACY, loose))
+        assertTrue(StrictVoice.settingOpen(VoiceStrict.STRICTNESS, loose))
+        assertNull(StrictVoice.blocker(VoiceStrict.PRIVACY, VoiceStrict.PRIVATE_ON_SCREEN, loose, null))
+        // Back on screen: the memory setting is open again.
+        val onScreen = view("trained_three_rounds")
+        assertTrue(StrictVoice.settingOpen(VoiceStrict.MEMORY, onScreen))
+        assertNull(StrictVoice.blocker(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ON_SCREEN, onScreen, null))
     }
 
     @Test
@@ -236,6 +344,30 @@ class VoiceStrictTest {
     }
 
     // ------------------------------------------------ the guided repeat test --
+
+    @Test
+    fun `the guided test reads the desktop's twenty sentences, word for word`() {
+        // One list for both apps (fit audit, 2026-09-24). Read from the
+        // desktop's own file, found by walking up from the test's working
+        // folder (Gradle runs unit tests in jarvis-client/app), like
+        // WikiContractTest - so there is one copy, not two that drift.
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        var found: java.io.File? = null
+        while (dir != null && found == null) {
+            val f = java.io.File(dir, "jarvis-desktop/src/voice-training.js")
+            if (f.isFile) found = f
+            dir = dir.parentFile
+        }
+        val js = requireNotNull(found) {
+            "jarvis-desktop/src/voice-training.js not found above ${System.getProperty("user.dir")}"
+        }.readText()
+        val list = requireNotNull(
+            Regex("""TEST_SENTENCES\s*=\s*Object\.freeze\(\[(.*?)\]\)""", RegexOption.DOT_MATCHES_ALL).find(js),
+        ) { "TEST_SENTENCES not found in voice-training.js" }.groupValues[1]
+        val desktop = Regex(""""((?:[^"\\]|\\.)*)"""").findAll(list).map { it.groupValues[1] }.toList()
+        assertEquals(20, desktop.size)
+        assertEquals(desktop, StrictVoice.MEASURE_SENTENCES)
+    }
 
     @Test
     fun `twenty test sentences, none of them a training sentence, each long enough`() {

@@ -165,7 +165,8 @@ class ChatSession(private val api: JarvisApi) {
      *
      * [provenance] says where [message] came from ([Provenance]): the chat
      * box sends "typed" or "pasted", the voice loop "voice". With a
-     * [picture] the words are tagged "picture_caption" whatever is passed.
+     * [picture], typed or voice words are tagged "picture_caption"; pasted
+     * words stay "pasted" ([ChatHistory.asking]).
      * [shared] is text another app handed over through the Share sheet: it
      * goes as its own message, tagged "shared", right before [message] - and
      * alone when [message] is blank. Both join [history] with their tags.

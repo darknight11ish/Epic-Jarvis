@@ -1589,7 +1589,7 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             },
-                            // Security's "Hide memory lists": hidden until
+                            // Security's "Hide memory lists and chat history": hidden until
                             // Show is confirmed, and hidden again whenever the
                             // app would lock again.
                             privateHidden = privateHidden,
@@ -1605,7 +1605,7 @@ class MainActivity : FragmentActivity() {
                         // Only turning the switch ON waits for this - rule 4.
                         canAct = link == LinkState.CONNECTED && !stale,
                         onBack = { nav.back() },
-                        // "Hide memory lists" hides the conversations too.
+                        // "Hide memory lists and chat history" hides the conversations too.
                         privateHidden = privateHidden,
                         onShowPrivate = ::showPrivateLists,
                         showPrivateBusy = ownerCheckBusy.value,
