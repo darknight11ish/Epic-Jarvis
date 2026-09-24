@@ -1728,10 +1728,12 @@ function renderWikiPlate() {
 async function addWiki(source) {
   wiki.job = { source, said: { text: "Asking the PC…", tone: null, final: false } };
   paintWiki();
+  // With the link to the PC down, polls are skipped rather than failed: the
+  // job carries on there, and following it resumes when the link does.
   const last = await addToWiki(invoke, source, (said) => {
     wiki.job = { source, said };
     paintWiki();
-  });
+  }, { linkDown: () => !currentLink().connected });
   announce(`${source}: ${last.text}`, last.tone === "bad" ? "assertive" : "polite");
   await loadWiki();
 }
