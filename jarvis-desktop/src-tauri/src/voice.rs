@@ -343,6 +343,11 @@ struct HeardRaw {
     /// The words asked about something private - a hint.
     #[serde(default)]
     question_private: bool,
+    /// May an answer that uses what Jarvis remembers be read aloud, when
+    /// nothing else about it is private? True by default on the PC (the
+    /// owner's choice, 2026-09-24). Missing (an older PC) is read as `false`.
+    #[serde(default)]
+    memory_aloud: bool,
 }
 
 fn default_true() -> bool {
@@ -380,6 +385,8 @@ pub struct HeardReply {
     pub private_aloud: bool,
     /// The question itself was about something private.
     pub question_private: bool,
+    /// Answers that use remembered facts may be read aloud (private-speech.js).
+    pub memory_aloud: bool,
 }
 
 impl HeardReply {
@@ -401,6 +408,7 @@ impl HeardReply {
             too_short: false,
             private_aloud: false,
             question_private: false,
+            memory_aloud: false,
         }
     }
 }
@@ -422,6 +430,7 @@ impl From<HeardRaw> for HeardReply {
             too_short: raw.too_short,
             private_aloud: raw.private_aloud,
             question_private: raw.question_private,
+            memory_aloud: raw.memory_aloud,
         }
     }
 }

@@ -675,6 +675,8 @@ pub(crate) fn voice_setting(
         ("strictness", "balanced") => Ok(("strictness", "balanced", true)),
         ("privacy", "private_on_screen") => Ok(("privacy", "private_on_screen", false)),
         ("privacy", "voice_is_enough") => Ok(("privacy", "voice_is_enough", true)),
+        ("memory", "memory_on_screen") => Ok(("memory", "memory_on_screen", false)),
+        ("memory", "memory_aloud") => Ok(("memory", "memory_aloud", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
     }
 }
@@ -983,6 +985,14 @@ mod tests {
         );
         assert_eq!(
             voice_setting("privacy", "private_on_screen").map(|t| t.2),
+            Ok(false)
+        );
+        assert_eq!(
+            voice_setting("memory", "memory_aloud"),
+            Ok(("memory", "memory_aloud", true))
+        );
+        assert_eq!(
+            voice_setting("memory", "memory_on_screen").map(|t| t.2),
             Ok(false)
         );
         assert!(voice_setting("mode", "broad").is_err());

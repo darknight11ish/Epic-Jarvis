@@ -60,9 +60,18 @@ await check("the rule, from the real route headers", async () => {
   assert.equal(mayReadAloud({ privateAloud: true, questionPrivate: true, route: PRIVATE_ROUTE, toolRan: true }), true,
     "the owner chose \"voice check is enough\"");
   assert.equal(mayReadAloud({ route: null }), true, "an older PC and an older route: nothing says private");
-  // An older PC sends no private_aloud: read as false, not as true.
-  assert.deepEqual(privacyFromHeard(K.HEARD_OWNER), { privateAloud: false, questionPrivate: false });
-  assert.deepEqual(privacyFromHeard({ privateAloud: "true", questionPrivate: 1 }), { privateAloud: false, questionPrivate: false });
+  // The owner's choice (2026-09-24): remembered facts are read aloud while
+  // memory_aloud is true - and nothing else private is let through by it.
+  const mem = { ...quiet, memoryAloud: true };
+  assert.equal(mayReadAloud({ ...mem, route: { ...OFFER_ROUTE, injected_facts: 2 } }), true, "memory aloud");
+  assert.equal(mayReadAloud({ ...mem, route: PRIVATE_ROUTE }), false, "memory aloud, gate private");
+  assert.equal(mayReadAloud({ ...mem, questionPrivate: true, route: OFFER_ROUTE }), false);
+  assert.equal(mayReadAloud({ ...mem, route: { ...OFFER_ROUTE, injected_facts: 2 }, toolRan: true }), false);
+  // An older PC sends no private_aloud or memory_aloud: read as false, not as true.
+  assert.deepEqual(privacyFromHeard(K.HEARD_OWNER), { privateAloud: false, questionPrivate: false, memoryAloud: false });
+  assert.deepEqual(privacyFromHeard({ privateAloud: "true", questionPrivate: 1, memoryAloud: "yes" }),
+    { privateAloud: false, questionPrivate: false, memoryAloud: false });
+  assert.deepEqual(privacyFromHeard({ memoryAloud: true }), { privateAloud: false, questionPrivate: false, memoryAloud: true });
   assert.equal(PRIVATE_LINE, "It's on your screen.");
 });
 

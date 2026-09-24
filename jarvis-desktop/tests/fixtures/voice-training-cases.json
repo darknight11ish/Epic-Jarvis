@@ -350,6 +350,7 @@
         "ok": true,
         "pending": false,
         "settings": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
@@ -364,6 +365,7 @@
         "ok": true,
         "pending": false,
         "settings": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
@@ -378,6 +380,7 @@
         "ok": true,
         "pending": false,
         "settings": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict",
           "voice_is_enough_allowed": true
@@ -519,6 +522,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -602,6 +606,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -612,9 +620,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 1.5,
           "privacy": "private_on_screen",
           "strictness": "balanced",
@@ -662,6 +672,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -746,6 +757,10 @@
       "settings": {
         "changed": 1790000000.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -756,9 +771,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 1.5,
         "privacy": "private_on_screen",
         "strictness": "balanced",
@@ -962,6 +979,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -1040,6 +1058,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -1050,9 +1072,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -1098,6 +1122,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -1177,6 +1202,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -1187,9 +1216,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -1393,6 +1424,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -1476,6 +1508,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -1486,9 +1522,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -1547,6 +1585,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -1631,6 +1670,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -1641,9 +1684,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -1847,6 +1892,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "small",
@@ -1930,6 +1976,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -1940,9 +1990,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -1984,6 +2036,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "small",
@@ -2068,6 +2121,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -2078,9 +2135,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -2284,6 +2343,7 @@
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "",
@@ -2362,6 +2422,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -2372,9 +2436,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -2416,6 +2482,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "",
@@ -2495,6 +2562,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -2505,9 +2576,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -2711,6 +2784,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -2789,6 +2863,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -2799,9 +2877,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -2857,6 +2937,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -2936,6 +3017,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -2946,9 +3031,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -3152,6 +3239,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -3235,6 +3323,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -3245,9 +3337,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -3303,6 +3397,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -3387,6 +3482,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -3397,9 +3496,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -3603,6 +3704,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -3686,6 +3788,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -3696,9 +3802,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -3747,6 +3855,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -3831,6 +3940,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -3841,9 +3954,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -4047,6 +4162,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "small",
@@ -4130,6 +4246,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -4140,9 +4260,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -4184,6 +4306,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "small",
@@ -4268,6 +4391,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -4278,9 +4405,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -4484,6 +4613,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -4572,6 +4702,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -4582,9 +4716,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -4626,6 +4762,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -4715,6 +4852,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -4725,9 +4866,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -4931,6 +5074,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -5014,6 +5158,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -5024,9 +5172,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -5074,6 +5224,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -5158,6 +5309,10 @@
       "settings": {
         "changed": 1790000000.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -5168,9 +5323,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -5374,6 +5531,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -5461,6 +5619,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -5471,9 +5633,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -5527,6 +5691,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -5615,6 +5780,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -5625,9 +5794,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -5831,6 +6002,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -5922,6 +6094,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -5932,9 +6108,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -5998,6 +6176,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -6090,6 +6269,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -6100,9 +6283,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -6306,6 +6491,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -6384,6 +6570,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -6394,9 +6584,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -6442,6 +6634,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -6521,6 +6714,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -6531,9 +6728,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -6737,6 +6936,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": false,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -6815,6 +7015,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -6825,9 +7029,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -6900,6 +7106,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -6979,6 +7186,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -6989,9 +7200,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -7195,6 +7408,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -7278,6 +7492,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -7288,9 +7506,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
           "strictness": "very_strict",
@@ -7335,6 +7555,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -7419,6 +7640,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -7429,9 +7654,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
         "strictness": "very_strict",
@@ -7635,6 +7862,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "memory": "memory_aloud",
         "mode": "owner",
         "models": {
           "balanced_uses": "strong",
@@ -7718,6 +7946,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "memory": [
+              "memory_aloud",
+              "memory_on_screen"
+            ],
             "privacy": [
               "private_on_screen",
               "voice_is_enough"
@@ -7728,9 +7960,11 @@
             ]
           },
           "defaults": {
+            "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "strictness": "very_strict"
           },
+          "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "voice_is_enough",
           "strictness": "very_strict",
@@ -7778,6 +8012,7 @@
         "wake_word_why": "off unless you turn it on: a phone's microphone goes wherever you do"
       },
       "local_stt_on_client_allowed": false,
+      "memory": "memory_aloud",
       "mode": "owner",
       "models": {
         "balanced_uses": "strong",
@@ -7862,6 +8097,10 @@
       "settings": {
         "changed": 1790000000.0,
         "choices": {
+          "memory": [
+            "memory_aloud",
+            "memory_on_screen"
+          ],
           "privacy": [
             "private_on_screen",
             "voice_is_enough"
@@ -7872,9 +8111,11 @@
           ]
         },
         "defaults": {
+          "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "strictness": "very_strict"
         },
+        "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "voice_is_enough",
         "strictness": "very_strict",
@@ -8480,7 +8721,7 @@
         "kind": "create",
         "outcome": "denied",
         "voice": "grandpa",
-        "why": "You said no, so nothing changed (the voice \"grandpa\" was not added)."
+        "why": "You said no, so nothing changed (the voice \"Grandpa\" was not added)."
       },
       "limits": {
         "max_clip_bytes": 2900000,

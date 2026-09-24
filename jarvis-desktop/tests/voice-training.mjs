@@ -424,6 +424,29 @@ await check("on a stale link only loosening is held; tightening still goes", asy
   assert.match(said, /catching up/);
 });
 
+await check("answers that use memories: read aloud by default; keeping them on screen is at once; back asks", async () => {
+  const page = await open(S.strong_ready);
+  const shown = await page.evaluate(() => !document.getElementById("vt-memory-box").hidden);
+  const pressed = await page.evaluate(() =>
+    document.querySelector('#vt-memory button[aria-pressed="true"]').dataset.value);
+  assert.equal(shown, true, "offered when the PC reports it");
+  assert.equal(pressed, "memory_aloud", "the owner's default");
+  assert.match(await text(page, "vt-memory-note"), /Anyone near the speaker will hear them/);
+  await page.click('#vt-memory button[data-value="memory_on_screen"]');
+  await page.waitForTimeout(150);
+  assert.deepEqual(await calls(page, "set_voice_setting"), [{ setting: "memory", value: "memory_on_screen" }]);
+  await page.close();
+  // An older PC (no memory in its settings): not offered at all.
+  const older = JSON.parse(JSON.stringify(S.strong_ready));
+  delete older.gate.settings.memory;
+  const old = await open(older);
+  const hidden = await old.evaluate(() => document.getElementById("vt-memory-box").hidden);
+  await old.close();
+  assert.equal(hidden, true);
+  assert.equal(VT.loosens("memory", "memory_aloud"), true);
+  assert.equal(VT.loosens("memory", "memory_on_screen"), false);
+});
+
 await check("the guided test: 20 sentences, one request, the result in words", async () => {
   const page = await open(S.strong_ready);
   await click(page, "vt-test", "Start the test");

@@ -374,7 +374,11 @@ export function heldSession(status) {
 
 /* ── How strict, and private answers ──────────────────────────────────── */
 
-const SETTING_NAMES = { strictness: "how strict the voice check is", privacy: "private answers" };
+const SETTING_NAMES = {
+  strictness: "how strict the voice check is",
+  privacy: "private answers",
+  memory: "answers that use what Jarvis remembers",
+};
 
 /** The choices, in the order they are shown, with plain words for each. */
 export const STRICTNESS = Object.freeze([
@@ -394,7 +398,7 @@ export const PRIVACY = Object.freeze([
   {
     id: "private_on_screen",
     label: "Stay on screen",
-    detail: "When you ask by voice, answers from your email, calendar, notes or what Jarvis remembers are shown on screen, not read aloud. Typing on your own PC or phone is not affected.",
+    detail: "When you ask by voice, answers from your email, calendar or notes are shown on screen, not read aloud. Typing on your own PC or phone is not affected.",
   },
   {
     id: "voice_is_enough",
@@ -403,8 +407,22 @@ export const PRIVACY = Object.freeze([
   },
 ]);
 
+/** The owner's choice of 2026-09-24: "looser now, with a setting to make it more strict". */
+export const MEMORY = Object.freeze([
+  {
+    id: "memory_aloud",
+    label: "Read aloud",
+    detail: "When you ask by voice, answers that use what Jarvis remembers about you are read aloud. Anyone near the speaker will hear them. Questions about email, your calendar, notes, health or money still stay on screen.",
+  },
+  {
+    id: "memory_on_screen",
+    label: "Keep on screen",
+    detail: "Those answers are shown, not read aloud, like email and notes.",
+  },
+]);
+
 function choiceWords(setting, value) {
-  const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY : [];
+  const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY : setting === "memory" ? MEMORY : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -416,7 +434,8 @@ export function settingLabel(setting, value) {
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
 export function loosens(setting, value) {
-  return (setting === "strictness" && value === "balanced") || (setting === "privacy" && value === "voice_is_enough");
+  return (setting === "strictness" && value === "balanced") || (setting === "privacy" && value === "voice_is_enough")
+    || (setting === "memory" && value === "memory_aloud");
 }
 
 /**
@@ -433,9 +452,12 @@ export function settingsView(status) {
   const training = obj(gate.training);
   const waiting = yes(training.pending) && training.kind === "setting" ? obj(training.setting) : null;
   const min = num(s.min_command_seconds);
+  // "" from a PC older than the memory setting: the page does not offer it.
+  const memory = s.memory === "memory_aloud" || s.memory === "memory_on_screen" ? s.memory : "";
   return {
     strictness,
     privacy,
+    memory,
     voiceIsEnoughAllowed: yes(s.voice_is_enough_allowed) && strictness === "very_strict",
     minSeconds: min,
     waiting: waiting && waiting.name ? { setting: String(waiting.name), value: String(waiting.value || "") } : null,

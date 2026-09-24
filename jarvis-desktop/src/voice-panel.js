@@ -524,6 +524,14 @@ function paintSettings() {
   let privacyNote = VT.PRIVACY.find((c) => c.id === view.privacy).detail;
   if (!view.voiceIsEnoughAllowed) privacyNote += " \"Voice check is enough\" can only be chosen while the check is very strict.";
   say($("vt-privacy-note"), privacyNote);
+  const memBox = $("vt-memory-box");
+  if (memBox) {
+    memBox.hidden = !view.memory;
+    if (view.memory) {
+      group($("vt-memory"), VT.MEMORY, view.memory, "memory");
+      say($("vt-memory-note"), VT.MEMORY.find((c) => c.id === view.memory).detail);
+    }
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;

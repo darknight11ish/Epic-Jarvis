@@ -5,8 +5,10 @@
  * (tests/private-speech.mjs).
  *
  * With "private answers stay on screen" (the default), an answer drawn
- * from email, the calendar, notes or what Jarvis remembers is shown, and
- * not read aloud, unless the question was typed. So for a voice question
+ * from email, the calendar or notes is shown, and not read aloud, unless
+ * the question was typed. An answer that uses what Jarvis remembers is read
+ * aloud by default (the owner's choice, 2026-09-24: `memory_aloud`), and
+ * kept on screen too when the owner chooses "keep on screen". So for a voice question
  * whose utterance reply said `private_aloud: false` - or did not say at
  * all, which is what an older PC sends - the answer is read aloud only
  * when nothing says it is private:
@@ -14,7 +16,8 @@
  *   - `question_private` is not true (the words asked about something
  *     private: the router's private-topic list, plus notes and memory);
  *   - the chat reply's `X-Jarvis-Route` has no `gate: "private"`;
- *   - it has no `injected_facts` above 0 (remembered facts went in);
+ *   - only when `memory_aloud` is not true: it has no `injected_facts`
+ *     above 0 (remembered facts went in);
  *   - no tool ran while it was being written. The stream carries no
  *     tool receipt (section 4), so "a tool ran" is read from the only sign
  *     it gives: `: jarvis-status working` (a tool running) or `approval`
@@ -37,20 +40,23 @@ export const TOOL_WORDS = Object.freeze(["working", "approval"]);
 
 /**
  * The privacy facts of one voice question, from the utterance reply
- * (`HeardReply`, camelCased by voice.rs): `{privateAloud, questionPrivate}`.
- * Anything missing reads as the refusing answer for `privateAloud` and as
- * "not said" for `questionPrivate`.
+ * (`HeardReply`, camelCased by voice.rs): `{privateAloud, questionPrivate,
+ * memoryAloud}`. Anything missing reads as the refusing answer for
+ * `privateAloud` and `memoryAloud` (an older PC), and as "not said" for
+ * `questionPrivate`.
  */
 export function privacyFromHeard(heard) {
   const h = heard && typeof heard === "object" ? heard : {};
   return {
     privateAloud: h.privateAloud === true,
     questionPrivate: h.questionPrivate === true,
+    memoryAloud: h.memoryAloud === true,
   };
 }
 
 /**
- * May this answer be read aloud? `ctx`: `{privateAloud, questionPrivate}`
+ * May this answer be read aloud? `ctx`: `{privateAloud, questionPrivate,
+ * memoryAloud}`
  * from the question, `route` (the route line's object: `gate`,
  * `injected_facts`) and `toolRan`.
  */
@@ -61,7 +67,7 @@ export function mayReadAloud(ctx) {
   const route = c.route && typeof c.route === "object" ? c.route : {};
   if (String(route.gate || "").trim().toLowerCase() === "private") return false;
   const facts = Number(route.injected_facts);
-  if (Number.isFinite(facts) && facts > 0) return false;
+  if (Number.isFinite(facts) && facts > 0 && c.memoryAloud !== true) return false;
   if (c.toolRan === true) return false;
   return true;
 }
