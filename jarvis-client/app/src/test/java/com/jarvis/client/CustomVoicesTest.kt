@@ -130,6 +130,15 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `a 202 is a card up, whatever else the body says`() {
+        // The real 202, with its `pending` field taken out: the status code alone says a card is up.
+        val a = voices["answers"]!!.jsonObject["create"]!!.jsonObject
+        val body = JsonObject(a["body"]!!.jsonObject - "pending")
+        assertTrue(CustomVoices.answer(202, body).pending)
+        assertFalse(CustomVoices.answer(200, body).pending)
+    }
+
+    @Test
     fun `the owner's own voice is refused, with the owner's wording first`() {
         val a = answer("create_owner_voice")
         assertEquals(409, a.code)

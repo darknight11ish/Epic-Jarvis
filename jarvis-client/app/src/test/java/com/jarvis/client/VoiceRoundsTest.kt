@@ -139,6 +139,15 @@ class VoiceRoundsTest {
     }
 
     @Test
+    fun `a 202 is a card, even when the PC's body says it was already answered`() {
+        // Real answer: the card was raised and answered at once (pending false in the body).
+        val a = answer("train_finish")
+        assertEquals(202, a.code)
+        assertTrue(a.pending)
+        assertTrue(a.accepted)
+    }
+
+    @Test
     fun `refusals are the PC's sentences, and a held training elsewhere can be cancelled`() {
         val other = answer("train_other_session")
         assertFalse(other.accepted)
