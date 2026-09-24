@@ -410,6 +410,30 @@ class JarvisApi(
      */
     suspend fun noteTargets(): ApiResult<JsonObject> = probe(NoteCapture.PATH)
 
+    // ------------------------------------------------------------- wiki ----
+
+    /**
+     * The wiki builder's documents and whether it can run - [Wiki.read].
+     * Names, states and reasons only: the phone never reads a page.
+     */
+    suspend fun wiki(): ApiResult<JsonObject> = probe(Wiki.PATH)
+
+    /**
+     * "Add to wiki" for one document in the desktop's `Jarvis Wiki/Sources`.
+     * Answers the job (202, `state: "reading"`), or a refusal the desktop
+     * explained (`state: "refused"` with `error`) - both as [ApiResult.Ok],
+     * for [Wiki.describe]. Nothing is written until the card it raises is
+     * approved.
+     */
+    suspend fun wikiIngest(source: String): ApiResult<JsonObject> {
+        val body = Wiki.body(source)
+            ?: return ApiResult.Failed(ApiError.Malformed("no document named"))
+        return postForJob(Wiki.INGEST_PATH, body)
+    }
+
+    /** How one "Add to wiki" is going. Never carries a page's text. */
+    suspend fun wikiJob(id: String): ApiResult<JsonObject> = probe(Wiki.statusPath(id))
+
     private suspend fun postForJob(path: String, json: String): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(

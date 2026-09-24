@@ -1940,6 +1940,76 @@ object JarvisRuntime {
                 com.jarvis.client.net.NoteCapture.targetsFailure(r.error, describe(r.error))
         }
 
+    // ------------------------------------------------------------- wiki ----
+
+    private val _wikiJob =
+        MutableStateFlow<Pair<String, com.jarvis.client.net.Wiki.Said>?>(null)
+
+    /**
+     * The document this phone last asked to add to the wiki, and how that is
+     * going, in the desktop's own words - null until something is asked.
+     */
+    val wikiJob: StateFlow<Pair<String, com.jarvis.client.net.Wiki.Said>?> =
+        _wikiJob.asStateFlow()
+
+    /** `GET /api/wiki` - see [com.jarvis.client.net.Wiki]. */
+    suspend fun wiki(): ApiResult<JsonObject> = api.wiki()
+
+    /**
+     * "Add to wiki" for one document. The desktop's model reads it, then one
+     * approval card is raised - nothing is written until it is answered.
+     *
+     * Held on a stale or dropped link ([actionBlocker], rule 4): the card it
+     * raises should be answered from a queue known to be live. Like
+     * [fileNote], the job is followed on the runtime's own scope, so leaving
+     * the screen does not lose the answer, and [wikiJob] never says "added"
+     * before the desktop does.
+     */
+    suspend fun addToWiki(source: String): ApiResult<Unit> {
+        actionBlocker()?.let {
+            _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(it, final = true, done = false)
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        val job = when (val first = api.wikiIngest(source)) {
+            is ApiResult.Failed -> {
+                val text = com.jarvis.client.net.Wiki.failure(first.error) ?: describe(first.error)
+                _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(text, final = true, done = false)
+                return ApiResult.Failed(first.error)
+            }
+            is ApiResult.Ok -> first.value
+        }
+        val said = com.jarvis.client.net.Wiki.describe(job)
+        _wikiJob.value = source to said
+        val id = com.jarvis.client.net.Wiki.jobId(job)
+        if (!said.final && id != null) {
+            scope.launch {
+                val started = SystemClock.elapsedRealtime()
+                while (true) {
+                    delay(com.jarvis.client.net.Wiki.POLL_MS)
+                    if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Wiki.GIVE_UP_MS) {
+                        _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(
+                            com.jarvis.client.net.Wiki.GAVE_UP, final = true, done = false,
+                        )
+                        break
+                    }
+                    val next = api.wikiJob(id)
+                    if (next is ApiResult.Failed) {
+                        _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(
+                            "Lost track of it (${describe(next.error)}). Check the approval " +
+                                "card on the desktop and the wiki folder.",
+                            final = true, done = false,
+                        )
+                        break
+                    }
+                    val now = com.jarvis.client.net.Wiki.describe((next as ApiResult.Ok).value)
+                    _wikiJob.value = source to now
+                    if (now.final) break
+                }
+            }
+        }
+        return ApiResult.Ok(Unit)
+    }
+
     private suspend fun runTaskAction(call: suspend () -> ApiResult<Unit>): ApiResult<Unit> {
         val result = call()
         if (result is ApiResult.Failed) _notice.value = describeDraft(result.error)

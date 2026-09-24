@@ -423,6 +423,9 @@ fun BrainScreen(
                     onDismissSleepOffer = onDismissSleepOffer,
                 )
             }
+            // backend/wiki.patch - its own plate, reading and acting through
+            // JarvisRuntime directly (WikiPlate.kt), so this is its only line.
+            item(key = "wiki") { WikiSection(canAct = canAct) }
             item(key = "memory-as-of") {
                 Section("What did I believe on this date?") {
                     MemoryAsOfPlate(

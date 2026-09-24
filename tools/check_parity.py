@@ -128,6 +128,8 @@ CLASSIFICATION = {
     "/api/watch/remove": ("todo", "Removing a watch."),
     "/api/watch/report": ("todo", "A watch's findings."),
     "/api/watch/seen": ("todo", "Marking a watch report read."),
+    "/api/wiki": ("ported", "The wiki builder's documents and their state (backend/wiki.patch, 2026-09-24). Both apps list them; neither browses files or reads pages - the vault reaches the phone through Syncthing."),
+    "/api/wiki/ingest": ("ported", "\"Add to wiki\" for one document, then its job. Raises one approval card (wiki_update); nothing is written before it is answered."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 
