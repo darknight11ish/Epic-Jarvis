@@ -11,13 +11,17 @@
  * nothing (the per-microphone prints, the stop word, Smart Turn), the words
  * are new and say only what the status says.
  *
- * Training is not here. It is on the phone for now; the section says so.
+ * Training on this PC, the strictness and private-answer settings and the
+ * guided test are in voice-training.js; how a training or a setting's card
+ * ended is here (`lastTrainingLine`), because it is one line of the status.
  *
  * Every field is read defensively, the phone's way: anything missing reads
  * as the refusing answer ("not trained", "off"), never as a guess.
  *
  * @module voice-settings
  */
+
+import { settingLabel } from "./voice-training.js";
 
 const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 const yes = (v) => v === true;
@@ -53,7 +57,7 @@ export function summaryLine(status, approveWhere) {
   if (status.available === false) return "The voice part of Jarvis is not running on your PC.";
   if (yes(training.pending)) return `Waiting for your approval. Approve it ${approveWhere}.`;
   if (yes(gate.needs_retraining)) {
-    return "Your PC's voice check changed since you trained it. Train your voice again on your phone.";
+    return "Your PC's voice check changed since you trained it. Train your voice again, below or on your phone.";
   }
   if (yes(phone.trained)) return `Trained on your phone, from ${plural(count(phone.samples), "sample")}.`;
   if (yes(gate.enrolled)) return `Trained, from ${plural(count(gate.samples), "sample")}.`;
@@ -129,12 +133,45 @@ export function checkLine(status) {
   };
 }
 
-/** How the last training ended, or null. The phone's `lastLine`. */
+/** The two settings a card can loosen, as a sentence names them. */
+const SETTING_NAMES = { strictness: "how strict the voice check is", privacy: "private answers" };
+
+/**
+ * How the last training - or the last card to change a voice setting -
+ * ended, or null. The phone's `lastLine` for the outcomes it has, and the
+ * ones the stricter check (docs/JARVIS-API.md section 16) added: a
+ * training cancelled or left to expire, "train more" (`added`), and a
+ * strictness or privacy card (`setting`, `value`).
+ */
 export function lastTrainingLine(last) {
   const l = obj(last);
   const outcome = String(l.outcome || "");
   const reason = String(l.reason || "").trim().replace(/\.$/, "");
   const because = reason ? `: ${reason}.` : ".";
+  const setting = SETTING_NAMES[l.setting];
+  if (setting && outcome) {
+    switch (outcome) {
+      case "setting_changed": {
+        const label = settingLabel(l.setting, l.value);
+        if (!label) return "The change was approved.";
+        return l.setting === "strictness"
+          ? `The change was approved: the voice check is now "${label}".`
+          : `The change was approved: private answers asked by voice are now "${label}".`;
+      }
+      case "denied":
+        return `Your change to ${setting} was denied on the card. Nothing changed.`;
+      case "timed_out":
+        return `Nobody answered the card to change ${setting} in time. Nothing changed.`;
+      case "withdrawn":
+        return `The card to change ${setting} did nothing: you made it stricter again while it waited.`;
+      case "refused":
+        return `Your PC refused the change to ${setting}${because}`;
+      case "failed":
+        return `The change to ${setting} failed${because}`;
+      default:
+        return `The change to ${setting}: ${outcome}.`;
+    }
+  }
   switch (outcome) {
     case "":
       return null;
@@ -142,12 +179,18 @@ export function lastTrainingLine(last) {
       const wake = String(l.wake_check || "");
       let suffix = "";
       if (wake.startsWith("built")) suffix = " Its \"hey Jarvis\" check was built too.";
+      else if (wake.startsWith("kept")) suffix = " Its \"hey Jarvis\" check is the one you had.";
+      else if (wake.startsWith("being built")) suffix = " Its \"hey Jarvis\" check is being built from the same sentences.";
       else if (wake.trim()) {
         const why = wake.replace(/^not built/, "").replace(/^[:\s]+/, "").replace(/\.$/, "");
         suffix = ` Its "hey Jarvis" check was not built (${why}).`;
       }
-      return `Last training was approved: ${plural(count(l.samples), "sample")} saved.${suffix}`;
+      return `Last training was approved: ${plural(count(l.samples), "sample")} ${l.added === true ? "in the voice print now" : "saved"}.${suffix}`;
     }
+    case "cancelled":
+      return "The last training was cancelled, and its recordings were deleted.";
+    case "expired":
+      return "The last training was not finished in time, so its recordings were deleted.";
     case "threshold_set": {
       const bar = Number(l.threshold);
       return `The new setting was approved: voices must now score ${Number.isFinite(bar) ? bar.toFixed(2) : "?"} to pass.`;

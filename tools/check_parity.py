@@ -159,18 +159,22 @@ CLASSIFICATION = {
     "/api/version": ("ported", "The handshake. Both apps also list its capabilities by name: desktop Settings, \"What this backend supports\" (its own card, after About) (get_backend_capabilities); phone, \"This backend\"."),
     "/api/visual-spec": ("deliberate", "The phone bundles its own copy of the spec and checks it in a unit test (SpecDriftTest); JARVIS-API.md: the phone never fetches it."),
     "/api/voice/say": ("ported", ""),
-    "/api/voice/status": ("ported", "What the PC's voice can do. Desktop: \"hey Jarvis\" listening reads it (voice.rs), and Settings, Voice shows it read-only (get_voice_status). Phone: Platform checks, Your voice and the wake-word card."),
+    "/api/voice/status": ("ported", "What the PC's voice can do. Desktop: \"hey Jarvis\" listening reads it (voice.rs), and Settings, Voice shows it, with training, how strict, private answers and the guided test drawn from it (get_voice_status, voice-panel.js). Phone: Platform checks, Your voice and the wake-word card."),
+    "/api/voice/enroll": ("ported", "\"Train my voice\" (backend/voice-enroll.patch) and, since 2026-09-24, its other modes (docs/JARVIS-API.md section 16): training in rounds, strictness, private answers, the guided test. Desktop: Settings, Voice, for this PC's microphone (mic=desktop; voice_training.rs send_voice_training, set_voice_setting, measure_voice, cancel_voice_training). Phone: Train my voice (JarvisApi.enrollVoice and the calibrate / threshold modes)."),
     "/api/voice/turn": ("deliberate", "Smart Turn, 'finished or only paused?'. The phone runs the same model "
                         "itself (assets/turn/, voice/SmartTurn.kt), so its audio never leaves it to ask; "
                         "the desktop asks its own PC over loopback."),
     "/api/voice/utterance": ("ported", ""),
     # Custom voices (backend/voices.patch, 2026-09-24): built on the backend
-    # first; both apps are to build against docs/JARVIS-API.md section 15.
-    "/api/voice/voices": ("planned", "Custom voices: the list, which one Jarvis speaks in and why the built-in voice is used instead, the better voice's state, and say() timings (docs/JARVIS-API.md section 15)."),
-    "/api/voice/voices/create": ("planned", "Add a custom voice: a recording and its exact words. One approval card (custom_voice); a voice that sounds like the owner's is refused."),
-    "/api/voice/voices/active": ("planned", "Speak in a custom voice (one approval card) or back in the built-in one (immediate)."),
-    "/api/voice/voices/delete": ("planned", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use."),
-    "/api/voice/voices/better": ("planned", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate."),
+    # first (docs/JARVIS-API.md section 15). The desktop has them (Settings,
+    # Jarvis's voice: voice_training.rs, voice-panel.js); the phone is being
+    # built against the same section - `todo` until it calls them, then
+    # `ported`.
+    "/api/voice/voices": ("todo", "Custom voices: the list, which one Jarvis speaks in and why the built-in voice is used instead, the better voice's state, and say() timings (docs/JARVIS-API.md section 15). Desktop: Settings, Jarvis's voice (get_custom_voices)."),
+    "/api/voice/voices/create": ("todo", "Add a custom voice: a recording and its exact words. One approval card (custom_voice); a voice that sounds like the owner's is refused. Desktop: create_custom_voice (the sentence shown, or a WAV file and typed words)."),
+    "/api/voice/voices/active": ("todo", "Speak in a custom voice (one approval card) or back in the built-in one (immediate). Desktop: set_active_voice."),
+    "/api/voice/voices/delete": ("todo", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use. Desktop: delete_custom_voice, after an are-you-sure."),
+    "/api/voice/voices/better": ("todo", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate. Desktop: set_better_voice, offered only with a capable second card."),
     "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card, turning it off is immediate. Both apps can do both: desktop Settings, Voice (set_wake_word; ON also from the Jarvis bar's listen button), phone Platform checks."),
     "/api/watch": ("ported", "Watches - the GitHub topics Jarvis keeps an eye on. Desktop: Brain, Watch tab. Phone: Mind, Watches (WatchPlate.kt, net/Watch.kt)."),
     "/api/watch/add": ("ported", "Watch a topic. The phone holds it on a stale link (it turns something on) and shows a card if the PC raises one."),
@@ -187,7 +191,6 @@ STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 # "phone-only"    - kept off the desktop on purpose; the reason is the point
 # "desktop-todo"  - the desktop should have it too, and nobody has built it
 PHONE_ONLY = {
-    "/api/voice/enroll": ("desktop-todo", "\"Train my voice\" (backend/voice-enroll.patch). The backend keeps a separate voice print for the PC's microphone (mic=desktop), but the desktop has no training screen yet, so the PC's microphone uses the phone's print (backend/README.md, voice-mic)."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 

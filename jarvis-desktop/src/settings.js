@@ -54,6 +54,7 @@ import {
   verifierLine as voiceVerifierLine,
   wakeInfo,
 } from "./voice-settings.js";
+import { paintVoicePanel, startVoicePanel } from "./voice-panel.js";
 import {
   APPROVAL_CHOICES,
   appLockDetail,
@@ -2146,8 +2147,10 @@ loadBigModel();
    /api/voice/status, jarvis_speech.status() - its real shape is
    tests/fixtures/voice-status-cases.json). The same facts the phone shows on
    Platform checks under "Your voice" and the wake word, in the phone's words
-   where it has them (voice-settings.js). Training a voice is on the phone for
-   now; the section says so and offers no button for it.
+   where it has them (voice-settings.js). Training this PC's microphone, how
+   strict the check is, private answers, the guided test and custom voices
+   are drawn by voice-panel.js from the same status (and, for the voices,
+   GET /api/voice/voices).
 
    The one thing it changes is the PC's "hey Jarvis" switch (`set_wake_word`,
    POST /api/voice/wake), as the phone's wake-word card does. Turning it OFF
@@ -2247,6 +2250,7 @@ function vcPaint(status) {
 
   const gate = status.gate || {};
   vcWaiting = wake.state === "waiting" || (gate.training || {}).pending === true;
+  paintVoicePanel(status);
 }
 
 async function loadVoice() {
@@ -2301,6 +2305,7 @@ async function vcSetWake(enabled) {
   await loadVoice();
 }
 
+startVoicePanel({ reload: loadVoice });
 if (vc.wakeOff) vc.wakeOff.addEventListener("click", () => vcSetWake(false));
 if (vc.wakeOn) vc.wakeOn.addEventListener("click", () => vcSetWake(true));
 

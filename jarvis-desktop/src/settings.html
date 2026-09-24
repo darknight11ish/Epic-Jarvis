@@ -352,18 +352,18 @@
 
       <!-- ── Voice ─────────────────────────────────────────────────────────
            Read from GET /api/voice/status (settings.js, voice part; the
-           words are in voice-settings.js). The same facts the phone shows
-           on Platform checks, under "Your voice" and the wake word. Training
-           a voice is on the phone for now, and this says so. -->
+           words are in voice-settings.js and voice-training.js). The same
+           facts the phone shows on Platform checks, under "Your voice" and
+           the wake word, and the phone's "Train my voice" for THIS PC's
+           microphone (voice-panel.js; the recordings are held by the app,
+           voice_training.rs, never by this page). -->
       <section class="card" id="voice">
         <h2>Voice</h2>
         <p class="note">
           What Jarvis on this PC says about listening to you: whether it
-          knows your voice, and what it can hear.
-        </p>
-        <p class="note" id="voice-train-where">
-          To teach Jarvis your voice, use your phone for now: open Platform
-          checks and tap Train my voice on the Your voice card.
+          knows your voice, how strict it is, and what it can hear. You can
+          teach it your voice here, through this PC's microphone, or on your
+          phone for the phone's microphone.
         </p>
 
         <p class="state" id="voice-state" role="status">Asking Jarvis about voice…</p>
@@ -375,6 +375,34 @@
           <p class="sc-line" id="voice-check"></p>
           <p class="sc-line" id="voice-last" hidden></p>
           <p class="sc-line" id="voice-talk"></p>
+          <p class="sc-line" id="vt-model" hidden>
+            <span id="vt-model-text"></span>
+            <a id="vt-model-link" href="#" data-external="true" hidden></a>
+          </p>
+          <p class="sc-line" id="vt-note" hidden></p>
+
+          <h3 class="subhead">Train my voice on this PC</h3>
+          <div class="vt-box" id="vt-train"></div>
+
+          <div id="vt-settings" hidden>
+            <h3 class="subhead">How strict</h3>
+            <div class="choices" id="vt-strictness" role="group" aria-label="How strict the voice check is"></div>
+            <p class="note" id="vt-strictness-note"></p>
+            <h3 class="subhead">Private answers asked by voice</h3>
+            <div class="choices" id="vt-privacy" role="group" aria-label="Private answers asked by voice"></div>
+            <p class="note" id="vt-privacy-note"></p>
+            <p class="sc-line" id="vt-setting-waiting" data-tone="warn" hidden></p>
+            <p class="note">
+              Making it stricter happens at once. Making it looser shows you
+              an approval card first, and nothing changes until you approve it.
+            </p>
+            <span class="status" id="vt-setting-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead">How often Jarvis asks you to repeat</h3>
+          <ul class="sc-cards" id="vt-repeat"></ul>
+          <p class="note" id="vt-repeat-note" hidden></p>
+          <div class="vt-box" id="vt-test"></div>
 
           <h3 class="subhead">"Hey Jarvis"</h3>
           <p class="sc-line" id="voice-wake"></p>
@@ -408,6 +436,92 @@
           This PC only; your phone has its own switch. It matters only while
           this PC is listening for "hey Jarvis".
         </p>
+      </section>
+
+      <!-- ── Jarvis's voice ────────────────────────────────────────────────
+           Custom voices: GET /api/voice/voices and its four POSTs
+           (voice-panel.js; the words are in custom-voices.js). Adding a
+           voice and switching to one each raise ONE approval card; going
+           back to the built-in voice and deleting a voice happen at once.
+           A recording made here is the sentence shown, read aloud - this
+           app turns no speech into text. -->
+      <section class="card" id="voices">
+        <h2>Jarvis's voice</h2>
+        <p class="note">
+          Jarvis can speak in a voice you recorded, instead of its built-in
+          one. Adding a voice and switching to one each show you an approval
+          card first. Going back to the built-in voice, and deleting a voice,
+          happen at once. Everything stays on your PC.
+        </p>
+        <p class="state" id="cv-state" role="status">Asking Jarvis about its voices…</p>
+
+        <div id="cv-body" hidden>
+          <p class="sc-line" id="cv-speaking"></p>
+          <p class="sc-line" id="cv-fallback" data-tone="warn" hidden></p>
+          <p class="sc-line" id="cv-pending" data-tone="warn" hidden></p>
+          <p class="sc-line" id="cv-last" hidden></p>
+
+          <h3 class="subhead">Voices</h3>
+          <ul class="sc-cards" id="cv-list"></ul>
+          <div class="row">
+            <span class="status" id="cv-status" role="status"></span>
+          </div>
+          <p class="note" id="cv-status-detail" hidden></p>
+
+          <h3 class="subhead">Add a voice</h3>
+          <p class="note" id="cv-consent"></p>
+          <div class="field">
+            <label class="label" for="cv-name">Name</label>
+            <input id="cv-name" type="text" maxlength="40" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="choices" id="cv-way" role="group" aria-label="How to add the voice">
+            <button class="choice" type="button" data-value="record" aria-pressed="true">Record a sentence</button>
+            <button class="choice" type="button" data-value="file" aria-pressed="false">Choose a WAV file</button>
+          </div>
+          <div id="cv-record">
+            <p class="note">Have the person read this sentence aloud, exactly as it is written:</p>
+            <p class="vt-sentence" id="cv-sentence"></p>
+            <div class="row">
+              <button class="btn ghost" id="cv-another" type="button">Another sentence</button>
+              <button class="btn" id="cv-rec" type="button">Record</button>
+              <span class="status" id="cv-rec-status" role="status"></span>
+            </div>
+            <div class="progress-track vt-meter" id="cv-meter" hidden><div class="progress-fill" id="cv-meter-fill"></div></div>
+          </div>
+          <div id="cv-file-box" hidden>
+            <div class="field">
+              <label class="label" for="cv-file">The recording (a WAV file, 3 to 10 seconds of one person speaking)</label>
+              <input id="cv-file" type="file" accept=".wav,audio/wav,audio/x-wav" />
+            </div>
+            <div class="field">
+              <label class="label" for="cv-words">Type exactly what is said in it</label>
+              <textarea id="cv-words" rows="3" maxlength="300" spellcheck="true"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn" id="cv-add" type="button">Add this voice</button>
+            <span class="status" id="cv-add-status" role="status"></span>
+          </div>
+          <p class="note" id="cv-add-detail" hidden></p>
+
+          <h3 class="subhead">The better voice</h3>
+          <div id="cv-better" hidden>
+            <label class="toggle">
+              <input id="cv-better-switch" type="checkbox" />
+              <span>
+                Make custom voices on the second graphics card
+                <span class="toggle-detail">A more natural copy of the voice. Turning it on shows you an approval card first; turning it off happens at once.</span>
+              </span>
+            </label>
+            <div class="sc-lines" id="cv-better-lines"></div>
+            <span class="status" id="cv-better-status" role="status"></span>
+          </div>
+          <p class="sc-line" id="cv-better-why" hidden></p>
+
+          <h3 class="subhead">How long speaking took</h3>
+          <ul class="sc-cards" id="cv-timings"></ul>
+          <p class="note" id="cv-timings-none">Nothing has been said since Jarvis last started.</p>
+        </div>
       </section>
 
       <!-- ── Second graphics card ─────────────────────────────────────────
