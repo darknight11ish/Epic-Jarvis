@@ -537,6 +537,18 @@ function paintSettings() {
       say($("vt-memory-note"), moot ? VT.MEMORY_MOOT_NOTE : VT.MEMORY.find((c) => c.id === view.memory).detail);
     }
   }
+  // Decision 13: answers that use a sensitive saved fact. Offered only when
+  // the PC reports the setting, and never moot - it holds even under
+  // "Voice check is enough". "Read aloud" is held on a stale link
+  // (changeSetting, VT.loosens), like every loosening.
+  const sensBox = $("vt-sensitive-box");
+  if (sensBox) {
+    sensBox.hidden = !view.sensitiveMemory;
+    if (view.sensitiveMemory) {
+      group($("vt-sensitive"), VT.SENSITIVE_MEMORY, view.sensitiveMemory, "sensitive_memory");
+      say($("vt-sensitive-note"), VT.SENSITIVE_MEMORY.find((c) => c.id === view.sensitiveMemory).detail);
+    }
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;

@@ -334,8 +334,9 @@ const state = {
    *  header, so nothing in the stream may overwrite it with a guess. */
   routeFromHeader: false,
   /** The private-answer rule (private-speech.js), for a voice turn: what the
-   *  utterance reply said (`privateAloud`, `questionPrivate`), the route
-   *  line (`gate`, `injected_facts`), whether `: jarvis-status` said a
+   *  utterance reply said (`privateAloud`, `questionPrivate`,
+   *  `memoryAloud`, `sensitiveAloud`), the route line (`gate`,
+   *  `injected_facts`, `injected_sensitive`), whether `: jarvis-status` said a
    *  tool ran, the tool counters when the question was sent (`toolStart`,
    *  a `toolWatch` snapshot), and whether "It's on your screen." was said
    *  already. */

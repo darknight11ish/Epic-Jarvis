@@ -348,6 +348,12 @@ struct HeardRaw {
     /// owner's choice, 2026-09-24). Missing (an older PC) is read as `false`.
     #[serde(default)]
     memory_aloud: bool,
+    /// May an answer that uses a SENSITIVE saved fact (health, money,
+    /// passwords, other people) be read aloud? True only when the owner
+    /// chose "Read aloud" for those answers AND a real voice check passed
+    /// (the owner's decision 13). Missing (an older PC) is read as `false`.
+    #[serde(default)]
+    sensitive_aloud: bool,
 }
 
 fn default_true() -> bool {
@@ -387,6 +393,9 @@ pub struct HeardReply {
     pub question_private: bool,
     /// Answers that use remembered facts may be read aloud (private-speech.js).
     pub memory_aloud: bool,
+    /// Answers that use a sensitive saved fact may be read aloud too
+    /// (private-speech.js). `false` when the PC did not say.
+    pub sensitive_aloud: bool,
 }
 
 impl HeardReply {
@@ -409,6 +418,7 @@ impl HeardReply {
             private_aloud: false,
             question_private: false,
             memory_aloud: false,
+            sensitive_aloud: false,
         }
     }
 }
@@ -431,6 +441,7 @@ impl From<HeardRaw> for HeardReply {
             private_aloud: raw.private_aloud,
             question_private: raw.question_private,
             memory_aloud: raw.memory_aloud,
+            sensitive_aloud: raw.sensitive_aloud,
         }
     }
 }
@@ -1839,6 +1850,33 @@ mod voice_settings_tests {
         assert_eq!(wake_change_answer(404, "").unwrap_err(), VOICE_UPDATE);
         let said = wake_change_answer(403, r#"{"error": "origin not allowed"}"#).unwrap_err();
         assert_eq!(said, "Origin not allowed");
+    }
+}
+
+#[cfg(test)]
+mod heard_tests {
+    use super::{HeardRaw, HeardReply};
+
+    fn reply(body: &str) -> serde_json::Value {
+        let raw: HeardRaw = serde_json::from_str(body).expect("an utterance reply");
+        serde_json::to_value(HeardReply::from(raw)).expect("serialisable")
+    }
+
+    /// Decision 13: `sensitive_aloud` reaches the page as `sensitiveAloud`,
+    /// and an older PC that does not send it reads as `false` - the
+    /// on-screen answer, never the looser one.
+    #[test]
+    fn sensitive_aloud_is_passed_on_and_missing_is_false() {
+        let said = reply(
+            r#"{"is_owner": true, "text": "what is my PIN", "memory_aloud": true,
+                "sensitive_aloud": true}"#,
+        );
+        assert_eq!(said["sensitiveAloud"], true);
+        assert_eq!(said["memoryAloud"], true);
+        let older = reply(r#"{"is_owner": true, "text": "hello", "memory_aloud": true}"#);
+        assert_eq!(older["sensitiveAloud"], false);
+        let off = serde_json::to_value(HeardReply::unavailable("no".into())).unwrap();
+        assert_eq!(off["sensitiveAloud"], false);
     }
 }
 

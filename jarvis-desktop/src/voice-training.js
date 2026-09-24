@@ -383,6 +383,7 @@ const SETTING_NAMES = {
   strictness: "how strict the voice check is",
   privacy: "private answers",
   memory: "answers that use what Jarvis remembers",
+  sensitive_memory: "answers that use sensitive saved facts",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -429,8 +430,30 @@ export const MEMORY = Object.freeze([
   },
 ]);
 
+/**
+ * The owner's decision 13 (2026-09-24): answers that use a SENSITIVE saved
+ * fact - health, money, passwords, other people - stay on screen by
+ * default, even while "Answers that use what Jarvis remembers" reads the
+ * rest aloud, and even with "Voice check is enough". Reading them aloud is
+ * the looser choice: the voice card, and held on a stale link.
+ */
+export const SENSITIVE_MEMORY = Object.freeze([
+  {
+    id: "sensitive_on_screen",
+    label: "Keep on screen",
+    recommended: true,
+    detail: "Answers that use a saved fact about your health, money, passwords or other people are shown, not read aloud.",
+  },
+  {
+    id: "sensitive_aloud",
+    label: "Read aloud",
+    detail: "Those answers are read aloud when your voice passes the check. Anyone near the speaker will hear them.",
+  },
+]);
+
 function choiceWords(setting, value) {
-  const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY : setting === "memory" ? MEMORY : [];
+  const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
+    : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -466,13 +489,14 @@ export function currentSetting(status, setting) {
   const view = settingsView(status);
   if (!view) return "";
   return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
-    : setting === "memory" ? view.memory : "";
+    : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
 export function loosens(setting, value) {
   return (setting === "strictness" && value === "balanced") || (setting === "privacy" && value === "voice_is_enough")
-    || (setting === "memory" && value === "memory_aloud");
+    || (setting === "memory" && value === "memory_aloud")
+    || (setting === "sensitive_memory" && value === "sensitive_aloud");
 }
 
 /**
@@ -491,10 +515,17 @@ export function settingsView(status) {
   const min = num(s.min_command_seconds);
   // "" from a PC older than the memory setting: the page does not offer it.
   const memory = s.memory === "memory_aloud" || s.memory === "memory_on_screen" ? s.memory : "";
+  // Decision 13's setting: `gate.settings.sensitive_memory` (or
+  // `gate.sensitive_memory`). "" from a PC that does not have it, and the
+  // page does not offer it then.
+  const rawSensitive = s.sensitive_memory !== undefined ? s.sensitive_memory : gate.sensitive_memory;
+  const sensitiveMemory = rawSensitive === "sensitive_on_screen" || rawSensitive === "sensitive_aloud"
+    ? rawSensitive : "";
   return {
     strictness,
     privacy,
     memory,
+    sensitiveMemory,
     voiceIsEnoughAllowed: yes(s.voice_is_enough_allowed) && strictness === "very_strict",
     minSeconds: min,
     waiting: waiting && waiting.name ? { setting: String(waiting.name), value: String(waiting.value || "") } : null,

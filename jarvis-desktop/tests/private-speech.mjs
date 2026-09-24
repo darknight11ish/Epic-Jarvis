@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
 import {
   createToolWatch, isToolRun, mayReadAloud, privacyFromHeard, PRIVATE_LINE, toolRanBetween, toolsKnownBetween,
+  usedSensitiveFact,
 } from "../src/private-speech.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -32,13 +33,17 @@ const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
 const CHAT = JSON.parse(read("tests/fixtures/chat-stream-cases.json"));
 const header = (name) => JSON.parse(CHAT.route_headers.find((r) => r.name === name).header);
 /** The route line commands.rs sends: lane, where, gate, second_card as
- *  strings, and injected_facts as a whole number. */
+ *  strings, and injected_facts and injected_sensitive as whole numbers. */
 const routeLine = (h) => {
   const out = {};
   for (const k of ["lane", "where", "gate", "second_card"]) if (typeof h[k] === "string") out[k] = h[k];
-  if (Number.isInteger(h.injected_facts) && h.injected_facts >= 0) out.injected_facts = h.injected_facts;
+  for (const k of ["injected_facts", "injected_sensitive"]) {
+    if (Number.isInteger(h[k]) && h[k] >= 0) out[k] = h[k];
+  }
   return "\u001fjarvis-route:" + JSON.stringify(out);
 };
+/** The same route from a PC that counts sensitive facts (decision 13). */
+const counted = (h, sensitive) => ({ ...h, injected_sensitive: sensitive });
 const PRIVATE_ROUTE = header("local answer");       // gate "private", 1 fact
 const OFFER_ROUTE = header("local answer, cloud offered"); // gate "offer", 0 facts
 const delta = (text) => JSON.stringify({ choices: [{ delta: { content: text } }] });
@@ -63,7 +68,7 @@ await check("the rule, from the real route headers", async () => {
   assert.equal(mayReadAloud({ ...quiet, route: header("cloud answer") }), true);
   assert.equal(mayReadAloud({ privateAloud: false, questionPrivate: true, route: OFFER_ROUTE }), false);
   assert.equal(mayReadAloud({ ...quiet, route: OFFER_ROUTE, toolRan: true }), false, "a tool ran");
-  assert.equal(mayReadAloud({ privateAloud: true, questionPrivate: true, route: PRIVATE_ROUTE, toolRan: true }), true,
+  assert.equal(mayReadAloud({ privateAloud: true, questionPrivate: true, route: counted(PRIVATE_ROUTE, 0), toolRan: true }), true,
     "the owner chose \"voice check is enough\"");
   assert.equal(mayReadAloud({ route: null, toolsKnown: true }), true, "an older PC and an older route: nothing says private");
   // The phone's rule: whether a tool ran is only known while the event
@@ -73,16 +78,50 @@ await check("the rule, from the real route headers", async () => {
   // The owner's choice (2026-09-24): remembered facts are read aloud while
   // memory_aloud is true - and nothing else private is let through by it.
   const mem = { ...quiet, memoryAloud: true };
-  assert.equal(mayReadAloud({ ...mem, route: { ...OFFER_ROUTE, injected_facts: 2 } }), true, "memory aloud");
+  assert.equal(mayReadAloud({ ...mem, route: { ...OFFER_ROUTE, injected_facts: 2, injected_sensitive: 0 } }), true,
+    "memory aloud");
   assert.equal(mayReadAloud({ ...mem, route: PRIVATE_ROUTE }), false, "memory aloud, gate private");
   assert.equal(mayReadAloud({ ...mem, questionPrivate: true, route: OFFER_ROUTE }), false);
   assert.equal(mayReadAloud({ ...mem, route: { ...OFFER_ROUTE, injected_facts: 2 }, toolRan: true }), false);
-  // An older PC sends no private_aloud or memory_aloud: read as false, not as true.
-  assert.deepEqual(privacyFromHeard(K.HEARD_OWNER), { privateAloud: false, questionPrivate: false, memoryAloud: false });
-  assert.deepEqual(privacyFromHeard({ privateAloud: "true", questionPrivate: 1, memoryAloud: "yes" }),
-    { privateAloud: false, questionPrivate: false, memoryAloud: false });
-  assert.deepEqual(privacyFromHeard({ memoryAloud: true }), { privateAloud: false, questionPrivate: false, memoryAloud: true });
+  // An older PC sends no private_aloud, memory_aloud or sensitive_aloud:
+  // read as false, not as true.
+  const none = { privateAloud: false, questionPrivate: false, memoryAloud: false, sensitiveAloud: false };
+  assert.deepEqual(privacyFromHeard(K.HEARD_OWNER), none);
+  assert.deepEqual(privacyFromHeard({ privateAloud: "true", questionPrivate: 1, memoryAloud: "yes", sensitiveAloud: "true" }),
+    none);
+  assert.deepEqual(privacyFromHeard({ memoryAloud: true }), { ...none, memoryAloud: true });
+  assert.deepEqual(privacyFromHeard({ sensitiveAloud: true }), { ...none, sensitiveAloud: true });
   assert.equal(PRIVATE_LINE, "It's on your screen.");
+});
+
+await check("decision 13: an answer that used a sensitive saved fact stays on screen, whatever else says aloud", async () => {
+  const quiet = { privateAloud: false, questionPrivate: false, toolsKnown: true };
+  const MEM = { ...OFFER_ROUTE, injected_facts: 2 };
+  // Which routes used a sensitive fact: the count, or - from a PC that does
+  // not send it - any fact at all (fail closed).
+  assert.equal(usedSensitiveFact({ ...MEM, injected_sensitive: 1 }), true);
+  assert.equal(usedSensitiveFact({ ...MEM, injected_sensitive: 0 }), false);
+  assert.equal(usedSensitiveFact(MEM), true, "missing, with facts in: may be sensitive");
+  assert.equal(usedSensitiveFact(OFFER_ROUTE), false, "no facts in");
+  assert.equal(usedSensitiveFact({ injected_sensitive: 0 }), false);
+  assert.equal(usedSensitiveFact(null), false);
+  // Kept on screen even with memory_aloud or private_aloud...
+  for (const aloud of [{ memoryAloud: true }, { privateAloud: true }, { memoryAloud: true, privateAloud: true }]) {
+    const ctx = { ...quiet, ...aloud };
+    assert.equal(mayReadAloud({ ...ctx, route: { ...MEM, injected_sensitive: 1 } }), false, JSON.stringify(aloud));
+    assert.equal(mayReadAloud({ ...ctx, route: MEM }), false, `older PC, ${JSON.stringify(aloud)}`);
+    // ...and read aloud once the owner chose "Read aloud" for them.
+    assert.equal(mayReadAloud({ ...ctx, sensitiveAloud: true, route: { ...MEM, injected_sensitive: 1 } }), true,
+      `sensitive aloud, ${JSON.stringify(aloud)}`);
+  }
+  // sensitive_aloud loosens nothing else: it is not memory_aloud.
+  assert.equal(mayReadAloud({ ...quiet, sensitiveAloud: true, route: { ...MEM, injected_sensitive: 1 } }), false,
+    "sensitive aloud but memory on screen");
+  assert.equal(mayReadAloud({ ...quiet, sensitiveAloud: true, route: PRIVATE_ROUTE }), false, "gate private");
+  assert.equal(mayReadAloud({ ...quiet, memoryAloud: true, sensitiveAloud: true, route: { ...MEM, injected_sensitive: 1 },
+    toolRan: true }), false, "a tool ran");
+  // CONTROL: nothing sensitive in, memory aloud - read aloud as before.
+  assert.equal(mayReadAloud({ ...quiet, memoryAloud: true, route: { ...MEM, injected_sensitive: 0 } }), true);
 });
 
 await check("the tool watch: step events and stream drops, as the phone counts them", async () => {
@@ -195,8 +234,24 @@ await check("CONTROL: nothing says private - read aloud as before", async () => 
 
 await check("the owner chose \"voice check is enough\": a private answer is read aloud", async () => {
   const said = await spoken({ ...QUIET, privateAloud: true, questionPrivate: true },
-    [routeLine(PRIVATE_ROUTE), delta("Your dentist is on Tuesday. ")]);
+    [routeLine(counted(PRIVATE_ROUTE, 0)), delta("Your dentist is on Tuesday. ")]);
   assert.deepEqual(said, ["Your dentist is on Tuesday."]);
+});
+
+await check("a sensitive saved fact went in: on screen even with \"voice check is enough\" and memories aloud", async () => {
+  const said = await spoken({ ...QUIET, privateAloud: true, memoryAloud: true },
+    [routeLine(counted(PRIVATE_ROUTE, 1)), delta("Your PIN is 4471. ")]);
+  assert.deepEqual(said, [PRIVATE_LINE]);
+  // A PC that does not count them: the fact that went in may be sensitive.
+  const older = await spoken({ ...QUIET, memoryAloud: true },
+    [routeLine({ ...OFFER_ROUTE, injected_facts: 1 }), delta("Your sister is unwell. ")]);
+  assert.deepEqual(older, [PRIVATE_LINE]);
+});
+
+await check("CONTROL: the owner chose \"Read aloud\" for sensitive saved facts: read aloud", async () => {
+  const said = await spoken({ ...QUIET, memoryAloud: true, sensitiveAloud: true },
+    [routeLine(counted({ ...OFFER_ROUTE, injected_facts: 2 }, 1)), delta("Your PIN is 4471. ")]);
+  assert.deepEqual(said, ["Your PIN is 4471."]);
 });
 
 await check("an older PC (no private_aloud) with a private route: not read aloud", async () => {
@@ -219,12 +274,13 @@ await check("too short to check: the PC's own sentence, not \"that did not sound
 
 await check("CONTROL (Rust): the utterance reply carries the three fields, and the route line the count", async () => {
   const voice = read("src-tauri/src/voice.rs");
-  for (const f of ["too_short", "private_aloud", "question_private"]) {
+  for (const f of ["too_short", "private_aloud", "question_private", "memory_aloud", "sensitive_aloud"]) {
     assert.match(voice, new RegExp(`#\\[serde\\(default\\)\\]\\s+${f}: bool,`), `HeardRaw.${f}`);
     assert.match(voice, new RegExp(`pub ${f}: bool,`), `HeardReply.${f}`);
   }
   const commands = read("src-tauri/src/commands.rs");
   assert.match(commands, /route\.get\("injected_facts"\)\.and_then\(\|v\| v\.as_u64\(\)\)/);
+  assert.match(commands, /route\.get\("injected_sensitive"\)\.and_then\(\|v\| v\.as_u64\(\)\)/);
 });
 
 await browser.close();

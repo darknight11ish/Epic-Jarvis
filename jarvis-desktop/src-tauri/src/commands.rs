@@ -1474,6 +1474,15 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
     if let Some(n) = route.get("injected_facts").and_then(|v| v.as_u64()) {
         out.insert("injected_facts".to_string(), serde_json::json!(n));
     }
+    // How many of those facts are SENSITIVE (health, money, passwords, other
+    // people) - the owner's decision 13: an answer that uses one stays on
+    // screen unless "Answers that use sensitive saved facts" is "Read
+    // aloud". Passed on only as a whole number; anything else is left out,
+    // and a missing count with facts in is read as "they may all be
+    // sensitive" (private-speech.js), so leaving it out fails closed.
+    if let Some(n) = route.get("injected_sensitive").and_then(|v| v.as_u64()) {
+        out.insert("injected_sensitive".to_string(), serde_json::json!(n));
+    }
     (!out.is_empty()).then(|| serde_json::Value::Object(out).to_string())
 }
 
@@ -4630,6 +4639,32 @@ mod turn_tests {
         }
         let odd = super::route_line_from_header(r#"{"lane": "x", "injected_facts": "2"}"#).unwrap();
         assert!(!odd.contains("injected_facts"), "{odd}");
+    }
+
+    /// Decision 13: the count of SENSITIVE facts that went in passes on as a
+    /// whole number, next to the count of all of them - and a count that is
+    /// not one is left out (which the page reads as "may be sensitive").
+    #[test]
+    fn the_route_line_carries_the_count_of_sensitive_facts() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "gate": "offer", "injected_facts": 3, "injected_sensitive": 1}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["injected_facts"], 3);
+        assert_eq!(got["injected_sensitive"], 1);
+        let none = super::route_line_from_header(
+            r#"{"lane": "x", "injected_facts": 2, "injected_sensitive": 0}"#,
+        )
+        .unwrap();
+        let none: serde_json::Value = serde_json::from_str(&none).unwrap();
+        assert_eq!(none["injected_sensitive"], 0);
+        for odd in [r#""1""#, "-1", "1.5", "true", "null"] {
+            let header =
+                format!(r#"{{"lane": "x", "injected_facts": 2, "injected_sensitive": {odd}}}"#);
+            let line = super::route_line_from_header(&header).unwrap();
+            assert!(!line.contains("injected_sensitive"), "{odd}: {line}");
+        }
     }
 
     /// A turn the second graphics card answered. `chat-stream-cases.json` has
