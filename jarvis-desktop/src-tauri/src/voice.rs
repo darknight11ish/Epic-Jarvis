@@ -394,6 +394,86 @@ impl From<HeardRaw> for HeardReply {
     }
 }
 
+/// The rate the server's speech models take: `jarvis_speech.AUDIO_IN` says
+/// "WAV, 16-bit mono PCM", 16000 Hz, and that the server does not convert.
+const SERVER_RATE: u32 = 16_000;
+/// The longest push-to-talk clip sent. At 16 kHz mono a second is 32 000
+/// bytes, so two minutes is about 3.7 MiB - under the server's 4 MiB body
+/// limit, with room for the WAV header. Longer is refused with a sentence
+/// rather than sent to be refused by the server.
+const MAX_PUSH_TO_TALK: Duration = Duration::from_secs(120);
+
+/// `samples` (interleaved, as captured, at `spec`) as the server takes them:
+/// one channel, 16 kHz.
+///
+/// It used to send the microphone's own format - 48 kHz stereo on many
+/// PCs, 192 000 bytes a second - so a push-to-talk clip passed the server's
+/// 4 MiB body limit after about 22 seconds. Channels are averaged; a higher
+/// rate is brought down by averaging each output sample's span of input
+/// (which also keeps what is above 8 kHz from folding back into the
+/// speech band), a lower one is brought up by straight-line interpolation.
+pub(crate) fn to_server_format(
+    spec: hound::WavSpec,
+    samples: &[i16],
+) -> (hound::WavSpec, Vec<i16>) {
+    let channels = usize::from(spec.channels.max(1));
+    let mono: Vec<i32> = samples
+        .chunks_exact(channels)
+        .map(|frame| frame.iter().map(|&s| i32::from(s)).sum::<i32>() / channels as i32)
+        .collect();
+    let out_spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: SERVER_RATE,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    (out_spec, resample(&mono, spec.sample_rate, SERVER_RATE))
+}
+
+/// One channel of samples from rate `from` to rate `to`.
+fn resample(mono: &[i32], from: u32, to: u32) -> Vec<i16> {
+    let narrow = |v: i64| v.clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16;
+    if from == to || from == 0 || to == 0 || mono.is_empty() {
+        return mono.iter().map(|&s| narrow(i64::from(s))).collect();
+    }
+    let (from, to) = (u64::from(from), u64::from(to));
+    let len = mono.len();
+    let n_out = (len as u64 * to / from) as usize;
+    if from > to {
+        (0..n_out)
+            .map(|j| {
+                let a = (j as u64 * from / to) as usize;
+                let b = (((j as u64 + 1) * from / to) as usize).clamp(a + 1, len);
+                let span = &mono[a..b];
+                narrow(span.iter().map(|&s| i64::from(s)).sum::<i64>() / span.len() as i64)
+            })
+            .collect()
+    } else {
+        (0..n_out)
+            .map(|j| {
+                let pos = j as f64 * from as f64 / to as f64;
+                let i = (pos.floor() as usize).min(len - 1);
+                let frac = pos - i as f64;
+                let a = f64::from(mono[i]);
+                let b = f64::from(mono[(i + 1).min(len - 1)]);
+                narrow((a + (b - a) * frac).round() as i64)
+            })
+            .collect()
+    }
+}
+
+/// `samples` as the WAV the server takes: [`to_server_format`], encoded.
+fn server_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> {
+    let (spec, samples) = to_server_format(spec, samples);
+    encode_wav(spec, &samples)
+}
+
+/// How long `samples` (interleaved, at `spec`) lasts.
+fn clip_length(spec: hound::WavSpec, samples: &[i16]) -> Duration {
+    let per_second = u64::from(spec.sample_rate.max(1)) * u64::from(spec.channels.max(1));
+    Duration::from_millis(samples.len() as u64 * 1000 / per_second)
+}
+
 /// `samples` (interleaved, as captured) as the bytes of one 16-bit WAV file.
 fn encode_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> {
     let mut cursor = Cursor::new(Vec::new());
@@ -428,7 +508,7 @@ async fn post_utterance(
     if samples.is_empty() {
         return Err("nothing was recorded - the microphone produced no audio".to_string());
     }
-    let wav_bytes = encode_wav(spec, samples)?;
+    let wav_bytes = server_wav(spec, samples)?;
 
     // mic=desktop: the server keeps one voice print per microphone and
     // checks this clip against this PC's own when there is one (a server
@@ -580,6 +660,15 @@ pub async fn stop_voice_capture(
     let raw_samples = Arc::try_unwrap(samples)
         .map(|m| m.into_inner().unwrap_or_default())
         .unwrap_or_else(|arc| arc.lock().map(|g| g.clone()).unwrap_or_default());
+
+    let held = clip_length(spec, &raw_samples);
+    if held > MAX_PUSH_TO_TALK {
+        return Err(format!(
+            "That was too long to send - {} seconds. Hold the button for under two \
+             minutes, and say a long request in parts. Nothing was sent.",
+            held.as_secs()
+        ));
+    }
 
     // Push-to-talk may go to a server elsewhere: holding the button is a
     // deliberate act, unlike the room audio the wake-word listener sends.
@@ -745,7 +834,7 @@ async fn ask_turn(
     spec: hound::WavSpec,
     samples: &[i16],
 ) -> Result<Option<bool>, String> {
-    let wav = encode_wav(spec, samples)?;
+    let wav = server_wav(spec, samples)?;
     let response = jarvis_client(Some(TURN_TIMEOUT))?
         .post(format!("{base}/api/voice/turn"))
         .headers(jarvis_headers(app)?)
@@ -1550,6 +1639,87 @@ mod wake_tests {
         assert!(
             mic_died(Some(&rx)).is_some(),
             "its thread ended without a word"
+        );
+    }
+
+    fn spec(channels: u16, sample_rate: u32) -> hound::WavSpec {
+        hound::WavSpec {
+            channels,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        }
+    }
+
+    /// T13 (audit 3): the microphone's own format went to the server - at
+    /// 48 kHz stereo the body passed 4 MiB after about 22 seconds.
+    #[test]
+    fn push_to_talk_is_sent_as_16k_mono() {
+        // 22 s of 48 kHz stereo: 8.4 MB as captured.
+        let raw = vec![1000i16; 48_000 * 2 * 22];
+        assert!(encode_wav(spec(2, 48_000), &raw).unwrap().len() > 4 * 1024 * 1024);
+        let (out_spec, out) = to_server_format(spec(2, 48_000), &raw);
+        assert_eq!((out_spec.channels, out_spec.sample_rate), (1, 16_000));
+        assert_eq!(out.len(), 16_000 * 22);
+        assert!(
+            out.iter().all(|&s| s == 1000),
+            "a steady level stays that level"
+        );
+        let wav = server_wav(spec(2, 48_000), &raw).unwrap();
+        assert!(wav.len() < 1024 * 1024, "{} bytes", wav.len());
+        // Two minutes, the most push-to-talk sends, fits under 4 MiB.
+        let most = (MAX_PUSH_TO_TALK.as_secs() as usize) * 16_000 * 2 + 44;
+        assert!(most < 4 * 1024 * 1024);
+    }
+
+    #[test]
+    fn channels_are_averaged_and_odd_rates_land_on_16k() {
+        // Left and right opposite: the average is silence.
+        let lr: Vec<i16> = (0..4_800).flat_map(|_| [8000i16, -8000]).collect();
+        let (_, out) = to_server_format(spec(2, 48_000), &lr);
+        assert_eq!(out.len(), 1_600);
+        assert!(out.iter().all(|&s| s == 0));
+        // 44.1 kHz: one second is 16 000 samples.
+        let (_, out) = to_server_format(spec(1, 44_100), &vec![-300i16; 44_100]);
+        assert_eq!(out.len(), 16_000);
+        assert!(out.iter().all(|&s| s == -300));
+        // Already 16 kHz mono: unchanged, sample for sample.
+        let same: Vec<i16> = (0..1_000).map(|i| (i * 7 % 2000 - 1000) as i16).collect();
+        assert_eq!(to_server_format(spec(1, 16_000), &same).1, same);
+        // 8 kHz: twice as many samples, the in-between ones between.
+        let (_, up) = to_server_format(spec(1, 8_000), &[0, 100, 200]);
+        assert_eq!(up, vec![0, 50, 100, 150, 200, 200]);
+    }
+
+    #[test]
+    fn a_voice_band_tone_survives_and_a_too_high_one_does_not_fold_back_loud() {
+        let tone = |hz: f64, rate: u32| -> Vec<i16> {
+            (0..rate)
+                .map(|n| {
+                    (10_000.0 * (2.0 * std::f64::consts::PI * hz * n as f64 / rate as f64).sin())
+                        as i16
+                })
+                .collect()
+        };
+        let peak = |v: &[i16]| v.iter().map(|s| i32::from(*s).abs()).max().unwrap_or(0);
+        // 1 kHz, squarely in speech: kept at nearly full level.
+        let (_, speech) = to_server_format(spec(1, 48_000), &tone(1_000.0, 48_000));
+        assert!(peak(&speech) > 9_500, "{}", peak(&speech));
+        // 16 kHz is silent after averaging three samples of it: it must not
+        // come back as a loud false tone in the speech band.
+        let (_, high) = to_server_format(spec(1, 48_000), &tone(16_000.0, 48_000));
+        assert!(peak(&high) < 500, "{}", peak(&high));
+    }
+
+    #[test]
+    fn a_clip_length_is_its_duration() {
+        assert_eq!(
+            clip_length(spec(2, 48_000), &vec![0i16; 48_000 * 2 * 3]),
+            Duration::from_secs(3)
+        );
+        assert_eq!(
+            clip_length(spec(1, 16_000), &vec![0i16; 8_000]),
+            Duration::from_millis(500)
         );
     }
 
