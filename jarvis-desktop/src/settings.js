@@ -55,6 +55,18 @@ import {
   wakeInfo,
 } from "./voice-settings.js";
 import {
+  APPROVAL_CHOICES,
+  appLockDetail,
+  approvalsNote,
+  helloLine,
+  needsHello,
+  normalise as normaliseSecurity,
+  privateDetail,
+  RELOCK_CHOICES,
+  relockNote,
+  savedLine,
+} from "./security-settings.js";
+import {
   FRAME_RATES,
   loadFaceTuning,
   QUALITIES,
@@ -984,6 +996,107 @@ dom.resetHotkeys.addEventListener("click", async () => {
 });
 
 loadHotkeys();
+
+/* ==========================================================================
+   Security - Windows Hello
+   --------------------------------------------------------------------------
+   The app lock, Windows Hello for approvals and for the Brain's private
+   lists. Nothing is decided here: set_security_settings (lock.rs) asks
+   Windows Hello before anything is loosened, refuses a lock this PC could
+   never unlock, and answers with what is now stored - which is what this
+   paints, never what was asked for. A refused change therefore puts the
+   switch straight back.
+   ========================================================================== */
+
+const secDom = {
+  hello: $("sec-hello"),
+  appLock: $("sec-app-lock"),
+  appLockDetail: $("sec-app-lock-detail"),
+  relock: $("sec-relock"),
+  relockNote: $("sec-relock-note"),
+  approvals: $("sec-approvals"),
+  approvalsNote: $("sec-approvals-note"),
+  privateAnswers: $("sec-private"),
+  privateDetail: $("sec-private-detail"),
+  status: $("sec-status"),
+};
+const sec = { settings: null, hello: null, busy: false };
+
+function paintSecurity() {
+  if (!secDom.hello) return;
+  const known = sec.settings !== null;
+  const s = normaliseSecurity(sec.settings);
+  secDom.hello.textContent = known
+    ? helloLine(sec.hello, s)
+    : "Could not read these settings, so nothing here can be changed right now.";
+  secDom.hello.dataset.tone = sec.hello === "ready" ? "ok" : "";
+  secDom.appLock.checked = s.appLock;
+  secDom.privateAnswers.checked = s.privateAnswers;
+  secDom.appLockDetail.textContent = appLockDetail();
+  secDom.privateDetail.textContent = privateDetail();
+  secDom.relockNote.textContent = relockNote(s);
+  secDom.approvalsNote.textContent = approvalsNote(APPROVE_WHERE);
+  const mark = (box, value) => {
+    for (const b of box.querySelectorAll("button")) {
+      b.setAttribute("aria-pressed", String(known && b.dataset.value === String(value)));
+      b.disabled = !known || sec.busy;
+    }
+  };
+  mark(secDom.relock, s.relockAfterSecs);
+  mark(secDom.approvals, s.approvals);
+  secDom.appLock.disabled = !known || sec.busy;
+  secDom.privateAnswers.disabled = !known || sec.busy;
+}
+
+async function loadSecurity() {
+  try {
+    const out = await invoke("get_security_settings");
+    sec.settings = normaliseSecurity(out && out.settings);
+    sec.hello = String((out && out.hello) || "");
+  } catch (error) {
+    sec.settings = null;
+    report(secDom.status, String((error && error.message) || error), "bad");
+  }
+  paintSecurity();
+}
+
+async function changeSecurity(patch) {
+  if (sec.busy || sec.settings === null) return;
+  const before = sec.settings;
+  const next = { ...before, ...patch };
+  sec.busy = true;
+  paintSecurity();
+  report(secDom.status,
+    needsHello(before, next) ? "Waiting for Windows Hello…" : "Saving…");
+  try {
+    const saved = normaliseSecurity(await invoke("set_security_settings", { settings: next }));
+    sec.settings = saved;
+    report(secDom.status, savedLine(before, saved), "ok");
+    announce(savedLine(before, saved));
+  } catch (error) {
+    // Refused (Windows Hello said no, or is not set up): nothing changed,
+    // and the switch goes back to what is stored.
+    const said = String((error && error.message) || error);
+    report(secDom.status, /[.!?]$/.test(said) ? `${said} Nothing changed.` : `${said}. Nothing changed.`, "bad");
+    announce(said, "assertive");
+  } finally {
+    sec.busy = false;
+    paintSecurity();
+  }
+}
+
+if (secDom.hello) {
+  choiceRow(secDom.relock, RELOCK_CHOICES, (c) => c.label,
+    (c) => changeSecurity({ relockAfterSecs: c.id }));
+  choiceRow(secDom.approvals, APPROVAL_CHOICES, (c) => c.label,
+    (c) => changeSecurity({ approvals: c.id }));
+  secDom.appLock.addEventListener("change", () =>
+    changeSecurity({ appLock: secDom.appLock.checked }));
+  secDom.privateAnswers.addEventListener("change", () =>
+    changeSecurity({ privateAnswers: secDom.privateAnswers.checked }));
+  paintSecurity();
+  loadSecurity();
+}
 
 
 /* ==========================================================================

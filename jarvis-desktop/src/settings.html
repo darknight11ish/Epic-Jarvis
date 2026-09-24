@@ -302,6 +302,54 @@
         </div>
       </section>
 
+      <!-- ── Security ──────────────────────────────────────────────────────
+           Windows Hello (src-tauri/src/lock.rs; the words are in
+           security-settings.js). Stored by the app where no window can write
+           it: this page asks set_security_settings, which asks Windows Hello
+           before anything is loosened. Tightening is instant. The phone has
+           its own fingerprint settings for itself. -->
+      <section class="card" id="security">
+        <h2>Security</h2>
+        <p class="note">
+          Windows Hello is how Windows checks it is you: your Windows PIN, a
+          fingerprint or your face - whatever this PC has. These settings are
+          for this PC only; your phone has its own fingerprint settings.
+          Turning something on happens at once. Turning something off, or
+          making it wait longer, asks Windows Hello first.
+        </p>
+        <p class="state" id="sec-hello" role="status">Checking Windows Hello on this PC…</p>
+
+        <label class="toggle">
+          <input id="sec-app-lock" type="checkbox" />
+          <span>
+            App lock
+            <span class="toggle-detail" id="sec-app-lock-detail"></span>
+          </span>
+        </label>
+
+        <div class="field">
+          <span class="label" id="sec-relock-label">Lock again after</span>
+          <div class="choices" id="sec-relock" role="group" aria-labelledby="sec-relock-label"></div>
+          <p class="note" id="sec-relock-note"></p>
+        </div>
+
+        <div class="field">
+          <span class="label" id="sec-approvals-label">Windows Hello for approvals</span>
+          <div class="choices" id="sec-approvals" role="group" aria-labelledby="sec-approvals-label"></div>
+          <p class="note" id="sec-approvals-note"></p>
+        </div>
+
+        <label class="toggle">
+          <input id="sec-private" type="checkbox" />
+          <span>
+            Windows Hello for private answers
+            <span class="toggle-detail" id="sec-private-detail"></span>
+          </span>
+        </label>
+
+        <span class="status" id="sec-status" role="status"></span>
+      </section>
+
       <!-- ── Voice ─────────────────────────────────────────────────────────
            Read from GET /api/voice/status (settings.js, voice part; the
            words are in voice-settings.js). The same facts the phone shows
