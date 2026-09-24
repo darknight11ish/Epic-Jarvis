@@ -13,8 +13,10 @@ registration - the whole point of choosing them.
 ONE BACKEND, PICKED FROM WHAT IS CONFIGURED, NEVER BOTH AT ONCE
 An owner runs Joplin or Obsidian, essentially never both for the same
 notes. `_resolve_backend()` picks whichever this owner has actually set up -
-`JARVIS_NOTES_BACKEND` if given explicitly, otherwise whichever token/key is
-present - and `plan()` builds a request for that one backend only. Wanting
+`JARVIS_NOTES_BACKEND` if given explicitly, otherwise an Obsidian vault
+folder if one is configured and valid (see "THE OBSIDIAN VAULT AS A PLAIN
+FOLDER" below), otherwise whichever token/key is present - and `plan()`
+builds a request for that one backend only. Wanting
 support for switching later is real; guessing which of two different REST
 APIs and two different response shapes to merge results from is not this
 module's job today.
@@ -68,23 +70,58 @@ TESTING WITHOUT A REAL JOPLIN OR OBSIDIAN INSTANCE
 own `fetch` uses: given the token-free `Plan`, it returns the backend's raw
 parsed JSON, and only `_default_fetch` (never called by anything in this
 file except itself) does the real network call and adds the real credential.
+
+THE OBSIDIAN VAULT AS A PLAIN FOLDER - "vault" (added 2026-09-24)
+An Obsidian vault is a folder of Markdown files with a `.obsidian` settings
+folder inside it. When one is configured (`JARVIS_OBSIDIAN_VAULT`, else
+`[notes.obsidian] vault_directory` in jarvis-framework.toml) and really is a
+vault, the search reads that folder directly: no Obsidian plugin, no API key,
+no network request at all. It is preferred over every REST backend, the
+Obsidian plugin's included - set `JARVIS_NOTES_BACKEND` to "joplin" or
+"obsidian" to pick one of those instead.
+
+What the folder search reads, and what it will not:
+  - `*.md` files only, matched on the file name (the note's title) and the
+    text, ignoring case. Every word of the query must appear in one or the
+    other.
+  - Never a hidden folder (a name starting with "."), which covers
+    `.obsidian/` (settings) and `.trash/` (Obsidian's own bin).
+  - Never anything whose real location, after following links (symlinks and
+    Windows junctions), is outside the vault.
+  - At most VAULT_MAX_FILES files, the first VAULT_MAX_FILE_BYTES of each,
+    VAULT_MAX_ENTRIES directory entries looked at, and VAULT_MAX_SECONDS in
+    all - so a huge vault cannot hold up the chat turn. The result says when
+    one of those stopped it early, so the answer can say it may be missing
+    notes.
+
+The results are the owner's own files. They go back ONLY to the model that
+asked, and that is only ever the local one: this runs as jarvis_agent.py's
+`notes_search` tool, and jarvis_agent runs tools only for a turn on the local
+lane (chat-stream.patch: `use_tools = (lane == local_model ...)`). A cloud
+lane is sent the newest user turn alone (cloud-one-turn.patch), never a tool
+result. backend/test_obsidian_notes.py checks both, with this search's real
+output.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, asdict
+from pathlib import Path
 from typing import Callable, Optional
 
-BACKEND_ENV = "JARVIS_NOTES_BACKEND"       # "joplin" | "obsidian", optional override
+BACKEND_ENV = "JARVIS_NOTES_BACKEND"       # "vault" | "joplin" | "obsidian", optional
 JOPLIN_URL_ENV = "JARVIS_JOPLIN_URL"
 JOPLIN_TOKEN_ENV = "JARVIS_JOPLIN_TOKEN"
 OBSIDIAN_URL_ENV = "JARVIS_OBSIDIAN_URL"
 OBSIDIAN_KEY_ENV = "JARVIS_OBSIDIAN_API_KEY"
+OBSIDIAN_VAULT_ENV = "JARVIS_OBSIDIAN_VAULT"
 
 _DEFAULT_JOPLIN_URL = "http://127.0.0.1:41184"
 _DEFAULT_OBSIDIAN_URL = "https://127.0.0.1:27124"
@@ -93,11 +130,61 @@ _MAX_RESULTS = 20
 _MAX_TITLE_CHARS = 200
 _MAX_SNIPPET_CHARS = 400
 
+#: The folder search's bounds (see the module docstring).
+VAULT_MAX_FILES = 5000
+VAULT_MAX_FILE_BYTES = 256 * 1024
+VAULT_MAX_ENTRIES = 50000
+VAULT_MAX_SECONDS = 5.0
+
+
+# --------------------------------------------------------------------------
+#   Where the Obsidian vault is (jarvis_note_capture.py uses these too)
+# --------------------------------------------------------------------------
+
+def _notes_cfg(section: str, key: str, default=None):
+    try:
+        import jarvis_framework as fw
+        notes = fw.load_framework().get("notes", {}) or {}
+        return (notes.get(section, {}) or {}).get(key, default)
+    except Exception:
+        return default
+
+
+def obsidian_vault() -> Optional[Path]:
+    """The vault folder the owner configured, or None. Not checked here -
+    see vault_problem(). `JARVIS_OBSIDIAN_VAULT` wins over the config file."""
+    env = os.environ.get(OBSIDIAN_VAULT_ENV, "").strip()
+    if env:
+        return Path(os.path.expanduser(env))
+    cfg = str(_notes_cfg("obsidian", "vault_directory", "") or "").strip()
+    if cfg:
+        return Path(os.path.expanduser(cfg))
+    return None
+
+
+def vault_problem(vault: Optional[Path]) -> str:
+    """Why `vault` is not a usable Obsidian vault, in plain words, or "".
+
+    It must already exist and hold a `.obsidian` folder - the settings folder
+    Obsidian makes in every vault. Nothing here ever creates a vault."""
+    if vault is None:
+        return (f"no Obsidian vault folder is set - put its path in [notes.obsidian] "
+                f"vault_directory in jarvis-framework.toml, or in {OBSIDIAN_VAULT_ENV}")
+    if not vault.is_dir():
+        return (f"there is no folder at {vault} - check [notes.obsidian] "
+                f"vault_directory in jarvis-framework.toml, or {OBSIDIAN_VAULT_ENV}")
+    if not (vault / ".obsidian").is_dir():
+        return (f"{vault} is not an Obsidian vault (it has no .obsidian folder) - "
+                f"open it in Obsidian once, or point the setting at the vault itself")
+    return ""
+
 
 def _resolve_backend() -> Optional[str]:
     explicit = os.environ.get(BACKEND_ENV, "").strip().lower()
-    if explicit in ("joplin", "obsidian"):
+    if explicit in ("joplin", "obsidian", "vault"):
         return explicit
+    if not vault_problem(obsidian_vault()):
+        return "vault"
     if os.environ.get(JOPLIN_TOKEN_ENV, "").strip():
         return "joplin"
     if os.environ.get(OBSIDIAN_KEY_ENV, "").strip():
@@ -121,13 +208,14 @@ def authenticated() -> bool:
 
 @dataclass
 class Plan:
-    backend: Optional[str]     # "joplin" | "obsidian" | None
+    backend: Optional[str]     # "vault" | "joplin" | "obsidian" | None
     query: str
     limit: int
     url: str = ""               # token-free - see the module docstring
     if_refused: str = ""
     authenticated: bool = False
     reason_empty: str = ""
+    folder: str = ""            # vault only: the vault folder, links resolved
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -147,8 +235,17 @@ def plan(query: str, limit: int = 10) -> Plan:
         return Plan(
             backend=None, query=query, limit=limit, if_refused=if_refused,
             reason_empty=(
-                f"neither {JOPLIN_TOKEN_ENV} nor {OBSIDIAN_KEY_ENV} is set - "
-                "there is no notes app configured to search"))
+                f"no Obsidian vault folder is set, and neither {JOPLIN_TOKEN_ENV} nor "
+                f"{OBSIDIAN_KEY_ENV} is set - there is no notes app configured to search"))
+
+    if backend == "vault":
+        vault = obsidian_vault()
+        problem = vault_problem(vault)
+        if problem:
+            return Plan(backend="vault", query=query, limit=limit,
+                        if_refused=if_refused, reason_empty=problem)
+        return Plan(backend="vault", query=query, limit=limit, if_refused=if_refused,
+                    folder=os.path.realpath(str(vault)))
 
     if backend == "joplin":
         base = os.environ.get(JOPLIN_URL_ENV, "").strip() or _DEFAULT_JOPLIN_URL
@@ -170,6 +267,21 @@ def describe(p: Plan) -> str:
     if p.reason_empty:
         return (f"Jarvis would like to search notes for \"{p.query}\", but "
                 f"{p.reason_empty}. Nothing would be sent.")
+    if p.backend == "vault":
+        return "\n".join([
+            f"Jarvis would like to search your Obsidian vault for \"{p.query}\" "
+            f"(up to {p.limit} result(s)).",
+            "",
+            f"It reads the .md files in {p.folder} on this PC - at most "
+            f"{VAULT_MAX_FILES} files, and the first {VAULT_MAX_FILE_BYTES // 1024} KB "
+            f"of each. Hidden folders (.obsidian, .trash) and links that lead out of "
+            f"the vault are skipped.",
+            "",
+            "What leaves this machine: nothing. No network request is made, and "
+            "what is found goes only to the local model.",
+            "",
+            f"If you say no: {p.if_refused}",
+        ])
     auth_line = (
         f"Authenticated: this will send the configured {p.backend} "
         "token/key to that local server, over that one request."
@@ -301,6 +413,83 @@ def _normalize_obsidian(raw, limit: int) -> list:
     return out
 
 
+def _inside(root: str, path: str) -> bool:
+    """True when `path` (already resolved) is `root` or under it."""
+    try:
+        return os.path.commonpath([root, path]) == root
+    except ValueError:          # different drives on Windows
+        return False
+
+
+def _vault_snippet(text: str, terms: list) -> str:
+    """Up to _MAX_SNIPPET_CHARS of `text`, starting a little before the
+    first matched word (or at the top, when only the title matched)."""
+    first = None
+    for t in terms:
+        m = re.search(re.escape(t), text, re.IGNORECASE)
+        if m and (first is None or m.start() < first):
+            first = m.start()
+    start = 0 if first is None else max(0, first - _MAX_SNIPPET_CHARS // 3)
+    piece = " ".join(text[start:start + _MAX_SNIPPET_CHARS * 2].split())
+    return (("…" if start else "") + piece)[:_MAX_SNIPPET_CHARS]
+
+
+def _search_vault(p: Plan, *, clock: Callable[[], float] = time.monotonic) -> dict:
+    """The folder search itself. Reads files; opens no socket; writes nothing."""
+    root = os.path.realpath(p.folder)
+    terms = [t.casefold() for t in p.query.split() if t.strip()]
+    started = clock()
+    hits, scanned, entries, stopped = [], 0, 0, ""
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        # A hidden folder is never entered, and nor is one whose real place
+        # (through a symlink or a junction) is outside the vault.
+        dirnames[:] = sorted(
+            d for d in dirnames if not d.startswith(".")
+            and _inside(root, os.path.realpath(os.path.join(dirpath, d))))
+        for name in sorted(filenames):
+            entries += 1
+            if entries > VAULT_MAX_ENTRIES:
+                stopped = f"looked at {VAULT_MAX_ENTRIES} entries"
+                break
+            if clock() - started > VAULT_MAX_SECONDS:
+                stopped = f"ran for {VAULT_MAX_SECONDS:g} seconds"
+                break
+            if name.startswith(".") or not name.lower().endswith(".md"):
+                continue
+            full = os.path.join(dirpath, name)
+            real = os.path.realpath(full)
+            if not _inside(root, real) or not os.path.isfile(real):
+                continue
+            if scanned >= VAULT_MAX_FILES:
+                stopped = f"read {VAULT_MAX_FILES} files"
+                break
+            scanned += 1
+            try:
+                with open(real, "rb") as f:
+                    text = f.read(VAULT_MAX_FILE_BYTES).decode("utf-8", "replace")
+            except OSError:
+                continue
+            title = name[:-3]
+            in_title = [t for t in terms if t in title.casefold()]
+            body = text.casefold()
+            if all(t in in_title or t in body for t in terms):
+                rel = os.path.relpath(full, root).replace(os.sep, "/")
+                hits.append((not in_title, rel, title, text))
+        if stopped:
+            break
+    # Title matches first, then by path, so the same vault answers the same way.
+    hits.sort(key=lambda h: (h[0], h[1].casefold()))
+    results = [{"title": title[:_MAX_TITLE_CHARS],
+                "snippet": _vault_snippet(text, terms),
+                "ref": rel} for _, rel, title, text in hits[:p.limit]]
+    out = {"ok": True, "results": results, "backend": "vault", "query": p.query,
+           "files_searched": scanned, "matches": len(hits)}
+    if stopped:
+        out["stopped_early"] = (f"the search stopped early (it {stopped}), so notes "
+                                f"it did not reach are not in these results")
+    return out
+
+
 def run(p: Plan, *, fetch: Optional[Callable[[Plan], object]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan. `approved` has no default of True.
@@ -313,6 +502,13 @@ def run(p: Plan, *, fetch: Optional[Callable[[Plan], object]] = None,
                 "plan": p.as_dict()}
     if p.reason_empty:
         return {"ok": False, "reason": p.reason_empty, "results": []}
+    if p.backend == "vault":
+        # A folder on this PC: no fetch, no credential, no socket.
+        try:
+            return _search_vault(p)
+        except Exception as exc:
+            return {"ok": False, "results": [],
+                    "reason": f"the vault could not be searched: {type(exc).__name__}: {exc}"}
 
     getter = fetch or _default_fetch
     try:

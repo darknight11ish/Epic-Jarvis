@@ -110,6 +110,12 @@ create_logseq_page        = "auto"
 edit_logseq_page          = "ask"
 delete_logseq_page        = "never"
 
+# Obsidian's daily note (#obs), same reasoning as the Logseq journal: it only
+# ever ADDS to the end of today's note, a file on this PC, so it is saved
+# straight away (owner decision, 2026-09-24). Change it to "ask" to get a
+# card every time.
+append_obsidian_daily     = "auto"
+
 # --- Models: three separate decisions, deliberately not bundled --------
 # Reading public catalogues says nothing about you (see the privacy note in
 # jarvis_models.py) so it is free. A download spends bandwidth and disk. A
@@ -324,6 +330,16 @@ graph_directory = ""
 auto_index_rag = true
 recent_journal_days_indexed = 14
 max_rag_chars_per_file = 2000
+
+[notes.obsidian]
+# The vault folder: the one that has a ".obsidian" folder inside it, e.g.
+# 'C:\Users\you\Documents\MyVault' (single quotes, so the backslashes are
+# kept as they are). Leave empty for no Obsidian. JARVIS_OBSIDIAN_VAULT, if
+# set, wins. Read as plain files on this PC - no Obsidian plugin, no API key.
+# #obs adds to today's daily note (Obsidian's Daily notes core plugin
+# decides its folder and name); Jarvis's notes search reads the .md files.
+# Neither ever creates a vault, and nothing from it goes to a cloud model.
+vault_directory = ""
 
 
 # ------------------------------------------------------------------------

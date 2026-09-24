@@ -368,15 +368,18 @@ def _run_home_control(args: dict, plan_obj, **_) -> dict:
 
 
 def _prepare_note(kind: str):
-    """prepare() for the two note tools: jarvis_note_capture's plan + card."""
+    """prepare() for the three note tools: jarvis_note_capture's plan + card."""
     def prepare(args: dict):
         try:
             import jarvis_note_capture as NC
         except Exception as exc:
             return None, (f"File a note: {json.dumps(args, ensure_ascii=False)} "
                           f"(unavailable: {exc})")
-        return (NC.prepare_logseq_tool(args) if kind == "logseq"
-                else NC.prepare_joplin_tool(args))
+        if kind == "logseq":
+            return NC.prepare_logseq_tool(args)
+        if kind == "obsidian":
+            return NC.prepare_obsidian_tool(args)
+        return NC.prepare_joplin_tool(args)
     return prepare
 
 
@@ -611,8 +614,9 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "jarvis_email_read_run"),
     "notes_search": Tool(
         "notes_search",
-        "Search the owner's own notes in Joplin or Obsidian, over each "
-        "app's local REST API. Read-only; never creates or edits a note.",
+        "Search the owner's own notes: the Obsidian vault folder on this PC, "
+        "or Joplin or Obsidian over each app's local REST API. Read-only; "
+        "never creates or edits a note.",
         {"type": "object", "properties": {
             "query": {"type": "string"},
             "limit": {"type": "integer",
@@ -648,11 +652,11 @@ TOOLS: dict = {
         _prepare_home_control,
         lambda args, state, **_: _run_home_control(args, state),
         gate_lookup_name=lambda args: "jarvis_home_control_run"),
-    # The two note WRITES (jarvis_note_capture.py). Their action names are the
-    # ones the owner's jarvis-framework.toml already has tiers for, so that
-    # file - not this one - decides whether each asks first. Like every tool
-    # here they are offered only when [tools].enabled names them. The desktop's
-    # #log / #joplin / quick note do NOT go through these: they post the
+    # The note WRITES (jarvis_note_capture.py). Their action names are the
+    # ones the owner's jarvis-framework.toml has tiers for, so that file - not
+    # this one - decides whether each asks first. Like every tool here they
+    # are offered only when [tools].enabled names them. The desktop's #log /
+    # #joplin / #obs / quick note do NOT go through these: they post the
     # owner's own words to /api/notes/capture, with no model involved.
     "append_logseq_journal": Tool(
         "append_logseq_journal",
@@ -663,6 +667,15 @@ TOOLS: dict = {
          "required": ["text"]},
         _prepare_note("logseq"), _run_note,
         gate_lookup_name=lambda args: "append_logseq_journal"),
+    "append_obsidian_daily": Tool(
+        "append_obsidian_daily",
+        "Add one entry to the end of today's Obsidian daily note on this PC. "
+        "Only ever adds; never changes or removes anything already written.",
+        {"type": "object", "properties": {
+            "text": {"type": "string", "description": "the entry, in the owner's words"}},
+         "required": ["text"]},
+        _prepare_note("obsidian"), _run_note,
+        gate_lookup_name=lambda args: "append_obsidian_daily"),
     "create_joplin_note": Tool(
         "create_joplin_note",
         "Create one NEW note in Joplin on this PC. Never edits an existing note "
@@ -725,7 +738,8 @@ def _github_search_action_name() -> str:
 #: "outbound" by their worst case, a browser step nearly always sends
 #: something, and home_control moves a real lock or light. The reads the
 #: owner chose to leave at "auto" (calendar, email, notes, home state) and the
-#: two note writes (owner decision, 2026-09-23: saved straight away, no card)
+#: note writes (owner decisions, 2026-09-23 and, for Obsidian, 2026-09-24:
+#: saved straight away, no card)
 #: are deliberately NOT here - they are the config's call.
 NEEDS_A_PERSON = {
     "github_search": "sends a search term to GitHub",

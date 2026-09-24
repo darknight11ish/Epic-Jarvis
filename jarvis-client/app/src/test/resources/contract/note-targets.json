@@ -1,0 +1,55 @@
+{
+  "_about": "Written by backend/test_obsidian_notes.py --write from jarvis_note_capture's real functions. Do not edit by hand.",
+  "none": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "targets": []
+    }
+  },
+  "logseq_only": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "targets": [
+        "logseq"
+      ]
+    }
+  },
+  "all": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "targets": [
+        "logseq",
+        "joplin",
+        "obsidian"
+      ]
+    }
+  },
+  "obsidian_only": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "targets": [
+        "obsidian"
+      ]
+    }
+  },
+  "older_backend": {
+    "status": 404,
+    "body": {
+      "ok": false,
+      "error": "no note with that id on this PC"
+    }
+  },
+  "capture_not_set_up": {
+    "status": 503,
+    "body": {
+      "ok": false,
+      "state": "not_filed",
+      "error": "no Obsidian vault folder is set - put its path in [notes.obsidian] vault_directory in jarvis-framework.toml, or in JARVIS_OBSIDIAN_VAULT",
+      "message": "Not filed: Obsidian isn't set up on your PC - no Obsidian vault folder is set - put its path in [notes.obsidian] vault_directory in jarvis-framework.toml, or in JARVIS_OBSIDIAN_VAULT."
+    }
+  }
+}

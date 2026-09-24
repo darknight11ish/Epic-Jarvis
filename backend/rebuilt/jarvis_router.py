@@ -88,6 +88,11 @@ _PRIVATE_TERMS = [
     r"\be-?mails?\b", r"\binbox\w*\b", r"\bcalendars?\b",
     r"\bbank\w*\b", r"\binvoic\w*\b", r"\btax(?:es)?\b", r"\bfinanc\w*\b",
     r"\bmedical\b", r"\bfiles?\b",
+    # The two private note stores. jarvis-framework.toml's [notes.joplin]
+    # said this list matched "joplin"; it did not until 2026-09-24. A
+    # question about them is answered where the notes search can run, and
+    # that is only ever the local lane.
+    r"\bjoplin\b", r"\bobsidian\b",
 ]
 
 
