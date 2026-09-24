@@ -1,9 +1,16 @@
 package com.jarvis.client
 
+import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.voice.SpeechText
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * The pure text-shaping half of sentence-streaming TTS on Android -
@@ -71,6 +78,95 @@ class SpeechTextTest {
     @Test
     fun `a starting cursor past the end of the text finds nothing rather than crashing`() {
         assertTrue(sentences("Short.", from = 500).isEmpty())
+        assertTrue(SpeechText.findSentences("Short, yes", 500, firstPiece = true).isEmpty())
+    }
+
+    // -- The first piece: speech starts at the first comma ------------------
+    //
+    // The cases are `jarvis-desktop/tests/fixtures/first-piece-cases.json`,
+    // the same file the desktop's tests/speech-pieces.mjs reads, found by
+    // walking up from Gradle's working folder - one copy, so the two apps
+    // cannot drift apart.
+
+    private fun repoFile(rel: String): File {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            val f = File(dir, rel)
+            if (f.isFile) return f
+            dir = dir.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
+    }
+
+    private val fixture: JsonObject by lazy {
+        JarvisJson.parseToJsonElement(
+            repoFile("jarvis-desktop/tests/fixtures/first-piece-cases.json").readText(),
+        ).jsonObject
+    }
+
+    /** What VoiceSession.speakStreamed does as an answer streams in, `step`
+     *  characters at a time, then at its end: the pieces, trimmed. */
+    private fun speak(text: String, step: Int): List<String> {
+        val out = mutableListOf<String>()
+        var spokenUpTo = 0
+        var end = minOf(step, text.length)
+        while (true) {
+            val soFar = text.substring(0, end)
+            for ((piece, consumedTo) in SpeechText.findSentences(soFar, spokenUpTo, spokenUpTo == 0)) {
+                spokenUpTo = consumedTo
+                out.add(piece)
+            }
+            if (end >= text.length) break
+            end = minOf(text.length, end + step)
+        }
+        val rest = if (spokenUpTo <= text.length) text.substring(spokenUpTo).trim() else ""
+        if (rest.isNotEmpty()) out.add(rest)
+        return out
+    }
+
+    @Test
+    fun `the numbers and the word list are the ones the desktop uses`() {
+        assertEquals(fixture["min_chars"]!!.jsonPrimitive.int, SpeechText.FIRST_PIECE_MIN_CHARS)
+        assertEquals(fixture["force_words"]!!.jsonPrimitive.int, SpeechText.FIRST_PIECE_FORCE_WORDS)
+        assertEquals(fixture["marks"]!!.jsonPrimitive.content, SpeechText.FIRST_PIECE_MARKS)
+        assertEquals(
+            fixture["avoid_pause_words"]!!.jsonArray.map { it.jsonPrimitive.content },
+            SpeechText.AVOID_PAUSE_WORDS,
+        )
+    }
+
+    @Test
+    fun `every shared case is cut the same, all at once and one character at a time`() {
+        val cases = fixture["cases"]!!.jsonArray
+        assertTrue("found the shared cases", cases.size >= 10)
+        for (case in cases) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val text = c["text"]!!.jsonPrimitive.content
+            val want = c["pieces"]!!.jsonArray.map { it.jsonPrimitive.content }
+            assertEquals("$name (all at once)", want, speak(text, maxOf(1, text.length)))
+            assertEquals("$name (one character at a time)", want, speak(text, 1))
+        }
+    }
+
+    @Test
+    fun `only the first piece may end at a comma`() {
+        val text = "Tomorrow looks mild, with rain, and wind. "
+        assertEquals(
+            listOf("Tomorrow looks mild," to 21, "with rain, and wind." to text.length),
+            SpeechText.findSentences(text, 0, firstPiece = true),
+        )
+        // Without firstPiece - the old call - the same text is one sentence.
+        assertEquals(listOf("Tomorrow looks mild, with rain, and wind." to text.length), sentences(text))
+    }
+
+    @Test
+    fun `the voice session asks for the first piece while nothing is cut yet`() {
+        val kt = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/voice/VoiceSession.kt",
+        ).readText()
+        assertTrue(kt.contains("val firstPiece = spokenUpTo == 0"))
+        assertTrue(kt.contains("SpeechText.findSentences(soFar, spokenUpTo, firstPiece)"))
     }
 
     // --------------------------------------------------- markdown cleanup ---
