@@ -616,8 +616,7 @@ function renderCounts() {
   // extractor fills that queue on its own - nobody asked for the thing that
   // is waiting, so nothing else would tell you it is there.
   const proposed = state.data.memory_pending;
-  set(dom.countMemory,
-      (proposed && Array.isArray(proposed.pending) && proposed.pending.length) || 0);
+  set(dom.countMemory, waitingCount(proposed));
 
   // Live, Trust and Watch carry their own badges but sit behind "Advanced"
   // by default, where nobody sees them. Rolled into one count on the
@@ -1117,6 +1116,11 @@ function renderMemory() {
   if (dl.childElementCount) dom.memory.append(dl);
 
   const proposed = Array.isArray(pending.pending) ? pending.pending : [];
+  if (pending.hidden === true && waitingCount(pending)) {
+    dom.memory.append(el("h3", "inspector-sub", "Proposed facts"));
+    dom.memory.append(el("p", "note",
+      `${waitingCount(pending)} waiting, hidden. Press Show on the Memory tab to see them.`));
+  }
   if (proposed.length) {
     dom.memory.append(el("h3", "inspector-sub", "Proposed facts"));
     const list = el("div", "rows");
@@ -1309,6 +1313,55 @@ async function memoryWrite(command, args, okText) {
   }
 }
 
+/* ==========================================================================
+   Private answers - Settings' "Windows Hello for private answers"
+
+   While it is on, brain_read hands the two memory lists back EMPTY, with
+   `hidden: true` and how many there were (lock.rs redact_private). The
+   entries never reach this page until Show has passed Windows Hello, so
+   nothing here can be read round: this only draws the count and the button.
+   ========================================================================== */
+
+/** How many proposals are waiting, whether or not they are shown. */
+function waitingCount(pending) {
+  if (!pending) return 0;
+  if (pending.hidden === true) return Number(pending.hidden_count) || 0;
+  return (Array.isArray(pending.pending) && pending.pending.length) || 0;
+}
+
+function hiddenNode(count, what) {
+  const n = Number(count) || 0;
+  const box = el("div", "private-hidden");
+  box.append(el("p", "empty", n
+    ? `${n} ${what === "facts" ? (n === 1 ? "fact" : "facts") : "waiting"}, hidden until Windows Hello confirms it is you.`
+    : "Hidden until Windows Hello confirms it is you."));
+  box.append(button("Show", revealPrivate,
+    { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows this list." }));
+  return box;
+}
+
+async function revealPrivate() {
+  try {
+    await invoke("reveal_private_answers");
+  } catch (error) {
+    toast(String((error && error.message) || error), "bad");
+    return;
+  }
+  await refreshMemory();
+  if (state.view !== "memory") render(state.view);
+}
+
+// Settings changed, or the owner was away long enough that a Show ended:
+// read the lists again - Rust decides whether they come back hidden.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const reread = async () => {
+    await load(VIEW_SECTIONS.memory, { quiet: true });
+    render(state.view);
+  };
+  TAURI.event.listen("security-changed", reread);
+  TAURI.event.listen("private-hidden", reread);
+}
+
 function renderLearning() {
   const facts = state.data.memory_facts || {};
   const pending = state.data.memory_pending || {};
@@ -1316,6 +1369,11 @@ function renderLearning() {
   const why = unavailable("memory_facts");
   if (why) return dom.memoryLearning.append(whyNode("memory_facts"));
 
+  // A past view's rows came from a Show; hidden again, it goes back to now.
+  if (facts.hidden === true) {
+    memoryAsOf = null;
+    memoryAsOfRows = null;
+  }
   const on = facts.learning === true;
   if (on) state.learningAsk = null;    // the card was approved
   const setup = pending.setup || {};
@@ -1387,7 +1445,7 @@ function renderLearning() {
   const dl = el("dl", "kv");
   dl.append(el("dt", "", "Learning"), el("dd", "", on ? "on" : "off"));
   dl.append(el("dt", "", "Waiting"), el("dd", "",
-    String(facts.pending ?? (Array.isArray(pending.pending) ? pending.pending.length : 0))));
+    String(facts.pending ?? waitingCount(pending))));
   if (setup.note) dl.append(el("dt", "", "Note"), el("dd", "", String(setup.note)));
   // memory-intake.patch: why the last "Remember:" did NOT become a card (a
   // queued one is already a card, marked "your own words"), and how many
@@ -1509,6 +1567,10 @@ function renderProposals() {
     dom.memoryProposals.replaceChildren(whyNode("memory_pending"));
     return;
   }
+  if (body.hidden === true) {
+    dom.memoryProposals.replaceChildren(hiddenNode(body.hidden_count, "waiting"));
+    return;
+  }
   const items = Array.isArray(body.pending) ? body.pending : [];
   rows(
     dom.memoryProposals,
@@ -1611,6 +1673,12 @@ function renderFacts() {
   const why = unavailable("memory_facts");
   if (why) {
     dom.memoryFacts.replaceChildren(whyNode("memory_facts"));
+    return;
+  }
+  if (body.hidden === true) {
+    memoryAsOf = null;
+    memoryAsOfRows = null;
+    dom.memoryFacts.replaceChildren(hiddenNode(body.hidden_count, "facts"));
     return;
   }
   const past = memoryAsOf !== null;
