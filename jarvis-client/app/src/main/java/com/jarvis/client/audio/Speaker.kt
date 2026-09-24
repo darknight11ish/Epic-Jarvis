@@ -111,11 +111,13 @@ class Speaker(private val context: Context) {
             val speakerOut = manager.availableCommunicationDevices
                 .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
             // A headset, if one is connected, is left alone: Android picks it.
-            val headset = manager.availableCommunicationDevices.any {
-                it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                    it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-                    it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
-            }
+            // Every kind the owner might wear or have chosen, not only wired
+            // and Bluetooth: a USB-C headset and a hearing aid were forced
+            // back onto the loudspeaker. A Bluetooth LE speaker is not worn,
+            // but it is an output the owner connected on purpose, so it is
+            // left alone too. All of these exist at minSdk 33 (USB headset
+            // API 26, hearing aid 28, the two BLE types 31).
+            val headset = manager.availableCommunicationDevices.any { it.type in OWN_OUTPUTS }
             if (speakerOut != null && !headset) manager.setCommunicationDevice(speakerOut)
             val undo: () -> Unit = {
                 runCatching { manager.clearCommunicationDevice() }
@@ -415,6 +417,17 @@ class Speaker(private val context: Context) {
 
     private companion object {
         const val TAG = "JarvisSpeaker"
+
+        /** Outputs the voice-call mode must not override with the loudspeaker. */
+        val OWN_OUTPUTS = setOf(
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_BLE_SPEAKER,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_HEARING_AID,
+        )
 
         /** Longest the tail is waited for; one buffer is a few tens of ms. */
         const val DRAIN_MAX_MS = 1_500L

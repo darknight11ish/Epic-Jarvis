@@ -266,7 +266,8 @@ class WakeWordService : Service() {
                 }
                 if (running && answering() && bargeInOn()) {
                     try {
-                        voice.speaker.beginVoiceCall()
+                        // Voice-call mode starts inside listenWhileAnswering,
+                        // once Jarvis actually speaks; ended here either way.
                         var cutIn = listenWhileAnswering(answering, models, stopHead, turnModel)
                         // Short after a "hey Jarvis" cut-in: that cancelled the
                         // old turn. After a "stop", the rest of the answer is
@@ -383,7 +384,11 @@ class WakeWordService : Service() {
         }
         val wav = Wav.encode(clip)
         if (!bargeInOn()) return@coroutineScope voice.deliverWakeClip(wav) to null
-        voice.speaker.beginVoiceCall()
+        // Voice-call mode is entered by listenWhileAnswering when the reply
+        // starts (SPEAKING), not here: the PC may take many seconds to check
+        // and answer, and until it speaks there is nothing to cancel the echo
+        // of - only the phone's audio switched into call mode for no reason.
+        // Ended here in every case (safe when it never started).
         try {
             val turn = async { voice.deliverWakeClip(wav) }
             val cutIn = listenWhileAnswering({ turn.isActive }, models, stopHead, turnModel)
@@ -410,6 +415,12 @@ class WakeWordService : Service() {
         val voice = JarvisRuntime.voice
         while (running && answering() && voice.phase.value != VoiceSession.Phase.SPEAKING) delay(50)
         if (!running || !answering()) return null
+        // Now, and not before: the reply is starting. SPEAKING is set just
+        // before the first sentence goes to the PC for its audio, so this
+        // normally lands (within one 50 ms check) before that audio comes
+        // back and is played - on the voice-call path the echo canceller
+        // needs. The caller ends it in its `finally`.
+        voice.speaker.beginVoiceCall()
         val rec = openRecorder(MediaRecorder.AudioSource.VOICE_COMMUNICATION) ?: return null
         val canceller = runCatching {
             if (AcousticEchoCanceler.isAvailable()) {
