@@ -1226,6 +1226,81 @@ let scPollTimer = null;
 let scPollUntil = 0;
 /** Switches with a card waiting at the last read, to say how each ended. */
 let scWaiting = new Set();
+/** When this page first saw each of those cards waiting, in seconds. */
+const scWaitingSince = new Map();
+
+/**
+ * How a switch's card ended, in words, for the second card and the big
+ * model alike.
+ *
+ * A backend with the `last` field (`status().last`: `{feature, outcome,
+ * why, at}`) says what really happened; without it - an older backend -
+ * the page can only see that the switch is still off, and says the old
+ * "denied or ran out of time". `last` is used only when it is about THIS
+ * switch and ended after the page started waiting on it, so an older card's
+ * ending is never reported as this one's. Every field is read defensively:
+ * a missing, renamed or odd value falls back to the old words, never to a
+ * guess.
+ */
+const CARD_OUTCOMES = {
+  enabled: "enabled", approved: "enabled", on: "enabled",
+  denied: "denied", rejected: "denied",
+  expired: "expired", timed_out: "expired", timeout: "expired",
+  refused: "refused",
+  failed: "failed", error: "failed",
+  withdrawn: "withdrawn", cancelled: "withdrawn", canceled: "withdrawn",
+};
+
+/** Seconds since the epoch from a number (seconds or ms) or a date string. */
+function cardSeconds(at) {
+  if (typeof at === "number" && Number.isFinite(at)) return at > 1e12 ? at / 1000 : at;
+  if (typeof at === "string" && at.trim()) {
+    const n = Number(at);
+    if (Number.isFinite(n)) return n > 1e12 ? n / 1000 : n;
+    const parsed = Date.parse(at);
+    if (Number.isFinite(parsed)) return parsed / 1000;
+  }
+  return null;
+}
+
+/** `last`, when it is about switch `id` and ended after `since` (seconds). */
+function cardLast(status, id, since) {
+  const last = status && status.last;
+  if (!last || typeof last !== "object") return null;
+  const which = String(last.feature ?? last.switch ?? "").trim();
+  if (which !== id) return null;
+  const outcome = CARD_OUTCOMES[String(last.outcome || "").trim().toLowerCase()];
+  if (!outcome) return null;
+  const at = cardSeconds(last.at);
+  // A few seconds of slack: the page's clock and the backend's are the same
+  // PC's, but the page noted `since` when it READ the card as waiting.
+  if (at !== null && Number.isFinite(since) && at < since - 5) return null;
+  return { outcome, why: String(last.why ?? last.reason ?? "").trim() };
+}
+
+/** The sentence for switch `name`, which was waiting and no longer is. */
+function cardEndedWords(name, on, last) {
+  if (on) return `"${name}" is on.`;
+  const why = scSentence(last && last.why);
+  const because = why ? ` ${why}` : "";
+  switch (last && last.outcome) {
+    case "denied":
+      return `"${name}" was not turned on: the card was denied.`;
+    case "expired":
+      return `"${name}" was not turned on: the card ran out of time before anyone answered it.`;
+    case "refused":
+      return `"${name}" was not turned on: Jarvis refused it.${because || " It did not say why."}`;
+    case "failed":
+      return `"${name}" was approved, but turning it on failed.${because || " Jarvis did not say why."}`;
+    case "withdrawn":
+      return `"${name}" was not turned on: the card was withdrawn before it was answered.${because}`;
+    case "enabled":
+      // Approved, yet off by this read: turned off again since.
+      return `"${name}" was approved and turned on, but it is off again now.${because}`;
+    default:
+      return `"${name}" was not turned on: the card was denied or ran out of time.`;
+  }
+}
 
 /** A backend sentence as a sentence: first letter up, one full stop. */
 function scSentence(text) {
@@ -1445,11 +1520,13 @@ function scPaint(status) {
       if (pending.has(id)) continue;
       const name = id === "master" ? SC_MASTER.name : names.byId[id] || id;
       const on = id === "master" ? status.enabled === true : names.enabled.has(id);
-      report(sc.status, on ? `"${name}" is on.` : `"${name}" was not turned on: the card was denied or ran out of time.`,
+      report(sc.status, cardEndedWords(name, on, cardLast(status, id, scWaitingSince.get(id))),
         on ? "ok" : null);
       announce(sc.status.textContent);
     }
   }
+  for (const id of [...scWaitingSince.keys()]) if (!pending.has(id)) scWaitingSince.delete(id);
+  for (const id of pending) if (!scWaitingSince.has(id)) scWaitingSince.set(id, Date.now() / 1000);
   scWaiting = pending;
   if (pending.size) scStartPoll();
   else scStopPoll();
@@ -1618,6 +1695,8 @@ let bmPollTimer = null;
 let bmPollUntil = 0;
 /** Switches with a card waiting at the last read, to say how each ended. */
 let bmWaiting = new Set();
+/** When this page first saw each of those cards waiting, in seconds. */
+const bmWaitingSince = new Map();
 let bmPainted = false;
 
 /** `scSentence`, except that colibri keeps its own lower-case name. */
@@ -1847,12 +1926,14 @@ function bmPaint(status) {
       if (pending.has(id)) continue;
       const name = id === "master" ? BM_MASTER.name : (byId[id] && byId[id].name) || id;
       const on = id === "master" ? status.enabled === true : Boolean(byId[id] && byId[id].enabled);
-      report(bm.status, on ? `"${name}" is on.` : `"${name}" was not turned on: the card was denied or ran out of time.`,
+      report(bm.status, cardEndedWords(name, on, cardLast(status, id, bmWaitingSince.get(id))),
         on ? "ok" : null);
       announce(bm.status.textContent);
     }
   }
   bmPainted = true;
+  for (const id of [...bmWaitingSince.keys()]) if (!pending.has(id)) bmWaitingSince.delete(id);
+  for (const id of pending) if (!bmWaitingSince.has(id)) bmWaitingSince.set(id, Date.now() / 1000);
   bmWaiting = pending;
   if (pending.size || engine.state === "loading") bmStartPoll();
   else bmStopPoll();

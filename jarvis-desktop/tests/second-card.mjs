@@ -255,6 +255,46 @@ await check("a denied card: the switch is still off, and the page says it was no
   assert.match(s.status, /"Longer conversations" was not turned on/);
 });
 
+// AP-6 (audit 3): the page always said "denied or ran out of time". A
+// backend with status().last ({feature, outcome, why, at}) says what really
+// happened; one without it keeps the old words. The fixture may not have
+// `last` yet, so these add it to a real status.
+const endedWith = async (last, feature = "long_context") => {
+  const page = await open({ status: SC.capable_pending });
+  await page.evaluate(({ next, last }) => {
+    if (last) next.last = { ...last, at: last.at ?? Date.now() / 1000 };
+    window.__secondCard.status = next;
+    window.__emit("approvals-changed", { count: 0, items: [] });
+  }, { next: { ...SC.capable_pending, pending: [] }, last: last && { feature, ...last } });
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  await page.close();
+  return s.status;
+};
+
+await check("how a card ended comes from the backend's `last`: denied, expired, refused, failed, withdrawn", async () => {
+  const L = '"Longer conversations"';
+  assert.match(await endedWith({ outcome: "denied" }), new RegExp(`${L} was not turned on: the card was denied\\.$`));
+  assert.match(await endedWith({ outcome: "expired" }), /ran out of time before anyone answered it/);
+  assert.match(await endedWith({ outcome: "timed_out" }), /ran out of time before anyone answered it/);
+  const refused = await endedWith({ outcome: "refused", why: "the second card is not capable" });
+  assert.match(refused, /Jarvis refused it\. The second card is not capable\./);
+  const failed = await endedWith({ outcome: "failed", why: "ollama did not start on the second card" });
+  assert.match(failed, /was approved, but turning it on failed\. Ollama did not start on the second card\./);
+  assert.match(await endedWith({ outcome: "withdrawn" }), /the card was withdrawn before it was answered/);
+  for (const words of [await endedWith({ outcome: "denied" }), refused, failed]) {
+    assert.doesNotMatch(words, /denied or ran out of time/);
+  }
+});
+
+await check("CONTROL: with no `last` (an older backend), or one about another switch or an older card, the old words stay", async () => {
+  const OLD = /"Longer conversations" was not turned on: the card was denied or ran out of time\./;
+  assert.match(await endedWith(null), OLD);
+  assert.match(await endedWith({ outcome: "denied" }, "vision"), OLD);
+  assert.match(await endedWith({ outcome: "denied", at: Date.now() / 1000 - 3600 }), OLD);
+  assert.match(await endedWith({ outcome: "something new" }), OLD);
+});
+
 await check("while a card waits and nothing else happens, the page re-reads gently on its own", async () => {
   const page = await open({ status: SC.capable_pending });
   const first = await page.evaluate(() => window.__secondCard.reads);

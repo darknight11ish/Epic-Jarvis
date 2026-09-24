@@ -273,6 +273,30 @@ await check("a denied card: the switch is still off, and the page says it was no
   assert.match(s.status, /"Use the big model" was not turned on/);
 });
 
+// AP-6 (audit 3): what the card really did, from status().last when the
+// backend has it; the old words when it does not.
+const bmEndedWith = async (last) => {
+  const page = await open({ status: BM.status_pending });
+  await page.evaluate(({ next, last }) => {
+    if (last) next.last = { at: Date.now() / 1000, ...last };
+    window.__bigModel.status = next;
+    window.__emit("approvals-changed", { count: 0, items: [] });
+  }, { next: BM.status_ready_off, last });
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  await page.close();
+  return s.status;
+};
+
+await check("how the big model's card ended comes from `last` when the backend sends it", async () => {
+  assert.match(await bmEndedWith({ feature: "master", outcome: "denied" }),
+    /"Use the big model" was not turned on: the card was denied\./);
+  assert.match(await bmEndedWith({ feature: "master", outcome: "refused", why: "colibri is not installed" }),
+    /Jarvis refused it\. Colibri is not installed\./);
+  assert.match(await bmEndedWith({ feature: "master", outcome: "expired" }), /ran out of time before anyone answered it/);
+  assert.match(await bmEndedWith(null), /"Use the big model" was not turned on: the card was denied or ran out of time\./);
+});
+
 await check("while a card waits it re-reads gently; with nothing waiting it does not poll", async () => {
   const page = await open({ status: BM.status_pending });
   const first = await page.evaluate(() => window.__bigModel.reads);
