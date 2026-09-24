@@ -435,10 +435,10 @@ only what Jarvis itself said it did.
 | Endpoint | Method | Body / params | Desktop | Android | Notes |
 |---|---|---|---|---|---|
 | `/api/voice/status` | GET | — | **no** | `JarvisApi.kt:553` | Phone calls it before showing a mic button; failure returns refusing defaults. |
-| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word` | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. |
+| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop` | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
-| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...]}` | **no** | `JarvisApi.enrollVoice` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
+| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"` | **no** | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
 | `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
 
 **The audio format is fixed and the server will not convert.** 16 kHz,
@@ -484,6 +484,29 @@ clip within `awake_seconds` needs no phrase), `awake_seconds`. The returned
 `text` has the phrase removed. A client drops a reply with `wake_heard:
 false` silently. `backend/README.md`, "Voice that works", has the details.
 
+**Since 2026-09-24 `/api/voice/enroll` also takes** a `mic` ("phone" or
+"desktop": which microphone's voice print this trains - one print per
+microphone, the old single `owner.json` read as the fallback), up to 12
+clips (80 s in all), and two more modes on the same route:
+
+- `{"mode": "calibrate", "mic": "phone", "clips": [...]}` (1-5 clips of
+  SOMEONE ELSE): 200 `{"ok": true, "scores": [0.21, ...], "threshold": 0.35,
+  "owner_low": 0.62, "others_high": 0.4, "separated": true, "suggested":
+  0.51, "print": "phone", "message": "..."}`. Scored and dropped; no card;
+  nothing changes. `suggested` is null unless every one of the owner's own
+  training clips scored above every one of theirs. 409 `{"ok": false,
+  "error": ...}` when nothing is trained.
+- `{"mode": "threshold", "mic": "phone", "threshold": 0.51}`: raises ONE
+  card to use that bar for that microphone's print (0.05-0.9); 202 like a
+  training. The outcome shows as `last.outcome = "threshold_set"`.
+
+**A client must not send either mode unless `gate.training.calibrate` is
+true**: an older PC reads any body with clips in it as a training. The
+status also carries `gate.prints` = `{phone, desktop, general}`, each
+`{trained, samples, threshold, created, needs_retraining}`, and
+`gate.training.last.wake_check` (the "hey Jarvis" verifier built from the
+same training, `jarvis_wakeword.py`).
+
 **`/api/voice/turn` - Smart Turn** (`voice-turn.patch`, module
 `jarvis_turn.py`, added 2026-09-24). "Has the speaker finished, or only
 paused?" The body is one WAV (any rate, mono or stereo, at most 30 s; only
@@ -502,7 +525,7 @@ governs both listeners.
 
 ```
 POST /api/voice/enroll
-{"clips": ["<base64 of one WAV>", ...]}       3 to 8 clips, each 1-10 s,
+{"clips": ["<base64 of one WAV>", ...]}       3 to 12 clips, each 1-10 s, 80 s in all,
                                               16 kHz 16-bit mono, not silent
 ```
 

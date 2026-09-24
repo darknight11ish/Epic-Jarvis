@@ -51,6 +51,30 @@ from the sherpa-onnx releases
 (`3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx`); backend/README.md has
 the one-line install. The class keeps its old name because jarvis_speech
 constructs it by that name.
+
+ONE VOICE PRINT PER MICROPHONE (added 2026-09-24). A phone held at arm's
+length and a desk microphone across the room make the same voice sound
+different, and a print trained on one scores the other lower. So each
+microphone can have its own: `owner-phone.json` and `owner-desktop.json`
+beside the old `owner.json`. The clients say which microphone a clip came
+from (`mic=phone` / `mic=desktop` on /api/voice/utterance, voice-mic.patch;
+`"mic"` in the training body). A clip is checked against its own
+microphone's print and, when that one has not been trained, falls back:
+
+    phone:    owner-phone.json -> owner.json -> owner-desktop.json
+    desktop:  owner-desktop.json -> owner-phone.json -> owner.json
+    unnamed:  owner.json -> owner-phone.json -> owner-desktop.json
+
+`owner.json` is every print made before this change - all of them from the
+phone - so it keeps working untouched, for both, until the phone is
+trained again; that training replaces it (the card says so), which is why
+it moves to `owner-phone.json` then rather than being kept beside it.
+Nothing is migrated in place: an old print is only ever read.
+
+Each print also keeps its own training clips' scores against it
+(`self_scores`, numbers only) so the "someone else" check can suggest a
+threshold from them later (suggest_threshold) - never applied without a
+card.
 """
 from __future__ import annotations
 
@@ -91,6 +115,37 @@ def _profile_dir() -> Path:
 
 PROFILE_PATH = Path(os.environ.get("JARVIS_VOICE_PROFILE")
                     or (_profile_dir() / "owner.json"))
+
+#: The microphones that may have a print of their own. Anything else is
+#: "no microphone named", which reads the prints in the old order.
+MICS = ("phone", "desktop")
+
+
+def clean_mic(mic) -> str:
+    m = str(mic or "").strip().lower()
+    return m if m in MICS else ""
+
+
+def profile_path(mic: str = "") -> Path:
+    """Where `mic`'s own print lives; the old owner.json for no mic."""
+    m = clean_mic(mic)
+    base = Path(PROFILE_PATH)
+    return base.with_name(f"owner-{m}.json") if m else base
+
+
+def lookup_order(mic: str = "") -> list:
+    """[(label, path)] in the order a clip from `mic` is checked against -
+    see the module docstring. The label is what verdicts and status call
+    the print: "phone", "desktop", or "general" (the old owner.json)."""
+    general = ("general", Path(PROFILE_PATH))
+    phone = ("phone", profile_path("phone"))
+    desk = ("desktop", profile_path("desktop"))
+    m = clean_mic(mic)
+    if m == "desktop":
+        return [desk, phone, general]
+    if m == "phone":
+        return [phone, general, desk]
+    return [general, phone, desk]
 
 
 # --------------------------------------------------------------------------
@@ -401,6 +456,11 @@ class VoiceProfile:
     threshold: float = 0.35
     samples: int = 0
     created: float = 0.0
+    #: "phone", "desktop" or "" - the microphone it was trained on.
+    mic: str = ""
+    #: Each training clip's score against this print (numbers, no audio):
+    #: what "you" look like, for the "someone else" check.
+    self_scores: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -475,6 +535,13 @@ def load_profile(path: Optional[Path] = None) -> Optional[VoiceProfile]:
         # docstring promises None on "anything wrong", and the owner had no
         # way to learn "your profile is corrupt, re-enrol" from either.
         return None
+    scores = raw.get("self_scores", [])
+    if not isinstance(scores, list) or any(
+            isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x)
+            for x in scores):
+        # Only ever advisory (the "someone else" check), so a bad list is
+        # dropped rather than the whole print refused.
+        scores = []
     try:
         prof = VoiceProfile(
             name=str(raw.get("name", "owner")),
@@ -483,14 +550,28 @@ def load_profile(path: Optional[Path] = None) -> Optional[VoiceProfile]:
             threshold=_clamp_threshold(
                 raw.get("threshold", _cfg("threshold", 0.35) or 0.35)),
             samples=int(raw.get("samples", 0)),
-            created=float(raw.get("created", 0.0)))
+            created=float(raw.get("created", 0.0)),
+            mic=clean_mic(raw.get("mic", "")),
+            self_scores=[float(x) for x in scores][:64])
     except (TypeError, ValueError):
         return None
     return prof if prof.usable else None
 
 
+def find_profile(mic: str = ""):
+    """(profile, label) - the first usable print in `mic`'s lookup order, or
+    (None, ""). A print that exists but will not load is skipped, never
+    guessed at; load_profile's None means "refuse", and the next one in the
+    order is a different, real print."""
+    for label, p in lookup_order(mic):
+        prof = load_profile(p)
+        if prof is not None:
+            return prof, label
+    return None, ""
+
+
 def enroll(clips: list, embedder=None, path: Optional[Path] = None,
-           sample_rate: Optional[int] = None) -> VoiceProfile:
+           sample_rate: Optional[int] = None, mic: str = "") -> VoiceProfile:
     """Build a profile from sample clips.
 
     Implements the config's promise: "Enrolment lowers it automatically if
@@ -518,16 +599,90 @@ def enroll(clips: list, embedder=None, path: Optional[Path] = None,
         raise ValueError("those clips produced no usable voice print")
 
     configured = _clamp_threshold(_cfg("threshold", 0.35) or 0.35)
+    sims = [round(cosine(v, centroid), 4) for v in vecs]
     if len(vecs) > 1:
-        sims = [cosine(v, centroid) for v in vecs]
         loosest = min(sims)
         threshold = min(configured, round(max(MIN_THRESHOLD, loosest - 0.05), 4))
     else:
         threshold = configured
 
+    m = clean_mic(mic)
     prof = VoiceProfile(embedder=emb.name, centroid=centroid,
                         threshold=threshold, samples=len(vecs),
-                        created=time.time())
+                        created=time.time(), mic=m, self_scores=sims)
+    prof.save(path or profile_path(m))
+    if path is None and m == "phone" and Path(PROFILE_PATH).is_file():
+        # Every print before per-microphone prints came from the phone, so
+        # a new phone print is what replaces it - the card said "any voice
+        # trained before is replaced". Left behind, it would keep deciding
+        # for clips that name no microphone.
+        try:
+            Path(PROFILE_PATH).unlink()
+        except OSError:
+            pass
+    return prof
+
+
+def score_clips(clips: list, embedder=None, sample_rate: Optional[int] = None,
+                mic: str = "") -> dict:
+    """How each clip scores against `mic`'s print - for the "someone else"
+    check. Numbers only; changes nothing, stores nothing."""
+    prof, label = find_profile(mic)
+    if prof is None:
+        return {"ok": False, "why": "no voice has been trained yet"}
+    emb = embedder or Embedder()
+    if prof.embedder and emb.name != prof.embedder:
+        return {"ok": False, "why": "your voice was trained with a different voice check; "
+                                    "train it again first"}
+    scores = []
+    for c in clips:
+        v = _embed(emb, c, sample_rate)
+        scores.append(round(cosine(v, prof.centroid), 4) if v and len(v) == len(prof.centroid)
+                      else None)
+    return {"ok": True, "scores": scores, "threshold": prof.threshold,
+            "owner_scores": list(prof.self_scores), "print": label}
+
+
+#: Never suggest a bar above this: a real voice varies more than a
+#: synthetic one, and a print that refuses its owner half the time is
+#: worse than useless.
+MAX_SUGGESTED = 0.9
+
+
+def suggest_threshold(owner_scores: list, other_scores: list) -> dict:
+    """A bar between how the owner scores and how someone else scores.
+
+    Only when the two are apart: the owner's LOWEST training clip must beat
+    the other person's HIGHEST clip. Then the suggestion is halfway between
+    them. Otherwise there is no safe number - raising the bar far enough to
+    refuse the other person would refuse the owner too - and it says so.
+    """
+    own = [float(s) for s in owner_scores if isinstance(s, (int, float))]
+    other = [float(s) for s in other_scores if isinstance(s, (int, float))]
+    if not own or not other:
+        return {"separated": False, "suggested": None,
+                "why": "not enough to compare (train your voice again to record your own scores)"}
+    low, high = min(own), max(other)
+    if high >= low:
+        return {"separated": False, "suggested": None, "owner_low": round(low, 4),
+                "others_high": round(high, 4),
+                "why": ("someone else scored as high as you did, so a stricter setting would "
+                        "refuse you too")}
+    suggested = round(min(MAX_SUGGESTED, max(MIN_THRESHOLD, (low + high) / 2)), 2)
+    return {"separated": True, "suggested": suggested, "owner_low": round(low, 4),
+            "others_high": round(high, 4), "why": ""}
+
+
+def set_threshold(value: float, mic: str = "") -> VoiceProfile:
+    """Writes a new bar into `mic`'s own print (or the one it falls back
+    to). Called ONLY after an approval card said yes - see
+    jarvis_voice_enroll.stage_threshold. Raises ValueError, in words, when
+    there is nothing to change."""
+    prof, label = find_profile(mic)
+    if prof is None:
+        raise ValueError("no voice has been trained yet")
+    prof.threshold = _clamp_threshold(value)
+    path = Path(PROFILE_PATH) if label == "general" else profile_path(label)
     prof.save(path)
     return prof
 
@@ -576,12 +731,16 @@ class Verdict:
     threshold: float = 0.0
     mode: str = "owner"
     reason: str = ""
+    #: Which print decided: "phone", "desktop", "general" (the old
+    #: owner.json), or "" when none did.
+    voice_print: str = ""
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def verify(audio, embedder=None, sample_rate: Optional[int] = None) -> Verdict:
+def verify(audio, embedder=None, sample_rate: Optional[int] = None,
+           mic: str = "") -> Verdict:
     """Is this the owner? Called by jarvis_speech before any transcription.
 
     ORDER MATTERS. jarvis_speech's own comment explains why this must answer
@@ -602,7 +761,7 @@ def verify(audio, embedder=None, sample_rate: Optional[int] = None) -> Verdict:
         return Verdict(True, score=1.0, threshold=0.0, mode="broad",
                        reason="mode is broad: any voice is accepted")
 
-    prof = load_profile()
+    prof, label = find_profile(mic)
     if prof is None:
         return Verdict(False, mode=mode,
                        reason="no enrolled voice profile - run enrolment first")
@@ -646,19 +805,30 @@ def verify(audio, embedder=None, sample_rate: Optional[int] = None) -> Verdict:
     return Verdict(ok, score=round(score, 4), threshold=prof.threshold, mode=mode,
                    reason=("recognised" if ok else
                            f"does not match the enrolled voice "
-                           f"({score:.2f} < {prof.threshold:.2f})"))
+                           f"({score:.2f} < {prof.threshold:.2f})"),
+                   voice_print=label)
 
 
 def status() -> dict:
     """What the voice gate can actually do right now. Read by jarvis_speech
     and reported to clients as a capability, so it must not overstate."""
-    prof = load_profile()
+    prof, _label = find_profile("")
     try:
         # "ecapa" for speechbrain, "sherpa-onnx:<hash>" for a model file.
         model = EcapaEmbedder().name
     except Exception:
         model = "spectral-v1"
     speaker_model = model != "spectral-v1"
+    prints = {}
+    for label, p in lookup_order(""):
+        pr = load_profile(p)
+        prints[label] = {
+            "trained": pr is not None,
+            "samples": pr.samples if pr else 0,
+            "threshold": pr.threshold if pr else 0.0,
+            "created": pr.created if pr else 0.0,
+            "needs_retraining": bool(pr and pr.embedder and pr.embedder != model),
+        }
     # A profile made with one embedder cannot be checked with another -
     # verify() refuses it, correctly. That is exactly what happens the day
     # the better model is installed over a profile trained on the basic
@@ -689,6 +859,8 @@ def status() -> dict:
         "wake_phrase": _cfg("wake_phrase", "hey_jarvis"),
         "wake_word_enabled": bool(_cfg("wake_word_enabled", False)),
         "note": note,
+        # One print per microphone ("general" is the old owner.json).
+        "prints": prints,
     }
 
 

@@ -4057,7 +4057,7 @@ tap: the card says "If you did not just do this on your phone, say no".
 | deny, or nobody answers in 3 minutes | Nothing changes. The clips are deleted. |
 | a second training while a card waits | `409` - "approve or deny that card first", with the seconds left. It does not replace the first: that card would still be on screen, and approving it would then enrol the wrong clips or nothing. |
 | `change_own_config` not `"ask"` | `409` before any card, saying to set it back to `"ask"`. A card that no person answers must not replace your voice. |
-| limits | 3 to 8 clips, each 1 to 10 seconds, 16 kHz 16-bit mono WAV, not silent. Anything else is a `400` naming the clip: "clip 3 is too short (0.6 s) - read the whole sentence". Eight clips of ten seconds fit inside the backend's 4 MB request limit. |
+| limits | 3 to 12 clips (8 before 2026-09-24), each 1 to 10 seconds and 80 seconds in all, 16 kHz 16-bit mono WAV, not silent. Anything else is a `400` naming the clip: "clip 3 is too short (0.6 s) - read the whole sentence". 80 seconds of clips fit inside the backend's 4 MB request limit. |
 | `/api/voice/status` | `gate.enrolled`, `gate.samples`, `gate.embedder`, `gate.speaker_model`, `gate.needs_retraining`, and `gate.training` (a card waiting, and how the last one ended). |
 
 The card is raised through `jarvis_gate.check()` on a background thread,
@@ -4932,6 +4932,57 @@ model running there); every clip the phone sends is VAD-checked on the PC.
 one model family against a bank from another), and how it copes with a
 cold, a different room, or a different microphone - retrain if "hey Jarvis"
 starts being ignored.
+
+## Better "Train my voice": 12 sentences, one voice print per microphone, and a "someone else" check
+
+**1. Twelve short sentences instead of five.** About two minutes. Four of
+them start with "Hey Jarvis" - that is what the wake-word check above learns
+from. More, and more varied, sentences give a steadier voice print and let
+the PC measure how much your own voice varies. The PC now takes up to 12
+clips, 80 seconds in all (so the upload stays under its 4 MB limit).
+
+**2. One voice print per microphone.** Your phone held at arm's length and
+the PC's microphone across the desk make the same voice sound different, so
+each can have its own print. The phone trains `owner-phone.json`; each clip
+says which microphone it came from (`mic=phone` / `mic=desktop`, added to
+`/api/voice/utterance` by the new `voice-mic.patch`), and is checked against
+that microphone's print first:
+
+| a clip from | is checked against, in this order |
+|---|---|
+| the phone | the phone's print, then your old single print, then the PC's |
+| the desktop app | the PC's print, then the phone's, then your old single print |
+
+**Your existing voice print keeps working.** Nothing is converted: the old
+`owner.json` (it was always made on the phone) is still read, for both,
+until you train on the phone again - that training replaces it, as the
+card says. There is no training screen on the desktop yet, so the PC's
+microphone uses the phone's print until one is added; the phone's Train my
+voice screen says so.
+
+**3. "Check it with someone else".** After training, the phone offers:
+ask another person to read three sentences. The PC scores their clips
+against your print, throws them away, and tells you how many would have
+passed. If every one of your own training clips scored higher than every
+one of theirs, it suggests a stricter setting halfway between - and the
+only button that uses it **raises an approval card** ("Make Jarvis stricter
+about your voice on your phone's microphone? From 0.35 to 0.52"). Nothing
+changes until you approve it, and only that microphone's print changes. If
+their voice came as close as yours, it says so and suggests nothing,
+because a stricter setting would then refuse you too. The phone only
+offers this when the PC says it understands it: an older PC would read
+those clips as a training and ask to make the other person "you".
+
+**Owner steps:** run `.\scripts\apply-patches.ps1` (it copies the new
+`jarvis_voice.py`, `jarvis_voice_enroll.py` and `jarvis_speech.py`, and
+applies `voice-mic.patch`), restart Jarvis, update the phone app, then on
+the phone: Checks -> Your voice -> Train my voice, and approve the card.
+
+**Not checked:** a real voice, a real phone, the desktop microphone with a
+print of its own (no desktop training screen yet), and the owner's real
+`jarvis_hud.py` (voice-mic.patch was rehearsed on voice-503.patch's lines).
+
+**Test it:** `py -3 backend\test_voice_enroll.py; py -3 backend\test_voice_mic.py; py -3 backend\test_voice_contract.py`
 
 ---
 

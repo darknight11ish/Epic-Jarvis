@@ -736,7 +736,9 @@ class JarvisApi(
         wav: ByteArray,
         source: String = SOURCE_PUSH_TO_TALK,
     ): ApiResult<Heard> = withContext(Dispatchers.IO) {
-        val target = url("/api/voice/utterance?source=$source") ?: return@withContext ApiResult.Failed(
+        // mic=phone: the PC checks the clip against this phone's own voice
+        // print when there is one (a PC older than 2026-09-24 ignores it).
+        val target = url("/api/voice/utterance?source=$source&mic=$MIC_PHONE") ?: return@withContext ApiResult.Failed(
             ApiError.Unreachable("No desktop address set"),
         )
         val body = wav.toRequestBody("audio/wav".toMediaType())
@@ -834,12 +836,58 @@ class JarvisApi(
      * Uses the general [client]: a few megabytes over Tailscale is not a
      * short call. Nothing here is logged - the body is the owner's voice.
      */
-    suspend fun enrollVoice(clips: List<ByteArray>): ApiResult<VoiceTrainingReply> =
+    suspend fun enrollVoice(clips: List<ByteArray>, mic: String? = null): ApiResult<VoiceTrainingReply> =
+        postTraining(enrollRequestBody(clips, mic = mic))
+
+    /**
+     * Proposes a new bar for the owner's voice on [mic] - the PC raises an
+     * approval card and changes nothing until it is approved. The same
+     * route and answer shape as [enrollVoice].
+     */
+    suspend fun proposeVoiceThreshold(value: Double, mic: String): ApiResult<VoiceTrainingReply> =
+        postTraining(thresholdRequestBody(value, mic))
+
+    /**
+     * The "someone else" check: another person's clips, scored against the
+     * owner's print on the PC and thrown away. Changes nothing, raises no
+     * card. **Only after [VoiceTrainingState.calibrate]** - see its doc for
+     * why an older PC must never be sent this.
+     */
+    suspend fun calibrateVoice(clips: List<ByteArray>, mic: String): ApiResult<VoiceCalibration> =
         withContext(Dispatchers.IO) {
             val target = url("/api/voice/enroll") ?: return@withContext ApiResult.Failed(
                 ApiError.Unreachable("No desktop address set"),
             )
-            val body = enrollRequestBody(clips).toRequestBody("application/json".toMediaType())
+            val body = enrollRequestBody(clips, mic = mic, mode = "calibrate")
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                client.newCall(req).execute().use {
+                    when (it.code) {
+                        401, 403, 404 -> ApiResult.Failed(errorFor(it))
+                        else -> {
+                            val text = it.body?.string().orEmpty()
+                            val reply = runCatching {
+                                JarvisJson.decodeFromString(VoiceCalibration.serializer(), text)
+                            }.getOrNull()
+                            when {
+                                reply != null && (it.isSuccessful || reply.error.isNotBlank()) ->
+                                    ApiResult.Ok(reply)
+                                it.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                                else -> ApiResult.Failed(ApiError.Server(it.code, ""))
+                            }
+                        }
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
+    private suspend fun postTraining(json: String): ApiResult<VoiceTrainingReply> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/voice/enroll") ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
                 client.newCall(req).execute().use {
@@ -958,6 +1006,9 @@ class JarvisApi(
 
         const val SOURCE_PUSH_TO_TALK = "push_to_talk"
         const val SOURCE_WAKE_WORD = "wake_word"
+
+        /** Which microphone this app's clips come from - the PC keeps a voice print per microphone. */
+        const val MIC_PHONE = "phone"
 
         const val TOKEN_HEADER = "X-Jarvis-Token"
         const val CLIENT_HEADER = "X-Jarvis-Client"

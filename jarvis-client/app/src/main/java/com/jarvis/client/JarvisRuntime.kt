@@ -1165,7 +1165,9 @@ object JarvisRuntime {
      */
     suspend fun sendVoiceTraining(clips: List<ByteArray>): VoiceTraining.SendResult {
         actionBlocker()?.let { return VoiceTraining.SendResult(false, it) }
-        return when (val result = api.enrollVoice(clips)) {
+        // mic=phone: since 2026-09-24 the PC keeps one voice print per
+        // microphone, and this is the phone's.
+        return when (val result = api.enrollVoice(clips, VoiceTraining.MIC)) {
             is ApiResult.Ok -> {
                 val accepted = VoiceTraining.accepted(result.value)
                 // The card should appear in this phone's approvals too.
@@ -1184,6 +1186,47 @@ object JarvisRuntime {
                     else -> describe(result.error)
                 },
             )
+        }
+    }
+
+    /**
+     * The "someone else" check: another person's clips, scored on the PC
+     * against the owner's print and thrown away there. Changes nothing and
+     * raises no card, so it is not gated on the link the way a write is -
+     * but it is refused outright unless the PC says it understands it
+     * ([VoiceTraining.canCheck]): an older PC would read these clips as a
+     * training and raise a card to make the other person "the owner".
+     */
+    suspend fun checkVoiceWithSomeoneElse(clips: List<ByteArray>): VoiceTraining.CheckResult {
+        if (!VoiceTraining.canCheck(voice.status.value, voice.answered.value)) {
+            return VoiceTraining.CheckResult(
+                false,
+                "Your PC does not have this check yet. Run the patch script on the PC first.",
+            )
+        }
+        return when (val result = api.calibrateVoice(clips, VoiceTraining.MIC)) {
+            is ApiResult.Ok -> VoiceTraining.checkResult(result.value)
+            is ApiResult.Failed -> VoiceTraining.CheckResult(false, describe(result.error))
+        }
+    }
+
+    /**
+     * Asks the PC to use a stricter bar for the owner's voice on this
+     * phone's microphone. Like [sendVoiceTraining], a success means a card
+     * was raised - the bar changes only once it is approved.
+     */
+    suspend fun proposeVoiceThreshold(value: Double): VoiceTraining.SendResult {
+        actionBlocker()?.let { return VoiceTraining.SendResult(false, it) }
+        if (!VoiceTraining.canCheck(voice.status.value, voice.answered.value)) {
+            return VoiceTraining.SendResult(false, "Your PC does not have this setting yet.")
+        }
+        return when (val result = api.proposeVoiceThreshold(value, VoiceTraining.MIC)) {
+            is ApiResult.Ok -> {
+                val accepted = VoiceTraining.accepted(result.value)
+                if (accepted) refreshPending()
+                VoiceTraining.SendResult(accepted, VoiceTraining.replyLine(result.value))
+            }
+            is ApiResult.Failed -> VoiceTraining.SendResult(false, describe(result.error))
         }
     }
 

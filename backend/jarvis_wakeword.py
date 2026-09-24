@@ -488,9 +488,23 @@ def _read_verifier(p: Path) -> Optional[Verifier]:
     return ver
 
 
+def _verifier_order(mic: str = "") -> list:
+    """The verifiers a clip from `mic` is checked with, in order - the same
+    order as the voice prints they were trained beside (jarvis_voice
+    .lookup_order): its own microphone's first, then the others."""
+    m = str(mic or "").strip().lower()
+    if m == "desktop":
+        names = ("desktop", "phone", "")
+    elif m == "phone":
+        names = ("phone", "", "desktop")
+    else:
+        names = ("", "phone", "desktop")
+    return [verifier_path(n) for n in names]
+
+
 def load_verifier(mic: str = "") -> Optional[Verifier]:
-    """The verifier for `mic`, else the one trained without a mic, else None."""
-    for p in dict.fromkeys((verifier_path(mic), verifier_path(""))):
+    """The first verifier in `mic`'s order that exists, else None."""
+    for p in _verifier_order(mic):
         if p.is_file():
             return _read_verifier(p)
     return None
@@ -498,7 +512,7 @@ def load_verifier(mic: str = "") -> Optional[Verifier]:
 
 def verifier_status(mic: str = "") -> dict:
     """For status(): is there a verifier, from how much, and is it readable."""
-    for p in dict.fromkeys((verifier_path(mic), verifier_path(""))):
+    for p in _verifier_order(mic):
         if p.is_file():
             ver = _read_verifier(p)
             if ver is None:

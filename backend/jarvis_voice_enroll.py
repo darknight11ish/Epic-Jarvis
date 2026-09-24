@@ -3,11 +3,26 @@
 NEW MODULE, shipped whole beside jarvis_hud.py (apply-patches.ps1 copies it).
 `voice-enroll.patch` adds the one route that calls it:
 
-    POST /api/voice/enroll   {"clips": ["<base64 WAV>", ...]}
+    POST /api/voice/enroll   {"clips": ["<base64 WAV>", ...], "mic": "phone"}
         -> stage(body)       202 {"ok": true, "pending": true, ...}   a card is up
                              400 {"error": "clip 2 ..."}              bad input
                              409 {"error": ..., "pending": true}      one is already waiting
     GET /api/voice/status    gate.training = state()                  (jarvis_speech)
+
+Since 2026-09-24 the same route (no new route, so no new patch) also takes:
+
+    {"mode": "calibrate", "mic": "phone", "clips": [...]}   "someone else" -
+        another person's clips, scored against the owner's print and
+        dropped. 200 with the scores and, only when the owner's own
+        training clips all beat theirs, a suggested stricter bar. No card:
+        it changes nothing.
+    {"mode": "threshold", "mic": "phone", "threshold": 0.52}   raises ONE
+        card to use that bar for that microphone's print. Nothing changes
+        until it is approved.
+
+`mic` says which microphone's voice print the clips train (one print per
+microphone - jarvis_voice.py, "ONE VOICE PRINT PER MICROPHONE"). Missing
+means none named; an older phone sends none.
 
 WHY THERE IS A CARD AT ALL. The voice print decides who may talk to Jarvis.
 Replacing it is a change to who Jarvis obeys, which is `change_own_config`
@@ -70,12 +85,18 @@ ACTION = "change_own_config"
 
 #: Limits. Three is the fewest that says anything about how consistent the
 #: owner's voice is (enroll() lowers the bar to fit the loosest clip, so one
-#: clip would give it nothing to measure); eight at ten seconds is ~2.6 MB of
-#: audio, ~3.4 MB as base64, inside jarvis_hud's 4 MB MAX_BODY.
+#: clip would give it nothing to measure). Twelve since 2026-09-24 (the
+#: phone asks for twelve short sentences, four of them "hey Jarvis"). Twelve
+#: at ten seconds would not fit jarvis_hud's 4 MB MAX_BODY, so the TOTAL is
+#: capped too: 80 s is ~2.6 MB of audio, ~3.4 MB as base64.
 MIN_CLIPS = 3
-MAX_CLIPS = 8
+MAX_CLIPS = 12
 MIN_SECONDS = 1.0
 MAX_SECONDS = 10.0
+MAX_TOTAL_SECONDS = 80.0
+#: The "someone else" check: a few clips of another person.
+MIN_OTHER_CLIPS = 1
+MAX_OTHER_CLIPS = 5
 SAMPLE_RATE = 16000
 #: Per clip, after base64: the audio at MAX_SECONDS plus room for a header
 #: and a small extra chunk. Checked before the WAV is even parsed.
@@ -132,18 +153,35 @@ def _read_clip(n: int, raw: bytes) -> tuple:
     return frames, round(seconds, 2)
 
 
-def _parse(body: bytes) -> list:
-    """The request body -> [(pcm, seconds)], or BadClip with the reason."""
+def _doc(body) -> dict:
+    """The request body as a JSON object, or BadClip."""
     try:
         doc = json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray))
                          else body or "")
     except (UnicodeDecodeError, ValueError):
         raise BadClip('send {"clips": ["<base64 WAV>", ...]}') from None
-    clips = doc.get("clips") if isinstance(doc, dict) else None
+    if not isinstance(doc, dict):
+        raise BadClip('send {"clips": ["<base64 WAV>", ...]}')
+    return doc
+
+
+def _mic(doc: dict) -> str:
+    """The microphone named in the body, as jarvis_voice spells it, or ""."""
+    try:
+        import jarvis_voice
+        return jarvis_voice.clean_mic(doc.get("mic", ""))
+    except Exception:
+        return ""
+
+
+def _parse(body, lo: int = MIN_CLIPS, hi: int = MAX_CLIPS) -> list:
+    """The request body -> [(pcm, seconds)], or BadClip with the reason."""
+    doc = body if isinstance(body, dict) else _doc(body)
+    clips = doc.get("clips")
     if not isinstance(clips, list):
         raise BadClip('send {"clips": ["<base64 WAV>", ...]}')
-    if not MIN_CLIPS <= len(clips) <= MAX_CLIPS:
-        raise BadClip(f"send between {MIN_CLIPS} and {MAX_CLIPS} clips, not "
+    if not lo <= len(clips) <= hi:
+        raise BadClip(f"send between {lo} and {hi} clips, not "
                       f"{len(clips)}")
     out = []
     for n, c in enumerate(clips, 1):
@@ -159,6 +197,10 @@ def _parse(body: bytes) -> list:
         except (binascii.Error, ValueError):
             raise BadClip(f"clip {n} is not valid base64") from None
         out.append(_read_clip(n, raw))
+    total = sum(s for _, s in out)
+    if total > MAX_TOTAL_SECONDS:
+        raise BadClip(f"the recordings are {total:.0f} seconds in all; the most is "
+                      f"{MAX_TOTAL_SECONDS:.0f} - redo the longest ones a little quicker")
     return out
 
 
@@ -166,17 +208,44 @@ def _parse(body: bytes) -> list:
 #   The card
 # --------------------------------------------------------------------------
 
-def describe(count: int, seconds: float) -> str:
+_MIC_WORDS = {"phone": "your phone's microphone", "desktop": "this PC's microphone",
+              "": "your microphones"}
+_MIC_WHERE = {"phone": "on your phone", "desktop": "on this PC", "": "on your phone"}
+
+
+def describe(count: int, seconds: float, mic: str = "") -> str:
     """The card's text. Every word from here - no audio, no transcript, no
     name. What refusing costs is on it, as docs/ARCHITECTURE.md §3 asks."""
+    words = _MIC_WORDS.get(mic, _MIC_WORDS[""])
+    where = _MIC_WHERE.get(mic, _MIC_WHERE[""])
     return (
-        f"Replace the voice Jarvis listens for with the one just recorded on "
-        f"your phone? {count} clips, {seconds:.0f} seconds in all.\n\n"
+        f"Replace the voice Jarvis listens for on {words} with the one just "
+        f"recorded {where}? {count} clips, {seconds:.0f} seconds in all.\n\n"
         f"If you say yes: from now on only a voice that matches these clips "
-        f"can talk to Jarvis. Any voice trained before is replaced.\n\n"
-        f"If you did not just do this on your phone, say no - someone else "
-        f"may be trying to make Jarvis obey their voice.\n\n"
+        f"can talk to Jarvis through {words}. Any voice trained before for it "
+        f"is replaced. The sentences that start with \"hey Jarvis\" also "
+        f"teach it how you say that.\n\n"
+        f"If you did not just do this {where}, say no - someone else may be "
+        f"trying to make Jarvis obey their voice.\n\n"
         f"If you say no: nothing changes, and the recordings are deleted."
+    )
+
+
+def describe_threshold(mic: str, old: float, new: float) -> str:
+    """The threshold card. Plain words: what the number does, both ways."""
+    words = _MIC_WORDS.get(mic, _MIC_WORDS[""])
+    stricter = new > old
+    return (
+        f"Make Jarvis {'stricter' if stricter else 'less strict'} about your voice "
+        f"on {words}? From {old:.2f} to {new:.2f}.\n\n"
+        f"This is how closely a voice must match yours to be obeyed. "
+        + ("Higher turns other people away more often, and may sometimes "
+           "ask you to repeat yourself. " if stricter else
+           "Lower lets you through more easily, and lets other voices through "
+           "more easily too. ")
+        + "It was suggested by the \"someone else\" check.\n\n"
+        f"If you did not just do this, say no.\n\n"
+        f"If you say no: nothing changes."
     )
 
 
@@ -209,28 +278,49 @@ def _timeout() -> float:
         return 180.0
 
 
-def _enroll(clips: list):
+def _embedder():
+    import jarvis_voice
+    try:
+        return jarvis_voice.EcapaEmbedder()
+    except Exception:
+        return jarvis_voice.Embedder()
+
+
+def _enroll(clips: list, mic: str = ""):
     """The same embedder choice jarvis_speech.hear() makes, so the profile
     this writes is one hear() can compare against - verify() refuses a
     profile made by a different embedder."""
     import inspect
     import jarvis_voice
+    emb = _embedder()
+    # `sample_rate` and `mic` only for a jarvis_voice.py new enough to take
+    # them: an older copy on the PC would otherwise turn an approved card
+    # into a TypeError.
+    params = inspect.signature(jarvis_voice.enroll).parameters
+    kw = {}
+    if "sample_rate" in params:
+        kw["sample_rate"] = SAMPLE_RATE
+    if "mic" in params:
+        kw["mic"] = mic
+    return jarvis_voice.enroll(clips, embedder=emb, **kw)
+
+
+def _takes_mic(fn) -> bool:
+    """Whether a callable takes (clips, mic) - the real ones do; a test's
+    one-argument stand-in does not, and is called the old way."""
+    import inspect
     try:
-        emb = jarvis_voice.EcapaEmbedder()
-    except Exception:
-        emb = jarvis_voice.Embedder()
-    # `sample_rate` only for a jarvis_voice.py new enough to take it: an older
-    # copy on the PC would otherwise turn an approved card into a TypeError.
-    if "sample_rate" in inspect.signature(jarvis_voice.enroll).parameters:
-        return jarvis_voice.enroll(clips, embedder=emb, sample_rate=SAMPLE_RATE)
-    return jarvis_voice.enroll(clips, embedder=emb)
+        inspect.signature(fn).bind(None, "")
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 def _spawn(fn: Callable[[], None]) -> None:
     threading.Thread(target=fn, name="jarvis-voice-enroll", daemon=True).start()
 
 
-def _wake_verifier(clips: list) -> str:
+def _wake_verifier(clips: list, mic: str = "") -> str:
     """Builds the "hey Jarvis" verifier from the approved clips (16 kHz PCM
     bytes) and saves it beside the voice print. Returns one line for the
     outcome. Never raises: this must never undo an approved enrolment."""
@@ -241,10 +331,14 @@ def _wake_verifier(clips: list) -> str:
         return "not built: the wake-word module is not installed"
     p = None
     try:
-        p = W.verifier_path("")
+        p = W.verifier_path(mic)
+        if mic == "phone":
+            # The phone's new print replaces the old single one (jarvis_voice
+            # .enroll); the old verifier described that voice, so it goes too.
+            _drop(W.verifier_path(""))
         samples = [np.frombuffer(bytes(c[: len(c) // 2 * 2]), dtype="<i2")
                    .astype(np.float32) / 32768.0 for c in clips]
-        out = W.build_verifier(samples, SAMPLE_RATE)
+        out = W.build_verifier(samples, SAMPLE_RATE, mic=mic)
         if not out.get("built"):
             _drop(p)
             return "not built: " + str(out.get("why", "no reason given"))[:160]
@@ -298,11 +392,11 @@ def _decide(pid: str, *, gate: Callable, enroll: Callable,
         p = _PENDING if (_PENDING and _PENDING["id"] == pid) else None
         if p is None:
             return {"outcome": "gone"}
-        count, seconds = p["count"], p["seconds"]
-    text = describe(count, seconds)
+        count, seconds, mic = p["count"], p["seconds"], p.get("mic", "")
+    text = describe(count, seconds, mic)
     # Counts and lengths only. The gate stores `detail` on the approvals row
     # and an audit line; neither is a place for audio.
-    detail = {"text": text, "clips": count, "seconds": seconds,
+    detail = {"text": text, "clips": count, "seconds": seconds, "mic": mic,
               "what": "replace the enrolled owner voice print"}
     try:
         try:
@@ -329,12 +423,13 @@ def _decide(pid: str, *, gate: Callable, enroll: Callable,
                            reason=str(getattr(v, "reason", "refused"))[:200])
         with _LOCK:
             clips = list(_PENDING["clips"]) if (_PENDING and _PENDING["id"] == pid) else []
+            mic = _PENDING.get("mic", "") if (_PENDING and _PENDING["id"] == pid) else ""
         if not clips:
             return _finish(pid, "failed", request_id=rid,
                            reason="the recordings were gone")
         try:
             try:
-                prof = enroll(clips)
+                prof = enroll(clips, mic) if _takes_mic(enroll) else enroll(clips)
             except Exception as exc:
                 # ValueError from enroll() is its own plain sentence ("no
                 # usable audio in those clips"); anything else is named, not
@@ -348,7 +443,7 @@ def _decide(pid: str, *, gate: Callable, enroll: Callable,
                            samples=int(getattr(prof, "samples", 0) or 0),
                            embedder=str(getattr(prof, "embedder", "")),
                            wake_check="being built from the same sentences")
-            wake = str(wake_check(clips))
+            wake = str(wake_check(clips, mic) if _takes_mic(wake_check) else wake_check(clips))
             _note_last(pid_outcome="enrolled", wake_check=wake)
             return {**done, "wake_check": wake}
         finally:
@@ -378,6 +473,17 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
     wake_check = wake_check or _wake_verifier
     spawn = spawn or _spawn
 
+    try:
+        doc = _doc(body)
+    except BadClip as exc:
+        return 400, {"error": str(exc)}
+    mode = str(doc.get("mode", "enroll") or "enroll").strip().lower()
+    if mode == "calibrate":
+        # Changes nothing, raises no card: allowed while a card waits.
+        return calibrate(doc)
+    if mode not in ("enroll", "threshold"):
+        return 400, {"error": f"unknown mode {mode[:20]!r}"}
+
     with _LOCK:
         if _PENDING is not None:
             left = max(0, int(_PENDING["since"] + _PENDING["timeout"] - time.time()))
@@ -385,8 +491,11 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
                                    "approval - approve or deny that card first"),
                          "pending": True, "expires_in": left}
 
+    if mode == "threshold":
+        return stage_threshold(doc, gate=gate, tier_of=tier_of, spawn=spawn)
+    mic = _mic(doc)
     try:
-        clips = _parse(body)
+        clips = _parse(doc)
     except BadClip as exc:
         return 400, {"error": str(exc)}
 
@@ -411,8 +520,8 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
                                    "approval - approve or deny that card first"),
                          "pending": True}
         _PENDING = {"id": pid, "clips": [pcm for pcm, _ in clips],
-                    "count": len(clips), "seconds": seconds,
-                    "since": time.time(), "timeout": _timeout()}
+                    "count": len(clips), "seconds": seconds, "mic": mic,
+                    "kind": "enroll", "since": time.time(), "timeout": _timeout()}
     clips.clear()
     _audit("voice.training.staged", {"clips": count, "seconds": seconds})
 
@@ -439,17 +548,157 @@ def state() -> dict:
     """For /api/voice/status (gate.training). Counts and times only."""
     with _LOCK:
         p = _PENDING
-        out = {"available": True, "pending": p is not None}
+        # `calibrate`: this PC understands mode calibrate/threshold. The
+        # phone offers the "someone else" check only when it sees this - an
+        # older PC would stage those clips as a training.
+        out = {"available": True, "pending": p is not None, "calibrate": True}
         if p is not None:
-            out["clips"] = p["count"]
+            out["clips"] = p.get("count", 0)
+            out["kind"] = p.get("kind", "enroll")
             out["expires_in"] = max(0, int(p["since"] + p["timeout"] - time.time()))
         if _LAST is not None:
             out["last"] = {k: _LAST[k] for k in ("outcome", "at", "samples", "reason",
-                                                 "wake_check")
+                                                 "wake_check", "threshold", "mic")
                            if k in _LAST}
     out["limits"] = {"min_clips": MIN_CLIPS, "max_clips": MAX_CLIPS,
-                     "min_seconds": MIN_SECONDS, "max_seconds": MAX_SECONDS}
+                     "min_seconds": MIN_SECONDS, "max_seconds": MAX_SECONDS,
+                     "max_total_seconds": MAX_TOTAL_SECONDS}
     return out
+
+
+# --------------------------------------------------------------------------
+#   "Someone else": scores only, and the card that uses them
+# --------------------------------------------------------------------------
+
+def calibrate(doc: dict, *, score=None) -> tuple:
+    """mode "calibrate": another person's clips against the owner's print.
+    Scored, answered, dropped - nothing stored, nothing changed, no card."""
+    mic = _mic(doc)
+    try:
+        clips = _parse(doc, MIN_OTHER_CLIPS, MAX_OTHER_CLIPS)
+    except BadClip as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    try:
+        import jarvis_voice
+    except Exception:
+        return 503, {"ok": False, "error": "the voice check is not installed on this PC"}
+    pcm = [c for c, _ in clips]
+    clips.clear()
+    try:
+        if score is None:
+            got = jarvis_voice.score_clips(pcm, _embedder(), SAMPLE_RATE, mic)
+        else:
+            got = score(pcm, mic)
+    except Exception as exc:
+        return 500, {"ok": False, "error": type(exc).__name__}
+    finally:
+        pcm.clear()
+    if not got.get("ok"):
+        return 409, {"ok": False, "error": str(got.get("why", "could not compare"))}
+    theirs = [s for s in got["scores"] if isinstance(s, (int, float))]
+    sug = jarvis_voice.suggest_threshold(got.get("owner_scores", []), theirs)
+    current = float(got.get("threshold", 0.0))
+    passed = sum(1 for s in theirs if s >= current)
+    if sug["separated"]:
+        msg = (f"Your own training clips all scored {sug['owner_low']:.2f} or more; "
+               f"theirs {sug['others_high']:.2f} at most.")
+    else:
+        msg = sug["why"][:1].upper() + sug["why"][1:] + "."
+    _audit("voice.training.checked", {"clips": len(got["scores"]), "passed": passed})
+    return 200, {"ok": True, "scores": got["scores"], "threshold": current,
+                 "owner_low": sug.get("owner_low", 0.0),
+                 "others_high": sug.get("others_high", 0.0),
+                 "separated": bool(sug["separated"]), "suggested": sug["suggested"],
+                 "print": got.get("print", ""), "message": msg}
+
+
+def stage_threshold(doc: dict, *, gate: Callable, tier_of: Callable,
+                    spawn: Callable, apply: Optional[Callable] = None) -> tuple:
+    """mode "threshold": ONE card to use a new bar for `mic`'s print."""
+    global _PENDING
+    mic = _mic(doc)
+    raw = doc.get("threshold")
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not math.isfinite(raw):
+        return 400, {"error": "send {\"mode\": \"threshold\", \"threshold\": 0.5}"}
+    try:
+        import jarvis_voice
+    except Exception:
+        return 503, {"error": "the voice check is not installed on this PC"}
+    lo, hi = jarvis_voice.MIN_THRESHOLD, jarvis_voice.MAX_SUGGESTED
+    if not lo <= float(raw) <= hi:
+        return 400, {"error": f"the setting must be between {lo:g} and {hi:g}"}
+    prof, _label = jarvis_voice.find_profile(mic)
+    if prof is None:
+        return 409, {"error": "no voice has been trained yet", "pending": False}
+    new, old = round(float(raw), 2), float(prof.threshold)
+    try:
+        tier = tier_of(ACTION)
+    except Exception as exc:
+        tier = f"unreadable ({type(exc).__name__})"
+    if tier != "ask":
+        return 409, {"error": (f"{ACTION} is tier {tier!r} in jarvis-framework.toml; "
+                               f"changing how strict Jarvis is about your voice needs "
+                               f"a person to say yes, so it must be 'ask'"),
+                     "pending": False}
+    pid = uuid.uuid4().hex
+    with _LOCK:
+        if _PENDING is not None:
+            return 409, {"error": ("a voice card is already waiting for approval - "
+                                   "approve or deny that one first"), "pending": True}
+        _PENDING = {"id": pid, "clips": [], "count": 0, "seconds": 0.0, "mic": mic,
+                    "kind": "threshold", "threshold": new, "old": old,
+                    "since": time.time(), "timeout": _timeout()}
+    apply = apply or (lambda value, m: jarvis_voice.set_threshold(value, m))
+
+    def work():
+        try:
+            _decide_threshold(pid, gate=gate, apply=apply)
+        except Exception:
+            _finish(pid, "failed", reason="unexpected error")
+
+    try:
+        spawn(work)
+    except Exception as exc:
+        _finish(pid, "failed", reason=f"could not start ({type(exc).__name__})")
+        return 500, {"error": "could not raise the approval card"}
+    return 202, {"ok": True, "pending": True, "threshold": new,
+                 "message": ("Approve the card on your PC or phone to use the new "
+                             "setting. Nothing changes until you do.")}
+
+
+def _decide_threshold(pid: str, *, gate: Callable, apply: Callable) -> dict:
+    with _LOCK:
+        p = _PENDING if (_PENDING and _PENDING["id"] == pid) else None
+        if p is None:
+            return {"outcome": "gone"}
+        mic, new, old = p.get("mic", ""), p["threshold"], p["old"]
+    text = describe_threshold(mic, old, new)
+    detail = {"text": text, "mic": mic, "from": old, "to": new,
+              "what": "change how closely a voice must match the owner's"}
+    try:
+        v = gate(ACTION, detail, text)
+    except Exception as exc:
+        return _finish(pid, "refused", reason=f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    rid = getattr(v, "request_id", None)
+    if vtier != "ask":
+        return _finish(pid, "refused", request_id=rid,
+                       reason=f"the gate answered at tier {vtier!r}, which is not a person saying yes")
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _finish(pid, outcome, request_id=rid)
+        return _finish(pid, "refused", request_id=rid,
+                       reason=str(getattr(v, "reason", "refused"))[:200])
+    try:
+        apply(new, mic)
+    except Exception as exc:
+        why = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+        return _finish(pid, "failed", request_id=rid, reason=why[:200])
+    return _finish(pid, "threshold_set", request_id=rid, threshold=new, mic=mic)
 
 
 def _reset_for_tests() -> None:

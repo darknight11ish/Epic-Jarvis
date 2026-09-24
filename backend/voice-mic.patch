@@ -1,0 +1,20 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1561,6 +1561,16 @@
+                            "disarms the owner-voice gate; show that dictation "
+                            "is unavailable instead"))
+             try:
+-                heard = jarvis_speech.hear(raw, source=src)
++                # Which microphone (voice-mic.patch): the phone sends ?mic=phone,
++                # the desktop ?mic=desktop, so the clip is checked against that
++                # microphone's own voice print. Passed only to a jarvis_speech.py
++                # that says it takes it; anything but those two words is ignored.
++                from urllib.parse import parse_qs as _voice_qs
++                voice_mic = ((_voice_qs(self.path.split("?", 1)[1]).get("mic") or [""])[0]
++                             if "?" in self.path else "")
++                if getattr(jarvis_speech, "TAKES_MIC", False):
++                    heard = jarvis_speech.hear(raw, source=src, mic=voice_mic)
++                else:
++                    heard = jarvis_speech.hear(raw, source=src)
+             except Exception as exc:
+                 return self._send(500, {"error": type(exc).__name__})

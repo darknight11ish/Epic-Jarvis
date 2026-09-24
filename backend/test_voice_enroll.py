@@ -25,6 +25,13 @@ What it proves:
   9. voice-enroll.patch applies to what voice-503 and appearance wrote, and leaves
      test_voice_503.py's four _no_speech call sites at four.
  10. The patched jarvis_hud.py - only where it exists (the owner's PC).
+ 11. One voice print per microphone (2026-09-24): each trains its own, the
+     old single print keeps working for both until the phone trains again,
+     and each checks against its own first.
+ 12. "Someone else": scored and dropped, no card, nothing changed; a
+     suggestion only when the owner's own clips all beat theirs.
+ 13. The threshold card: nothing changes until it is approved, and only
+     for the microphone it names.
 """
 import array
 import ast
@@ -281,8 +288,10 @@ def t_the_tier_must_be_ask():
 def t_the_limits():
     fresh()
     bad = [
-        ("two clips (too few)", body(five()[:2]), "between 3 and 8"),
-        ("nine clips (too many)", body([wav()] * 9), "between 3 and 8"),
+        ("two clips (too few)", body(five()[:2]), "between 3 and 12"),
+        ("thirteen clips (too many)", body([wav()] * 13), "between 3 and 12"),
+        ("twelve 7-second clips (84 s in all, over 80)", body([wav(7.0)] * 12),
+         "84 seconds in all"),
         ("a clip under a second", body([wav(), wav(0.5), wav()]), "clip 2 is too short"),
         ("a clip over ten seconds", body([wav(), wav(), wav(10.5)]), "clip 3 is longer"),
         ("44.1 kHz", body([wav(), wav(rate=44100), wav()]), "clip 2 must be 16 kHz"),
@@ -321,8 +330,8 @@ def t_the_limits():
     code, out = E.stage(body([wav(1.0), wav(9.9), wav(5.0)]), gate=Gate(Verdict(False, outcome="denied")),
                         tier_of=ask, enroll=Enrol(), spawn=run_sync)
     check("the edges are inside the limits (1 s and 9.9 s)", code == 202, f"{code} {out}")
-    check("eight clips is fine", E.stage(body([wav()] * 8), gate=Gate(Verdict(False, outcome="denied")),
-                                         tier_of=ask, enroll=Enrol(), spawn=run_sync)[0] == 202)
+    check("twelve clips is fine", E.stage(body([wav()] * 12), gate=Gate(Verdict(False, outcome="denied")),
+                                          tier_of=ask, enroll=Enrol(), spawn=run_sync)[0] == 202)
 
 
 def t_one_at_a_time():
@@ -548,6 +557,177 @@ def t_the_patch():
               f"{out.count('_no_speech(')} including the def")
 
 
+# ------------------------------------------- 11. one print per microphone --
+
+def _mic_body(clips, mic, **extra):
+    return json.dumps({"mic": mic, **extra,
+                       "clips": [base64.b64encode(c).decode() for c in clips]}).encode()
+
+
+def _voice(freq):
+    """Clips that the spectral check tells apart by pitch."""
+    return [wav(2.0 + i * 0.2, freq + i) for i in range(4)]
+
+
+def _pcm(clip):
+    return E._read_clip(1, clip)[0]
+
+
+def t_one_print_per_microphone():
+    fresh()
+    keep = V.PROFILE_PATH
+    d = Path(tempfile.mkdtemp(prefix="jarvis-mics-"))
+    V.PROFILE_PATH = d / "owner.json"
+    try:
+        emb = V.Embedder()
+        # Before this change: one print, made from the phone.
+        V.enroll([_pcm(c) for c in _voice(180)], embedder=emb, path=V.PROFILE_PATH,
+                 sample_rate=16000)
+        for mic in ("phone", "desktop", ""):
+            v = V.verify(_pcm(wav(2.0, 181)), emb, sample_rate=16000, mic=mic)
+            check(f"the old single print still decides for mic={mic!r}",
+                  v.voice_print == "general" and v.threshold > 0, v)
+
+        gate = Gate(Verdict(True, outcome="approved"))
+        code, out = E.stage(_mic_body(_voice(300), "desktop"), gate=gate, tier_of=ask,
+                            spawn=run_sync, wake_check=lambda c, m: f"skipped {m}")
+        check("a desktop training is staged and approved", code == 202
+              and E.state()["last"]["outcome"] == "enrolled", (code, out, E.state()))
+        check("its card names this PC's microphone",
+              "this PC's microphone" in gate.calls[0][2] and gate.calls[0][1]["mic"] == "desktop",
+              gate.calls[0][2])
+        check("it made owner-desktop.json and left the old print alone",
+              (d / "owner-desktop.json").is_file() and V.PROFILE_PATH.is_file())
+        check("the verifier was built for that microphone",
+              E.state()["last"].get("wake_check") == "skipped desktop", E.state()["last"])
+        v_desk = V.verify(_pcm(wav(2.0, 301)), emb, sample_rate=16000, mic="desktop")
+        v_phone = V.verify(_pcm(wav(2.0, 181)), emb, sample_rate=16000, mic="phone")
+        check("a desktop clip is checked against the desktop's print",
+              v_desk.voice_print == "desktop", v_desk)
+        check("a phone clip is still checked against the old print",
+              v_phone.voice_print == "general", v_phone)
+
+        fresh()
+        gate = Gate(Verdict(True, outcome="approved"))
+        code, _ = E.stage(_mic_body(_voice(220), "phone"), gate=gate, tier_of=ask,
+                          spawn=run_sync, wake_check=lambda c, m: "skipped")
+        check("a phone training makes owner-phone.json and REPLACES the old print",
+              code == 202 and (d / "owner-phone.json").is_file()
+              and not V.PROFILE_PATH.exists(), sorted(p.name for p in d.iterdir()))
+        check("its card names the phone's microphone",
+              "your phone's microphone" in gate.calls[0][2], gate.calls[0][2])
+        order = {m: V.verify(_pcm(wav(2.0, 221)), emb, sample_rate=16000, mic=m).voice_print
+                 for m in ("phone", "desktop", "", "tablet")}
+        check("each microphone reads its own print; no microphone named reads the phone's",
+              order == {"phone": "phone", "desktop": "desktop", "": "phone", "tablet": "phone"},
+              order)
+        st = V.status()
+        check("status lists the prints per microphone",
+              st["prints"]["phone"]["trained"] and st["prints"]["desktop"]["trained"]
+              and not st["prints"]["general"]["trained"], st["prints"])
+        prof = V.load_profile(d / "owner-phone.json")
+        check("each print keeps its own training clips' scores (numbers, for the check)",
+              len(prof.self_scores) == 4 and all(0 < s <= 1 for s in prof.self_scores)
+              and prof.mic == "phone", prof)
+    finally:
+        V.PROFILE_PATH = keep
+
+
+# --------------------------------------------------- 12. someone else --
+
+def t_someone_else():
+    fresh()
+    keep = V.PROFILE_PATH
+    d = Path(tempfile.mkdtemp(prefix="jarvis-check-"))
+    V.PROFILE_PATH = d / "owner.json"
+    try:
+        check("no print yet: said, not guessed",
+              E.stage(_mic_body([wav(2.0, 500)], "phone", mode="calibrate"))[0] == 409)
+        V.enroll([_pcm(c) for c in _voice(180)], embedder=V.Embedder(), mic="phone",
+                 sample_rate=16000)
+        gate = Gate(Verdict(True, outcome="approved"))
+        before = (d / "owner-phone.json").read_text()
+        with audited() as lines:
+            code, out = E.stage(_mic_body([wav(2.0, 900), wav(2.0, 950)], "phone",
+                                          mode="calibrate"), gate=gate, tier_of=ask,
+                                spawn=run_sync)
+        check("the check answers at once: 200, no card, nothing staged",
+              code == 200 and not gate.calls and E._PENDING is None, (code, out))
+        check("...with a score per clip and the bar in use",
+              len(out["scores"]) == 2 and out["threshold"] > 0 and out["print"] == "phone", out)
+        check("...and changes nothing", (d / "owner-phone.json").read_text() == before)
+        check("the audit line carries counts, never audio",
+              lines and all(len(x) < 120 for _, x in lines), lines)
+        s = V.suggest_threshold([0.8, 0.7, 0.75], [0.3, 0.5])
+        check("apart: the suggestion is halfway between them", s["separated"]
+              and s["suggested"] == 0.6, s)
+        s = V.suggest_threshold([0.8, 0.45], [0.3, 0.5])
+        check("overlapping: no suggestion, and it says why", not s["separated"]
+              and s["suggested"] is None and "refuse you too" in s["why"], s)
+        s = V.suggest_threshold([0.99, 0.98], [0.97])
+        check("never above 0.9", s["suggested"] <= V.MAX_SUGGESTED, s)
+        check("the check needs 1 to 5 clips",
+              E.stage(_mic_body([wav()] * 6, "phone", mode="calibrate"))[0] == 400)
+        check("an unknown mode is refused", E.stage(_mic_body([wav()] * 3, "phone",
+                                                                 mode="upload"))[0] == 400)
+        st = E.state()
+        check("the status says this PC understands the check", st["calibrate"] is True, st)
+    finally:
+        V.PROFILE_PATH = keep
+
+
+# ---------------------------------------------------- 13. the bar card --
+
+def t_the_threshold_card():
+    fresh()
+    keep = V.PROFILE_PATH
+    d = Path(tempfile.mkdtemp(prefix="jarvis-bar-"))
+    V.PROFILE_PATH = d / "owner.json"
+    try:
+        def bar(value, verdict, tier="ask"):
+            fresh()
+            gate = Gate(verdict)
+            code, out = E.stage(json.dumps({"mode": "threshold", "mic": "phone",
+                                            "threshold": value}).encode(),
+                                gate=gate, tier_of=lambda a: tier, spawn=run_sync)
+            return code, out, gate
+        code, out, gate = bar(0.5, Verdict(True, outcome="approved"))
+        check("no print yet: 409, no card", code == 409 and not gate.calls, (code, out))
+        V.enroll([_pcm(c) for c in _voice(180)], embedder=V.Embedder(), mic="phone",
+                 sample_rate=16000)
+        V.enroll([_pcm(c) for c in _voice(300)], embedder=V.Embedder(), mic="desktop",
+                 sample_rate=16000)
+        start = V.load_profile(d / "owner-phone.json").threshold
+        desk = V.load_profile(d / "owner-desktop.json").threshold
+
+        code, out, gate = bar(0.52, Verdict(False, outcome="denied"))
+        check("a card is raised, and says what the number does, both ways",
+              code == 202 and gate.calls and "stricter" in gate.calls[0][2]
+              and f"From {start:.2f} to 0.52" in gate.calls[0][2]
+              and "If you say no: nothing changes" in gate.calls[0][2], gate.calls[:1])
+        check("denied: nothing changes",
+              V.load_profile(d / "owner-phone.json").threshold == start
+              and E.state()["last"]["outcome"] == "denied")
+        code, out, gate = bar(0.52, Verdict(True, tier="auto", outcome="approved"))
+        check("a verdict at the wrong tier: nothing changes",
+              V.load_profile(d / "owner-phone.json").threshold == start
+              and E.state()["last"]["outcome"] == "refused")
+        code, out, gate = bar(0.52, Verdict(True, outcome="approved"), tier="auto")
+        check("tier not 'ask': 409 before any card", code == 409 and not gate.calls, out)
+        code, out, gate = bar(0.52, Verdict(True, outcome="approved"))
+        check("approved: the phone's print uses 0.52, the desktop's is untouched",
+              V.load_profile(d / "owner-phone.json").threshold == 0.52
+              and V.load_profile(d / "owner-desktop.json").threshold == desk
+              and E.state()["last"]["outcome"] == "threshold_set"
+              and E.state()["last"]["threshold"] == 0.52, E.state()["last"])
+        for silly in (0.01, 0.99, "0.5", True, None):
+            code, out, gate = bar(silly, Verdict(True, outcome="approved"))
+            check(f"{silly!r} is refused without a card", code == 400 and not gate.calls,
+                  (code, out))
+    finally:
+        V.PROFILE_PATH = keep
+
+
 def t_the_real_file():
     if missing("jarvis_hud.py"):
         return check("SKIP - " + explain(), True)
@@ -567,7 +747,8 @@ if __name__ == "__main__":
     for fn in (t_staging_never_enrols, t_approve_enrols_and_drops_the_clips,
                t_every_other_answer_drops_the_clips, t_the_tier_must_be_ask, t_the_limits,
                t_one_at_a_time, t_nothing_logs_audio_or_tokens, t_the_real_enrolment_path,
-               t_with_the_better_model, t_the_patch, t_the_real_file):
+               t_with_the_better_model, t_the_patch, t_one_print_per_microphone,
+               t_someone_else, t_the_threshold_card, t_the_real_file):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

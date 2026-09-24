@@ -91,7 +91,7 @@ private val FAQS = listOf(
     Faq(
         "How do I teach Jarvis my voice? Where is the talk button?",
         "Open Platform checks and tap Train my voice on the Your voice card. " +
-            "Read the five sentences, send them, then approve the card that " +
+            "Read the twelve short sentences, send them, then approve the card that " +
             "appears on your desktop or here - Jarvis learns your voice only " +
             "when you approve it, and the recordings are deleted either way. " +
             "The talk button on Home appears once your voice is trained and " +

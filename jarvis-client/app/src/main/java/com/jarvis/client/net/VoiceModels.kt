@@ -215,6 +215,32 @@ data class VoiceGate(
     @SerialName("needs_retraining") val needsRetraining: Boolean = false,
     val note: String = "",
     val training: VoiceTrainingState = VoiceTrainingState(),
+    /**
+     * One voice print per microphone (since 2026-09-24): the phone's, the
+     * PC's, and "general" - the single print every training before then
+     * made. A clip is checked against its own microphone's print first.
+     * All untrained on a PC that does not send this.
+     */
+    val prints: VoicePrints = VoicePrints(),
+)
+
+/** `gate.prints`. See [VoiceGate.prints]. */
+@Serializable
+data class VoicePrints(
+    val phone: VoicePrint = VoicePrint(),
+    val desktop: VoicePrint = VoicePrint(),
+    /** The old single print (owner.json). Replaced the next time the phone trains. */
+    val general: VoicePrint = VoicePrint(),
+)
+
+@Serializable
+data class VoicePrint(
+    val trained: Boolean = false,
+    val samples: Int = 0,
+    /** How close a voice must be to pass, 0..1. */
+    val threshold: Double = 0.0,
+    val created: Double = 0.0,
+    @SerialName("needs_retraining") val needsRetraining: Boolean = false,
 )
 
 /** "Train my voice" on the desktop side: whether a card is waiting, and how the last one ended. */
@@ -232,6 +258,14 @@ data class VoiceTrainingState(
     val last: VoiceTrainingLast? = null,
     /** Why [available] is false. */
     val why: String = "",
+    /**
+     * The PC understands the "someone else" check and the threshold card
+     * (`mode: calibrate` / `mode: threshold`, 2026-09-24). **The phone must
+     * not send either without this**: an older PC reads any body with
+     * clips in it as a training, and would raise a card to replace the
+     * owner's voice with the other person's.
+     */
+    val calibrate: Boolean = false,
 )
 
 @Serializable
@@ -241,6 +275,14 @@ data class VoiceTrainingLast(
     val at: Double = 0.0,
     val samples: Int = 0,
     val reason: String = "",
+    /**
+     * The "hey Jarvis" check built from the same clips, in the PC's words:
+     * "built from 4 "hey Jarvis" sentences" or "not built: ...". Blank from
+     * a PC older than 2026-09-24, or for an outcome that trained nothing.
+     */
+    @SerialName("wake_check") val wakeCheck: String = "",
+    /** "threshold_set" outcomes: the new bar. */
+    val threshold: Double = 0.0,
 )
 
 /**
@@ -261,12 +303,52 @@ data class VoiceTrainingLast(
  * java.util.Base64 rather than android.util.Base64, so the unit test runs on
  * a plain JVM; it has been on Android since API 26 and minSdk is 33.
  */
-fun enrollRequestBody(clips: List<ByteArray>): String {
+fun enrollRequestBody(clips: List<ByteArray>, mic: String? = null, mode: String? = null): String {
     val enc = java.util.Base64.getEncoder()
-    return clips.joinToString(prefix = "{\"clips\":[", postfix = "]}", separator = ",") {
+    // `mode` and `mic` are fixed words from this app (never user text), so
+    // they need no escaping either. Absent, the PC reads "enrol" and "no
+    // microphone named" - which is what a PC older than 2026-09-24 does anyway.
+    val head = buildString {
+        append("{")
+        if (mode != null) append("\"mode\":\"").append(mode).append("\",")
+        if (mic != null) append("\"mic\":\"").append(mic).append("\",")
+        append("\"clips\":[")
+    }
+    return clips.joinToString(prefix = head, postfix = "]}", separator = ",") {
         "\"" + enc.encodeToString(it) + "\""
     }
 }
+
+/** `{"mode": "threshold", "mic": ..., "threshold": 0.52}` - asks for a card; changes nothing itself. */
+fun thresholdRequestBody(value: Double, mic: String): String =
+    "{\"mode\":\"threshold\",\"mic\":\"$mic\",\"threshold\":" +
+        String.format(java.util.Locale.US, "%.2f", value) + "}"
+
+/**
+ * The PC's answer to the "someone else" check (`mode: calibrate`): how
+ * each of the other person's clips scored against the owner's print, how
+ * the owner's own training clips scored, and - only when the two are
+ * clearly apart - a stricter bar to propose. Nothing changed on the PC.
+ */
+@Serializable
+data class VoiceCalibration(
+    val ok: Boolean = false,
+    /** One per clip; null where a clip was too short to score. */
+    val scores: List<Double?> = emptyList(),
+    /** The bar in use now. */
+    val threshold: Double = 0.0,
+    /** The owner's own lowest training score. */
+    @SerialName("owner_low") val ownerLow: Double = 0.0,
+    /** The other person's highest score. */
+    @SerialName("others_high") val othersHigh: Double = 0.0,
+    /** True when every one of the owner's clips beat every one of theirs. */
+    val separated: Boolean = false,
+    /** The bar to propose, or null when there is no safe one. */
+    val suggested: Double? = null,
+    /** The PC's own plain sentence about the result. */
+    val message: String = "",
+    val error: String = "",
+)
 
 @Serializable
 data class VoiceTrainingReply(

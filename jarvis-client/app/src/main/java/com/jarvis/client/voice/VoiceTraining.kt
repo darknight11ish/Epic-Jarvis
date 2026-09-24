@@ -1,5 +1,7 @@
 package com.jarvis.client.voice
 
+import com.jarvis.client.net.JarvisApi
+import com.jarvis.client.net.VoiceCalibration
 import com.jarvis.client.net.VoiceStatus
 import com.jarvis.client.net.VoiceTrainingLast
 import com.jarvis.client.net.VoiceTrainingReply
@@ -22,19 +24,44 @@ import java.util.Locale
 object VoiceTraining {
 
     /**
-     * Five sentences, each about three to five seconds read aloud.
+     * Twelve short sentences, each about two to four seconds read aloud -
+     * about two minutes in all, including the tapping.
      *
      * Chosen to cover different sounds rather than to mean anything: a
-     * pangram (every letter), a request in an ordinary voice, a question
-     * (the voice rises at the end), a run of "s" and "th" sounds, and the
-     * name Jarvis itself, which is what the owner will actually say most.
+     * pangram (every letter), requests in an ordinary voice, questions (the
+     * voice rises at the end), a run of "s" and "th" sounds, numbers and
+     * colours. Four start with "Hey Jarvis": the PC learns from those how
+     * the owner says the wake word (its "hey Jarvis" check), and the rest
+     * teach it what the owner sounds like saying anything else. More, and
+     * more varied, sentences than the old five give the voice print a
+     * steadier middle and the PC more to measure the owner's own spread by.
      */
     val SENTENCES: List<String> = listOf(
-        "The quick brown fox jumps over the lazy dog near the riverbank.",
-        "Please remind me to call my sister on Thursday afternoon.",
+        "Hey Jarvis, what's on my calendar today?",
+        "The quick brown fox jumps over the lazy dog.",
+        "Please remind me to call my sister on Thursday.",
+        "Hey Jarvis, turn the lights down a little.",
         "What is the weather going to be like this weekend?",
-        "Six thick thistle sticks stood beside the old wooden gate.",
-        "Jarvis, turn the lights down low and play some quiet music.",
+        "Six thick thistle sticks stood by the gate.",
+        "Hey Jarvis, play some quiet music.",
+        "I'd like a cup of tea with milk, no sugar.",
+        "How long will it take to drive into town?",
+        "Hey Jarvis, set a timer for ten minutes.",
+        "My favourite colours are red, green and blue.",
+        "Good morning, it's nice to hear your voice again.",
+    )
+
+    /** This phone's microphone, as the PC names it (one voice print per microphone). */
+    const val MIC = JarvisApi.MIC_PHONE
+
+    /**
+     * For the "someone else" check: three sentences for another person to
+     * read, so the PC can see how close a different voice gets.
+     */
+    val OTHER_SENTENCES: List<String> = listOf(
+        "Hey Jarvis, what time is it?",
+        "Can you read me the news headlines?",
+        "Turn the heating up a couple of degrees.",
     )
 
     /**
@@ -45,10 +72,16 @@ object VoiceTraining {
     const val MIN_SECONDS = 1.0f
     const val MAX_SECONDS = 10.0f
 
+    /**
+     * All the clips together, at most (`jarvis_voice_enroll.py`
+     * MAX_TOTAL_SECONDS): twelve long clips would not fit in one request.
+     */
+    const val MAX_TOTAL_SECONDS = 80.0f
+
     /** The first screen, word for word. */
     const val INTRO =
-        "Jarvis only listens to your voice. Read these 5 sentences so it learns what you " +
-            "sound like. It takes about a minute."
+        "Jarvis only listens to your voice. Read these 12 short sentences so it learns what you " +
+            "sound like, and how you say \"hey Jarvis\". It takes about two minutes."
 
     const val INTRO_DETAIL =
         "Find a quiet spot and speak normally, at the distance you usually hold the phone. " +
@@ -91,9 +124,17 @@ object VoiceTraining {
      * acting (the same `actionBlocker` every other write uses), and it is the
      * answer the owner can do something about from here.
      */
-    fun sendBlocker(recorded: Int, total: Int, linkBlocker: String?): String? = when {
+    fun sendBlocker(
+        recorded: Int,
+        total: Int,
+        linkBlocker: String?,
+        totalSeconds: Float = 0f,
+    ): String? = when {
         linkBlocker != null -> linkBlocker
         recorded < total -> "Record all $total sentences first ($recorded done)."
+        totalSeconds > MAX_TOTAL_SECONDS ->
+            "The recordings are ${totalSeconds.toInt()} seconds in all; the most is " +
+                "${MAX_TOTAL_SECONDS.toInt()}. Redo the longest ones a little quicker."
         else -> null
     }
 
@@ -106,6 +147,8 @@ object VoiceTraining {
             gate.training.pending -> "Waiting for you to approve the card on your PC or phone."
             gate.needsRetraining ->
                 "Your PC's voice check changed since you trained it. Train your voice again."
+            gate.prints.phone.trained ->
+                "Trained on this phone, from ${plural(gate.prints.phone.samples, "sample")}."
             gate.enrolled -> "Trained, from ${plural(gate.samples, "sample")}."
             gate.mode.trim().lowercase(Locale.ROOT) == "broad" ->
                 "Not trained. Jarvis is set to listen to anyone, so this is optional."
@@ -131,10 +174,27 @@ object VoiceTraining {
             null
         }
 
+    /**
+     * One line about the PC's microphone, or null when there is nothing
+     * worth saying (the PC did not report per-microphone prints).
+     */
+    fun desktopLine(status: VoiceStatus, answered: Boolean): String? {
+        val p = status.gate.prints
+        if (!answered || !status.available || !(p.phone.trained || p.general.trained)) return null
+        return if (p.desktop.trained) {
+            "The PC's microphone has its own voice print too."
+        } else {
+            "Your PC's own microphone uses this one until it is trained separately."
+        }
+    }
+
     /** How the last training ended, or null if none has since the PC started. */
     fun lastLine(last: VoiceTrainingLast?): String? = when (last?.outcome) {
         null, "" -> null
-        "enrolled" -> "Last training was approved: ${plural(last.samples, "sample")} saved."
+        "enrolled" -> "Last training was approved: ${plural(last.samples, "sample")} saved." +
+            wakeCheckSuffix(last.wakeCheck)
+        "threshold_set" -> "The new setting was approved: voices must now score " +
+            "${score(last.threshold)} to pass."
         "denied" -> "Last training was denied on the card. Nothing changed."
         "timed_out" -> "Nobody answered the last training card in time. Nothing changed."
         "refused" -> "Your PC refused the last training" + reasonSuffix(last.reason)
@@ -152,6 +212,55 @@ object VoiceTraining {
 
     /** Whether the PC accepted the clips (a card is up, or was just answered). */
     fun accepted(reply: VoiceTrainingReply): Boolean = reply.ok && reply.error.isBlank()
+
+    // ------------------------------------------------ the "someone else" check
+
+    /** What the PC said about the other person's clips, in plain words. */
+    data class CheckResult(val ok: Boolean, val message: String, val suggested: Double? = null)
+
+    /** Offered only when the PC is new enough ([com.jarvis.client.net.VoiceTrainingState.calibrate]) and a print exists. */
+    fun canCheck(status: VoiceStatus, answered: Boolean): Boolean =
+        answered && status.available && status.gate.training.calibrate &&
+            (status.gate.prints.phone.trained || status.gate.prints.general.trained)
+
+    const val CHECK_INTRO =
+        "Want to make sure Jarvis turns other people away? Ask someone else to read 3 " +
+            "sentences into this phone. Your PC compares them with your voice and suggests a " +
+            "setting. Nothing changes unless you approve it."
+
+    /** The result, from the PC's answer. */
+    fun checkResult(c: VoiceCalibration): CheckResult {
+        if (c.error.isNotBlank()) {
+            return CheckResult(false, c.error.trim().replaceFirstChar { it.uppercase() }
+                .let { if (it.endsWith(".")) it else "$it." })
+        }
+        if (!c.ok) return CheckResult(false, c.message.ifBlank { "Your PC could not compare the voices." })
+        val theirs = c.scores.filterNotNull()
+        val passed = theirs.count { it >= c.threshold }
+        val head = when {
+            theirs.isEmpty() -> "None of the clips could be scored."
+            passed == 0 -> "Good: none of their ${theirs.size} clips would pass as you now."
+            else -> "$passed of their ${theirs.size} clips would pass as you now."
+        }
+        val tail = when {
+            c.suggested != null && c.suggested > c.threshold + 0.005 ->
+                " A stricter setting, ${score(c.suggested)} (now ${score(c.threshold)}), would " +
+                    "turn them away and still let you in."
+            c.suggested != null -> " Your current setting already sits between you and them."
+            else -> " " + c.message.ifBlank { "Their voice came too close to yours to suggest a stricter setting." }
+        }
+        return CheckResult(true, head + tail, c.suggested?.takeIf { it > c.threshold + 0.005 })
+    }
+
+    /** "0.52" - always a dot. */
+    fun score(v: Double): String = String.format(Locale.US, "%.2f", v)
+
+    private fun wakeCheckSuffix(wakeCheck: String): String = when {
+        wakeCheck.isBlank() -> ""
+        wakeCheck.startsWith("built") -> " Its \"hey Jarvis\" check was built too."
+        else -> " Its \"hey Jarvis\" check was not built (" +
+            wakeCheck.removePrefix("not built").trimStart(':', ' ').trimEnd('.') + ")."
+    }
 
     private fun reasonSuffix(reason: String): String =
         if (reason.isBlank()) "." else ": ${reason.trim().trimEnd('.')}."

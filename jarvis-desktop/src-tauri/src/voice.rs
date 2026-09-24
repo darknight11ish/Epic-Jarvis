@@ -125,6 +125,8 @@ use crate::events::{VOICE_HEARD, VOICE_SPEECH_STARTED};
 const UTTERANCE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Synthesising a reply is comparable work in the other direction.
 const SAY_TIMEOUT: Duration = Duration::from_secs(30);
+/// Which microphone this app's clips come from, as the server names it.
+const MIC_DESKTOP: &str = "desktop";
 /// How long `start_voice_capture`/`start_automatic_listening` wait to hear
 /// back from the capture thread before giving up and reporting the
 /// microphone as unreachable, rather than returning success for a stream
@@ -384,9 +386,12 @@ async fn post_utterance(
     }
     let wav_bytes = encode_wav(spec, samples)?;
 
+    // mic=desktop: the server keeps one voice print per microphone and
+    // checks this clip against this PC's own when there is one (a server
+    // older than 2026-09-24 ignores it). See backend/voice-mic.patch.
     let response = jarvis_client(Some(UTTERANCE_TIMEOUT))?
         .post(format!(
-            "{}/api/voice/utterance?source={source}",
+            "{}/api/voice/utterance?source={source}&mic={MIC_DESKTOP}",
             jarvis_base(app)
         ))
         .headers(jarvis_headers(app)?)

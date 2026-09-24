@@ -11,6 +11,9 @@ missing module):
 
     jarvis_speech.status()                 -> dict
     jarvis_speech.hear(raw, source=...)    -> Heard  (raw = one complete WAV)
+    jarvis_speech.hear(raw, source=..., mic="phone"|"desktop")   since 2026-09-24:
+        which microphone, so the clip is checked against that microphone's
+        own voice print (voice-mic.patch passes `?mic=`; TAKES_MIC says so)
     jarvis_speech.say(text)                -> bytes | None  (a WAV)
     jarvis_speech.set_wake_enabled(bool)   -> {"ok": bool, ...}
 
@@ -738,6 +741,19 @@ def _wake_spotter_state() -> dict:
                 "why": f"could not read it ({type(exc).__name__})"}
 
 
+def _prints(voice: dict) -> dict:
+    """gate.prints: {phone, desktop, general}, each {trained, samples,
+    threshold, created, needs_retraining}. Never raises."""
+    blank = {"trained": False, "samples": 0, "threshold": 0.0, "created": 0.0,
+             "needs_retraining": False}
+    got = voice.get("prints") if isinstance(voice.get("prints"), dict) else {}
+    out = {}
+    for k in ("phone", "desktop", "general"):
+        p = got.get(k) if isinstance(got.get(k), dict) else {}
+        out[k] = {**blank, **{f: p[f] for f in blank if f in p}}
+    return out
+
+
 def _verifier_state() -> dict:
     """{trained, positives, why} - never raises."""
     if jarvis_wakeword is None or not hasattr(jarvis_wakeword, "verifier_status"):
@@ -779,12 +795,12 @@ def _training_state() -> dict:
     try:
         import jarvis_voice_enroll
     except Exception:
-        return {"available": False, "pending": False,
+        return {"available": False, "pending": False, "calibrate": False,
                 "why": "jarvis_voice_enroll.py is not in the backend folder"}
     try:
         return jarvis_voice_enroll.state()
     except Exception as exc:
-        return {"available": False, "pending": False,
+        return {"available": False, "pending": False, "calibrate": False,
                 "why": f"could not read it ({type(exc).__name__})"}
 
 
@@ -1006,6 +1022,10 @@ def status() -> dict:
             "needs_retraining": bool(voice.get("needs_retraining", False)),
             "note": str(voice.get("note", "")),
             "training": _training_state(),
+            # One voice print per microphone (jarvis_voice.py, "ONE VOICE
+            # PRINT PER MICROPHONE"); every one untrained from an older
+            # jarvis_voice.py that does not report them.
+            "prints": _prints(voice),
         },
     }
 
@@ -1015,6 +1035,11 @@ def status() -> dict:
 # --------------------------------------------------------------------------
 
 SOURCE_WAKE_WORD = "wake_word"
+
+#: hear() takes `mic` (voice-mic.patch checks for this before passing it, so
+#: a jarvis_hud.py patched against a newer jarvis_speech.py never calls an
+#: older one with an argument it does not know).
+TAKES_MIC = True
 
 
 @dataclass
@@ -1038,6 +1063,10 @@ class Heard:
     #: `awake_seconds` needs no phrase of its own.
     awake: bool = False
     awake_seconds: float = 0.0
+    #: Which voice print decided: "phone", "desktop", "general" (the old
+    #: single print) or "" - see jarvis_voice.py, "ONE VOICE PRINT PER
+    #: MICROPHONE". Shown, never branched on by a client.
+    voice_print: str = ""
 
     def as_dict(self) -> dict:
         """What /api/voice/utterance sends back - assuming, as the desktop's
@@ -1058,20 +1087,32 @@ class Heard:
         return d
 
 
-def _takes_rate(fn) -> bool:
-    """Whether a jarvis_voice function accepts `sample_rate` (added
-    2026-09-23). The PC may still hold the copy from before that."""
+def _takes(fn, name: str) -> bool:
+    """Whether `fn` accepts keyword `name` - jarvis_voice / jarvis_wakeword on
+    the PC may be older than this file (`sample_rate` came 2026-09-23,
+    `mic` 2026-09-24)."""
     try:
         import inspect
-        return "sample_rate" in inspect.signature(fn).parameters
+        return name in inspect.signature(fn).parameters
     except (TypeError, ValueError):
         return False
 
 
-def hear(raw: bytes, source: str = "push_to_talk") -> Heard:
+def _takes_rate(fn) -> bool:
+    return _takes(fn, "sample_rate")
+
+
+def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
     """One complete WAV utterance in. Never transcribes before the speaker
     is checked - see the module docstring for the whole order and why it is
-    load-bearing, not a style choice."""
+    load-bearing, not a style choice.
+
+    `mic`: "phone" or "desktop" (anything else counts as none named) - the
+    clip is checked against that microphone's own voice print, and its own
+    "hey Jarvis" verifier, falling back as jarvis_voice.lookup_order says."""
+    mic = str(mic or "").strip().lower()
+    if mic not in ("phone", "desktop"):
+        mic = ""
     parsed = _read_wav(raw)
     if parsed is None:
         return Heard(False, source=source, available=False,
@@ -1104,7 +1145,10 @@ def hear(raw: bytes, source: str = "push_to_talk") -> Heard:
             if jarvis_wakeword is None:
                 return Heard(False, source=source, available=False, seconds=seconds,
                              reason="jarvis_wakeword.py is not in the backend folder")
-            spot = jarvis_wakeword.spot(samples, sample_rate)
+            if mic and _takes(jarvis_wakeword.spot, "mic"):
+                spot = jarvis_wakeword.spot(samples, sample_rate, mic=mic)
+            else:
+                spot = jarvis_wakeword.spot(samples, sample_rate)
             if not spot.ran:
                 return Heard(False, source=source, available=False, seconds=seconds,
                              reason="the PC cannot listen for \"hey Jarvis\": " + spot.why)
@@ -1128,13 +1172,16 @@ def hear(raw: bytes, source: str = "push_to_talk") -> Heard:
     # microphone's own rate, and the speaker model resamples when told it.
     # Only to a jarvis_voice.py that takes it - an older copy on the PC
     # would raise TypeError here, and this call is not wrapped.
+    kw = {}
     if _takes_rate(jarvis_voice.verify):
-        verdict = jarvis_voice.verify(samples, embedder, sample_rate=sample_rate)
-    else:
-        verdict = jarvis_voice.verify(samples, embedder)
+        kw["sample_rate"] = sample_rate
+    if mic and _takes(jarvis_voice.verify, "mic"):
+        kw["mic"] = mic
+    verdict = jarvis_voice.verify(samples, embedder, **kw)
     common = dict(score=verdict.score, threshold=verdict.threshold,
                   source=source, mode=verdict.mode, seconds=seconds,
-                  wake_score=spot.score if spot else 0.0)
+                  wake_score=spot.score if spot else 0.0,
+                  voice_print=str(getattr(verdict, "voice_print", "") or ""))
 
     if not verdict.is_owner:
         return Heard(False, reason=verdict.reason, **common)

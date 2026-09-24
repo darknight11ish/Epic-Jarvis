@@ -173,7 +173,8 @@ def t_the_client_files_are_readable():
     classes = kotlin_classes(KT)
     for c in ("VoiceStatus", "VoiceListening", "VoiceEngine", "VoiceAudioIn", "VoiceGate",
               "VoiceTrainingState", "VoiceTrainingLast", "VoiceTrainingReply", "Heard",
-              "VoiceWake", "VoiceSpotter", "VoiceTurn"):
+              "VoiceWake", "VoiceSpotter", "VoiceTurn", "VoicePrints", "VoicePrint",
+              "VoiceCalibration"):
         check(f"VoiceModels.kt declares {c}", c in classes and classes[c], f"{sorted(classes)}")
     check("VoiceListening reads push_to_talk (the field that hid the button)",
           ("push_to_talk", "Boolean") in classes.get("VoiceListening", []))
@@ -290,7 +291,10 @@ def t_training_state_in_every_shape():
         # A denial has no samples and no reason to give.
         conforms(done, "VoiceTrainingState", classes, "answered",
                  optional=("answered.clips", "answered.expires_in", "answered.why",
-                           "answered.last.samples", "answered.last.reason"))
+                           "answered.last.samples", "answered.last.reason",
+                           # only a training that enrolled has a wake check,
+                           # only a threshold card that passed has a bar
+                           "answered.last.wake_check", "answered.last.threshold"))
         check("the last outcome is readable", done.get("last", {}).get("outcome") == "denied", done)
 
     with mock.patch.dict(sys.modules, {"jarvis_voice_enroll": None}):
@@ -385,6 +389,33 @@ def t_the_utterance_reply_serves_both_clients():
     check("seconds is the clip's real length", abs(wires["a stranger"]["seconds"] - 1.0) < 0.01)
 
 
+def t_the_someone_else_reply_serves_the_phone():
+    """mode calibrate's answer, against the phone's VoiceCalibration."""
+    import base64
+    classes = kotlin_classes(KT)
+    with Env() as env:
+        samples, _ = S._read_wav(tone(220.0, 2.0))
+        V.enroll([samples, samples * 0.9, samples * 0.8], embedder=V.Embedder(),
+                 path=env.profile)
+        body = json.dumps({"mode": "calibrate", "mic": "phone",
+                           "clips": [base64.b64encode(tone(700.0, 2.0)).decode()]}).encode()
+        code, reply = E.stage(body)
+        wire = json.loads(json.dumps(reply))
+        check("the check answers 200", code == 200, (code, reply))
+        conforms(wire, "VoiceCalibration", classes, "calibrate", optional=("calibrate.error",))
+        code, refused = E.stage(json.dumps({"mode": "calibrate", "clips": []}).encode())
+        conforms(json.loads(json.dumps(refused)), "VoiceCalibration", classes, "refused",
+                 optional=tuple(f"refused.{k}" for k, _ in classes["VoiceCalibration"]
+                                if k not in ("ok", "error")))
+        check("a refusal carries the phone's `error`", code == 400 and refused["error"], refused)
+        st = S.status()
+        check("status says this PC understands the check (the phone waits for it)",
+              st["gate"]["training"]["calibrate"] is True)
+        check("status lists the prints; this one is the old single print",
+              st["gate"]["prints"]["general"]["trained"] is True
+              and st["gate"]["prints"]["phone"]["trained"] is False, st["gate"]["prints"])
+
+
 def t_the_turn_answer_serves_the_desktop():
     """voice.rs TurnRaw reads the /api/voice/turn reply (jarvis_turn.handle)."""
     import jarvis_turn as T
@@ -425,6 +456,7 @@ if __name__ == "__main__":
     for fn in (t_the_client_files_are_readable, t_status_has_every_field_the_phone_reads,
                t_push_to_talk_means_it_can_work, t_training_state_in_every_shape,
                t_the_utterance_reply_serves_both_clients, t_the_turn_answer_serves_the_desktop,
+               t_the_someone_else_reply_serves_the_phone,
                t_an_older_jarvis_voice_still_works):
         print(f"\n--- {fn.__name__} ---")
         try:

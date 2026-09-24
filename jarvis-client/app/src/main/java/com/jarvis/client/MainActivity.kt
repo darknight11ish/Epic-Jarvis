@@ -1102,6 +1102,8 @@ class MainActivity : FragmentActivity() {
                             linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() },
                             record = { stop, onLevel -> voice.recordTrainingClip(stop, onLevel) },
                             send = { clips -> JarvisRuntime.sendVoiceTraining(clips) },
+                            checkOthers = { clips -> JarvisRuntime.checkVoiceWithSomeoneElse(clips) },
+                            proposeThreshold = { value -> JarvisRuntime.proposeVoiceThreshold(value) },
                             onRefresh = { voice.refreshStatus() },
                             onAskMicrophone = {
                                 // Never starts a recording on the grant - the

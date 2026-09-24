@@ -218,6 +218,11 @@ $PATCHES = @(
     # last lines, so it comes after that one; nothing else touches them.
     # Needs jarvis_turn.py copied in; without it the route answers 503.
     'voice-turn.patch'
+    # One voice print per microphone: hands `?mic=phone|desktop` from
+    # /api/voice/utterance to jarvis_speech.hear(). Its context is
+    # voice-503's lines in that route, which nothing later touches. Passes
+    # it only to a jarvis_speech.py that says TAKES_MIC.
+    'voice-mic.patch'
     # The pairing token moves out of the plain file token-file.patch wrote,
     # into Windows Credential Manager (CLAUDE.md rule 3). Its context is
     # token-file's _resolve_token and banner, with loopback-too's and
