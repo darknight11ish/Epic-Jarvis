@@ -68,6 +68,30 @@ class NoteCaptureTest {
         assertEquals("You said no, so nothing was written.", said.text)
     }
 
+    /** K10: a reason sent only in `error` is shown, not a bare "Not filed". */
+    @Test
+    fun aRefusalWithOnlyAnErrorShowsThatError() {
+        // The 429 jarvis_note_capture.py sends when too many cards wait: `error`, no `message`.
+        val said = NoteCapture.describe(
+            job(
+                """{"ok":false,"state":"not_filed",
+                    "error":"several notes are already waiting for approval - answer those first"}""",
+            ),
+            "logseq",
+        )
+        assertTrue(said.final)
+        assertFalse(said.filed)
+        assertEquals("Several notes are already waiting for approval - answer those first.", said.text)
+        // `message` still wins when both are there.
+        val both = NoteCapture.describe(
+            job("""{"state":"not_filed","error":"empty","message":"Not filed: the note was empty."}"""),
+            "logseq",
+        )
+        assertEquals("Not filed: the note was empty.", both.text)
+        // Neither: the plain fallback.
+        assertEquals("Not filed in Logseq.", NoteCapture.describe(job("""{"state":"failed"}"""), "logseq").text)
+    }
+
     @Test
     fun anUnknownStateIsNeverShownAsFiled() {
         assertFalse(NoteCapture.describe(job("""{"state":"weird"}"""), "logseq").filed)
