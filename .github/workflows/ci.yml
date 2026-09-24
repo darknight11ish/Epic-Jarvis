@@ -174,7 +174,10 @@ jobs:
 
           # Every shipped module is there, and is this repository's copy.
           $where = [IO.File]::ReadAllText((Join-Path $repo 'backend\_where.py'))
-          $shipped = @([regex]::Matches($where, '"((?:rebuilt/)?jarvis_\w+\.py)"') | ForEach-Object { $_.Groups[1].Value })
+          # Only the SHIPPED tuple: the rest of _where.py names other files too
+          # (HUD = BACKEND / "jarvis_hud.py"), and one of those is the owner's own.
+          $block = [regex]::Match($where, '(?s)\nSHIPPED = \((.*?)\n\)').Groups[1].Value
+          $shipped = @([regex]::Matches($block, '"((?:rebuilt/)?jarvis_\w+\.py)"') | ForEach-Object { $_.Groups[1].Value })
           if ($shipped.Count -lt 20) { throw "read only $($shipped.Count) names from _where.SHIPPED" }
           foreach ($m in $shipped) {
             $leaf = Split-Path -Leaf $m

@@ -50,6 +50,7 @@ import com.jarvis.client.voice.VoiceSession
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * The raw JSON behind the brain screen.
