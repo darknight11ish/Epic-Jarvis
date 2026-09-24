@@ -478,6 +478,12 @@ def t_the_desktop_fixture_is_fresh():
     import gen_voice_status_cases as G
     check("voice-status-cases.json equals a fresh run of the producer",
           G.main(["--check"]) == 0, "run python3 tools/gen_voice_status_cases.py")
+    # The training and custom-voice screens are tested against their own
+    # file (tests/voice-training.mjs). Nothing checked it, so a backend
+    # change left it stale unseen (the voice-flow merge did exactly that).
+    import gen_voice_training_cases as T
+    check("voice-training-cases.json equals a fresh run of the producer",
+          T.main(["--check"]) == 0, "run python3 tools/gen_voice_training_cases.py")
 
 
 if __name__ == "__main__":
