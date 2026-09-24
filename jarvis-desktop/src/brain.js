@@ -64,6 +64,23 @@ import {
   TAINT_TITLE,
 } from "./history-view.js";
 import {
+  addPage as addAutoPage,
+  AUTO_MISSING,
+  cardReason,
+  factMeta,
+  forgetQuestion,
+  LEARNING_OFF_NOTE,
+  olderThan as olderAuto,
+  PAGE as AUTO_PAGE,
+  readAuto,
+  refreshRows as refreshAutoRows,
+  rememberedLine,
+  savedIds,
+  SWITCHES as AUTO_SWITCHES,
+  VOICE_MARK,
+  VOICE_TITLE,
+} from "./auto-learn.js";
+import {
   askDeep,
   leadLine as deepLead,
   POLL_MS as DEEP_POLL_MS,
@@ -162,6 +179,9 @@ const dom = {
   memoryLearning: $("memory-learning"),
   memoryProposals: $("memory-proposals"),
   memoryFacts: $("memory-facts"),
+  memoryAuto: $("memory-auto"),
+  memoryAutoList: $("memory-auto-list"),
+  memorySavedLine: $("memory-saved-line"),
   jobs: $("jobs"),
   undo: $("undo"),
   contentRisk: $("content-risk"),
@@ -512,6 +532,7 @@ function render(name) {
       break;
     case "memory":
       renderLearning();
+      renderAuto();
       renderProposals();
       renderFacts();
       renderWikiPlate();
@@ -1325,7 +1346,10 @@ function asOfSeconds(typed, now) {
 
 /** Re-read the pane's own sections and repaint. Used after every write. */
 async function refreshMemory() {
-  await load(VIEW_SECTIONS.memory, { quiet: true });
+  // The "Saved automatically" list is read through its own command
+  // (brain/auto_learn.rs), next to the pane's sections: a Forget or a
+  // decision changes it too.
+  await Promise.all([load(VIEW_SECTIONS.memory, { quiet: true }), loadAuto()]);
   render("memory");
 }
 
@@ -1349,6 +1373,12 @@ async function memoryWrite(command, args, okText) {
       toast(String(out.error || out.reason || "Refused."), "bad");
     } else {
       toast(typeof okText === "function" ? okText(out) : okText, "ok");
+      // Forgotten or reworded, from either list: no longer current, so not
+      // "saved automatically" any more - even on a page "Load older" brought
+      // in, which the re-read below does not replace.
+      if (command === "brain_memory_forget" || command === "brain_memory_edit") {
+        autoL.rows = autoL.rows.filter((r) => r.id !== args.id);
+      }
     }
     await refreshMemory();
     return out;
@@ -1536,7 +1566,8 @@ function renderLearning() {
     }, { title: on
         ? "Stop reading conversations for facts. Nothing already proposed is lost. "
           + "A message that starts “Remember:” still makes a card."
-        : "Read conversations for facts again. Each one still needs your yes." })
+        : "Read conversations for facts again. With “Learn automatically” on, facts in "
+          + "your own words are saved straight away; everything else waits for your yes." })
   );
   box.append(
     button("Export everything", async () => {
@@ -1666,6 +1697,10 @@ function proposalRow(p) {
         p.verbatim ? "your own words" : "",
         p.confidence != null ? `confidence ${Number(p.confidence).toFixed(2)}` : "",
         p.source ? `from ${p.source}` : "",
+        // Why automatic learning left this one for your yes (section 2 of
+        // JARVIS-API.md section 19): "from pasted text", "sensitive:
+        // health"... in the PC's own words.
+        cardReason(p),
         ago(p.created),
       ];
   const actions = retire
@@ -1803,7 +1838,8 @@ function renderFacts() {
         state: current ? "ok" : undefined,
         title: String(f.text || "(no text)"),
         meta: [
-          f.source ? `from ${f.source}` : "",
+          f.source === "auto" ? "saved automatically"
+            : f.source ? `from ${f.source}` : "",
           current ? "" : "no longer recalled",
           // `retired_by` is the column the store writes: the id of the fact
           // that replaced this one. (It used to read `supersedes`, which is
@@ -2412,6 +2448,370 @@ function renderHistory() {
   if (IS_TAURI && !chats.loading && Date.now() - chats.at > HISTORY_READ_MS) loadHistory();
 }
 
+/* ==========================================================================
+   Automatic learning (JARVIS-API.md section 19). On the Memory tab, next to
+   the learning switch; the words are auto-learn.js, the commands
+   brain/auto_learn.rs.
+
+   The two switches are the learning switch's shape: ON raises one approval
+   card and shows "Waiting for your approval" until the card leaves the
+   queue - including a card raised on the phone; OFF is immediate. Rust
+   holds ON on a stale link, and the switch is greyed then; OFF never is.
+   "Saved automatically" lists what was saved without a card, newest first,
+   with Forget on each (brain_memory_forget, one fact, after a confirm) and
+   "Load older". A `memory_saved` event is a quiet line that opens the list.
+   ========================================================================== */
+
+const autoL = {
+  /** readAuto() of the first page, or null before the first read. */
+  view: null,
+  /** Every fact shown, newest first: the first page, then older ones. */
+  rows: [],
+  more: false,
+  error: "",
+  /** The list alone could not be read (the switches could). */
+  listError: "",
+  at: 0,
+  loading: false,
+  /** A read was asked for while one was in flight: read once more after. */
+  again: false,
+  older: false,
+  /** `{ cardId, gone }` while an ON card waits, per switch. */
+  ask: { auto: null, sensitive: null },
+  /** Whether each switch's card was in the queue at the last look. */
+  seen: { auto: false, sensitive: false },
+  /** Ids from `memory_saved` events the owner has not looked at yet. */
+  unseen: new Set(),
+};
+const AUTO_READ_MS = 15000;
+
+async function loadAuto() {
+  if (autoL.loading) {
+    autoL.again = true;
+    return;
+  }
+  autoL.loading = true;
+  try {
+    // The switches come from GET /api/memory/learning, the list from GET
+    // /api/memory/auto; an older PC without the first is read from the
+    // second (readAuto). Both failing is the one error worth a Retry.
+    const [list, status] = await Promise.allSettled([
+      invoke("brain_memory_auto_list", { before: null, limit: AUTO_PAGE }),
+      invoke("brain_memory_learning_status"),
+    ]);
+    if (list.status === "rejected" && status.status === "rejected") throw list.reason;
+    autoL.listError = list.status === "rejected" ? errorText(list.reason) : "";
+    const v = readAuto(list.status === "fulfilled" ? list.value : null,
+      status.status === "fulfilled" ? status.value : null);
+    autoL.view = v;
+    // Pages "Load older" brought in stay; a hidden list keeps nothing.
+    const kept = v.hidden ? { rows: [], more: false }
+      : refreshAutoRows(autoL.rows, v.facts, AUTO_PAGE, autoL.more);
+    autoL.rows = kept.rows;
+    autoL.more = kept.more;
+    autoL.error = "";
+    if (v.auto) autoL.ask.auto = null;           // the card was approved
+    if (v.sensitive) autoL.ask.sensitive = null;
+  } catch (error) {
+    autoL.error = errorText(error);
+  } finally {
+    autoL.loading = false;
+    autoL.at = Date.now();
+  }
+  if (autoL.again) {
+    autoL.again = false;
+    await loadAuto();
+    return;
+  }
+  if (state.view === "memory") paintAuto();
+}
+
+async function loadOlderAuto() {
+  const before = olderAuto(autoL.rows);
+  if (before === null || autoL.older) return;
+  autoL.older = true;
+  try {
+    const v = readAuto(await invoke("brain_memory_auto_list", { before, limit: AUTO_PAGE }), null);
+    autoL.rows = addAutoPage(autoL.rows, v.facts);
+    autoL.more = v.facts.length >= AUTO_PAGE;
+  } catch (error) {
+    toast(errorText(error), "bad");
+  } finally {
+    autoL.older = false;
+  }
+  paintAuto();
+}
+
+/** Whether the approval queue holds this switch's ON card, wherever it was
+ *  raised - this window, the phone, or anywhere else. */
+function autoCardWaiting(which, queue = currentQueue()) {
+  const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
+  const action = AUTO_SWITCHES[which].action;
+  return items.some((item) => item && item.action === action);
+}
+
+async function setAutoSwitch(which, on) {
+  const sw = AUTO_SWITCHES[which];
+  const waitingBefore = new Set(
+    (currentQueue().items || []).map((item) => item && item.id).filter(Boolean)
+  );
+  try {
+    const out = await invoke(sw.command, { enabled: on });
+    const said = out && typeof out.message === "string" ? out.message.trim() : "";
+    if (out && out.ok === false) {
+      toast(String(out.error || out.reason || "Refused."), "bad");
+    } else if (on && out && out.waiting) {
+      // ON raises an approval card: it is NOT on yet.
+      autoL.ask[which] = { cardId: await findNewCard(waitingBefore) };
+      toast(said || sw.waiting(APPROVE_WHERE), "ok");
+    } else {
+      autoL.ask[which] = null;
+      toast(on ? (said || sw.on) : sw.off, "ok");
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  autoL.at = 0;
+  await loadAuto();
+}
+
+async function forgetAuto(f) {
+  if (!window.confirm(forgetQuestion(f))) return;
+  const out = await memoryWrite("brain_memory_forget", { id: f.id },
+    "Forgotten. It stays in the history and will not be recalled.");
+  if (out && out.ok !== false) {
+    autoL.rows = autoL.rows.filter((r) => r.id !== f.id);
+    paintAuto();
+  }
+}
+
+/** A `memory_saved` event: count what was saved, and read the list again. */
+function noteMemorySaved(data) {
+  const ids = savedIds(data);
+  if (!ids.length) return;
+  for (const id of ids) autoL.unseen.add(id);
+  autoL.at = 0;
+  paintSavedLine();
+  if (state.view === "memory") loadAuto();
+}
+
+/** The quiet line opens the list: shown, scrolled to, and the line goes. */
+async function openSavedList() {
+  autoL.unseen.clear();
+  if (state.view !== "memory") await showView("memory");
+  paintSavedLine();
+  const card = $("memory-auto-card");
+  if (card) {
+    card.scrollIntoView({ block: "start" });
+    dom.memoryAutoList.focus({ preventScroll: true });
+  }
+}
+
+/** The ON card left the queue: read the switch again after the backend has
+ *  had a moment to apply an approval. Still off: it was denied or ran out
+ *  of time, and that is said - the learning switch's handler. */
+onQueue((queue) => {
+  let changed = false;
+  for (const which of Object.keys(AUTO_SWITCHES)) {
+    const waitingNow = autoCardWaiting(which, queue);
+    if (waitingNow !== autoL.seen[which]) {
+      autoL.seen[which] = waitingNow;
+      changed = true;
+    }
+    const ask = autoL.ask[which];
+    if (!ask || !ask.cardId || ask.gone) continue;
+    const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
+    if (items.some((item) => item && item.id === ask.cardId)) continue;
+    ask.gone = true;
+    setTimeout(async () => {
+      if (autoL.ask[which] !== ask) return;
+      autoL.at = 0;
+      await loadAuto();
+      if (autoL.ask[which] === ask) {
+        autoL.ask[which] = null;
+        const v = autoL.view;
+        if (!(v && v[AUTO_SWITCHES[which].field])) toast(AUTO_SWITCHES[which].denied, "bad");
+        if (state.view === "memory") paintAuto();
+      }
+    }, MODEL_ASK_GRACE_MS);
+  }
+  // A card came or went: the line follows the queue at once, and the PC's
+  // own `*_waiting` is read again so it does not hold the line up.
+  if (changed && state.view === "memory") {
+    paintAutoSettings();
+    autoL.at = 0;
+    loadAuto();
+  }
+});
+
+// Private answers turned on or off, or a Show ran out: read the list again -
+// Rust decides whether it comes back hidden.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const rereadAuto = () => {
+    autoL.at = 0;
+    if (state.view === "memory") loadAuto();
+  };
+  TAURI.event.listen("security-changed", rereadAuto);
+  TAURI.event.listen("private-hidden", rereadAuto);
+}
+
+function autoSwitchNode(which, v) {
+  const sw = AUTO_SWITCHES[which];
+  const on = v[sw.field] === true;
+  const box = el("div", "auto-switch-box");
+  const label = el("label", "history-switch auto-switch");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `memory-${which}-on`;
+  input.setAttribute("role", "switch");
+  input.setAttribute("aria-describedby", `memory-${which}-detail`);
+  input.checked = on;
+  label.append(input, el("span", "history-switch-label", sw.label));
+  const detail = el("p", "note history-switch-detail", sw.detail);
+  detail.id = `memory-${which}-detail`;
+  box.append(label, detail);
+  // Turning it ON waits for a live link (rule 4); OFF never does.
+  if (!on) {
+    input.dataset.title = "Asks you first, with an approval card.";
+    liveButtons.add(input);
+    syncLiveButton(input);
+  }
+  input.addEventListener("change", async () => {
+    const want = input.checked;
+    // Show what the PC says, never what was clicked: ON is only a card.
+    input.checked = on;
+    input.disabled = true;
+    input.dataset.busy = "true";
+    await setAutoSwitch(which, want);
+  });
+  // Our own click, or a card raised elsewhere (the phone): the queue says,
+  // and so does the PC (`auto_waiting` / `sensitive_waiting`).
+  if (!on && (autoL.ask[which] || v[sw.waitingField] || autoCardWaiting(which))) {
+    box.append(el("p", "hint learning-waiting history-waiting auto-waiting",
+      sw.waiting(APPROVE_WHERE)));
+  }
+  return box;
+}
+
+function paintAutoSettings() {
+  const box = dom.memoryAuto;
+  if (!box) return;
+  box.replaceChildren();
+  const v = autoL.view;
+  if (!v) {
+    const line = el("p", "empty", autoL.error
+      ? `Could not read automatic learning: ${autoL.error}` : "Reading…");
+    if (autoL.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadAuto));
+    }
+    box.append(line);
+    return;
+  }
+  if (!v.switches) {
+    box.append(el("p", "empty", v.why));
+    return;
+  }
+  box.append(autoSwitchNode("auto", v), autoSwitchNode("sensitive", v));
+  // "Learn automatically" means something only while learning is on. The
+  // learning route says; an older PC's answer is the facts list's flag.
+  const facts = state.data.memory_facts || {};
+  const learning = v.learning ?? (typeof facts.learning === "boolean" ? facts.learning : null);
+  if (learning === false && v.auto) {
+    box.append(el("p", "history-why-not auto-learning-off", LEARNING_OFF_NOTE));
+  }
+}
+
+function paintSavedLine() {
+  const box = dom.memorySavedLine;
+  if (!box) return;
+  box.replaceChildren();
+  const words = rememberedLine(autoL.unseen.size);
+  if (!words) return;
+  const b = el("button", "btn small ghost memory-saved", words);
+  b.type = "button";
+  b.title = "Show what was saved automatically.";
+  b.addEventListener("click", openSavedList);
+  box.append(b);
+}
+
+function paintAutoList() {
+  const box = dom.memoryAutoList;
+  if (!box) return;
+  box.tabIndex = -1;
+  box.replaceChildren();
+  const v = autoL.view;
+  if (!v) {
+    box.append(el("p", "empty", autoL.error
+      ? "Nothing to show until automatic learning can be read." : "Reading…"));
+    return;
+  }
+  if (!v.available) {
+    // The switches' box already says why when nothing is there at all.
+    if (v.switches) box.append(el("p", "empty", AUTO_MISSING));
+    return;
+  }
+  if (autoL.listError) {
+    const line = el("p", "empty failed", `Could not read what was saved automatically: ${autoL.listError}`);
+    line.append(" ", button("Retry", loadAuto));
+    box.append(line);
+    return;
+  }
+  if (v.hidden) {
+    box.append(hiddenNode(v.hiddenCount, "facts"));
+    return;
+  }
+  if (!autoL.rows.length) {
+    box.append(el("p", "empty", v.auto
+      ? "Nothing saved automatically yet."
+      : "Nothing saved automatically. Learning automatically is off."));
+    return;
+  }
+  const past = memoryAsOf !== null;
+  const list = el("div", "rows auto-rows");
+  for (const f of autoL.rows) {
+    const item = row({
+      tag: "auto",
+      state: "ok",
+      title: f.text || "(no text)",
+      meta: [factMeta(f)],
+      // Nothing is changed while the pane shows a past moment (memoryWrite).
+      actions: past ? [] : [
+        button("Forget", () => forgetAuto(f),
+          { danger: true, live: true, title: "Stop this being recalled. There is no undo." }),
+      ],
+    });
+    item.dataset.id = String(f.id);
+    if (f.provenance === "voice") {
+      const marks = el("span", "history-marks");
+      const mic = el("span", "history-mark history-mark-voice", VOICE_MARK);
+      mic.title = VOICE_TITLE;
+      marks.append(mic);
+      const main = item.querySelector(".row-main");
+      (main || item).append(marks);
+    }
+    list.append(item);
+  }
+  box.append(list);
+  if (autoL.more) {
+    const more = el("div", "row-actions history-more");
+    more.append(button(autoL.older ? "Loading…" : "Load older", loadOlderAuto,
+      { title: "Show the next page of older facts saved automatically." }));
+    box.append(more);
+  }
+}
+
+function paintAuto() {
+  paintAutoSettings();
+  paintSavedLine();
+  paintAutoList();
+}
+
+function renderAuto() {
+  paintAuto();
+  if (IS_TAURI && !autoL.loading && Date.now() - autoL.at > AUTO_READ_MS) loadAuto();
+}
+
 /** "learned 12d ago" only when that differs from when the fact became true.
  *
  * valid_from and created are stamped together for anything typed or accepted
@@ -2892,6 +3292,11 @@ function pushTrace(frame) {
     // the number, and the memory pane is where you go to read them.
     const n = data.count ?? (Array.isArray(data.value) ? data.value.length : "?");
     body = n === 0 ? "review queue empty" : `${n} to review`;
+  } else if (kind === "memory_saved") {
+    // Automatic learning saved something: how many, never the words (the
+    // event carries ids only - JARVIS-API.md section 19).
+    const n = savedIds(data).length;
+    body = rememberedLine(n) || "saved nothing";
   } else if (kind === "deep") {
     // The id and how it ended - never the question or the answer.
     body = `question ${String(data.id || "?")} ${String(data.state || "")}`.trim();
@@ -3840,6 +4245,7 @@ dom.refresh.addEventListener("click", async () => {
   // simulation twice and cancelled the first one mid-flight.
   if (state.view === "galaxy") state.graph = null;
   if (state.view === "history") chats.at = 0;
+  if (state.view === "memory") autoL.at = 0;
   await load(sectionsFor(state.view));
   render(state.view);
 });
@@ -3985,6 +4391,9 @@ onEvent((frame) => {
     deep.at = 0;
     if (state.view === "memory") loadDeep();
   }
+  // Automatic learning saved something (`{ids}` only, never the text): the
+  // quiet line, and the list read again. Never a pop-up.
+  if (kind === "memory_saved") noteMemorySaved(frame && frame.data);
 
   const refreshes = {
     model: ["models"],
@@ -3994,6 +4403,8 @@ onEvent((frame) => {
     // made a card). Without this the Memory tab showed an old queue until
     // something else refreshed it.
     proposal: ["memory_pending"],
+    // ...or saved some on its own (automatic learning): the facts list too.
+    memory_saved: ["memory_facts"],
   };
   const sections = refreshes[kind];
   if (!sections) return;

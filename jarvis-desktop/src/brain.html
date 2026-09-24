@@ -301,11 +301,23 @@
               <h2>Learning</h2>
               <p class="note">
                 After a conversation goes quiet, Jarvis reads back what
-                <em>you</em> typed — never its own replies, never anything a
-                tool returned — and proposes facts worth keeping. Nothing below
-                enters memory until you say so, one at a time.
+                <em>you</em> typed or said — never its own replies, never
+                anything a tool returned — and picks out facts worth keeping.
+                With “Learn automatically” on, facts in your own words are
+                saved straight away and listed under “Saved automatically”,
+                where you can forget any of them. Everything else waits below
+                for your yes, one at a time.
               </p>
               <div id="memory-learning"></div>
+              <!-- Automatic learning (auto-learn.js): its two switches. -->
+              <div id="memory-auto"></div>
+            </div>
+            <div class="card card-wide" id="memory-auto-card">
+              <h2>Saved automatically</h2>
+              <!-- "Jarvis remembered 2 things" on a memory_saved event: a
+                   quiet line, never a pop-up. -->
+              <div id="memory-saved-line" role="status"></div>
+              <div id="memory-auto-list"></div>
             </div>
             <div class="card card-wide">
               <h2>Waiting for you</h2>

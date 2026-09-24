@@ -76,7 +76,7 @@ pub struct Security {
     pub relock_after_secs: u32,
     pub approvals: ApprovalCheck,
     /// The Brain's memory lists and chat history stay hidden until Show passes
-    /// Windows Hello (brain_read, and brain/history.rs).
+    /// Windows Hello (brain_read, brain/history.rs and brain/auto_learn.rs).
     pub private_answers: bool,
 }
 

@@ -66,6 +66,12 @@ fn main() {
             "brain_memory_sleep_time",
             // "Both are true" on a correction card (memory-intake.patch).
             "brain_memory_keep_both",
+            // Automatic learning (JARVIS-API.md section 19): the "Saved
+            // automatically" list and its two switches. Brain only.
+            "brain_memory_learning_status",
+            "brain_memory_auto_list",
+            "brain_memory_learning_auto",
+            "brain_memory_learning_sensitive",
             // Chat history on the PC (JARVIS-API.md section 18): list, open
             // one read-only, delete ONE, and the two settings. Brain only.
             "brain_history_list",
