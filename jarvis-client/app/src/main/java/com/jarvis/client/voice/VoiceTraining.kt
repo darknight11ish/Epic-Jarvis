@@ -4,6 +4,7 @@ import com.jarvis.client.net.Approvals
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.VoiceCalibration
 import com.jarvis.client.net.VoiceStatus
+import com.jarvis.client.net.VoiceStrict
 import com.jarvis.client.net.VoiceTrainingLast
 import com.jarvis.client.net.VoiceTrainingReply
 import java.util.Locale
@@ -186,6 +187,31 @@ object VoiceTraining {
             "The PC's microphone has its own voice print too."
         } else {
             "Your PC's own microphone uses this one until it is trained separately."
+        }
+    }
+
+    /**
+     * How the last voice card ended, or null if none has since the PC started.
+     *
+     * Since the stricter check (2026-09-24) the PC's `training.last` also
+     * reports a card that changed a SETTING (very strict / balanced, private
+     * answers), and rounds that were cancelled or ran out of time. [strict]
+     * is the same `last`, read by [VoiceStrict.parse], which has the fields
+     * that tell those apart - without it a denied setting card read "Last
+     * training was denied", and a changed one "Last training:
+     * setting_changed."
+     */
+    fun lastLine(last: VoiceTrainingLast?, strict: VoiceStrict.Last?): String? {
+        if (strict != null && strict.setting.isNotBlank()) return StrictVoice.lastLine(strict)
+        return when {
+            last?.outcome == "enrolled" && strict?.added == true ->
+                "Your extra recordings were approved and added: the voice print now has " +
+                    "${plural(last.samples, "sample")}." + wakeCheckSuffix(last.wakeCheck)
+            last?.outcome == "cancelled" -> "The last training was cancelled. Nothing changed."
+            last?.outcome == "expired" ->
+                "The rounds your PC was holding were deleted after 15 minutes with no new " +
+                    "round. Nothing changed."
+            else -> lastLine(last)
         }
     }
 

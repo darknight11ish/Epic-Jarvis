@@ -431,6 +431,16 @@ data class Heard(
     /** The clip was "hey Jarvis" and nothing else: send the next sentence. */
     val awake: Boolean = false,
     @SerialName("awake_seconds") val awakeSeconds: Float = 0f,
+    /**
+     * May an answer drawn from email, the calendar, notes or memory be READ
+     * ALOUD for this request? True only when the owner chose "voice check is
+     * enough" (and the check is very strict). False - and missing, from a PC
+     * older than 2026-09-24 - means the phone reads such an answer aloud
+     * only when nothing says it is private (voice/PrivateAloud.kt).
+     */
+    @SerialName("private_aloud") val privateAloud: Boolean = false,
+    /** The words asked about something private (email, calendar, notes, memory). A hint. */
+    @SerialName("question_private") val questionPrivate: Boolean = false,
 ) {
     enum class Outcome {
         /** Verified, transcribed. Feed [text] to the chat. */

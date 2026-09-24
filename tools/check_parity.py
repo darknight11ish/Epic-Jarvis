@@ -166,15 +166,15 @@ CLASSIFICATION = {
                         "the desktop asks its own PC over loopback."),
     "/api/voice/utterance": ("ported", ""),
     # Custom voices (backend/voices.patch, 2026-09-24): built on the backend
-    # first (docs/JARVIS-API.md section 15). The desktop has them (Settings,
-    # Jarvis's voice: voice_training.rs, voice-panel.js); the phone is being
-    # built against the same section - `todo` until it calls them, then
-    # `ported`.
-    "/api/voice/voices": ("todo", "Custom voices: the list, which one Jarvis speaks in and why the built-in voice is used instead, the better voice's state, and say() timings (docs/JARVIS-API.md section 15). Desktop: Settings, Jarvis's voice (get_custom_voices)."),
-    "/api/voice/voices/create": ("todo", "Add a custom voice: a recording and its exact words. One approval card (custom_voice); a voice that sounds like the owner's is refused. Desktop: create_custom_voice (the sentence shown, or a WAV file and typed words)."),
-    "/api/voice/voices/active": ("todo", "Speak in a custom voice (one approval card) or back in the built-in one (immediate). Desktop: set_active_voice."),
-    "/api/voice/voices/delete": ("todo", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use. Desktop: delete_custom_voice, after an are-you-sure."),
-    "/api/voice/voices/better": ("todo", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate. Desktop: set_better_voice, offered only with a capable second card."),
+    # first (docs/JARVIS-API.md section 15). Both apps call all five since
+    # 2026-09-24: desktop Settings, Jarvis's voice (voice_training.rs,
+    # voice-panel.js); phone Platform checks -> Jarvis's voice
+    # (ui/screens/VoicesScreen.kt, net/CustomVoices.kt).
+    "/api/voice/voices": ("ported", "Custom voices: the list, which one Jarvis speaks in and why the built-in voice is used instead, the better voice's state, and say() timings (docs/JARVIS-API.md section 15). Desktop: Settings, Jarvis's voice (get_custom_voices). Phone: Platform checks, Jarvis's voice (VoicesScreen.kt), re-read on the `voices` event."),
+    "/api/voice/voices/create": ("ported", "Add a custom voice: a recording and its exact words. One approval card (custom_voice); a voice that sounds like the owner's is refused. Desktop: create_custom_voice (the sentence shown, or a WAV file and typed words). Phone: record a sentence it shows (the words are that sentence - no speech-to-text) or pick a WAV and type its words; held on a stale link."),
+    "/api/voice/voices/active": ("ported", "Speak in a custom voice (one approval card) or back in the built-in one (immediate). Desktop: set_active_voice. Phone: the custom voice is held on a stale link, the built-in one always goes."),
+    "/api/voice/voices/delete": ("ported", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use. Desktop: delete_custom_voice, after an are-you-sure. Phone: asks first on the phone, never held."),
+    "/api/voice/voices/better": ("ported", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate. Desktop: set_better_voice, offered only with a capable second card. Phone: offered only when a capable second card is there; ON held on a stale link, OFF always goes."),
     # The voice flow (backend/voice-flow.patch, 2026-09-24): built on the
     # backend, for both apps. Its other two parts are on routes both apps
     # already call - `?source=barge_in` / `&waited_ms=` on /api/voice/utterance

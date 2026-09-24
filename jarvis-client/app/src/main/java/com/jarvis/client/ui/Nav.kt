@@ -65,8 +65,12 @@ import kotlinx.coroutines.CancellationException
  *
  * `SECURITY` is the lock and fingerprint settings, opened from the Security
  * card on `CHECKS`. Last, for the same reason.
+ *
+ * `VOICE_CHECK` (how strict the voice check is, private answers, the repeat
+ * test) and `VOICES` (custom voices) are opened from the voice card on
+ * `CHECKS`. Last again.
  */
-enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY }
+enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY, VOICE_CHECK, VOICES }
 
 /**
  * A back stack, because there was not one.

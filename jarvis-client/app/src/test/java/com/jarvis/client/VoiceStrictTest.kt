@@ -1,0 +1,320 @@
+package com.jarvis.client
+
+import com.jarvis.client.net.ApiError
+import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.net.VoiceStatus
+import com.jarvis.client.net.VoiceStrict
+import com.jarvis.client.net.VoiceTrainingLast
+import com.jarvis.client.voice.StrictVoice
+import com.jarvis.client.voice.VoiceTraining
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The stricter voice check on the phone: reading `/api/voice/status`, the
+ * PC's answers to the two settings and the guided test, and the words.
+ *
+ * Every status and answer below is the PC's REAL output, from
+ * `contract/phone-voice-cases.json` (tools/gen_phone_voice_cases.py runs
+ * jarvis_speech.status() and jarvis_voice_enroll.stage() to make it). The
+ * one exception is said where it is made: an older PC's status is a real
+ * one with the three new flags taken OUT, which is what an older PC sends.
+ */
+class VoiceStrictTest {
+
+    private val strict: JsonObject = run {
+        val text = requireNotNull(javaClass.classLoader?.getResource("contract/phone-voice-cases.json")) {
+            "contract/phone-voice-cases.json is missing - run tools/gen_phone_voice_cases.py"
+        }.readText()
+        (JarvisJson.parseToJsonElement(text) as JsonObject)["strict"]!!.jsonObject
+    }
+
+    private fun status(case: String): JsonObject = strict["status"]!!.jsonObject[case]!!.jsonObject
+
+    private fun view(case: String) = VoiceStrict.parse(status(case))
+
+    private fun answer(case: String): VoiceStrict.Answer {
+        val a = strict["answers"]!!.jsonObject[case]!!.jsonObject
+        return VoiceStrict.answer(a["status"]!!.jsonPrimitive.int, a["body"]!!.jsonObject)
+    }
+
+    private fun trainingLast(case: String): VoiceTrainingLast? =
+        JarvisJson.decodeFromJsonElement(VoiceStatus.serializer(), status(case)).gate.training.last
+
+    // ------------------------------------------------------------ reading --
+
+    @Test
+    fun `every real status reads both halves, and the talk-button half is unchanged`() {
+        for (case in strict["status"]!!.jsonObject.keys) {
+            val read = VoiceStrict.read(status(case))
+            assertTrue(case, read is ApiResult.Ok)
+            val (st, v) = (read as ApiResult.Ok).value
+            // The same VoiceStatus the old typed read produced.
+            assertEquals(case, JarvisJson.decodeFromJsonElement(VoiceStatus.serializer(), status(case)), st)
+            assertTrue(case, v.rounds && v.settings && v.measure)
+            assertTrue(case, v.strictness in setOf(VoiceStrict.VERY_STRICT, VoiceStrict.BALANCED))
+        }
+    }
+
+    @Test
+    fun `available false is not a status to show`() {
+        val body = JsonObject(status("strong_untrained") + ("available" to JsonPrimitive(false)))
+        val read = VoiceStrict.read(body)
+        assertEquals(ApiResult.Failed(ApiError.NotAvailable), read)
+    }
+
+    @Test
+    fun `an older PC - the three flags taken out of a real status - offers none of the new modes`() {
+        val real = status("strong_untrained")
+        val gate = real["gate"]!!.jsonObject
+        val training = JsonObject(gate["training"]!!.jsonObject - setOf("rounds", "settings", "measure"))
+        val older = JsonObject(real + ("gate" to JsonObject(gate + ("training" to training))))
+        val v = VoiceStrict.parse(older)
+        assertFalse(v.rounds)
+        assertFalse(v.settings)
+        assertFalse(v.measure)
+        assertNull(StrictVoice.modelLine(v))
+        assertEquals(StrictVoice.NOT_ON_THIS_PC, StrictVoice.blocker(VoiceStrict.STRICTNESS, VoiceStrict.BALANCED, v, null))
+    }
+
+    @Test
+    fun `the settings, the models and the round words come from the PC`() {
+        val v = view("trained_three_rounds")
+        assertEquals(VoiceStrict.VERY_STRICT, v.strictness)
+        assertEquals(VoiceStrict.PRIVATE_ON_SCREEN, v.privacy)
+        assertTrue(v.voiceIsEnoughAllowed)
+        assertEquals(2.0, v.minCommandSeconds, 0.0)
+        assertEquals("strong", v.veryStrictModel)
+        assertEquals("further away from the microphone, or quieter", v.roundAsks[2])
+        assertEquals(12, v.limits.maxClips)
+        assertEquals(20, v.limits.measureMaxClips)
+        assertEquals(80.0, v.limits.maxTotalSeconds, 0.0)
+        assertEquals(listOf(VoiceStrict.Outlier(2, 5)), v.last!!.outliers)
+    }
+
+    @Test
+    fun `a held round and a waiting setting card are read`() {
+        val held = view("round_held").session!!
+        assertEquals(12, held.clips)
+        assertEquals(listOf(1), held.rounds.map { it.round })
+        assertEquals("close", held.rounds[0].condition)
+        val waiting = view("setting_waiting")
+        assertEquals("setting", waiting.pendingKind)
+        assertEquals(VoiceStrict.PRIVACY, waiting.pendingSetting)
+        assertEquals(VoiceStrict.VOICE_IS_ENOUGH, waiting.pendingValue)
+        assertEquals(
+            "Waiting for your approval to change this to \"Voice check is enough\". " +
+                "Approve it on your PC or on this phone's Home screen.",
+            StrictVoice.waitingLine(VoiceStrict.PRIVACY, waiting),
+        )
+        assertNull(StrictVoice.waitingLine(VoiceStrict.STRICTNESS, waiting))
+    }
+
+    // ----------------------------------------------------- the two settings --
+
+    @Test
+    fun `loosening is held on a stale link, tightening never is`() {
+        val v = view("trained_three_rounds")
+        val stale = "Not connected to the desktop, so this cannot be delivered."
+        assertEquals(stale, StrictVoice.blocker(VoiceStrict.STRICTNESS, VoiceStrict.BALANCED, v, stale))
+        assertEquals(stale, StrictVoice.blocker(VoiceStrict.PRIVACY, VoiceStrict.VOICE_IS_ENOUGH, v, stale))
+        val b = view("balanced")
+        assertNull(StrictVoice.blocker(VoiceStrict.STRICTNESS, VoiceStrict.VERY_STRICT, b, stale))
+        val loose = view("voice_is_enough")
+        assertNull(StrictVoice.blocker(VoiceStrict.PRIVACY, VoiceStrict.PRIVATE_ON_SCREEN, loose, stale))
+    }
+
+    @Test
+    fun `voice is enough is only offered while very strict - as the PC itself refuses`() {
+        val b = view("balanced")
+        assertEquals(
+            StrictVoice.PRIVACY_ONLY_VERY_STRICT,
+            StrictVoice.blocker(VoiceStrict.PRIVACY, VoiceStrict.VOICE_IS_ENOUGH, b, null),
+        )
+        // ...and the PC's own answer when asked anyway.
+        val refused = answer("privacy_while_balanced")
+        assertEquals(409, refused.code)
+        assertFalse(refused.accepted)
+        assertEquals(
+            "Private answers can only be read aloud while the voice check is very strict - make it very strict first.",
+            StrictVoice.answerLine(refused),
+        )
+    }
+
+    @Test
+    fun `the setting bodies are the PC's own modes`() {
+        assertEquals("{\"mode\":\"strictness\",\"value\":\"balanced\"}",
+            VoiceStrict.settingBody(VoiceStrict.STRICTNESS, VoiceStrict.BALANCED))
+        assertEquals("{\"mode\":\"privacy\",\"value\":\"voice_is_enough\"}",
+            VoiceStrict.settingBody(VoiceStrict.PRIVACY, VoiceStrict.VOICE_IS_ENOUGH))
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.STRICTNESS, VoiceStrict.BALANCED))
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.PRIVACY, VoiceStrict.VOICE_IS_ENOUGH))
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.STRICTNESS, VoiceStrict.VERY_STRICT))
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.PRIVACY, VoiceStrict.PRIVATE_ON_SCREEN))
+    }
+
+    @Test
+    fun `loosening answers 202 and is shown as waiting, never as done`() {
+        for (case in listOf("strictness_loosen", "privacy_loosen")) {
+            val a = answer(case)
+            assertEquals(case, 202, a.code)
+            assertTrue(case, a.pending)
+            assertEquals(
+                case,
+                "Waiting for your approval. Approve it on your PC or on this phone's Home screen. " +
+                    "Nothing changes until you do.",
+                StrictVoice.answerLine(a),
+            )
+        }
+    }
+
+    @Test
+    fun `tightening applies at once, in the PC's words`() {
+        val a = answer("strictness_tighten")
+        assertEquals(200, a.code)
+        assertTrue(a.changed)
+        assertFalse(a.pending)
+        assertEquals("Done - that applies now.", StrictVoice.answerLine(a))
+        assertEquals("It was already set that way.", StrictVoice.answerLine(answer("strictness_same")))
+        val busy = answer("setting_card_waiting")
+        assertEquals(409, busy.code)
+        assertEquals(
+            "A voice card is already waiting for approval - approve or deny that one first.",
+            StrictVoice.answerLine(busy),
+        )
+    }
+
+    @Test
+    fun `how a setting card ended is said about the setting, not about a training`() {
+        val changed = view("balanced").last
+        assertEquals("Approved: \"Balanced\" is on now.", StrictVoice.lastLine(changed))
+        assertEquals(
+            "Approved: \"Balanced\" is on now.",
+            VoiceTraining.lastLine(trainingLast("balanced"), changed),
+        )
+        val denied = view("loosen_denied").last
+        assertEquals(
+            "The change to \"Balanced\" was denied on the card. Nothing changed.",
+            VoiceTraining.lastLine(trainingLast("loosen_denied"), denied),
+        )
+        // Without the strict half the old line would have said "Last training".
+        assertEquals("Last training was denied on the card. Nothing changed.",
+            VoiceTraining.lastLine(trainingLast("loosen_denied")))
+    }
+
+    @Test
+    fun `cancelled and extra recordings are named as what they were`() {
+        assertEquals(
+            "The last training was cancelled. Nothing changed.",
+            VoiceTraining.lastLine(trainingLast("cancelled"), view("cancelled").last),
+        )
+        val more = VoiceTraining.lastLine(trainingLast("trained_more"), view("trained_more").last)!!
+        assertTrue(more, more.startsWith("Your extra recordings were approved and added: the voice print now has 38 samples."))
+    }
+
+    // ------------------------------------------------------ the model line --
+
+    @Test
+    fun `very strict on the small model says plainly it will turn the owner away far more often`() {
+        val line = StrictVoice.modelLine(view("small_model_only"))!!
+        assertTrue(line, line.contains("very strict will turn you away far more often"))
+        assertTrue(line, line.contains("stronger one"))
+        val none = StrictVoice.modelLine(view("no_model"))!!
+        assertTrue(none, none.contains("far more often"))
+        assertTrue(none, none.contains("No voice-ID model is installed"))
+        assertNull(StrictVoice.modelLine(view("trained_three_rounds")))
+    }
+
+    // ------------------------------------------------ the guided repeat test --
+
+    @Test
+    fun `twenty test sentences, none of them a training sentence, each long enough`() {
+        val s = StrictVoice.MEASURE_SENTENCES
+        assertEquals(20, s.size)
+        assertEquals(20, s.toSet().size)
+        assertTrue(s.none { it in VoiceTraining.SENTENCES })
+        for (line in s) {
+            // Two to four seconds read aloud: 7 to 11 words.
+            val words = line.split(" ").size
+            assertTrue("$words words: $line", words in 7..11)
+        }
+    }
+
+    @Test
+    fun `the test's answer is read and said in plain words`() {
+        val a = answer("measure")
+        assertEquals(200, a.code)
+        val m = a.measured!!
+        assertEquals(20, m.clips)
+        assertEquals(14, m.veryStrict.passed)
+        assertEquals(3, m.veryStrict.tooShort)
+        assertEquals(17, m.balanced.passed)
+        assertTrue(m.strongModel)
+        val lines = StrictVoice.measureLines(m)
+        assertEquals("Very strict let 14 of your 20 sentences through; balanced let 17 of 20 through.", lines[0])
+        assertEquals("So at very strict you would have to say it again about 3 in 10; at balanced, about 2 in 10.", lines[1])
+        assertTrue(lines[2], lines[2].startsWith("3 sentences were too short for very strict"))
+        // The same counts come back in the status, for the next visit.
+        assertEquals(m, view("measured").measureLast)
+    }
+
+    @Test
+    fun `the test is sent in parts the PC will take, and the parts add up`() {
+        // 20 clips of 5 s: 100 s, more than the 80 s one request may carry.
+        val parts = StrictVoice.batches(List(20) { 5f })
+        assertEquals(listOf(0..15, 16..19), parts)
+        assertTrue(parts.all { r -> r.sumOf { 5.0 } <= 80.0 })
+        assertEquals(listOf(0..19), StrictVoice.batches(List(20) { 3f }))
+        assertEquals(listOf(0..1, 2..2), StrictVoice.batches(listOf(1f, 2f, 3f), maxClips = 2))
+        val one = answer("measure").measured!!
+        val both = StrictVoice.combine(listOf(one, one))!!
+        assertEquals(28, both.veryStrict.passed)
+        assertEquals(40, both.veryStrict.of)
+        assertNull(StrictVoice.combine(listOf(one, null)))
+        val refused = answer("measure_too_many")
+        assertEquals(400, refused.code)
+        assertNull(refused.measured)
+    }
+
+    @Test
+    fun `how often, in words`() {
+        assertEquals("never", StrictVoice.howOften(0.0))
+        assertEquals("about 3 in 10", StrictVoice.howOften(0.3))
+        assertEquals("about 1 in 20", StrictVoice.howOften(0.05))
+        assertEquals("almost every time", StrictVoice.howOften(1.0))
+    }
+
+    @Test
+    fun `the real-use repeat numbers`() {
+        // A real status after nothing was said: no line, the PC keeps these in memory only.
+        assertTrue(StrictVoice.repeatLines(view("trained_three_rounds")).isEmpty())
+        val v = view("trained_three_rounds").copy(
+            veryStrict = VoiceStrict.Counts(accepted = 16, refused = 3, tooShort = 1, refusedThenAccepted = 2),
+        )
+        assertEquals(
+            listOf("At very strict: 16 commands let through; you had to say it again about 1 in 8 " +
+                "(2 times). Turned away: 4, 1 of them too short."),
+            StrictVoice.repeatLines(v),
+        )
+    }
+
+    @Test
+    fun `now line`() {
+        assertEquals("Voice check: Very strict; private answers stay on screen.",
+            StrictVoice.nowLine(view("trained_three_rounds")))
+        assertEquals("Voice check: Balanced; private answers stay on screen.", StrictVoice.nowLine(view("balanced")))
+        assertEquals("Voice check: Very strict; private answers may be read aloud.",
+            StrictVoice.nowLine(view("voice_is_enough")))
+        assertNotNull(StrictVoice.label(VoiceStrict.STRICTNESS, VoiceStrict.VERY_STRICT))
+    }
+}
