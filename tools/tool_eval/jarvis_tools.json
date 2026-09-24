@@ -1,0 +1,411 @@
+[
+ {
+  "type": "function",
+  "function": {
+   "name": "calculator",
+   "description": "Evaluate a plain arithmetic expression.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "expression": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "expression"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "memory_search",
+   "description": "Search what Jarvis has been told and remembers.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string"
+     },
+     "k": {
+      "type": "integer",
+      "description": "how many facts, default 5"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "file_read",
+   "description": "Read a local text file.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "shell_exec",
+   "description": "Run one shell command on this machine and return its output.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "command": {
+      "type": "string"
+     },
+     "timeout_seconds": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "command"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "control_computer",
+   "description": "Click or type inside another Windows program, by naming its on-screen controls. Reads the target window first; a control that cannot be found is reported, not guessed at.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "goal": {
+      "type": "string"
+     },
+     "window": {
+      "type": "string",
+      "description": "the exact window title"
+     },
+     "requests": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "control": {
+         "type": "string"
+        },
+        "action": {
+         "type": "string",
+         "enum": [
+          "click",
+          "type",
+          "select",
+          "read"
+         ]
+        },
+        "value": {
+         "type": "string"
+        },
+        "why": {
+         "type": "string"
+        },
+        "irreversible": {
+         "type": "boolean"
+        },
+        "leaves_machine": {
+         "type": "boolean"
+        }
+       }
+      }
+     }
+    },
+    "required": [
+     "goal",
+     "window",
+     "requests"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "control_phone",
+   "description": "Tap, swipe, type, press a key, or take a screenshot on the owner's own paired Android phone over adb.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device": {
+      "type": "string"
+     },
+     "goal": {
+      "type": "string"
+     },
+     "requests": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "action": {
+         "type": "string",
+         "enum": [
+          "tap",
+          "swipe",
+          "key",
+          "text",
+          "screenshot"
+         ]
+        },
+        "x": {
+         "type": "integer"
+        },
+        "y": {
+         "type": "integer"
+        },
+        "x1": {
+         "type": "integer"
+        },
+        "y1": {
+         "type": "integer"
+        },
+        "x2": {
+         "type": "integer"
+        },
+        "y2": {
+         "type": "integer"
+        },
+        "key": {
+         "type": "string"
+        },
+        "value": {
+         "type": "string"
+        },
+        "why": {
+         "type": "string"
+        },
+        "irreversible": {
+         "type": "boolean"
+        },
+        "leaves_machine": {
+         "type": "boolean"
+        }
+       }
+      }
+     }
+    },
+    "required": [
+     "device",
+     "goal",
+     "requests"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_search",
+   "description": "Check whether a library or approach for a coding idea already exists on GitHub, graded by maintenance and licence, before building it from scratch.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "idea": {
+      "type": "string"
+     },
+     "capabilities": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "idea"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "calendar_read",
+   "description": "Read the owner's own calendar (CalDAV) for the next N days - event titles, times, and locations. Read-only; never creates or changes an event.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "days_ahead": {
+      "type": "integer",
+      "description": "how many days ahead to look, default 7, max 90"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "email_check",
+   "description": "Check the owner's own IMAP inbox for recent messages - sender, subject, date, and a short plain-text preview of each. Read-only; never sends, replies to, deletes, or marks anything.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "limit": {
+      "type": "integer",
+      "description": "how many messages, default 10, max 25"
+     },
+     "unread_only": {
+      "type": "boolean",
+      "description": "true (default) for unread mail only, false for all"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "notes_search",
+   "description": "Search the owner's own notes: the Obsidian vault folder on this PC, or Joplin or Obsidian over each app's local REST API. Read-only; never creates or edits a note.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "integer",
+      "description": "how many results, default 10, max 20"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "home_read",
+   "description": "Read the current state of specific, named Home Assistant entities - never the whole house at once. Read-only.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "entity_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "e.g. [\"light.kitchen\", \"lock.front_door\"], max 20"
+     }
+    },
+    "required": [
+     "entity_ids"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "home_control",
+   "description": "Call one Home Assistant service on one named entity - turn a light on, unlock a door, and so on. This changes something real, not just data; a lock, alarm, or cover action is treated as especially consequential.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "domain": {
+      "type": "string",
+      "description": "e.g. \"light\", \"lock\""
+     },
+     "service": {
+      "type": "string",
+      "description": "e.g. \"turn_on\", \"unlock\""
+     },
+     "entity_id": {
+      "type": "string"
+     },
+     "data": {
+      "type": "object",
+      "description": "extra service data, e.g. {\"brightness\": 200}"
+     }
+    },
+    "required": [
+     "domain",
+     "service",
+     "entity_id"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "append_logseq_journal",
+   "description": "Add one entry to the end of today's Logseq journal page on this PC. Only ever adds; never changes or removes anything already written.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "the entry, in the owner's words"
+     }
+    },
+    "required": [
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "append_obsidian_daily",
+   "description": "Add one entry to the end of today's Obsidian daily note on this PC. Only ever adds; never changes or removes anything already written.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "the entry, in the owner's words"
+     }
+    },
+    "required": [
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "create_joplin_note",
+   "description": "Create one NEW note in Joplin on this PC. Never edits an existing note and never creates a notebook.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     },
+     "notebook": {
+      "type": "string",
+      "description": "an existing notebook's exact name; omit for Joplin's default"
+     }
+    },
+    "required": [
+     "title",
+     "body"
+    ]
+   }
+  }
+ }
+]

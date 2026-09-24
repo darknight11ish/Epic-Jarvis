@@ -46,3 +46,4 @@ __pycache__/
 
 # Rust / Tauri build output
 jarvis-desktop/src-tauri/target/
+tools/tool_eval/tool_eval_results.json
