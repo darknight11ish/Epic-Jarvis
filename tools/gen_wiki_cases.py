@@ -149,13 +149,16 @@ def _off_why() -> str:
 
 
 def cases() -> dict:
-    saved = (W.time, W.secrets, W._today, W._audit)
+    off = _off_why()
+    saved = (W.time, W.secrets, W._today, W._audit, W._off_why)
     W.time = types.SimpleNamespace(time=lambda: NOW, strftime=lambda f: "20260924-120000")
     W.secrets = types.SimpleNamespace(token_hex=lambda n: "0" * (2 * n))
     W._today = lambda: DAY
     W._audit = lambda what, detail: None
+    # Every "off" answer is the second card's words for a one-card PC, never
+    # whatever this machine's own nvidia-smi says.
+    W._off_why = lambda: off
     out = {}
-    off = _off_why()
     try:
         def run(name, fn, *, wiki=True, seeded=True):
             W._reset_for_tests()
@@ -252,7 +255,7 @@ def cases() -> dict:
         run("job_model_refused", model_refused)
         run("job_unknown", lambda v: dict(zip(("status", "body"), W.ingest_status("wiki_nope"))))
     finally:
-        W.time, W.secrets, W._today, W._audit = saved
+        W.time, W.secrets, W._today, W._audit, W._off_why = saved
         W._reset_for_tests()
     return out
 

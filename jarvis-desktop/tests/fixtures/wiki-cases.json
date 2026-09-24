@@ -19,7 +19,7 @@
     },
     "ingest_off": {
       "body": {
-        "error": "The wiki builder runs only on the second graphics card. Its switch there says: Needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer).",
+        "error": "The wiki builder runs only on the second graphics card. Its switch there says: Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER).",
         "ok": false,
         "state": "refused"
       },
