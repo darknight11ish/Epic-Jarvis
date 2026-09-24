@@ -457,12 +457,6 @@ backend routes, in both directions; the rest are listed here only.
 |---|---|
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
 
-**On the phone, NOT on purpose** (being built on the desktop, 2026-09-24):
-the voice check's "someone else" test and the stricter-bar card (the
-`calibrate` and `threshold` modes of `/api/voice/enroll`). Both apps call
-that route, so `tools/check_parity.py` cannot see the gap; this line is the
-record of it until the desktop has them.
-
 **On the backend, in neither app yet, NOT on purpose** (2026-09-24, both
 apps should get it; the app side is tracked as a task): the voice flow (`docs/JARVIS-API.md` §17,
 `jarvis_voice_flow.py`, `voice-flow.patch`) - interrupting Jarvis by

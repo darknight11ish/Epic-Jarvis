@@ -1605,6 +1605,12 @@ for a question that came by VOICE and reply `private_aloud: false`:
    fields §4 describes; the route that fills them is on the PC and was not
    read for this). Otherwise say one fixed line instead, such as "It's on
    your screen."
+   "A tool ran" is read from the event stream's `step` events
+   (`tool_started` / `tool_finished`) between the question and each
+   sentence, and a stream that was stale or dropped in that time counts as
+   "a tool may have run". Both apps do this: `: jarvis-status working`
+   alone arrives only after 1.5 s, so a quick calendar or email lookup was
+   missed (voice audit, 2026-09-24).
 3. Treat a reply from an older PC (no `private_aloud` or no `memory_aloud`
    field) as `false`.
 
