@@ -724,7 +724,7 @@ adds four:
 | `flags_checked` | bool | `false` means the check could not run (the backend lacks `jarvis_intake.py`), which is not the same as "clean". |
 | `keep_both_ok` | bool | True only on a correction card (one that would retire `replaces_text` by adding a new fact). **False on a "retire this?" card** (`source == "feedback_retire"`), even though that card also has `replaces_id`. Only when true, show a third button, "Both are true", which posts `{"id": row.id}` to `/api/memory/keep_both`. |
 | `verbatim` | bool | True when `source` is `"remember"`: the owner's own words from a "Remember:" message. Label it that way. Since `auto-learn.patch` (§19) it is **false** on a "Remember:" card whose words this PC saw arrive as shared, pasted, clipboard, picture words or untagged, or could not match to a live turn at all - those are not known to be the owner's own words. |
-| `auto_reason` | string | `auto-learn.patch` (§19). Why automatic learning left this proposal as a card, in plain words: `"from pasted text"`, `"sensitive: health"`, `"not in your own words"`, ... Show it as one quiet line on the card. `""` (or absent, on an older backend) when automatic learning was off or never looked at this card. |
+| `auto_reason` | string | `auto-learn.patch` (§19). Why automatic learning left this proposal as a card, in plain words: `"from pasted text"`, `"about health, a sensitive topic"`, `"not in your own words"`, ... Show it as one quiet line on the card. `""` (or absent, on an older backend) when automatic learning was off or never looked at this card. |
 
 **How the phone draws these** (`MemoryCards.from` in `net/Learning.kt`, pinned
 by `LearningTest`; drawn by `BrainScreen.kt`'s `MemoryProposalRow`): each `why`
@@ -2147,21 +2147,50 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    fact (`replaces_id`, or even `replaces` words) is always a card: "it would
    replace a fact you already have".
 9. **Not sensitive**, unless "Also remember sensitive topics automatically"
-   is on (GUARDS L7). A word-list check (no model) on the fact AND on the
-   turns it shares words with: passwords and codes in several languages, PINs,
-   card-like digit groups, expiry dates, account and ID numbers, security
-   questions; health words, medicines and doses; money amounts, salaries,
-   debt, rent, savings; and other people's private details (affairs, arrests,
-   addresses, phone numbers, email addresses, secrets). "sensitive: health",
-   "sensitive: money", "sensitive: passwords and account details",
-   "sensitive: private details about someone else", "sensitive: someone
-   else's health". Deliberately broad: a false hit costs one card.
+   is on (GUARDS L7) - then this check does not run at all. Otherwise
+   `jarvis_sensitive.py` looks at the fact AND at the turns it shares words
+   with, in two layers; either one saying "sensitive" makes a card:
+   - **patterns** (no model): word lists for health, money, passwords and
+     account details, ID numbers and birth dates, addresses and routines,
+     religion, politics, sexuality, ethnicity, immigration and the law, in
+     English, Spanish, French, German, Italian, Portuguese, Dutch and Polish
+     (accents ignored); the shapes of codes near a lock word, "<service> is
+     <token>", card, account and ID numbers, money amounts, postcodes and
+     street addresses; and **any fact about another person** - a relation
+     word, a common first name, a title or "he"/"she" ("My sister likes
+     jazz" is a card too; a famous name as a taste, a pet's name and the
+     owner's own name are not);
+   - **the learner's own local model**, asked only when the patterns find
+     nothing, for a one-line JSON verdict. Its "unsure", an answer that is
+     not that JSON, no answer within 8 seconds, Ollama not reachable, no
+     model known, or a model that is not on this PC or is a cloud model: a
+     card (fail closed).
+
+   The reason is one per topic: "about health, a sensitive topic", "about
+   money, ...", "about passwords or account details, ...", "about ID
+   numbers, birth dates or contact details, ...", "about religion, ..."
+   (or "politics or union membership", "sexuality or sex life",
+   "ethnicity", "immigration status", "arrests, courts or a criminal
+   record"), "about where someone can be found, ...", "about another
+   person, ..."; "about someone else's health, ..." when another person is
+   in the same sentence; and, from the model, "the local model was not sure
+   it is free of sensitive topics" or why it gave no answer. Measured on
+   the development set (`backend/sensitive_cases/dev.jsonl`, patterns only):
+   every one of its 777 sensitive lines in the eight languages is caught
+   and none of its 259 plainly harmless lines is flagged - but that is
+   after tuning on those lines; a batch written later and measured before
+   tuning caught 78.9% (health 55%). What it cannot catch, the local model
+   has to: other languages, slang and euphemisms, unlisted names, a
+   password that looks like a word. The model layer has not been measured
+   with a real model yet (`backend/README.md`, "The sensitive-topic
+   check", has the command).
 
 **"Remember: ..."** is saved without a card only with a **colon**, on **one
 line**, at most 600 characters, from a typed or verified-voice live turn,
 with background learning and "Learn automatically" both on, and nothing
-sensitive or instruction-like in it (GUARDS L3). No model reads it, so check
-2 does not apply. Otherwise it stays the card it already is - and that card
+sensitive or instruction-like in it (GUARDS L3). No model writes it, so check
+2 does not apply - though the sensitive-topic check (9) does ask the local
+model about it. Otherwise it stays the card it already is - and that card
 says "Your own words" (`verbatim`) only when the words were typed or said to
 this PC.
 
@@ -2284,16 +2313,20 @@ sensitive topics automatically. ..." (`jarvis_auto_learn.AUTO_CARD`,
   rewords ("prefers" for "likes better") is not grounded; a conversation
   with one pasted message, one shared text, one tool run or one voice turn at
   the balanced voice setting makes every later pass of that conversation
-  cards; and the sensitive word list is broad (it flags "tokens", "bank",
-  "budget", "doctor"...). No local-model sensitivity check yet.
+  cards; and the sensitive-topic check flags any fact about another person,
+  and asks the local model about everything else (a card when it is unsure
+  or does not answer in 8 seconds).
 - **The registry is in memory.** After a backend restart, the rest of an
   ongoing conversation is cards (the earlier turns are "not seen arrive"). An
   app that sends no `conversation_id` gets cards only.
 - **Voice** is saved automatically only at `very_strict` with the stronger
   voice model installed and in mode `owner`.
-- **The 38 phrasings.** The memory audit's sensitive-topic red-team script
-  holds 38 phrasings (the brief said 42); all 38 are flagged, and
-  `backend/test_auto_learn.py` carries them word for word.
+- **The attack phrasings.** The memory audit's sensitive-topic red-team
+  script holds 38 phrasings (the brief said 42); all 38, the auto-learning
+  red team's list (lupus, the alarm code, the Netflix password, "Estoy
+  embarazada", "Ich habe Krebs", ...) and the memory-safety research's
+  political and ethnicity cases are flagged by the patterns alone, and
+  `backend/test_sensitive.py` carries them word for word.
 - **Checked only against stand-ins.** `auto-learn.patch` was applied to
   stand-ins of `jarvis_hud.py`, `jarvis_gate.py` and `jarvis_extract.py`
   built from the whole patch stack, and `accept_auto()` / `_accept()` were

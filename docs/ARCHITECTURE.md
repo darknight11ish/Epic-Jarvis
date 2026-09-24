@@ -281,7 +281,10 @@ by this PC as typed or very-strictly-verified voice in an untainted
 conversation (the live-turn registry `jarvis_chat_log.record_turn()` writes
 on every request, history on or off), no sign of pasted or hidden text, every
 word of the fact in those turns, never a correction, nothing sensitive
-unless the owner allowed it, and a local model by address AND name. Anything
+unless the owner allowed it (`jarvis_sensitive.py`: word lists in eight
+languages, number and token shapes, any fact about another person, then the
+learner's own local model - its "unsure" or no answer is a card too), and a
+local model by address AND name. Anything
 else is the same card as before, with the reason on it. Saved facts are
 `source = "auto"` and listed in both apps with Forget; the `memory_saved`
 event carries ids only. Turning either switch ON is an approval card; OFF is
