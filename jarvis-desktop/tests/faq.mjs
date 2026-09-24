@@ -72,6 +72,21 @@ const faqAnswer = async (page, question) =>
   page.locator(".faq-item", { hasText: question }).locator(".faq-a").textContent();
 const squash = (t) => String(t).replace(/\s+/g, " ").trim();
 
+// F1: the token FAQ said "stored as plain text on disk" and "never shown
+// again". It is in Windows Credential Manager, and Settings has a button
+// that shows it for the phone.
+await check("the token FAQ says Credential Manager and the Show button, not plain text or never shown", async () => {
+  const page = await open();
+  const answer = squash(await faqAnswer(page, "Is my pairing token safe?"));
+  const reveal = await page.locator("#reveal-token").textContent();
+  await page.close();
+  assert.doesNotMatch(answer, /plain text on disk/i);
+  assert.doesNotMatch(answer, /never shown again/i);
+  assert.match(answer, /Windows Credential Manager/);
+  assert.ok(answer.includes(squash(reveal)), `the FAQ does not name the "${squash(reveal)}" button`);
+  assert.match(answer, /no Copy button/);
+});
+
 // F3: one sentence for where a card is answered, on every desktop surface,
 // and it names the phone.
 const WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen";

@@ -575,12 +575,18 @@
           <details class="faq-item">
             <summary class="faq-q">Is my pairing token safe?</summary>
             <p class="faq-a">
-              It is stored on this computer only, it is never shown again
-              once you save it here, and this page never sends it anywhere
-              except the Jarvis address set above. It is stored as plain
-              text on disk, not scrambled, so treat this computer's own user
-              account the way you would treat any other place a password
-              lives.
+              It is kept in Windows Credential Manager, the part of Windows
+              that holds saved passwords - not in a plain-text file. This app
+              sends it only to the Jarvis address set above, and never writes
+              it to its logs. <strong>Show the token for my phone</strong>
+              shows it for a minute so you can type it into the phone; there
+              is no Copy button, because anything copied stays in Windows'
+              clipboard history. Anyone signed in to this computer as you can
+              read it, the same as your other saved passwords, so keep your
+              Windows account password-protected. One exception: if the
+              Token line above says Jarvis's own token is still in its old
+              plain-text file, run apply-patches.ps1 to update the backend,
+              which moves it into Credential Manager.
             </p>
           </details>
         </div>
