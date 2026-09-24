@@ -49,6 +49,7 @@ import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
+import com.jarvis.client.net.Provenance
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.UpdateCheck
 import com.jarvis.client.platform.CrashLog
@@ -74,6 +75,7 @@ import com.jarvis.client.ui.screens.ConnectionInfo
 import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.FaceSpecimen
 import com.jarvis.client.ui.screens.FaqScreen
+import com.jarvis.client.ui.screens.HistoryScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
 import com.jarvis.client.ui.screens.HomeState
@@ -116,8 +118,9 @@ class MainActivity : FragmentActivity() {
 
     /**
      * Text handed to this app by another app's share sheet, waiting to be
-     * folded into the composer draft. Cleared the moment `App()` consumes it,
-     * so the same share cannot be re-applied on a later recomposition.
+     * picked up as the "Shared text" chip above the chat box. Cleared the
+     * moment `App()` consumes it, so the same share cannot be re-applied on a
+     * later recomposition.
      */
     private val sharedText = mutableStateOf<String?>(null)
 
@@ -332,8 +335,8 @@ class MainActivity : FragmentActivity() {
             if (!text.isNullOrEmpty()) sharedText.value = text
             return
         }
-        // One photo. Its words, if the other app sent some, go into the
-        // draft; the photo is attached only if the Photo button would be
+        // One photo. Its words, if the other app sent some, become the
+        // Shared text chip; the photo is attached only if the Photo button would be
         // offered (see the LaunchedEffect on sharedPicture in App()).
         if (!ChatPicture.isSharedImage(intent.type)) return
         val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) ?: return
@@ -430,15 +433,26 @@ class MainActivity : FragmentActivity() {
         // [pairingBusy] for why it lives outside the composition instead.
         var busy by pairingBusy
         var draft by rememberSaveable { mutableStateOf("") }
+        // Whether the draft counts as pasted into: one edit put more than 40
+        // characters in, since the box was last empty (Provenance.pastedAfter).
+        // Sent as the question's `provenance` - chat history, JARVIS-API.md
+        // section 18. Saveable alongside the draft it describes.
+        var draftPasted by rememberSaveable { mutableStateOf(false) }
+        // Text shared from another app, held apart from the draft as the
+        // "Shared text" chip above the box, and sent as its OWN message,
+        // tagged "shared", right before the owner's typed one (section 18).
+        // It used to be appended into the draft, where it became - to the
+        // PC - the owner's own words.
+        var sharedHeld by rememberSaveable { mutableStateOf<String?>(null) }
 
         // A share from another app's share sheet arrives as an Intent extra,
-        // not through the runtime, so it is folded into the draft here
-        // rather than sent on its own — the owner still decides when and
-        // whether to send it. Appended rather than replacing whatever was
-        // already being typed, so a share never eats an in-progress message.
+        // not through the runtime, so it is picked up here rather than sent
+        // on its own — the owner still decides when and whether to send it.
+        // Joined to any share already held, so a share never eats another,
+        // and never touches what is being typed.
         LaunchedEffect(sharedText.value) {
             val text = sharedText.value ?: return@LaunchedEffect
-            draft = if (draft.isBlank()) text else "$draft\n\n$text"
+            sharedHeld = Provenance.joinShared(sharedHeld, text)
             sharedText.value = null
             nav.resetTo(Screen.HOME)
         }
@@ -1465,8 +1479,22 @@ class MainActivity : FragmentActivity() {
                             privateHidden = privateHidden,
                             onShowPrivate = ::showPrivateLists,
                             showPrivateBusy = ownerCheckBusy.value,
+                            // Chat history on the PC (docs/JARVIS-API.md
+                            // section 18): its own screen, opened from here.
+                            onOpenHistory = { nav.go(Screen.HISTORY) },
                         )
                     }
+
+                    Screen.HISTORY -> HistoryScreen(
+                        // Only turning the switch ON waits for this - rule 4.
+                        canAct = link == LinkState.CONNECTED && !stale,
+                        onBack = { nav.back() },
+                        // "Hide memory lists" hides the conversations too.
+                        privateHidden = privateHidden,
+                        onShowPrivate = ::showPrivateLists,
+                        showPrivateBusy = ownerCheckBusy.value,
+                        modifier = root,
+                    )
 
                     Screen.FAQ -> FaqScreen(
                         onBack = { nav.back() },
@@ -1621,6 +1649,7 @@ class MainActivity : FragmentActivity() {
                             // last reported it. The send asks again first.
                             pictureOffered = SecondCard.visionAvailable(secondCard),
                             pictureLine = picture.value?.let { ChatPicture.attachedLine(it) },
+                            sharedLine = sharedHeld?.let { Provenance.sharedLine(it) },
                             pictureBusy = pictureBusy.value,
                             noteTargets = noteTargets,
                             updateLine = updateState.newerLine.takeIf { updateChecks },
@@ -1643,39 +1672,56 @@ class MainActivity : FragmentActivity() {
                         speechLevel = speechLevel,
                         actions = remember {
                             HomeActions(
-                                onDraftChange = { draft = it },
+                                onDraftChange = {
+                                    draftPasted = Provenance.pastedAfter(draftPasted, draft, it)
+                                    draft = it
+                                },
+                                onDropShared = { sharedHeld = null },
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value
+                                    // Where the words came from, and any shared
+                                    // text held beside them - both read NOW,
+                                    // as the question goes (section 18).
+                                    val tag = Provenance.forComposer(draftPasted)
+                                    val shared = sharedHeld
                                     // `#log`, `#obs`, `#joplin` ... at the start
                                     // files the rest as a note instead of asking
                                     // Jarvis, as on the desktop. An attached
                                     // picture stays for the next question. The
                                     // words stay in the box unless the desktop
-                                    // took the note.
+                                    // took the note. A note files the typed
+                                    // words only; shared text stays in its chip
+                                    // for the next question.
                                     val note = NoteCapture.prefixed(text)
                                     if (note != null) {
                                         scope.launch {
                                             if (JarvisRuntime.fileChatNote(note) && draft == text) {
                                                 draft = ""
+                                                draftPasted = false
                                             }
                                         }
                                     } else if (pic == null) {
                                         draft = ""
-                                        scope.launch { chat.send(text) }
+                                        draftPasted = false
+                                        sharedHeld = null
+                                        scope.launch { chat.send(text, provenance = tag, shared = shared) }
                                     } else {
                                         // With a picture, the PC is asked first
                                         // whether Pictures still works; if not,
-                                        // nothing is sent and the draft and the
-                                        // picture stay where they are.
+                                        // nothing is sent and the draft, the
+                                        // shared text and the picture stay where
+                                        // they are.
                                         scope.launch {
                                             val why = JarvisRuntime.pictureBlocker()
                                             if (why != null) {
                                                 JarvisRuntime.setNotice(why)
                                             } else {
                                                 draft = ""
+                                                draftPasted = false
+                                                if (sharedHeld == shared) sharedHeld = null
                                                 picture.value = null
-                                                chat.send(text, picture = pic.dataUri)
+                                                chat.send(text, picture = pic.dataUri, provenance = tag, shared = shared)
                                             }
                                         }
                                     }

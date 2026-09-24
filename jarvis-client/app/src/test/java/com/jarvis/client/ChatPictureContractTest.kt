@@ -5,6 +5,7 @@ import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.SecondCard
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
@@ -55,10 +56,33 @@ class ChatPictureContractTest {
             val question = r["question"]!!.jsonPrimitive.content
             val jpeg = r["jpeg_b64"].let { if (it == null || it is JsonNull) null else it.jsonPrimitive.content }
             val picture = jpeg?.let { ChatPicture.dataUri(Base64.getDecoder().decode(it)) }
-            val built = JarvisJson.parseToJsonElement(ChatHistory.requestBody(window, question, picture))
-            assertEquals(name, r["body"], built)
+            val asking = ChatHistory.asking(question, picture = picture != null)
+            val built = JarvisJson.parseToJsonElement(ChatHistory.requestBody(window, asking, picture)).jsonObject
+            assertEquals(name, r["body"], withoutHistoryFields(built))
+            // The picture's words say so.
+            val last = built["messages"]!!.jsonArray.last().jsonObject
+            val want = if (picture != null) "picture_caption" else "typed"
+            assertEquals(name, want, last["provenance"]!!.jsonPrimitive.content)
         }
     }
+
+    /**
+     * The request minus what chat history on the PC added on 2026-09-24
+     * (docs/JARVIS-API.md section 18): `conversation_id`, `device`, and
+     * `provenance` on each user message. The fixture was recorded before
+     * those existed, and the PC strips all three before anything routes on
+     * the body or reaches a model - so everything else must still match
+     * byte for byte.
+     */
+    private fun withoutHistoryFields(body: JsonObject): JsonObject = JsonObject(
+        body.filterKeys { it != "conversation_id" && it != "device" }.mapValues { (k, v) ->
+            if (k != "messages") {
+                v
+            } else {
+                JsonArray(v.jsonArray.map { m -> JsonObject(m.jsonObject.filterKeys { it != "provenance" }) })
+            }
+        },
+    )
 
     @Test
     fun `the phone's picture numbers are the desktop's, and fit what the PC accepts`() {
@@ -83,7 +107,8 @@ class ChatPictureContractTest {
     @Test
     fun `a picture never lands in the conversation that is sent again`() {
         val window = ChatHistory.commit(emptyList(), "what is this?", "A cat.")
-        val next = JarvisJson.parseToJsonElement(ChatHistory.requestBody(window, "and now?")).jsonObject
+        val next = JarvisJson.parseToJsonElement(ChatHistory.requestBody(window, ChatHistory.asking("and now?")))
+            .jsonObject
         assertFalse(next.toString().contains("data:image"))
         assertEquals(false, next["has_image"]!!.jsonPrimitive.content.toBoolean())
     }

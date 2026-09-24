@@ -510,7 +510,10 @@ object JarvisRuntime {
             // was spoken. `onDelta` is this same call's own local callback,
             // not a subscription to that shared flow - see ChatSession.send's
             // own doc for why that distinction is the whole point.
-            chatSession.send(text, onDelta)?.takeIf { it.isNotBlank() }
+            // Tagged "voice": this is the transcript the PC's speech route
+            // gave back (chat history, docs/JARVIS-API.md section 18).
+            chatSession.send(text, onDelta, provenance = com.jarvis.client.net.Provenance.VOICE)
+                ?.takeIf { it.isNotBlank() }
         }
 
         settings = clientSettings
@@ -2366,6 +2369,63 @@ object JarvisRuntime {
             is ApiResult.Failed -> "Not changed. " + describe(r.error)
         }
     }
+
+    // ---------------------------------------------------- chat history ----
+    // docs/JARVIS-API.md section 18 (2026-09-24) - see
+    // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The
+    // phone reads all of it from the PC and keeps none of it.
+
+    /** `GET /api/history`, one page, newest first. A read: never held. */
+    suspend fun history(before: Long? = null): ApiResult<JsonObject> = api.history(before)
+
+    /** `GET /api/history/conversation` - one conversation, read-only. */
+    suspend fun historyConversation(id: String): ApiResult<JsonObject> = api.historyConversation(id)
+
+    /**
+     * The chat history switch - the same shape as [setLearning]. ON is held
+     * on a stale link (rule 4) and raises an approval card on the PC; OFF is
+     * never held - it only stops something. @return the sentence to show.
+     */
+    suspend fun setHistory(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setHistory(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.enableSaid(on, r.value)
+            is ApiResult.Failed -> "Not changed. " +
+                (com.jarvis.client.net.ChatLog.failure(r.error) ?: describe(r.error))
+        }
+    }
+
+    /**
+     * "Delete conversations older than". Not held on a stale link: it raises
+     * no card, and a shorter limit only removes - the History screen has
+     * already asked "are you sure" when it deletes anything now.
+     * @return the sentence to show.
+     */
+    suspend fun setHistoryKeepDays(days: Int): String {
+        val body = com.jarvis.client.net.ChatLog.keepDaysBody(days)
+            ?: return "Not changed. Pick Never, 30 days, 90 days or 1 year."
+        return when (val r = api.setHistoryKeepDays(body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.keepSaid(days, r.value)
+            is ApiResult.Failed -> "Not changed. " +
+                (com.jarvis.client.net.ChatLog.failure(r.error) ?: describe(r.error))
+        }
+    }
+
+    /**
+     * Deletes ONE conversation from the PC, after the History screen's
+     * confirm. Never held on a stale link: it only takes something away, the
+     * same rule as every removal here. One already gone counts as deleted.
+     * @return whether it is gone now, and the sentence to show.
+     */
+    suspend fun deleteHistory(id: String): Pair<Boolean, String> =
+        when (val r = api.deleteHistory(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.deleteSaid(r.value)
+            is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
+                true to com.jarvis.client.net.ChatLog.ALREADY_GONE
+            } else {
+                false to "Not deleted. " + describe(r.error)
+            }
+        }
 
     // ----------------------------------------------------------- skills ----
 

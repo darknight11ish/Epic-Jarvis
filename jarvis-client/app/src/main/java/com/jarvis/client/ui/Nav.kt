@@ -65,8 +65,11 @@ import kotlinx.coroutines.CancellationException
  *
  * `SECURITY` is the lock and fingerprint settings, opened from the Security
  * card on `CHECKS`. Last, for the same reason.
+ *
+ * `HISTORY` is chat history on the PC (docs/JARVIS-API.md section 18),
+ * opened from Mind. Last, for the same reason.
  */
-enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY }
+enum class Screen { HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY, HISTORY }
 
 /**
  * A back stack, because there was not one.

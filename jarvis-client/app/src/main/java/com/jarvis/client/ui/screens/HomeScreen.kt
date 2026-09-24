@@ -353,6 +353,13 @@ data class HomeState(
      * picture itself is never in this state - only its size, in words.
      */
     val pictureLine: String? = null,
+    /**
+     * The chip for text shared from another app, waiting to go with the next
+     * question as its own message ("Shared text · 1,204 characters"), or null
+     * when none is held. See [com.jarvis.client.net.Provenance]. The text
+     * itself is not in this state - only its size, in words.
+     */
+    val sharedLine: String? = null,
     /** True while a picked photo is being made small enough to send. */
     val pictureBusy: Boolean = false,
     /**
@@ -439,6 +446,8 @@ data class HomeActions(
     val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
+    /** Drop the shared text without sending it. */
+    val onDropShared: () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
     val onOpenUpdate: () -> Unit = {},
 )
@@ -2004,7 +2013,8 @@ private fun Composer(
     // The one snapshot read of the draft in the whole screen, so a keystroke
     // recomposes this composable and nothing above it.
     val text = draft()
-    val canSend = text.isNotBlank() && state.link == LinkState.CONNECTED
+    // Shared text alone is something to send: it goes as its own message.
+    val canSend = (text.isNotBlank() || state.sharedLine != null) && state.link == LinkState.CONNECTED
 
     Column(
         Modifier
@@ -2018,6 +2028,11 @@ private fun Composer(
         VoiceStrip("Preparing the picture…", tone = chrome.textMid)
     } else if (state.pictureLine != null) {
         VoiceStrip(state.pictureLine, tone = chrome.textMid, onDismiss = actions.onRemovePicture)
+    }
+    // Text shared from another app: sent as its own message, before what is
+    // typed, never mixed into it. Dismiss drops it.
+    if (state.sharedLine != null) {
+        VoiceStrip(state.sharedLine, tone = chrome.textMid, onDismiss = actions.onDropShared)
     }
     // A `#log` / `#obs` / `#joplin` line is filed, not asked - said while it
     // is typed, as the desktop's chip beside its prompt does.

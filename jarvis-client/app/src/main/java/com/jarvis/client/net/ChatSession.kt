@@ -122,6 +122,15 @@ class ChatSession(private val api: JarvisApi) {
      */
     @Volatile private var conversation = 0
 
+    /**
+     * The `conversation_id` every request carries (docs/JARVIS-API.md
+     * section 18), so the PC keeps this chat as one conversation in its
+     * History. A new one when this session is made - that is, when the app
+     * starts - and on [newConversation]. Made up here, never read from the
+     * PC, and never written anywhere on the phone.
+     */
+    @Volatile private var conversationId: String = ChatHistory.newConversationId()
+
     @Volatile private var call: Call? = null
 
     /**
@@ -149,19 +158,29 @@ class ChatSession(private val api: JarvisApi) {
      * [picture], when given, is a `data:image/jpeg;base64,` URI ([ChatPicture])
      * sent inside this one question. It is not kept: only the words join
      * [history], so it is never sent again with a later question.
+     *
+     * [provenance] says where [message] came from ([Provenance]): the chat
+     * box sends "typed" or "pasted", the voice loop "voice". With a
+     * [picture] the words are tagged "picture_caption" whatever is passed.
+     * [shared] is text another app handed over through the Share sheet: it
+     * goes as its own message, tagged "shared", right before [message] - and
+     * alone when [message] is blank. Both join [history] with their tags.
      */
     suspend fun send(
         message: String,
         onDelta: ((String) -> Unit)? = null,
         picture: String? = null,
+        provenance: String = Provenance.TYPED,
+        shared: String? = null,
     ): String? {
         cancel()
         _reply.value = ""
         _error.value = null
         // Set as the old reply is cleared, before anything can fail below:
         // a question that got no answer is still what the owner asked, and
-        // the screen should not go on showing the one before it.
-        _question.value = message
+        // the screen should not go on showing the one before it. Shared text
+        // sent on its own is what was asked, so it is what is shown.
+        _question.value = if (message.isBlank() && !shared.isNullOrBlank()) shared else message
         // The previous answer's id goes with the previous answer: a mark
         // tapped now must never land on the answer that is being replaced.
         _turnId.value = null
@@ -172,7 +191,8 @@ class ChatSession(private val api: JarvisApi) {
         // what this question was asked in the light of.
         val earlier = _history.value
         val askedIn = conversation
-        val c = api.chatCall(message, earlier, picture)
+        val asking = ChatHistory.asking(message, provenance, shared, picture = picture != null)
+        val c = api.chatCall(asking, earlier, picture, conversationId)
         if (c == null) {
             _error.value = "No desktop address set"
             return null
@@ -481,7 +501,7 @@ class ChatSession(private val api: JarvisApi) {
         // added its own pair, and this one goes after it.
         val answer = mine
         if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn) {
-            _history.update { ChatHistory.commit(it, message, answer) }
+            _history.update { ChatHistory.commit(it, asking, answer) }
         }
         return mine
     }
@@ -498,13 +518,16 @@ class ChatSession(private val api: JarvisApi) {
      * conversation, and clears the question and answer on screen. The next
      * question goes to the desktop on its own, as the very first one did.
      *
-     * Only the phone's copy is forgotten. Nothing in this repository shows
-     * the desktop keeping a copy of its own between requests; what it has
-     * LEARNED (memory, and cards waiting for review) is a different thing,
-     * kept on the desktop, and this does not touch it.
+     * Only the phone's copy is forgotten. The PC's own record of the chat
+     * (chat history, docs/JARVIS-API.md section 18) is kept there until it
+     * is deleted from History; the next question starts a NEW conversation
+     * there, under a new [conversationId]. What the PC has LEARNED (memory,
+     * and cards waiting for review) is a different thing again, and this
+     * does not touch it.
      */
     fun newConversation() {
         conversation++
+        conversationId = ChatHistory.newConversationId()
         cancel()
         _history.value = emptyList()
         _reply.value = ""

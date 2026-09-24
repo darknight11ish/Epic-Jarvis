@@ -514,6 +514,32 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
         }
 
+    // ----------------------------------------------------- chat history ----
+    // docs/JARVIS-API.md section 18 (2026-09-24). See [ChatLog] for the
+    // shapes, the words and the rules; these only carry them.
+
+    /** `GET /api/history`: the switch and one page of conversations, newest first. */
+    suspend fun history(before: Long? = null): ApiResult<JsonObject> = probe(ChatLog.listPath(before))
+
+    /** `GET /api/history/conversation`: one conversation, read-only. 404 when it is gone. */
+    suspend fun historyConversation(id: String): ApiResult<JsonObject> = probe(ChatLog.conversationPath(id))
+
+    /**
+     * `POST /api/history/delete`: ONE conversation. No route deletes them
+     * all, on purpose. A 404 - already gone - comes back as
+     * [ApiError.NotFound] whatever its body says ([ChatLog.deleteSaid]).
+     */
+    suspend fun deleteHistory(id: String): ApiResult<JsonObject> =
+        postForJob(ChatLog.DELETE_PATH, ChatLog.deleteBody(id))
+
+    /** The switch. ON answers 202 waiting while its approval card is up; OFF is immediate. */
+    suspend fun setHistory(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(ChatLog.SETTINGS_PATH, ChatLog.enabledBody(on))
+
+    /** How long conversations are kept. The whole answer comes back: it says how many went. */
+    suspend fun setHistoryKeepDays(body: String): ApiResult<JsonObject> =
+        postForJob(ChatLog.SETTINGS_PATH, body)
+
     // ------------------------------------------------------------ power ----
 
     /**
@@ -1040,18 +1066,24 @@ class JarvisApi(
      * confirmed against the backend.
      *
      * [history] is the conversation so far - earlier questions and the
-     * answers to them, already trimmed to fit - sent ahead of [message] so a
+     * answers to them, already trimmed to fit - sent ahead of [asking] so a
      * follow-up is understood. Only one user turn used to go, and every
      * follow-up started from nothing. See [ChatHistory] for what is kept,
      * how much, and why.
+     *
+     * [asking] is the new question's user message(s), each with where it
+     * came from ([ChatHistory.asking]), and [conversationId] the chat it
+     * belongs to - both for the PC's chat history (docs/JARVIS-API.md
+     * section 18, 2026-09-24).
      */
     fun chatCall(
-        message: String,
+        asking: List<ChatHistory.UserTurn>,
         history: List<ChatHistory.Exchange> = emptyList(),
         picture: String? = null,
+        conversationId: String? = null,
     ): Call? {
         val target = url("/api/chat") ?: return null
-        val body = ChatHistory.requestBody(history, message, picture)
+        val body = ChatHistory.requestBody(history, asking, picture, conversationId)
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
         return client.newCall(req)

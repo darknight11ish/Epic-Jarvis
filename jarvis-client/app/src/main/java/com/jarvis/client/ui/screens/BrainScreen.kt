@@ -204,6 +204,11 @@ fun BrainScreen(
     onShowPrivate: () -> Unit = {},
     /** True while that check is up. */
     showPrivateBusy: Boolean = false,
+    /**
+     * Opens History - chat history kept on the PC (HistoryScreen.kt,
+     * docs/JARVIS-API.md section 18). Null draws no way in.
+     */
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // The same test ModelsPlate always had, now shared by every control on this
@@ -427,6 +432,18 @@ fun BrainScreen(
             // How much Jarvis remembers, and whether it is learning - the
             // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
             item(key = "memory-counts") { MemoryCountsSection() }
+            // Chat history on the PC: its own screen (HistoryScreen.kt), next
+            // to Memory, as the desktop puts it in the Brain window.
+            if (onOpenHistory != null) {
+                item(key = "history") {
+                    HistoryEntrySection(
+                        onOpen = onOpenHistory,
+                        privateHidden = privateHidden,
+                        showPrivateBusy = showPrivateBusy,
+                        onShowPrivate = onShowPrivate,
+                    )
+                }
+            }
             if (privateHidden) {
                 item(key = "memory-hidden") {
                     HiddenSection("Memory awaiting review", busy = showPrivateBusy, onShow = onShowPrivate)
