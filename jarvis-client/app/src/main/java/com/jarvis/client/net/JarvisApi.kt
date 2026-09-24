@@ -523,6 +523,35 @@ class JarvisApi(
         postForJob(AutoLearn.FORGET_PATH, AutoLearn.forgetBody(id))
 
     /**
+     * `POST /api/memory/erase`: "Erase the words" of ONE fact - its words
+     * wiped from the PC for good, its dates kept (the owner's decision,
+     * 2026-09-24). The status and body come back whole ([MemoryErase.Reply]):
+     * a 404 that says "no such fact" and a 404 from a PC without the route
+     * must read differently, and [postForJob] would make both [ApiError.NotFound].
+     * [MemoryErase.said] reads it.
+     */
+    suspend fun eraseFact(id: Long): ApiResult<MemoryErase.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(MemoryErase.PATH) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = MemoryErase.body(id).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(MemoryErase.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
+    /**
      * A POST whose answer's shape is not written down - read by
      * [DesktopWrite.classify], which uses no field it has not seen the
      * server's other routes use.

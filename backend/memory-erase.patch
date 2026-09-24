@@ -1,0 +1,44 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2646,6 +2646,41 @@
+                 return self._send(500, {"error": type(exc).__name__})
+             return self._send(code, out)
+ 
++        if route == "/api/memory/erase":
++            # memory-erase.patch - "Erase the words" (the owner's decision,
++            # 2026-09-24). ONE fact's words wiped for good - its text, its
++            # search entry, its meaning vector and every copy in memory.db -
++            # while its row and its dates stay, so the history shows that
++            # something was erased (jarvis_memory.MemoryStore.erase). The same
++            # checks as /api/memory/forget just below, and like forget no
++            # approval card: both apps ask "are you sure?" first and hold it
++            # while the event stream is stale. The reply never has the words.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            if not MEMORY:
++                return self._send(503, {"error": "memory layer not importable"})
++            try:
++                raw = _read_body(self)
++            except Exception as exc:
++                return self._send(400, {"error": "could not read the request "
++                                                 f"({type(exc).__name__})"})
++            try:
++                body = json.loads(raw or b"{}")
++            except ValueError:
++                return self._send(400, {"error": "the request is not JSON"})
++            erase = getattr(jarvis_memory, "handle_erase", None)
++            if erase is None:
++                return self._send(501, {
++                    "error": "this PC's jarvis_memory.py cannot erase words yet - "
++                             "apply-patches.ps1 copies in the one that can"})
++            try:
++                code, out = erase(body)
++            except Exception as exc:
++                return self._send(500, {"error": type(exc).__name__})
++            return self._send(code, out)
++
+         if route in ("/api/memory/forget", "/api/memory/edit",
+                      "/api/memory/learning", "/api/memory/sleep_time",
+                      "/api/memory/keep_both"):

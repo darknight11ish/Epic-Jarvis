@@ -392,7 +392,13 @@ object MemoryDates {
  */
 object MemoryAsOf {
 
-    data class Fact(val text: String, val trueThen: Boolean?)
+    /**
+     * [erasedAt] is set when the owner used "Erase the words" on it (the
+     * owner's decision, 2026-09-24; [MemoryErase]): its words are gone from
+     * the PC, [text] is then empty, and the plate shows
+     * [MemoryErase.erasedLine] instead - never the marker the PC keeps.
+     */
+    data class Fact(val text: String, val trueThen: Boolean?, val erasedAt: Double? = null)
 
     data class Answer(
         val facts: List<Fact>,
@@ -408,9 +414,12 @@ object MemoryAsOf {
         val list = body["facts"] as? JsonArray ?: return null
         val facts = list.mapNotNull { el ->
             val f = el as? JsonObject ?: return@mapNotNull null
+            val current = (f["current"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+            // An erased fact: its words are gone, and what the PC sends in
+            // their place is not shown as if it were words.
+            MemoryErase.erasedAt(f)?.let { return@mapNotNull Fact("", current, it) }
             val text = (f["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content
                 ?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            val current = (f["current"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
             Fact(text, current)
         }
         val note = (body["note"] as? JsonPrimitive)?.takeIf { it.isString }?.content

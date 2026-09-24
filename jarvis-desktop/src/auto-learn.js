@@ -193,6 +193,43 @@ export function forgetQuestion(f) {
 /** Said after a Forget went through. */
 export const FORGOTTEN = "Forgotten. Jarvis will not use it again.";
 
+/**
+ * "Erase the words" (the owner's decision, 2026-09-24): the second action
+ * beside Forget. It wipes the fact's words from the PC for good and keeps
+ * only its dates (brain_memory_erase -> POST /api/memory/erase). The
+ * question is both apps' words, word for word (the phone's
+ * `MemoryErase.CONFIRM`); here the fact's own words follow it, because a
+ * Windows dialog has no row above it to say which fact.
+ */
+export const ERASE_LABEL = "Erase the words";
+export const ERASE_TITLE =
+  "Wipe this fact's words from your PC for good. Only its dates stay. There is no undo.";
+export const ERASE_CONFIRM =
+  "Erase the words of this fact from your PC for good? Jarvis keeps only the date it " +
+  "was saved, so its history shows something was erased here. This cannot be undone.";
+export function eraseQuestion(f) {
+  return `${ERASE_CONFIRM}\n\n${f.text}`;
+}
+
+/** Said after an erase went through. */
+export const ERASED = "Erased.";
+
+/**
+ * An erased fact's `erased_at` (unix seconds, a column of every fact row),
+ * or null for a fact that still has its words. Only a real number counts.
+ */
+export function erasedAt(f) {
+  const v = f && f.erased_at;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** What an erased fact shows instead of its words: "Erased on 24 September 2026". */
+export function erasedLine(seconds) {
+  const when = new Date(seconds * 1000);
+  return `Erased on ${when.toLocaleDateString(undefined,
+    { day: "numeric", month: "long", year: "numeric" })}`;
+}
+
 /** Under "Saved automatically": History and this list are separate. */
 export const HISTORY_NOTE =
   "Deleting a conversation from History does not forget facts learned from it - use Forget here.";

@@ -1274,8 +1274,11 @@ def _stacks():
 
 def t_the_patch_is_last_and_builds():
     names = [str(p).replace("\\", "/").split("/")[-1] for p in _stack.order()]
-    check("auto-learn.patch is last in apply-patches.ps1's order, after chat-history",
-          names[-1] == "auto-learn.patch" and names[-2] == "chat-history.patch", names[-3:])
+    # memory-erase.patch came after it (2026-09-24); its context is this
+    # patch's /api/memory/learning/auto block, so it must stay after.
+    check("auto-learn.patch comes right after chat-history, before memory-erase",
+          names.index("auto-learn.patch") == names.index("chat-history.patch") + 1
+          and names.index("memory-erase.patch") > names.index("auto-learn.patch"), names[-3:])
     for target, (text, log) in _stacks().items():
         check(f"{target}: the whole stack builds", text is not None, "\n".join(log[-2:]))
         check(f"{target}: every auto-learn hunk found its context (none made up)",
@@ -1297,7 +1300,9 @@ def t_the_patch_applies_forwards_and_backwards():
             if text is None:
                 return
             (d / target).write_text(text, encoding="utf-8", newline="\n")
-            fulls[target] = _stack.stand_in(target)[0]
+            # Up to and including this patch: memory-erase.patch comes after.
+            fulls[target] = _stack.stand_in(
+                target, order[:order.index("auto-learn.patch") + 1])[0]
         (d / "p.patch").write_bytes((HERE / "auto-learn.patch").read_bytes()
                                     .replace(b"\r\n", b"\n"))
         for extra in (["--check"], [], ["--check", "--reverse"], ["--reverse"], []):

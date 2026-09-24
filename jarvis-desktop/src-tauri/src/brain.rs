@@ -332,6 +332,65 @@ pub async fn brain_memory_forget(
     post(&app, "/api/memory/forget", body).await
 }
 
+/// "Erase the words" (the owner's decision, 2026-09-24): wipes ONE fact's
+/// words from the PC for good and keeps only its dates, so the history shows
+/// that something was erased there. Works on a forgotten fact too.
+///
+/// One integer id and nothing else - the server refuses any other key, so
+/// there is no list form. Like forget there is no approval card, and the
+/// page asks "are you sure?" first; there is no undo at all.
+#[tauri::command]
+pub async fn brain_memory_erase(app: AppHandle, id: i64) -> Result<serde_json::Value, String> {
+    // Held on a stale link, like forget: it acts on a fact the window drew
+    // from a read that may be stale, and nothing brings the words back.
+    require_link_live(&app)?;
+    post(&app, "/api/memory/erase", serde_json::json!({ "id": id }))
+        .await
+        .map_err(erase_refusal)
+}
+
+/// The erase route's refusals in plain words. A 404 is two different
+/// things: "no fact with that id" (nothing left to erase) and a PC whose
+/// backend has no such route at all - an older one, where the words are
+/// still there. A 501 is an older `jarvis_memory.py`. Everything else is
+/// passed on as `post` wrote it.
+fn erase_refusal(err: String) -> String {
+    if err.starts_with("HTTP 404") && err.contains("no fact with that id") {
+        "Jarvis had no such fact any more.".to_string()
+    } else if err.starts_with("HTTP 404") || err.starts_with("HTTP 501") {
+        "Not erased: your PC's Jarvis cannot erase words yet - run apply-patches.ps1 \
+         on the PC to update it."
+            .to_string()
+    } else {
+        err
+    }
+}
+
+#[cfg(test)]
+mod erase_tests {
+    use super::erase_refusal;
+
+    /// A PC without the route must never read as "erased" or "gone".
+    #[test]
+    fn a_missing_route_is_not_a_missing_fact() {
+        assert_eq!(
+            erase_refusal("HTTP 404: no fact with that id".into()),
+            "Jarvis had no such fact any more."
+        );
+        for old in [
+            "HTTP 404: not found",
+            "HTTP 404",
+            "HTTP 501: this PC's jarvis_memory.py",
+        ] {
+            assert!(erase_refusal(old.into()).starts_with("Not erased: your PC's Jarvis cannot"));
+        }
+        assert_eq!(
+            erase_refusal("HTTP 400: need an integer id".into()),
+            "HTTP 400: need an integer id"
+        );
+    }
+}
+
 /// Rewords a fact by superseding it.
 ///
 /// Separate from forget because they are different powers: this one adds a

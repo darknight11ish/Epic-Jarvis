@@ -41,6 +41,12 @@ Two ideas, both of which the patches explain in the original's own words:
      "where did I live last year" works, and "what did you think you knew in
      June" is answerable from the same rows.
 
+     THE ONE EXCEPTION IS erase() ("Erase the words", the owner's decision of
+     2026-09-24). It wipes a fact's WORDS for good - the text, its search
+     entry, its meaning vector, and every copy of the text elsewhere in this
+     file - and keeps the row, its id and its dates, so the history still
+     shows that something was here and when. The row is never removed.
+
      This is the Graphiti idea done natively in the one SQLite file the
      project already uses, because Graphiti requires a graph database server -
      neo4j>=5.26 is not optional there - and the whole point here is one file,
@@ -525,6 +531,16 @@ class MemoryStore:
                 # retirements record both separately.
                 c.execute("UPDATE facts SET retired_at=valid_to "
                           "WHERE valid_to IS NOT NULL AND retired_at IS NULL")
+            if "erased_at" not in have:
+                # "Erase the words" (erase() below): when a fact's words were
+                # wiped. NULL for every fact that still has them. Added the
+                # same way, and with the same race handled the same way, as
+                # retired_at above.
+                try:
+                    c.execute("ALTER TABLE facts ADD COLUMN erased_at REAL")
+                except sqlite3.OperationalError as e:
+                    if "duplicate column name" not in str(e).lower():
+                        raise
             c.execute("CREATE INDEX IF NOT EXISTS ix_facts_valid ON facts(valid_to, valid_from)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_facts_known ON facts(created, retired_at)")
             c.execute("""
@@ -709,6 +725,110 @@ class MemoryStore:
             c.commit()
             return cur.rowcount > 0
 
+    def erase(self, fact_id: int) -> Optional[dict]:
+        """"Erase the words": wipe one fact's text for good. Keep its dates.
+
+        The owner's decision of 2026-09-24 (CLAUDE.md). Forget (retire())
+        hides a fact and keeps its words as history; this is the second
+        action, for words that must really be gone. It is the one place in
+        this store that destroys anything, so it destroys exactly one thing -
+        the words - and keeps the row:
+
+          * `text` becomes ERASED_TEXT, a fixed marker with no words in it.
+          * `meta` keeps only ERASE_KEEPS_META - dates, ids, where it came
+            from - and drops everything else, above all `message_hash` (a
+            hash of the words, which a guess can be checked against) and
+            `conversation_id` (which points at where the words were said).
+          * the word-search row (facts_fts) and the meaning vector
+            (facts_vec) for this id are deleted - they are the words too.
+          * if the fact is still current, it is retired exactly as retire()
+            stamps it (valid_to and retired_at = now); a fact already retired
+            keeps the dates it has.
+          * `erased_at` records when. id, created, valid_from, valid_to,
+            retired_at, retired_by and source are left as they were, so the
+            history, the supersede chain and "what did you know in June"
+            still show that a fact was here - and never what it said.
+          * every COPY of the words elsewhere in this file goes too: the
+            review-queue rows that became this fact or named it as the fact
+            they would replace, and any queue row holding exactly these
+            words (a card still waiting with them is turned down - keeping
+            it would keep the words). See _erase_copies().
+          * then the file itself: word search is compacted ('optimize'),
+            with secure_delete on, so the freed pages are zeroed rather than
+            left holding the old text, and the write-ahead log (the -wal
+            file) is checkpointed and truncated to nothing.
+
+        Works on a current fact AND on one already forgotten (retired), so
+        the owner can erase something forgotten earlier. Erasing an erased
+        fact again changes nothing but re-runs the clean-up.
+
+        Returns None if there is no such fact, else
+        {"id", "erased_at", "already_erased", "retired_now", "file_clean",
+        "copies"}. Never the words.
+        """
+        fid = int(fact_id)
+        with _LOCK, closing(self._connect()) as c:
+            row = c.execute("SELECT * FROM facts WHERE id=?", (fid,)).fetchone()
+            if row is None:
+                return None
+            row = dict(row)
+            old_text = str(row.get("text") or "")
+            already = row.get("erased_at") is not None
+            now = time.time()
+            # Before any write on this connection: freed space is zeroed.
+            try:
+                c.execute("PRAGMA secure_delete=ON")
+            except sqlite3.Error:
+                pass
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                vt, ra = row.get("valid_to"), row.get("retired_at")
+                retired_now = False
+                # The same rule every reader uses for "current": valid_to
+                # NULL or still in the future. A lease that ends in December
+                # is current today, and an erased fact must never be recalled
+                # again, so it is retired now too - which retire() alone
+                # would not do (it matches valid_to IS NULL only).
+                if vt is None or float(vt) > now:
+                    vt, retired_now = now, True
+                if ra is None and float(vt) <= now:
+                    ra = now
+                erased_at = row.get("erased_at") if already else now
+                c.execute("UPDATE facts SET meta=?, valid_to=?, retired_at=?, erased_at=?,"
+                          " embedded=0 WHERE id=?",
+                          (json.dumps(_erased_meta(row.get("meta"))), vt, ra, erased_at, fid))
+                if not already:
+                    # The UPDATE OF text trigger takes the OLD words out of
+                    # facts_fts and puts the marker in; the marker then comes
+                    # out too, so an erased fact is found by no word at all.
+                    # Only when the words are still there: run on a row that
+                    # is already the marker, the trigger would ask FTS5 to
+                    # delete an entry it no longer has, which corrupts it.
+                    c.execute("UPDATE facts SET text=? WHERE id=?", (ERASED_TEXT, fid))
+                    c.execute("INSERT INTO facts_fts(facts_fts, rowid, text)"
+                              " VALUES('delete', ?, ?)", (fid, ERASED_TEXT))
+                if self._vec_ok:
+                    try:
+                        c.execute("DELETE FROM facts_vec WHERE fact_id=?", (fid,))
+                    except sqlite3.Error:
+                        pass
+                copies = _erase_copies(c, fid, old_text if not already else "", now)
+                c.execute("COMMIT")
+            except Exception:
+                try:
+                    c.execute("ROLLBACK")
+                except sqlite3.Error:
+                    pass
+                raise
+            file_clean = _scrub_file(c)
+        try:
+            if fw is not None:
+                fw.audit_log("memory.erased", {"id": fid})   # the id only, never the words
+        except Exception:
+            pass
+        return {"id": fid, "erased_at": erased_at, "already_erased": already,
+                "retired_now": retired_now, "file_clean": file_clean, "copies": copies}
+
     # Counted rather than logged: this module has no logger, and a print on a
     # background thread in a windowed app goes to a closed handle. status() is
     # where it becomes visible.
@@ -779,7 +899,10 @@ class MemoryStore:
         done = 0
         while True:
             with _LOCK, closing(self._connect()) as c:
-                rows = c.execute("SELECT id, text FROM facts WHERE embedded=0 LIMIT ?",
+                # Never an erased fact: its text is only the marker, and a
+                # vector of "[erased]" would be a search hit for nothing.
+                rows = c.execute("SELECT id, text FROM facts WHERE embedded=0"
+                                 " AND erased_at IS NULL LIMIT ?",
                                  (batch,)).fetchall()
                 if not rows:
                     break
@@ -1008,11 +1131,15 @@ class MemoryStore:
             current = c.execute(
                 "SELECT COUNT(*) FROM facts WHERE valid_to IS NULL OR valid_to > ?",
                 (time.time(),)).fetchone()[0]
-            pending = c.execute("SELECT COUNT(*) FROM facts WHERE embedded=0").fetchone()[0]
+            pending = c.execute("SELECT COUNT(*) FROM facts WHERE embedded=0"
+                                " AND erased_at IS NULL").fetchone()[0]
+            erased = c.execute("SELECT COUNT(*) FROM facts"
+                               " WHERE erased_at IS NOT NULL").fetchone()[0]
         out = {"db": str(self.path), "facts": total, "current": current,
                "retired": total - current,
                "embedder": self.embedder.name, "semantic": self.embedder.semantic,
-               "vector_search": self._vec_ok, "unembedded": pending}
+               "vector_search": self._vec_ok, "unembedded": pending,
+               "erased": erased}
         if self._bad_vectors:
             # Only when it has happened. A permanent "bad_vectors: 0" line is
             # noise on every screen that renders status().
@@ -1023,6 +1150,201 @@ class MemoryStore:
                 "still found by keyword. If this keeps climbing the embedding "
                 "model is broken, not the store.")
         return out
+
+
+# --------------------------------------------------------------------------
+#   "Erase the words" (the owner's decision, 2026-09-24)
+# --------------------------------------------------------------------------
+
+#: What an erased fact's text becomes. Fixed, and no words of the fact in it.
+#: The apps never show it: they read `erased_at` and say "Erased on <date>".
+ERASED_TEXT = "[erased]"
+
+#: The meta keys an erased fact keeps: dates, ids and where it came from -
+#: never words, and never a hash of them. Anything else in meta is dropped,
+#: including keys this list has never heard of: an allowlist, because meta
+#: is free-form and a new key holding words must not survive by default.
+ERASE_KEEPS_META = ("auto", "saved_at", "proposal_id", "proposal_source", "provenance",
+                    "device", "tainted", "confidence")
+
+#: A kept string value must look like a label ("typed", "phone",
+#: "import:claude"), never like a sentence.
+_META_LABEL = re.compile(r"^[a-z][a-z0-9_:.-]{0,31}$")
+
+#: The review-queue source of a "retire this?" card (feedback.patch). Its
+#: `fact_id` names the fact it RETIRED, and its `text` is only the reason.
+_RETIRE_SOURCE = "feedback_retire"
+
+
+def _erased_meta(raw) -> dict:
+    """An erased fact's meta: ERASE_KEEPS_META only, and only plain values."""
+    try:
+        meta = json.loads(raw) if isinstance(raw, str) and raw else (raw or {})
+    except (TypeError, ValueError):
+        meta = {}
+    if not isinstance(meta, dict):
+        return {}
+    out = {}
+    for k in ERASE_KEEPS_META:
+        v = meta.get(k)
+        if isinstance(v, bool) or (isinstance(v, (int, float)) and math.isfinite(v)):
+            out[k] = v
+        elif isinstance(v, str) and _META_LABEL.match(v):
+            out[k] = v
+    return out
+
+
+def _same_words(a, b: str) -> bool:
+    return isinstance(a, str) and " ".join(a.split()).lower() == b
+
+
+def _erase_copies(c, fid: int, old_text: str, now: float) -> int:
+    """Every copy of an erased fact's words elsewhere in memory.db. Returns
+    how many rows it changed.
+
+    What is in this file (checked 2026-09-24): `facts`, `facts_fts`,
+    `facts_vec` (erase() handles those three), `meta` (the embedder's name
+    only), `auto_learn_notes` (why a card stayed a card - a fixed sentence,
+    never the fact), a `documents` table that is not Jarvis's, and the
+    review queue, `proposals`, which jarvis_extract keeps here:
+
+      * the card that BECAME this fact (`fact_id`): its text is the words.
+        Not a "retire this?" card, whose `fact_id` names the fact it retired
+        and whose text is only the reason.
+      * cards that named this fact as the one they would replace
+        (`replaces_id`): their `replaces` / `replaces_text` are its words.
+        A "retire this?" card still waiting about it is turned down - the
+        fact is retired already, and the card showed nothing but its words.
+      * any card holding exactly these words (a card discarded earlier, or
+        one proposed again and still waiting). A waiting one is turned down:
+        keeping it would keep the words, and keeping it by mistake later
+        would save them again.
+
+    A table the owner's jarvis_extract has not created yet, or an older one
+    without some column, is simply skipped.
+    """
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='proposals'"
+                     ).fetchone():
+        return 0
+    cols = {r[1] for r in c.execute("PRAGMA table_info(proposals)")}
+    if "text" not in cols:
+        return 0
+    has = cols.__contains__
+    n = 0
+
+    def turn_down(pid: int) -> None:
+        if has("state"):
+            sets = "state='rejected'" + (", decided=?" if has("decided") else "")
+            c.execute(f"UPDATE proposals SET {sets} WHERE id=? AND state='pending'",
+                      ((now, pid) if has("decided") else (pid,)))
+
+    if has("fact_id"):
+        if has("source"):
+            cur = c.execute("UPDATE proposals SET text=? WHERE fact_id=? AND text IS NOT ?"
+                            " AND COALESCE(source, '') != ?",
+                            (ERASED_TEXT, fid, ERASED_TEXT, _RETIRE_SOURCE))
+        else:
+            cur = c.execute("UPDATE proposals SET text=? WHERE fact_id=? AND text IS NOT ?",
+                            (ERASED_TEXT, fid, ERASED_TEXT))
+        n += max(cur.rowcount, 0)
+    if has("replaces_id"):
+        for col in ("replaces", "replaces_text"):
+            if has(col):
+                cur = c.execute(f"UPDATE proposals SET {col}=? WHERE replaces_id=?"
+                                f" AND {col} IS NOT NULL AND {col} IS NOT ?",
+                                (ERASED_TEXT, fid, ERASED_TEXT))
+                n += max(cur.rowcount, 0)
+        if has("source") and has("state"):
+            for (pid,) in c.execute("SELECT id FROM proposals WHERE replaces_id=? AND source=?"
+                                    " AND state='pending'", (fid, _RETIRE_SOURCE)).fetchall():
+                turn_down(pid)
+    want = " ".join(str(old_text or "").split()).lower()
+    if want:
+        pick = ["id", "text"] + [k for k in ("replaces", "state") if has(k)]
+        for r in c.execute(f"SELECT {', '.join(pick)} FROM proposals").fetchall():
+            r = dict(zip(pick, r))
+            if r.get("state") == "accepting":
+                continue            # mid-decision elsewhere; not this call's to touch
+            if _same_words(r["text"], want):
+                c.execute("UPDATE proposals SET text=? WHERE id=?", (ERASED_TEXT, r["id"]))
+                n += 1
+                if r.get("state") == "pending":
+                    turn_down(r["id"])
+            if _same_words(r.get("replaces"), want):
+                c.execute("UPDATE proposals SET replaces=? WHERE id=?", (ERASED_TEXT, r["id"]))
+                n += 1
+    return n
+
+
+def _scrub_file(c) -> bool:
+    """Make the erased words really gone from the file, not only unreachable.
+
+    SQLite does not overwrite what it frees, and FTS5 does not even free a
+    deleted entry at once - it adds a "deleted" marker and keeps the old
+    words in its index until the index is merged. So, on the connection
+    that erased (which has secure_delete on, so freed pages are zeroed):
+    merge the word index ('optimize'), then copy the write-ahead log into
+    the file and truncate the log to nothing. Measured in
+    backend/test_memory_erase.py by reading memory.db and memory.db-wal as
+    raw bytes.
+
+    Returns whether the log was emptied. False when another connection was
+    in the middle of reading and the log could not be truncated after a few
+    tries - the old words may then stay in memory.db-wal until the next
+    checkpoint. The caller says so.
+    """
+    try:
+        c.execute("INSERT INTO facts_fts(facts_fts) VALUES('optimize')")
+    except sqlite3.Error:
+        pass
+    # A TRUNCATE checkpoint waits on a reader through the busy handler, which
+    # _connect() sets to 30 seconds - five tries would hold the erase (and
+    # _LOCK, and the owner's button) for two and a half minutes. Short waits
+    # here, about two seconds in all; the caller says when it did not work.
+    try:
+        c.execute("PRAGMA busy_timeout=200")
+    except sqlite3.Error:
+        pass
+    for attempt in range(5):
+        try:
+            busy = c.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+        except sqlite3.Error:
+            busy = 1
+        if not busy:
+            return True
+        time.sleep(0.1 * (attempt + 1))
+    return False
+
+
+def handle_erase(body) -> tuple:
+    """POST /api/memory/erase {"id": <fact id>} -> (http status, reply).
+
+    memory-erase.patch hands the route here after the same origin and token
+    checks as /api/memory/forget. One fact per request, and nothing else in
+    the body: there is no list form, the same as forget and decide. The
+    reply never carries the words - not even the "was" forget sends back.
+    """
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "need an object"}
+    fid = body.get("id")
+    if not isinstance(fid, int) or isinstance(fid, bool):
+        return 400, {"ok": False, "error": "need an integer id"}
+    if set(body) - {"id"}:
+        return 400, {"ok": False, "error": 'erase takes one fact: {"id": <int>} and nothing else'}
+    try:
+        out = store().erase(fid)
+    except Exception as exc:
+        return 500, {"ok": False, "error": type(exc).__name__}
+    if out is None:
+        return 404, {"ok": False, "reason": "no_such_fact", "error": "no fact with that id"}
+    note = ("Erased. The words are gone from Jarvis's memory on this PC; only the "
+            "dates are kept, so the history shows something was erased here. "
+            "There is no undo.")
+    if not out["file_clean"]:
+        note += (" Another part of Jarvis was reading the memory file at that "
+                 "moment, so an older copy may stay in memory.db-wal until the "
+                 "file is next tidied.")
+    return 200, {"ok": True, **out, "note": note}
 
 
 # --------------------------------------------------------------------------

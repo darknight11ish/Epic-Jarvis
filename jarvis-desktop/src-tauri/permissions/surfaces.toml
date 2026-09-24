@@ -372,10 +372,14 @@ permissions = ["allow-brain-remove-skill", "allow-brain-model"]
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, and list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off. One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, and list what it saved automatically and turn its two automatic-learning switches on (an approval card) or off. One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
+  # "Erase the words" (the owner's decision, 2026-09-24): ONE fact's words
+  # wiped for good, its dates kept. Stricter than forget, never looser:
+  # held on a stale link, one id per call, asked about first.
+  "allow-brain-memory-erase",
   "allow-brain-memory-edit",
   "allow-brain-memory-learning",
   "allow-brain-memory-export",

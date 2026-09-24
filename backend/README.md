@@ -5,8 +5,8 @@
 > is the detail.
 
 
-Fifty patches against the Jarvis backend (counted 2026-09-24, after
-`chat-history.patch` and `auto-learn.patch`), each with an executable test
+Fifty-one patches against the Jarvis backend (counted 2026-09-24, after
+`chat-history.patch`, `auto-learn.patch` and `memory-erase.patch`), each with an executable test
 (counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
 refuses to run if a `.patch` file here is missing from it). The paragraphs
 below were written as the list grew, so the counts in them are the count at
@@ -108,6 +108,7 @@ on a throwaway copy instead.
 | `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
 | `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them, and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
 | `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
+| `memory-erase.patch` | `jarvis_hud.py` | **"Erase the words"** (the owner's decision, 2026-09-24). Adds `POST /api/memory/erase {"id"}`: ONE fact's words wiped for good - its text, its word-search entry, its meaning vector, the copies in the review queue, and the old bytes in `memory.db` and `memory.db-wal` - while its row and dates stay. Same checks as forget, no card. The work is in the shipped `rebuilt/jarvis_memory.py` (`erase()`, `handle_erase()`). See its own section. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -5937,8 +5938,8 @@ before the fix):
   does not hold: the new lines sit next to `feedback.patch`'s `turn_id`
   line and were checked only on the patch-stack stand-in.
 
-**Where it goes.** Last in the order, after `chat-history.patch`. Its context
-is chat-history's lines (the learner call it moves, both route blocks,
+**Where it goes.** Right after `chat-history.patch` (`memory-erase.patch`
+comes after it). Its context is chat-history's lines (the learner call it moves, both route blocks,
 `_NO_CHAT_LOG` and the gate line), memory-intake's learner, memory-safety's
 `_accept()`, memory-intake's end of `jarvis_extract.py` and memory-noise's
 recalled-facts block.
@@ -5949,6 +5950,72 @@ backend folder:
 ```powershell
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_auto_learn.py
 ```
+
+## memory-erase.patch - "Erase the words"
+
+**What it is for.** The owner decided on 2026-09-24 that "Erase the words"
+joins Forget. Forget stops Jarvis using a fact but keeps its words in the
+history. "Erase the words" wipes the words themselves, for good. Only the
+dates stay, so the history still shows that something was there and when.
+
+**What it does.** One new route, `POST /api/memory/erase {"id": <fact id>}`,
+placed right above the forget route and checked the same way (the pairing
+token and the origin check). Like Forget, there is no approval card: both
+apps ask "are you sure?" first and refuse while the link is stale. The work
+is in `rebuilt/jarvis_memory.py`, which `apply-patches.ps1` copies in:
+
+- the fact's text becomes `[erased]` and `erased_at` records when (a new
+  column, added automatically the first time the store opens);
+- its word-search entry and its meaning vector are deleted;
+- its extra details keep only dates, ids and where it came from - the hash
+  of the message it came from and the conversation id are dropped;
+- a fact still in use is retired, exactly like Forget; one already forgotten
+  keeps its dates;
+- copies of the words in the review queue go too: the card that became the
+  fact, cards that would have replaced it, and any card with exactly the same
+  words (one still waiting is turned down - keeping it would keep the words);
+- then the file itself is cleaned: the word index is compacted, freed space
+  is zeroed (`secure_delete`), and the journal file `memory.db-wal` is emptied.
+
+The reply never contains the words. Nothing is sent on the event bus
+(Forget sends nothing either); the audit log gets the fact id only.
+
+**What was checked in `memory.db`.** `facts`, `facts_fts`, `facts_vec`,
+`meta` (the embedding model's name only), `proposals` (the review queue),
+`auto_learn_notes` (why a card stayed a card - fixed sentences, never a
+fact's words; left alone) and a `documents` table that is not Jarvis's.
+`feedback.db` holds fact ids only.
+
+**What it cannot reach - said plainly.**
+
+- A memory export you saved to a file earlier still has the words. Delete
+  that file yourself.
+- The conversation the fact was learned from, in chat history, still has
+  the words. Delete it in History (Brain, History on the PC; Mind, Chat
+  history on the phone).
+- Windows backups, System Restore points and the drive's own free space are
+  outside Jarvis.
+- If another part of Jarvis is reading the memory file at that exact moment,
+  the journal cannot be emptied; the reply says so (`file_clean: false`) and
+  the next erase cleans it.
+- Your own `jarvis_gate.py` ledger and audit trail are not in this
+  repository, so whether they ever held a fact's words was not checked.
+- Checked only against the patch-stack stand-in of `jarvis_hud.py` and a
+  real SQLite store here, never on your PC.
+
+**Where it goes.** Last in the order, after `auto-learn.patch`: its context
+is that patch's `/api/memory/learning/auto` block and the forget route tuple.
+
+**Test.** From the repository folder, with `JARVIS_BACKEND` set to your
+backend folder:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_erase.py
+```
+
+`test_memory_erase.py` erases real facts in a temporary store and then reads
+`memory.db` and `memory.db-wal` as raw bytes to prove the words are gone.
+Every one of its tests fails against the store as it was before.
 
 ## The sensitive-topic check - `jarvis_sensitive.py`
 

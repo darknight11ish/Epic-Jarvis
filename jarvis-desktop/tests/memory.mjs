@@ -145,7 +145,7 @@ await check("confirming it sends one forget for that id", async () => {
   assert.equal(FORGOTTEN, "Forgotten. Jarvis will not use it again.");
 });
 
-await check("a retired fact offers no Forget or Reword at all", async () => {
+await check("a retired fact offers no Forget or Reword - only Erase the words", async () => {
   // The fixture deliberately omits the server's `current` flag on this row and
   // gives only `valid_to`. The pane has to work that out for itself: a retired
   // fact shown as live is one the owner thinks Jarvis still uses, with a
@@ -156,10 +156,13 @@ await check("a retired fact offers no Forget or Reword at all", async () => {
   const page = await memoryTab();
   const retired = page.locator("#memory-facts .row-item").nth(2);
   const tag = await retired.locator(".row-tag").innerText();
-  const buttons = await retired.locator("button").count();
+  const buttons = await retired.locator("button").allInnerTexts();
   await page.close();
   assert.equal(tag.trim().toLowerCase(), "retired");
-  assert.equal(buttons, 0, "a retired fact should have no actions");
+  // "Erase the words" (the owner's decision, 2026-09-24) is the one thing a
+  // forgotten fact still offers: forgetting kept its words, erasing wipes
+  // them (tests/erase.mjs).
+  assert.deepEqual(buttons, ["Erase the words"], "a retired fact should offer only Erase");
 });
 
 /* ── The switch renders the answer, not the request ──────────────────────── */

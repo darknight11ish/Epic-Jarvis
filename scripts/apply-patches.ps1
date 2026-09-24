@@ -305,6 +305,14 @@ $PATCHES = @(
     # Needs jarvis_auto_learn.py copied in; without it every fact waits for
     # the owner's yes, as before, and the new routes answer 503.
     'auto-learn.patch'
+    # "Erase the words" (the owner's decision, 2026-09-24): POST
+    # /api/memory/erase wipes ONE fact's words for good and keeps its dates.
+    # One route block, added right above memory-pane's forget/edit route; its
+    # context is auto-learn's /api/memory/learning/auto block and that route
+    # tuple, so it goes after auto-learn - last, like every new patch. The
+    # work is in the shipped rebuilt\jarvis_memory.py (erase(),
+    # handle_erase()); with an older copy the route answers 501.
+    'memory-erase.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

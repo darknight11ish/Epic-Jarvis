@@ -56,6 +56,8 @@ fn main() {
             // whether facts are proposed at all.
             "brain_memory_decide",
             "brain_memory_forget",
+            // "Erase the words": one fact's words wiped, its dates kept.
+            "brain_memory_erase",
             "brain_memory_edit",
             "brain_memory_learning",
             "brain_memory_export",

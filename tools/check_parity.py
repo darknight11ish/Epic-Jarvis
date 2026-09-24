@@ -129,6 +129,7 @@ CLASSIFICATION = {
     "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
     "/api/memory/facts": ("ported", ""),
     "/api/memory/forget": ("ported", "Forget ONE fact (retired, not deleted; no undo). Desktop: Brain, Memory, every fact (brain_memory_forget, with an optional date). Phone, since automatic learning (owner, 2026-09-24: every auto-saved fact is listed in both apps with a one-tap Forget): Mind, Saved automatically, auto-saved facts only (AutoLearnPlate.kt, JarvisApi.forgetFact). Both ask first and hold it on a stale link. Rewording (/api/memory/edit) stays desktop-only."),
+    "/api/memory/erase": ("ported", "\"Erase the words\" (owner, 2026-09-24): ONE fact's words wiped from the PC for good, its dates kept (backend/memory-erase.patch, rebuilt/jarvis_memory.py erase()). Offered wherever Forget is. Desktop: Brain, Memory, Saved automatically and every fact in What Jarvis knows about you, forgotten ones too (brain_memory_erase). Phone: Mind, Saved automatically (AutoLearnPlate.kt, JarvisApi.eraseFact). Both ask first in the same words and hold it on a stale link. Erasing a fact that was already forgotten, or never saved automatically, is desktop-only, like Forget of one (ARCHITECTURE.md section 8)."),
     "/api/memory/keep_both": ("ported", ""),
     # Automatic learning (docs/JARVIS-API.md section 19, 2026-09-24): built
     # on the backend and both apps at once. Desktop: Brain, Memory
