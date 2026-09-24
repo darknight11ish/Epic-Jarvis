@@ -375,8 +375,12 @@ What "set up" means for each:
 
 - **Logseq**: the graph folder exists — `[notes.logseq] graph_directory` in
   `jarvis-framework.toml` (or the `JARVIS_LOGSEQ_GRAPH` environment variable).
-- **Joplin**: Joplin's Web Clipper token is in `JARVIS_JOPLIN_TOKEN` (Joplin:
-  Tools → Options → Web Clipper). Joplin also has to be open when you file.
+- **Joplin**: Joplin's Web Clipper token (Joplin: Tools → Options → Web
+  Clipper) is in an environment variable Jarvis can read:
+  `JARVIS_JOPLIN_TOKEN`, or else the one named by `[notes.joplin] token_env`
+  in `jarvis-framework.toml` (that is `JOPLIN_TOKEN` unless you changed it).
+  Filing notes and the notes search both look in the same two places.
+  Joplin also has to be open when you file.
 - **Obsidian**: the vault folder is set, below.
 
 ### Obsidian
@@ -626,6 +630,22 @@ you unpair a device you no longer have), run
 `py -3 jarvis_token_store.py forget` in the backend folder and start Jarvis
 again; every device then has to pair again.
 
+**`forget` does not unpair anything while another token is in use.** It
+only deletes the token kept in Credential Manager. Two other tokens win over
+that one, and `forget` cannot touch either:
+
+- **A token typed into the desktop app's Settings.** When the desktop app
+  starts Jarvis, it hands that token over, and Jarvis uses it. Clear it
+  first: desktop app, **Settings → Connection → Clear token**. Then run
+  `forget`.
+- **`HUD_TOKEN` set in your environment.** Remove it first with this one
+  line in PowerShell, then open a new PowerShell window before running
+  `forget`:
+  `[Environment]::SetEnvironmentVariable('HUD_TOKEN', $null, 'User')`
+
+`forget` reminds you of both when it runs (the `HUD_TOKEN` one only when
+it is set in the window you run it in).
+
 If the banner says `NOT SAVED`, Credential Manager refused the token: Jarvis
 uses it for that run only and writes nothing to disk, so the phone would need
 pairing again after every restart. The lines under it give the Windows error.
@@ -728,7 +748,7 @@ proxy there. Jarvis's calls to programs on this PC (the backend, Ollama) are
 being changed to never use a proxy at all; until that is done, a proxy set in
 any of these places can get between them.
 
-**"Jarvis got slow."** Open the Brain → Models. If the model has fallen off
+**"Jarvis got slow."** Open the Brain → Faculties → Models. If the model has fallen off
 the graphics card onto the CPU, there is now a yellow line at the top of that
 list saying so, with the percentage. Nothing used to say it — Ollama reports
 the model as loaded and healthy either way.
