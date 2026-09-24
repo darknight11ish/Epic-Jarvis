@@ -32,11 +32,18 @@ Jarvis under on their own (quiet hours, the idle timer) - that is
 
 REFUSED
 Standby while a multi-step task is running (unloading the model under it
-would break it): stop the task first.
+would break it): stop the task first. With the tier set to "ask", that is
+checked again AFTER the card is approved, before anything is unloaded - a
+task may have started while the card waited.
+
+A second change while a power card is still waiting (409): approve or deny
+that one first. Otherwise two cards could be up at once, and the one
+answered last - not the one asked for last - would decide the mode.
 """
 from __future__ import annotations
 
 import threading
+import time
 from typing import Callable, Optional
 
 MODES = ("active", "quiet", "standby")
@@ -97,6 +104,11 @@ def _unload_models(models) -> dict:
     return {"unloaded": done}
 
 
+_PENDING_LOCK = threading.Lock()
+#: The one power card that may be waiting: {"mode", "since"}, or None.
+_PENDING: dict = {}
+
+
 def card_text(mode: str, current: str) -> str:
     return "\n".join([
         f"Switch Jarvis from {current} to {mode}.", "",
@@ -124,10 +136,24 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
     if mode == "standby" and _running_tasks():
         return 409, {"ok": False, "error": "a task is running - stop it first, or it would "
                                            "lose the model it is using"}
+    with _PENDING_LOCK:
+        if _PENDING:
+            return 409, {"ok": False, "waiting": True,
+                         "error": (f"a card to switch to {_PENDING['mode']} is already "
+                                   f"waiting on your PC or phone - approve or deny that one "
+                                   f"first")}
+        _PENDING.update(mode=mode, since=time.time())
 
     box: dict = {}
 
     def work():
+        try:
+            decide()
+        finally:
+            with _PENDING_LOCK:
+                _PENDING.clear()
+
+    def decide():
         verdict = (gate_check or _gate_check)(
             "power_manage", {"text": card_text(mode, current)},
             f"power mode {current} -> {mode}, asked from {by or 'an app'}")
@@ -136,6 +162,16 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
                                 "outcome": str(getattr(verdict, "outcome", "refused")),
                                 "message": f"Not changed - Jarvis stays {current}."})
             return
+        if mode == "standby" and _running_tasks():
+            # Checked again: with the tier at "ask" the card may have waited
+            # minutes, and a task that started meanwhile would lose its model.
+            box["out"] = (409, {"ok": False, "mode": current, "changed": False,
+                                "outcome": "refused",
+                                "message": (f"Not changed - a task started while the card "
+                                            f"waited, and standby would unload the model it "
+                                            f"is using. Jarvis stays {current}; stop the task "
+                                            f"first.")})
+            return
         power.set_mode(mode, why=f"the owner, from {by or 'an app'}")
         out = {"ok": True, "mode": mode, "changed": True, "message": _WORDS[mode]}
         if mode == "standby":
@@ -143,13 +179,18 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
         box["out"] = (200, out)
 
     t = threading.Thread(target=work, name="jarvis-power-switch", daemon=True)
-    t.start()
+    try:
+        t.start()
+    except Exception:
+        with _PENDING_LOCK:
+            _PENDING.clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
     t.join(max(0.0, float(wait_s)))
     if "out" in box:
         return box["out"]
     return 202, {"ok": True, "mode": current, "changed": False, "waiting": True,
-                 "message": "Waiting for your approval on the desktop. The mode changes "
-                            "only if you approve it."}
+                 "message": "Waiting for your approval on your PC or phone. The mode "
+                            "changes only if you approve it."}
 
 
 def handle_post(body, *, by: str = "") -> tuple:
