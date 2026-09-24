@@ -1004,3 +1004,39 @@ checks that shape against `newest_turn_has_image`, `choose_lane` and the
 router, and the phone's `ChatPictureContractTest` builds the same bodies with
 its own encoder. Under the answer the phone says "Answered on the second
 graphics card (<model>)" when `second_card` is in the route header.
+
+---
+
+## 13. The wiki builder (added 2026-09-24)
+
+`backend/wiki.patch` and `backend/jarvis_wiki.py`; the owner's guide is
+`docs/SECOND-CARD.md`, "Wiki builder". Both apps call these routes: the
+desktop from the Brain's Memory tab (`src/wiki.js`, the `wiki_*` commands in
+`commands.rs`), the phone from Mind (`net/Wiki.kt`, `WikiPlate.kt`).
+`tools/check_parity.py` records both as `ported`.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/wiki` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_wiki.py` is missing | Token + origin. Names, states and reasons; never a page's text. `folder` is the absolute path of `Jarvis Wiki` on the PC (the desktop uses it to open the folder; the phone ignores it). |
+| `POST /api/wiki/ingest` | `{"source": "<file name in Sources>"}` | **202** `{"ok": true, "id", "pending": true, "state": "reading", "message"}` - the model is reading it; the card comes after; **400** not a plain name, too big, or not readable; **409** already in the wiki and unchanged, or another document is being added; **503** the second card's wiki lane is not ready, or no vault / `Jarvis Wiki` folder. Every refusal is `{"ok": false, "state": "refused", "error": "<a sentence>"}` | ONE approval card, action `wiki_update` (tier `ask` as shipped), raised after the model has read the document. Nothing is written before it is answered. Show `error` word for word. Hold it on a stale link (rule 4). |
+| `GET /api/wiki/ingest?id=` | - | 200 the job: `{"id", "source", "state", "message", "ok", "pending", "created", "updated", "pages"?, "outcome"?}`; 404 unknown id (a restart forgets jobs); 400 no id | `state` is `reading`, `waiting` (the card is up), `writing`, `done`, `refused` or `failed`. Say "added" only on `done`. `message` is the sentence to show. `pages` is `[{"action": "create"\|"update", "path", "summary", "chars"}]` once planned. |
+
+**`status()`** - the real output is in
+`jarvis-desktop/tests/fixtures/wiki-cases.json` (`status_ready`,
+`status_off`, `status_no_wiki_folder`, `status_running`, then each POST
+answer and each job state). Build against that file, not this summary.
+
+```
+{"available": bool,          lane_for("wiki") returned a lane
+ "why": str,                 "Ready: ..." or, when not, the second card's own reason
+ "vault_folder_ok": bool, "folder_why": str, "folder": str | null,
+ "sources": [{"name", "state": "new"|"changed"|"in_wiki"|"too_big"|"unreadable", "why"}],
+ "recent": ["## [YYYY-MM-DD] ingest | <source>", ...],   the last five
+ "pages": int, "running": {"id", "source", "state"} | null, "reads": [".md", ".txt"]}
+```
+
+Offer "Add to wiki" only for `new` and `changed`, only when `available` and
+`vault_folder_ok` are true and `running` is null. Show every other state
+with its `why`. There is no event for the wiki; ask the job route until the
+state is final, then read `GET /api/wiki` again.
+

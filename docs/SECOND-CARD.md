@@ -40,7 +40,7 @@ The main switch must be on before any feature can be.
 | **Pictures** (`vision`) | A message with a picture (a screenshot from Alt+Shift+S) goes to a picture-reading model on the second card, so Jarvis actually sees it. Pictures still never go to the internet. | `qwen2.5vl:7b` | about 6.7 GB (**an estimate** - see "Not checked" below) |
 | **Learning in the background** (`learning`) | The memory learner (which suggests facts for you to review) runs on the second card, so it never slows chat down, and it waits only 10 seconds of quiet instead of 45. | same as Longer conversations | shared |
 | **Browser control** (`browser_control`) | Jarvis can work a web page for you, one approved step at a time. Needs Longer conversations on too, and `"browser_control"` in `[tools].enabled`. | same as Longer conversations | shared |
-| **Wiki builder** (`wiki`) | A switch for a wiki builder that is not built yet. It does nothing on its own today. | same as Longer conversations | shared |
+| **Wiki builder** (`wiki`) | Turns documents you put in your vault's `Jarvis Wiki/Sources` folder into linked wiki pages, one approval card each. See "Wiki builder" below. | same as Longer conversations | shared |
 
 The second card holds **one model at a time**. If Pictures and Longer
 conversations are both on, the second card swaps between the two models as
@@ -128,6 +128,72 @@ the second card, and the answer's badge says "on the second graphics card".
 With a feature on, ask something that uses it and watch `nvidia-smi` in a
 second terminal: the second card's memory should go up and the 2080 Super's
 should not. The log file above shows what Ollama did.
+
+## Wiki builder
+
+**Short version:** put a document in a folder, press **Add to wiki**, and say
+yes to the card. The model on the second card reads it and writes linked
+pages about the people, topics and things in it, in your Obsidian vault.
+Nothing leaves this PC, and nothing is written until you say yes.
+
+It works only when the "Wiki builder" switch above is on and working (the
+second card is in, its Ollama is running, the model is installed). Until
+then the Wiki plate says why, in the same words as the switch.
+
+### Using it
+
+1. **Make the folders, once.** In Obsidian (or Explorer), inside your vault,
+   make a folder called `Jarvis Wiki`, and inside that a folder called
+   `Sources`. Jarvis uses the same vault as `#obs` and the notes search:
+   `[notes.obsidian] vault_directory` in `jarvis-framework.toml`, or
+   `JARVIS_OBSIDIAN_VAULT`.
+2. **Drop a document in.** Put a `.md` or `.txt` file in `Jarvis Wiki/Sources`.
+   Other kinds of file (PDF, Word, pictures) are not read yet; they show as
+   "can't read", with the reason.
+3. **Press Add to wiki.** On the PC: Brain window, Memory tab, the Wiki card.
+   On the phone: Mind, the Wiki section. The document's line says what is
+   happening: the model is reading it (a minute or two for a long one), then
+   an approval card appears.
+4. **Read the card and answer it.** It lists every page it would create or
+   change, with one line about each, and what it thinks this document
+   disagrees with. Yes writes them; no writes nothing.
+
+### What it writes, and where
+
+Everything is inside `<your vault>/Jarvis Wiki/`, never anywhere else:
+
+- `Pages/` - one page per topic, person or thing. Each starts with
+  `sources: [...]` (the documents it came from) and links to other pages
+  with `[[Page name]]`, so Obsidian's graph and backlinks work.
+- `index.md` - one line per page.
+- `log.md` - one entry per document added, like
+  `## [2026-09-24] ingest | spring-meeting.md`.
+- `.versions/` - before a page is changed, its old copy is saved here. To
+  undo a change, copy the old file back into `Pages/`.
+- Your document in `Sources` is never changed.
+
+A document already added and not changed since shows "in the wiki" and is
+not read again. Edit it and it shows "changed"; adding it again updates the
+pages.
+
+### What it will not do
+
+- Read a document too big for the model's room. It says "too big" with the
+  numbers; split the document into smaller files. Nothing is ever cut short.
+- Write more than 12 pages from one document, or a page over 6,000
+  characters, or a page anywhere but `Jarvis Wiki/Pages`. A plan that tries
+  is refused whole, with the reason.
+- Load anything from the internet. A picture link from the internet in a
+  page becomes a plain link, so opening the page in Obsidian fetches
+  nothing.
+- Work on two documents at once. The second waits for the first.
+
+### Not checked yet, said plainly
+
+No real model has written a wiki page here yet: the tests use a stand-in.
+How good the pages are, and how often a real answer is refused, will only
+be known once the second card is in. "Too big" is worked out from an
+estimate (about 3 bytes per token, on the cautious side).
 
 ## What was not built, and why
 

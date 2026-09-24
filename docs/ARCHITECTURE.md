@@ -459,7 +459,7 @@ they landed):
 - **The second graphics card** (added 2026-09-24), built and ALL OFF.
   `jarvis_second_card.py` detects a capable second card (Turing or newer,
   10 GB or more), and five switches - longer conversations, pictures,
-  background learning, browser control, a wiki builder's lane - each turned
+  background learning, browser control, the wiki builder - each turned
   on by one approval card (`second_card_enable`, the same four steps as
   section 3) and only while that card is detected. When one is on, a second
   Ollama runs on `127.0.0.1:11435`, pinned to that card by its id; chat,
@@ -468,6 +468,19 @@ they landed):
   state. `GET`/`POST /api/second-card` (`second-card.patch`). Not measured on
   real cards; the apps' screens for it are not built yet.
   [`SECOND-CARD.md`](SECOND-CARD.md) is the owner's guide.
+
+- **The wiki builder** (added 2026-09-24). Documents the owner puts in the
+  vault's `Jarvis Wiki/Sources` become linked pages in `Jarvis Wiki/Pages`,
+  written ONLY by the second card's model (`lane_for("wiki")`; None means
+  nothing runs). `backend/jarvis_wiki.py` and `wiki.patch`: `GET /api/wiki`,
+  `GET`/`POST /api/wiki/ingest`, gate action `wiki_update` (tier `ask` as
+  shipped), the same four steps as section 3 - with one honest difference:
+  its `plan()` opens a socket, to the lane on 127.0.0.1 only, because the
+  model's answer IS the plan. Every page is validated before anything is
+  written; the old copy of a changed page is kept in `.versions`. The card
+  lists each page with a one-line summary rather than its full text. Both
+  apps have a Wiki plate (the desktop's Brain → Memory, the phone's Mind).
+  Not run against a real model yet.
 
 **Still missing:**
 

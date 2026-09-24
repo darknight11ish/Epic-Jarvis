@@ -99,7 +99,8 @@ on a throwaway copy instead.
 | `task-control.patch` | `jarvis_hud.py` | **The Pause, Resume, Stop and note buttons on both apps went nowhere.** Adds the routes they call. Resume raises an approval card; nothing else here approves anything. Needs `jarvis_task_control.py` and the updated `jarvis_agent.py` — see its own section, at the end. |
 | `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq, Joplin or Obsidian (`#obs`, since 2026-09-24) through the gate, says honestly whether it landed, and lists which of the three this PC is set up for. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
 | `power-mode.patch` | `jarvis_hud.py` | **Nothing could change the power mode.** Adds `POST /api/power` (Active / Quiet / Standby) through the gate as `power_manage`. Needs `note-capture.patch` (textual) and `jarvis_power_switch.py` — see its own section, at the end. |
-| `second-card.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The second graphics card, all switched off.** Adds `GET`/`POST /api/second-card` (each ON is one approval card, `second_card_enable`), says in the chat route header when the second card answered, shortens the learner's quiet wait when it runs there, and gives the approval notice true words for the new action. Last in the list. Needs `jarvis_second_card.py` — see its own section, at the end, and `docs/SECOND-CARD.md`. |
+| `second-card.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The second graphics card, all switched off.** Adds `GET`/`POST /api/second-card` (each ON is one approval card, `second_card_enable`), says in the chat route header when the second card answered, shortens the learner's quiet wait when it runs there, and gives the approval notice true words for the new action. Needs `jarvis_second_card.py` — see its own section, at the end, and `docs/SECOND-CARD.md`. |
+| `wiki.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The wiki builder.** Adds `GET /api/wiki` (the documents in your vault's `Jarvis Wiki/Sources` and their state) and `GET`/`POST /api/wiki/ingest` ("Add to wiki": the second card's model proposes pages, then ONE approval card, `wiki_update`, before anything is written), and the approval notice's words for it. Last in the list, after `second-card.patch` (textual). Needs `jarvis_wiki.py` — see its own section, at the end, and `docs/SECOND-CARD.md`, "Wiki builder". |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
@@ -5079,7 +5080,7 @@ code does.
 - `jarvis_intake.propose()`: the learner's model calls go to `learning`'s
   lane, falling back to the usual call if it does not answer.
 
-**`second-card.patch`** (last in `$PATCHES`):
+**`second-card.patch`** (in `$PATCHES` after everything it quotes; `wiki.patch` comes after it):
 
 - `GET /api/second-card` → `jarvis_second_card.status()`.
 - `POST /api/second-card` `{"feature", "enabled"}` →
@@ -5119,3 +5120,108 @@ values) and Ollama answered by a stand-in on 127.0.0.1; no process is
 started. `jarvis-desktop/tests/fixtures/second-card-cases.json` is the real
 `status()` output in six named cases, for the desktop and phone to build
 against; the test fails if it is stale.
+
+# `wiki.patch` and `jarvis_wiki.py` — the wiki builder, on the second card only
+
+**What it is.** Your documents, turned into linked pages in your Obsidian
+vault by the model on the second graphics card. The idea is Andrej
+Karpathy's "LLM wiki"; no code was taken from any other wiki project. How to
+use it is in [`docs/SECOND-CARD.md`](../docs/SECOND-CARD.md), "Wiki builder";
+this section is what the code does.
+
+**Where it writes.** `<your vault>/Jarvis Wiki/` only (the vault is the one
+`jarvis_notes.obsidian_vault()` finds: `JARVIS_OBSIDIAN_VAULT`, else
+`[notes.obsidian] vault_directory`):
+
+| | |
+|---|---|
+| `Sources/` | you put `.md` and `.txt` files here; never changed. Other formats are listed as "can't read" and left alone |
+| `Pages/` | one page per topic, person or thing: frontmatter `sources: [...]`, then text with `[[links]]` |
+| `index.md` | one line per page; new pages are appended |
+| `log.md` | append-only, `## [YYYY-MM-DD] ingest \| <source>` then the pages made and changed |
+| `.versions/` | the copy of every page from before it was changed |
+| `.jarvis-wiki.json` | each added source's SHA-256, so an unchanged one is not read again |
+
+The two dot-names are hidden, so the notes search and Obsidian skip them.
+
+**`jarvis_wiki.py`** (shipped whole):
+
+- **Runs only on `lane_for("wiki")`.** None — the switch off, no capable
+  second card, its Ollama not running, the model not installed — means
+  nothing runs, and `GET /api/wiki` says why in the second card's own words.
+  The model call is Ollama's native `/api/chat` on that lane, 127.0.0.1 only
+  (checked where the socket opens), with the lane's `num_ctx`, `think` off
+  and a JSON-schema `format`. There is no other model call in the module.
+- **`plan()`** reads the source and asks twice: an analysis (the key people,
+  topics and things; which existing pages it adds to, from the index; where
+  it disagrees with them), then the pages to create or update as structured
+  output. It writes nothing. Everything is checked before anything is
+  written, and one bad page refuses the whole plan: a path must be
+  `Pages/<name>.md` (one level, a sane name, no `..`, no Windows device
+  name, no link out of the wiki); at most 12 pages; at most 6,000 characters
+  a page; only pages it was shown may be updated, and only missing ones
+  created (ignoring case, as Windows does); no HTML that loads or runs
+  something; a picture from the internet (`![](https://...)`) becomes a
+  plain link, because Obsidian would fetch it when the page opens. A source
+  that does not fit the lane's context with the index and the answer is
+  refused as "too big", with the numbers — never cut short. An answer that
+  is not JSON, not the shape asked for, or cut off (`done_reason: "length"`)
+  is refused.
+- **`describe()`** is the card: the source, each page to create or change
+  with a one-line summary, the `.versions` promise, "Nothing leaves this
+  PC", and what saying no costs. It summarises rather than printing every
+  page in full; `.versions` is what makes a change you did not read
+  recoverable.
+- **The gate:** `jarvis_gate.check("wiki_update", ...)`, failing closed if
+  the gate is missing or raises. `wiki_update = "ask"` in the shipped toml;
+  you may lower it (then pages are written without a card), and `never`
+  turns it off. The gate's answer is followed either way.
+- **`run()`** checks again (the source and every page unchanged since the
+  card), then writes the `.versions` copies first, then the pages (each
+  written whole, through a temporary file), then `index.md` and `log.md`
+  (append only), then the cache. If a write fails it says exactly what was
+  written and what was not; the source is not marked as added, and running
+  the same plan again carries on from where it stopped.
+- **One job at a time** (the second card holds one model). Jobs live in
+  memory: `reading` → `waiting` (the card) → `writing` → `done`, or
+  `refused` / `failed` with the reason.
+
+**`wiki.patch`** (last in `$PATCHES`, after `second-card.patch`):
+
+- `GET /api/wiki` → `jarvis_wiki.status()`.
+- `GET /api/wiki/ingest?id=` → the job.
+- `POST /api/wiki/ingest` `{"source": "<name in Sources>"}` → 202 with the
+  job id, or 400 / 409 / 503 with `{"state": "refused", "error": "<a
+  sentence>"}`.
+- `jarvis_gate.py`: a `_RISK` line for `wiki_update` — "local" and
+  reversible — so the approval notice does not call it an unknown action
+  that might leave the machine.
+
+Its context is second-card's own GET and POST route blocks and its
+`jarvis_gate.py` line. Rehearsed against stand-ins built from the patches
+before it, forwards and backwards, with `second-card.patch` still coming off
+cleanly after it (`test_wiki.py`); the owner's own `apply-patches.ps1` run
+is the proof against the real file.
+
+## Test it
+
+```powershell
+python test_wiki.py
+python ..\tools\gen_wiki_cases.py --check
+```
+
+Runs anywhere: a real vault folder made for each test, a stand-in lane on
+127.0.0.1, and the model either an injected function or a tiny HTTP server
+answering in Ollama's shape — never a real model. It covers the lane being
+None, every source state, each refusal above, the card, the gate (one card;
+no, nobody answering and a missing gate all write nothing), `.versions`,
+the index and log being appended, a rerun being skipped, a page edited
+while the card was up, a failed write and carrying on, and the patch.
+`jarvis-desktop/tests/fixtures/wiki-cases.json` is the real output of the
+three routes in named cases, for the desktop and the phone; the test fails
+if it is stale.
+
+**Not checked, said plainly:** no real model has written a page here, so
+how good the pages are, and how often a real model's answer is refused, is
+not known yet. The token count is an estimate (3 bytes a token, on the
+cautious side). The patch has been rehearsed only against stand-ins.
