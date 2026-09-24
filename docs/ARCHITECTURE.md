@@ -447,8 +447,22 @@ they landed):
   (`memory-pane.patch`). The HUD page decides no memory cards: it says how
   many are waiting and points at the Brain, and `hud_bootstrap.js` refuses
   any memory write from it.
+- **Obsidian** (added 2026-09-24). `#obs` appends to today's daily note and
+  the notes search reads the vault, both as a plain folder on this PC - no
+  plugin, no key, no socket (`jarvis_note_capture.py`, `jarvis_notes.py`,
+  gate action `append_obsidian_daily`, the same four steps as §3). Both apps
+  show only the note targets the PC is set up for: `GET /api/notes/capture`
+  with no id lists them by name. What the search finds reaches the local
+  model only - `backend/test_obsidian_notes.py` puts its real output through
+  the agent loop and the cloud cut to prove it.
 
 **Still missing:**
+
+- **Obsidian daily notes in every date format.** Only formats that can be
+  written out exactly are followed (YYYY, YY, MM, M, DD, D, bracketed words,
+  `/` folders). A format with month or weekday names, or week numbers, is
+  refused with the reason, and so is a vault where the Periodic Notes plugin
+  may be naming the daily note. Nothing guesses a file name.
 
 - **Overnight memory tidying.** `jarvis_sleep.py` only offers it, once a
   day, and the card says it is not built; switching it on records the wish

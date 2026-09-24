@@ -348,6 +348,133 @@ switch cannot lift.
 
 ---
 
+## Notes: Logseq, Joplin and Obsidian
+
+Jarvis can file a note you type straight into a notes app on this PC:
+`#log` for today's Logseq journal, `#joplin` (or `#jop`) for a new Joplin
+note, `#obs` for today's Obsidian daily note. On the phone it is Home →
+**Quick note…**. No model is involved: what you typed is what gets written,
+and nothing leaves the PC.
+
+**Only the apps that are set up on the PC are shown** — in the quickbar's
+help, on the widget, and on the phone. If you type a prefix for one that is
+not set up, Jarvis says "Obsidian isn't set up on your PC" (or Logseq, or
+Joplin) and files nothing. If the desktop or phone cannot ask the PC which
+apps are set up, it shows none, and says why.
+
+What "set up" means for each:
+
+- **Logseq**: the graph folder exists — `[notes.logseq] graph_directory` in
+  `jarvis-framework.toml` (or the `JARVIS_LOGSEQ_GRAPH` environment variable).
+- **Joplin**: Joplin's Web Clipper token is in `JARVIS_JOPLIN_TOKEN` (Joplin:
+  Tools → Options → Web Clipper). Joplin also has to be open when you file.
+- **Obsidian**: the vault folder is set, below.
+
+### Obsidian
+
+Jarvis reads and writes your vault as a plain folder of files. It needs no
+Obsidian plugin and no API key.
+
+1. **Find your vault folder.** It is the folder that has a hidden
+   `.obsidian` folder inside it. In Obsidian: click the vault name at the
+   bottom left → **Manage vaults**; the path is shown under each vault's name.
+2. **Tell Jarvis where it is.** Open your `jarvis-framework.toml` (step 1.6
+   says where it is) in Notepad and add, or fill in:
+   ```toml
+   [notes.obsidian]
+   vault_directory = 'C:\Users\you\Documents\MyVault'
+   ```
+   Use single quotes, so the backslashes are kept as they are. The folder
+   must already exist; Jarvis never creates a vault.
+3. **Let `#obs` save straight away.** In the same file, under
+   `[autonomy.tiers]`, add:
+   ```toml
+   append_obsidian_daily     = "auto"
+   ```
+   This repository's copy already has that line; yours is left alone, so
+   `apply-patches.ps1` prints it as a difference instead. Without it, every
+   `#obs` note waits for you to approve it first. Put `"ask"` there if that
+   is what you want.
+4. **Turn on Daily notes in Obsidian.** Settings (the gear, bottom left) →
+   **Core plugins** → switch on **Daily notes**. Its options (Settings →
+   **Daily notes**) decide where today's note is:
+   - **New file location**: the folder. Empty means the top of the vault.
+   - **Date format**: the file name. Leave it as `YYYY-MM-DD`. Jarvis also
+     follows `YYYY/MM/YYYY-MM-DD`-style formats that make a folder per year or
+     month, and words in square brackets like `[Journal]`. It will **not**
+     guess formats with month or day *names* (`MMMM`, `dddd`) or week numbers:
+     it refuses and tells you which part it could not follow.
+   - **Template**: when Obsidian makes today's note, it uses your template.
+     When Jarvis makes it (because you filed a note before opening today's
+     note), the file holds just your note; the template is not applied.
+   If the Periodic Notes community plugin is on and handles daily notes,
+   Jarvis refuses rather than guess, because that plugin can name the note
+   instead.
+5. **Restart the backend.** Then open the quickbar: its help should now list
+   `#obs`. Type `#obs call the plumber` and press Enter; it should say
+   "Filed in Obsidian, 2026-09-24.md" (with today's date). The note is added
+   at the **end** of today's note, after a blank line; nothing already in the
+   file is changed.
+
+**Searching the vault.** When a vault is set, Jarvis's notes search (the
+`notes_search` tool, which is off until you add it to `[tools].enabled`,
+step 1.6) reads the vault's `.md` files directly. It skips the `.obsidian`
+and `.trash` folders, and anything linked from outside the vault, and it
+stops after 5,000 files or 5 seconds so a big vault cannot hold up an
+answer. What it finds goes only to the local model on this PC. If you also
+use Joplin for search, the vault wins; set the environment variable
+`JARVIS_NOTES_BACKEND=joplin` to search Joplin instead.
+
+### Your vault on your phone, with Syncthing
+
+Jarvis does nothing with Syncthing; this is only how to get the same vault
+onto your phone. Syncthing copies a folder between your own devices,
+directly, with no account.
+
+**On the PC (Windows):**
+
+1. Download the Windows zip from Syncthing's releases page
+   (`https://github.com/syncthing/syncthing/releases/latest`, the file named
+   `syncthing-windows-amd64-v….zip`), unzip it, and double-click `syncthing.exe`. The
+   first time, it opens its control page in your browser at
+   `http://127.0.0.1:8384`; that page is where Syncthing is controlled. It
+   syncs only while it is running; Syncthing's own documentation
+   ("Starting Syncthing Automatically") shows how to start it with Windows.
+2. Click **Add Folder**. For **Folder Path**, give your vault folder (the one
+   from step 1 above). Give it a label such as `Obsidian`. Save.
+3. Click **Actions** (top right) → **Show ID**. Leave that showing; the
+   phone needs it.
+
+**On the phone (Android):**
+
+4. Install **Syncthing-Fork** (from F-Droid, or its GitHub releases page:
+   `https://github.com/researchxxl/syncthing-android/releases`). The original
+   Syncthing Android app is discontinued; Syncthing-Fork is the maintained one.
+5. Open it, allow what it asks for (it needs file access to write the vault).
+6. **Devices** tab → **+** → scan the QR code the PC is showing (or type the
+   ID). Save.
+7. On the PC, a message appears asking to add the phone. Click **Add
+   Device**, and on the **Sharing** tab tick the `Obsidian` folder. Save.
+8. On the phone, accept the `Obsidian` folder when it is offered, and choose
+   where it goes (for example a new folder `Obsidian` in the phone's storage).
+9. Install Obsidian on the phone, choose **Open folder as vault**, and pick
+   that folder.
+
+Two things worth knowing:
+
+- If you edit today's note on the phone at the same moment Jarvis adds to it
+  on the PC, Syncthing keeps both, and names one of them
+  `...sync-conflict-....md`. Nothing is lost, but you merge them by hand.
+- Syncthing encrypts everything between your devices. By default, when the
+  two cannot reach each other directly, it may pass that encrypted traffic
+  through a public relay server. To keep it on your own network only: in
+  the PC's Syncthing page, **Actions → Settings → Connections**, untick
+  **Enable Relaying** and **Global Discovery** (and do the same on the
+  phone). The two then only find each other on the same network, or over
+  Tailscale if you type the other's Tailscale address into the device.
+
+---
+
 ## Part 3 — The phone
 
 **Read this part before you start it.**

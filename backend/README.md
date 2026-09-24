@@ -97,7 +97,7 @@ on a throwaway copy instead.
 | `voice-enroll.patch` | `jarvis_hud.py` | **"Train my voice" from the phone.** `POST /api/voice/enroll` takes the owner's recorded sentences, holds them in memory and raises ONE approval card. Only approving it replaces the voice print; the recordings are deleted either way. Needs `voice-503.patch` and `appearance.patch` (textual), and `jarvis_voice_enroll.py` — see its own section at the end. |
 | `cloud-one-turn.patch` | `jarvis_hud.py` | The phone and quickbar now send the conversation so far with each question. This makes sure a **cloud** lane still gets only the newest question, never an earlier one. Needs `ollama-direct.patch` (textual) — see its own section at the end. |
 | `task-control.patch` | `jarvis_hud.py` | **The Pause, Resume, Stop and note buttons on both apps went nowhere.** Adds the routes they call. Resume raises an approval card; nothing else here approves anything. Needs `jarvis_task_control.py` and the updated `jarvis_agent.py` — see its own section, at the end. |
-| `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq or Joplin through the gate, and says honestly whether it landed. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
+| `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq, Joplin or Obsidian (`#obs`, since 2026-09-24) through the gate, says honestly whether it landed, and lists which of the three this PC is set up for. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
 | `power-mode.patch` | `jarvis_hud.py` | **Nothing could change the power mode.** Adds `POST /api/power` (Active / Quiet / Standby) through the gate as `power_manage`. Needs `note-capture.patch` (textual) and `jarvis_power_switch.py` — see its own section, at the end. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 
@@ -2915,7 +2915,7 @@ environment before it can do anything at all:
 |---|---|
 | calendar | `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` |
 | email | `JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` (default 993), `JARVIS_IMAP_USER`, `JARVIS_IMAP_PASSWORD`, `JARVIS_IMAP_MAILBOX` (default `INBOX`) |
-| notes | `JARVIS_NOTES_BACKEND` (`"joplin"` or `"obsidian"`, optional - inferred from which token is set), `JARVIS_JOPLIN_URL`/`JARVIS_JOPLIN_TOKEN`, `JARVIS_OBSIDIAN_URL`/`JARVIS_OBSIDIAN_API_KEY` |
+| notes | `JARVIS_OBSIDIAN_VAULT` or `[notes.obsidian] vault_directory` (the vault read as a folder - no key; used first when set, since 2026-09-24), `JARVIS_NOTES_BACKEND` (`"vault"`, `"joplin"` or `"obsidian"`, optional - otherwise the vault, then whichever token is set), `JARVIS_JOPLIN_URL`/`JARVIS_JOPLIN_TOKEN`, `JARVIS_OBSIDIAN_URL`/`JARVIS_OBSIDIAN_API_KEY` |
 | home | `JARVIS_HOME_URL`, `JARVIS_HOME_TOKEN` |
 
 Turning one on with nothing configured is safe - `plan()`/`plan_states()`/
@@ -4431,6 +4431,94 @@ verdict (denied, timed out and a broken gate all write nothing and say why);
 the earlier text of a journal is byte-for-byte intact after an append; only
 `POST /notes` is ever sent to Joplin; the token is in no plan, card, result or
 error — including the exact `ValueError` the audit found in `jarvis_notes.py`.
+
+## Obsidian, added 2026-09-24: `#obs`, the vault search, and only the apps you set up
+
+**What this adds.** A third target, `obsidian`: `#obs` (or `#obsidian`,
+`#daily`) on the desktop, **To Obsidian** on the phone, and the
+`append_obsidian_daily` tool in chat. The note is added to the end of
+**today's Obsidian daily note**. Your vault is read as a plain folder on this
+PC — no Obsidian plugin, no API key, no network.
+
+Setup, step by step, is in `docs/INSTALL.md` ("Notes: Logseq, Joplin and
+Obsidian"). In short: `[notes.obsidian] vault_directory` in your
+`jarvis-framework.toml` (or `JARVIS_OBSIDIAN_VAULT`), and Obsidian's **Daily
+notes** core plugin on.
+
+**Permission.** Gate action `append_obsidian_daily`, tier **`auto`** in this
+repository's `jarvis-framework.toml` (your decision, 2026-09-24: saved
+straight away, like the Logseq journal). **Your own file does not have that
+line until you add it** — `apply-patches.ps1` never changes your settings and
+prints it as a difference instead — and until then the gate uses
+`unknown_action_tier` (`"ask"` as shipped), so each `#obs` note waits for your
+yes. `note-capture.patch` gives the gate its risk line ("stays on this PC")
+and maps the tool to the action.
+
+**Where today's note is.** Read from `<vault>\.obsidian\daily-notes.json`,
+which is where Obsidian keeps the Daily notes settings: `folder` (empty = the
+top of the vault) and `format` (empty = `YYYY-MM-DD`). The module docstring
+cites what was checked: Obsidian's own help page, the
+`obsidian-daily-notes-interface` library's source, and real vaults'
+`daily-notes.json` files. Formats followed: `YYYY`, `YY`, `MM`, `M`, `DD`, `D`,
+`[bracketed words]`, digits, and `- _ . /` (a `/` makes a folder). **Anything
+else is refused with the part it could not follow** — month and weekday
+names, week numbers, `Do` — and so is a vault where the Periodic Notes plugin
+may be naming daily notes instead. It never guesses a file name.
+
+**What it will never do.**
+- **Overwrite.** Opened for append only; the file is made only if missing
+  (then it holds just your note — Obsidian's daily template is not applied,
+  and the card says so). Missing folders on the way are made, as Obsidian
+  would.
+- **Write outside the vault.** The path must stay in the vault after `..` and
+  every link are resolved — checked when the card is made and again at the
+  write. A daily note that is itself a link is refused.
+- **Create a vault.** The folder must exist and hold a `.obsidian` folder.
+
+**The vault search.** `jarvis_notes.py` gains a `vault` mode, used whenever a
+vault is set (preferred over the Local REST API plugin, which still works for
+anyone with a key: set `JARVIS_NOTES_BACKEND=obsidian`). It reads `*.md`
+files, matching the title and the text, ignoring case; it skips hidden
+folders (`.obsidian`, `.trash`) and anything whose real place is outside the
+vault; it stops at 5,000 files, 256 KB per file, 50,000 entries or 5 seconds,
+and says when it stopped early. The results go **only to the local model**:
+`notes_search` is an agent tool, and tools run only on the local lane
+(`chat-stream.patch`), while a cloud lane gets only your newest typed turn
+(`cloud-one-turn.patch`). `jarvis_router.py` now also keeps a question that
+names Joplin or Obsidian on the local lane.
+
+**Only the apps you set up are shown.** `GET /api/notes/capture` with no `id`
+answers `{"ok": true, "targets": ["logseq", "obsidian"]}` — names only,
+never a path or a token: `logseq` when the graph folder is there, `joplin`
+when a token is set (it does not check Joplin is open), `obsidian` when the
+vault is a real vault. The desktop and the phone show only those. This needed
+no new route: the existing GET route already passes an absent `id` as "".
+A backend without this answers that request with a 404, and both apps then
+show no target and say the backend needs updating.
+
+**Also fixed.** The append now opens the file with `O_BINARY` on Windows.
+Without it, Windows' text mode writes each `\n` as `\r\n`, and the
+byte-for-byte read-back that "filed" depends on would fail; Logseq's append
+opened its file the same way. This is from reading CPython's source
+(`Modules/_io/fileio.c`: Python's own file objects add `O_BINARY` on Windows,
+"don't translate newlines"; a bare `os.open` does not), not from a run on
+Windows.
+
+**Test it.**
+
+```
+python backend\test_obsidian_notes.py
+```
+
+100 checks, no Obsidian and no network. Among them: the settings shapes real
+vaults use, formats refused by name, earlier text byte-for-byte intact,
+links out of the vault refused at plan and at write time, the search's caps,
+and the real search output put through `jarvis_agent`'s real tool loop and
+`cloud-one-turn.patch`'s own lines — it reaches the local model's address
+and nothing else. It also writes the shared fixture
+(`jarvis-client/app/src/test/resources/contract/note-targets.json`, with
+`--write`) that the desktop's `tests/notes.mjs` and the phone's
+`NoteTargetsContractTest.kt` read.
 
 
 ---

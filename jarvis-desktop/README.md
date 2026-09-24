@@ -61,7 +61,7 @@ shell controls where they come from; it cannot stop the page caching them.
 | `Alt` + `Space` | Toggle the quickbar. On show it is centred, focused, and the frontend receives `focus-input`. |
 | `Win` + `Shift` + `J` | Read the clipboard and inject it into the quickbar as context. |
 | `Alt` + `Shift` + `S` | Capture the primary display and attach it to the next prompt. |
-| `Alt` + `Shift` + `N` | Summon the bar pre-armed for a Logseq journal note (`#log `). |
+| `Alt` + `Shift` + `N` | Summon the bar pre-armed for a note (`#log `, or the first note app the PC is set up for). |
 | `Ctrl` + `+` / `-` / `0` | Text size, per window. Not a global hotkey — the window must have focus. |
 
 Every global combination in that table is a **default**, not a constant. They
@@ -323,23 +323,34 @@ its command line, Rust's argument escaping targets the C runtime convention
 rather than cmd's metacharacters, and link text here is written by a language
 model — a URL containing `&` would become a second command.
 
-## Dual-note quick capture
+## Quick notes: Logseq, Joplin, Obsidian
 
-A prefix at the head of the prompt pre-routes the turn and shows a chip beside
-the reactor:
+A prefix at the head of the prompt files the rest as a note instead of asking
+Jarvis anything, and shows a chip beside the reactor while you type:
 
 | Prefix | Target | Chip |
 |--------|--------|------|
-| `#log`, `#logseq`, `#journal` | Logseq daily journal (`append_logseq_journal`) | cyan **Logseq Journal** |
-| `#joplin`, `#vault` | Joplin personal vault (`create_joplin_note` / `search_joplin`) | violet **Joplin Vault** |
+| `#log`, `#logseq`, `#journal` | today's Logseq journal (`append_logseq_journal`) | cyan **Logseq Journal** |
+| `#joplin`, `#jop`, `#vault` | a new Joplin note (`create_joplin_note`) | violet **Joplin Vault** |
+| `#obs`, `#obsidian`, `#daily` | today's Obsidian daily note (`append_obsidian_daily`) | violet **Obsidian Daily Note** |
 
-`Alt+Shift+N` summons the bar with `#log ` already typed and the caret after
-it; anything already in the box is kept.
+The prefix is stripped, and the rest goes to `/api/notes/capture` through the
+`capture_note` command — no chat turn and no model. The backend writes it
+through the approval gate and the card shows its answer: filed (and where),
+waiting for approval, or not filed and why.
 
-The prefix is stripped before sending. Routing is declared twice, so a server
-reading either mechanism lands in the same place: a top-level `note_target`
-field, and a system turn naming the tool. `note_target` is additive — a server
-that does not know the field ignores it.
+**Only the note apps the PC is set up for are shown.** `note_targets` asks the
+backend (`GET /api/notes/capture` with no id) when the bar starts and each
+time it is focused; the help list shows only those prefixes. A prefix typed
+by hand for an app the PC said is not set up turns the chip amber ("not set
+up"), and Enter says "Obsidian isn't set up on your PC" (or Logseq, or
+Joplin) and sends nothing. If the backend could not be asked, the help shows
+no prefix and says why; a typed note is then still sent, and the backend's
+own answer is shown. Setting each one up: `docs/INSTALL.md`, "Notes".
+
+`Alt+Shift+N` summons the bar with `#log ` already typed (or the first note
+app that is set up, if Logseq is not) and the caret after it; anything
+already in the box is kept.
 
 ## Approval gates
 
@@ -375,15 +386,13 @@ response down a `tauri::ipc::Channel`:
 ```jsonc
 {
   "messages": [
-    { "role": "system", "content": "Route this turn to the Logseq daily journal…" },
     { "role": "system", "content": "Context:\n…clipboard…" },
     { "role": "user",   "content": "…" }
   ],
   "has_image": true,
   "images": ["data:image/jpeg;base64,…"],
   "stream": true,
-  "auto": true,
-  "note_target": "logseq"   // only when a prefix pre-routed the turn
+  "auto": true
 }
 ```
 
@@ -430,7 +439,8 @@ A separate `widget` window, 320px wide, transparent and frameless, with Acrylic
 behind it. It starts visible and is remembered between runs.
 
 **Collapsed (44px).** Connection dot, GPU temperature, the active route pill,
-`#log` / `#jop` quick-capture buttons, a pin toggle and the expand chevron. The
+`#log` / `#jop` / `#obs` quick-capture buttons (only for the note apps the PC
+is set up for), a pin toggle and the expand chevron. The
 whole bar is a `data-tauri-drag-region`, so it drags from anywhere.
 
 **Expanded.** Three meters (VRAM, CPU, GPU), any pending approval gate, and a

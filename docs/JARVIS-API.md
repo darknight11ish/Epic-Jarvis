@@ -891,15 +891,16 @@ Stop, Pause and notes through.
 
 | Route | Body | Answers | What it does |
 |---|---|---|---|
-| `POST /api/notes/capture` | `{"target": "logseq"\|"joplin", "text": "…", "title"?: "…", "notebook"?: "…"}` | **200** job, finished; **202** job, `state: "waiting"` (an approval card is up); **400** empty / unknown target; **503** not set up (no graph folder, no token — `message` says which); **429** four notes already waiting | Files the owner's own words. No model. Written through `jarvis_gate` as `append_logseq_journal` / `create_joplin_note`, under the owner's own tier for those in `jarvis-framework.toml`. |
+| `POST /api/notes/capture` | `{"target": "logseq"\|"joplin"\|"obsidian", "text": "…", "title"?: "…", "notebook"?: "…"}` | **200** job, finished; **202** job, `state: "waiting"` (an approval card is up); **400** empty / unknown target; **503** not set up (no graph folder, no token, no vault, a daily-note format it cannot follow — `message` says which, starting "X isn't set up on your PC" when it is the setup); **429** four notes already waiting | Files the owner's own words. No model. Written through `jarvis_gate` as `append_logseq_journal` / `create_joplin_note` / `append_obsidian_daily`, under the owner's own tier for those in `jarvis-framework.toml`. |
 | `GET /api/notes/capture?id=…` | — | 200/202 job; 404 unknown id | How that note ended. |
+| `GET /api/notes/capture` (no id) | — | **200** `{"ok": true, "targets": ["logseq", "joplin", "obsidian"]}` — only those set up on the PC, names only; a backend from before 2026-09-24 answers **404** (its "unknown id") | Which note apps to show. Both apps show only these, and show none (saying why) when this cannot be read. |
 
 A job is `{"id", "state", "target", "message", "created", "updated", "ok"}`
 with `state` one of `waiting`, `filed` (written and read back), `not_filed`
 (denied / timed out / refused — `message` says which) or `failed`. **It never
 carries the note's text.** Clients show `message` and nothing of their own.
 
-Replaces what `POST /api/note` in §8 suggested. The desktop's `#log` /
+Replaces what `POST /api/note` in §8 suggested. The desktop's `#log` / `#obs` /
 `#joplin` / quick note / widget capture use it (`capture_note`,
 `capture_note_status`); the chat turn with a routing system message is gone.
 The phone uses it too: Home's "Quick note…" field, opened directly or by the
