@@ -1084,11 +1084,11 @@ def t_the_patch():
     start = ps1.index("$PATCHES = @(")
     names = [l.strip().strip("'") for l in ps1[start:ps1.index("\n)", start)].splitlines()
              if l.strip().startswith("'")]
-    # After wiki.patch (its context is wiki's route blocks). Patches added
-    # since (learning-asks.patch) come after it; none may come between.
-    check("apply-patches.ps1 applies big-model.patch straight after wiki.patch",
-          "big-model.patch" in names
-          and names.index("big-model.patch") == names.index("wiki.patch") + 1, names[-4:])
+    # Not last any more: voices.patch (custom voices) quotes big-model's own
+    # route blocks, so it comes straight after it (test_voices.py).
+    check("apply-patches.ps1 applies big-model.patch right after wiki.patch",
+          names and "big-model.patch" in names
+          and names.index("wiki.patch") + 1 == names.index("big-model.patch"))
     shipped = ps1[ps1.index("$SHIPPED = @("):]
     check("apply-patches.ps1 copies jarvis_big_model.py in, right after jarvis_wiki.py",
           "'jarvis_big_model.py'" in shipped

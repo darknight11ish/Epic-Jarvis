@@ -118,6 +118,7 @@ SHIPPED = (
     "jarvis_big_model.py",
     "jarvis_turn.py", "jarvis_wakebank.py", "jarvis_stopword.py",
     "jarvis_local_http.py", "jarvis_child_env.py",
+    "jarvis_voices.py", "jarvis_f5_worker.py",
     "jarvis_learning_switch.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",

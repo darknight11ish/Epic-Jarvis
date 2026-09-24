@@ -112,6 +112,24 @@ sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
   the owner downloads carry their own licences: NVIDIA Parakeet TDT 0.6B v2
   (CC-BY-4.0), Kokoro-82M v0.19 (Apache-2.0), Silero VAD (MIT), 3D-Speaker
   CAM++ (Apache-2.0).
+  Custom voices (backend/jarvis_voices.py, 2026-09-24) add two more
+  downloads, neither shipped here: ZipVoice (k2-fsa,
+  https://github.com/k2-fsa/ZipVoice, code Apache-2.0), the distilled
+  int8 zh-en model from sherpa-onnx's tts-models release, recorded as
+  Apache-2.0 on the owner's brief - NOT checked here (huggingface.co is
+  blocked from where this was written), and trained on the Emilia
+  dataset, which is the reason F5-TTS gives for its own weights being
+  non-commercial; this build is non-commercial either way (CLAUDE.md rule
+  5). And the Vocos 24 kHz vocoder (vocos_24khz.onnx, sherpa-onnx's
+  vocoder-models release, from charactr/vocos, MIT).
+
+F5-TTS (SWivid), code MIT - https://github.com/SWivid/F5-TTS
+  The optional "better voice" on the second graphics card
+  (backend/jarvis_f5_worker.py starts it; pip install f5-tts). Its model
+  weights (F5TTS_v1_Base) are CC-BY-NC (its README) - non-commercial, which
+  this build is. With the Vocos mel 24 kHz vocoder (charactr, MIT).
+  Nothing of either is shipped here; the owner downloads them
+  (backend/README.md, "The better voice").
 
 Smart Turn v3.2 (Daily / Pipecat), BSD 2-Clause -
 https://github.com/pipecat-ai/smart-turn

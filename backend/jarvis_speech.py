@@ -15,6 +15,10 @@ missing module):
         which microphone, so the clip is checked against that microphone's
         own voice print (voice-mic.patch passes `?mic=`; TAKES_MIC says so)
     jarvis_speech.say(text)                -> bytes | None  (a WAV)
+        since 2026-09-24 in the owner's chosen custom voice when there is one
+        (jarvis_voices.py: ZipVoice on the processor, or F5-TTS on the second
+        card), falling back to Kokoro with the reason recorded; every call's
+        timing is kept in memory (say_timings(), status()'s tts.timings)
     jarvis_speech.set_wake_enabled(bool)   -> {"ok": bool, ...}
 
 ORDER MATTERS, and this is the one invariant that must never move: `hear()`
@@ -1019,6 +1023,12 @@ def status() -> dict:
             # The same answer /api/voice/say gives with its 503: the client
             # may speak text it already holds, with an ON-DEVICE voice only.
             "client_fallback_ok": True,
+            # Which voice Jarvis speaks in (a custom one, jarvis_voices.py)
+            # and why the built-in one is used instead, if it is; and how
+            # long the last few say() calls took. GET /api/voice/voices has
+            # the whole picture.
+            "voice": _custom_voice_brief(),
+            "timings": say_timings()[-5:],
         },
         "vad": {"engine": "silero (sherpa-onnx)", "available": vad_ok,
                 "status": vad_status},
@@ -1342,8 +1352,33 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     # "stop" itself is not taken for the owner's stop word. `mic`: which app
     # plays it ("phone" / "desktop"), when the route says; "" counts for both.
     _remember_said(text, mic)
+    t0 = time.monotonic()
+    voice, fallback, note = "builtin", "", ""
+    # A custom voice first (jarvis_voices.py, since 2026-09-24). None means
+    # the built-in voice is the one chosen; a result without audio means the
+    # custom voice could not be used, and says why - then Kokoro speaks.
+    try:
+        import jarvis_voices
+    except Exception:
+        jarvis_voices = None
+    if jarvis_voices is not None:
+        try:
+            custom = jarvis_voices.speak(text)
+        except Exception as exc:
+            custom = None
+            fallback = f"the custom voice failed ({type(exc).__name__})"
+        if custom is not None:
+            voice, note = custom.voice, custom.note
+            if custom.ok:
+                wav = _write_wav(custom.samples, custom.sample_rate)
+                _note_timing(custom.engine, voice, text, t0,
+                             len(custom.samples) / float(custom.sample_rate), "", note)
+                return wav
+            fallback = custom.why
     engine = _tts_engine()
     if engine is None:
+        _note_timing("none", voice, text, t0, 0.0, fallback, note,
+                     failed="no Kokoro voice is installed")
         return None
     try:
         audio = engine.generate(
@@ -1352,10 +1387,61 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
             speed=float(_cfg("tts_speed", 1.0) or 1.0),
         )
     except Exception:
+        _note_timing("none", voice, text, t0, 0.0, fallback, note, failed="Kokoro failed")
         return None
     if audio is None or len(audio.samples) == 0:
+        _note_timing("none", voice, text, t0, 0.0, fallback, note,
+                     failed="Kokoro made no sound")
         return None
+    _note_timing("kokoro", voice, text, t0, len(audio.samples) / float(audio.sample_rate),
+                 fallback, note)
     return _write_wav(audio.samples, audio.sample_rate)
+
+
+# --------------------------------------------------------------------------
+#   How long say() took - numbers only, in memory
+# --------------------------------------------------------------------------
+
+#: The last say() calls, newest last: which engine spoke, how many
+#: characters, how long it took to make the sound, and how long the sound
+#: lasts. Never the text. Read by status() (tts.timings),
+#: jarvis_voices.status() and `python jarvis_voices.py --time`, and by
+#: whatever later works on cutting the delay before Jarvis speaks.
+TIMINGS_KEPT = 20
+_TIMINGS: list = []
+_TIMINGS_LOCK = threading.Lock()
+
+
+def _note_timing(engine: str, voice: str, text: str, t0: float, audio_seconds: float,
+                 fallback: str = "", note: str = "", failed: str = "") -> None:
+    """One row. `engine`: "kokoro", "zipvoice", "f5", or "none" (nothing was
+    said - `failed` says why). `fallback`: why the chosen custom voice was
+    not used, when it was not. `seconds`: from say() being called to the
+    sound being ready, loading included - what a listener waits."""
+    took = time.monotonic() - t0
+    row = {"at": int(time.time()), "engine": engine, "voice": voice, "chars": len(text),
+           "seconds": round(took, 3), "audio_seconds": round(audio_seconds, 3),
+           "rtf": round(took / audio_seconds, 3) if audio_seconds > 0 else None,
+           "fallback": str(fallback or "")[:300], "note": str(note or "")[:300],
+           "failed": str(failed or "")[:300]}
+    with _TIMINGS_LOCK:
+        _TIMINGS.append(row)
+        del _TIMINGS[:-TIMINGS_KEPT]
+
+
+def say_timings() -> list:
+    """Copies of the timing rows, oldest first."""
+    with _TIMINGS_LOCK:
+        return [dict(r) for r in _TIMINGS]
+
+
+def _custom_voice_brief() -> dict:
+    try:
+        import jarvis_voices
+        return jarvis_voices.brief()
+    except Exception:
+        return {"active": "builtin", "name": "Built-in voice", "engine": "kokoro",
+                "fallback": ""}
 
 
 def _self_test() -> int:

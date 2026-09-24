@@ -103,6 +103,7 @@ on a throwaway copy instead.
 | `wiki.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The wiki builder.** Adds `GET /api/wiki` (the documents in your vault's `Jarvis Wiki/Sources` and their state) and `GET`/`POST /api/wiki/ingest` ("Add to wiki": the second card's model proposes pages, then ONE approval card, `wiki_update`, before anything is written), and the approval notice's words for it. After `second-card.patch` (textual). Needs `jarvis_wiki.py` — see its own section, at the end, and `docs/SECOND-CARD.md`, "Wiki builder". |
 | `big-model.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The big model (slow), all switched off.** Adds `GET`/`POST /api/big-model` (three switches; each ON is one approval card, `big_model_enable`), `GET /api/deep` and `POST /api/deep/ask` (deep questions, answered in the background), and the approval notice's words for the new action. Last in the list, after `wiki.patch` (textual). Needs `jarvis_big_model.py` — see its own section, at the end, and `docs/BIG-MODEL.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
+| `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -244,7 +245,9 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   Manager), `jarvis_second_card.py`, `jarvis_wiki.py`, `jarvis_big_model.py`,
   `jarvis_turn.py` (Smart Turn: "finished, or only paused?"),
   `jarvis_wakebank.py` and `jarvis_stopword.py` (the numbers the wake word
-  and the "stop" word are checked against);
+  and the "stop" word are checked against),
+  `jarvis_voices.py` (custom voices) and `jarvis_f5_worker.py` (the better
+  voice's own program, started by `jarvis_voices.py`);
 - two small safety modules the others use (added 2026-09-24):
   `jarvis_local_http.py`, so calls to services on this PC (Ollama, Joplin,
   the second card) never go through a proxy, which would be another
@@ -5717,8 +5720,8 @@ second card and the big model.
 - If `jarvis_learning_switch.py` was not copied in, the route answers 503
   instead of switching learning on without a card.
 
-**Where it goes.** Last in the order, after `big-model.patch`: its context
-is `memory-pane.patch`'s route.
+**Where it goes.** Last in the order, after `voices.patch`: its context
+is `memory-pane.patch`'s route, so anywhere after that works.
 
 **Test.** From the repository folder, with `JARVIS_BACKEND` set to your
 backend folder:
@@ -5726,3 +5729,208 @@ backend folder:
 ```powershell
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_learning_switch.py
 ```
+---
+
+# Custom voices: `voices.patch`, `jarvis_voices.py` and the better voice
+
+**What it is.** Jarvis can speak in a voice you recorded. Someone (you, or a
+person who has agreed to it) reads a sentence Jarvis shows for 3 to 10
+seconds, or you upload a short clip and type exactly what is said in it.
+After an approval card, Jarvis keeps that recording on this PC and can speak
+in that voice. Switching Jarvis to it is a second card. Switching back to
+the built-in voice, or deleting a voice, never asks.
+
+**Nothing leaves the PC.** The recording waits in memory until you answer
+the card; approved, it is kept in `C:\Users\pcadmin\.openjarvis\voices\<name>\`
+(the recording as `clip.wav`, its words as `transcript.txt`, and a small
+`voice.json`); refused or unanswered, it is thrown away. There is no network
+call in `jarvis_voices.py` or `jarvis_f5_worker.py` (the tests check), and
+the recording, its words and what Jarvis says are never logged.
+
+**Your own voice is refused, on purpose.** Every recording is compared with
+your trained voice prints ("Train my voice"). If it scores at or above a
+print's bar minus 0.10, it is refused with the reason. Jarvis speaking in
+your voice through the speakers could otherwise pass its own "is it you?"
+check. The comparison runs again when you switch to a voice, and again the
+first time Jarvis speaks after you train your voice - so a voice added
+before you trained one is still caught.
+
+**Two engines, and the built-in voice as the safety net:**
+
+| | where it runs | when |
+|---|---|---|
+| ZipVoice | this PC's **processor** (sherpa-onnx, the package the voice already uses) | always tried first |
+| F5-TTS, "the better voice" | the **second graphics card**, in its own program (`jarvis_f5_worker.py`) | only if you turn its switch on (a card), only while Jarvis speaks in a custom voice; stops after 10 idle minutes, in standby, and when switched off. While it loads, ZipVoice speaks in the same voice |
+| Kokoro (the built-in voice) | the processor | whenever the custom voice is missing, fails, or is too slow; the status says why |
+
+"Too slow" means: three sentences in a row took more than 1.5 seconds to
+make for each second of speech (`[voice] custom_voice_max_rtf`). Then the
+built-in voice is used for 10 minutes, and ZipVoice is tried again.
+
+**Every sentence is timed** (in memory, numbers only): which engine, how
+many characters, how long it took to make, how long it lasts. The last five
+are in `/api/voice/status` (`tts.timings`), the last twenty in
+`/api/voice/voices`. The timing line below prints the same numbers.
+
+**The routes** are in `docs/JARVIS-API.md`, section 15. **Neither app has a
+screen for this yet** - the backend is built first, and the desktop and
+phone build against that section (`tools/check_parity.py` lists the five
+routes as `planned`). Until then there is no button to add a voice.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Make sure sherpa-onnx can do ZipVoice** (it was tested with 1.13.8):
+
+```powershell
+py -3 -m pip install --upgrade sherpa-onnx; py -3 -c "import sherpa_onnx as s; print('sherpa-onnx', s.__version__, '- ZipVoice:', 'yes' if hasattr(s, 'OfflineTtsZipvoiceModelConfig') else 'NO - upgrade it')"
+```
+
+**2. Download ZipVoice** - about 165 MB, into `voice-models\zipvoice` in
+Jarvis's settings folder (normally
+`C:\Users\pcadmin\.openjarvis\voice-models\zipvoice`). Both files are checked
+against a SHA-256 measured from the real downloads; a wrong one is deleted
+and nothing is installed:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $m = Join-Path $base 'voice-models'; New-Item -ItemType Directory -Force -Path $m | Out-Null; $f = Join-Path $env:TEMP 'jarvis-zipvoice.tar.bz2'; $v = Join-Path $env:TEMP 'jarvis-vocos-24khz.onnx'; Write-Host 'Downloading ZipVoice (165 MB)...'; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-zipvoice-distill-int8-zh-en-emilia.tar.bz2' -OutFile $f; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/vocoder-models/vocos_24khz.onnx' -OutFile $v; if (((Get-FileHash $f -Algorithm SHA256).Hash -ne '77219C8B40F4EE8D73A7F902305FF6C1128EF9B54461C41B4CA6ED890B6C2803') -or ((Get-FileHash $v -Algorithm SHA256).Hash -ne 'BCB3B970E384161C4D634F0BB9E999FF1C471B34C9BC0B1049A5014065ED3CC0')) { Remove-Item $f, $v; Write-Host 'That is not the expected file, so nothing was installed. Run this line again.' -ForegroundColor Red } else { tar -xjf $f -C $m; Remove-Item $f; $d = Join-Path $m 'zipvoice'; if (Test-Path $d) { Rename-Item $d ('zipvoice-old-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }; Rename-Item (Join-Path $m 'sherpa-onnx-zipvoice-distill-int8-zh-en-emilia') 'zipvoice'; Move-Item $v (Join-Path $d 'vocos_24khz.onnx'); Write-Host "OK - ZipVoice is in $d" -ForegroundColor Green }
+```
+
+**3. Put the new code on the PC** (copies `jarvis_voices.py`,
+`jarvis_f5_worker.py` and the new `jarvis_speech.py`, applies
+`voices.patch`), from this repository's folder, then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+The script will also list two new lines for your `jarvis-framework.toml`
+(`custom_voice = "ask"` and `better_voice_enable = "ask"` under
+`[autonomy.tiers]`). Without them the unknown-action tier, `ask`, applies,
+which is correct.
+
+**4. Time the voice Jarvis is using now** (the built-in one until a custom
+voice is chosen). It speaks three sentences - the first includes loading the
+voice - and prints, for each, the engine, the seconds to make it and the
+seconds it lasts. The last one is saved as
+`C:\Users\pcadmin\.openjarvis\voice\timing-test.wav` so you can listen:
+
+```powershell
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_voices.py --time
+```
+
+It runs apart from the Jarvis that is already running, so while Jarvis is
+busy the numbers are slower. Please send the output back: it is the first
+measurement on your PC, and "too slow" (1.5) is a guess until then.
+
+## The better voice (optional, only once the second card is in)
+
+Two more downloads, both large, and both unverified on your PC. **Only do
+this after the second card is installed and working.** Then the switch
+appears in the apps (once they have the screen) and asks for a card.
+
+**5. PyTorch for the graphics card, and F5-TTS** - about 3 GB, into the
+Python that runs Jarvis (to keep it apart, install into another Python and
+set `f5_python` under `[voice]` to that `python.exe`):
+
+```powershell
+py -3 -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124; py -3 -m pip install f5-tts; py -3 -c "import torch, f5_tts; print('OK - PyTorch', torch.__version__, '- can see a graphics card:', torch.cuda.is_available())"
+```
+
+**6. F5-TTS's model files** - about 1.4 GB, into `voice-models\f5-tts`
+(normally `C:\Users\pcadmin\.openjarvis\voice-models\f5-tts`). **There is no
+checksum to compare yet**: huggingface.co could not be reached from where
+this was written, so the line prints each file's SHA-256 instead - send them
+back and they will be recorded here:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path (Join-Path $base 'voice-models') 'f5-tts'; New-Item -ItemType Directory -Force -Path (Join-Path $d 'vocos') | Out-Null; $hf = 'https://huggingface.co/'; $files = @( @(($hf + 'SWivid/F5-TTS/resolve/main/F5TTS_v1_Base/model_1250000.safetensors'), (Join-Path $d 'model_1250000.safetensors')), @(($hf + 'charactr/vocos-mel-24khz/resolve/main/config.yaml'), (Join-Path $d 'vocos\config.yaml')), @(($hf + 'charactr/vocos-mel-24khz/resolve/main/pytorch_model.bin'), (Join-Path $d 'vocos\pytorch_model.bin')) ); Write-Host 'Downloading F5-TTS (about 1.4 GB)...'; foreach ($x in $files) { Invoke-WebRequest -UseBasicParsing -Uri $x[0] -OutFile $x[1] }; foreach ($x in $files) { Write-Host ((Split-Path -Leaf $x[1]) + '  ' + (Get-FileHash $x[1] -Algorithm SHA256).Hash) }; Write-Host "OK - F5-TTS is in $d. Send the lines above back so the checksums can be recorded." -ForegroundColor Green
+```
+
+F5-TTS's code is MIT; **its model is CC-BY-NC** (non-commercial), which this
+build is (CLAUDE.md rule 5). Recorded in `THIRD-PARTY-NOTICES.txt`.
+
+## What the code does
+
+**`jarvis_voices.py`** (shipped whole):
+
+- **The recording** is read as 16- or 24-bit WAV, 8-48 kHz, mono or stereo;
+  silence at both ends is trimmed; 3-10 s of speech must remain; it is made
+  mono 24 kHz. The words must fit the length (0.5 to 8 words a second) -
+  a transcript that does not match makes ZipVoice misjudge the length (seen
+  here: it asked for 48 GB and failed).
+- **The owner check** (`owner_check`): the clip, and every 3-second stretch
+  of it, is scored with the same voice check `hear()` uses against every
+  trained print (phone, PC, and the old single one); the highest score
+  counts. A print made with a different voice check cannot be compared and
+  is skipped, said in the reason; a voice check that is missing or fails
+  refuses.
+- **The cards** follow `jarvis_voice_enroll.py`'s shape: the tier is
+  checked before the card and on the answer; only `ask` + `approved` acts;
+  one voice card at a time (409); the clip is dropped in every ending.
+  Switching back to the built-in voice while a switch card waits withdraws
+  it.
+- **`speak()`** is what `jarvis_speech.say()` asks first: the built-in
+  voice chosen means `None` (Kokoro, as before); otherwise F5 if it is
+  ready, else ZipVoice, else a reason and Kokoro. A long answer is made a
+  few sentences at a time (ZipVoice's memory grows with the square of the
+  length).
+- **The F5 program** is started with the second card by its id
+  (`CUDA_VISIBLE_DEVICES=GPU-...`), an allowlisted environment (no token or
+  key), the Hugging Face libraries told they are offline, and no network
+  port - one JSON line each way on its standard input and output. It is not
+  started when: the switch is off, Jarvis is on standby, the model files are
+  missing, there is no capable second card, the big model is using that
+  card, or the card has less than about 3 GB free (an estimate, not
+  measured). A sentence it fails on, or does not answer within 60 s, is
+  spoken by ZipVoice; a program that failed is tried again after 5 minutes.
+- **Standby** (`jarvis_power_switch.py`) now also calls
+  `jarvis_voices.sleep()`, which stops the F5 program and keeps it stopped
+  until Jarvis leaves standby. Custom voices keep speaking from the
+  processor meanwhile.
+
+**`voices.patch`** (last in `$PATCHES`, after `big-model.patch`): the GET
+and POST route blocks, and `_RISK` lines for `custom_voice` and
+`better_voice_enable` in `jarvis_gate.py` ("local", reversible).
+`gate-outcome.patch`'s `_NO_RULE_FROM_DENIAL` now lists both actions, so a
+"no" on one of these cards does not propose a standing rule.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:JARVIS_TEST_VOICE_MODELS = "$env:USERPROFILE\.openjarvis\voice-models"; py -3 backend\test_voices.py
+```
+
+`test_voices.py`: reading and trimming clips; the owner check (with stand-in
+numbers against the real `jarvis_voice` profile files, and once end to end
+with `jarvis_voice`'s own voice check); every way a card can end; one card
+at a time; withdrawn switches; delete; each fallback (missing, failing,
+too slow); a voice print trained later stopping a voice at `say()`; the
+better voice's switch, its real program with stand-ins for PyTorch and
+F5-TTS (on demand, ZipVoice while loading, idle stop, standby, switched
+off, a failed load, a hung sentence, low card memory); no network call in
+either file and none at run time; no name or words in an audit line, event
+or timing row; the patch, rehearsed; the toml. With
+`JARVIS_TEST_VOICE_MODELS` pointing at a folder holding `zipvoice\` it also
+runs the real ZipVoice once.
+
+**Measured here, and how little it means.** The real ZipVoice ran in the
+dev container (4 processor cores, shared with other work, load average 5-9
+during the runs) with its own sample recording: **0.4 to 4 seconds to make
+each second of speech**, depending on how busy the machine was (0.42 and
+1.0 at a lighter moment; 1.5-4.1 when busy). The first sentence also pays
+for loading the model. That spread is the machine, not the voice; your
+PC's number is step 4's. The recording is processed again for every
+sentence (sherpa-onnx's ZipVoice has no way to keep it prepared).
+
+**Not checked, said plainly:** F5-TTS has never run here - no graphics card,
+no PyTorch; its program was tested with stand-ins, so the real model's
+speed, memory (3 GB is a guess) and quality are unknown, as are step 5's
+and step 6's lines (not run anywhere; huggingface.co was blocked from
+here). Nothing ran on Windows or on your PC. The spectral fallback voice
+check (used when no speaker model is installed) is coarse, so the owner
+check is only as good as your voice check; with the recommended speaker
+model it is much stronger. The routes were rehearsed on stand-ins built from
+the patches before them, not on your real `jarvis_hud.py`. If the big model
+is set to use the second card (`[big_model] cuda = "on"`), the better voice
+will not start while the big model runs there, but the big model does not
+yet check for the better voice before it starts.
