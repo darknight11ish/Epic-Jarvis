@@ -104,6 +104,7 @@ on a throwaway copy instead.
 | `big-model.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The big model (slow), all switched off.** Adds `GET`/`POST /api/big-model` (three switches; each ON is one approval card, `big_model_enable`), `GET /api/deep` and `POST /api/deep/ask` (deep questions, answered in the background), and the approval notice's words for the new action. Last in the list, after `wiki.patch` (textual). Needs `jarvis_big_model.py` — see its own section, at the end, and `docs/BIG-MODEL.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 | `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. |
+| `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them, and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -5753,6 +5754,80 @@ backend folder:
 
 ```powershell
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_learning_switch.py
+```
+
+## chat-history.patch - chat history kept on this PC, encrypted
+
+**What it is for.** The owner decided on 2026-09-24 that chat history,
+including what you say to Jarvis by voice, is kept on the PC by default,
+encrypted, with a switch to turn it off. Until now the only copy of a
+conversation was the one an app held in memory, gone when the app closed.
+It is also the PC's own record of each turn, with where its words came from
+(typed, voice, shared, clipboard, pasted, or words sent with a picture), so
+later learning work can trust the PC's record instead of the history an app
+re-sends. The full contract is `docs/JARVIS-API.md` section 18.
+
+**What it changes** in `jarvis_hud.py` (a new shipped module,
+`jarvis_chat_log.py`, does the work):
+
+- `/api/chat` takes the apps' new bookkeeping fields - `provenance` on a
+  message, `conversation_id` and `device` on the request - off before
+  anything reaches a model: the local answering loop gets clean messages,
+  and `_open()` cleans every request the relay sends. The request itself is
+  left as it arrived, so the learner still reads each message's `origin`.
+- When the turn is over (in the same `finally` as the learner, after it, in
+  its own `try`), `jarvis_chat_log.record_turn()` keeps the newest user
+  message and - only when the local model answered through
+  `jarvis_agent.run_local_turn` and finished - the answer. `run_local_turn`
+  now also returns `answer` and `tools_ran` for this. If any tool ran, the
+  turn is marked `read_outside`.
+- Four routes: `GET /api/history`, `GET /api/history/conversation`,
+  `POST /api/history/delete` (one conversation; there is no delete-all) and
+  `POST /api/history/settings` (off at once; ON is one approval card,
+  `history_enable`; how long to keep conversations).
+- `jarvis_gate.py`: the approval notice's words for `history_enable` (stays
+  on this PC). The settings file gets `history_enable = "ask"`, and
+  `gate-outcome.patch` lists it, so a "no" on the card never becomes a
+  proposed memory.
+
+**Encrypted, or not kept at all.** Every piece of text is encrypted with
+AES-256-GCM (the `cryptography` package, now in `requirements.txt`). The
+key is in Windows Credential Manager, "Jarvis Backend/chat history key".
+If the package is missing, or Credential Manager cannot be used, or the key
+does not open what is already kept, nothing is recorded - never a plain-text
+copy - and the History screens say why.
+
+**What it deliberately does not do.**
+
+- **It does not keep a cloud answer.** Only the question; the answer never
+  passes through the PC's own answering loop. `answer_kept: false` says so.
+- It keeps no tool output, system messages, pictures, deep questions, wiki
+  jobs, notes or approval cards.
+- There is no "delete all" route. One conversation at a time.
+- It does not make chat depend on it. Without `jarvis_chat_log.py` the
+  history routes answer 503 and chat works exactly as before; an error in
+  the history never fails a chat turn.
+- It does not yet know which messages were really spoken: that needs the
+  speech route to call `jarvis_chat_log.note_transcript()`, which is wired
+  in separately. Until then a message the app says was spoken is kept as
+  `voice_unverified`.
+
+**Where it goes.** Last in the order, after `learning-asks.patch`. Its
+context is `voices.patch`'s route blocks and `jarvis_gate.py` line,
+`chat-stream.patch`'s and `speed-record.patch`'s `/api/chat` lines,
+`cloud-one-turn.patch`'s `_open()` line and `memory-intake.patch`'s learner
+call.
+
+**Not checked, said plainly:** the patch has been applied only to a
+stand-in of `jarvis_hud.py` built from the whole patch stack, never to the
+real file, and nothing here has run on the owner's PC or against a real
+Credential Manager.
+
+**Test.** From the repository folder, with `JARVIS_BACKEND` set to your
+backend folder:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_chat_log.py
 ```
 ---
 
