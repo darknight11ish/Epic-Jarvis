@@ -133,7 +133,7 @@ pub async fn brain_read(
         );
     }
 
-    // "Windows Hello for private answers" (lock.rs): the memory lists come
+    // "Windows Hello for memory lists and chat history" (lock.rs): the memory lists come
     // back with their entries taken out until Show has passed Windows Hello.
     // Here rather than in brain.js, so a page script cannot read round it.
     if crate::lock::private_hidden(&app) {

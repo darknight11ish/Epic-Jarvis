@@ -280,7 +280,7 @@ Commands exposed to the frontend (`invoke("<name>", …)`):
 | `stream_chat` | Open a chat stream against the Jarvis server and push each response line down a Tauri channel. Returns the stream's generation number. |
 | `cancel_chat` | Abort the stream in flight; drops the socket, so the workstation stops generating. |
 | `decide_approval` | Answer a pending approval — `POST /api/approve` or `/api/deny` with `{id, by: "desktop_spotlight"}`. An Approve asks Windows Hello first when Settings' Security section says it should (`lock.rs`); Deny never does. |
-| `get_security_settings` / `set_security_settings` | Settings' Security section: the app lock, Windows Hello for approvals and for private answers. Loosening one asks Windows Hello first. Settings window only. |
+| `get_security_settings` / `set_security_settings` | Settings' Security section: the app lock, Windows Hello for approvals, and Windows Hello for memory lists and chat history. Loosening one asks Windows Hello first. Settings window only. |
 | `reveal_private_answers` | The Brain's Show button on its hidden memory lists: asks Windows Hello. Brain window only. |
 | `capture_screen` | Grab the primary display, return a base64 JPEG data URI. |
 | `check_server_health` | Probe Jarvis (`:4719/api/status`), Ollama (`:11434/api/tags`) and LiteLLM (`:4000/health`) concurrently; returns a structured report. |

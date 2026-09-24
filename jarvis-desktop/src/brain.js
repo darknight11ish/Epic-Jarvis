@@ -1359,7 +1359,7 @@ async function memoryWrite(command, args, okText) {
 }
 
 /* ==========================================================================
-   Private answers - Settings' "Windows Hello for private answers"
+   Private answers - Settings' "Windows Hello for memory lists and chat history"
 
    While it is on, brain_read hands the two memory lists back EMPTY, with
    `hidden: true` and how many there were (lock.rs redact_private). The

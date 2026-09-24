@@ -15,7 +15,7 @@
  *   leaves the queue; OFF is immediate; ON is greyed on a stale link;
  * - "Delete conversations older than": Never / 30 days / 90 days / 1 year;
  * - `why_not` said plainly when nothing new is being kept;
- * - "Windows Hello for private answers" holds the list back too.
+ * - "Windows Hello for memory lists and chat history" holds the list back too.
  *
  * The answers are the shapes in the contract (section 3). The backend is
  * built to the same contract in parallel; when its generated fixtures land

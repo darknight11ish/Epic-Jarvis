@@ -17,7 +17,7 @@
 //!   like the learning switch ([`super::brain_memory_learning`]). OFF is
 //!   never held: it only narrows what Jarvis does.
 //!
-//! "Windows Hello for private answers" (lock.rs) covers this list too: while
+//! "Windows Hello for memory lists and chat history" (lock.rs) covers this list too: while
 //! the Brain's private lists are hidden, the list comes back with its
 //! conversations taken out (how many there were is kept), and a transcript
 //! is not opened at all. Here, in Rust, so a page script cannot read round
