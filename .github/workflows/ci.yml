@@ -250,6 +250,19 @@ jobs:
           function Write-Lf([string] $Path, [string] $Content) {
             [IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding $false))
           }
+          # Why two texts differ, in one line: a wrong LINE ENDING (Windows
+          # git turning LF into CRLF on write) reads very differently from
+          # wrong CONTENT, and the first time this step ran on Windows it
+          # failed without saying which.
+          function Get-Diff([string] $Got, [string] $Want) {
+            $cr = ([regex]::Matches($Got, "`r")).Count
+            $same = ($Got -replace "`r`n", "`n") -eq $Want
+            return "got $($Got.Length) chars with $cr CR; expected $($Want.Length) chars with 0 CR; same apart from line endings: $same"
+          }
+          function Assert-Text([string] $Path, [string] $Want, [string] $Why) {
+            $got = [IO.File]::ReadAllText($Path)
+            if ($got -ne $Want) { throw "$Why - $(Get-Diff $got $Want)" }
+          }
           # A 40-line jarvis_hud.py with some lines changed (0-based index).
           function Get-Hud([hashtable] $Changes) {
             $lines = @(1..40 | ForEach-Object { "line $_" })
@@ -311,25 +324,29 @@ jobs:
           New-Item -ItemType Directory -Force -Path $be | Out-Null
           $hud = Join-Path $be 'jarvis_hud.py'
           Write-Lf $hud (Get-Hud @{})
-          Assert-Native 'git' @('-C', $be, 'apply', (Join-Path $pd 'toy-one.patch'))
-          Assert-Native 'git' @('-C', $be, 'apply', (Join-Path $hist 'aaaaaaa.patch'))
-          if ([IO.File]::ReadAllText($hud) -ne (Get-Hud $twoOld)) { throw "the stand-in backend was not built as intended" }
+          # autocrlf off for THIS setup only, so the stand-in is exactly what
+          # an LF backend holds. The script's own git calls are left alone:
+          # if Windows git changes endings under them, the checks below
+          # must see it.
+          Assert-Native 'git' @('-c', 'core.autocrlf=false', '-C', $be, 'apply', (Join-Path $pd 'toy-one.patch'))
+          Assert-Native 'git' @('-c', 'core.autocrlf=false', '-C', $be, 'apply', (Join-Path $hist 'aaaaaaa.patch'))
+          Assert-Text $hud (Get-Hud $twoOld) "the stand-in backend was not built as intended"
           $r = Invoke-Native 'powershell' ($runArgs + @($be))
           $r.Out
           if ($r.Code -ne 0) { throw "the run on a backend with an older patch exited $($r.Code)" }
-          if ([IO.File]::ReadAllText($hud) -ne (Get-Hud $three)) { throw "the result is not what the current list gives" }
+          Assert-Text $hud (Get-Hud $three) "the result is not what the current list gives"
           if ($r.Out -notmatch 'OLDER version') { throw "it did not say it found an older version" }
           if ($r.Out -notmatch 'toy-two\.patch from 2026-09-01 \(commit aaaaaaa\)') { throw "it did not name the older version it found" }
           $bk = @(Get-ChildItem -Directory -LiteralPath $be -Filter '_jarvis-backup-*')
           if ($bk.Count -ne 1) { throw "expected one backup folder, found $($bk.Count)" }
-          if ([IO.File]::ReadAllText((Join-Path $bk[0].FullName 'jarvis_hud.py')) -ne (Get-Hud $twoOld)) { throw "the backup is not the file as it was before the run" }
+          Assert-Text (Join-Path $bk[0].FullName 'jarvis_hud.py') (Get-Hud $twoOld) "the backup is not the file as it was before the run"
           "an older toy-two.patch was recognised, taken off and replaced; the backup holds the file as it was"
 
           # 2. Run again: everything is on, nothing changes.
           $r = Invoke-Native 'powershell' ($runArgs + @($be))
           if ($r.Code -ne 0) { throw "the second run exited $($r.Code)`n$($r.Out)" }
           if ($r.Out -notmatch 'already applied') { throw "the second run did not find everything applied`n$($r.Out)" }
-          if ([IO.File]::ReadAllText($hud) -ne (Get-Hud $three)) { throw "the second run changed the file" }
+          Assert-Text $hud (Get-Hud $three) "the second run changed the file"
           "a second run found everything applied"
 
           # 3. A text of the second patch that was never published: refused,
@@ -342,7 +359,7 @@ jobs:
           $r.Out
           if ($r.Code -eq 0) { throw "a never-published text was not refused" }
           if ($r.Out -notmatch 'NOTHING HAS BEEN CHANGED') { throw "the refusal did not say nothing was changed" }
-          if ([IO.File]::ReadAllText($hud2) -ne (Get-Hud $never)) { throw "the refused run changed the file" }
+          Assert-Text $hud2 (Get-Hud $never) "the refused run changed the file"
           if (@(Get-ChildItem -Directory -LiteralPath $be2 -Filter '_jarvis-backup-*').Count -ne 0) { throw "the refused run made a backup folder, so it got past the rehearsal" }
           "a never-published text was refused and nothing was touched"
 
@@ -353,7 +370,7 @@ jobs:
           Write-Lf $hud3 (Get-Hud @{})
           $r = Invoke-Native 'powershell' ($runArgs + @($be3))
           if ($r.Code -ne 0) { throw "the run on a fresh backend exited $($r.Code)`n$($r.Out)" }
-          if ([IO.File]::ReadAllText($hud3) -ne (Get-Hud $three)) { throw "a fresh backend did not get the current list" }
+          Assert-Text $hud3 (Get-Hud $three) "a fresh backend did not get the current list"
           "a fresh backend got the whole current list"
           # Explicitly: the runner ends a powershell step with the LAST native
           # exit code, and case 3 above expects one that is not 0.
