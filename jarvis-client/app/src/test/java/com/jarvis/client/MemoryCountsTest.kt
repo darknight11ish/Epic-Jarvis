@@ -1,5 +1,8 @@
 package com.jarvis.client
 
+import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.Approvals
+import com.jarvis.client.net.DesktopWrite
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.MemoryCounts
 import kotlinx.serialization.json.JsonObject
@@ -13,7 +16,7 @@ import java.io.File
 
 /**
  * Mind's memory counts, in the desktop's words (`brain.js`, `renderMemory`),
- * from `/api/memory/status` - and the learning state, read-only.
+ * from `/api/memory/status` - and the learning switch, which waits for a card.
  */
 class MemoryCountsTest {
 
@@ -74,7 +77,7 @@ class MemoryCountsTest {
         assertNull(MemoryCounts.learning(obj("""{"facts":[]}""")))
         assertTrue(MemoryCounts.learningLine(true).startsWith("Learning is on"))
         assertTrue(MemoryCounts.learningLine(false).startsWith("Learning is off"))
-        assertTrue(MemoryCounts.learningLine(null).contains("switch is on your PC"))
+        assertTrue(MemoryCounts.learningLine(null).startsWith("Couldn't tell"))
     }
 
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
@@ -89,18 +92,50 @@ class MemoryCountsTest {
     }
 
     /**
-     * Why the phone has no learning switch: the owner wants turning learning
-     * ON to ask first, and the PC's route turns it on at once with no card.
-     * When this fails, the PC's route has changed - check whether it now asks,
-     * and if so build the phone's switch (and change learningLine).
+     * The phone's switch is only honest while the PC asks before turning
+     * learning on: learning-asks.patch routes the ON through
+     * jarvis_learning_switch, whose action is the one the phone watches the
+     * queue for. If either name moves, the "waiting" line would never show.
      */
     @Test
-    fun thePcStillSwitchesLearningOnWithoutACard() {
-        val route = repoFile("backend/memory-pane.patch").readText()
-        assertTrue(route.contains("return self._send(200, set_learning(body[\"enabled\"]))"))
-        val setter = repoFile("backend/extraction-wiring.patch").readText()
-            .substringAfter("+def set_learning(on: bool) -> dict:").substringBefore("+class ")
-        assertTrue("found set_learning", setter.contains("LEARNING_FILE"))
-        assertFalse("set_learning raises no card", setter.contains("jarvis_gate") || setter.contains("check("))
+    fun thePcAsksBeforeLearningTurnsOn() {
+        val patch = repoFile("backend/learning-asks.patch").readText()
+        assertTrue(patch.contains("-                return self._send(200, set_learning(body[\"enabled\"]))"))
+        assertTrue(patch.contains("+                code, out = jarvis_learning_switch.request(body[\"enabled\"], set_learning)"))
+        val module = repoFile("backend/jarvis_learning_switch.py").readText()
+        assertTrue(module.contains("ACTION = \"${MemoryCounts.LEARNING_ACTION}\""))
+    }
+
+    @Test
+    fun onWaitsForTheCardAndNeverSaysOn() {
+        val waiting = MemoryCounts.learningSaid(true, DesktopWrite.Outcome.Waiting("anything"))
+        assertTrue(waiting, waiting.startsWith("Waiting for your approval to turn learning on."))
+        assertTrue(waiting.endsWith(Approvals.WHERE))
+        // The PC's real 202 answer, through the same classifier the switch uses.
+        val real = DesktopWrite.classify(
+            202,
+            obj("""{"ok":true,"waiting":true,"enabled":false,"message":"Waiting for your approval."}"""),
+        )
+        assertTrue(real is ApiResult.Ok && real.value is DesktopWrite.Outcome.Waiting)
+        assertEquals("Learning is off. Nothing new will be proposed.",
+            MemoryCounts.learningSaid(false, DesktopWrite.Outcome.Done(null)))
+        assertEquals("Learning is off.", MemoryCounts.learningSaid(false, DesktopWrite.Outcome.Done("Learning is off.")))
+        assertTrue(MemoryCounts.learningSaid(true, DesktopWrite.Outcome.Refused("It must be 'ask'."))
+            .startsWith("Not changed."))
+    }
+
+    @Test
+    fun theCardInTheQueueIsFoundByItsAction() {
+        assertTrue(MemoryCounts.learningCardWaiting(listOf(null, "switch_model", "learning_enable")))
+        assertFalse(MemoryCounts.learningCardWaiting(listOf(null, "switch_model")))
+        assertFalse(MemoryCounts.learningCardWaiting(emptyList()))
+        assertEquals("{\"enabled\":true}", MemoryCounts.learningBody(true))
+        assertEquals("{\"enabled\":false}", MemoryCounts.learningBody(false))
+    }
+
+    @Test
+    fun theOffLineSaysTurningOnAsks() {
+        assertTrue(MemoryCounts.learningLine(false).contains("asks you first"))
+        assertFalse(MemoryCounts.learningLine(false).contains("your PC does not ask yet"))
     }
 }

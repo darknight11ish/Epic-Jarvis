@@ -2340,14 +2340,23 @@ object JarvisRuntime {
     suspend fun memoryStatus(): ApiResult<JsonObject> =
         api.probe(com.jarvis.client.net.MemoryCounts.STATUS_PATH)
 
-    /**
-     * Whether learning is on, off `GET /api/memory/facts?limit=1`. Read-only:
-     * the phone has no learning switch, because turning it on must ask first
-     * and the PC's route does not ([com.jarvis.client.net.MemoryCounts]).
-     */
+    /** Whether learning is on, off `GET /api/memory/facts?limit=1`. */
     suspend fun memoryLearning(): Boolean? =
         (api.probe(com.jarvis.client.net.MemoryCounts.LEARNING_PATH) as? ApiResult.Ok)
             ?.value?.let { com.jarvis.client.net.MemoryCounts.learning(it) }
+
+    /**
+     * The learning switch. ON is held on a stale link (rule 4) and raises an
+     * approval card on the PC; OFF is never held - it only narrows what
+     * Jarvis does. @return the sentence to show under the switch.
+     */
+    suspend fun setLearning(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setLearning(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryCounts.learningSaid(on, r.value)
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
 
     // ----------------------------------------------------------- skills ----
 

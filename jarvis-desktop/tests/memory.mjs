@@ -165,6 +165,26 @@ await check("the learning switch reflects what the server said", async () => {
   assert.equal(sent[0].enabled, false);
 });
 
+await check("turning learning on waits for its approval card, and says so", async () => {
+  // learning-asks.patch: ON answers 202 {waiting: true, enabled: false}. The
+  // pane used to read any non-enabled answer as "Learning is off."
+  const brain = { ...K.BRAIN, memory_facts: { ...K.BRAIN.memory_facts, learning: false } };
+  const page = await memoryTab({ brain, learningWaits: true });
+  await page.getByRole("button", { name: "Start learning" }).click();
+  await page.waitForTimeout(400);
+  const toast = await page.locator("#toast").innerText();
+  const line = await page.locator("#memory-learning .learning-waiting").innerText();
+  const still = await page.getByRole("button", { name: "Start learning" }).count();
+  const sent = await writes(page);
+  await page.close();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].enabled, true);
+  assert.match(toast, /Waiting for your approval/, `the toast said "${toast}"`);
+  assert.doesNotMatch(toast, /Learning is (on|off)/);
+  assert.match(line, /Waiting for your approval to turn learning on/);
+  assert.equal(still, 1, "it is not on until the card is approved");
+});
+
 await check("when the environment overrides the switch, the toast says so", async () => {
   // JARVIS_EXTRACT=0 is a floor the pane cannot lift. The server answers 200
   // and still refuses, so a pane that rendered its own request would show

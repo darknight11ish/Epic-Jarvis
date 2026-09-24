@@ -1264,7 +1264,7 @@ in, was in.
 | `GET /api/memory/export` | the whole store as JSON, for a copy that does not depend on this program continuing to work |
 | `POST /api/memory/forget` | `{id, valid_to?}` → `retire()`. Its first caller. |
 | `POST /api/memory/edit` | `{id, text, valid_to?}` → supersede |
-| `POST /api/memory/learning` | `{enabled}` → the switch |
+| `POST /api/memory/learning` | `{enabled}` → the switch (ON raises an approval card since `learning-asks.patch`) |
 | `POST /api/memory/sleep_time` | `{enabled?}` and/or `{remind?}` → the overnight-offer card's own "enable" / "stop asking" actions |
 
 ## Four things it deliberately does
@@ -5698,3 +5698,31 @@ speed claims have been checked there. Whether Qwen3.6 or DeepSeek V4 answer
 the wiki's JSON reliably without a constraint is not known. The drive-type
 line has not run on a real Windows disk. The patch has been rehearsed only
 against stand-ins.
+
+
+## learning-asks.patch - turning learning on asks first
+
+**What it fixes.** `memory-pane.patch`'s `POST /api/memory/learning` turned
+background learning on the moment either app asked, with no approval card.
+The owner decided on 2026-09-24 that turning it on asks first, like the
+second card and the big model.
+
+**What it changes.** One line of that route. It now calls
+`jarvis_learning_switch.request()` (a new shipped module):
+
+- **On:** one approval card (action `learning_enable`, tier `ask` in the
+  shipped settings file). The reply is 202 "waiting". Learning turns on only
+  if you approve the card.
+- **Off:** immediate. It also cancels a card that is still waiting.
+- If `jarvis_learning_switch.py` was not copied in, the route answers 503
+  instead of switching learning on without a card.
+
+**Where it goes.** Last in the order, after `big-model.patch`: its context
+is `memory-pane.patch`'s route.
+
+**Test.** From the repository folder, with `JARVIS_BACKEND` set to your
+backend folder:
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_learning_switch.py
+```

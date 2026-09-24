@@ -354,9 +354,14 @@ pub async fn brain_memory_learning(
     app: AppHandle,
     enabled: bool,
 ) -> Result<serde_json::Value, String> {
-    // Gated like every other memory write (rule 4): the button's label came
-    // from a read that a stale link cannot confirm is still true.
-    require_link_live(&app)?;
+    // Turning learning ON is held on a stale link (rule 4): the button's
+    // label came from a read a stale link cannot confirm, and ON now raises
+    // an approval card (learning-asks.patch). OFF is never held - it only
+    // narrows what Jarvis does, and a stop that refuses when the link is
+    // unwell fails exactly when it is wanted.
+    if enabled {
+        require_link_live(&app)?;
+    }
     post(
         &app,
         "/api/memory/learning",

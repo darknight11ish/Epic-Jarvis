@@ -130,7 +130,7 @@ CLASSIFICATION = {
     "/api/memory/facts": ("ported", ""),
     "/api/memory/forget": ("deliberate", "Deep memory editing; it stays on the desktop's Memory tab."),
     "/api/memory/keep_both": ("ported", ""),
-    "/api/memory/learning": ("todo", "The learning on/off switch. Waiting on the backend: the owner decided (2026-09-24) that turning learning ON must raise an approval card, and this route switches it on at once with no card (extraction-wiring.patch, set_learning). The phone shows whether learning is on (Mind, What Jarvis remembers) and says the switch is on the PC for now; MemoryCountsTest fails when the route changes."),
+    "/api/memory/learning": ("ported", "The learning on/off switch on Mind (MemoryCountsSection). Turning learning ON raises an approval card on the PC (learning-asks.patch, 2026-09-24): the phone says \"waiting\" while a learning_enable card is in the queue, and holds ON on a stale link; OFF is immediate."),
     "/api/memory/pending": ("ported", "The review queue."),
     "/api/memory/sleep_time": ("ported", ""),
     "/api/memory/status": ("ported", "Memory counts and whether search-by-meaning is on, read-only, in the desktop Memory pane's words. Phone: Mind, What Jarvis remembers (MemoryCountsPlate.kt, net/MemoryCounts.kt)."),

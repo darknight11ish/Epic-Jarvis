@@ -462,6 +462,10 @@ class JarvisApi(
     suspend fun removeSkill(name: String): ApiResult<DesktopWrite.Outcome> =
         postWrite(Skills.DECIDE_PATH, Skills.removeBody(name))
 
+    /** The learning switch - see [MemoryCounts]. ON answers 202 waiting while a card is up. */
+    suspend fun setLearning(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(MemoryCounts.LEARNING_WRITE_PATH, MemoryCounts.learningBody(on))
+
     /**
      * A POST whose answer's shape is not written down - read by
      * [DesktopWrite.classify], which uses no field it has not seen the

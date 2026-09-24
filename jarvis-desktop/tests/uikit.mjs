@@ -375,7 +375,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -817,6 +817,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               // JARVIS_EXTRACT is off in the environment. Reproduce that,
               // because rendering the request instead of the reply is the
               // bug most likely to be written here.
+              // Since learning-asks.patch, ON raises a card: 202 waiting,
+              // still off. Rendering that as "on" or as "off" are both wrong.
+              if (window.__learningWaits && args.enabled === true) {
+                return { ok: true, waiting: true, enabled: false,
+                         message: "Waiting for your approval. Learning turns on only if you approve the card, on your PC or phone." };
+              }
               return window.__learningFloor
                 ? { ok: true, enabled: false, floor: false,
                     note: "JARVIS_EXTRACT is off in the environment, which overrides this switch." }
@@ -892,6 +898,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__memoryRefuses = memoryRefuses || null;
   window.__chatReplies = [...(chatReplies || [])];
   window.__learningFloor = Boolean(learningFloor);
+  window.__learningWaits = Boolean(learningWaits);
   window.__found = found || null;
   window.__installFails = installFails || null;
   window.__restartFails = restartFails || null;
@@ -950,7 +957,7 @@ export async function open(browser, base, file, data, viewport) {
     taskActionFails: null, taskNoteFails: null, noteJobs: null,
     noteTargets: NOTE_TARGETS.all,
     heard: null, captureFails: null, speakFails: null, autoListenFails: null, speakDelayMs: 0,
-    memoryRefuses: null, learningFloor: false, apiSettings: null, tokenSaveRefuses: null,
+    memoryRefuses: null, learningFloor: false, learningWaits: false, apiSettings: null, tokenSaveRefuses: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     vision: null,
     secondCard: { status: SECOND_CARD.one_card },

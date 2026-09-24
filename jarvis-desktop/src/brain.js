@@ -876,6 +876,29 @@ function modelCardGone(ask) {
   }, MODEL_ASK_GRACE_MS);
 }
 
+/** The learning card left the queue: read the switch after the backend has
+ *  had a moment to apply an approval. On: the line goes (renderLearning).
+ *  Still off: it was denied or ran out of time, and that is said. */
+onQueue((queue) => {
+  const ask = state.learningAsk;
+  if (!ask || !ask.cardId || ask.gone) return;
+  const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
+  if (items.some((item) => item && item.id === ask.cardId)) return;
+  ask.gone = true;
+  setTimeout(async () => {
+    if (state.learningAsk !== ask) return;
+    await refreshMemory();
+    if (state.learningAsk === ask) {
+      state.learningAsk = null;
+      const facts = state.data.memory_facts || {};
+      if (facts.learning !== true) {
+        toast("Learning stays off: the card was denied or ran out of time.", "bad");
+      }
+      renderLearning();
+    }
+  }, MODEL_ASK_GRACE_MS);
+});
+
 onQueue((queue) => {
   const ask = state.modelAsk;
   if (!ask || !ask.cardId) return;
@@ -1294,6 +1317,7 @@ function renderLearning() {
   if (why) return dom.memoryLearning.append(whyNode("memory_facts"));
 
   const on = facts.learning === true;
+  if (on) state.learningAsk = null;    // the card was approved
   const setup = pending.setup || {};
   noteSleepOffer(setup);
 
@@ -1378,19 +1402,32 @@ function renderLearning() {
   }
   dom.memoryLearning.append(dl);
 
+  if (state.learningAsk) {
+    dom.memoryLearning.append(el("p", "hint learning-waiting",
+      `Waiting for your approval to turn learning on. Approve it ${APPROVE_WHERE}.`));
+  }
   const box = el("div", "row-actions");
   box.append(
     button(on ? "Stop learning" : "Start learning", async () => {
-      await memoryWrite(
+      const waitingBefore = new Set(
+        (currentQueue().items || []).map((item) => item && item.id).filter(Boolean)
+      );
+      const out = await memoryWrite(
         "brain_memory_learning",
         { enabled: !on },
         (out) =>
-          out && out.note
-            ? String(out.note)
-            : out && out.enabled
-              ? "Learning is on."
-              : "Learning is off. Nothing new will be proposed."
+          out && out.waiting
+            // Turning learning ON raises an approval card (learning-asks.patch):
+            // it is NOT on yet, and it is not "off" as a result of this either.
+            ? String(out.message || `Waiting for your approval. Approve it ${APPROVE_WHERE}.`)
+            : out && out.note
+              ? String(out.note)
+              : out && out.enabled
+                ? "Learning is on."
+                : "Learning is off. Nothing new will be proposed."
       );
+      state.learningAsk = out && out.waiting ? { cardId: await findNewCard(waitingBefore) } : null;
+      renderLearning();
     }, { title: on
         ? "Stop reading conversations for facts. Nothing already proposed is lost. "
           + "A message that starts “Remember:” still makes a card."
@@ -3460,6 +3497,7 @@ onEvent((frame) => {
     deep.at = 0;
     if (state.view === "memory") loadDeep();
   }
+
   const refreshes = {
     model: ["models"],
     finding: ["watch", "watch_report"],

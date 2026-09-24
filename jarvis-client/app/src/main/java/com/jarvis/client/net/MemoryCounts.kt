@@ -19,14 +19,34 @@ import kotlinx.serialization.json.doubleOrNull
  * - `learning` rides on `GET /api/memory/facts` (`memory-pane.patch`); asked
  *   with `?limit=1` so the phone is not sent every fact to learn one switch.
  *
- * READ-ONLY on purpose. The owner decided that turning learning ON must ask
- * first, with an approval card. The PC's `POST /api/memory/learning` switches
- * it on at once, with no card (`extraction-wiring.patch`, `set_learning`),
- * so the phone has no switch until the PC asks. [learningLine] says so.
+ * The learning switch (`POST /api/memory/learning`). The owner decided that
+ * turning learning ON must ask first: since `learning-asks.patch` the PC
+ * raises an approval card under the action [LEARNING_ACTION] and answers 202
+ * `{"waiting": true, "enabled": false}` - so ON is "waiting", never "on",
+ * until that card is approved. OFF is immediate on the PC and is never held
+ * here. The runtime holds ON on a stale link.
  */
 object MemoryCounts {
     const val STATUS_PATH = "/api/memory/status"
     const val LEARNING_PATH = "/api/memory/facts?limit=1"
+    const val LEARNING_WRITE_PATH = "/api/memory/learning"
+
+    /** The gate action the PC raises the ON card under (jarvis_learning_switch.py). */
+    const val LEARNING_ACTION = "learning_enable"
+
+    fun learningBody(on: Boolean): String = "{\"enabled\":$on}"
+
+    /** Is the ON card still in the approval queue? */
+    fun learningCardWaiting(actions: List<String?>): Boolean = actions.any { it == LEARNING_ACTION }
+
+    /** What to say after the switch was pressed, from the PC's answer. */
+    fun learningSaid(on: Boolean, outcome: DesktopWrite.Outcome): String = when (outcome) {
+        is DesktopWrite.Outcome.Waiting ->
+            "Waiting for your approval to turn learning on. ${Approvals.WHERE}"
+        is DesktopWrite.Outcome.Refused -> "Not changed. ${outcome.why}"
+        is DesktopWrite.Outcome.Done -> outcome.said?.let { DesktopWrite.asSentence(it) }
+            ?: if (on) "Learning is on." else "Learning is off. Nothing new will be proposed."
+    }
 
     private fun JsonObject.prim(key: String): JsonPrimitive? = this[key] as? JsonPrimitive
 
@@ -69,13 +89,12 @@ object MemoryCounts {
     /** `learning` off `/api/memory/facts`: true, false, or null when it is not there. */
     fun learning(facts: JsonObject): Boolean? = facts.prim("learning")?.booleanOrNull
 
-    /** The learning line, and why the switch is on the PC for now. */
+    /** The learning line. */
     fun learningLine(on: Boolean?): String = when (on) {
         true -> "Learning is on: Jarvis reads your conversations for facts, and each one still " +
             "needs your yes."
         false -> "Learning is off: nothing new is proposed. A message that starts " +
-            "\"Remember:\" still makes a card."
+            "\"Remember:\" still makes a card. Turning it on asks you first, with an approval card."
         null -> "Couldn't tell whether learning is on."
-    } + " The switch is on your PC for now (Brain window, Memory tab): turning learning on " +
-        "should ask you first, and your PC does not ask yet."
+    }
 }
