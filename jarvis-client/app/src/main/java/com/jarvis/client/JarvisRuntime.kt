@@ -1035,6 +1035,12 @@ object JarvisRuntime {
             // reviewing memory was desk work; the phone has had review cards
             // since, and they sat stale until something else refreshed them.
             "proposal" -> refreshMemoryQueue()
+            // Facts saved WITHOUT a card (automatic learning,
+            // docs/JARVIS-API.md section 19): `{"ids": [...]}` only, never
+            // the text - a doorbell like the rest. The list on Mind reads
+            // itself again, and a quiet line counts them. Never a
+            // notification: nothing here reaches ApprovalNotifier.
+            com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data)
             // Face and bindings changed on another device. Each device renders
             // its own face and the server is only the sync channel, so this
             // just re-reads the shared document; nothing here redraws
@@ -2632,6 +2638,90 @@ object JarvisRuntime {
         return when (val r = writeNoticingCards { api.setLearning(on) }) {
             is ApiResult.Ok -> com.jarvis.client.net.MemoryCounts.learningSaid(on, r.value)
             is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
+    // ----------------------------------------------- automatic learning ----
+    // docs/JARVIS-API.md section 19 (2026-09-24) - see
+    // [com.jarvis.client.net.AutoLearn] and ui/screens/AutoLearnPlate.kt.
+    // The phone reads the list from the PC and keeps none of it.
+
+    private val _autoTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `memory_saved` event, so Mind's "Saved
+     * automatically" list reads itself again - the event carries ids only.
+     */
+    val autoTick: StateFlow<Int> = _autoTick.asStateFlow()
+
+    private val _autoRemembered = MutableStateFlow(0)
+
+    /**
+     * How many facts the PC has saved automatically since the owner last
+     * looked, for Mind's quiet "Jarvis remembered N things" line. A count,
+     * never the words: no fact's text reaches a notification or this line.
+     */
+    val autoRemembered: StateFlow<Int> = _autoRemembered.asStateFlow()
+
+    /** The ids already counted, so an event heard twice is not counted twice. */
+    private var autoSeenIds: List<Long> = emptyList()
+
+    /** The owner opened the list: the line has said its piece. */
+    fun clearAutoRemembered() {
+        _autoRemembered.value = 0
+    }
+
+    private fun onMemorySaved(data: kotlinx.serialization.json.JsonElement?) {
+        val ids = com.jarvis.client.net.AutoLearn.savedIds(data)
+        val fresh = synchronized(this) {
+            val (added, seen) = com.jarvis.client.net.AutoLearn.fresh(autoSeenIds, ids)
+            autoSeenIds = seen
+            added
+        }
+        if (fresh.isNotEmpty()) _autoRemembered.update { it + fresh.size }
+        _autoTick.update { it + 1 }
+    }
+
+    /** `GET /api/memory/learning` - the two automatic-learning switches. A read: never held. */
+    suspend fun autoLearnSettings(): ApiResult<JsonObject> = api.autoLearnSettings()
+
+    /** `GET /api/memory/auto`, one page, newest first. A read: never held. */
+    suspend fun autoFacts(
+        before: Double? = null,
+        limit: Int = com.jarvis.client.net.AutoLearn.PAGE,
+    ): ApiResult<JsonObject> = api.autoFacts(before, limit)
+
+    /**
+     * "Learn automatically" or "Also remember sensitive topics
+     * automatically" - the same shape as [setLearning]. ON is held on a
+     * stale link (rule 4) and raises an approval card on the PC; OFF is never
+     * held - it only narrows what Jarvis does. @return the sentence to show.
+     */
+    suspend fun setAutoLearn(which: com.jarvis.client.net.AutoLearn.Which, on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setAutoLearn(which, on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.AutoLearn.said(which, on, r.value)
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
+    /**
+     * Forgets ONE automatically saved fact, after Mind's confirm. Held on a
+     * stale link (rule 4), the same as the desktop's Forget
+     * (`brain_memory_forget` requires a live link): it cannot be undone, and
+     * it acts on a list read over a link that cannot be confirmed live. No
+     * such fact (404) counts as gone. @return whether it is gone now, and the
+     * sentence to show.
+     */
+    suspend fun forgetAutoFact(id: Long): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        return when (val r = api.forgetFact(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.AutoLearn.forgetSaid(r.value)
+            is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
+                true to com.jarvis.client.net.AutoLearn.ALREADY_GONE
+            } else {
+                false to (com.jarvis.client.net.AutoLearn.forgetFailure(r.error) ?: ("Not forgotten. " + describe(r.error)))
+            }
         }
     }
 

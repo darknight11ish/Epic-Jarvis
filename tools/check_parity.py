@@ -128,8 +128,15 @@ CLASSIFICATION = {
     "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
     "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
     "/api/memory/facts": ("ported", ""),
-    "/api/memory/forget": ("deliberate", "Deep memory editing; it stays on the desktop's Memory tab."),
+    "/api/memory/forget": ("ported", "Forget ONE fact (retired, not deleted; no undo). Desktop: Brain, Memory, every fact (brain_memory_forget, with an optional date). Phone, since automatic learning (owner, 2026-09-24: every auto-saved fact is listed in both apps with a one-tap Forget): Mind, Saved automatically, auto-saved facts only (AutoLearnPlate.kt, JarvisApi.forgetFact). Both ask first and hold it on a stale link. Rewording (/api/memory/edit) stays desktop-only."),
     "/api/memory/keep_both": ("ported", ""),
+    # Automatic learning (docs/JARVIS-API.md section 19, 2026-09-24): built
+    # on the backend and both apps at once. The phone calls these three
+    # (net/AutoLearn.kt, Mind, What Jarvis remembers and Saved automatically);
+    # reclassify as "ported" once the desktop calls them too.
+    "/api/memory/learning/auto": ("planned", "\"Learn automatically\": ON is one approval card (learning_auto_enable), OFF is immediate. Both apps hold ON on a stale link and say \"waiting\" while the card is in the queue, wherever it was raised. Its state rides on GET /api/memory/learning."),
+    "/api/memory/learning/sensitive": ("planned", "\"Also remember sensitive topics automatically\" (off by default): ON is one approval card (learning_sensitive_enable), OFF is immediate. The same holds as the other switch."),
+    "/api/memory/auto": ("planned", "\"Saved automatically\": the facts saved without a card, newest first, with Load older, a \"said aloud\" mark for voice and a Forget on each. Both apps read it again on the memory_saved event (ids only, never the text) and hide it under the phone's \"Hide memory lists and chat history\"."),
     "/api/memory/learning": ("ported", "The learning on/off switch on Mind (MemoryCountsSection). Turning learning ON raises an approval card on the PC (learning-asks.patch, 2026-09-24): the phone says \"waiting\" while a learning_enable card is in the queue, and holds ON on a stale link; OFF is immediate."),
     "/api/memory/pending": ("ported", "The review queue."),
     "/api/memory/sleep_time": ("ported", ""),

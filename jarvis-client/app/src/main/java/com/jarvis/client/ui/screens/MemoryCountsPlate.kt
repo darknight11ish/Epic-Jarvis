@@ -28,9 +28,17 @@ import kotlinx.coroutines.launch
  * Memory pane numbers ([com.jarvis.client.net.MemoryCounts]) - and the
  * learning switch. Turning it ON raises an approval card on the PC, so it
  * reads "waiting" while that card is in the queue; OFF is immediate.
+ *
+ * Under it, automatic learning's two switches ([AutoLearnSwitches],
+ * docs/JARVIS-API.md section 19) - the same shape - and, after a
+ * `memory_saved` event, a quiet "Jarvis remembered N things" line that
+ * opens the "Saved automatically" list. A count only, never a fact's words.
+ *
+ * @param canAct the link is up and fresh: turning a switch ON waits for it.
+ * @param onOpenAutoList brings "Saved automatically" into view.
  */
 @Composable
-internal fun MemoryCountsSection() {
+internal fun MemoryCountsSection(canAct: Boolean = false, onOpenAutoList: () -> Unit = {}) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var reads by remember { mutableIntStateOf(0) }
@@ -40,6 +48,7 @@ internal fun MemoryCountsSection() {
     var said by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val queue by JarvisRuntime.pending.collectAsState()
+    val remembered by JarvisRuntime.autoRemembered.collectAsState()
     val cardWaiting = MemoryCounts.learningCardWaiting(queue.map { it.action })
     // The card leaving the queue (approved, denied or expired) re-reads the
     // switch, so the line says what really happened.
@@ -102,6 +111,14 @@ internal fun MemoryCountsSection() {
             said?.let {
                 Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
                     modifier = androidx.compose.ui.Modifier.liveStatus())
+            }
+            AutoLearnSwitches(canAct = canAct, learningOn = learning, refresh = reads)
+            com.jarvis.client.net.AutoLearn.rememberedLine(remembered)?.let { line ->
+                Gap(6)
+                Quiet(line, onClick = {
+                    JarvisRuntime.clearAutoRemembered()
+                    onOpenAutoList()
+                })
             }
         }
     }

@@ -466,6 +466,30 @@ class JarvisApi(
     suspend fun setLearning(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(MemoryCounts.LEARNING_WRITE_PATH, MemoryCounts.learningBody(on))
 
+    // ------------------------------------------------ automatic learning ----
+    // docs/JARVIS-API.md section 19 (2026-09-24). See [AutoLearn] for the
+    // shapes, the words and the rules; these only carry them.
+
+    /** `GET /api/memory/learning`: the two automatic-learning switches and their cards. */
+    suspend fun autoLearnSettings(): ApiResult<JsonObject> = probe(AutoLearn.SETTINGS_PATH)
+
+    /** One switch. ON answers 202 waiting while its approval card is up; OFF is immediate. */
+    suspend fun setAutoLearn(which: AutoLearn.Which, on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(which.path, AutoLearn.enabledBody(on))
+
+    /** `GET /api/memory/auto`: one page of the facts saved without a card, newest first. */
+    suspend fun autoFacts(before: Double? = null, limit: Int = AutoLearn.PAGE): ApiResult<JsonObject> =
+        probe(AutoLearn.listPath(before, limit))
+
+    /**
+     * `POST /api/memory/forget`: ONE fact, retired rather than deleted. The
+     * same route as the desktop's Forget; the phone sends no `valid_to`
+     * ("stopped being true just now", the usual case). A 404 - no such fact -
+     * comes back as [ApiError.NotFound].
+     */
+    suspend fun forgetFact(id: Long): ApiResult<JsonObject> =
+        postForJob(AutoLearn.FORGET_PATH, AutoLearn.forgetBody(id))
+
     /**
      * A POST whose answer's shape is not written down - read by
      * [DesktopWrite.classify], which uses no field it has not seen the
