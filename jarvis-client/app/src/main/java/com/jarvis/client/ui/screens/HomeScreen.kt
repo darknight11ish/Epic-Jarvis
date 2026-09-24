@@ -324,6 +324,17 @@ data class HomeState(
      */
     val conversationTurns: Int = 0,
     /**
+     * What the answer on its way is waiting on, in words - "Waiting for your
+     * approval…" while a card is up on the desktop - or null. Shown in place
+     * of "…". See [com.jarvis.client.net.ChatSession.waiting].
+     */
+    val chatWaiting: String? = null,
+    /**
+     * One line under a finished answer: cut short at the length limit, and/or
+     * written by a cloud model. See [com.jarvis.client.net.ChatSession.answerNote].
+     */
+    val answerNote: String? = null,
+    /**
      * Whether the quick-note field is open - the home-screen widget's Note
      * button opens it. See [QuickNotePlate].
      */
@@ -863,6 +874,8 @@ private fun ConversationList(
                 onMark = actions.onMarkAnswer,
                 conversationTurns = state.conversationTurns,
                 onNewConversation = actions.onNewConversation,
+                waiting = state.chatWaiting,
+                note = state.answerNote,
             )
         }
     }
@@ -1641,6 +1654,8 @@ private fun Reply(
     onMark: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
     conversationTurns: Int = 0,
     onNewConversation: () -> Unit = {},
+    waiting: String? = null,
+    note: String? = null,
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
@@ -1676,9 +1691,12 @@ private fun Reply(
                 // alone rather than a placeholder that implies more is coming.
                 if (streaming) {
                     Text(
-                        "…",
+                        // What it is waiting on, when the desktop says -
+                        // "Waiting for your approval…" - so a turn held by
+                        // an approval card does not look stuck.
+                        waiting ?: "…",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = chrome.textHi,
+                        color = if (waiting != null) chrome.textMid else chrome.textHi,
                     )
                 }
             } else {
@@ -1698,6 +1716,14 @@ private fun Reply(
             // sharing a reply mid-stream would grab a sentence Jarvis has not
             // finished writing yet.
             if (!streaming && text.isNotBlank()) {
+                if (note != null) {
+                    Gap(6)
+                    Text(
+                        note,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                }
                 Gap(8)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Quiet("Copy", color = chrome.textMid) {

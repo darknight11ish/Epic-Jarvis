@@ -211,6 +211,12 @@ class JarvisApi(
         // nothing for a minute before the first byte. Two full minutes of
         // silence is a wedge, not slowness.
         //
+        // A chat turn waiting on an approval card can hold for three minutes
+        // (the gate's own timeout) before a word is written. That no longer
+        // trips this: the desktop sends a keepalive line every 10 seconds of
+        // silence (`backend/chat-stream.patch`), and each one restarts this
+        // clock. On a desktop without that patch it still would.
+        //
         // /api/events is NOT covered by this: [streamClient] overrides it with
         // the tighter keepalive-based 90s, and [shortCall] overrides it too.
         .readTimeout(120, TimeUnit.SECONDS)
@@ -234,8 +240,9 @@ class JarvisApi(
      * with nothing to say is never mistaken for a dead one, while a genuinely
      * dead socket now fails its read, reconnects through the normal backoff,
      * and clears itself. This 90s is deliberately not applied to [client]:
-     * `/api/chat` streams for as long as a reply takes and has no keepalive to
-     * pace it, so it gets the looser 120s silence limit set above instead.
+     * `/api/chat` streams for as long as a reply takes, with a keepalive only
+     * every 10s of silence (and none at all from a desktop without
+     * chat-stream.patch), so it gets the looser 120s silence limit set above.
      */
     val streamClient: OkHttpClient = client.newBuilder()
         .readTimeout(90, TimeUnit.SECONDS)

@@ -343,6 +343,57 @@ class ApiContractTest {
     }
 
     /**
+     * Every reply the desktop REALLY sends, through the real ChatSession.
+     *
+     * `chat-stream-cases.json` is written by running the backend's producer
+     * (`backend/test_chat_stream_contract.py --write`, which fails if this
+     * copy is stale): Ollama's real stream as relayed by `/api/chat`, with
+     * the Content-Type the desktop sends, keepalive and approval-status
+     * lines, an answer cut short at the length limit, and the desktop's own
+     * error sentences. The test above uses "Hello there." as text/plain,
+     * which no server of this project sends; this is the one that matters.
+     */
+    @Test
+    fun theRealRepliesReadThroughTheRealChatSession() = runBlocking {
+        val text = requireNotNull(javaClass.classLoader?.getResourceAsStream("chat-stream-cases.json")) {
+            "chat-stream-cases.json is missing from androidTest resources"
+        }.bufferedReader().readText()
+        val doc = org.json.JSONObject(text)
+        val headers = doc.getJSONArray("route_headers")
+        val localRoute = (0 until headers.length()).map { headers.getJSONObject(it) }
+            .first { it.getJSONObject("expect").getString("where") == "local" }
+            .getString("header")
+        val cases = doc.getJSONArray("cases")
+        assertTrue("no cases", cases.length() >= 10)
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val name = c.getString("name")
+            val exp = c.getJSONObject("expect")
+            routes["/api/chat"] = MockResponse().setResponseCode(200)
+                .setHeader("Content-Type", c.getString("content_type"))
+                .setHeader("X-Jarvis-Route", localRoute)
+                .setBody(c.getString("body"))
+            val chat = ChatSession(api)
+            val reply = chat.send("hi")
+            if (!exp.isNull("error")) {
+                assertEquals(name, null, reply)
+                assertEquals(name, exp.getString("error"), chat.error.value)
+                assertEquals("$name: a failed turn is not kept", 0, chat.history.value.size)
+                continue
+            }
+            assertEquals(name, exp.getString("text"), reply)
+            assertEquals("$name: no error", null, chat.error.value)
+            assertEquals("$name: a finished answer is kept", 1, chat.history.value.size)
+            assertEquals(
+                "$name: cut short is said under the answer",
+                exp.getBoolean("length"),
+                chat.answerNote.value?.startsWith("Cut short") == true,
+            )
+            assertEquals("$name: nothing left waiting", null, chat.waiting.value)
+        }
+    }
+
+    /**
      * A follow-up carries the conversation so far (net/ChatHistory.kt). The
      * phone used to send the newest question alone, so every follow-up
      * reached the desktop with nothing before it. Read off the wire, from

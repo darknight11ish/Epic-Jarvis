@@ -508,6 +508,10 @@ class MainActivity : FragmentActivity() {
         // The conversation the next question carries (ChatHistory). Only its
         // size is shown; memory only, like the question itself.
         val conversation by chat.history.collectAsState()
+        // What a turn is waiting on ("Waiting for your approval…"), and the
+        // one line under a finished answer (cut short / from a cloud model).
+        val chatWaiting by chat.waiting.collectAsState()
+        val answerNote by chat.answerNote.collectAsState()
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
         val face = remember(faceId) { Faces.byId(faceId) }
@@ -1365,6 +1369,8 @@ class MainActivity : FragmentActivity() {
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,
+                            chatWaiting = chatWaiting,
+                            answerNote = answerNote,
                             quickNoteOpen = quickNoteOpen.value,
                         ),
                         // A lambda, so a streamed token redraws the reply and

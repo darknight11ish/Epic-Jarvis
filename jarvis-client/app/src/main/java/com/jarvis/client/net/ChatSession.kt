@@ -78,6 +78,27 @@ class ChatSession(private val api: JarvisApi) {
      */
     val turnId: StateFlow<String?> = _turnId.asStateFlow()
 
+    private val _waiting = MutableStateFlow<String?>(null)
+
+    /**
+     * What the answer on its way is waiting on, in words, or null.
+     *
+     * "Waiting for your approval…" while an approval card is up on the
+     * desktop - the desktop says so in the stream (`: jarvis-status approval`,
+     * `backend/chat-stream.patch`). Before that, a tool turn showed "…" for up
+     * to three minutes and then "timeout". Cleared as soon as words arrive.
+     */
+    val waiting: StateFlow<String?> = _waiting.asStateFlow()
+
+    private val _answerNote = MutableStateFlow<String?>(null)
+
+    /**
+     * One line to show under the answer, or null: that it was cut short at
+     * the length limit (it used to look finished), and/or that a cloud model
+     * wrote it rather than this user's PC (read from `X-Jarvis-Route`).
+     */
+    val answerNote: StateFlow<String?> = _answerNote.asStateFlow()
+
     private val _history = MutableStateFlow<List<ChatHistory.Exchange>>(emptyList())
 
     /**
@@ -135,6 +156,8 @@ class ChatSession(private val api: JarvisApi) {
         // The previous answer's id goes with the previous answer: a mark
         // tapped now must never land on the answer that is being replaced.
         _turnId.value = null
+        _waiting.value = null
+        _answerNote.value = null
 
         // Captured before the request goes, and the same list that is sent:
         // what this question was asked in the light of.
@@ -213,10 +236,14 @@ class ChatSession(private val api: JarvisApi) {
                         // leaving the owner to go and read a log to learn
                         // something the reply already contained.
                         val detail = serverDetail(resp)
+                        // A 404 WITH a sentence is the desktop passing on
+                        // what the model server said - a model that is not
+                        // installed, say - not a missing route. It used to
+                        // read "This server has no chat endpoint." either way.
                         val generic = when (resp.code) {
                             401, 403 -> "The desktop refused that token."
-                            404 -> "This server has no chat endpoint."
-                            else -> "The desktop answered ${resp.code}."
+                            404 -> if (detail == null) "This server has no chat endpoint." else ""
+                            else -> if (detail == null) "The desktop answered ${resp.code}." else ""
                         }
                         // The token is in the REQUEST, never in the response, so
                         // there is nothing of the token to leak here. 401/403
@@ -227,7 +254,10 @@ class ChatSession(private val api: JarvisApi) {
                             when {
                                 detail == null -> generic
                                 resp.code == 401 || resp.code == 403 -> "$generic ($detail)"
-                                else -> "$generic $detail"
+                                // The desktop's own sentence says what is wrong
+                                // and what to do; a status number in front of it
+                                // adds nothing the owner can act on.
+                                else -> detail
                             },
                         )
                         return@use
@@ -236,8 +266,12 @@ class ChatSession(private val api: JarvisApi) {
                     // the first word. Same identity guard as every other
                     // write to the shared flows: a cancelled call unwinding
                     // late must not put its id beside the new answer.
-                    val tid = Feedback.turnIdFromRouteHeader(resp.header(Feedback.ROUTE_HEADER))
+                    val routeHeader = resp.header(Feedback.ROUTE_HEADER)
+                    val tid = Feedback.turnIdFromRouteHeader(routeHeader)
                     if (call === c) _turnId.value = tid
+                    // Where it was made. Only a cloud answer gets a line: an
+                    // answer from this user's own PC is the normal case.
+                    val cloud = ChatChunkParser.whereFromRouteHeader(routeHeader) == "cloud"
                     // Decoded as CHARACTERS, not as whatever bytes happened
                     // to be buffered.
                     //
@@ -287,12 +321,15 @@ class ChatSession(private val api: JarvisApi) {
                     var failed = false
                     var framed = false
                     var ended = false
+                    var cutShortAtLimit = false
 
                     /** @return true when the caller should stop reading. */
                     fun handle(line: String): Boolean {
                         if (line.trimStart().startsWith("data:")) framed = true
                         return when (val result = ChatChunkParser.consume(line)) {
                             is ChatChunkParser.Result.Text -> {
+                                if (call === c) _waiting.value = null
+                                if (result.cutShort) cutShortAtLimit = true
                                 acc.append(result.delta)
                                 // Published as it arrives - the whole reason
                                 // the body is chunked is so the reply appears
@@ -309,6 +346,19 @@ class ChatSession(private val api: JarvisApi) {
                             ChatChunkParser.Result.Terminal -> {
                                 ended = true
                                 true
+                            }
+                            ChatChunkParser.Result.CutShort -> {
+                                ended = true
+                                cutShortAtLimit = true
+                                true
+                            }
+                            is ChatChunkParser.Result.Status -> {
+                                // Only before the first words: after them, the
+                                // words are the progress.
+                                if (call === c && acc.isEmpty()) {
+                                    _waiting.value = WAITING[result.word]
+                                }
+                                false
                             }
                             is ChatChunkParser.Result.Failed -> {
                                 failWith(result.message)
@@ -369,6 +419,17 @@ class ChatSession(private val api: JarvisApi) {
                         mine = acc.toString()
                         cutShort = framed && !ended
                     }
+                    if (call === c) {
+                        _waiting.value = null
+                        _answerNote.value = listOfNotNull(
+                            if (cutShortAtLimit && !failed && acc.isNotBlank()) {
+                                "Cut short: it reached the length limit. Ask \"go on\" for the rest."
+                            } else {
+                                null
+                            },
+                            if (cloud && !failed) "Answered by a cloud model, not on your PC." else null,
+                        ).joinToString(" ").ifEmpty { null }
+                    }
                 }
             } catch (ce: CancellationException) {
                 throw ce
@@ -395,6 +456,7 @@ class ChatSession(private val api: JarvisApi) {
                 // generation could no longer be interrupted at all.
                 if (call === c) {
                     _streaming.value = false
+                    _waiting.value = null
                     call = null
                 }
             }
@@ -435,10 +497,18 @@ class ChatSession(private val api: JarvisApi) {
         _question.value = null
         _turnId.value = null
         _error.value = null
+        _waiting.value = null
+        _answerNote.value = null
     }
 
     private companion object {
         const val TAG = "JarvisChat"
+
+        /** What each `: jarvis-status` word means on screen. */
+        val WAITING = mapOf(
+            "approval" to "Waiting for your approval…",
+            "working" to "Working…",
+        )
 
         /**
          * How much of a failed response body to look at, in bytes.

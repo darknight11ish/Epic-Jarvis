@@ -24,9 +24,13 @@ import kotlinx.serialization.json.contentOrNull
  * paraphrase - because that shape was earned against the real backend over
  * several rounds (see that file's own comments on `images`/`note_target`,
  * fields that were invented and never read), not guessed from this side.
- * Not ported: `routeFromPayload`/`applyRoute`, the tier/model badge the
- * desktop shows next to a reply - this app has no UI slot for it, and
- * adding one is a feature, not a protocol fix.
+ * Not ported: `routeFromPayload`, the desktop's guess at the lane from each
+ * chunk's `model` name - a guess that labelled every answer "Local". Where an
+ * answer was made is read from the `X-Jarvis-Route` header instead
+ * ([whereFromRouteHeader]), and Home says so under an answer from a cloud model.
+ *
+ * Checked against what the desktop really sends by `ChatStreamContractTest`,
+ * whose cases are written by running the backend's producer.
  *
  * A pure function of one line, so it can be driven by a string in a test
  * the same way [SseParser] is - it does not read or write [ChatSession]'s
@@ -43,8 +47,31 @@ object ChatChunkParser {
          *   together. The caller appends the text and then stops, in that
          *   order; that is why this is a flag on [Text] and not a separate
          *   case.
+         * @param cutShort That end was the length limit
+         *   (`finish_reason: "length"`): the answer is not whole.
          */
-        data class Text(val delta: String, val terminal: Boolean = false) : Result
+        data class Text(
+            val delta: String,
+            val terminal: Boolean = false,
+            val cutShort: Boolean = false,
+        ) : Result
+
+        /**
+         * `: jarvis-status <word>` - an SSE comment the desktop sends
+         * (`backend/chat-stream.patch`) to say what the turn is waiting on:
+         * "approval" while an approval card is up, "working" while a tool
+         * runs, "thinking" otherwise. Any other SSE reader skips it; this one
+         * lets the chat say "Waiting for your approval…" instead of "…".
+         */
+        data class Status(val word: String) : Result
+
+        /**
+         * The stream ended at the length limit with no text of its own - the
+         * shape Ollama sends: a finish chunk with an empty delta and
+         * `finish_reason: "length"`. Stop, like [Terminal], and say the
+         * answer was cut short.
+         */
+        data object CutShort : Result
 
         /** A blank line, an SSE comment, or a field (`event:`/`id:`/`retry:`)
          *  this route never carries anything worth rendering in. */
@@ -68,6 +95,8 @@ object ChatChunkParser {
     }
 
     private val FIELD_ONLY = Regex("^(event|id|retry):", RegexOption.IGNORE_CASE)
+
+    private val STATUS = Regex("^:\\s*jarvis-status\\s+(\\w+)")
 
     /**
      * Strict, deliberately NOT the shared [JarvisJson], which sets
@@ -95,8 +124,12 @@ object ChatChunkParser {
     fun consume(rawLine: String): Result {
         var line = rawLine.trim()
         if (line.isEmpty()) return Result.Ignored
-        // SSE comment / heartbeat.
-        if (line.startsWith(":")) return Result.Ignored
+        // SSE comment / heartbeat - or the one comment that says what the
+        // turn is waiting on.
+        if (line.startsWith(":")) {
+            val word = STATUS.find(line)?.groupValues?.get(1)
+            return if (word != null) Result.Status(word) else Result.Ignored
+        }
         // SSE fields other than `data:` carry nothing this route renders.
         if (FIELD_ONLY.containsMatchIn(line)) return Result.Ignored
 
@@ -152,9 +185,11 @@ object ChatChunkParser {
         val choice = (chunk["choices"] as? JsonArray)?.firstOrNull() as? JsonObject
         val delta = deltaText(chunk, choice)
         val terminal = isTerminal(chunk, choice)
+        val cutShort = (choice?.get("finish_reason") as? JsonPrimitive)?.contentOrNull == "length"
 
         return when {
-            delta.isNotEmpty() -> Result.Text(delta, terminal)
+            delta.isNotEmpty() -> Result.Text(delta, terminal, cutShort)
+            cutShort -> Result.CutShort
             terminal -> Result.Terminal
             else -> Result.Ignored
         }
@@ -239,6 +274,22 @@ object ChatChunkParser {
             ?: chunk.stringField("content")
             ?: chunk.stringField("text")
             ?: ""
+    }
+
+    /**
+     * Where the answer was made, from the `X-Jarvis-Route` response header:
+     * "local" (this user's PC) or "cloud", or null when there is no header
+     * to read. `where` is the desktop's own word for it
+     * (`backend/chat-stream.patch`); an older desktop without it is read by
+     * its `gate` - "escalate" is the only gate that picks a cloud lane.
+     */
+    fun whereFromRouteHeader(header: String?): String? {
+        if (header.isNullOrBlank()) return null
+        val obj = runCatching { StrictJson.parseToJsonElement(header.trim()) as? JsonObject }
+            .getOrNull() ?: return null
+        val where = obj.stringField("where")
+        if (where == "local" || where == "cloud") return where
+        return if (obj.stringField("gate") == "escalate") "cloud" else "local"
     }
 
     private fun isTerminal(chunk: JsonObject, choice: JsonObject?): Boolean {
