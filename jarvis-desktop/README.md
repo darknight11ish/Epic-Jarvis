@@ -181,7 +181,8 @@ then, and that is true.
 What is already done: the app's updater (`src-tauri/src/update.rs`), and a
 GitHub Actions workflow (`.github/workflows/desktop-release.yml`) that builds
 the Windows installer on GitHub's own Windows machine every time desktop code
-changes on `main`. Without a key it builds an unsigned installer, keeps it
+changes on `main` or on a `claude/...` working branch (the branch Claude
+pushes to - the same rule as the phone's app). Without a key it builds an unsigned installer, keeps it
 with the run for 14 days, and publishes nothing. With a key it signs the
 installer and publishes it, with the small `latest.json` file the app reads,
 to the release called **`desktop-latest`**.
@@ -213,8 +214,8 @@ have to install once by hand again.
 
 Open `jarvis-desktop\src-tauri\tauri.conf.json`, find the line
 `"pubkey": "",` near the bottom, and paste between the two quotes, so it
-reads `"pubkey": "<the long text>",`. Commit and push that to `main`. (Or
-send the public key to Claude and ask for it to be put in.)
+reads `"pubkey": "<the long text>",`. Commit and push it. (Easier: send the
+PUBLIC key to Claude and ask for it to be put in. Never send the private key.)
 
 **3. Give GitHub the private key.** This copies it to your clipboard:
 
@@ -236,8 +237,7 @@ Then, on github.com:
 Nobody, including you, can read a secret back after saving it; GitHub
 only hands it to the workflow while it builds.
 
-**4. Make the first signed build.** Pushing step 2's change to `main` starts
-it. Or: the repository's **Actions** tab → **Desktop release** (left
+**4. Make the first signed build.** Pushing step 2's change starts it. Or: the repository's **Actions** tab → **Desktop release** (left
 column) → **Run workflow** → **Run workflow**. It takes about 15-25
 minutes. The run's summary says in one line what it did ("Signed, and
 published...", or why not).

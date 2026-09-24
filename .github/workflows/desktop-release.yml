@@ -15,6 +15,12 @@
 # app cannot verify is worse than no update, so there is no unsigned path to
 # the release.
 #
+# Which branches publish: the default branch and `claude/...` working
+# branches (the owner installs from those, like the phone). Anything else
+# builds and keeps the installer as an artifact only. The release notes and
+# latest.json name the branch and commit, so a build from a working branch is
+# never mistaken for one from main.
+#
 # Where it publishes: the rolling release tagged `desktop-latest`, the exact
 # URL in tauri.conf.json. Not `/releases/latest/`: that is whichever full
 # release in the whole repository is newest, which says nothing about the
@@ -29,7 +35,10 @@ name: Desktop release
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # main, and the working branches Claude sessions push to (the owner
+    # installs from those, as with the phone's client-latest - owner's
+    # decision, 2026-09-24).
+    branches: [main, "claude/**"]
     paths:
       - "jarvis-desktop/**"
       - ".github/workflows/desktop-release.yml"
@@ -71,6 +80,7 @@ jobs:
           # A yes/no only. The key itself is not read here.
           HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
           IS_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+          IS_WORK_BRANCH: ${{ startsWith(github.ref, 'refs/heads/claude/') }}
         run: |
           set -euo pipefail
           pubkey=$(node -e 'const c = require("./src-tauri/tauri.conf.json"); const k = ((c.plugins || {}).updater || {}).pubkey || ""; process.stdout.write(k.trim() ? "yes" : "no")')
@@ -89,11 +99,11 @@ jobs:
             why="The signing secret is set, but tauri.conf.json has no public key (plugins.updater.pubkey), so the app could not check a signed download. Nothing is signed or published until it is added."
           else
             sign=true
-            if [ "$IS_DEFAULT_BRANCH" = "true" ]; then
+            if [ "$IS_DEFAULT_BRANCH" = "true" ] || [ "$IS_WORK_BRANCH" = "true" ]; then
               publish=true
-              why="Signed, and published to the '$TAG' release as version $version."
+              why="Signed, and published to the '$TAG' release as version $version, from $GITHUB_REF_NAME."
             else
-              why="Signed, but this is not the default branch, so it is not published. Only the default branch updates the owner's app."
+              why="Signed, but $GITHUB_REF_NAME is neither the default branch nor a claude/ working branch, so it is not published."
             fi
           fi
 
@@ -187,7 +197,7 @@ jobs:
             --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" \
             --nsis "dist/jarvis-desktop_${VERSION}_x64-setup.exe" \
             ${msi_args[@]+"${msi_args[@]}"} \
-            --notes "Jarvis Desktop ${VERSION}, built from commit ${GITHUB_SHA::7}. Install it from Settings -> Updates; nothing installs on its own." \
+            --notes "Jarvis Desktop ${VERSION}, built from commit ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Install it from Settings -> Updates; nothing installs on its own." \
             --out dist/latest.json
           cat dist/latest.json
 
