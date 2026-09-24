@@ -126,7 +126,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
-        "status": "no Kokoro model files on disk yet"
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
       },
       "tts_available": false,
       "tts_engine": "sherpa-onnx",
@@ -278,7 +285,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
-        "status": "no Kokoro model files on disk yet"
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
       },
       "tts_available": false,
       "tts_engine": "sherpa-onnx",
@@ -430,7 +444,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
-        "status": "no Kokoro model files on disk yet"
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
       },
       "tts_available": false,
       "tts_engine": "sherpa-onnx",
@@ -582,7 +603,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
-        "status": "no Kokoro model files on disk yet"
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
       },
       "tts_available": false,
       "tts_engine": "sherpa-onnx",
@@ -734,7 +762,14 @@
         "available": true,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
-        "status": "ready"
+        "status": "ready",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
       },
       "tts_available": true,
       "tts_engine": "sherpa-onnx",
@@ -892,7 +927,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
-        "status": "no Kokoro model files on disk yet"
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
       },
       "tts_available": false,
       "tts_engine": "sherpa-onnx",
@@ -1044,7 +1086,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
-        "status": "no Kokoro model files on disk yet"
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
       },
       "tts_available": false,
       "tts_engine": "sherpa-onnx",
@@ -1196,7 +1245,14 @@
         "available": false,
         "client_fallback_ok": true,
         "engine": "sherpa-onnx",
-        "status": "no Kokoro model files on disk yet"
+        "status": "no Kokoro model files on disk yet",
+        "timings": [],
+        "voice": {
+          "active": "builtin",
+          "engine": "kokoro",
+          "fallback": "",
+          "name": "Built-in voice"
+        }
       },
       "tts_available": false,
       "tts_engine": "sherpa-onnx",
