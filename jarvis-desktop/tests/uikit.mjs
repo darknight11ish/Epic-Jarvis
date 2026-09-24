@@ -421,14 +421,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                                 { name: "litellm", online: false, optional: true }] };
           case "get_api_settings": {
             // Mirrors commands.rs pick_token: typed (Credential Manager),
-            // then the environment, then the backend's own token - from
-            // Credential Manager, else its old plain-text file; empty is
-            // "not set" at every step.
+            // then the environment, then the backend's own token - its old
+            // plain-text file first, else Credential Manager, the backend's
+            // own order (pick_backend_token); empty is "not set" at every
+            // step.
             const s = window.__apiSettings;
             const source = s.typedToken ? "credential-manager"
               : s.envToken ? "environment"
-              : s.backendCmToken ? "backend-credential-manager"
-              : s.backendFileToken ? "backend-file" : null;
+              : s.backendFileToken ? "backend-file"
+              : s.backendCmToken ? "backend-credential-manager" : null;
             return { base: s.base, hasToken: s.hasToken === false ? false : Boolean(source),
                      tokenSource: s.hasToken === false ? null : source,
                      bindAddress: window.__apiSettings.bindAddress,
@@ -437,7 +438,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "reveal_pairing_token": {
             const s = window.__apiSettings;
-            const t = s.typedToken || s.envToken || s.backendCmToken || s.backendFileToken;
+            const t = s.typedToken || s.envToken || s.backendFileToken || s.backendCmToken;
             if (!t) throw new Error("there is no token yet - start Jarvis once and it makes one for itself");
             return t;
           }

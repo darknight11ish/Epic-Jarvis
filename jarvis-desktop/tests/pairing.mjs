@@ -160,6 +160,26 @@ await check("CONTROL: an empty token is 'not set' in Rust, at every step", async
     "the Rust test for the lockout is gone");
 });
 
+// CONN-3 (audit 3): the backend's own token was read Credential Manager
+// first (the backend reads its old file first), and a backend this app
+// started was handed that read-back token as HUD_TOKEN, pinning it.
+await check("CONTROL: the backend's own token is read in the backend's order, and never passed back as HUD_TOKEN", async () => {
+  const rust = read("src-tauri/src/commands.rs");
+  const own = rust.slice(rust.indexOf("fn backend_token(app: &AppHandle)"));
+  const body = own.slice(0, own.indexOf("\n}\n"));
+  assert.match(body, /pick_backend_token\(token_from_config_dir\(app\), \|\| \{/,
+    "backend_token no longer reads the old file first");
+  assert.match(rust, /fn the_backends_old_file_beats_its_credential_manager_copy/, "the Rust order test is gone");
+  const sidecar = read("src-tauri/src/sidecar.rs");
+  const start = sidecar.slice(sidecar.indexOf("fn start(app: &AppHandle"));
+  const startBody = start.slice(0, start.indexOf("\n}\n"));
+  assert.doesNotMatch(startBody, /jarvis_token_for\(/, "the sidecar passes whatever token was picked");
+  assert.match(startBody, /if commands::passes_as_hud_token\(source\) \{\s*command\.env\("HUD_TOKEN", token\);/);
+  const passes = rust.slice(rust.indexOf("pub(crate) fn passes_as_hud_token("));
+  const passBody = passes.slice(0, passes.indexOf("\n}\n"));
+  assert.match(passBody, /TokenSource::BackendCredentialManager \| TokenSource::BackendFile => false/);
+});
+
 await check("CONTROL: Clear never stores an empty token", async () => {
   const rust = read("src-tauri/src/commands.rs");
   const set = rust.slice(rust.indexOf("pub fn set_api_settings"));

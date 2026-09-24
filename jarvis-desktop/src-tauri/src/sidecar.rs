@@ -456,8 +456,17 @@ fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, Str
     // Only when we have one. Passing an empty HUD_TOKEN would *clear* a token
     // the user had set in the environment, quietly turning a token-gated
     // backend into an open one.
-    if let Some(token) = commands::jarvis_token_for(app) {
-        command.env("HUD_TOKEN", token);
+    //
+    // And only one set on purpose - typed into Settings, or from the
+    // environment (`passes_as_hud_token`). The backend's OWN token, which
+    // this app merely read back from Credential Manager or the old file, is
+    // never passed: HUD_TOKEN overrides the backend's own choice, so handing
+    // it back pinned the backend to whatever copy this app read, a stale one
+    // included, instead of the token the backend resolves for itself.
+    if let Some((token, source)) = commands::jarvis_token_with_source(app) {
+        if commands::passes_as_hud_token(source) {
+            command.env("HUD_TOKEN", token);
+        }
     }
 
     // Off by default: with no bind address configured, the backend binds

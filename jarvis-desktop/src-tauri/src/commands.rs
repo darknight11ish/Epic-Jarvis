@@ -291,15 +291,49 @@ pub fn migrate_plain_token(app: &AppHandle) {
 /// did not know where to find it would be locked out of its own backend by a
 /// secret generated on its behalf.
 ///
-/// Credential Manager first (`backend/jarvis_token_store.py` keeps it there).
-/// A failure to read it falls through rather than stops, to the old
-/// plain-text file - which only a backend WITHOUT token-store.patch still
-/// has, and which the patched backend deletes once it has moved it.
+/// The OLD plain-text file first, then Credential Manager - the order
+/// `backend/jarvis_token_store.resolve` uses. The file only exists when a
+/// backend without token-store.patch wrote it (the patched backend moves it
+/// into Credential Manager and deletes it at its next start), so when both
+/// exist the file is the newer token: an older backend is running and
+/// wrote it after the move. Reading Credential Manager first sent that
+/// backend a token it no longer used, and every request was refused.
 fn backend_token(app: &AppHandle) -> Option<(String, TokenSource)> {
-    if let Ok(Some(t)) = crate::token_store::read_backend() {
-        return Some((t, TokenSource::BackendCredentialManager));
+    pick_backend_token(token_from_config_dir(app), || {
+        crate::token_store::read_backend().ok().flatten()
+    })
+}
+
+/// [`backend_token`]'s order, pure so it is tested without an app: the old
+/// file, else Credential Manager (read only when the file has nothing - a
+/// failure there falls through to "no token", never stops). Empty is "not
+/// set" at both steps.
+pub(crate) fn pick_backend_token(
+    file: Option<String>,
+    credential_manager: impl FnOnce() -> Option<String>,
+) -> Option<(String, TokenSource)> {
+    let clean = |t: Option<String>| t.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    clean(file)
+        .map(|t| (t, TokenSource::BackendFile))
+        .or_else(|| clean(credential_manager()).map(|t| (t, TokenSource::BackendCredentialManager)))
+}
+
+/// Whether a token from `source` is handed to a backend this app starts, as
+/// `HUD_TOKEN`.
+///
+/// Only a token set DELIBERATELY: typed into Settings (Credential Manager,
+/// or an older version's settings-file copy) or given in the environment.
+/// Never the backend's own token read back: `HUD_TOKEN` overrides the
+/// backend's own choice, so passing it back pinned the backend to whatever
+/// this app happened to read - a stale copy included - instead of the one
+/// the backend itself resolves (`jarvis_token_store.resolve`).
+pub(crate) fn passes_as_hud_token(source: TokenSource) -> bool {
+    match source {
+        TokenSource::CredentialManager | TokenSource::SettingsFile | TokenSource::Environment => {
+            true
+        }
+        TokenSource::BackendCredentialManager | TokenSource::BackendFile => false,
     }
-    token_from_config_dir(app).map(|t| (t, TokenSource::BackendFile))
 }
 
 /// The backend's OLD plain-text token file. Read, never written.
@@ -3863,7 +3897,7 @@ mod health_tests {
 
 #[cfg(test)]
 mod token_tests {
-    use super::{pick_token, TokenSource};
+    use super::{passes_as_hud_token, pick_backend_token, pick_token, TokenSource};
 
     fn s(v: &str) -> Option<String> {
         Some(v.to_string())
@@ -3948,6 +3982,48 @@ mod token_tests {
     fn values_are_trimmed() {
         let got = pick_token(None, None, None, || file("  tok\n"));
         assert_eq!(got.map(|(t, _)| t), s("tok"));
+    }
+
+    /// CONN-3: the backend's own order (jarvis_token_store.resolve) - the
+    /// old file wins, because it exists only when an older backend wrote it
+    /// after the move into Credential Manager.
+    #[test]
+    fn the_backends_old_file_beats_its_credential_manager_copy() {
+        let got = pick_backend_token(s("from-file"), || s("from-cm"));
+        assert_eq!(
+            got,
+            Some(("from-file".to_string(), TokenSource::BackendFile))
+        );
+    }
+
+    #[test]
+    fn with_no_old_file_the_backends_credential_manager_copy_is_used() {
+        for none in [None, s(""), s("  \n")] {
+            let got = pick_backend_token(none, || s(" from-cm "));
+            assert_eq!(
+                got,
+                Some(("from-cm".to_string(), TokenSource::BackendCredentialManager))
+            );
+        }
+        assert_eq!(pick_backend_token(None, || None), None);
+        assert_eq!(pick_backend_token(s(""), || s("")), None);
+    }
+
+    #[test]
+    fn credential_manager_is_not_even_read_when_the_old_file_has_a_token() {
+        let got = pick_backend_token(s("from-file"), || panic!("not reached"));
+        assert_eq!(got.map(|(t, _)| t), s("from-file"));
+    }
+
+    /// CONN-3: only a token set on purpose is handed to a backend this app
+    /// starts. The backend's own token, read back, never is.
+    #[test]
+    fn only_a_deliberately_set_token_is_passed_as_hud_token() {
+        assert!(passes_as_hud_token(TokenSource::CredentialManager));
+        assert!(passes_as_hud_token(TokenSource::SettingsFile));
+        assert!(passes_as_hud_token(TokenSource::Environment));
+        assert!(!passes_as_hud_token(TokenSource::BackendCredentialManager));
+        assert!(!passes_as_hud_token(TokenSource::BackendFile));
     }
 }
 
