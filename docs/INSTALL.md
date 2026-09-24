@@ -412,7 +412,11 @@ Obsidian plugin and no API key.
    This repository's copy already has that line; yours is left alone, so
    `apply-patches.ps1` prints it as a difference instead. Without it, every
    `#obs` note waits for you to approve it first. Put `"ask"` there if that
-   is what you want.
+   is what you want. (A note Jarvis writes **from chat** after it has read
+   an email, a web page, a file or other outside text - or after you pasted
+   or shared something - always asks first, whatever this line says. That
+   is `write_notes_after_outside_text = "ask"`; a file without that line
+   asks anyway.)
 4. **Turn on Daily notes in Obsidian.** Settings (the gear, bottom left) →
    **Core plugins** → switch on **Daily notes**. Its options (Settings →
    **Daily notes**) decide where today's note is:

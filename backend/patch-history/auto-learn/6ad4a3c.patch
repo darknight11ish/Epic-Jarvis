@@ -303,7 +303,7 @@
 +    # about you from what you type or say, on THIS PC, without a card per
 +    # fact; every one can be forgotten, and turning it off never asks.
 +    "learning_auto_enable": ("yes", "local", "lets Jarvis save facts about you and your projects from what you type or say to it, without asking about each one; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
-+    "learning_sensitive_enable": ("yes", "local", "lets Jarvis also save facts about health, money and other people's private details without asking first; passwords, PINs, account and ID numbers still wait for your yes; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
++    "learning_sensitive_enable": ("yes", "local", "lets Jarvis also save facts about health, money, passwords and account details, and other people's private details without asking first; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",

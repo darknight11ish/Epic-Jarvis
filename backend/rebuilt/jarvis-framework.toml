@@ -116,6 +116,15 @@ delete_logseq_page        = "never"
 # card every time.
 append_obsidian_daily     = "auto"
 
+# ...except after outside text (owner decision, 2026-09-24, after the safety
+# research). In a turn where Jarvis has read an email, a web page, a file or
+# other tool output - or the conversation already had, or your message was
+# pasted, shared or from the clipboard - a note Jarvis wants to write to
+# Obsidian, Logseq or Joplin is asked under this name instead, and waits for
+# your yes. Must stay "ask": anything else and the note is refused rather
+# than written unasked. A file without this line asks too (unknown_action_tier).
+write_notes_after_outside_text = "ask"
+
 # --- Models: three separate decisions, deliberately not bundled --------
 # Reading public catalogues says nothing about you (see the privacy note in
 # jarvis_models.py) so it is free. A download spends bandwidth and disk. A

@@ -30,7 +30,8 @@ the fact a card:
      the model not being reachable, or no local model at all: the fact is
      treated as sensitive (fail closed).
   3. The owner's switch: with "Also remember sensitive topics automatically"
-     on, jarvis_auto_learn skips this whole check, exactly as before.
+     on, jarvis_auto_learn skips this whole check - except always_asks() at
+     the end of this file (passwords, PINs, account and ID numbers).
 
 Nothing here writes to disk or logs the words it is given. A verdict names
 which rule fired, never the words that fired it.
@@ -3272,6 +3273,31 @@ def _main(argv) -> int:
     report(res, with_model=a.with_model, show=a.show)
     print(f"\n{len(rows)} lines in {time.time() - t0:.1f} s")
     return 0
+
+
+def always_asks(text: str) -> str:
+    """Added 2026-09-24 (the owner's decision after the safety research):
+    passwords, PINs, account numbers and ID numbers always wait for the
+    owner's yes, even with "Also remember sensitive topics automatically"
+    on. "credentials", "identity" or "" for one text - the patterns alone,
+    never the model, so the switch being on costs no model wait.
+
+    An account number, IBAN or sort code is "money" in patterns(); here it
+    counts as "credentials", so "my IBAN is ..." always asks while "my
+    salary is 40k" stays money (and is covered by the switch)."""
+    if not isinstance(text, str) or not text.strip():
+        return ""
+    p = patterns(text)
+    account = any(r in ("bank account details", "a sort code", "an account number")
+                  for r in p["rules"]) or re.search(
+        r"(?<![\w])(?:(?:bank |current |savings |checking )?account (?:number|no|details)"
+        r"|acct (?:number|no)|a/c (?:number|no)|iban|sort ?code|routing number"
+        r"|swift(?:/bic)? code|bic (?:code|number)"
+        r"|kontonummer|numero de (?:cuenta|compte)|numero d[ai] conta|numero di conto"
+        r"|rekeningnummer|numer (?:konta|rachunku))(?![\w])", _Views(text).blank)
+    if "credentials" in p["categories"] or account:
+        return "credentials"
+    return "identity" if "identity" in p["categories"] else ""
 
 
 if __name__ == "__main__":

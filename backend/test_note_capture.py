@@ -280,6 +280,34 @@ def t_capture_goes_through_the_gate():
           and all("from the widget" not in d for _, d in AUDIT))
 
 
+def t_a_typed_prefix_note_stays_instant():
+    """The owner's decision of 2026-09-24 (note writes wait for a yes after
+    outside text) is about the CHAT's tool loop: a turn where Jarvis read an
+    email, a page or a file. A #log / #obs / #joplin note or the quick-note
+    field never goes through that loop - no model reads anything, the
+    owner's words go straight to /api/notes/capture - so it is asked under
+    the note's own action, whose tier (auto as shipped) decides: filed at
+    once, no card. A control: it passes before and after the change."""
+    g = graph()
+    seen = []
+
+    def shipped(action, detail, prompt):
+        seen.append(action)
+        # The shipped tiers: the Logseq journal at auto, anything else asks.
+        return (Verdict(True, "auto") if action == "append_logseq_journal"
+                else Verdict(False, "denied"))
+    code, out = NC.capture("log", "typed after #log", gate_check=shipped, wait_s=2.0)
+    check("a typed #log note at the shipped tier: filed at once, no card",
+          code == 200 and out["state"] == "filed" and seen == ["append_logseq_journal"],
+          (code, out, seen))
+    check("... and it is in the journal",
+          "- typed after #log\n" in next((g / "journals").glob("*.md")).read_text())
+    src = (BACKEND / "jarvis_note_capture.py").read_text(encoding="utf-8")
+    check("the capture route never goes through the chat's tool loop",
+          "jarvis_agent" not in src.replace("jarvis_agent.py", "")
+          and "write_notes_after_outside_text" not in src)
+
+
 def t_a_refused_capture_writes_nothing_and_says_why():
     for outcome, words in (("denied", "You said no"), ("timed_out", "Nobody answered"),
                            ("refused", "refused it")):

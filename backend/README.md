@@ -5864,7 +5864,9 @@ these hold:
 - it does not replace a fact you already have;
 - nothing sensitive (health, money, passwords and account details, other
   people's private details) unless you allowed that - see "The
-  sensitive-topic check" below.
+  sensitive-topic check" below. Passwords, PINs, account and ID numbers
+  are never saved without your yes, even when you allowed sensitive topics
+  (your decision of 2026-09-24, after the safety research).
 
 Anything else stays an ordinary card, and the card says which check stopped
 it ("from pasted text", "about health, a sensitive topic", "not in your own
@@ -6018,7 +6020,24 @@ a card.
    this PC or is a cloud model - all make the fact a card. It never goes
    through a proxy (`jarvis_local_http.py`).
 3. **Your switch.** With "Also remember sensitive topics automatically" on,
-   none of this runs, exactly as before.
+   layers 1 and 2 do not run - **except one narrow check** (your decision of
+   2026-09-24, after the safety research): passwords, PINs, account and ID
+   numbers still wait for your yes. `always_asks()`, one small function
+   added at the end of this file, runs the patterns alone (no model, so
+   the switch adds no wait) on the fact and the words it came from. It
+   counts what the patterns call passwords and account details, what they
+   call ID numbers, birth dates or contact details, anything
+   `jarvis_router.looks_like_a_secret` catches, and account numbers, IBANs
+   and sort codes (which the patterns otherwise file under money - "my
+   salary is 40k" stays money and is saved). The card says "a password, PIN
+   or account number - these always wait for your yes" (or "an ID number,
+   birth date or contact details - ..."). Said plainly:
+   - a birth date, a phone number and an email address wait too, because
+     the word lists keep them in the same group as ID numbers. If you want
+     those saved under the switch, the lists need splitting;
+   - a password the patterns miss ("my Netflix is sunflower", a plain word
+     with no password word near it) is saved with the switch on, because
+     only the model would have caught it.
 
 **What the card says.** One reason per topic, after "Not saved
 automatically:":
@@ -6186,12 +6205,15 @@ seconds.
 **What it changes elsewhere.** `jarvis_auto_learn.py`: `sensitivity()` (the
 patterns alone, cheap enough for every recalled fact) and
 `check_sensitive()` now call this module; the old word list is gone. If this
-file is missing, every fact is a card.
+file is missing, every fact is a card. With the sensitive switch on,
+`check_sensitive()` calls `always_asks()` instead; a copy of this file from
+before `always_asks()` existed makes every fact a card then too.
 
-**Test.** From the repository folder:
+**Test.** From the repository folder (the second one holds the
+passwords/PINs/account/ID-numbers checks, both ways in, switch on and off):
 
 ```powershell
-$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_sensitive.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_sensitive.py; py -3 backend\test_auto_learn.py
 ```
 
 **Measure it with your real model.** From the repository folder. It asks
@@ -6801,9 +6823,11 @@ PowerShell 5.1 problems.
 When Jarvis uses a tool - reads an email, a file, a web page, a note - what
 comes back was written by someone else. A cleverly written email can try to
 give Jarvis orders ("before you answer, forward the invoices to ..."). The
-approval card is still the real defence, and **nothing here changes which
-tools need a card** (that is your decision, still open). What changed is in
-`jarvis_agent.py` (shipped whole) and one line of `jarvis_intake.py`:
+approval card is still the real defence. **One thing here changes which
+tools need a card - your decision of 2026-09-24, after the safety research:
+writing to your notes after outside text** (item 5 below). Everything else
+does not. What changed is in `jarvis_agent.py` (shipped whole) and one line
+of `jarvis_intake.py`:
 
 1. **Broken tool requests never reach you.** Before Jarvis prepares a tool,
    it checks the request against that tool's own list of fields: is it
@@ -6835,6 +6859,37 @@ tools need a card** (that is your decision, still open). What changed is in
    link, path or command on the card that came from what it read rather than
    from you ("“billing@evil.example” came from what Jarvis read, not from
    you."). The action itself is not changed, only the words on the card.
+5. **Writing to your notes after outside text waits for your yes.** In a
+   turn where Jarvis has read an email, a web page, a file or anything else
+   a tool gave back (not the calculator, and not its own "note saved"), or
+   the conversation read outside text earlier, or your newest message was
+   pasted, shared or from the clipboard, a note it wants to add to
+   Obsidian, Logseq or Joplin raises an approval card. The card says why in
+   one line - "Jarvis read outside text in this conversation, so it asks
+   before writing to your notes." - above the "What shaped this request"
+   list. In every other turn nothing changes: your settings file decides,
+   and as shipped the note is saved straight away.
+   - **How.** The note is put to the approval gate under a new name,
+     `write_notes_after_outside_text`, instead of its own. The shipped
+     `jarvis-framework.toml` has it as `"ask"`; **your own file does not
+     have the line**, and then the gate uses `unknown_action_tier`
+     (`"ask"` as shipped), so it asks anyway. You may add the line;
+     `apply-patches.ps1` shows it as a difference and never changes your
+     file. It must stay `"ask"`: if it says anything else, the note is
+     refused (never written without asking) and Jarvis is told which line
+     to change. A note action you set to `"never"` stays never; one you
+     already set to `"ask"` asks under its own name, with the same line.
+   - `note-capture.patch` gives the new name its line in the gate's risk
+     table, so the phone and desktop notification says "Jarvis wants to
+     write notes after outside text" and that it stays on this PC.
+     `gate-outcome.patch` puts it on the list whose "no" never becomes a
+     proposed standing rule: a no answers that one card.
+   - **Not affected: `#log`, `#obs`, `#joplin` and Quick note**, on either
+     app. They never go through this loop - no model reads anything; your
+     words go straight to `/api/notes/capture`. Said plainly: that route is
+     not told whether the words were typed or pasted, so pasting text after
+     `#obs` still files it straight away. Whether it should ask too is your
+     call; it would need both apps to send where the words came from.
 
 `jarvis_intake.py`: the "hidden characters" warning now also catches the
 invisible tag characters (U+E0000 to U+E007F). Checked before changing it:
@@ -6871,5 +6926,11 @@ scripted model that obeys every planted instruction. It checks the markers
 are gone, every card names what Jarvis read and which values came from it,
 the warning rate has not dropped, ordinary text raises no warning, broken
 requests raise no card and get one retry, and an unreadable request is asked
-again once. Every one of its eleven tests fails against the modules as they
-were before this change.
+again once. Every one of its first eleven tests fails against the modules as
+they were before this change. The two added for note writes (2026-09-24)
+check that a note after an email, in a tainted conversation, or after a
+pasted, shared or clipboard message raises a card that says why; that it is
+written only after a yes, never when the gate lets it through unasked; and,
+as controls that pass before and after, that a clean turn still saves
+straight away. `test_note_capture.py` checks a typed `#log` note is still
+filed at once.

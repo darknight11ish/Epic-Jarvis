@@ -840,6 +840,117 @@ def t_sensitive_model_layer():
         SENS.ASK_MODEL = keep
 
 
+ALWAYS = "always wait for your yes"
+
+
+def t_passwords_pins_account_and_id_numbers_always_wait():
+    """The owner's decision of 2026-09-24, after the safety research:
+    passwords, PINs, account numbers and ID numbers wait for a yes even with
+    "Also remember sensitive topics automatically" on - both ways in, a
+    learning pass and "Remember: ...". Health and money are still saved with
+    it on, and with it off every one of these is a card, as before. Fails on
+    the old jarvis_auto_learn.py, which skipped the whole check when on."""
+    keep = SENS.ASK_MODEL
+    asked = []
+    SENS.ASK_MODEL = lambda prompt: (asked.append(prompt), '{"sensitive": false}')[1]
+    try:
+        waits = (
+            ("a bank PIN", "Remember: my bank PIN is 4821", "PIN"),
+            ("an IBAN", "Remember: my IBAN is GB82 WEST 1234 5698 7654 32", "account number"),
+            ("an IBAN with no spaces", "Remember: my IBAN is DE89370400440532013000",
+             "account number"),
+            ("an account number (money in the patterns)",
+             "Remember: my account number is 12345678", "account number"),
+            ("a sort code", "Remember: my sort code is 12-34-56", "account number"),
+            ("a passport number", "Remember: my passport number is 533401922", "ID number"),
+            ("a wifi password", "Remember: the wifi password is hunter2blue", "password"),
+            ("a wifi password that is a plain word", "Remember: the wifi password is sunflower",
+             "password"))
+        for on in (True, False):
+            for name, text, word in waits:
+                w = World()
+                try:
+                    A.set_sensitive(on)
+                    q, res = _remember(w, text)
+                    if on:
+                        check(f"sensitive ON, Remember {name}: a card that says it always waits",
+                              carded(res, ALWAYS) and all(word in r for r in res["cards"].values()),
+                              (q, res))
+                    else:
+                        check(f"sensitive OFF, Remember {name}: a card, as before",
+                              carded(res, "a sensitive topic"), (q, res))
+                finally:
+                    w.done()
+        for name, turn, fact in (
+                ("a PIN", "my bank PIN is 4821", "The owner's bank PIN is 4821"),
+                ("an IBAN", "my IBAN is GB82 WEST 1234 5698 7654 32",
+                 "The owner's IBAN is GB82 WEST 1234 5698 7654 32"),
+                ("a passport number", "my passport number is 533401922",
+                 "The owner's passport number is 533401922"),
+                ("a PIN in the turn, not in the fact", "I like jazz and my PIN is 4821",
+                 "The owner likes jazz")):
+            w = World()
+            try:
+                A.set_sensitive(True)
+                w.say(turn)
+                res = w.learn([fact])
+                check(f"sensitive ON, a learning pass with {name}: a card that says it always "
+                      f"waits", carded(res, ALWAYS), res)
+            finally:
+                w.done()
+        asked.clear()
+        for name, turn, fact in (
+                ("health", "I have diabetes", "The owner has diabetes"),
+                ("money that is not an account", "my salary is 40k",
+                 "The owner's salary is 40k")):
+            w = World()
+            try:
+                A.set_sensitive(True)
+                w.say(turn)
+                res = w.learn([fact])
+                check(f"sensitive ON, {name}: saved without a card", saved(res), res)
+                A.set_sensitive(False)
+                w.say(turn)
+                res = w.learn([fact])
+                check(f"sensitive OFF, {name}: a card, as before",
+                      carded(res, "a sensitive topic"), res)
+            finally:
+                w.done()
+        w = World()
+        try:
+            A.set_sensitive(True)
+            q, res = _remember(w, "Remember: I have diabetes")
+            check("sensitive ON, Remember: I have diabetes: saved", saved(res), (q, res))
+        finally:
+            w.done()
+        check("with sensitive topics on, the model is never asked (patterns only, no wait)",
+              not asked, len(asked))
+        # Every one of the red team's password / account lines, with it on.
+        missed = [t for t in SENSITIVE_COPY["passwords / account details"]
+                  if ALWAYS not in A.check_sensitive(t, [t], True)]
+        check("sensitive ON: every red-team password / account line still waits", not missed,
+              missed)
+        check("sensitive ON: an API key still waits",
+              ALWAYS in A.check_sensitive("my token is ghp_abcdefghijklmnopqrstuvwxyz0123456789ab",
+                                          [], True))
+        bearer = "my home server takes Bearer abcdefghijklmnopqrstuvwxyz"
+        import jarvis_router
+        check("sensitive ON: a secret only jarvis_router.looks_like_a_secret catches still waits",
+              jarvis_router.looks_like_a_secret(bearer) is not None
+              and ALWAYS in A.check_sensitive(bearer, [], True))
+        clean = [t for t in ("I'm learning Swift", "I opened a savings account",
+                             "I have a Netflix account", "my salary is 40k",
+                             "I have diabetes")
+                 if A.check_sensitive(t, [t], True)]
+        check("sensitive ON, CONTROL: Swift the language, a savings account with no "
+              "number, money and health are not held back", not clean, clean)
+        check("the card's words say what always waits",
+              A.check_sensitive("my PIN is 4821", [], True)
+              == "a password, PIN or account number - these always wait for your yes")
+    finally:
+        SENS.ASK_MODEL = keep
+
+
 def _sensitive_cases() -> dict:
     return SENSITIVE_COPY
 

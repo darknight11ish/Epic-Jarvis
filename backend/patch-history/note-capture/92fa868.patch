@@ -57,7 +57,7 @@
                       "/api/memory/keep_both"):
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -307,6 +307,19 @@
+@@ -307,6 +307,14 @@
      # to auto in jarvis-framework.toml) so authenticating is its own
      # decision rather than inheriting a tier set for anonymous search.
      "research_authenticated": ("yes", "outbound", "identifies you to GitHub via your token; nothing is written"),
@@ -66,18 +66,13 @@
 +    # Joplin's service must be at 127.0.0.1 or the plan refuses. All only ADD
 +    # - an entry at the end of a day's page, or a new note - so each can be
 +    # undone by deleting what was added.
-+    # A note Jarvis wants to write in a chat turn shaped by outside text is
-+    # asked under write_notes_after_outside_text instead (jarvis_agent.py
-+    # NOTE_WRITES, the owner's decision of 2026-09-24): the same three
-+    # writes, so the same "stays on this PC".
-+    "write_notes_after_outside_text": ("yes", "local", "adds one entry to your notes on this PC (today's Logseq journal, today's Obsidian daily note, or a new Joplin note); nothing already there is changed; asked because Jarvis read outside text in this conversation, or your message was not typed"),
 +    "append_logseq_journal": ("yes", "local", "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"),
 +    "create_joplin_note":    ("yes", "local", "creates one new note in Joplin on this PC; no existing note is changed"),
 +    "append_obsidian_daily": ("yes", "local", "adds one entry to the end of today's Obsidian daily note on this PC; nothing already there is changed"),
  }
 
  _UNKNOWN_RISK = ("no", "outbound",
-@@ -464,6 +477,11 @@
+@@ -464,6 +472,11 @@
      # search - see JARVIS_GITHUB_TOKEN in that module's own docstring.
      "jarvis_research_plan": "auto", "jarvis_research_run": "web_research",
      "jarvis_research_run_authenticated": "research_authenticated",
