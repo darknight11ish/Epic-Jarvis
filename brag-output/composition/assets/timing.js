@@ -1,1 +1,0 @@
-window.TIMING = {"bpm":120,"dur":25,"hits":{"ignite":0,"hey":2,"nothing":3.5,"montage":[5.5,6,6.5,7],"listens":7.5,"thinks":8.5,"speaks":9.5,"reply":10.5,"stop":11.5,"interrupt":12,"ask":13,"phone":14,"swipe":15.5,"approved":16,"private":18,"local":19.5,"outro":21,"pc":22,"rules":23,"logo":24,"end":25}};

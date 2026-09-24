@@ -6,21 +6,25 @@ Non-commercial, for one owner.
 
 ## Launch video
 
-[![Jarvis launch video: Your assistant. Your PC. Your rules.](brag-output/brag.jpg)](brag-output/brag.mp4)
+[![Jarvis launch video v2: it learns, it adapts, it scales](videos/v2/jarvis-launch-v2.jpg)](videos/v2/jarvis-launch-v2.mp4)
 
-**Tap the picture to watch** (25 seconds, sound on). It opens the video file,
-and GitHub plays it in the browser.
+**Tap the picture to watch v2** (35 seconds, sound on). It opens the video
+file, and GitHub plays it in the browser.
 
-What it shows: the reactor face waking up to "Hey Jarvis", four of the face
-designs, the face changing as it listens, thinks and speaks, being cut off
-mid-sentence with "stop", the phone approval card being swiped to approve,
-and the desktop and phone joined over the private network.
+What it shows: Jarvis learning you over time (it proposes facts, keeps only
+the ones you accept, and remembers what changed), learning your voice,
+waiting while you think, asking before it acts, and being cut off
+mid-sentence with "stop". Then how it scales: one graphics card today, ready
+for a second card, and next, any 8 GB card and up to two. Each claim is
+marked on screen as today, ready or next.
 
-The faces in the video are not drawings of the app. They are the app's own
-face code from `jarvis-desktop/src/faces.html`, run frame by frame. The music
-was written for the video, in code, on the same beat as the cuts. Everything
-needed to make the video again is in [`brag-output/`](brag-output/): the plan,
-the Hyperframes project, and the scripts that produce the faces and the music.
+The faces in the video are the app's own face code from
+`jarvis-desktop/src/faces.html`, run frame by frame. The music was written
+for the video, in code, on the same beat as the cuts.
+
+Every version is kept in [`videos/`](videos/): the first one is
+[v1](videos/v1/jarvis-launch-v1.mp4). Each folder also has the plan and the
+project needed to make that video again.
 
 ## How it fits together
 
