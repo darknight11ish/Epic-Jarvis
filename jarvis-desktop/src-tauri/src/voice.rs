@@ -892,6 +892,18 @@ async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
                 .to_string(),
         ),
         WakeReadiness::Off => {
+            // Asking for it raises an approval card, so it is held while
+            // the event stream is stale - rule 4, the same one-direction
+            // hold as the second card's and the big model's ON. Stopping
+            // listening never comes here and is never held.
+            if app.state::<crate::stream::StreamState>().link().stale {
+                return Err(
+                    "\"Hey Jarvis\" is off, and turning it on needs your approval. The \
+                     connection to Jarvis is catching up, so that is held until it does - \
+                     try again in a moment."
+                        .to_string(),
+                );
+            }
             let reply: serde_json::Value = client
                 .post(format!("{base}/api/voice/wake"))
                 .headers(jarvis_headers(app)?)

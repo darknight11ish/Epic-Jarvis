@@ -2403,6 +2403,10 @@ pub async fn get_second_card(app: AppHandle) -> Result<serde_json::Value, String
 /// `pending: true` until the owner decides it there. OFF is immediate, because
 /// it only narrows what runs. There is no form that sends more than one
 /// switch. Settings window only, like [`get_second_card`].
+///
+/// ON is held while the event stream is stale - rule 4, the same
+/// one-direction hold as [`set_big_model`]: the card it raises should be
+/// answered by someone looking at a live queue. OFF always goes through.
 #[tauri::command]
 pub async fn set_second_card(
     app: AppHandle,
@@ -2410,6 +2414,13 @@ pub async fn set_second_card(
     enabled: bool,
 ) -> Result<serde_json::Value, String> {
     let feature = second_card_feature(&feature)?;
+    if enabled && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so nothing can be turned on until \
+             it does. Turning things off still works."
+                .to_string(),
+        );
+    }
     let base = jarvis_base(&app);
     let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
         .post(format!("{base}{SECOND_CARD_PATH}"))

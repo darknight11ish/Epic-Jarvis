@@ -172,6 +172,21 @@ await check("CONTROL (Rust): every wake-word clip and turn check is re-checked f
   assert.match(fnBody(voice, "async fn ensure_wake_ready("), /wake_audio_refusal\(&base\)/);
 });
 
+// AP-2 / CONN-4 (audit 3): asking to turn the wake word on raises an
+// approval card, and was not held on a stale link.
+await check("CONTROL (Rust): asking to turn \"hey Jarvis\" on is held on a stale link, before its POST", async () => {
+  const ready = fnBody(rustSrc("voice.rs"), "async fn ensure_wake_ready(");
+  const off = ready.indexOf("WakeReadiness::Off => {");
+  assert.ok(off > -1);
+  const branch = ready.slice(off);
+  const hold = branch.indexOf("app.state::<crate::stream::StreamState>().link().stale");
+  const post = branch.indexOf('.post(format!("{base}/api/voice/wake"))');
+  assert.ok(hold > -1, "the Off branch has no stale-link hold");
+  assert.ok(post > -1 && hold < post, "the stale-link hold comes after the POST");
+  // Only the ON request is held: the Ready branch (already on) is not.
+  assert.doesNotMatch(ready.slice(0, off), /link\(\)\.stale/);
+});
+
 await check("CONTROL (Rust): changing the server address in Settings stops \"hey Jarvis\" listening", async () => {
   const set = fnBody(rustSrc("commands.rs"), "pub fn set_api_settings(");
   const save = set.lastIndexOf(".save()");

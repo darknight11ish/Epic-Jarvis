@@ -441,6 +441,20 @@ await check("CONTROL: both commands send X-Jarvis-Client: hud and the token the 
   assert.doesNotMatch(unreachable, /\{err\}|\{e\}|err\.to_string/);
 });
 
+// AP-2 / CONN-4 (audit 3): the big model's ON was held on a stale link and
+// the second card's was not, though both raise the same kind of card.
+await check("CONTROL: ON is held on a stale link before anything is sent; OFF never is", async () => {
+  const rust = read("src-tauri/src/commands.rs");
+  const set = fnBody(rust, "pub async fn set_second_card(");
+  const hold = set.indexOf("if enabled && app.state::<crate::stream::StreamState>().link().stale {");
+  const post = set.indexOf(".post(");
+  assert.ok(hold > -1, "set_second_card has no stale-link hold");
+  assert.ok(hold < post, "the stale-link hold comes after the POST");
+  // One direction only: the hold is conditioned on `enabled`, never on OFF.
+  assert.doesNotMatch(set, /if !enabled && [^\n]*stale/);
+  assert.match(set.slice(hold, post), /Turning things off still works\./);
+});
+
 await check("CONTROL: only the settings window may read or change the second card", async () => {
   const toml = read("src-tauri/permissions/surfaces.toml");
   const sets = toml.split("[[set]]").slice(1);
