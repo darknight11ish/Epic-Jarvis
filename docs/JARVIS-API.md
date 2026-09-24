@@ -428,7 +428,7 @@ read the turn as local, which it is.
 
 **`second_card` in `X-Jarvis-Route`** (`second-card.patch`, 2026-09-24): on a
 turn the second graphics card answered, `where` is still `"local"` (it is
-this PC), `lane` is the model really answering (e.g. `"qwen3:14b"`), and
+this PC), `lane` is the model really answering (e.g. `"qwen3:8b"`), and
 `second_card` says why: `"long_context"` or `"vision"`. Absent on every other
 turn. See section 12.
 
@@ -522,8 +522,15 @@ most 2 s of speech (`STOP_MAX_SECONDS`) is put to the stop-word model
 the reply is `stop: true` with `owner: false`, `ok: false`, `text: ""` -
 no voice check, no speech-to-text, nothing kept - and the desktop app
 silences the reply it is speaking; nothing else happens. Ignored (a plain
-refusal) while Jarvis itself said "stop" in the last 30 s. Every reply
-carries `stop` (false otherwise). The status's `wake` block adds
+refusal) while Jarvis itself said "stop" in the last 30 s: then the reply
+has `stop: false`, `stop_ignored: true`, and a `reason` sentence saying so
+and how many seconds to wait, which an app can show as it is. "Said stop"
+means the whole word (`\bstop\b`, so "stopped" or "stopwatch" do not
+count), and it is kept per app: words `say()` was told were for the phone
+only hold back the phone's microphone, and the same for the desktop. Words
+said with no app named - which is what the say route does today - still
+hold back both. Every reply carries `stop` and `stop_ignored` (false
+otherwise). The status's `wake` block adds
 `stop_word: {available, threshold, why}`. The phone spots "stop" on its own
 (the same numbers, `assets/wakeword/stop_head.bin`) and sends nothing for it.
 
@@ -639,7 +646,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/watch/report` | GET | `routes.rs:27` | **no** | A peek. Marking read is a POST on purpose. |
 | `/api/memory/status` | GET | `routes.rs:28` | **no** | `{available, db, facts, current, retired, embedder, semantic, vector_search, unembedded, sleep_time}` - `MemoryStore.status()` plus the route's own two. `facts` counts retired ones too; `current` is what is in use. |
 | `/api/memory/pending` | GET | `routes.rs` (`memory_pending`), as `?retire_cards=1&sleep_offer=1` | via `probe`, as `/api/memory/pending?retire_cards=1&sleep_offer=1` (`MemoryCards.PENDING_PATH`, read by `JarvisRuntime.refreshBrain`/`refreshMemoryQueue`) | The review QUEUE, never the corpus. Both apps ask for retire cards because they label them correctly, and for the overnight-tidy card because they show it - see below. The HUD page reads it plainly, for a count only. |
-| `/api/memory/facts` | GET | `routes.rs:32`, `brain.rs:413` | `JarvisApi.kt:429` | Takes `?known_at=<unix seconds>` — "what did I believe then?" |
+| `/api/memory/facts` | GET | `routes.rs:32`, `brain.rs:413` | `JarvisApi.kt:429` | Takes `?known_at=<unix seconds>` — "what did I believe then?" Each fact's `current` is judged as Jarvis knew it at that moment, not as of today: a fact retired later (`retired_at` after that moment) was current then; `valid_to` counts only while `retired_at` is empty (`bitemporal.patch`). |
 | `/api/memory/export` | GET | `brain.rs` `brain_memory_export` | **no** | Everything, current and retired. The desktop saves it to a file the owner picks in the Windows "Save as" dialog - never the clipboard, which Windows can sync to other devices. |
 | `/api/initiative` | GET | `routes.rs:33` | via `probe` | The **only** list route that uses the key `items`. |
 | `/api/attention` | GET | `attention.rs:54`, `routes.rs:34` | `JarvisApi.kt:277` | Nests the budget; the phone flattens it (`ApiModels.kt:366`). |
@@ -977,7 +984,7 @@ Stop, Pause and notes through.
 
 | Route | Body | Answers | What it does |
 |---|---|---|---|
-| `POST /api/notes/capture` | `{"target": "logseq"\|"joplin"\|"obsidian", "text": "…", "title"?: "…", "notebook"?: "…"}` | **200** job, finished; **202** job, `state: "waiting"` (an approval card is up); **400** empty / unknown target; **503** not set up (no graph folder, no token, no vault, a daily-note format it cannot follow — `message` says which, starting "X isn't set up on your PC" when it is the setup); **429** four notes already waiting | Files the owner's own words. No model. Written through `jarvis_gate` as `append_logseq_journal` / `create_joplin_note` / `append_obsidian_daily`, under the owner's own tier for those in `jarvis-framework.toml`. |
+| `POST /api/notes/capture` | `{"target": "logseq"\|"joplin"\|"obsidian", "text": "…", "title"?: "…", "notebook"?: "…"}` | **200** job, finished; **202** job, `state: "waiting"` (an approval card is up); **400** empty / unknown target, or a body that is not a JSON object (`{"ok": false, "state": "not_filed", "error", "message"}`); **503** not set up (no graph folder, no token, no vault, a daily-note format it cannot follow — `message` says which, starting "X isn't set up on your PC" when it is the setup); **429** four notes already waiting (`state: "not_filed"`, with `error` and a `message` saying why) | Files the owner's own words. No model. Written through `jarvis_gate` as `append_logseq_journal` / `create_joplin_note` / `append_obsidian_daily`, under the owner's own tier for those in `jarvis-framework.toml`. |
 | `GET /api/notes/capture?id=…` | — | 200/202 job; 404 unknown id | How that note ended. |
 | `GET /api/notes/capture` (no id) | — | **200** `{"ok": true, "targets": ["logseq", "joplin", "obsidian"]}` — only those set up on the PC, names only; a backend from before 2026-09-24 answers **404** (its "unknown id") | Which note apps to show. Both apps show only these, and show none (saying why) when this cannot be read. |
 
@@ -1023,7 +1030,7 @@ deciding whether pictures can be sent. `tools/check_parity.py` records
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/second-card` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_second_card.py` is missing | Token + origin. Card names and hardware ids (`GPU-...`); never a token. Re-read it after a card is decided - there is no event for it. |
-| `POST /api/second-card` | `{"feature": "master" \| "<feature id>", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits; **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), or `second_card_enable` is not tier `ask` | ON is one approval card (action `second_card_enable`). OFF is immediate. Show `error` word for word. |
+| `POST /api/second-card` | `{"feature": "master" \| "<feature id>", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, or (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card; **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), or the switch's action is not tier `ask` (`second_card_enable`, or `second_card_browser_enable` for Browser control) | ON is one approval card: action `second_card_enable`, except Browser control, which has its own action `second_card_browser_enable` because it lets Jarvis work pages on the internet. OFF is immediate. Show `error` word for word. |
 
 **`status()`** - the real output of each case is in
 `jarvis-desktop/tests/fixtures/second-card-cases.json` (`one_card`,
@@ -1043,8 +1050,18 @@ not this summary.
  "lane": {"state": "off"|"starting"|"running"|"failed", "why": str},
  "main_ollama_pinned": true|false|null, "pin_note": str, "pin_command": str|null,
  "features": [{"id", "name", "what", "enabled", "active", "available", "needs": [ids],
-               "model", "model_installed": bool|null, "memory_gib": float|null, "why"}]}
+               "model", "model_installed": bool|null, "memory_gib": float|null, "why"}],
+ "last": {"feature", "outcome", "why", "at"} | null}
 ```
+
+`last` (2026-09-24) is how the most recent approval card for any of these
+switches ended: `outcome` is one of `enabled`, `denied`, `timed_out`,
+`refused`, `failed`, `withdrawn`; `why` is a sentence to show as it is (for
+example "You said no, so "Pictures" stays off."); `at` is Unix seconds.
+`null` when no card has ended since Jarvis started. The phone shows `why` as
+a line under that switch while it is off and not waiting
+(`SecondCard.lastLine`); the desktop uses it to say how a card it was
+waiting on ended (`settings.js` `cardLast`).
 
 Feature ids, in display order: `long_context`, `vision`, `learning`,
 `browser_control` (needs `long_context`), `wiki`. `enabled` is the owner's
@@ -1165,9 +1182,15 @@ file in its test resources). Build against that file, not this summary.
  "switches": [{"id": "wiki"|"deep_questions", "name", "what", "enabled", "available",
                "model", "model_name", "why"}],
  "measured": {"wiki": M|null, "deep_questions": M|null},
- "verified": false, "unverified": str}
+ "verified": false, "unverified": str,
+ "last": {"feature", "outcome", "why", "at"} | null}
 M = {"model", "seconds", "tokens", "tokens_per_s", "words", "words_per_s", "at"}
 ```
+
+`last` is the same as in `GET /api/second-card`: how the most recent card
+for one of these switches ended (`feature` is `master`, `wiki` or
+`deep_questions`), or `null`. `words` and `words_per_s` count every word
+the model wrote, its reasoning (`<think>`) included.
 
 Show `why` under each switch and each model; `note` (for example "a giant
 model on a SATA drive") as a warning line; `unverified` somewhere near the
@@ -1188,6 +1211,11 @@ A switch whose model has gone stays `enabled`: show it as on-but-waiting.
 
 `answer` is there only when `state` is `done`. `why` is the sentence to show
 under each job (on `done` it says the speed; on `failed`, what went wrong).
+An answer cut off while the model was still reasoning (a `<think>` with no
+`</think>`) is `failed`, and nothing is kept. An answer cut off at the length
+limit after the reasoning closed is `done`, and `why` says it may end
+mid-sentence. While the big model is on another job, a question stays
+`loading` and `why` says it is waiting for that job.
 Times are Unix seconds. The answers are kept on the PC in
 `<config dir>/deep-questions.jsonl` (the last 100), so they survive a
 restart; questions still waiting when the backend stops are lost.
