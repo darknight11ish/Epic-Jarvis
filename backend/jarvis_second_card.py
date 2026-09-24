@@ -286,6 +286,62 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def _big_model():
+    """jarvis_big_model, or None. Imported when asked, never at load."""
+    try:
+        import jarvis_big_model
+        return jarvis_big_model
+    except Exception:
+        return None
+
+
+def _claim_card(uuid: str) -> Optional[str]:
+    """jarvis_compute.claim_card for this lane: None when the card is ours,
+    else who holds it."""
+    if compute is None or not hasattr(compute, "claim_card"):
+        return None
+    try:
+        return compute.claim_card(uuid, "second_card")
+    except Exception:
+        return None
+
+
+def _release_card(uuid: str) -> None:
+    if compute is None or not uuid or not hasattr(compute, "release_card"):
+        return
+    try:
+        compute.release_card(uuid, "second_card")
+    except Exception:
+        pass
+
+
+def big_model_holds(uuid: str, name: str) -> Optional[str]:
+    """Why the second Ollama must not start on this card because the big
+    model (colibri, with [big_model] cuda = "on") is using it, in plain
+    words; None when it is not. Reads only."""
+    if not uuid:
+        return None
+    bm = _big_model()
+    ec = None
+    if bm is not None and hasattr(bm, "engine_card"):
+        try:
+            ec = bm.engine_card()
+        except Exception:
+            ec = None
+    held = bool(ec and str(ec.get("uuid") or "").lower() == str(uuid).lower())
+    if not held and compute is not None and hasattr(compute, "card_holder"):
+        try:
+            held = compute.card_holder(uuid) == "big_model"
+        except Exception:
+            held = False
+    if not held:
+        return None
+    mins = (ec or {}).get("idle_minutes")
+    after = (f"it stops after {mins} idle minutes" if mins
+             else "it stops when it has been idle for a while")
+    return f"the big model is using the {name}; {after}"
+
+
 # --------------------------------------------------------------------------
 #   Settings: the toml for how, a small file for the owner's switches
 # --------------------------------------------------------------------------
@@ -610,6 +666,7 @@ class _LaneProcess:
         self.num_ctx = 0
         self.failed_at = -1e9
         self.gen = 0
+        self.claimed = ""          # the card id whose claim this lane holds
 
     def url(self) -> str:
         return f"http://{HOST}:{self.port}"
@@ -630,6 +687,7 @@ class _LaneProcess:
             if self.state == "running" and same and not self.alive():
                 code = self._exit_code()
                 self._clear()
+                self._drop_card()
                 self._fail(f"the second Ollama stopped by itself (exit code {code}); "
                            f"Jarvis will try again in a minute. Its log: {_log_path()}")
                 return
@@ -652,6 +710,19 @@ class _LaneProcess:
     def _fail(self, why: str) -> None:
         self.state, self.why, self.failed_at = "failed", why, time.monotonic()
 
+    def _drop_card(self) -> None:
+        """Gives back the card's claim once no process of ours is on it."""
+        card, self.claimed = self.claimed, ""
+        _release_card(card)
+
+    def hold(self, why: str) -> None:
+        """Not started, and not a failure: something else (the big model)
+        is using the card. Tried again on the next look."""
+        with self.lock:
+            if self.proc is not None:
+                self._stop_proc()
+            self.state, self.why = "off", why
+
     def _start(self, uuid: str, card: str, num_ctx: int, port: int) -> None:
         self.uuid, self.card, self.num_ctx, self.port = uuid, card, num_ctx, port
         exe = _which("ollama")
@@ -672,6 +743,15 @@ class _LaneProcess:
                            keep_alive=_keep_alive())
         except ValueError as exc:
             return self._fail(str(exc))
+        # The card's claim, taken BEFORE the process starts. jarvis_big_model
+        # takes the same claim before it starts colibri on this card, so the
+        # two can never both be starting here, whatever the timing.
+        if _claim_card(uuid) is not None:
+            self.state = "off"
+            self.why = (big_model_holds(uuid, card)
+                        or f"the big model is starting on the {card}")
+            return None
+        self.claimed = uuid
         kwargs: dict = {"env": env, "stdin": subprocess.DEVNULL}
         log = None
         try:
@@ -691,6 +771,7 @@ class _LaneProcess:
             self.proc = _popen([exe, "serve"], **kwargs)
         except Exception as exc:
             self.proc = None
+            self._drop_card()
             return self._fail(f"the second Ollama could not be started ({type(exc).__name__})")
         finally:
             if log is not None:
@@ -714,6 +795,7 @@ class _LaneProcess:
                 if not self.alive():
                     code = self._exit_code()
                     self._clear()
+                    self._drop_card()
                     return self._fail(f"the second Ollama stopped straight away (exit code "
                                       f"{code}). Its log: {_log_path()}")
             if _version_at(self.port) is not None:
@@ -733,6 +815,7 @@ class _LaneProcess:
     def _stop_proc(self) -> None:
         p, self.proc = self.proc, None
         self.gen += 1
+        self._drop_card()
         if p is None:
             return
         try:
@@ -858,6 +941,16 @@ def _reconcile(sw: dict, det: dict) -> None:
         if _wanted(sw, det):
             second = det["_second"]
             _, ctx, _ = _long_context_plan(second.total_mb)
+            ours = (_LANE.state in ("starting", "running") and _LANE.uuid == second.uuid
+                    and _LANE.alive())
+            if not ours:
+                # The big model (colibri with [big_model] cuda = "on") may be
+                # on this very card. It will not start while this lane runs
+                # (jarvis_big_model._cuda_plan); this is the other direction.
+                held = big_model_holds(second.uuid, second.name)
+                if held:
+                    _LANE.hold(held)
+                    return
             _LANE.ensure(second.uuid, second.name, ctx)
         elif _LANE.state != "off" or _LANE.proc is not None:
             if not det.get("capable"):
@@ -1152,6 +1245,21 @@ def _audit(event: str, detail: dict) -> None:
         pass
 
 
+def _shares_with_big_model() -> str:
+    """One line for the card when the big model may use this card too, or
+    ""."""
+    bm = _big_model()
+    try:
+        on = bm is not None and bm._cuda_setting() == "on"
+    except Exception:
+        on = False
+    if not on:
+        return ""
+    return ("\n\nThe big model is set to use this card too ([big_model] cuda = \"on\"). "
+            "They never share it: while the big model is using the card, this waits "
+            "until it stops.")
+
+
 def describe_on(feature: str, det: dict) -> str:
     """The approval card. Every word from here; what refusing costs is on it."""
     s = det["second"]
@@ -1159,7 +1267,7 @@ def describe_on(feature: str, det: dict) -> str:
     card = f"the {s['name']} ({_gb(s['total_mb'])}, id {s['uuid']})"
     lane = (f"Jarvis starts a second copy of Ollama that uses only that card and "
             f"listens on {HOST}:{_port()} - this PC only, not your network or the "
-            f"internet. Nothing leaves this PC.")
+            f"internet. Nothing leaves this PC.") + _shares_with_big_model()
     if feature == "master":
         return (
             "Let Jarvis use the second graphics card?\n\n"
@@ -1295,6 +1403,12 @@ def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = No
         if missing:
             names = ", ".join(f"\"{_BY_ID[d]['name']}\"" for d in missing)
             return 400, {"error": f"{label} needs {names} on first."}
+    if feature != "master" or any(sw["features"].values()):
+        # This ON would start the second Ollama. Not while the big model is
+        # on the card: the approval would turn on something that cannot run.
+        held = big_model_holds(det["second"]["uuid"], det["second"]["name"])
+        if held:
+            return 409, {"error": f"Not now: {held}."}
     try:
         tier = tier_of(ACTION)
     except Exception as exc:

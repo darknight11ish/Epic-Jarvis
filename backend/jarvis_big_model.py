@@ -930,11 +930,51 @@ def _cuda_plan() -> tuple:
         return None, (f"[big_model] cuda is \"on\", but there is no capable second card "
                       f"({sc['why']}). colibri is never put on the main card: that one is "
                       f"everyday chat"), False
-    if sc["lane"] in ("starting", "running"):
+    if sc["lane"] in ("starting", "running") or _card_holder(sc["uuid"]) == "second_card":
         return None, (f"[big_model] cuda is \"on\", but the second card's own features are "
                       f"running on the {sc['name']} right now, so colibri will not share "
                       f"it"), False
     return sc["uuid"], (f"the {sc['name']} (the second card), and only that card"), True
+
+
+def _compute():
+    try:
+        import jarvis_compute
+        return jarvis_compute
+    except Exception:
+        return None
+
+
+def _card_holder(uuid: Optional[str]) -> Optional[str]:
+    cp = _compute()
+    if cp is None or not uuid or not hasattr(cp, "card_holder"):
+        return None
+    try:
+        return cp.card_holder(uuid)
+    except Exception:
+        return None
+
+
+def _claim_card(uuid: str) -> Optional[str]:
+    """jarvis_compute.claim_card for colibri: None when the card is ours,
+    else who holds it. Without jarvis_compute there is nothing to share."""
+    cp = _compute()
+    if cp is None or not hasattr(cp, "claim_card"):
+        return None
+    try:
+        return cp.claim_card(uuid, "big_model")
+    except Exception:
+        return None
+
+
+def _release_card(uuid: Optional[str]) -> None:
+    cp = _compute()
+    if cp is None or not uuid or not hasattr(cp, "release_card"):
+        return
+    try:
+        cp.release_card(uuid, "big_model")
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -997,6 +1037,7 @@ class _Engine:
             if self.state == "ready" and self.model_id == row["id"] and not self.alive():
                 code = self._exit_code()
                 self.proc = None
+                self._drop_card()
                 self._fail(f"colibri stopped by itself (exit code {code}). Its log: "
                            f"{_log_path()}")
                 return
@@ -1046,6 +1087,15 @@ class _Engine:
             env = engine_env(key, cuda_uuid=uuid)
         except ValueError as exc:
             return self._fail(str(exc))
+        if uuid:
+            # Taken BEFORE the process starts. jarvis_second_card takes the
+            # same claim before its own start, so only one of the two can
+            # start on the card, whatever the timing.
+            holder = _claim_card(uuid)
+            if holder is not None:
+                return self._fail(f"[big_model] cuda is \"on\", but the second card's own "
+                                  f"features are starting on it right now, so colibri will "
+                                  f"not share it")
         kwargs: dict = {"env": env, "stdin": subprocess.DEVNULL, "cwd": col.get("dir") or None}
         log = None
         try:
@@ -1064,6 +1114,7 @@ class _Engine:
             self.proc = _popen(argv, **kwargs)
         except Exception as exc:
             self.proc = None
+            _release_card(uuid)
             return self._fail(f"colibri could not be started ({type(exc).__name__})")
         finally:
             if log is not None:
@@ -1105,6 +1156,7 @@ class _Engine:
                 if not self.alive():
                     code = self._exit_code()
                     self.proc = None
+                    self._drop_card()
                     return self._fail(f"colibri stopped while loading (exit code {code}). "
                                       f"Its log: {_log_path()}")
             if self._probe():
@@ -1123,10 +1175,16 @@ class _Engine:
                 self._fail(f"colibri did not finish loading within {_load_minutes()} minutes "
                            f"([big_model] load_minutes). Its log: {_log_path()}")
 
+    def _drop_card(self) -> None:
+        """Gives back the card's claim (jarvis_compute) once no process of
+        ours is on it."""
+        card, self.card = self.card, None
+        _release_card(card)
+
     def _stop_proc(self) -> None:
         p, self.proc = self.proc, None
         self.gen += 1
-        self.card = None
+        self._drop_card()
         if p is None:
             return
         try:
@@ -1194,6 +1252,7 @@ def _reconcile(sw: dict) -> None:
             if _ENGINE.state == "ready" and not _ENGINE.alive():
                 code = _ENGINE._exit_code()
                 _ENGINE.proc = None
+                _ENGINE._drop_card()
                 _ENGINE._fail(f"colibri stopped by itself (exit code {code}). Its log: "
                               f"{_log_path()}")
     except Exception as exc:
@@ -1209,6 +1268,22 @@ def shutdown() -> None:
 
 
 atexit.register(shutdown)
+
+
+def engine_card() -> Optional[dict]:
+    """The graphics card colibri is on right now, or None: {"uuid",
+    "state", "idle_minutes"}. There is only ever one with [big_model] cuda =
+    "on", and it is only ever the SECOND card. Reads only; starts and stops
+    nothing. jarvis_second_card asks this before it starts its own Ollama on
+    that card (it does not while colibri is loading or running there).
+    Never raises."""
+    try:
+        state, card = _ENGINE.state, _ENGINE.card
+        if card and state in ("loading", "ready"):
+            return {"uuid": card, "state": state, "idle_minutes": _idle_minutes()}
+    except Exception:
+        pass
+    return None
 
 
 # --------------------------------------------------------------------------

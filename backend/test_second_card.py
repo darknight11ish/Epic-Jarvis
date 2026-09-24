@@ -335,6 +335,84 @@ def t_the_second_ollama():
               and "choice is kept" in st["features"][0]["why"])
 
 
+class _FakeColibri:
+    """A colibri process as jarvis_big_model records one: alive, never real."""
+    pid = 900003
+
+    def poll(self):
+        return None
+
+
+def _colibri_on(uuid):
+    """jarvis_big_model's engine, loaded on `uuid` with cuda = "on", the way
+    _Engine._start leaves it (the claim included)."""
+    import jarvis_big_model as BM
+    BM._reset_for_tests()
+    BM._ENGINE.state, BM._ENGINE.card, BM._ENGINE.proc = "ready", uuid, _FakeColibri()
+    CP.claim_card(uuid, "big_model")
+    return BM
+
+
+def t_big_model_holds_the_card():
+    # AP-1: the lane used to start on the card colibri was using. Only the
+    # reverse (colibri refusing while the lane runs) was guarded.
+    import jarvis_big_model as BM
+    kill = BM._kill_tree
+    BM._kill_tree = lambda p: None
+    try:
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True, long_context=True)
+            _colibri_on(G.U_2060)
+            st = SC.status()
+            check("colibri on the second card: the lane is not started on it",
+                  not w.started and st["lane"]["state"] == "off", st["lane"])
+            check("and says why, in words",
+                  st["lane"]["why"] == ("the big model is using the NVIDIA GeForce RTX 2060; "
+                                        "it stops after 10 idle minutes"), st["lane"]["why"])
+            check("engine_card() names the card, and reads only",
+                  BM.engine_card() == {"uuid": G.U_2060, "state": "ready", "idle_minutes": 10})
+            check("lane_for is None meanwhile", SC.lane_for("long_context") is None
+                  and not w.started)
+            code, out = SC.request_change("vision", True, gate=lambda *a: Verdict(True))
+            check("ON while colibri holds it: 409 with the same sentence, no card",
+                  code == 409 and out["error"] == ("Not now: the big model is using the NVIDIA "
+                                                   "GeForce RTX 2060; it stops after 10 idle "
+                                                   "minutes."), (code, out))
+            BM._reset_for_tests()          # colibri stopped: the claim goes with it
+            check("colibri stopped: its claim is given back", CP.card_holder(G.U_2060) is None)
+            st = SC.status()
+            check("and the lane starts on the next look",
+                  len(w.started) == 1 and st["lane"]["state"] == "running", st["lane"])
+            check("the lane holds the card's claim while it runs",
+                  CP.card_holder(G.U_2060) == "second_card")
+            SC.request_change("long_context", False)
+            check("the lane stopped: its claim is given back", CP.card_holder(G.U_2060) is None)
+        # The race: colibri has taken the claim and is starting, but its state
+        # is not yet readable. The claim alone keeps the lane off the card.
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True, long_context=True)
+            BM._reset_for_tests()
+            CP.claim_card(G.U_2060, "big_model")
+            try:
+                st = SC.status()
+                check("the claim alone (colibri mid-start): the lane does not start",
+                      not w.started and st["lane"]["state"] == "off"
+                      and "big model" in st["lane"]["why"], st["lane"])
+            finally:
+                CP.release_card(G.U_2060, "big_model")
+        with G.World(G.SMI["2080s_2060"]) as w:
+            w.switches(master=True)
+            seen = []
+            with mock.patch.object(BM, "_cuda_setting", lambda: "on"):
+                SC.request_change("long_context", True,
+                                  gate=lambda a, d, p: seen.append(p) or Verdict(True))
+            check("with [big_model] cuda = \"on\", the card says they never share it",
+                  seen and "They never share it" in seen[0], seen)
+    finally:
+        BM._kill_tree = kill
+        BM._reset_for_tests()
+
+
 def t_lane_for_is_none_when_not_ready():
     def ready(**kw):
         return G.World(G.SMI["2080s_2060"], **kw)

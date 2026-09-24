@@ -416,6 +416,32 @@ def t_the_graphics_card():
               and "never put on the main card" in BM.status()["engine"]["why"])
     with World(cfg={"cuda": "maybe"}) as w:
         check("a cuda value it does not know is 'off'", BM.status()["cuda"]["setting"] == "off")
+    # AP-1: the check-then-start race. The second card's lane has taken the
+    # card's claim (jarvis_compute) but its state still reads "off".
+    import jarvis_compute as CP
+    with World(cfg={"cuda": "on"}, second=capable) as w:
+        w.switches(master=True, deep_questions=True)
+        CP.claim_card(G.U_2060, "second_card")
+        try:
+            check("the lane's claim alone (it is mid-start): colibri is not started on the card",
+                  BM.lane_for("deep_questions") is None and not w.started
+                  and BM.engine_card() is None, BM.status()["engine"])
+        finally:
+            CP.release_card(G.U_2060, "second_card")
+    with World(cfg={"cuda": "on"}, second=capable) as w:
+        w.switches(master=True, deep_questions=True)
+        BM.lane_for("deep_questions")
+        check("colibri on the card holds its claim, and engine_card() says which card",
+              CP.card_holder(G.U_2060) == "big_model"
+              and (BM.engine_card() or {}).get("uuid") == G.U_2060)
+        BM.request_change("deep_questions", False)
+        check("switched off: colibri stopped and the claim given back",
+              CP.card_holder(G.U_2060) is None and BM.engine_card() is None)
+    with World() as w:
+        w.switches(master=True, deep_questions=True)
+        BM.lane_for("deep_questions")
+        check("cuda off (the default): colibri holds no card", BM.engine_card() is None
+              and CP.card_holder(G.U_2060) is None)
 
 
 def t_lane_for_is_none_when_not_ready():
