@@ -414,6 +414,9 @@ fun BrainScreen(
             item(key = "compute") {
                 Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
             }
+            // How much Jarvis remembers, and whether it is learning - the
+            // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
+            item(key = "memory-counts") { MemoryCountsSection() }
             item(key = "memory") {
                 // The QUEUE, not the corpus. /api/graph is desktop-only by the
                 // contract's own instruction, and a memory graph is not a thing

@@ -2334,6 +2334,21 @@ object JarvisRuntime {
                 (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error))
         }
 
+    // --------------------------------------------------- memory counts ----
+
+    /** `GET /api/memory/status` - see [com.jarvis.client.net.MemoryCounts]. Read-only. */
+    suspend fun memoryStatus(): ApiResult<JsonObject> =
+        api.probe(com.jarvis.client.net.MemoryCounts.STATUS_PATH)
+
+    /**
+     * Whether learning is on, off `GET /api/memory/facts?limit=1`. Read-only:
+     * the phone has no learning switch, because turning it on must ask first
+     * and the PC's route does not ([com.jarvis.client.net.MemoryCounts]).
+     */
+    suspend fun memoryLearning(): Boolean? =
+        (api.probe(com.jarvis.client.net.MemoryCounts.LEARNING_PATH) as? ApiResult.Ok)
+            ?.value?.let { com.jarvis.client.net.MemoryCounts.learning(it) }
+
     // ----------------------------------------------------------- skills ----
 
     /**
