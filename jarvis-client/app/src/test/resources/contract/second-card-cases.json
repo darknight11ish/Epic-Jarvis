@@ -1,0 +1,693 @@
+{
+  "_about": "Real output of backend/jarvis_second_card.status() (GET /api/second-card), one per named case, made by tools/gen_second_card_cases.py. The nvidia-smi lines behind them are in nvidia-smi's real format with made-up values; they were not captured on the owner's PC. Do not edit by hand: re-run the tool.",
+  "cases": {
+    "capable_off": {
+      "active": false,
+      "detected": {
+        "capable": true,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "primary",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "everyday chat runs here: a monitor is plugged into it"
+          },
+          {
+            "compute_cap": 7.5,
+            "display_active": false,
+            "free_mb": 12030,
+            "index": 1,
+            "name": "NVIDIA GeForce RTX 2060",
+            "role": "second",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+            "why": "the second-card features would run here"
+          }
+        ],
+        "primary": {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "second": {
+          "compute_cap": 7.5,
+          "index": 1,
+          "name": "NVIDIA GeForce RTX 2060",
+          "total_mb": 12288,
+          "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+        },
+        "why": "the NVIDIA GeForce RTX 2060 (12 GB) can take the second-card features; everyday chat stays on the NVIDIA GeForce RTX 2080 SUPER"
+      },
+      "enabled": false,
+      "features": [
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "long_context",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "vision",
+          "memory_gib": 6.68,
+          "model": "qwen2.5vl:7b",
+          "model_installed": false,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "why": "Off. Needs Longer conversations on first."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "why": "Off."
+        }
+      ],
+      "lane": {
+        "state": "off",
+        "why": "nothing on the second card is switched on"
+      },
+      "main_ollama_pinned": false,
+      "pending": [],
+      "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
+      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama."
+    },
+    "capable_pending": {
+      "active": true,
+      "detected": {
+        "capable": true,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "primary",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "everyday chat runs here: a monitor is plugged into it"
+          },
+          {
+            "compute_cap": 7.5,
+            "display_active": false,
+            "free_mb": 12030,
+            "index": 1,
+            "name": "NVIDIA GeForce RTX 2060",
+            "role": "second",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+            "why": "the second-card features would run here"
+          }
+        ],
+        "primary": {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "second": {
+          "compute_cap": 7.5,
+          "index": 1,
+          "name": "NVIDIA GeForce RTX 2060",
+          "total_mb": 12288,
+          "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+        },
+        "why": "the NVIDIA GeForce RTX 2060 (12 GB) can take the second-card features; everyday chat stays on the NVIDIA GeForce RTX 2080 SUPER"
+      },
+      "enabled": true,
+      "features": [
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "long_context",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "why": "Off. A card to turn it on is waiting for your answer."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "vision",
+          "memory_gib": 6.68,
+          "model": "qwen2.5vl:7b",
+          "model_installed": false,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "why": "Off. Needs Longer conversations on first."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "why": "Off."
+        }
+      ],
+      "lane": {
+        "state": "off",
+        "why": "nothing on the second card is switched on"
+      },
+      "main_ollama_pinned": true,
+      "pending": [
+        "long_context"
+      ],
+      "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
+      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
+    },
+    "card_missing_but_enabled": {
+      "active": false,
+      "detected": {
+        "capable": false,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "primary",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "everyday chat runs here: a monitor is plugged into it"
+          }
+        ],
+        "primary": {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "second": null,
+        "why": "only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+      },
+      "enabled": true,
+      "features": [
+        {
+          "active": false,
+          "available": false,
+          "enabled": true,
+          "id": "long_context",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "why": "On, but it cannot run: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER). Your choice is kept; it works again once a capable second card is back."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": true,
+          "id": "vision",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "On, but it cannot run: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER). Your choice is kept; it works again once a capable second card is back."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        }
+      ],
+      "lane": {
+        "state": "off",
+        "why": "no capable second card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+      },
+      "main_ollama_pinned": null,
+      "pending": [],
+      "pin_command": null,
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+    },
+    "not_capable_old_card": {
+      "active": false,
+      "detected": {
+        "capable": false,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "primary",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "everyday chat runs here: a monitor is plugged into it"
+          },
+          {
+            "compute_cap": 6.1,
+            "display_active": false,
+            "free_mb": 8010,
+            "index": 1,
+            "name": "NVIDIA GeForce GTX 1080",
+            "role": "unused",
+            "total_mb": 8192,
+            "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36",
+            "why": "the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need"
+          }
+        ],
+        "primary": {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "second": null,
+        "why": "the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need"
+      },
+      "enabled": false,
+      "features": [
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "long_context",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "vision",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
+        }
+      ],
+      "lane": {
+        "state": "off",
+        "why": "no capable second card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need"
+      },
+      "main_ollama_pinned": false,
+      "pending": [],
+      "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
+      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama."
+    },
+    "one_card": {
+      "active": false,
+      "detected": {
+        "capable": false,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "primary",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "everyday chat runs here: a monitor is plugged into it"
+          }
+        ],
+        "primary": {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "second": null,
+        "why": "only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+      },
+      "enabled": false,
+      "features": [
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "long_context",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "vision",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        }
+      ],
+      "lane": {
+        "state": "off",
+        "why": "no capable second card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+      },
+      "main_ollama_pinned": null,
+      "pending": [],
+      "pin_command": null,
+      "pin_note": "Only one graphics card, so there is nothing to keep apart yet."
+    },
+    "running_long_context": {
+      "active": true,
+      "detected": {
+        "capable": true,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "primary",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "everyday chat runs here: a monitor is plugged into it"
+          },
+          {
+            "compute_cap": 7.5,
+            "display_active": false,
+            "free_mb": 12030,
+            "index": 1,
+            "name": "NVIDIA GeForce RTX 2060",
+            "role": "second",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+            "why": "the second-card features would run here"
+          }
+        ],
+        "primary": {
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "second": {
+          "compute_cap": 7.5,
+          "index": 1,
+          "name": "NVIDIA GeForce RTX 2060",
+          "total_mb": 12288,
+          "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+        },
+        "why": "the NVIDIA GeForce RTX 2060 (12 GB) can take the second-card features; everyday chat stays on the NVIDIA GeForce RTX 2080 SUPER"
+      },
+      "enabled": true,
+      "features": [
+        {
+          "active": true,
+          "available": true,
+          "enabled": true,
+          "id": "long_context",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which can read all of it.",
+          "why": "Working: qwen3:14b on the NVIDIA GeForce RTX 2060, with room for 16,384 tokens of conversation."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "vision",
+          "memory_gib": 6.68,
+          "model": "qwen2.5vl:7b",
+          "model_installed": false,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you, one approved step at a time, using the second card's extra room for long pages.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": 10.38,
+          "model": "qwen3:14b",
+          "model_installed": true,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card. The builder itself is not made yet, so this switch does nothing on its own today.",
+          "why": "Off."
+        }
+      ],
+      "lane": {
+        "state": "running",
+        "why": "running on 127.0.0.1:11435 (this PC only), using only the NVIDIA GeForce RTX 2060"
+      },
+      "main_ollama_pinned": true,
+      "pending": [],
+      "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
+      "pin_note": "Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER (CUDA_VISIBLE_DEVICES in your user settings). If you set it just now, quit Ollama and start it again."
+    }
+  }
+}

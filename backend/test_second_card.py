@@ -707,8 +707,8 @@ def t_the_toml():
 
 def t_the_fixture():
     rc = G.main(["--check"])
-    check("jarvis-desktop/tests/fixtures/second-card-cases.json equals a fresh run", rc == 0,
-          "run python3 tools/gen_second_card_cases.py")
+    check("second-card-cases.json (the desktop's and the phone's copy) equals a fresh run",
+          rc == 0, "run python3 tools/gen_second_card_cases.py")
     data = json.loads(G.FIXTURE.read_text(encoding="utf-8"))["cases"]
     check("the six named cases are there",
           set(data) == {"one_card", "capable_off", "capable_pending", "running_long_context",

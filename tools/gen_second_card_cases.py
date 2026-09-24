@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Writes jarvis-desktop/tests/fixtures/second-card-cases.json: what
-GET /api/second-card really answers, in six named situations.
+"""Writes jarvis-desktop/tests/fixtures/second-card-cases.json, and the
+phone's identical copy in jarvis-client/app/src/test/resources/contract/:
+what GET /api/second-card really answers, in six named situations.
 
     python3 tools/gen_second_card_cases.py            # write the file
     python3 tools/gen_second_card_cases.py --check    # compare only
@@ -26,6 +27,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 FIXTURE = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "second-card-cases.json"
+# The phone's copy, byte for byte the same, read by SecondCardContractTest.kt
+# from its test resources (the way contract/pending-rows.json is shared).
+# Written and checked together with the desktop's, so neither can drift.
+PHONE_FIXTURE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
+                 / "second-card-cases.json")
+COPIES = (FIXTURE, PHONE_FIXTURE)
 for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
@@ -220,16 +227,22 @@ def render() -> str:
 def main(argv) -> int:
     text = render()
     if "--check" in argv:
-        have = FIXTURE.read_text(encoding="utf-8") if FIXTURE.is_file() else ""
-        if have.replace("\r\n", "\n") != text:
-            print(f"{FIXTURE.relative_to(ROOT)} is out of date: run "
+        stale = []
+        for path in COPIES:
+            have = path.read_text(encoding="utf-8") if path.is_file() else ""
+            if have.replace("\r\n", "\n") != text:
+                stale.append(path)
+        for path in stale:
+            print(f"{path.relative_to(ROOT)} is out of date: run "
                   f"python3 tools/gen_second_card_cases.py")
+        if stale:
             return 1
-        print("second-card-cases.json matches the producer.")
+        print("second-card-cases.json matches the producer (desktop and phone copies).")
         return 0
-    FIXTURE.parent.mkdir(parents=True, exist_ok=True)
-    FIXTURE.write_text(text, encoding="utf-8", newline="\n")
-    print(f"wrote {FIXTURE.relative_to(ROOT)}")
+    for path in COPIES:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {path.relative_to(ROOT)}")
     return 0
 
 
