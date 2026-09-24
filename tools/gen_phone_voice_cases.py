@@ -367,6 +367,42 @@ def strict_cases():
         status["loosen_denied"] = scrub(S.status(), w)
 
     with World("both") as w:
+        # POST /api/voice/utterance's answer (jarvis_speech.hear().as_dict())
+        # for the owner's voice, with speech-to-text standing in: the fields
+        # the phone's "private answers stay on screen" rule reads.
+        train({1: owner_round(1)})
+        heard = {}
+
+        def hear(words, seconds=2.6):
+            with mock.patch.object(S, "_speech_span", return_value="skip"), \
+                    mock.patch.object(S, "_stt_engine", return_value=object()), \
+                    mock.patch.object(S, "_transcribe", return_value=words):
+                return scrub(S.hear(tone_wav(170.0, seconds), mic="phone").as_dict(), w)
+
+        heard["private_question"] = hear("What is on my calendar today?")
+        heard["plain_question"] = hear("What time is it?")
+        heard["too_short"] = hear("Lights off.", seconds=1.2)
+        post({"mode": "privacy", "value": "voice_is_enough"})
+        heard["voice_is_enough"] = hear("What is on my calendar today?")
+        answers["heard"] = heard
+
+    # The router's decision for a chat turn (jarvis_router.choose), which
+    # the PC's chat route puts into the X-Jarvis-Route header with more keys
+    # of its own (`injected_facts` among them - that route is on the owner's
+    # PC, not in this repository). A question the private-topic list
+    # catches is kept local by gate "private" - only reached when a cloud
+    # lane is offered; with none, the gate is "unavailable".
+    import jarvis_router as R
+    answers["route"] = {
+        "private": R.choose("Read me the latest email from my bank", local_model="jarvis-primary",
+                            lanes=["cloud-lane"]).as_dict(),
+        "no_cloud_lane": R.choose("Read me the latest email from my bank",
+                                  local_model="jarvis-primary", lanes=[]).as_dict(),
+        "plain": R.choose("What time is it?", local_model="jarvis-primary",
+                          lanes=["cloud-lane"]).as_dict(),
+    }
+
+    with World("both") as w:
         # The card for three rounds, raised and not answered yet.
         got = train({1: owner_round(1), 2: owner_round(2), 3: owner_round(3)}, spawn=never)
         answers["train_finish_waiting"] = scrub(answer(got[2]), w)

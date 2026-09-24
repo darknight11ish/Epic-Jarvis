@@ -2,6 +2,112 @@
   "_about": "Real output of the backend's voice modules for the phone's voice screens, made by tools/gen_phone_voice_cases.py: strict.status = jarvis_speech.status() (GET /api/voice/status), strict.answers = jarvis_voice_enroll.stage() (POST /api/voice/enroll), voices.status = jarvis_voices.status() (GET /api/voice/voices), voices.answers = its create/switch/delete/set_better (the POST routes). Speaker models, speech engines, the second card and the approval card are stand-ins. Folders, times and measured durations are made the same on every machine. Do not edit by hand: re-run the tool.",
   "strict": {
     "answers": {
+      "heard": {
+        "plain_question": {
+          "available": true,
+          "awake": false,
+          "awake_seconds": 0.0,
+          "engine": "sherpa-onnx:sense_voice",
+          "is_owner": true,
+          "min_seconds": 0.0,
+          "mode": "owner",
+          "ok": true,
+          "owner": true,
+          "private_aloud": false,
+          "question_private": false,
+          "reason": "",
+          "score": 0.9982,
+          "seconds": 0.5,
+          "source": "push_to_talk",
+          "stop": false,
+          "stop_ignored": false,
+          "strictness": "very_strict",
+          "text": "What time is it?",
+          "threshold": 0.5,
+          "too_short": false,
+          "voice_print": "phone",
+          "wake_heard": false,
+          "wake_score": 0.0
+        },
+        "private_question": {
+          "available": true,
+          "awake": false,
+          "awake_seconds": 0.0,
+          "engine": "sherpa-onnx:sense_voice",
+          "is_owner": true,
+          "min_seconds": 0.0,
+          "mode": "owner",
+          "ok": true,
+          "owner": true,
+          "private_aloud": false,
+          "question_private": true,
+          "reason": "",
+          "score": 0.9982,
+          "seconds": 0.5,
+          "source": "push_to_talk",
+          "stop": false,
+          "stop_ignored": false,
+          "strictness": "very_strict",
+          "text": "What is on my calendar today?",
+          "threshold": 0.5,
+          "too_short": false,
+          "voice_print": "phone",
+          "wake_heard": false,
+          "wake_score": 0.0
+        },
+        "too_short": {
+          "available": true,
+          "awake": false,
+          "awake_seconds": 0.0,
+          "engine": "",
+          "is_owner": false,
+          "min_seconds": 2.0,
+          "mode": "owner",
+          "ok": false,
+          "owner": false,
+          "private_aloud": false,
+          "question_private": false,
+          "reason": "that was too short to be sure it was you (1.2 seconds of speech; a command needs at least 2.0) - say a little more",
+          "score": 0.0,
+          "seconds": 0.5,
+          "source": "push_to_talk",
+          "stop": false,
+          "stop_ignored": false,
+          "strictness": "",
+          "text": "",
+          "threshold": 0.0,
+          "too_short": true,
+          "voice_print": "",
+          "wake_heard": false,
+          "wake_score": 0.0
+        },
+        "voice_is_enough": {
+          "available": true,
+          "awake": false,
+          "awake_seconds": 0.0,
+          "engine": "sherpa-onnx:sense_voice",
+          "is_owner": true,
+          "min_seconds": 0.0,
+          "mode": "owner",
+          "ok": true,
+          "owner": true,
+          "private_aloud": true,
+          "question_private": true,
+          "reason": "",
+          "score": 0.9982,
+          "seconds": 0.5,
+          "source": "push_to_talk",
+          "stop": false,
+          "stop_ignored": false,
+          "strictness": "very_strict",
+          "text": "What is on my calendar today?",
+          "threshold": 0.5,
+          "too_short": false,
+          "voice_print": "phone",
+          "wake_heard": false,
+          "wake_score": 0.0
+        }
+      },
       "measure": {
         "body": {
           "balanced": {
@@ -192,6 +298,35 @@
           "pending": false
         },
         "status": 409
+      },
+      "route": {
+        "no_cloud_lane": {
+          "complexity": 0.067,
+          "gate": "unavailable",
+          "inject_memory": true,
+          "lane": "jarvis-primary",
+          "offer": "",
+          "reason": "no cloud lane was offered",
+          "tainted": false
+        },
+        "plain": {
+          "complexity": 0.033,
+          "gate": "complexity",
+          "inject_memory": true,
+          "lane": "jarvis-primary",
+          "offer": "",
+          "reason": "complexity 0.033 is under the threshold",
+          "tainted": false
+        },
+        "private": {
+          "complexity": 0.067,
+          "gate": "private",
+          "inject_memory": true,
+          "lane": "jarvis-primary",
+          "offer": "",
+          "reason": "the question matches the private-topic backstop",
+          "tainted": false
+        }
       },
       "setting_card_waiting": {
         "body": {
