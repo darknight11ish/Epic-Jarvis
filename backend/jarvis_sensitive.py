@@ -46,15 +46,24 @@ flagged". "My sister's name is Anna" is flagged too. Not flagged: famous
 people named as a taste ("I'm a fan of Terry Pratchett"), pets and things
 ("My dog is called Max"), and the owner's own name ("My name is Tom").
 
+ROUND 2 (2026-09-24)
+The first held-out set (sensitive_cases/heldout1.jsonl) caught 86.8% and
+flagged 15.3% of harmless lines. Its misses were turned into general word
+classes (the "ROUND 2" block in the data section), and three rules changed
+shape: the general words for a secret ("password", "PIN", "API key") need
+the secret or a give-away habit next to them; a group with no "my"
+("friends") is not one person; and the card says "someone else's" only when
+the sentence is not about the owner ("I came out to my parents").
+
 WHAT IT CANNOT CATCH, SAID PLAINLY
 The patterns only know the words and shapes written below. A language not
 in the list, slang, a euphemism, a spelling mistake, a name not in the name
 list, or a secret that looks like an ordinary word ("my Netflix is
 sunflower") gets past layer 1, and then only the local model stands between
-the fact and being saved. The model can be wrong too. The development numbers
-(`--measure`) are measured on sentences written by the same person who wrote
-the patterns, so they flatter the patterns; the held-out numbers are the
-honest ones.
+the fact and being saved. The model can be wrong too. Numbers measured on
+lines the patterns were tuned on flatter them - dev.jsonl, round2.jsonl, and
+since round 2 heldout1.jsonl too; only a set nobody tuned on is honest
+(backend/README.md, "The sensitive-topic check", has both kinds).
 
 THE CLI
     python jarvis_sensitive.py --measure cases.jsonl [--with-model]
@@ -236,7 +245,10 @@ _HEALTH = {
         r"off (?:work )?sick", r"off work (?:with|because of|due to)",
         r"sick (?:leave|note|day|days|pay)", r"signed off",
         r"(?:went|go|going|been) to (?:the |a |my )?(?:doctor|gp|hospital|a&e|clinic)",
-        r"check-?ups?", r"(?:waiting|wait) list for", r"referral to", r"hearing aids?",
+        r"check-?ups?", r"referral to", r"hearing aids?",
+        r"(?:waiting|wait) list for (?:a |an |my |the |his |her )?(?:\w+ )?(?:op|operation|surgery"
+        r"|scan|assessment|referral|appointment|transplant|treatment|therapy|counsell?ing"
+        r"|diagnosis|specialist|consultant|mri|hip|knee|kidney|liver|heart|donor)",
         r"weeks? (?:pregnant|postpartum)",
         # general shapes of medical words and plain-English ways of saying it
         r"\w{4,}itis", r"\w{3,}ectomy", r"\w{3,}plasty", r"\w{3,}osis", r"glaucoma",
@@ -372,10 +384,10 @@ _MONEY = {
         r"salar\w*", r"earnings", r"i earn", r"(?:he|she|they|owner|owner's) earns?",
         r"earn(?:s|ed)? (?:about |around |over |under |less than |more than |just |only |nearly |almost )?"
         r"[£$€]?\d", r"income\w*", r"wages?", r"pay ?checks?", r"pay ?cheques?", r"pay ?slips?",
-        r"take-?home(?: pay)?", r"(?:pay|salary) (?:rise|raise|cut|increase|freeze)",
+        r"take-home(?: pay)?", r"takehome", r"(?:pay|salary) (?:rise|raise|cut|increase|freeze)",
         r"(?:my|his|her|a|annual|yearly|christmas|year-end) bonus", r"commission",
         r"(?:minimum|living) wage", r"per annum", r"net worth", r"debts?", r"indebted",
-        r"owe[sd]?", r"owing", r"loans?", r"mortgage\w*", r"arrears", r"overdra\w*",
+        r"owing", r"loans?", r"mortgage\w*", r"overdra\w*",
         r"credit (?:cards?|score|rating|report|history|limit)", r"store cards?", r"payday loans?",
         r"buy now,? pay later", r"klarna",
         r"behind (?:on|with) (?:\w+ )?(?:rent|payments?|bills?|mortgage|council tax|loan)",
@@ -397,7 +409,7 @@ _MONEY = {
         r"unemploy\w*", r"out of work", r"(?:lost|losing) (?:my|his|her|their|the|a) job",
         r"laid off", r"made redundant",
         r"(?:being|facing|took|taking|voluntary|offered|my|his|her) redundan\w*",
-        r"redundancy (?:pay|payment|package|notice|money)",
+        r"redundancy (?:pay|payment|package|notice|money|payout|cheque|settlement)",
         r"(?:got|get|was|were|been|being|getting) (?:fired|sacked)", r"fired (?:from|me|him|her)",
         r"between jobs", r"furlough\w*", r"savings", r"(?:life|my|our|his|her) saving",
         r"(?:saved|saving) (?:up )?[£$€]?\d", r"(?:spend|spent|spending) too much",
@@ -508,37 +520,36 @@ _MONEY = {
 # (Shapes - a code next to a lock word, "<service> is <token>", card numbers,
 # API keys - are in the code below.)
 _CREDENTIALS = {
+    # The general English words for a secret ("password", "PIN", "API key",
+    # "2FA") are NOT here: they are in _CREDENTIALS_WEAK below, and count
+    # only with a value, a secret's shape or a give-away habit next to them.
     "en": [
-        r"pass(?:word|wd|wrd|code|phrase|key)s?", r"passwd", r"p[a@4][s$5]{2}(?:w|vv)[o0]r?d[sz]?",
-        r"p@ss\w*", r"p4ss\w*", r"pa55\w*", r"pw", r"pwd (?:is|:|=)", r"(?:my|the) pass (?:is|for)",
-        r"pins?", r"pin ?codes?", r"pin numbers?",
-        r"(?:door|alarm|gate|safe|garage|lock|entry|access|security|wi-?fi|wlan|verification"
-        r"|recovery|backup|unlock|keypad|key ?safe|lockbox|padlock|locker|building|front door"
-        r"|back door|puk|sim|voicemail|screen ?lock) ?codes?",
+        r"pwd (?:is|:|=)", r"(?:my|the) pass (?:is|for)",
+        r"(?:recovery|backup|puk) ?codes?",
         r"(?:one[- ]time|2fa|mfa|otp|two[- ]factor|2-step|authenticator|backup|recovery"
         r"|verification) (?:codes?|keys?|passwords?|pins?)",
-        r"2fa", r"mfa", r"otp", r"puk", r"two[- ]factor",
+        r"puk",
         r"(?:my|our|his|her|the owner's|owner's) (?:\w+ ){0,2}(?:log-?ins?|log-?ons?|usernames?"
         r"|user ?names?|user ?ids?|apple id|account details|account password)",
         r"(?:log-?in|username|user ?name|user ?id|apple id)s? ?(?:is|are|:|=|for)",
-        r"credentials?", r"creds", r"(?:login|sign-in|log-in) details",
+        r"(?:login|sign-in|log-in) details",
         r"security (?:questions?|answers?)", r"maiden name", r"memorable (?:word|information|date|place|name)",
-        r"secret (?:questions?|answers?|words?|phrases?|keys?)",
+        r"secret (?:questions?|answers?|words?|phrases?)",
         r"first (?:pet|school|car)'?s?(?: name)?", r"childhood (?:pet|street|best friend)",
         r"master (?:password|key)", r"root password", r"admin password", r"sudo password",
-        r"encryption keys?", r"private keys?", r"ssh keys?", r"gpg keys?", r"pgp keys?",
-        r"seed phrases?", r"recovery phrases?", r"mnemonic", r"wallet (?:seed|keys?|phrase)",
-        r"api[ _-]?keys?", r"access (?:keys?|tokens?)", r"secret keys?",
-        r"auth(?:entication)? tokens?", r"bearer tokens?", r"personal access tokens?",
-        r"refresh tokens?", r"client secrets?", r"app passwords?",
-        r"(?:github|gitlab|openai|anthropic|aws|azure|gcp|stripe|slack|discord|telegram|bot"
-        r"|hugging ?face) (?:token|key|secret)s?", r"(?:my|the) token (?:is|:)",
+        r"seed phrases?", r"recovery phrases?", r"wallet (?:seed|keys?|phrase)",
+        r"(?:my|the) token (?:is|:)",
         r"(?:wifi|wi-fi|wlan|network|router|hotspot|wpa2?|ssid) (?:key|password|pass|code|pin"
-        r"|passphrase)s?", r"wpa2?", r"network key",
+        r"|passphrase)s?", r"network key",
         r"(?:card|debit|credit|visa|mastercard|amex) (?:number|no|details|ends?|ending"
         r"|expir\w*|cvv|cvc|security code|pin)", r"cvv2?", r"cvc2?", r"csc",
         r"ends? in \d{4}", r"last (?:four|4) digits",
-        r"same password", r"password (?:is|for|:)",
+        r"same password",
+        # round 2: a phone's or tablet's unlock PATTERN is a secret too
+        r"(?:unlock|lock ?screen|screen ?lock|swipe|phone|tablet|android) patterns?",
+        r"pattern (?:lock|unlock|to unlock)",
+        r"(?:phone|tablet|ipad|laptop|screen) (?:lock|unlock)(?: code| pattern| pin)? is",
+        r"(?:screen|phone) lock (?:is|shape)",
     ],
     "es": [
         r"contrasenas?", r"clave (?:del|de la|de mi|wifi|wi-fi|secreta|de acceso|bancaria|pin)",
@@ -553,14 +564,18 @@ _CREDENTIALS = {
         r"code (?:de|du) (?:coffre|cadenas|portail|garage)", r"coffre-fort",
     ],
     "de": [
-        r"passwort\w*", r"kennwort\w*", r"geheimzahl", r"pin-?(?:nummer|code)",
+        # "Passwort", "WLAN-Passwort", "Bankpasswort" - but not "Passwortfeld"
+        # (a password FIELD in an app): see _SOFTWARE in the harmless list.
+        r"\w*passw(?:o|oe)rt(?:e|er|es|s)?", r"\w*kennw(?:o|oe)rt(?:e|er|es|s)?", r"geheimzahl",
+        r"pin-?(?:nummer|code)",
         r"zugangs(?:daten|code)", r"anmeldedaten", r"benutzername\w*",
         r"(?:alarm|tur|tor|tresor|zahlen|entsperr|sicherheits|wlan|zugangs)[- ]?(?:code|kennwort"
         r"|passwort|schlussel)", r"wlan[- ]?(?:passwort|schlussel|kennwort)", r"tresor\w*",
         r"alarmanlage",
     ],
     "it": [
-        r"password", r"parola d'ordine", r"codice (?:pin|segreto|di accesso|di sicurezza"
+        # ("password" itself is the English word, in _CREDENTIALS_WEAK)
+        r"parola d'ordine", r"codice (?:pin|segreto|di accesso|di sicurezza"
         r"|di sblocco|dell'allarme|della porta|della cassaforte|del bancomat)",
         r"nome utente", r"credenziali", r"pin (?:del|della|di)",
         r"combinazione (?:della|del) (?:cassaforte|lucchetto)", r"cassaforte",
@@ -582,7 +597,8 @@ _CREDENTIALS = {
     # Other languages' words for "password", so a password in one of them is
     # still caught (their other topics are left to the local model).
     "other": [
-        r"heslo", r"jelszo", r"losenord", r"adgangskode", r"passord", r"salasana", r"sifre",
+        r"heslo", r"jelszo", r"losenord\w*", r"adgangskode", r"passord", r"salasana", r"sifre\w*",
+        r"pasuwaado", r"pasuwado", r"anshou ?bangou",
         r"парол\w*", r"κωδικ\w*", r"パスワード", r"暗証", r"密码", r"密碼", r"비밀번호",
         r"كلمة ?(?:ال)?سر", r"סיסמ\w*",
     ],
@@ -727,6 +743,8 @@ _SPECIAL = {
             r"gay", r"lesbians?", r"bisexual\w*", r"bi-?curious", r"queer", r"homosexual\w*",
             r"heterosexual\w*", r"asexual", r"pansexual", r"demisexual", r"lgbt\w*",
             r"sexual(?:ity| orientation| identity)", r"(?:came|coming|come) out (?:as|to)",
+            r"(?:i|i've|i have|he|she|they) (?:came|come) out(?: (?:last|this|in|at|when|a|two|three"
+            r"|years?|months?|recently|finally))", r"(?:finally|recently|just) came out",
             r"in the closet", r"trans(?:gender|sexual)?", r"non-?binary", r"nonbinary", r"enby",
             r"genderqueer", r"genderfluid", r"gender (?:identity|transition|reassignment)",
             r"(?:i'm|i am|he's|she's|is) (?:bi|straight)", r"same-sex",
@@ -909,7 +927,9 @@ _SPECIAL = {
     },
     "law": {
         "en": [
-            r"arrest\w*", r"jail\w*", r"prison\w*", r"convict\w*", r"criminal record",
+            r"arrest\w*", r"jail\w*", r"prison\w*", r"convicted", r"convicts?",
+            r"(?:a|my|his|her|their|previous|prior|criminal|spent|unspent|past|old|no|two|three"
+            r"|drink[- ]driving|drug|fraud|assault|theft|driving) convictions?", r"criminal record",
             r"police (?:record|caution|check|interview|station)", r"cautioned",
             r"(?:a|got a|given a) caution", r"court (?:case|date|hearing|order|appearance)",
             r"in court", r"to court", r"magistrates", r"crown court", r"on trial",
@@ -969,9 +989,9 @@ _RELATIONS_STRONG = {
         r"ex-(?:wife|husband|girlfriend|boyfriend|partner)", r"widow(?:er)?",
         r"god(?:son|daughter|mother|father|child)", r"foster (?:child|kid|son|daughter|parents?)",
         r"carers?", r"caregivers?", r"babysitters?", r"nann(?:y|ies)", r"childminders?",
-        r"au pair", r"lodgers?", r"landlord", r"landlady", r"flatmates?", r"roommates?",
-        r"housemates?", r"neighbou?rs?", r"colleagues?", r"co-?workers?", r"workmates?",
-        r"friends?", r"bestie", r"bff", r"best mate",
+        r"au pair", r"lodgers?", r"landlord", r"landlady", r"flatmate", r"roommate",
+        r"housemate", r"neighbou?r", r"colleague", r"co-?worker", r"workmate",
+        r"friend", r"bestie", r"bff", r"best mate",
     ],
     "es": [
         r"hermanas?", r"hermanos?", r"madre", r"mama", r"padre", r"papa", r"esposa", r"esposo",
@@ -1044,6 +1064,10 @@ _RELATIONS_WEAK = [
     r"students?", r"pupils?", r"patients?", r"teachers?", r"tutors?", r"coach", r"mates?",
     r"ex", r"twins?", r"family", r"relatives?", r"folks", r"crush", r"date", r"nan",
     r"gran", r"tenants?", r"doctor", r"therapist", r"dentist", r"lawyer", r"solicitor",
+    # round 2: a group with no possessive ("cooking for friends") is not one
+    # person; "my friends", "our neighbours" still are.
+    r"friends", r"mates", r"colleagues", r"co-?workers", r"workmates", r"neighbou?rs",
+    r"flatmates", r"roommates", r"housemates",
 ]
 #: The possessives that turn a WEAK word into "another person".
 _POSSESSIVES = r"my|our|his|her|their|your|the owner'?s|owner'?s"
@@ -1073,7 +1097,8 @@ _PRIVATE_LIFE = {
         r"on drugs", r"(?:takes|taking|doing|using) drugs", r"smokes weed", r"dealer",
         r"(?:lost|losing|quit) (?:his|her|their) job", r"got (?:fired|sacked|laid off|the sack)",
         r"looking for a (?:new )?job", r"(?:is|are|started|been) dating", r"engaged to",
-        r"got engaged", r"getting married", r"moving in with", r"moved out", r"left (?:him|her)",
+        r"got engaged", r"(?:is|are|he's|she's|they're|who's) getting married",
+        r"getting married to", r"moving in with", r"moved out", r"left (?:him|her)",
         r"(?:is|are) single", r"going through a (?:hard|tough|rough|difficult) time",
         r"struggling", r"(?:going|went) through a divorce", r"cheating", r"having a baby",
         r"social services", r"domestic",
@@ -1259,7 +1284,8 @@ _HARMLESS = [
 #: Words before a capitalised name that make it a public figure named as a
 #: taste, not a private person: "a fan of Terry Pratchett".
 _PUBLIC_CUE = re.compile(
-    r"(?:fan of|favou?rite (?:\w+ ){1,2}(?:is |was |are )?|listen(?:ing|ed|s)? to|reading|read"
+    r"(?:fan of|favou?rite(?: \w+){1,2}(?: is| was| are)?|listen(?:ing|ed|s)? to|reading|read"
+    r"|[\"'] by"
     r"|watching|watched|books? by|novels? by|music by|songs? by|albums? by|films? by|movies? by"
     r"|directed by|written by|played by|starring|biography of|podcasts? (?:by|with)"
     r"|interview with|quotes? (?:from|by)|according to|the (?:band|singer|author|writer|artist"
@@ -1377,6 +1403,708 @@ apple amazon netflix spotify github gitlab
 
 
 # ==========================================================================
+#   ROUND 2 - word classes learned from the first held-out set
+# ==========================================================================
+#
+# The first held-out set (963 lines written by someone who never saw these
+# lists; now backend/sensitive_cases/heldout1.jsonl) showed which KINDS of
+# wording the lists above missed. Each list below is one such kind, written
+# to catch the unseen siblings too - not the one sentence that showed the
+# gap. "any" lists hold roots that are spelled the same in several of the
+# eight languages. The "other" lists hold a few core words in Swedish,
+# Turkish, and Hindi and Japanese written in Latin letters - only the
+# commonest words; everything else in those languages is left to the model.
+
+# ---- health, round 2
+_HEALTH["any"] = [
+    # medical specialties, and the clinics, wards and doctors named after them:
+    # oncology, oncologie, Onkologie, haematology, cardiologist, rheumatolog...
+    r"(?:on[ck]o|ha?emato|cardio|kardio|neuro|endo[ck]rino|endokryno|nephro|nefro"
+    r"|gastroentero|hepato|pneumo|pulmono|rheumato|reumato|dermato|uro|gyn(?:a)?eco|gineco"
+    r"|gineko|oftalmo|ophthalmo|ophtalmo|immuno|diabeto)log\w*",
+    # looking inside the body: colonoscopy, gastroscopia, coloscopie, Darmspiegelung
+    r"(?:colono|kolono|colo|kolo|endo|gastro|cysto|zysto|laparo|broncho?|arthro|artro|hystero"
+    r"|histero|sigmoido|colpo|kolpo|laryngo|naso|o?esophago|procto|recto|rekto)s[ck]op(?:y|ies"
+    r"|ia|ie|ii|ic\w*|isch\w*)",
+    r"(?:darm|magen|blasen|gelenk|bauch|kehlkopf|lungen|gebarmutter)spiegelung\w*",
+    # dialysis and transplants, in every spelling
+    r"(?:ha?emo)?dial[iy][sz]\w*",
+    r"trasplant\w*", r"trapiant\w*", r"transplant\w*", r"przeszczep\w*",
+    r"greffe (?:de|du|d'un|d'une|des) (?:rein|foie|coeur|poumon|moelle|cornee|organe)s?",
+    # thyroid, blood sugar and blood pressure prefixes, the same everywhere:
+    # hipotiroidismo, ipotiroidea, hyperthyroid, Hypertonie
+    r"(?:hipo|hiper|ipo|iper|hypo|hyper)(?:tiroid|tireo|thyr[eo]o?id|thyreo|glic|glyc|tens"
+    r"|tonie|tonia)\w*",
+    # HIV status and coeliac disease, in any language
+    r"seropositi\w*", r"sieropositiv\w*", r"serodiscordan\w*",
+    r"c(?:o)?eliac\w*", r"c(?:o)?eliaqu\w*", r"celiachi\w*", r"zoliakie", r"coeliakie",
+    r"celiaki\w*",
+    # a long-term illness said as a compound: zuckerkrank, herzkrank
+    r"\w{3,}krank(?:e|er|en|heit\w*)?",
+]
+_HEALTH["en"] += [
+    r"rheumy",
+    # lab values and test results said by name
+    r"hba1c", r"a1c", r"ferritin", r"cd4(?: counts?| cells?)?", r"viral load", r"t-?cell count",
+    r"egfr", r"creatinine", r"ha?emoglobin", r"platelets?", r"white (?:blood )?cell count",
+    r"ldl", r"hdl", r"triglycerides?", r"bilirubin", r"liver (?:function|enzymes?)",
+    r"kidney function", r"cortisol", r"tsh", r"free t4",
+    r"psa (?:levels?|tests?|results?|score|was|is|came)", r"(?:my|his|her) (?:psa|inr|tsh)",
+    r"inr (?:was|is|test|level|clinic|check|reading)",
+    r"vitamin (?:d|d3|b12|b-12)\b.{0,15}\b(?:was|is|levels?|deficien\w*|low|test|results?"
+    r"|injections?|shots?)",
+    r"b12 (?:levels?|injections?|deficien\w*|shots?|jabs?)",
+    r"iron (?:levels?|deficien\w*|infusions?|tablets|count)",
+    r"(?:blood|sugar|glucose|iron|hormone|thyroid|testosterone|o?estrogen|cholesterol|potassium"
+    r"|sodium|lithium|ketone|oxygen) levels?",
+    r"bloods? (?:came back|results?|tests?|taken|done|showed|were|are)",
+    r"(?:labs|lab results|test results) (?:came back|showed|were)",
+    # blood pressure readings
+    r"(?:my|high|low|home|his|her|their) bp", r"bp (?:readings?|is|was|meds?|medication|tablets?"
+    r"|pills?|ki|check|monitor|of|cuff)",
+    r"(?:blood pressure|bp)\b.{0,25}\b\d{2,3} ?(?:/|over) ?\d{2,3}", r"\d{2,3} ?/ ?\d{2,3} ?mm ?hg",
+    r"mm ?hg",
+    # conditions named whole, and the '-aemia', '-opathy', '-plegia' families
+    r"(?:pre-?)?cancer(?:s|ous)?", r"cerebral palsy", r"palsy", r"spina bifida",
+    r"muscular dystrophy", r"dystroph\w*", r"atroph\w*", r"cystic fibrosis", r"sickle[- ]cell",
+    r"thalass?a?emia", r"ha?emophilia\w*", r"huntington'?s", r"marfan'?s?", r"ehlers[- ]danlos",
+    r"hypermobil\w*", r"down'?s syndrome", r"trisomy", r"scoliosis", r"sarcoidosis", r"vitiligo",
+    r"alopecia", r"cleft (?:lip|palate)", r"hydrocephalus", r"tourette'?s?", r"polyps?", r"cysts?",
+    r"(?!academ|bohem)\w{2,}a?emias?", r"\w{2,}opath(?:y|ies|ic)", r"\w{2,}plegi\w*",
+    # how well someone sees, and being colour-blind
+    r"colou?r[- ]?blind\w*", r"red[- ]green(?: colou?r)?[- ]?blind\w*", r"\w+anop(?:ia|ic)",
+    r"myopi\w*", r"hyperopi\w*", r"presbyopi\w*", r"astigmatism", r"amblyopi\w*", r"lazy eye",
+    r"nystagmus", r"keratoconus", r"macular degeneration", r"retinitis",
+    r"(?:partially|partly|registered|legally|severely) (?:sighted|blind)",
+    r"sight (?:loss|impair\w*)", r"low vision", r"visual impairment", r"lost (?:the |my )?sight",
+    # neurodiversity, said the way people say it
+    r"neuro-?(?:divergen\w*|diverse|atypical)", r"on the (?:autism |autistic )?spectrum",
+    r"dyspra\w*", r"tic disorder", r"sensory processing",
+    # diabetes by its type, and before it
+    r"(?:got|have|has|had|with|diagnosed with|i'?m|i am|am|being) type (?:1|2|one|two|i|ii)\b"
+    r"(?! (?:font|error|errors|fun|safety|system|class|hint|hints|annotations?|checking"
+    r"|checker|traits?|keyboard|charger|cables?|ports?|connector))",
+    r"type (?:1|2|one|two|i|ii) diabet\w*", r"t[12]d", r"pre-?diabet\w*",
+    # the immune system
+    r"immuno(?:compromised|suppress\w*|deficien\w*|therapy)",
+    r"immune (?:system|deficien\w*|disorder|condition|suppress\w*|response)",
+    r"(?:weak|weakened|compromised|low|poor|no) immun\w*",
+    # HIV prevention and treatment ("PrEP", "PEP"), not meal prep or a pep talk
+    r"prep (?:pills?|for hiv|prescription|clinic|appointment)",
+    r"(?:on|taking|take|takes|started|stopped|restarted) (?:hiv )?prep\b(?! (?:work|duty|time"
+    r"|day|days|school|cook\w*|list|for (?:the|a|an|my|our|dinner|lunch|tomorrow|work|school"
+    r"|exams?|tests?)))",
+    r"(?:on|taking|started|a course of) pep\b(?! (?:talks?|rall(?:y|ies)|\d))",
+    r"antiretroviral\w*", r"hiv\+",
+    # common misspellings of health words
+    r"anti-?dep+res+\w*", r"dep+res+(?:ion|ions|ed|ive)", r"perscri\w*", r"ex[czs]+ema",
+    r"excema", r"alerg\w*", r"anx(?:eity|ity|ietys)", r"pnemonia", r"neumonia", r"migrane\w*",
+    r"arthrit(?:us|es)", r"diabet(?:is|ies|ees)", r"theraph\w*", r"ps[iy]colog\w*",
+    r"pyscholog\w*", r"phsycolog\w*", r"pregant\w*", r"pregnat\w*", r"hospitol", r"hosptial",
+    r"hopsital", r"surgury", r"sugery", r"medicaton", r"medcation", r"medicaiton", r"medecine",
+    r"diagnoised", r"diagonsed", r"scizo\w*", r"shizo\w*", r"scitzo\w*", r"dimentia",
+    r"demensia", r"altzheimer\w*", r"alzeimer\w*", r"epilepsey", r"seizers?",
+    # euphemisms and slang
+    r"the snip", r"(?:had|having|getting|get|booked|booking) (?:my |his |the )?snip",
+    r"(?:fell|fallen|falling|back|been|stay\w*) (?:off |on )the wagon", r"on the wagon",
+    r"bun in the oven", r"up the duff", r"(?:got|get|getting|is|she's|i'm|i am) knocked up",
+    r"knocked (?:her|me) up", r"the big c", r"tubes tied", r"time of the month",
+    r"(?:colostomy|ileostomy|ostomy|urostomy|stoma)(?: bags?)?", r"catheter\w*",
+    r"(?:in|into|out of) (?:the )?priory",
+    r"(?:i'?ve been|i'?m|i am|been|stayed|staying|stay) clean (?:for|since)",
+    r"\d+ (?:days|weeks|months|years) (?:clean|sober)", r"funny turn", r"water infection",
+    # my body part + a medical state: "my kidneys are only working at 40 percent"
+    r"(?:my|his|her|their|the owner'?s) (?:liver|kidneys?|heart|lungs?|thyroid|pancreas|bowels?"
+    r"|bladder|prostate|ovar(?:y|ies)|womb|uterus|cervix|colon|stomach|gall ?bladder|spleen"
+    r"|spine|brain|hips?|knees?|joints?|blood)(?:'s)?\b[^.]{0,25}\b(?:numbers|results?|levels?"
+    r"|function\w*|tests?|scans?|failing|damaged|enlarged|inflamed|scarred|working at|removed"
+    r"|stones?|infection|problems?|issues?|trouble|condition|disease|op|surgery|shot|packing up"
+    r"|playing up|giving out|off)\b",
+    r"(?:hip|knee|back|eye|heart|shoulder|foot|hand|wrist|ankle|spine|bowel|gall ?bladder"
+    r"|hernia|cataract|bunion|sinus|ear|nose|jaw|gum) (?:op|ops|operation|surgery|replacement)s?",
+    r"(?:gall|kidney|bladder)[- ]?stones?",
+    # contraception fitted, and pregnancy said as weeks
+    r"(?:coil|iud|implant) (?:fitted|removed|out|in|put in)",
+    r"(?:got|had|getting|have) (?:my|a|the) (?:coil|implant) (?:fitted|removed|out|in)", r"\d+ (?:weeks|months) (?:along|gone)",
+    # medicine name endings not covered above
+    r"\w{3,}(?:trexate|lukast|afil|tropium|olone|parin|conazole|vudine|setron|dronate|terol"
+    r"|semide|thiazide|profen|fenac|oxib|azine|peridol|apine|idone|zepam)",
+    # support groups
+    r"(?:i'?m|i am|been|he'?s|she'?s) in (?:aa|na|ga)\b(?! batter)",
+    # drugs named plainly (they stay visible after "addicted to" is blanked)
+    r"heroin", r"cocaine", r"amphetamines?", r"methamphetamine", r"crystal meth", r"ketamine",
+    r"mdma", r"ecstasy", r"lsd", r"ghb", r"mephedrone", r"opioids?", r"opiates?", r"benzos?",
+    r"benzodiazepines?", r"cannabis",
+    r"(?:needed|got|had|have|getting|with) (?:\d+ |a few |some )?stitches",
+    # a blood sugar reading said short: "my sugar was 14 this morning"
+    r"(?:my|his|her|their) (?:sugars?|glucose|bloods?|levels) (?:is|are|was|were|went|dropped"
+    r"|spiked|crashed|high|low|\d)",
+    # moles and skin checks
+    r"(?:suspicious|atypical|changing|dodgy|irregular) moles?",
+    r"moles? (?:checked|removed|biopsy|mapping|check|removal)", r"mole on (?:my|his|her)",
+]
+_HEALTH["other"] = [
+    # Swedish
+    r"sjuk\w*", r"gravid\w*", r"deprimerad", r"lakare", r"sjukhus\w*", r"vardcentral\w*",
+    # Turkish
+    r"hasta(?:yim|lik\w*|ligim|ligi|ne\w*|yken)", r"kanser\w*", r"seker hastas\w*", r"ilac\w*",
+    r"hamile\w*", r"depresyon\w*", r"ameliyat\w*",
+    # Hindi in Latin letters
+    r"bimari", r"bimaar\w*", r"beemari", r"dawai", r"dawaai", r"ilaaj", r"bp ki", r"sugar ki",
+    r"dard (?:hai|ho raha)",
+    # Japanese in Latin letters
+    r"byou?ki", r"byou?in", r"kusuri", r"utsu ?byou?", r"tounyou ?byou?", r"ninshin",
+    r"shujutsu", r"tsuuin",
+]
+_HEALTH["es"] += [r"en dialisis", r"lista de espera para"]
+# the thyroid, in every language (hypo-/hyper- forms are in "any" above)
+_HEALTH["any"] += [r"tiroid\w*", r"tireoid\w*", r"schilddruse\w*", r"schildklier\w*",
+                   r"tarczyc\w*", r"niedoczynn\w*", r"nadczynn\w*"]
+_HEALTH["it"] += [r"lista d'attesa per", r"celiac[oa]"]
+
+# ---- money, round 2
+_MONEY["en"] += [
+    # arrears in any spelling, and falling behind
+    r"arr?ea?rs", r"(?:fallen|fell|falling|got|get|getting) behind (?:on|with)",
+    r"missed (?:a |two |three |\d )?(?:payments?|repayments?|rent)",
+    # credit records and the agencies that keep them (UK, US, DE, FR, ES, IT, BR, NL, PL, SE)
+    r"schufa\w*", r"serasa", r"(?:no|in the|on the|nome no) spc", r"asnef", r"ficp",
+    r"fiche\w* (?:a|a la|au|par) (?:la )?(?:banque de france|ficp)", r"crif",
+    r"cattivo pagatore", r"bkr[- ]?(?:registratie|notering|codering)", r"(?:bij het|in het) bkr",
+    r"(?:w|z) bik", r"wpis\w* (?:w|do) (?:bik|krd|erif)", r"krd", r"kronofogden", r"experian",
+    r"equifax", r"transunion", r"credit ?karma", r"clearscore",
+    r"credit (?:file|check|record|reference|rating)", r"bad credit",
+    r"(?:poor|low|good|excellent|terrible) credit", r"default notice", r"defaulted",
+    r"in default", r"nome sujo", r"negativad[oa]",
+    # benefits by their national names
+    r"cost of living (?:payment|support|grant)s?", r"winter fuel(?: payment| allowance)?",
+    r"warm home discount", r"free school meals", r"housing benefit", r"child benefit",
+    r"council tax (?:reduction|support|benefit)", r"attendance allowance",
+    r"carer'?s allowance",
+    r"(?:on|claim\w*|receiv\w*|applied for|apply(?:ing)? for|lost (?:my|our)) (?:esa|dla|snap"
+    r"|ebt|wic|ssi|ssdi|section 8|tanf|jsa)",
+    r"social security (?:check|disability|benefits?|payments?)",
+    r"disability (?:check|payments?|allowance)", r"centrelink", r"newstart", r"ontario works",
+    # maxed out, and debt plans
+    r"maxed[- ]out (?:on )?(?:my |our |\w+ )?(?:cards?|credit|overdraft|limits?)",
+    r"maxed (?:out )?(?:my|our|the) (?:\w+ )?(?:cards?|credit|overdraft)",
+    r"debt (?:management|relief|consolidation|plan|advice|advisers?|charity)", r"stepchange",
+    # minimum payments
+    r"(?:the )?minimum (?:payments?|repayments?|due|amount due)",
+    r"(?:paying|pay|paid|making) (?:off )?the minimum", r"minimum on (?:my|the|our|all)",
+    # a money word with a number: "rent's 1,450", "salary: 42,000"
+    r"(?:rent|mortgage|salary|wages?|income|savings|debts?|loans?|overdraft|pension|bills?"
+    r"|allowance|payslip|paycheck|paycheque|take[- ]?home|net pay|gross pay|payout|severance"
+    r"|inheritance|balance)(?:'s| is| was| are| were| of| at| about| around| comes to| came to"
+    r"| costs?| went up to| goes up to|:)? (?:now |about |around |roughly |nearly |over |under "
+    r"|just |only |like |currently )?[£$€]?\d[\d,.]*",
+    r"(?:i|we|he|she|they) (?:only |just )?(?:clear|clears|net|nets|bring in|brings in|take home"
+    r"|takes home) (?:about |around |roughly |only |just |like )?[£$€]?\d[\d,.]{2,}",
+    r"take[- ]home pay",
+    # pay rises, bonuses and investments in per cent
+    r"(?:bonus|raise|pay ?rise|payrise|commission|pay ?cut|salary|pay|apr|interest rate"
+    r"|mortgage rate|portfolio|investments?|shares|stocks?|crypto|isa|pension|savings)\b"
+    r"[^.\n]{0,25}?\d+(?:\.\d+)? ?(?:%|per ?cent|percent)",
+    r"\d+(?:\.\d+)? ?(?:%|per ?cent|percent) (?:bonus|raise|pay ?rise|rise|pay ?cut|commission"
+    r"|interest|apr|equity|stake)",
+    r"(?:down|up|lost|gained|made) \d+(?:\.\d+)? ?(?:%|per ?cent|percent) on (?:my|our)",
+    r"(?:i'?m|we'?re|i am|we are) (?:down|up) \d+(?:\.\d+)? ?(?:%|per ?cent|percent)",
+    # buying and selling shares; losses and gains
+    r"(?:sold|sell|selling|bought|buy|buying|dumped|holding|own|owns) (?:my |our |some "
+    r"|all (?:of )?my |\d+ )?(?:\w+ )?(?:shares|stocks?|stock options|crypto|bitcoin|etfs?|bonds)",
+    r"at a (?:loss|profit)", r"capital gains",
+    r"(?:my|our|his|her) (?:\w+ )?(?:stocks|shares|portfolio|investments?|crypto|pension pot)",
+    # remortgaging, refinancing, equity release
+    r"re-?mortgag\w*", r"refinanc\w*", r"equity release", r"second mortgage", r"home equity",
+    r"heloc",
+    # cash in hand and hiding income from the tax office
+    r"cash[- ]in[- ]hand", r"off the books",
+    r"(?:paid|pay|paying|cash|money|work\w*) under the table",
+    r"cash jobs?", r"(?:don'?t|do not|didn'?t|never|not|without) declar\w*", r"undeclared",
+    r"tax ?man", r"tax (?:evasion|dodg\w*)", r"dodg\w* (?:the )?tax",
+    # owing: with money, an amount or someone who is owed money next to it
+    r"owe[sd]? (?:\w+ ){0,3}?(?:[£$€]?\d|money|cash|rent|a lot|loads|big|thousands|hundreds"
+    r"|a fortune|a grand|grand|the bank|the council|hmrc|the irs|tax)",
+]
+_MONEY["de"] += [
+    r"\w*ruckstand\w*", r"ruckstandig\w*",
+    r"(?:eltern|kinder|wohn|burger|arbeitslosen|kranken|mutterschafts|pflege|insolvenz"
+    r"|kurzarbeiter)geld", r"kurzarbeit", r"aufstocker", r"jobcenter", r"bafog", r"sozialamt",
+    r"schwarzarbeit", r"schwarz (?:arbeiten|gearbeitet|bezahlt)",
+    r"unterhalt(?:szahlung\w*|spflicht\w*|svorschuss)?", r"mit der miete", r"ratenzahlung\w*",
+]
+_MONEY["es"] += [
+    r"atrasad[oa]s? con (?:el|la|los|las) (?:alquiler|hipoteca|pagos?|letras?|cuotas?|recibos?)",
+    r"impagos?", r"moros[oa]s?", r"morosidad",
+    r"(?:cobro|cobra|trabajo|trabaja|pagan|me pagan) en negro", r"pension alimenticia", r"sepe",
+]
+_MONEY["fr"] += [
+    r"loyers? impayes?", r"impayes", r"retard de (?:loyer|paiement)",
+    r"en retard (?:sur|pour) (?:le |mon )?loyer", r"prime d'activite", r"aah", r"pole emploi",
+    r"france travail", r"minima sociaux", r"cheque energie", r"aide au logement",
+    r"pension alimentaire", r"(?:travail|travaille|paye|payee) au noir", r"au black",
+]
+_MONEY["it"] += [
+    r"arretrat\w*", r"morosit\w*", r"in ritardo con (?:l'affitto|il mutuo|le rate)",
+    r"assegno (?:unico|di inclusione|sociale|di disoccupazione|di mantenimento)", r"naspi",
+    r"inps", r"bonus (?:affitti|bollette)", r"in nero", r"lavoro nero",
+]
+_MONEY["pt"] += [
+    r"atrasad[oa]s? com", r"em atraso", r"inadimplen\w*", r"auxilio[- ]\w+", r"bpc", r"inss",
+    r"abono salarial", r"pensao alimenticia", r"por fora", r"sem carteira",
+]
+_MONEY["nl"] += [
+    r"\w*toeslag\w*", r"kinderbijslag", r"achterstand\w*", r"betalingsachterstand\w*",
+    r"studieschuld", r"(?:bij|aan) (?:de )?duo", r"zwart (?:werken|geld|betaald|gewerkt)",
+    r"alimentatie", r"huur(?:achterstand|verhoging)",
+]
+# indebted, in every language: "endividado", "endeudado", "verschuldet"
+_MONEY["any"] = [
+    r"endividad\w*", r"endeudad\w*", r"indebitat\w*", r"endette\w*", r"verschuld\w*",
+    r"schuldsanering", r"\w+schulden", r"zadluzon\w*",
+]
+_MONEY["pl"] += [
+    r"zaleg\w*", r"alimenty", r"alimentow", r"na czarno", r"komornik\w*", r"windykac\w*",
+    r"chwilowk\w*",
+]
+_MONEY["other"] = [
+    # Swedish
+    r"skuld\w*", r"kronofogden", r"arbetslos\w*", r"a-kassa", r"forsakringskassan",
+    r"socialbidrag",
+    # Turkish
+    r"borc\w*", r"maas(?:im|i|in|imi)", r"kredi kart\w*", r"issiz\w*", r"icra\w*",
+    # Hindi in Latin letters
+    r"karz\w*", r"karza", r"udhaar", r"udhar", r"tankhwah", r"berozgar\w*",
+    # Japanese in Latin letters
+    r"shakkin", r"kyu+ryo+", r"sarakin",
+]
+
+# ---- identity, round 2: birth dates written informally
+_MONTHS = (r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\w*")
+_IDENTITY["en"] += [
+    r"born (?:on |in )?(?:the )?(?:\d{1,2}(?:st|nd|rd|th)? (?:of )?" + _MONTHS + r"|" + _MONTHS
+    + r" \d{1,2}(?:st|nd|rd|th)?|'\d{2}\b|\d{1,2}[./-]\d{1,2}[./-]\d{2,4})",
+    r"(?:turn|turning|i'?ll be|i will be|i'?m going to be|she'?ll be|he'?ll be) \d{1,3}"
+    r"(?: years old)? (?:on|next|this) (?:the )?(?:\d{1,2}(?:st|nd|rd|th)?|" + _MONTHS
+    + r"|(?:mon|tues|wednes|thurs|fri|satur|sun)day|week|month|year)",
+    r"birthday(?:'s| is| was)?\b[^.]{0,30}\b(?:\d{1,2}(?:st|nd|rd|th)? (?:of )?" + _MONTHS
+    + r"|" + _MONTHS + r" \d{1,2}\b|\d{1,2}[./]\d{1,2})",
+]
+_IDENTITY["es"] += [r"cumpleanos (?:es )?el \d+", r"cumplo \d+ (?:anos )?el \d+"]
+_IDENTITY["fr"] += [r"anniversaire (?:est )?le \d+", r"j'aurai \d+ ans le \d+"]
+_IDENTITY["de"] += [r"geburtstag (?:ist )?am \d+", r"werde (?:am \d+\.? \w+ )?\d+ am \d+"]
+_IDENTITY["it"] += [r"compleanno (?:e )?il \d+", r"compio \d+ anni il \d+"]
+_IDENTITY["pt"] += [r"aniversario (?:e )?(?:no dia|em|a) \d+", r"faco \d+ anos (?:no dia|em|a) \d+"]
+_IDENTITY["nl"] += [r"verjaardag (?:is )?op \d+", r"word \d+ op \d+"]
+_IDENTITY["pl"] += [r"urodziny (?:mam )?\d+", r"koncze \d+ lat"]
+
+# ---- location, round 2: home security and whereabouts
+_HIDING = (r"(?:mat|doormat|pot|plant ?pot|flower ?pot|planter|stone|rock|brick|gnome"
+           r"|meter(?: box)?|bin|shed|porch|ledge|door ?frame|drainpipe|letter ?box|mail ?box|gutter|bird ?house"
+           r"|hedge|lockbox|key ?safe|wheel arch|bumper)s?")
+_LOCATION["en"] += [
+    # a key and where it is hidden
+    r"(?:spare |door |house |front |back |side |flat |car |garage |shed |gate )?keys?(?:'s| is"
+    r"| are|'re)?(?: \w+){0,3}? (?:under|behind|inside|in|on top of|above|beneath|on|by)\b"
+    r"[^.]{0,30}\b" + _HIDING,
+    # weak spots: doors and windows that do not lock, alarms and cameras off
+    r"(?:door|doors|window|windows|gate|lock|locks|latch|garage|shutters?|skylight|cat ?flap"
+    r"|burglar alarm|house alarm|alarm system|our alarm"
+    r"|(?:security|doorbell|driveway|front|back|garden"
+    r"|outdoor|porch|ring|house|home) cameras?|cctv|ring doorbell|doorbell|security lights?"
+    r"|motion (?:sensor|light)s?)(?:'s|s)?\b[^.]{0,30}\b(?:unlocked|doesn'?t (?:lock|shut"
+    r"|close|work|latch)|does not (?:lock|shut|close|work)|won'?t (?:lock|shut|close)"
+    r"|never (?:lock|locks|locked|shut|shuts|closes)|broken|bust|busted|not working"
+    r"|isn'?t working|offline|dead|faulty|jammed|stuck open|disabled|not set|isn'?t set"
+    r"|hasn'?t (?:worked|been (?:working|set|on))|has not worked|stopped working"
+    r"|left open|wide open)",
+    r"(?:leave|left|keep|kept|leaving|keeping) (?:the |our |my )?(?:\w+ )?(?:door|window|gate"
+    r"|garage|garage door)s? (?:unlocked|on the latch)",
+    r"(?:leave|left|keep|kept|leaving|keeping) (?:the |our |my )?(?:\w+ )?(?:door|window|gate"
+    r"|garage|garage door)s? open\b[^.]{0,30}\b(?:when|while|whenever) (?:we'?re|i'?m|we are"
+    r"|i am|nobody'?s|no one'?s) (?:out|away|at work|gone|asleep|not in|home)",
+    r"(?:don'?t|do not|never|forgot to|didn'?t|rarely|won'?t) (?:set|arm|turn on|switch on)"
+    r" (?:the |our )?(?:burglar |house )?(?:alarm|cameras?|cctv)",
+    r"(?:don'?t|do not|never|forgot to|didn'?t|rarely|won'?t) lock (?:the |our |my )?(?:\w+ )?"
+    r"(?:door|doors|house|flat|gate|windows?|garage|shed)",
+    # away from home: sitters, a trip with dates, back in three weeks
+    r"house[- ]?sitt\w*", r"(?:no|need|needs|needed|looking for|find|found|booked|got|have)"
+    r" (?:a )?(?:pet|cat|dog)[- ]?sitter",
+    r"(?:away|abroad|on holiday|on vacation|holiday|vacation|trip|travell?ing|flying|fly"
+    r"|out of (?:town|the country)|(?:we'?re|we are|i'?m|i am|we'?ll be|i'?ll be|we will be"
+    r"|i will be) in \w+)\b[^.]{0,40}\b\d{1,2}(?:st|nd|rd|th)? ?(?:-|to|until|till|through"
+    r"|thru) ?\d{1,2}(?:st|nd|rd|th)?\b",
+    r"\d{1,2}(?:st|nd|rd|th)? ?(?:-|to|until|till|through|thru) ?\d{1,2}(?:st|nd|rd|th)?"
+    r"(?: of)? " + _MONTHS + r"\b[^.]{0,40}\b(?:away|abroad|holiday|vacation|trip|flight"
+    r"|flying|sitt\w*|empty|nobody|no one)",
+    r"(?:we'?ll be|we'?re|we are|we will be|i'?ll be|i'?m|i am|i will be) (?:in|at) \w+ for"
+    r" (?:two|three|four|five|six|a couple of|a few|\d+) (?:weeks|months)",
+    r"(?:off|going|heading|flying|travell?ing|driving|sailing|away|abroad|holiday|vacation"
+    r"|trip)\b[^.]{0,30}\bfor (?:two|three|four|five|six|a couple of|a few|\d+) (?:weeks|months)",
+    r"(?:we'?re|we are|we'?ll be|i'?m|i am|i'?ll be) (?:away|abroad|gone|travell?ing) (?:all|most)"
+    r" of " + _MONTHS,
+    r"(?:door|gate|window|shed|garage)s? (?:has|have|with) no (?:lock|locks|latch|alarm)",
+    r"no locks? on (?:the|our|my) (?:\w+ )?(?:door|gate|window|shed|garage)",
+    r"(?:i'?m|i am|she'?s|he'?s) (?:the )?only one (?:home|in|at home|here|in the house)",
+    r"(?:away|gone|abroad|out of the country|travell?ing|on holiday|on vacation) for"
+    r" (?:two|three|four|five|six|a couple of|a few|\d+) (?:weeks|days|nights|months)",
+    r"(?:flying|fly|flight|leaving|leave|off to|heading (?:out|off)|going away|jetting off)\b"
+    r"[^.]{0,40}\b(?:back|home|return\w*) (?:in|after|on|the following|next) (?:\w+ )?(?:weeks?"
+    r"|days?|months?|fortnight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
+    # where someone lives, said by landmarks instead of a number
+    # (a home described by landmarks: _LANDMARK_HOME, in the code below)
+    # a home far from anyone
+    r"no neighbou?rs (?:for|within|nearby|around)", r"nearest neighbou?rs? (?:is|are) \w+ (?:miles"
+    r"|km|kilometres|minutes)", r"(?:middle of nowhere|isolated|remote) (?:house|cottage|farm"
+    r"|cabin|place|spot|farmhouse)",
+    r"cul-de-sac", r"what3words", r"///[a-z]+\.[a-z]+\.[a-z]+",
+    r"(?:i'?m|we'?re|i am|we are|i live in|we live in|my home is|our home is) the (?:flat|house"
+    r"|apartment|one) (?:above|below|next to|opposite|behind) the",
+    r"(?:floor|flat|unit|apartment|apt|room|suite) \d+[a-z]? (?:of|in|at) (?:the )?[\w' ]{0,25}"
+    r"(?:building|tower|house|block|court|flats|apartments|estate|halls)",
+    r"\d+(?:st|nd|rd|th) floor of",
+    # alone at home, or alone at set times
+    r"(?:usually|always|often|mostly|normally|completely) (?:alone|on my own|by myself|home alone)",
+    r"(?:alone|on my own|by myself) (?:after|until|till|from|at night|in the evenings?"
+    r"|most nights|on weekends|at weekends|when)",
+    r"lives? (?:on (?:my|his|her|their) own|by (?:my|him|her)self)",
+    r"living on (?:my|his|her|their) own",
+    # where valuables are kept at home
+    r"(?:the|my|our|a) safe(?:'s| is)? (?:\w+ )?(?:in|behind|under|inside|hidden|bolted)",
+    r"(?:keep|kept|keeps|hide|hid|hidden|stash\w*) (?:\w+ ){0,3}?(?:cash|money|jewell?ery|gold"
+    r"|valuables|passports?|savings|guns?|the deeds|watches)\b[^.]{0,30}\b(?:under|in|behind"
+    r"|inside) (?:the|a|my|our)",
+    r"(?:valuables|jewell?ery|cash|gold|guns?) (?:is|are) (?:kept |hidden |stored )?(?:in|under"
+    r"|behind) the",
+]
+# living alone, in every covered language: "je vis seule", "vivo sola"
+_LOCATION["any"] = [
+    r"vivo sol[oa]", r"vive sol[oa]", r"je vis seule?", r"(?:il|elle) vit seule?",
+    r"(?:ich )?(?:lebe|wohne) allein\w*", r"vivo da sol[oa]", r"(?:vive|abita) da sol[oa]",
+    r"moro sozinh[oa]", r"(?:vivo|mora) sozinh[oa]", r"(?:ik )?woon alleen",
+    r"mieszkam sam[a]?", r"mieszka sam[a]?",
+]
+_LOCATION["es"] += [r"llave\w*\b.{0,30}\b(?:debajo|bajo|detras|maceta|felpudo|buzon)",
+                    r"(?:de vacaciones|fuera) del? \d{1,2} al \d{1,2}"]
+_LOCATION["fr"] += [r"cle\b.{0,30}\b(?:sous|derriere|pot de fleurs|paillasson|boite aux lettres)",
+                    r"(?:en vacances|absents?|partis) du \d{1,2} au \d{1,2}"]
+_LOCATION["de"] += [
+    r"(?:haus|wohnung) (?:steht|ist|bleibt|stehen) (?:\w+ )?leer",
+    r"\w*schlussel\w*\b.{0,30}\b(?:hinter|blumentopf|fussmatte|briefkasten)",
+    r"\d{1,2}\.? ?(?:-|bis) ?\d{1,2}\.?[^.]{0,30}\b(?:weg|verreist|im urlaub"
+    r"|nicht (?:da|zu ?hause))",
+]
+_LOCATION["it"] += [r"chiav\w*\b.{0,30}\b(?:sotto|dietro|vaso|zerbino|cassetta)",
+                    r"(?:in vacanza|via) dal \d{1,2} al \d{1,2}"]
+_LOCATION["pt"] += [r"chave\w*\b.{0,30}\b(?:atras|vaso|tapete|caixa do correio)",
+                    r"(?:de ferias|fora) (?:de|do dia) \d{1,2} a \d{1,2}"]
+_LOCATION["nl"] += [r"sleutel\w*\b.{0,30}\b(?:achter|bloempot|deurmat|brievenbus)",
+                    r"(?:op vakantie|weg) van \d{1,2} tot \d{1,2}"]
+_LOCATION["pl"] += [r"klucz\w*\b.{0,30}\b(?:za|doniczk\w*|wycieraczk\w*|skrzynk\w*)",
+                    r"(?:na urlopie|nie ma nas|wyjezdzamy) od \d{1,2} do \d{1,2}"]
+
+# ---- special, round 2
+_SPECIAL["law"]["en"] += [
+    # prison said plainly or in slang
+    r"did time", r"doing time", r"served time",
+    r"(?:did|served|doing|got|spent|done) (?:\w+ ){0,2}(?:months|years|weeks|stretch)"
+    r" (?:inside|in prison|in jail|behind bars)",
+    r"\d+ (?:months|years|weeks) inside", r"(?:time|stretch|spell) inside",
+    r"inside for (?:burglary|robbery|theft|fraud|assault|drugs|dealing|gbh|abh|murder"
+    r"|manslaughter|arson|shoplifting|possession)",
+    r"banged up", r"(?:was|got|been|being|were) locked up", r"locked up (?:for|in)",
+    r"behind bars", r"went down for", r"sent down", r"young offenders?", r"yoi", r"borstal",
+    r"juvie", r"juvenile (?:detention|hall|record|court)", r"gang member", r"in a gang",
+    r"ex-?con", r"ex-?offenders?", r"on remand", r"remanded", r"on bail",
+    r"bail (?:conditions|hearing)", r"made bail", r"jumped bail", r"(?:ankle|electronic) tag",
+    r"on a tag", r"(?:night|nights|hours|weekend|day) in (?:the |a )?cells?", r"police cells?",
+    r"(?:in|into) (?:police )?custody",
+    # the police doing something to someone
+    r"(?:police|cops?|the feds|fbi|polizei|policia|polizia|politie|policj\w*|gendarm\w*"
+    r"|carabinieri|guardia civil)\b.{0,30}\b(?:search\w*|raid\w*|stopp\w*|pulled (?:me|him|her"
+    r"|us|them) over|question\w*|arrest\w*|interview\w*|caution\w*|record|visit\w*|came (?:round"
+    r"|to)|took (?:me|him|her|them)|seiz\w*|detain\w*|charg\w*|warrant|knocked|durchsuch\w*"
+    r"|festgenommen|verhaftet|registr\w*|detuv\w*|fouill\w*|perquisi\w*|doorzocht|przeszuk\w*"
+    r"|zatrzyma\w*)",
+    r"(?:searched|raided|arrested|questioned|stopped|interviewed|cautioned|detained) by (?:the )?"
+    r"(?:police|cops|officers)", r"stop(?:ped)? and search\w*",
+    r"(?:got|was|been|being|get) pulled over", r"pulled (?:me|us) over", r"search warrant",
+    r"raided (?:my|our|the) (?:flat|house|home|place|room)",
+    r"(?:my|our) (?:flat|house|home|place|car|room) (?:was|got) (?:searched|raided)",
+    # fines and points on a driving licence
+    r"speeding (?:fines?|tickets?|points|course|offen[cs]es?|awareness)",
+    r"(?:\d+|three|six|nine|twelve) points on (?:my|his|her) (?:licen[cs]e|record)",
+    r"points on (?:my|his|her) licen[cs]e", r"penalty points",
+    r"(?:speeding|driving|court|police|motoring|penalty) (?:fine|ticket|notice)s?",
+    r"fixed penalty", r"fined", r"got a fine", r"a fine of [£$€]?\d", r"driving ban",
+    r"banned from driving", r"lost (?:my|his|her) licen[cs]e",
+    # courts and tribunals, in every language
+    r"tribunal\w*", r"trybunal\w*", r"juzgado\w*", r"rechtbank\w*",
+    r"gerichts?(?:termin|verfahren|verhandlung|vollzieher)\w*",
+    r"(?:arbeits|amts|land|familien|sozial|straf|verwaltungs)gericht\w*",
+    r"(?:small claims|family|county|employment|crown|magistrates'?|youth|divorce|housing"
+    r"|immigration|high|supreme|district|traffic|civil|criminal) court",
+    r"court (?:summons|papers|fine|ruling|judgment|judgement|action|proceedings)",
+    r"hearing (?:at|in) (?:the )?(?:\w+ )?court",
+    r"(?:w|do|przed) sadzie", r"sad(?:u|em|zie) (?:rodzinn|rejonow|okregow|pracy)\w*",
+    r"rozpraw\w*", r"sprawa? (?:w sadzie|sadow\w*|karn\w*|rozwodow\w*)",
+    r"(?:tengo|tiene|tenemos|tienes) (?:un )?juicio", r"juicio (?:penal|civil|oral|laboral|rapido)",
+    r"audiencia (?:judicial|preliminar)", r"udienza", r"au tribunal", r"devant le juge",
+    r"proces[- ]verba\w*",
+    # crimes named, and records, in the other languages
+    r"vorbestraft\w*", r"korperverletzung", r"diebstahl", r"strafverfahren\w*",
+    r"ermittlungsverfahren\w*", r"condamnation\w*", r"pregiudicat\w*", r"fedina penale",
+    r"ficha (?:criminal|suja)", r"processad[oa]", r"veroordeling", r"taakstraf", r"gezeten",
+    r"siedzial\w* w (?:wiezieniu|pace|kiciu)", r"odsiadyw\w*", r"mandat karny",
+    r"dostal\w* mandat",
+]
+_SPECIAL["religion"]["en"] += [
+    # religious and belief identities by name
+    r"lds", r"latter[- ]day saints?", r"freemason\w*", r"masonic",
+    r"(?:free)?masons?\b(?=[^.]{0,40}\blodge)",
+    r"(?:my|the) lodge (?:meets|meeting|night|brothers)",
+    r"alevi\w*", r"sunni\w*", r"shi(?:a|'a|ite|'ite|ah)s?", r"ismaili\w*", r"ahmadi\w*",
+    r"druze", r"yazidi\w*", r"zoroastrian\w*", r"parsi", r"rastafari\w*", r"rasta",
+    r"scientolog\w*", r"unitarian\w*", r"adventist\w*", r"amish", r"mennonite\w*", r"hasidic",
+    r"haredi\w*", r"chassid\w*", r"hassid\w*", r"sufi\w*", r"baha'?i", r"shinto\w*", r"taois[mt]",
+    r"coptic", r"maronite\w*", r"calvinis\w*", r"lutheran\w*", r"presbyterian\w*",
+    r"episcopalian\w*", r"non-?denominational", r"opus dei", r"kabbalah", r"christadelphian\w*",
+    r"hare krishna", r"iskcon", r"church of (?:england|scotland|jesus christ)", r"c of e",
+    r"cofe", r"devout", r"ex-?(?:muslim|mormon|catholic|christian|jw|jehovah'?s witness)",
+    r"apostate", r"deconvert\w*",
+    r"(?:my|our) (?:parish|congregation|imam|rabbi|pastor|priest|vicar)",
+]
+_SPECIAL["religion"]["any"] = [
+    r"franc-macon\w*", r"freimaurer\w*", r"massone\w*", r"massoneria", r"maconaria",
+    r"masoneria", r"vrijmetselaar\w*", r"wolnomularz\w*", r"sunnit\w*", r"chiit\w*",
+    r"schiit\w*", r"sciit\w*", r"xiit\w*", r"szyic\w*", r"alevit\w*", r"mormon\w*",
+]
+_SPECIAL["politics"]["en"] += [
+    # party and union membership by name
+    r"card-carrying",
+    r"(?:the |a |my )?(?:\w+ )?union (?:member\w*|rep|dues|subs|card|branch|steward|official"
+    r"|meeting)",
+    r"member of (?:the |a )?(?:\w+ )?(?:union|party)",
+    r"(?:unite|unison|gmb|rmt|neu|nasuwt|ucu|pcs|usdaw|cwu|rcn|bma|fbu|aslef|seiu|uaw|afl-cio"
+    r"|ver\.?di|ig metall|ugt|ccoo|cgil|cisl|uil|cgt|cfdt|fnv|cnv|opzz|nszz) (?:union|member\w*"
+    r"|rep|membership)",
+    r"(?:joined|join|in|member of) (?:the )?(?:unite|unison|gmb|rmt|neu|nasuwt|ucu|pcs|usdaw"
+    r"|cwu|rcn|bma|fbu|aslef|seiu|uaw|ver\.?di|ig metall|ugt|ccoo)\b",
+    # protests and marches, and political causes named
+    r"(?:went on|going on|go on|joined|join|attended|attend\w*|went to|going to|go to"
+    r"|marched (?:in|on|with)) (?:the|a|an|this|that|\w+day'?s) (?:[\w'-]+ ){0,3}(?:march"
+    r"|rally|protest|demonstration|vigil|picket(?: line)?|sit-in|blockade)s?\b",
+    r"pro-?palestin\w*", r"pro-?israel\w*", r"zionis[mt]\w*", r"anti-?zionis\w*",
+    r"free palestine",
+    r"anti-(?:war|fascist|racist|brexit|abortion|immigration|government|capitalist|vax"
+    r"|vaxx?ers?|lockdown)\w*",
+]
+_SPECIAL["ethnicity"]["en"] += [
+    # caste
+    r"castes?", r"dalit\w*", r"brahmin\w*", r"kshatriya", r"vaishya", r"shudra", r"sudra",
+    r"scheduled (?:caste|tribe)s?", r"savarna", r"avarna", r"burakumin", r"untouchab\w*",
+]
+_SPECIAL["sexuality"]["other"] = [
+    r"gei (?:desu|da|no)", r"escinsel\w*", r"lezbiyen\w*", r"homosexuell", r"bisexuell",
+    r"lesbisk", r"flata",
+]
+
+# ---- other people, round 2: relation words in Swedish, Turkish and Hindi
+_RELATIONS_STRONG["other"] = [
+    r"(?:min|mitt|mina) (?:mamma|pappa|syster|bror|fru|man|sambo|flickvan|pojkvan|dotter|son"
+    r"|barn|mormor|farmor|morfar|farfar)",
+    r"ablam|abim|annem|babam|kardesim|esim|kizim|oglum|teyzem|amcam|dayim|halam|arkadasim"
+    r"|kuzenim",
+    r"(?:mere|meri|mera|meray) (?:papa|mummy|mummi|maa|mom|dad|pita|behen|bhai|biwi|pati|dost"
+    r"|beta|beti|bhabhi|chacha|chachi|nana|nani|dada|dadi|saas|sasur|husband|wife|boyfriend"
+    r"|girlfriend)",
+]
+
+# ---- credentials, round 2: the general words for a secret. They count only
+# with a value ("password is X", "pw: X"), a secret's shape anywhere in the
+# sentence, or a give-away habit ("same password", "my birthday backwards")
+# - so "I keep the API key in an env var", "two-factor is on for all my
+# accounts" and "I prefer passkeys over passwords" are not cards.
+_CREDENTIALS_WEAK = [
+    r"pass(?:word|wd|wrd|code|phrase|key)s?", r"passwd", r"p[a@4][s$5]{2}(?:w|vv)[o0]r?d[sz]?",
+    r"p@ss\w*", r"p4ss\w*", r"pa55\w*", r"pw", r"pins?", r"pin ?codes?", r"pin numbers?",
+    r"2fa", r"mfa", r"otp", r"two[- ]factor", r"credentials?", r"creds", r"mnemonic",
+    # a lock's code named without the code: "the office door code changed"
+    r"(?:door|alarm|gate|safe|garage|lock|entry|access|security|wi-?fi|wlan|verification"
+    r"|unlock|keypad|key ?safe|lockbox|padlock|locker|building|front door|back door|sim"
+    r"|voicemail|screen ?lock) ?codes?",
+    r"encryption keys?", r"private keys?", r"ssh keys?", r"gpg keys?", r"pgp keys?",
+    r"api[ _-]?keys?", r"access (?:keys?|tokens?)", r"secret keys?",
+    r"auth(?:entication)? tokens?", r"bearer tokens?", r"personal access tokens?",
+    r"refresh tokens?", r"client secrets?", r"app passwords?", r"wpa2?",
+    r"(?:api|app|aws|oauth|webhook|signing|jwt|session|consumer) secrets?",
+    r"(?:github|gitlab|openai|anthropic|aws|azure|gcp|stripe|slack|discord|telegram|bot"
+    r"|hugging ?face) (?:token|key|secret)s?",
+]
+#: What makes a weak word a real secret: a habit that gives it away.
+_CRED_HABIT = re.compile(
+    r"(?<![\w])(?:same (?:password|pin|passcode|code|one|login|as)|reus(?:e|ed|es|ing)"
+    r"|(?:my|his|her|our|the (?:dog|cat)'?s?|dog'?s|cat'?s|kids?'?s?) (?:birthday|birth ?date"
+    r"|name|names|initials|postcode|house number|phone number|anniversary|wedding (?:date|day)"
+    r"|maiden name|surname|number plate|reg)|birthday|backwards|plus (?:1|one|123|!)"
+    r"|written (?:down|on)|post-?it|sticky note|(?:in|on) (?:a |my |the )?(?:notes? app|notebook"
+    r"|spreadsheet|text file|google doc|word doc|fridge|piece of paper)|never changed"
+    r"|still the default|default (?:password|pin|one)|for everything|everywhere|every (?:site"
+    r"|account)|(?:gave|give|told|tell|share|shared|sent|send|text(?:ed)?|email(?:ed)?) (?:\w+ )"
+    r"{0,3}(?:my|the|our) (?:\w+ )?(?:password|pin|passcode|login|code)"
+    r"|(?:year|day|date) (?:i|we|he|she) (?:was|were) born"
+    # round 2, after an audit of the weak words: more give-away habits
+    r"|never (?:chang\w*|updat\w*|rotat\w*)|(?:is|are) also (?:the|my|our)"
+    r"|(?:written|kept|stuck|taped|hidden|scribbled) (?:down |inside |in |on |under |behind "
+    r"|at |by )|(?:write|wrote|writes|stick|keep) (?:\w+ ){0,2}(?:on|in|under) (?:my|the|a|our) "
+    r"(?:cards?|phone|notes?|wallet|fridge|desk|post-?its?|sticky notes?|paper|notebook|diary"
+    r"|monitor|screen|keyboard|purse)"
+    r"|(?:no|without (?:a|any)) (?:passphrase|password|passcode|pin|screen ?lock|lock ?screen)"
+    r"|(?:too|very|really|quite|pretty|dead) (?:simple|short|weak|easy|obvious|guessable|basic))"
+    r"(?![\w])")
+#: A value after a weak word: "password is X", "pw: X", "PIN = X".
+_CRED_VALUE = re.compile(
+    r"(?:is|are|was|were|would be|should be|will be|'s|=|:|->)\s*[\"']?([^\s\"',.;!?]+)")
+#: Words after "is" that are not a secret: "the key is in an env var", "my
+#: SSH key is fine", "2FA is on".
+_NOT_A_VALUE = set("""
+in on at into inside under stored saved kept fine safe secure weak strong the a an my our his
+her their your same wrong expired long short changed reset set required hashed encrypted salted
+managed missing invalid valid working broken needed enabled disabled not never being getting
+rotated revoked leaked compromised generated random unique different somewhere handled checked
+validated optional mandatory case visible hidden masked shown empty blank there here what where
+how why which that this those these it its off gone lost forgotten fixed sorted done ignored
+supported deprecated stale
+""".split())
+#: Little words that may stand before a value or a state: "is also in the
+#: vault" (a state), "is just qwerty" (a value) - the word after decides.
+_FILLER = {"also", "still", "now", "just", "only", "really", "always", "basically", "literally",
+           "simply", "actually", "currently"}
+#: What a password hint is made of: "my password is the street I grew up
+#: on", "the PIN is our wedding year".
+_HINT_NOUNS = (r"(?:street|road|school|name|names|birthday|town|village|city|house|pet|dog|cat"
+               r"|car|kids?|sons?|daughters?|wife|husband|partner|year|date|number|postcode|team"
+               r"|club|band|song|film|book|word|phrase|initials|maiden|mother|mum|mom|dad|father"
+               r"|anniversary|wedding|nickname|surname|reg|plate|place|hometown)(?![\w])")
+#: Test and example material: "the fake user in the seed data has password X".
+_CRED_EXAMPLE = re.compile(r"(?<![\w])(?:fake|dummy|test|testing|example|sample|placeholder"
+                           r"|seed data|mock|demo|fixture|fixtures|lorem)(?![\w])")
+
+# ---- harmless look-alikes, round 2 (blanked before the lists run)
+_HARMLESS_ROUND2 = [
+    # software about a sensitive topic is not the topic: "a budgeting app",
+    # "the password field", "credit card form validation", "a diabetes-tracking app"
+    r"(?:password|passcode|pin|login|sign[- ]?in|auth\w*|2fa|mfa|credit card|debit card|card"
+    r"|bank\w*|payments?|budget\w*|expense|finance|finances|money|salary|payroll|invoice|tax"
+    r"|medication|medicine|pill|meds|health|fitness|diabetes|insulin|glucose|symptom|mood|period"
+    r"|fertility|pregnancy|therapy|mental health|dating|prayer|address|location"
+    r"|diet|calorie|weight|sleep|habit|drug|dose|appointment)(?:[- ](?:\w+ing|\w+er|reminder"
+    r"|tracker|tracking|reset|entry|strength|input|form))? (?:apps?|tool|site|website"
+    r"|webapp|form|fields?|input|screen|page|modal|dialog|component|widget|validation|validator"
+    r"|generator|hashing|hash|strength (?:meter|checker)|flow|mockups?|ui|ux|api|sdk|library|lib"
+    r"|module|schema|table|endpoint|feature|plugin|bot|dashboard|tracker|reminders?|prototype"
+    r"|demo|template|tests?|fixture|icons?|logos?|placeholder|masks?|buttons?|integration"
+    r"|processing|processor|gateway|checkout|project|checker|calculator|finder|planner|scanner"
+    r"|logger|quiz)s?",
+    r"(?:password|passcode|pin|medication|pill|diabetes|budget\w*|expense|health|fitness|mood"
+    r"|period|dating)-\w+ (?:apps?|tool|site|feature)",
+    r"\w*passw(?:o|oe)rt(?:feld|felder|eingabe|generator|hash\w*|reset|richtlinie\w*|starke\w*)",
+    r"(?:visa|mastercard|amex) (?:cards?|debit|credit|electron|checkout|logos?|icons?|payments?"
+    r"|network|brand)",
+    r"pill[- ](?:shaped|buttons?|badges?|tabs?|toggles?|shapes?)",
+    r"portfolio (?:sites?|websites?|pages?|pieces?|projects?|reviews?|links?|urls?)",
+    r"(?:drop(?:ped|ping)?|put|place|add\w*|stick) (?:a |the )?pins? (?:on|at|to|in|for)",
+    r"map pins?", r"pins? on (?:the |a |my )?map", r"lock ?screen", r"screen ?lock (?:widget|api)",
+    r"(?:browser|app|modal|popup|pop-up|chat|terminal|settings|dialog|editor|preview|console"
+    r"|devtools|program|application|vs ?code) windows?",
+    r"(?:client|customer)s? (?:is|are) (?:a|an) (?:\w+ )?(?:bank|company|companies|startup|firm"
+    r"|charity|council|retailer|brand|business|agency|university|hospital|school|government"
+    r"|insurer|airline|fintech)",
+    # tech secrets and the idiom "secret"
+    r"secret (?:sauce|ingredient|weapon|recipe|garden|service|history|menu|level|door|passage"
+    r"|room|agent|lair|society|world|life of)", r"the secret (?:to|of|is)", r"open secret",
+    r"(?:ci|github|repo|k8s|kubernetes|docker|vault|environment|env|actions|pipeline|gitlab)"
+    r" secrets?", r"secrets? (?:in|management|manager|rotation|scanning|store"
+    r"|file|engine)", r"stor(?:e|es|ed|ing) secrets",
+    r"secrets (?:are|were|is|get) (?:stored|kept|managed|encrypted|injected|loaded|read|rotated)",
+    # a title after reading/watching: the title is blanked in code (_TITLE)
+    # drinks and dishes named after people
+    r"bloody mary", r"hail mary", r"tom collins", r"eggs benedict", r"beef wellington",
+    r"earl grey", r"lady grey", r"peach melba", r"shirley temple", r"arnold palmer",
+    r"granny smith", r"jack daniel'?s", r"johnnie walker", r"captain morgan",
+    r"ben (?:&|and) jerry'?s", r"sloppy joes?", r"mary poppins", r"peter pan", r"peter rabbit",
+    # hyperbole: addicted to a game, allergic to meetings, a bit OCD about tabs
+    r"addicted to(?! (?:alcohol|drink\w*|booze|drugs?|heroin|cocaine|coke|crack|meth\w*|opioids?"
+    r"|opiates?|painkillers?|pills|prescription|benzos?|ketamine|weed|cannabis|pot|nicotine"
+    r"|cigarettes?|smoking|vaping|vapes?|gambling|betting|slots|porn\w*|sex|shopping|spending"
+    r"|food|sugar|caffeine|codeine|oxy\w*|fentanyl|valium|xanax|tramadol|speed|mdma|ecstasy"
+    r"|lsd|it\b|them\b|him\b|her\b))",
+    r"allergic to (?:meetings|mondays|mornings|work|exercise|effort|early (?:starts|mornings)"
+    r"|hard work|responsibility|commitment|paperwork|small talk|emails?|phone calls|calls"
+    r"|people|stupidity|bad code|php|java\w*|excel|jira|deadlines|admin|cardio|running|the gym"
+    r"|cleaning|housework|chores|bureaucracy|anything before|(?:bad|ugly|slow|long|early|late"
+    r"|any|all) \w+)",
+    r"(?:a (?:bit|little|tad)|bit|kinda|kind of|slightly|so|super|totally|such an?) (?:ocd"
+    r"|adhd|anal) (?:about|with|when|over)",
+    r"(?:so|well|proper|really|totally) (?:depressed|gutted|devastated|traumati[sz]ed) (?:that )?"
+    r"(?:\w+ ){1,2}(?:lost|drew|got (?:beat|beaten|knocked out|relegated)|are out|went out"
+    r"|is (?:over|cancelled|ending)|ended|was cancelled|didn'?t win)",
+    r"malat[oaie] (?:di|per) (?:calcio|sport|musica|cinema|videogiochi|lavoro|shopping|viaggi"
+    r"|moda|tecnologia|libri|serie tv|montagna|mare)",
+    r"(?:ziek|beu|moe) van (?:de|het|die|dat|al (?:die|dat|de|het)) (?:regen|weer|kou|hitte"
+    r"|herrie|lawaai|drukte|files?|werk|politiek|reclame|vergaderingen|meetings|mails?|wachten)",
+    r"doente (?:por|de) (?:futebol|musica|\w+bol)", r"chor\w* na punkcie",
+    # a religion, a church or prayer as an idiom or a building
+    r"(?:is|was) (?:basically |like |kind of |practically )?(?:my|a|our) religion",
+    r"(?:old|former|converted|ruined|abandoned|medieval|gothic|historic|disused|deconsecrated)"
+    r" (?:church|chapel|mosque|temple|synagogue|monastery|convent)(?:es|s)?",
+    r"(?:church|chapel)(?:es)? (?:converted|turned) into",
+    r"church ?(?:bells?|halls?|towers?|spires?|organ|roof|steps|yard|fete|car park|building)s?",
+    r"my religion is (?:football|coffee|code|coding|vim|emacs|python|rust|linux|\w+ball|cricket"
+    r"|rugby|music|metal|jazz|food|cooking|sleep|running|cycling|gaming|work|tea)",
+    # sightseeing is not worship
+    r"(?:visited|visiting|visit|saw|toured|tour of|photographed|photos of) (?:a|the|an|some|this"
+    r"|that|lots of|loads of) (?:\w+ )?(?:church|churches|cathedrals?|mosques?|temples?"
+    r"|synagogues?|monaster(?:y|ies)|abbeys?|shrines?)",
+    r"(?:new |next |this |last )?tax year", r"(?:the|a) church (?:down|up|across|round|near|at the"
+    r" end of|on the corner of) (?:the |our )?(?:road|street|lane|way|corner)",
+    r"(?:visit\w*|toured|tour of) (?:\w+ ){0,2}(?:prisons?|jails?|courts?|courthouses?|gaols?)"
+    r"(?: as museums?)?",
+    # coffee and tea are not a drinking problem
+    r"(?:drink|drinks|drinking) too much (?:coffee|tea|water|coke|diet coke|energy drinks"
+    r"|caffeine|fizzy drinks|soda)",
+    # routine dental and eye check-ups
+    r"(?:the )?dentist(?:'s)?(?: check-?ups?| appointments?)?(?= (?:at|on|twice|once|every|next"
+    r"|tomorrow|today|this))", r"dental (?:check-?ups?|cleaning)", r"eye tests?",
+    # studying or teaching a subject is not living it
+    r"(?:teach\w*|taught|study|studied|studying|studies|research\w*|lectur\w*|modules?|courses?"
+    r"|degree|thesis|dissertation|essay|paper|phd|masters|seminar|class|book|article|podcast"
+    r"|documentary|history|sociology|philosophy|anthropology|psychology|politics|economics|policy)"
+    r" (?:\w+ ){0,2}?(?:on|of|about|in|into) (?:the )?(?:\d+\w*[- ]century |modern |medieval "
+    r"|ancient |early |comparative |global |british |european |american |world )?(?:religions?"
+    r"|immigration|migration|politics|medicine|health|money|finance|crime|criminal justice"
+    r"|policing|prisons?|sexuality|gender|race|ethnicity|caste|disability|mental health"
+    r"|psychiatry|addiction|poverty|debt|banking|law|psychology)\b",
+    # fitness and numbers that are not money or a body
+    r"couch (?:to|2) \d+k", r"c25k", r"parkrun",
+    r"(?:ran|run|runs|running|jog\w*|walk\w*|cycl\w*|rode|ride|riding|swam|swim\w*|hik\w*"
+    r"|row\w*|did|doing|finished|train\w* for|sub-?\d+) (?:a |the "
+    r"|my |another )?\d+(?:\.\d+)?k",
+    r"(?:convert|converting|how (?:many|much) is|what(?:'s| is)) \d+(?:\.\d+)? ?(?:kg|kilos?|lbs?"
+    r"|pounds|stones?|st)",
+    # owing thanks, not money
+    r"owe (?:you|u|ya|them|him|her) one", r"owe (?:it|this|that) (?:all )?to",
+    # banks you sit on (es, pt, it)
+    r"banco (?:del|de la|en el|en la|de|do|da|no|na) (?:parque|plaza|jardin|praca|jardim|madeira"
+    r"|madera|piedra|pedra)", r"sentar\w* en el banco",
+    # "key" in Spanish meaning the key to success
+    r"(?:la )?clave (?:del|de la|de su|de mi|de nuestro|de nuestra) (?:exito|proyecto|problema"
+    r"|asunto|cuestion|negocio|equipo|victoria|partido|todo)",
+]
+_HARMLESS += _HARMLESS_ROUND2
+
+
+# ==========================================================================
 #   Folding the text
 # ==========================================================================
 
@@ -1403,6 +2131,38 @@ def _visible(text: str) -> str:
     return "".join(out).translate(_QUOTES)
 
 
+#: Words right before a title: "reading The Psychology of Money".
+_TITLE_CUE = re.compile(
+    r"(?i)(?<![\w])(?:reading|read|re-?reading|reread|finished|started|loved|watching|watched"
+    r"|re-?watching|binge(?:d|ing)?|listening to|listened to|playing|played|book|novel|film|movie"
+    r"|show|series|album|podcast|game|song|track)\s+")
+#: A title: two or more capitalised words, or "The/A/An" and one, with the
+#: small words titles have between them. Never a possessive ("Mark's").
+_TITLE = re.compile(
+    r"(?:(?:The|A|An)\s+)?[A-Z][\w'-]*(?:\s+(?:(?:of|the|a|an|and|in|on|to|for|with|at|by|from|&"
+    r"|de|la|le|el|der|die|das)\s+)*[A-Z][\w'-]*)*")
+_QUOTED_BY = re.compile(r"[\"“]([^\"”]{1,60})[\"”]\s+by\b")
+
+
+def _title_spans(orig: str) -> list:
+    """Where the titles are in `orig`: after a cue word, or in quotes before
+    "by" ('"Hurt" by Johnny Cash')."""
+    out = []
+    for c in _TITLE_CUE.finditer(orig):
+        m = _TITLE.match(orig, c.end())
+        if not m:
+            continue
+        words = m.group(0).split()
+        caps = [w for w in words if w[:1].isupper()]
+        if any(w.endswith("'s") for w in words):
+            continue
+        if len(caps) >= 2 or (len(caps) == 1 and words[0] in ("The", "A", "An") and len(words) > 1):
+            out.append((m.start(), m.end()))
+    for m in _QUOTED_BY.finditer(orig):
+        out.append((m.start(1), m.end(1)))
+    return out
+
+
 class _Views:
     """The text three ways: `orig` (visible, case kept), `low` (lower case,
     accents kept) and `flat` (lower case, no accents), with `fmap` mapping
@@ -1423,10 +2183,25 @@ class _Views:
                 fmap.append(i)
         self.flat = "".join(flat)
         self.fmap = fmap
-        self.blank = _HARMLESS_RX.sub(lambda m: " " * len(m.group(0)), self.flat)
+        spans = [(m.start(), m.end()) for m in _HARMLESS_RX.finditer(self.flat)
+                 if m.end() > m.start()]
+        # Round 2: a title after "reading", "watching"... ("The Psychology of
+        # Money", "Rich Dad Poor Dad") is a title, not a topic or a person.
+        if _TITLE_CUE.search(self.orig) or '"' in self.orig:
+            first = {}
+            for j, i in enumerate(fmap):
+                first.setdefault(i, j)
+            for a, b in _title_spans(self.orig):
+                fa = first.get(a)
+                fb = first.get(b, len(self.flat))
+                if fa is not None and fb > fa:
+                    spans.append((fa, fb))
+        blank = list(self.flat)
+        for a, b in spans:
+            blank[a:b] = " " * (b - a)
+        self.blank = "".join(blank)
         # Where the harmless phrases are, in `orig` positions (for names).
-        self.harmless_spans = [(fmap[m.start()], fmap[m.end() - 1] + 1)
-                               for m in _HARMLESS_RX.finditer(self.flat) if m.end() > m.start()]
+        self.harmless_spans = [(fmap[a], fmap[b - 1] + 1) for a, b in spans]
 
 
 def _words(frags) -> re.Pattern:
@@ -1453,6 +2228,7 @@ def _compile_lists():
 
 
 _LISTS = _compile_lists()
+_CRED_WEAK_RX = _words(_CREDENTIALS_WEAK)
 # "my son", "our client", "the owner's boss" - with at most one word
 # between ("my eldest son"), but not "my ... the/a ...".
 _WEAK_RX = re.compile(r"(?<![\w])(?:" + _POSSESSIVES + r")\s+(?:(?!(?:the|a|an|and|of|to|in)\s)"
@@ -1491,10 +2267,11 @@ _YEAR_BEFORE = re.compile(
 _IS_TOKEN = re.compile(r"(?:(?:\bis|\bare|\bwas|\bes|\best|\bist|\be|\bè|\bé|\bto)\s+|[=:]\s*)"
                        r"[\"'“‘]?([^\s\"'”’,;()]{4,64})")
 _UNITY = re.compile(
-    r"^(?:\d+(?:st|nd|rd|th|am|pm|k|m|g|kg|km|cm|mm|gb|mb|tb|kb|ghz|mhz|hz|mph|kph|min|mins"
+    r"^(?:\d+(?:st|nd|rd|th)?-\d+(?:st|nd|rd|th)|\d+(?:st|nd|rd|th|am|pm|k|m|g|kg|km|cm|mm|gb|mb|tb|kb|ghz|mhz|hz|mph|kph|min|mins"
     r"|h|hr|hrs|s|ms|x|p|px|v|w|kw|kwh|mah|l|ml|yo|d|y|mo|wk|pt|em|rem|fps|hp|bhp|cc|lbs?"
     r"|oz|mg|in|ft|yrs?|h\d+)|v?\d+(?:\.\d+)+\w*|[a-f0-9]{7,40}|\d+x\d+|\d+-\d+"
     r"|\d{1,2}[:.]\d{2}\s?(?:am|pm|h)?|utf-?\d+|iso-?\d+|rfc-?\d+|sha-?\d+|md5|ipv\d|https?/?\d(?:\.\d)?"
+    r"|argon2\w*|bcrypt|scrypt|pbkdf2|aes-?\d+|rsa-?\d+|ed25519|x25519|[hre]s256|base64|utf8"
     r"|tls\d(?:\.\d)?|oauth\d|usb-?[c\d](?:\.\d)?|type-?c|gen\d|wi-?fi-?\d\w?|wpa\d|ddr\d|pcie\d"
     r"|hdmi\d(?:\.\d)?|dp\d(?:\.\d)?|[a-z]\d{1,2}|\d{1,2}[a-z]"
     r"|(?:python|py|win|windows|ps|mp|h|x|arm|i|m|covid|f|a|usb|ipv|ubuntu|debian|fedora"
@@ -1588,6 +2365,16 @@ _LOCATION_SHAPES = [
 ]
 
 
+#: A condition said by its initials, in capitals, after "have", "got",
+#: "with": "I have POTS", "diagnosed with COPD", "living with ME/CFS".
+_CONDITION_ACRONYM = re.compile(
+    r"(?i:have|has|had|got|with|diagnosed with|suffer(?:s|ing)? from|living with|it'?s)\s+"
+    r"(?:(?i:a|an|mild|severe|bad) )?(?:POTS|SVT|COPD|GERD|GORD|CKD|CHF|DVT|IBD|CFS|ME/CFS"
+    r"|MS(?! (?i:office|teams|word|excel|paint|sql|access|edge|dos|project|outlook))|BPD|EUPD|GAD"
+    r"|ASD|ALS|MND|SLE|AF|PMDD|PID|HSV|EDS|NAFLD|CRPS|FND|TMJ|TMD|MCAS|MDD|OSA|BPH|CML|CLL"
+    r"|AML|NHL)(?![\w/-])")
+
+
 def _luhn(digits: str) -> bool:
     total, alt = 0, False
     for d in reversed(digits):
@@ -1638,7 +2425,120 @@ def _service_token(v: _Views) -> Optional[str]:
     for m in _IS_TOKEN.finditer(v.orig):
         if _codey(m.group(1)):
             return "a password-like word after \"is\""
+    # Round 2: a login word straight before a code-like word, with no "is":
+    # "vpn user owner01 pass Gr33nTea!", "wifi sifresi ayse1234".
+    for m in _KEY_TOKEN.finditer(v.flat):
+        if _codey(m.group(1)) and not _CRED_EXAMPLE.search(v.blank):
+            return "a login word and a password-like word"
+    # "admin / admin123", "root/toor123" next to a login word
+    if _LOGIN_WORD.search(v.blank):
+        for m in _USER_PASS.finditer(v.orig):
+            if _codey(m.group(2)):
+                return "a username and password pair"
     return None
+
+
+#: A login word, then (maybe ":" or "=") a token: "pass Gr33nTea!", "pw blue42".
+_KEY_TOKEN = re.compile(
+    r"(?<![\w])(?:pass|pw|pwd|password|passwd|passcode|pin|login|user(?:name)?|clave|senha|haslo"
+    r"|wachtwoord|passwort|mdp|sifre\w*|pasuwaado|pasuwado|losenord\w*)\s*[:=]?\s+[\"']?"
+    r"([^\s\"',;()]{4,64})")
+_LOGIN_WORD = re.compile(r"(?<![\w])(?:log ?in|login|user(?:name)?|admin|root|creds|credentials"
+                         r"|account|router|vpn|ssh|server|wifi|nas|pass(?:word)?|pw|pwd|sign in"
+                         r"|portal)(?![\w])")
+_USER_PASS = re.compile(r"(?<![\w/])([\w.@-]{2,40}) ?/ ?([^\s/]{4,40})(?![\w/])")
+
+
+def _weak_credentials(v: _Views) -> Optional[str]:
+    """The general words for a secret ("password", "PIN", "API key") count
+    only with a value after them, a code-like word right after them, or a
+    habit that gives the secret away. Talk about security with no secret in
+    it ("I keep the API key in an env var") is not a card."""
+    text = v.blank
+    found = list(_CRED_WEAK_RX.finditer(text))
+    if not found:
+        return None
+    if _CRED_HABIT.search(text):
+        return "a password habit that gives it away"
+    if _CRED_EXAMPLE.search(text):
+        return None
+    for m in found:
+        rest = text[m.end():m.end() + 80]
+        # "password for the router is X": skip the "for the router"
+        rest = re.sub(r"^\s*(?:for|on|to|of|at|in) (?:[\w.@'-]+ ){0,4}?[\w.@'-]+(?![\w])"
+                      r"(?=\s*" + _COPULA + ")", "", rest)
+        vm = re.match(r"\s*(" + _COPULA + r")?\s*[\"']?([^\s\"',.;!?]+)", rest)
+        if not vm:
+            continue
+        cop, val = vm.group(1), vm.group(2)
+        if cop and val in _FILLER:
+            nxt = re.match(r"\s*\S+\s+[\"']?([^\s\"',.;!?]+)", rest[vm.end(1):] if vm.group(1) else rest)
+            val = nxt.group(1) if nxt else val
+        if cop and val not in _NOT_A_VALUE and val not in _FILLER:
+            return "a password or key with its value"
+        if not cop and _codey(val):
+            return "a password or key with its value"
+        # a code-like word a few words on: "door code at work changed to C1492X"
+        if any(_codey(t) for t in re.findall(r"[^\s\"',;()]{4,64}", rest[:40])):
+            return "a password or key with its value"
+        # "the password is the street I grew up on": a hint that gives it away
+        if cop and re.match(r"\s*(?:" + _COPULA + r")\s*(?:my|our|his|her|the|a) (?:\w+ )?"
+                            + _HINT_NOUNS, rest):
+            return "a password habit that gives it away"
+    return None
+
+
+#: "is", "=", ":" and the like between a secret's name and its value, in
+#: the eight languages ("è"/"é" are "e" once accents are gone).
+_COPULA = (r"(?:(?:is|are|was|were|would be|should be|will be|e|es|est|ist|jest|era|starts with"
+           r"|begins with|ends with|ending in|ends in|changed to|set to|reset to)(?![\w])|'s(?![\w])"
+           r"|=|:|->)")
+
+
+def _pet_subject(v: _Views) -> bool:
+    """Is the sentence about a pet or a plant, with no "I" in it? ("my cat's
+    on antibiotics for an ear infection", "the dog's on steroids for his skin")"""
+    return bool(_PET_SUBJECT.search(v.blank)) and not re.search(
+        r"(?<![\w])(?:i|i'm|im|i've|i'd|i'll|me|myself|we|we're|us)(?![\w])", v.blank)
+
+
+_PET_SUBJECT = re.compile(
+    r"^\W*(?:\w+ ){0,2}?(?:my|our|the) (?:old |new |little |elderly |young |poor |rescue |\w+'s )?"
+    r"(?:dogs?|cats?|pupp(?:y|ies)|kittens?|pets?|horses?|pony|rabbits?|bunny|hamsters?|budgies?"
+    r"|parrots?|tortoises?|guinea pigs?|ferrets?|goldfish|fish|chickens?|hens?|plants?|trees?"
+    r"|lawn|roses|tomato(?:es| plants?)|houseplants?|lizards?|snakes?|geckos?)(?:'s)?(?![\w])")
+
+#: A named street, and words that make it where someone is at set times:
+#: "I park on Fern Street overnight", "I'm at the gym on Bridge St till 8".
+_NAMED_STREET = re.compile(
+    r"(?<![\w])(?:on|in|at|near|off|along|by) (?:[A-Z][\w']+ ){1,2}(?:Street|St|Road|Rd|Lane|Ln"
+    r"|Avenue|Ave|Drive|Close|Way|Place|Pl|Crescent|Terrace|Square|Boulevard|Blvd|Gardens|Grove"
+    r"|Mews|Row|Walk|Hill|Parade|Circle|Track|Path)(?![\w])")
+_ROUTINE = re.compile(
+    r"(?<![\w])(?:live|lives|living|park|parks|parked|parking|stay|staying|home|flat|house|every"
+    r"|usually|always|till|until|overnight|each (?:morning|night|day|evening)|daily|weekdays?"
+    r"|weekends?|alone|at \d|\d ?(?:am|pm)|mornings|evenings|nights|leave|drop|pick)(?![\w])")
+_FIRST_PERSON = re.compile(r"(?<![\w])(?:i|i'm|im|i've|we|we're|my|our|me|us)(?![\w])")
+
+#: A home described by landmarks instead of a number, said by the owner:
+#: "our flat's opposite the Tesco", "we live in the cul-de-sac behind the Co-op".
+_LANDMARK_HOME = re.compile(
+    r"(?<![\w])(?:live|living|lives|flat|house|home|place|apartment|bungalow|cottage|cabin|caravan"
+    r"|farm|farmhouse|barn|chalet|houseboat|boat)(?:'s)?\b[^.]{0,40}\b(?:behind|opposite|above"
+    r"|below|beneath|next door to|next to|across (?:the road |the street )?from|round the corner"
+    r" from|around the corner from|at the (?:end|top|bottom) of|on the corner of) (?:the|a|an"
+    r"|that|this|\w+'s|\w+ (?:\w+ )?(?:road|street|lane|avenue|close|drive|way|track|terrace"
+    r"|crescent|grove|gardens|place|row|hill))\b")
+#: Membership of a party or union by its short name, in the languages that
+#: name parties that way: "ik ben lid van de SP", "je suis adherent au PS".
+#: (Not English "a member of the ...": the RSPB and the National Trust are
+#: not parties. English party and union names are in the politics list.)
+_MEMBER_ACRONYM = re.compile(
+    r"(?i:lid van|lid bij|mitglied (?:der|in der|bei der|im)|miembro del?"
+    r"|afiliad[oa] (?:al?|del?)|adh[eé]rente? (?:au|à la|a la|du|de la|de|des)"
+    r"|membre (?:du|de la|des)|iscritt[oa] (?:al|alla|a)|tesserat[oa] (?:del|della|al)"
+    r"|membro d[oa]|filiad[oa] ao?|cz[lł]onk\w*|należ\w* do|nalez\w* do) "
+    r"(?:(?i:the|de|der|del|du|la|le|al|ao|a) )?([A-Z][A-Za-z0-9-]{1,6})(?![\w])")
 
 
 def _shape_hits(v: _Views) -> list:
@@ -1689,6 +2589,8 @@ def _shape_hits(v: _Views) -> list:
         hits.append(("health", "a body weight"))
     if re.search(r"\bAIDS\b", v.orig):
         hits.append(("health", "health word (en)"))
+    if _CONDITION_ACRONYM.search(v.orig):
+        hits.append(("health", "a condition by its initials"))
     for name, rx in _IDENTITY_SHAPES:
         m = rx.search(v.blank)
         if m and name == "a phone number":
@@ -1713,6 +2615,18 @@ def _shape_hits(v: _Views) -> list:
         if rx.search(v.orig if view == "orig" else v.blank):
             hits.append(("location", name))
             break
+    if _FIRST_PERSON.search(v.blank):
+        if _NAMED_STREET.search(v.orig) and _ROUTINE.search(v.blank):
+            hits.append(("location", "a named street and a routine"))
+        if _LANDMARK_HOME.search(v.blank):
+            hits.append(("location", "a home described by landmarks"))
+    for m in _MEMBER_ACRONYM.finditer(v.orig):
+        if sum(c.isupper() for c in m.group(1)) >= 2:
+            hits.append(("special", "special word: politics (a party or union by name)"))
+            break
+    why = _weak_credentials(v)
+    if why:
+        hits.append(("credentials", why))
     return hits
 
 
@@ -1791,7 +2705,8 @@ def patterns(text: str) -> dict:
     ("religion", "law", ...). `rules` names what fired ("health word (es)"),
     never the words."""
     if not isinstance(text, str) or not text.strip():
-        return {"sensitive": False, "categories": [], "special": [], "rules": []}
+        return {"sensitive": False, "categories": [], "special": [], "rules": [],
+                "owner_subject": False}
     v = _Views(text)
     hits = []
     for cat, _sub, rule, rx in _LISTS:
@@ -1802,6 +2717,9 @@ def patterns(text: str) -> dict:
             hits.append((cat, f"{cat} word (accented)"))
     hits += _shape_hits(v)
     hits += _other_person(v)
+    if _pet_subject(v):
+        # A pet's or a plant's health, and "his skin" meaning the dog's.
+        hits = [h for h in hits if h[0] != "health" and h[1] != "he/she"]
     cats = [c for c in CATEGORIES if any(h[0] == c for h in hits)]
     rules = []
     for _, r in hits:
@@ -1809,7 +2727,36 @@ def patterns(text: str) -> dict:
             rules.append(r)
     special = [s for s in SPECIAL_LABELS if any(r.startswith(f"special word: {s} ")
                                                   for r in rules)]
-    return {"sensitive": bool(cats), "categories": cats, "special": special, "rules": rules}
+    # Whose topic is it? "I came out to my parents" is the owner's sexuality,
+    # not the parents'; "my old landlord is suing me" is the owner's court case.
+    owner = bool(_OWNER_SUBJECT.search(v.blank) or _OWNER_OBJECT.search(v.blank))
+    return {"sensitive": bool(cats), "categories": cats, "special": special, "rules": rules,
+            "owner_subject": owner}
+
+
+#: The sentence is about the owner: it starts with "I", "I'm", "me and",
+#: "the owner" (not "I think my sister...", "I'm worried my son..."), or
+#: with a verb and no subject at all ("came out as trans to my parents").
+_OWNER_SUBJECT = re.compile(
+    r"^\W*(?:(?:so|well|yeah|yes|honestly|btw|also|oh|ok|okay|and|but|remember|note)\W+)*"
+    r"(?:(?:i|i'm|im|i've|ive|i'd|i'll|me and|me &|the owner(?!'s)|owner(?!'s))(?![\w])"
+    r"(?!\s+(?:(?:am|'m|was|were|got|get|getting) )?(?:think|thought|heard|hear|found out|find out"
+    r"|worry|worried|know|knew|guess|believe|suspect|reckon|feel|felt|told|tell|said|say|learned"
+    r"|learnt|noticed|see|saw|wonder|hope|wish|scared|afraid|concerned|sad|upset|shocked"
+    r"|have a|have an|had a|had an|'ve got a|'ve got an)(?![\w]))"
+    r"|(?:came|come|coming|did|done|got|been|went|spent|served|voted|joined|had|have)(?![\w]))")
+#: ... or it names the owner as the one it happens to: "suing me".
+_OWNER_OBJECT = re.compile(
+    r"(?<![\w])(?:su(?:ing|ed|es)|arrest\w*|charg\w*|report\w*|prosecut\w*|took|taking|dragged"
+    r"|fined|cautioned|stopped|searched|evict\w*|deport\w*) (?:me|us)(?![\w])"
+    # "I told my boss I'm gay": what was told is about the owner
+    r"|(?:told|tell|telling|said|say) (?:\w+ ){1,3}(?:that )?(?:i'?m|i am|i was|i've)(?![\w])")
+
+
+def _someone_else(p: dict) -> bool:
+    """Say "someone else's" on the card only when another person is in the
+    sentence AND the sentence is not about the owner."""
+    return "other_people" in p["categories"] and not p.get("owner_subject")
 
 
 def _label(cat: str, special=()) -> str:
@@ -1844,7 +2791,7 @@ def topic(text: str) -> str:
     p = patterns(text)
     if not p["sensitive"]:
         return ""
-    r = reason_for(p["categories"], special=p["special"])
+    r = reason_for(p["categories"], special=p["special"], other_person=_someone_else(p))
     return r[len("about "):-len(", a sensitive topic")]
 
 
@@ -2114,11 +3061,13 @@ def classify(text: str, *, context="", use_model: bool = True, ask: Optional[Cal
     # clean does it name the topic of the words it came from. Each text's
     # topic is worked out on its own, so "someone else's" is said only when
     # another person is in the same sentence.
-    reason = reason_for(pats["categories"], special=pats["special"]) if pats["sensitive"] else ""
+    reason = reason_for(pats["categories"], special=pats["special"],
+                        other_person=_someone_else(pats)) if pats["sensitive"] else ""
     for c in ctx:
         p = patterns(c)
         if p["sensitive"] and not reason:
-            reason = reason_for(p["categories"], special=p["special"])
+            reason = reason_for(p["categories"], special=p["special"],
+                                other_person=_someone_else(p))
         for cat in p["categories"]:
             if cat not in pats["categories"]:
                 pats["categories"].append(cat)
