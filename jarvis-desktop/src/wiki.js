@@ -13,7 +13,7 @@
  * the backend answers with has a `state`:
  *
  *   reading   the model is reading it; no card yet
- *   waiting   the card is up, in the Jarvis bar and on the phone
+ *   waiting   the card is up, in the Jarvis bar, on the widget and on the phone
  *   writing   approved, writing the pages
  *   done      written                              (the server's sentence)
  *   refused   said no, nobody answered, or the plan was refused - and why
@@ -24,6 +24,8 @@
  *
  * @module wiki
  */
+
+import { APPROVE_WHERE } from "./jarvis-link.js";
 
 /** How often to ask while a job runs, and for how long before giving up. */
 export const POLL_MS = 3000;
@@ -80,7 +82,7 @@ export function describeJob(job) {
       return { text: said || "The model on the second card is reading it. No card yet.",
                tone: null, final: false };
     case "waiting":
-      return { text: said || "Waiting for your approval. Nothing is written until you answer.",
+      return { text: said || `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing is written until you do.`,
                tone: null, final: false };
     case "writing":
       return { text: said || "Writing the pages.", tone: null, final: false };

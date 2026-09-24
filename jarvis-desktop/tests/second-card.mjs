@@ -199,11 +199,11 @@ await check("turning the main switch ON sends one request, raises a card, and st
   assert.equal(master.checked, false, "shown as on before the card was approved");
   assert.equal(master.disabled, true, "a second card could be raised for the same switch");
   assert.equal(master.state, "waiting");
-  assert.match(master.text, /Waiting for your approval\. The card is in the Jarvis bar and on the widget/);
+  assert.match(master.text, /Waiting for your approval\. Approve it in the Jarvis bar, on the widget, or on your phone's Home screen/);
   assert.match(s.status, /Waiting for your approval/);
   // The same words the Brain's model install uses while its card waits.
   assert.ok(read("src/brain.js").includes(
-    "The card is in the Jarvis bar and on the widget — nothing changes until you approve it there."));
+    "Approve it ${APPROVE_WHERE} — nothing changes until you do."));
 });
 
 await check("a card already waiting: that switch says so, and the others stay usable", async () => {

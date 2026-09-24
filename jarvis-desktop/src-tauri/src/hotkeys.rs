@@ -75,9 +75,12 @@ pub const ACTIONS: &[Action] = &[
     },
     Action {
         id: "quick_note",
-        label: "Quick note to Logseq",
+        // Not "to Logseq": the quickbar arms Logseq only when this PC is set
+        // up for it, and otherwise the first note app it is set up for
+        // (main.js, "quick-note-summon").
+        label: "Quick note",
         default: "Alt+Shift+N",
-        hint: "Summon the bar already prefixed with #log.",
+        hint: "Summon the bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
     },
     Action {
         id: "toggle_widget",

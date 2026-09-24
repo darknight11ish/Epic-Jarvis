@@ -27,6 +27,7 @@
 import {
   announce,
   applyTheme,
+  APPROVE_WHERE,
   currentZoom,
   followTheme,
   followZoom,
@@ -1193,7 +1194,7 @@ const sc = {
 
 /** The same words the Brain's model install uses while its card waits. */
 const SC_WAITING =
-  "Waiting for your approval. The card is in the Jarvis bar and on the widget — nothing changes until you approve it there.";
+  `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing changes until you do.`;
 const SC_UPDATE =
   "This PC's Jarvis does not have the second graphics card part yet. Update the backend by running apply-patches.ps1, then open this again.";
 /** The main switch has no row in `features`; these are its words. */

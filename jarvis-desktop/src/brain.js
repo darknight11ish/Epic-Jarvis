@@ -23,6 +23,7 @@
 
 import {
   announce,
+  APPROVE_WHERE,
   currentLink,
   followTheme,
   followZoom,
@@ -654,7 +655,7 @@ function renderModels() {
       if (ref && !isCurrent) {
         actions.push(
           button("Use", () => modelAction("switch", ref), {
-            title: "Ask to switch to this model. You approve it in the Jarvis bar.",
+            title: `Ask to switch to this model. You approve it ${APPROVE_WHERE}.`,
             live: true,
           })
         );
@@ -722,8 +723,8 @@ function renderModels() {
         "p",
         "banner model-ask",
         state.modelAsk.action === "install"
-          ? `Waiting for your approval: installing ${state.modelAsk.ref}. The card is in the Jarvis bar and on the widget — nothing downloads until you approve it there.`
-          : `Waiting for your approval: switching to ${state.modelAsk.ref}. The card is in the Jarvis bar and on the widget — nothing changes until you approve it there.`
+          ? `Waiting for your approval: installing ${state.modelAsk.ref}. Approve it ${APPROVE_WHERE} — nothing downloads until you do.`
+          : `Waiting for your approval: switching to ${state.modelAsk.ref}. Approve it ${APPROVE_WHERE} — nothing changes until you do.`
       )
     );
   } else if (state.modelAskEnded) {
@@ -750,8 +751,8 @@ function installForm() {
       "p",
       "model-speed",
       "Install a model this computer does not have yet. Type its name the way you " +
-        "would give it to Ollama, for example llama3.1:8b. This only asks: a card " +
-        "appears in the Jarvis bar, and nothing downloads until you approve it there."
+        "would give it to Ollama, for example llama3.1:8b. This only asks: nothing " +
+        `downloads until you approve its card ${APPROVE_WHERE}.`
     )
   );
   const line = el("div", "row-actions");
@@ -772,7 +773,7 @@ function installForm() {
       }
       await modelAction("install", ref);
     },
-    { title: "Ask to install this model. You approve it in the Jarvis bar.", live: true }
+    { title: `Ask to install this model. You approve it ${APPROVE_WHERE}.`, live: true }
   );
   go.id = "model-install";
   input.addEventListener("keydown", (event) => {
@@ -913,8 +914,8 @@ async function modelAction(action, reference) {
       ask.cardId = await findNewCard(waitingBefore);
       toast(
         action === "install"
-          ? "Waiting for your approval. The card is in the Jarvis bar — nothing downloads until you approve it there."
-          : "Waiting for your approval. The card is in the Jarvis bar — nothing changes until you approve it there.",
+          ? `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing downloads until you do.`
+          : `Waiting for your approval. Approve it ${APPROVE_WHERE} — nothing changes until you do.`,
         "ok"
       );
     }
