@@ -198,6 +198,39 @@ def t_a_denial_proposes_a_constraint_never_writes_one():
               not hasattr(stub, "add_fact") and not hasattr(stub, "_accept"))
 
 
+def t_a_no_on_an_always_ask_card_proposes_nothing():
+    """AP-11: second_card_enable always asks (the module acts on nothing
+    else), so "I do not want Jarvis to second card enable without asking me
+    first" says nothing - and every "no" used to put it in the Memory tab."""
+    import threading
+    calls = []
+    stub = types.ModuleType("jarvis_extract")
+    stub.propose = lambda *a, **k: calls.append((a, k))
+    sys.modules["jarvis_extract"] = stub
+    box = {}
+
+    def ask():
+        box["v"] = G.check("second_card_enable", {"text": "turn on the wiki"},
+                           prompt="second card", timeout=20.0)
+    t = threading.Thread(target=ask, daemon=True)
+    t.start()
+    rid = None
+    for _ in range(200):
+        time.sleep(0.05)
+        pend = G.pending()
+        if pend:
+            rid = pend[0]["id"]
+            break
+    if not rid:
+        check("a second-card card was raised (test setup)", False, "no pending row appeared")
+        return
+    G.decide(rid, False, by="the test")
+    t.join(timeout=20)
+    check("it was denied (test setup)", box.get("v") is not None
+          and box["v"].outcome == "denied", repr(box.get("v")))
+    check("denying second_card_enable proposes no memory", calls == [], repr(calls))
+
+
 def t_a_timeout_never_proposes_anything():
     """Nobody decided anything here - a timeout must not seed a constraint,
     the same reason it must not be recorded as a denial."""
@@ -382,6 +415,7 @@ def main():
     for fn in (t_the_type_fails_closed, t_nobody_answered_is_timed_out_not_denied,
                t_a_real_denial_is_denied,
                t_a_denial_proposes_a_constraint_never_writes_one,
+               t_a_no_on_an_always_ask_card_proposes_nothing,
                t_a_timeout_never_proposes_anything,
                t_an_approval_is_approved,
                t_the_tool_hook_says_something_different,
