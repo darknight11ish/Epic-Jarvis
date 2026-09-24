@@ -66,8 +66,10 @@ await check("a code block is dropped rather than read character by character", a
   await page.waitForTimeout(400);
   const spoken = await speakCalls(page);
   await page.close();
-  assert.equal(spoken.length, 1);
-  assert.ok(!spoken[0].includes("const x"), spoken[0]);
+  // The colon ends the first piece (speech-pieces.js); the code block in
+  // the sentence after it is dropped.
+  assert.deepEqual(spoken, ["Here you go:", "done."], JSON.stringify(spoken));
+  assert.ok(!spoken.some((s) => s.includes("const x")), JSON.stringify(spoken));
 });
 
 await check("a typed reply, even multi-sentence, is never spoken", async () => {
@@ -262,6 +264,29 @@ await check("the next sentence's sound is asked for while the current one plays,
   assert.ok(at(log, "speak Three.") < at(log, "end Two."), JSON.stringify(log));
   // No gap: Two starts as One ends, its sound already made.
   assert.equal(at(log, "play Two."), at(log, "end One.") + 1, JSON.stringify(log));
+});
+
+await check("the first piece is spoken at its first comma, the next made while it plays", async () => {
+  // The owner's decision of 2026-09-24: speech starts at the first comma
+  // once the phrase is long enough (speech-pieces.js); only the first piece.
+  const page = await quickbar({
+    heard: K.HEARD_OWNER,
+    chatReplies: [[delta("Tomorrow looks mild, "), delta("with light rain in the afternoon, "),
+      delta("then sun. "), delta("Later, it clears up. ")]],
+    speakDelayMs: 30,
+  });
+  await K.slowSpeaker(page, 300);
+  await holdAndRelease(page);
+  await page.waitForTimeout(1600);
+  const log = await K.speechLog(page);
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(errors, []);
+  assert.deepEqual(played(log),
+    ["Tomorrow looks mild,", "with light rain in the afternoon, then sun.", "Later, it clears up."],
+    JSON.stringify(log));
+  assert.ok(at(log, "speak with light rain in the afternoon, then sun.") < at(log, "end Tomorrow looks mild,"),
+    `the second piece was not made while the first played: ${JSON.stringify(log)}`);
 });
 
 await check("only one ahead: never two sounds being made at once", async () => {

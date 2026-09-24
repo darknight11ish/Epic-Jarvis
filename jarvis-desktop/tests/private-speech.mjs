@@ -252,6 +252,13 @@ await check("a tool starts while the next sentence's sound is made: that sound i
   assert.ok(!log.includes("speak Two new emails."), JSON.stringify(log));
 });
 
+await check("a first piece cut at its comma: a tool that starts while the next sound is made still stops it", async () => {
+  const log = await spokenSlowly(QUIET, [routeLine(OFFER_ROUTE), delta("Tomorrow looks mild, "), delta("with light rain. "),
+    ...filler(60), step({ phase: "tool_started", tool: "email_read" }), delta("Two new emails. ")]);
+  assert.ok(log.includes("speak with light rain."), `the scenario did not make the second sound ahead: ${JSON.stringify(log)}`);
+  assert.deepEqual(playedOf(log), ["Tomorrow looks mild,", PRIVATE_LINE], JSON.stringify(log));
+});
+
 await check("a refused tool did not run: read aloud", async () => {
   const said = await spoken(QUIET, [routeLine(OFFER_ROUTE), step({ phase: "tool_refused", tool: "email_send" }),
     delta("It is sunny. ")]);

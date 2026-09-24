@@ -135,6 +135,8 @@ import {
   userMessage,
 } from "./chat-history.js";
 import { fileNote, loadTargets, notSetUp, noTargetsLine, targetName } from "./note-capture.js";
+// Where a spoken answer is cut into pieces - the same rule as the phone.
+import { nextSpeechPiece } from "./speech-pieces.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -2776,22 +2778,23 @@ function stripMarkdownForSpeech(text) {
     .trim();
 }
 
-/** Looks for one or more complete sentences that have arrived since
- *  `spokenUpTo` and queues each to be spoken. A "complete" sentence needs
- *  end punctuation FOLLOWED BY whitespace - punctuation alone is not
- *  enough, because the stream may simply not have produced the next
- *  character yet, and speaking a sentence the model was about to keep
- *  extending would need it un-said a moment later. Not fooled-proof
- *  against "Dr." or "3.14" - a real sentence splitter is more machinery
- *  than a queue that is, worst case, a little choppier warrants. */
+/** Looks for one or more complete pieces that have arrived since
+ *  `spokenUpTo` and queues each to be spoken (speech-pieces.js). A piece
+ *  is a sentence - end punctuation FOLLOWED BY whitespace, because the
+ *  stream may simply not have produced the next character yet, and
+ *  speaking a sentence the model was about to keep extending would need it
+ *  un-said a moment later. The FIRST piece of an answer (nothing cut yet,
+ *  `spokenUpTo` 0) may end sooner, at its first comma once the phrase is
+ *  long enough, so Jarvis starts talking sooner. Not fool-proof against
+ *  "Dr." or "3.14" - a real sentence splitter is more machinery than a
+ *  queue that is, worst case, a little choppier warrants. */
 function checkForSpeakableSentence() {
   if (!state.voiceTurn || speechMuted) return;
   for (;;) {
-    const unspoken = state.buffer.slice(spokenUpTo);
-    const match = unspoken.match(/^([\s\S]*?[.!?])\s+/);
-    if (!match) return;
-    spokenUpTo += match[0].length;
-    enqueueSpeech(match[1]);
+    const cut = nextSpeechPiece(state.buffer.slice(spokenUpTo), spokenUpTo === 0);
+    if (!cut) return;
+    spokenUpTo += cut.consumed;
+    enqueueSpeech(cut.piece);
   }
 }
 

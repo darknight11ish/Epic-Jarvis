@@ -1676,8 +1676,10 @@ class _TurnWatch:
         raw = [m for m in (raw or []) if isinstance(m, dict)]
         users = [m for m in raw if m.get("role") == "user"]
         self.provenance = None
+        self.spoken = False          # the newest question was said out loud
         if users:
             i = max(j for j, m in enumerate(raw) if m.get("role") == "user")
+            self.spoken = raw[i].get("provenance") == "voice"   # with_spoken_note
             newest = [raw[i]]
             if (i > 0 and raw[i - 1].get("role") == "user"
                     and raw[i - 1].get("provenance") == "shared"):
@@ -2154,7 +2156,8 @@ def _read_line(raw: bytes, rnd: _Round, on_text: Callable[[str], None]) -> None:
 
 #: A complete sentence the way both apps find one to speak: ".", "!" or "?"
 #: and then whitespace (the phone's SpeechText.findSentences, the desktop's
-#: checkForSpeakableSentence in main.js).
+#: speech-pieces.js). Since 2026-09-24 an app may ask for the FIRST piece's
+#: sound sooner, at its first comma; say_start_ms shows when it did.
 _SENTENCE_DONE = re.compile(r"[.!?]\s")
 
 
@@ -2188,6 +2191,56 @@ def _voice_timing(voice: dict, text: str) -> None:
             voice["tail"] = text[-1:]
     except Exception:
         voice["mark"] = None
+
+
+# --------------------------------------------------------------------------
+#   Spoken questions get spoken-style answers
+# --------------------------------------------------------------------------
+#
+# The owner's decision of 2026-09-24. When the newest user message has
+# `provenance: "voice"` (docs/JARVIS-API.md section 18.1 - read from the
+# request as it arrived, by _TurnWatch, because the server takes
+# `provenance` off `messages` before this loop gets them), each request this
+# turn makes gets one extra system line saying the answer will be read
+# aloud. A typed turn is sent exactly as before.
+#
+# It is added here, to the request for THIS machine's model, and nowhere
+# else: never to the caller's `messages`, so the relay (the only path to a
+# cloud model) never sees it - and the relay's own filter keeps only user
+# messages when a turn leaves this PC anyway (degrade-filter.patch).
+#
+# Adapted from kyutai unmute's system prompt (unmute/llm/system_prompt.py,
+# MIT - THIRD-PARTY-NOTICES.txt).
+
+SPOKEN_NOTE = (
+    "The owner asked this out loud, and your answer will be read aloud. "
+    "Write the way a person speaks. Start with one short sentence. Use one to "
+    "three sentences in all, unless the owner asks for more detail. No lists, "
+    "headings, markdown, emojis, or symbols that cannot be said, such as * or #. "
+    "Everything is read literally, so write numbers and units the way they are "
+    "said: \"fourteen degrees\", not \"14°C\".")
+
+_SPOKEN_MSG = {"role": "system", "content": SPOKEN_NOTE}
+
+
+def with_spoken_note(msgs: list) -> list:
+    """A new list: `msgs` with SPOKEN_NOTE as a system message just before
+    the newest user message. `msgs` itself is not changed.
+
+    Never first. Ollama puts the Modelfile's SYSTEM block in front only when
+    the first message is not a system message (memory-prefix.patch), so a
+    note at position 0 would silently drop the Jarvis rules. When the newest
+    user message IS the first one - the first question of a conversation -
+    the Modelfile's SYSTEM block goes first, word for word (LANE_SYSTEM,
+    which test_agent.py holds to the Modelfile): exactly what Ollama would
+    have put there, with the note after it."""
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users:
+        return list(msgs)
+    at = users[-1]
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, dict(_SPOKEN_MSG)] + list(msgs)
+    return list(msgs[:at]) + [dict(_SPOKEN_MSG)] + list(msgs[at:])
 
 
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
@@ -2350,8 +2403,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         if cur["feature"] is not None:
             # A second-card lane: its model has no Jarvis SYSTEM block.
             msgs = [{"role": "system", "content": LANE_SYSTEM}] + list(convo)
-        body = {"model": cur["model"], "messages": fit_messages(msgs, budget()),
+        room = budget() - (estimate_tokens(_SPOKEN_MSG) if watch.spoken else 0)
+        body = {"model": cur["model"], "messages": fit_messages(msgs, room),
                 "stream": True, **opts}
+        if watch.spoken:
+            # After trimming, so trimming can never leave the note first.
+            body["messages"] = with_spoken_note(body["messages"])
         if not _reasoning_field_refused:
             body.update(REASONING_OFF)
         if offer_tools and tool_schemas:

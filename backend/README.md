@@ -6792,8 +6792,10 @@ words, the last 20, in memory (gone when Jarvis restarts). The one line under
 inside your first spoken question after Jarvis started (a few seconds of
 waiting). Now they load in the background as soon as an app first asks the
 PC about voice. **What was checked and left alone:** both apps already start
-speaking the first sentence as soon as it is complete, and the "is it you?"
-check still runs before speech-to-text, always.
+speaking the first sentence as soon as it is complete (since 2026-09-24,
+at its first comma once the phrase is long enough - "Spoken questions get
+spoken-style answers", below), and the "is it you?" check still runs
+before speech-to-text, always.
 
 **3. "One moment."** If nothing has started playing about a second after you
 finish, an app can play a short "One moment." in the voice Jarvis is using.
@@ -6897,6 +6899,85 @@ first-sentence numbers were checked with a scripted model); anything on
 Windows. The PowerShell lines above could not be run here - `pwsh` was
 refused by this container's sandbox - so they were read by hand for Windows
 PowerShell 5.1 problems.
+
+# Spoken questions get spoken-style answers (`jarvis_agent.py`, 2026-09-24)
+
+The owner's decision of 2026-09-24. No patch and no new route: it is a few
+lines in `jarvis_agent.py`, which `apply-patches.ps1` already copies.
+
+## What it does, in plain words
+
+**On the PC.** When the question you just asked was **said out loud**, the
+model is told, in one extra line, that its answer will be read aloud: start
+with one short sentence, use one to three sentences unless you ask for more,
+no lists, headings, markdown, emojis or symbols that cannot be said, and
+write numbers and units the way they are said. A **typed** question is sent
+exactly as before. The line is adapted from kyutai's unmute (MIT, credited
+in `THIRD-PARTY-NOTICES.txt`). The answer to a spoken question is shorter
+on screen too, and it is still kept on screen, not read aloud, when it is
+private - the same rules as before.
+
+How the PC knows: every app marks each question with where its words came
+from (`provenance`, `docs/JARVIS-API.md` section 18.1). Only `voice` on the
+**newest** question counts. The PC takes `provenance` off before any model
+sees the conversation, so the answering loop reads it from the request as
+it arrived.
+
+**Where the line goes.** Just before your question. **Never first**: a
+system line in first place would make Ollama leave out the Jarvis rules
+built into `jarvis-primary` (see `memory-prefix.patch`). On the first
+question of a conversation, the PC puts those rules first itself, word for
+word, then the line, then the question. The line is only ever added to the
+request for this PC's own model - never to anything a cloud model could be
+sent.
+
+**In both apps (no change on the PC).** Jarvis starts talking at the first
+comma of an answer, once the phrase before it is long enough (10 or more
+characters, and not ending on a word like "and" or "the"), instead of
+waiting for the whole first sentence. Only the first piece of each answer;
+after that it speaks whole sentences as before. "1,450" and "10:30" are
+never cut. With no comma at all, it starts after about 12 words. Desktop:
+`jarvis-desktop/src/speech-pieces.js`; phone: `voice/SpeechText.kt`. The
+same rule, numbers and word list on both, held to one list of cases
+(`jarvis-desktop/tests/fixtures/first-piece-cases.json`). The idea and the
+word list come from KoljaB's stream2sentence (MIT, credited).
+
+In the delay numbers (`flow.timings`), `first_sentence_ms` still means the
+first complete sentence; the app may now ask for the first sound before
+that, which `say_start_ms` shows.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_spoken_style.py
+```
+
+It checks, on what really goes to the model: a spoken question gets the line
+once, on every round of a tool turn, just before the question; a typed one,
+or one where only an earlier message was spoken, is sent unchanged; the line
+is never first, even after a long conversation is trimmed; on the second
+card the Jarvis rules are not sent twice; and the conversation the relay
+would send to a cloud model never has it.
+
+## Not checked, said plainly
+
+- **How well the 8B model follows it.** It was checked with a scripted
+  model only. A small model follows instructions like these only partly;
+  expect shorter answers, not always one to three sentences.
+- **Where Qwen3's chat template puts a system line that is not first.**
+  Ollama's own code gathers every system message into one `System` value
+  as well as keeping it in place (`template/template.go`, `collate`, read
+  here); which of the two Qwen3's template uses could not be read (the
+  Ollama model registry is blocked from this container). If it is the
+  gathered one, the top of the prompt differs between a spoken and a typed
+  question, so after switching between the two Ollama reads the
+  conversation again once - a slower first word on that answer, nothing
+  worse. The recalled-facts block and the tool loop's notes are in the same
+  position already.
+- **How the first-comma pieces sound.** Nobody listened to them here; the
+  earlier measurement (first sound 2.04 s to 1.23 s on this container) was
+  of the sound being made, not of how natural the pause after the first
+  phrase is.
 
 # Outside text in the tool loop (`jarvis_agent.py`, 2026-09-24)
 

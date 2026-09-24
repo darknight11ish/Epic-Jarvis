@@ -191,6 +191,32 @@ LongMemEval (Di Wu et al.), MIT - https://github.com/xiaowu0162/LongMemEval
   is the one given for browser-use above with this copyright line in place
   of that one.
 
+SPOKEN ANSWERS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+unmute (kyutai-labs), MIT - https://github.com/kyutai-labs/unmute
+  backend/jarvis_agent.py's SPOKEN_NOTE, the line a spoken question's
+  answer is written under, is adapted from its speech-conversation prompt
+  (unmute/llm/system_prompt.py, _SYSTEM_PROMPT_BASICS: "Your responses will
+  be spoken out loud ... Everything is pronounced literally ... Write as a
+  human would speak."), read at commit
+  e348e567c7020d40020412024f7aa03c38a3bc3e. No other unmute code is used.
+  Copyright (c) 2025 kyutai. Licensed under the MIT License, whose full
+  text is the one given for browser-use above with this copyright line in
+  place of that one.
+
+stream2sentence (Kolja Beigel), MIT - https://github.com/KoljaB/stream2sentence
+  The list of words a speaker does not pause after
+  (stream2sentence/avoid_pause_words.py, copied and lowercased, each word
+  once) is in jarvis-desktop/src/speech-pieces.js and
+  jarvis-client voice/SpeechText.kt, and the idea of cutting the first
+  piece of a streamed answer early, with its 10-character minimum
+  (stream2sentence.py, minimum_first_fragment_length), is used there.
+  Read at commit 4751acec7686a8a6247e1562e8834ae8333e9bd2. The licence is
+  stated in its setup.py ("License :: OSI Approved :: MIT License") and
+  README; the repository has no LICENSE file of its own. Copyright (c)
+  Kolja Beigel. The MIT License text is the one given for browser-use
+  above, with this copyright line in place of that one.
+
 SUMMARY BY LICENCE
 ------------------
 (Apache-2.0 OR MIT) AND BSD-3-Clause (1): encoding_rs

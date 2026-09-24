@@ -683,7 +683,10 @@ class VoiceSession(
 
         try {
             val reply = chat(text, { header -> route.set(PrivateAloud.route(header)) }) { soFar ->
-                for ((sentence, consumedTo) in SpeechText.findSentences(soFar, spokenUpTo)) {
+                // Nothing cut yet: the first piece may end at its first
+                // comma, so the phone starts speaking sooner (SpeechText).
+                val firstPiece = spokenUpTo == 0
+                for ((sentence, consumedTo) in SpeechText.findSentences(soFar, spokenUpTo, firstPiece)) {
                     spokenUpTo = consumedTo
                     if (!spokeAny) {
                         spokeAny = true

@@ -1980,6 +1980,66 @@ speech the microphone hears is sent as `source=barge_in` (with the rules in
 plays the clip as in 3; send `waited_ms` on every utterance; and a "Voice
 delay" panel showing `flow.summary` (the `label`, `median_ms` and
 `worst_ms` columns), with `flow.warm.state`.
+
+### 4. Spoken-style answers, and speaking from the first comma (2026-09-24)
+
+The owner's decision of 2026-09-24: "spoken questions get spoken-style
+answers, and speech starts at the first comma". **No new route, no new
+field, nothing to check before sending**: both halves ride on what the apps
+already send and already do.
+
+**On the PC** (`backend/jarvis_agent.py`, `SPOKEN_NOTE`,
+`with_spoken_note`). When the **newest** user message of a `POST /api/chat`
+has `provenance: "voice"` (18.1), every request the answering loop makes to
+this PC's model for that turn carries one extra system line: the answer
+will be read aloud; start with one short sentence; one to three sentences
+unless the owner asks for more detail; no lists, headings, markdown, emojis
+or symbols that cannot be said; numbers and units written as they are said.
+Adapted from kyutai unmute's prompt (MIT, `THIRD-PARTY-NOTICES.txt`).
+
+- **Typed turns are unchanged**, byte for byte - and so is a typed turn
+  whose earlier messages were spoken. `provenance` missing or anything but
+  `voice` on the newest message: no line.
+- **Never message 0.** It goes just before the newest user message. When
+  that message is the first one, the Modelfile's SYSTEM block
+  (`LANE_SYSTEM`, word for word) is put first, then the line: a system
+  message at position 0 would make Ollama leave the built-in block out
+  (`memory-prefix.patch`). Placed after the history is trimmed, so trimming
+  cannot leave it first. On the second card the block is not sent twice.
+- **Local only.** It is added to the request for this PC's model inside the
+  answering loop, never to the conversation the relay sends; a cloud lane
+  gets the newest user turn only (`cloud-one-turn.patch`) and, when a turn
+  leaves this PC, user messages only (`degrade-filter.patch`).
+- The answer is shorter on screen too. The private-answer rules (16) are
+  unchanged: a private answer to a spoken question is still kept on screen.
+
+**In both apps** (desktop `src/speech-pieces.js`, used by `main.js`
+`checkForSpeakableSentence`; phone `voice/SpeechText.kt`
+`findSentences(..., firstPiece)`, used by `VoiceSession.speakStreamed`).
+The **first** piece of a spoken answer - nothing of it cut yet - ends at the
+earliest of:
+
+- `,` `;` or `:` followed by whitespace, with at least **10** characters
+  before it, when the word before it is not in stream2sentence's
+  avoid-pause list (100 words: "and", "the", "to", "is", "I", ...; MIT,
+  credited). "1,450", "10:30" and "https://" are never cut: no whitespace
+  follows the mark;
+- a sentence end (`.` `!` `?` followed by whitespace), as before;
+- with neither, after **12** complete words, at the first word from there
+  that is not on the list.
+
+Every later piece is a sentence, as before. Everything else is unchanged:
+one piece per `/api/voice/say`, the next piece's sound asked for while the
+current one plays (one ahead), the private-answer check before asking for a
+sound and again right before playing it, "stop". The numbers, marks and
+word list are the same on both apps, and both are held to one list of cases,
+`jarvis-desktop/tests/fixtures/first-piece-cases.json` (desktop
+`tests/speech-pieces.mjs`, phone `SpeechTextTest.kt`), fed whole and one
+character at a time.
+
+`flow.timings` is unchanged: `first_sentence_ms` still marks the first
+complete sentence; an app that asks for the first piece's sound earlier
+shows up in `say_start_ms`.
 ---
 
 ## 18. Chat history (added 2026-09-24)
@@ -2022,7 +2082,7 @@ On each `role: "user"` message:
   | value | meaning |
   |---|---|
   | `typed` | typed into the box by the owner (the app's default for its own box) |
-  | `voice` | the transcript the PC's speech route gave back for this turn |
+  | `voice` | the transcript the PC's speech route gave back for this turn; on the newest message it also gets the answer in a spoken style (17, part 4) |
   | `shared` | came from another app (the phone's Share sheet) |
   | `clipboard` | put in the box from the clipboard (the desktop hotkey) and not edited before sending |
   | `pasted` | pasted or dropped into the box (desktop: a `paste` or `drop` on the box since it was last empty; phone: one edit that inserted more than 40 characters at once) |
