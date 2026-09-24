@@ -325,6 +325,40 @@ def t_a_waiting_card_reports_waiting_then_the_end():
     check("an unknown id is a 404", NC.capture_status("note_nope")[0] == 404)
 
 
+def t_every_refusal_says_why_in_message():
+    """K10: the phone shows `message`. The 429 for "four notes already
+    waiting" had only `error`, so the phone said "Not filed" with no reason."""
+    import threading
+    graph()
+    hold = threading.Event()
+
+    def slow(*a):
+        hold.wait(5)
+        return Verdict(False, "timed_out")
+    try:
+        answers = [NC.capture("logseq", f"note {i}", gate_check=slow, wait_s=0.05)
+                   for i in range(NC._MAX_WAITING + 1)]
+    finally:
+        hold.set()
+    code, out = answers[-1]
+    check("one note more than may wait is a 429, not filed",
+          code == 429 and out["state"] == "not_filed", repr((code, out)))
+    check("and it says why in message, the field the phone shows",
+          out.get("message") == "Not filed: several notes are already waiting for approval - "
+                                "answer those first.", repr(out))
+    for label, (code, out) in (
+            ("an empty note", NC.handle_post({"target": "logseq", "text": ""})),
+            ("an unknown target", NC.handle_post({"target": "x", "text": "y"})),
+            ("a non-object body", NC.handle_post(["x"]))):
+        check(f"{label} ({code}) carries a message too",
+              code >= 400 and isinstance(out.get("message"), str) and out["message"].strip(),
+              repr(out))
+    # Not a refusal: a status poll for an id this PC does not know. Its 404
+    # body is also what an older backend answers (the phone's note-targets
+    # contract fixture), so it stays as it was.
+    time.sleep(0.05)
+
+
 def t_bad_requests():
     check("an empty note is a 400", NC.handle_post({"target": "logseq", "text": ""})[0] == 400)
     check("an unknown target is a 400", NC.handle_post({"target": "x", "text": "y"})[0] == 400)

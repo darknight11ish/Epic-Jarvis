@@ -18,6 +18,7 @@ installed jarvis_hud.py when there is one, and otherwise from the patch's own
 import ast
 import contextlib
 import io
+import ipaddress
 import socket
 import sys
 import traceback
@@ -47,14 +48,22 @@ def _source():
     return "\n".join(added), PATCH.name
 
 
+#: Lifted with it when the source has them. bind-wildcard.patch (later in the
+#: stack) made _loopback_companion call _binds_every_interface; lifting the
+#: companion alone then failed with a NameError on every installed backend.
+_HELPERS = ("_binds_every_interface",)
+
+
 def _companion_fn():
     source, where = _source()
-    found = [n for n in ast.walk(ast.parse(source))
-             if isinstance(n, ast.FunctionDef) and n.name == "_loopback_companion"]
+    defs = [n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.FunctionDef)]
+    found = [n for n in defs if n.name == "_loopback_companion"]
     if len(found) != 1:
         raise AssertionError(f"expected one _loopback_companion in {where}, found {len(found)}")
-    ns = {"ThreadingHTTPServer": ThreadingHTTPServer}
-    exec(compile(ast.Module(body=[found[0]], type_ignores=[]), "<lifted>", "exec"), ns)
+    helpers = [n for n in defs if n.name in _HELPERS]
+    # The names a top-level function of jarvis_hud.py can count on having.
+    ns = {"ThreadingHTTPServer": ThreadingHTTPServer, "socket": socket, "ipaddress": ipaddress}
+    exec(compile(ast.Module(body=helpers + found, type_ignores=[]), "<lifted>", "exec"), ns)
     return ns["_loopback_companion"], where
 
 

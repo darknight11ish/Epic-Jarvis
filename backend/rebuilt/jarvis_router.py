@@ -92,7 +92,14 @@ _PRIVATE_TERMS = [
     # said this list matched "joplin"; it did not until 2026-09-24. A
     # question about them is answered where the notes search can run, and
     # that is only ever the local lane.
-    r"\bjoplin\b", r"\bobsidian\b",
+    r"\bjoplin\b", r"\bobsidian\b", r"\blogseq\b",
+    # The same stores asked about WITHOUT naming the app: "search my vault",
+    # "what does my wiki say", "what did I write in my notes", "my journal
+    # from monday". Those four words are everyday English too - release
+    # notes, the Wall Street Journal, a pole vault, a game's wiki - so they
+    # count only as the owner's own: "my" or "our", with at most one word
+    # between ("my Obsidian vault", "my meeting notes", "my bullet journal").
+    r"\b(?:my|our)\s+(?:[\w'-]+\s+)?(?:vaults?|wikis?|notes?|journals?)\b",
 ]
 
 

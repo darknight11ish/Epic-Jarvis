@@ -84,10 +84,16 @@ reason, and the whole plan is refused - never "some of it"):
   - at most MAX_PAGES pages per ingest, each at most MAX_PAGE_CHARS.
   - the model may only UPDATE a page it was shown in full, and only CREATE
     a page that is not there (compared ignoring case, as Windows does).
-  - no raw HTML that loads or runs something (<img>, <iframe>, <script>,
-    ...); a Markdown picture from the internet (`![](https://...)`) becomes
-    a plain link, because Obsidian would fetch it the moment the page opens
-    - that is a way out of this PC.
+  - the body is held to an ALLOWLIST (see _ALLOWED_TAGS below): simple
+    formatting HTML only, with no style=, src=, background= or other
+    attribute that could name an address; no reference definition pointing
+    outside the vault; no code block or span a plugin would run. A picture
+    that is not a file in the vault (https:, file:, //host, \\\\server)
+    becomes a plain link, because Obsidian would fetch it the moment the
+    page opens - that is a way out of this PC.
+  - a page's one-line summary goes into index.md as it stands, so it is
+    plain text: the < > [ ] ` that make markup are taken out. The card
+    shows the summary exactly as it will be written.
   - the source must fit the lane's num_ctx with room for the answer, or it
     is refused ("too big") with the numbers. Nothing is ever cut short.
   - an answer that is not JSON, or not the shape asked for, or that the
@@ -99,6 +105,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import html
 import json
 import os
 import re
@@ -743,11 +750,142 @@ def check_analysis(raw: dict) -> dict:
 # --------------------------------------------------------------------------
 
 _FM = re.compile(r"\A---\n(.*?)\n---\n?", re.S)
-_DANGEROUS_HTML = re.compile(
-    r"<\s*(img|iframe|script|object|embed|link|style|audio|video|source|meta|base|form|frame)\b",
-    re.I)
-_REMOTE_EMBED = re.compile(r"!\[([^\]\n]*)\]\(\s*<?((?:https?:)?//[^)\s>]+)>?[^)]*\)", re.I)
-_REMOTE_WIKI_EMBED = re.compile(r"!\[\[\s*((?:https?:)?//[^\]]+)\]\]", re.I)
+
+# THE BODY FILTER IS AN ALLOWLIST. Obsidian renders a page the moment it is
+# opened, and anything that makes it load a picture, a stylesheet or a frame
+# from somewhere else is a way out of this PC (the address can carry what the
+# page says). A denylist of "dangerous" tags missed CSS url(), style=, SVG,
+# <table background>, <input type=image> and reference-style pictures, so the
+# rule is now the other way round: only what is listed here is kept.
+#
+#   HTML      only these tags, and on them only these attributes. Any other
+#             tag, <! or <? construct, or attribute is a refusal.
+#   pictures  `![...]` stays a picture only when it points at a file inside
+#             the vault (no scheme such as https: or file:, no leading / or
+#             \, no \ at all). Any other picture loses its "!" and becomes a
+#             plain link, which Obsidian does not fetch.
+#   ref defs  `[x]: <address>` (what `![a][x]` uses) must be a vault path too.
+#   code      a fenced block may be marked only with a plain language name
+#             (plugins such as Dataview run blocks marked with theirs), and
+#             an inline `=` / `$=` span (a Dataview query) is refused.
+_ALLOWED_TAGS = frozenset(
+    "abbr b blockquote br center cite code dd del details dfn div dl dt em "
+    "h1 h2 h3 h4 h5 h6 hr i ins kbd li mark ol p pre q s samp small span strong "
+    "sub summary sup table tbody td tfoot th thead tr u ul var wbr".split())
+_ALLOWED_ATTRS = frozenset(("class", "title", "align", "colspan", "rowspan", "open"))
+_ALLOWED_FENCES = frozenset(
+    "text txt plain markdown md python py javascript js typescript ts json yaml yml "
+    "toml ini csv bash sh shell zsh powershell ps1 bat cmd sql c cpp h java kotlin kt "
+    "rust rs go csharp cs html xml css diff ruby rb php swift lua r".split())
+_LIST = r"(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*"
+# "<" then a letter, "/", "!", "?" or "%" (Templater runs <% %> in a new file).
+_TAG_START = re.compile(r"</?[A-Za-z]|<[!?%]")
+_AUTOLINK = re.compile(r"<[A-Za-z][A-Za-z0-9+.\-]{1,31}:[^\s<>]*>|<[^\s<>@]+@[^\s<>@]+>")
+_TAG = re.compile(
+    r"</?([A-Za-z][A-Za-z0-9:\-]*)"
+    r"((?:\s+[^\s\"'>/=]+(?:\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?)*)"
+    r"\s*/?>")
+_ATTR = re.compile(r"([^\s\"'>/=]+)(?:\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s\"'=<>`]+))?")
+_WIKI_EMBED = re.compile(r"!+\[\[([^\]\n]*)\]\]")
+_MD_EMBED = re.compile(r"!+\[([^\[\]\n]*)\]\(\s*(<[^<>\n]*>|[^\s()<>]*)")
+_BANG = re.compile(r"!+(?=\[)")
+_REF_DEF = re.compile(r"^[ \t>]*" + _LIST + r"\[([^\]\n]+)\]:[ \t]*(\S*)", re.M)
+_FENCE = re.compile(r"^[ \t>]*" + _LIST + r"(?:`{3,}|~{3,})[ \t]*([^\s`{]*)", re.M)
+_DV_INLINE = re.compile(r"`[ \t]*\$?=")
+_ANGLE_DEST = re.compile(r"(\]\(\s*|\]:[ \t]*)(<[^<>\n]*>)")
+_SCHEME_URL = re.compile(r"[A-Za-z][A-Za-z0-9+.\-]*:[^\s<>]+")
+
+
+def _local_target(target: str) -> bool:
+    """True only for a path inside the vault: nothing with a scheme (https:,
+    file:, C:), nothing starting with / or ~ (//host is a remote address), and
+    no backslash at all (\\\\server\\share would be fetched from the network).
+    Decoded first - %3A, &#58; and friends - because Obsidian decodes them."""
+    t = target.strip().strip("<>").strip()
+    for _ in range(3):
+        t = html.unescape(urllib.parse.unquote(t))
+    t = t.split("|", 1)[0].split("#", 1)[0].strip()
+    return bool(t) and ":" not in t and "\\" not in t and not t.startswith(("/", "~"))
+
+
+def _unembed(body: str) -> str:
+    """Every picture that is not a vault file loses its "!" and is left a plain
+    link. Checked pictures are marked while the loop runs, so that "!![x](u)"
+    cannot leave a fresh "![x](u)" behind; any "![" nobody vetted loses its "!"."""
+    keep = "\x00"                  # _clean() has already taken every control character out
+
+    def wiki(m):
+        target = m.group(1).strip()
+        if _local_target(target):
+            return keep + m.group(0).lstrip("!")
+        if _SCHEME_URL.fullmatch(target):
+            return f"<{target}>"
+        return m.group(0).lstrip("!")
+
+    def md(m):
+        rest = m.group(0).lstrip("!")
+        return (keep + rest) if _local_target(m.group(2)) else rest
+
+    for _ in range(50):
+        before = body
+        body = _BANG.sub("", _MD_EMBED.sub(md, _WIKI_EMBED.sub(wiki, body)))
+        if body == before:
+            break
+    return body.replace(keep, "!")
+
+
+def _html_problem(body: str) -> str:
+    # A link's address in <...> - `[a](<x y.md>)`, `[x]: <...>` - is an
+    # address, not a tag (CommonMark says so); it is checked as an address
+    # elsewhere. Blanked here, same length, so it is not read as a tag.
+    body = _ANGLE_DEST.sub(lambda m: m.group(1) + " " * len(m.group(2)), body)
+    for m in _TAG_START.finditer(body):
+        at = m.start()
+        if body.startswith("<!--", at) or _AUTOLINK.match(body, at):
+            continue
+        if body[at + 1] in "!?%":
+            return (f"a page has a <{body[at + 1]} construct, which is not plain Markdown "
+                    f"and could run something when the page is opened")
+        t = _TAG.match(body, at)
+        if not t:
+            return ("a page has something that starts like an HTML tag but is not a "
+                    "simple one Jarvis can check")
+        name = t.group(1).lower()
+        if name not in _ALLOWED_TAGS:
+            return (f"a page has a <{name}> tag, and only simple formatting tags are "
+                    f"written (others could load or run something when the page is opened)")
+        for a in _ATTR.finditer(t.group(2) or ""):
+            attr, value = a.group(1).lower(), (a.group(2) or "").lower()
+            if attr not in _ALLOWED_ATTRS:
+                return (f"a page has a <{name}> tag with {attr}=, which could load "
+                        f"something when the page is opened")
+            flat = re.sub(r"\s+", "", html.unescape(value))
+            if "url(" in flat or (":" in flat and attr != "title"):
+                return f"a page has a <{name}> tag whose {attr}= holds an address"
+    return ""
+
+
+def _markdown_problem(body: str) -> str:
+    for m in _REF_DEF.finditer(body):
+        if not _local_target(m.group(2)):
+            return (f"a page defines [{m.group(1)[:40]}] as an address outside the vault, "
+                    f"which a picture could load when the page is opened")
+    for m in _FENCE.finditer(body):
+        lang = m.group(1).lower()
+        if lang and lang not in _ALLOWED_FENCES:
+            return (f'a page has a code block marked "{lang[:30]}", which an Obsidian '
+                    f"plugin could run; only plain language names are written")
+    if _DV_INLINE.search(body):
+        return ("a page has an inline `= ...` code span, which the Dataview plugin "
+                "would run as a query")
+    return ""
+
+
+def _summary_text(summary: str) -> str:
+    """A summary as plain text. It goes into index.md exactly as it is, so any
+    markup in it - a picture, a tag, a link, a code span - would render
+    there. The characters that make markup are taken out; the words stay."""
+    return " ".join(re.sub(r"[<>\[\]`]", "", summary).split())
 
 
 def split_frontmatter(text: str) -> tuple:
@@ -815,15 +953,14 @@ def page_text(body: str, source: str, old: Optional[str] = None) -> str:
 
 
 def make_safe(body: str) -> tuple:
-    """(body, "") with remote picture embeds turned into plain links, or
-    ("", why) when it holds HTML that would load or run something."""
-    m = _DANGEROUS_HTML.search(body)
-    if m:
-        return "", (f"a page has a <{m.group(1).lower()}> tag, which could load or run "
-                    f"something when the page is opened")
-    body = _REMOTE_EMBED.sub(lambda mm: f"[{mm.group(1) or 'link'}]({mm.group(2)})", body)
-    body = _REMOTE_WIKI_EMBED.sub(lambda mm: f"<{mm.group(1).strip()}>", body)
-    return body, ""
+    """(body, "") with every picture that is not a vault file turned into a
+    plain link, or ("", why) when it holds anything outside the allowlist
+    above: HTML beyond simple formatting, an address as a reference
+    definition, a code block or span a plugin would run."""
+    why = _html_problem(body) or _markdown_problem(body)
+    if why:
+        return "", why
+    return _unembed(body), ""
 
 
 # --------------------------------------------------------------------------
@@ -934,7 +1071,7 @@ def check_pages(raw: dict, w: Where, source: str, shown: dict) -> list:
         body, why = make_safe(body)
         if why:
             raise Refused(why)
-        summary = " ".join(_clean(item["summary"], MAX_SUMMARY_CHARS * 2).split())
+        summary = _summary_text(_clean(item["summary"], MAX_SUMMARY_CHARS * 2))
         summary = summary[:MAX_SUMMARY_CHARS] or "(no summary given)"
         if action == "create":
             if key in existing:

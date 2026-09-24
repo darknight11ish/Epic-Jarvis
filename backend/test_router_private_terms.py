@@ -99,6 +99,36 @@ def t_the_built_in_list_covers_the_topics_on_its_own():
         RT._PRIVATE._terms = None
 
 
+def t_the_note_stores_without_their_app_names():
+    """K6: the owner's vault, wiki, notes and journal, asked about in plain
+    words, matched nothing - only "obsidian" and "joplin" did."""
+    real = RT._config_terms
+    RT._config_terms = lambda: ()
+    try:
+        for q in ("search my vault for the lease", "what does my wiki say",
+                  "what did I write in my notes", "add this to my logseq journal",
+                  "what is in my journal from monday", "open my Obsidian vault",
+                  "check our wiki", "read my meeting notes", "my note about the boiler",
+                  "what's in logseq about Sam", "My Journal, yesterday"):
+            check(f"{q!r} is private", RT.is_private(q))
+            d = RT.choose(q + PAD, local_model="local", lanes=LANES, budget=RT.Budget(path=None))
+            check(f"... and a long {q!r} stays on the local model", d.lane == "local" and d.gate == "private",
+                  repr(d))
+        for q in ("show me the release notes for python 3.12",
+                  "patch notes for the new game update",
+                  "what notes are in a C major chord", "take notes on this lecture",
+                  "summarise this Wall Street Journal article",
+                  "who publishes the journal Nature",
+                  "how high is the pole vault world record", "the vaulted ceiling",
+                  "what does wikipedia say about rivers", "search the arch wiki for systemd",
+                  "a note on style: prefer short words", "notes from the talk"):
+            check(f"CONTROL: {q!r} is not private", not RT.is_private(q),
+                  repr(RT._PRIVATE.search(q)))
+    finally:
+        RT._config_terms = real
+        RT._PRIVATE._terms = None
+
+
 def t_a_word_added_to_the_config_takes_effect():
     d = tempfile.mkdtemp(prefix="jarvis-router-cfg-")
     p = Path(d) / "jarvis-framework.toml"
@@ -127,6 +157,7 @@ def t_the_hud_call_shape_still_works():
 if __name__ == "__main__":
     for fn in (t_every_config_topic_keeps_a_turn_local,
                t_the_built_in_list_covers_the_topics_on_its_own,
+               t_the_note_stores_without_their_app_names,
                t_a_word_added_to_the_config_takes_effect,
                t_the_hud_call_shape_still_works):
         print(f"\n--- {fn.__name__} ---")

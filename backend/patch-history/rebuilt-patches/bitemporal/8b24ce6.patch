@@ -30,7 +30,7 @@
  def _qs_int(handler, key: str, default: int) -> int:
      """One integer out of the query string, clamped and never raising.
  
-@@ -2026,11 +2049,45 @@
+@@ -2026,11 +2049,33 @@
                      # facts would make a superseded fact look deleted when it
                      # is not.
                      st = jarvis_memory.store()
@@ -45,21 +45,9 @@
 +                    if known is not None:
 +                        rows = st.known_at(known, limit=limit)
 +                        for r in rows:
-+                            # "Current" AS OF THAT MOMENT, from what Jarvis
-+                            # knew then - not from today's valid_to. Every
-+                            # row here was believed at `known` (known_at()
-+                            # picks rows by created and retired_at), so one
-+                            # retired after `known` was current then, even
-+                            # when the end date given later ("it stopped
-+                            # being true on Feb 1") falls before it. valid_to
-+                            # counts only while retired_at is empty: an end
-+                            # date nobody has retracted yet, like a lease.
-+                            ra = r.get("retired_at")
-+                            if ra is not None:
-+                                r["current"] = ra > known
-+                            else:
-+                                vt = r.get("valid_to")
-+                                r["current"] = vt is None or vt > known
++                            # "Current" AS OF THAT MOMENT, not as of now.
++                            vt = r.get("valid_to")
++                            r["current"] = vt is None or vt > known
 +                        return self._send(200, {
 +                            "available": True, "facts": rows,
 +                            "known_at": known,
