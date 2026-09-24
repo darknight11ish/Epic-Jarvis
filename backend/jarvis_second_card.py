@@ -1062,15 +1062,34 @@ def lane_for(feature: str) -> Optional[Lane]:
         return None
 
 
+#: After the learning lane fails to answer, how long the learner goes back
+#: to exactly what it did before this module: the main card, after the full
+#: quiet wait (K13).
+LEARN_RETRY_SECONDS = 600.0
+_LEARN: dict = {"failed_at": -1e9, "short": False}
+
+
+def _learning_lane() -> Optional[Lane]:
+    """lane_for("learning"), unless it failed to answer in the last
+    LEARN_RETRY_SECONDS."""
+    if time.monotonic() - _LEARN["failed_at"] < LEARN_RETRY_SECONDS:
+        return None
+    return lane_for("learning")
+
+
 def learning_idle_seconds(default: float) -> float:
     """How long the learner waits for a quiet spell. With the learner on the
     second card it no longer competes with chat, so a short pause is enough
-    (10 s, never longer than it already was)."""
+    (10 s, never longer than it already was). Not while the lane has lately
+    failed to answer: then the pass will run on the main card, which needs
+    the full wait."""
     try:
-        if lane_for("learning") is not None:
+        if _learning_lane() is not None:
+            _LEARN["short"] = float(default) > 10.0
             return min(float(default), 10.0)
     except Exception:
         pass
+    _LEARN["short"] = False
     return default
 
 
@@ -1099,21 +1118,51 @@ def generate(lane: Lane, prompt: str, *, timeout: float = 120.0) -> Optional[str
     return None
 
 
+def _skip_pass(prompt: str) -> Optional[str]:
+    return None
+
+
+def _say_skipped() -> None:
+    print("  ! learning: the second card did not answer, so this pass was skipped rather "
+          "than run on the main card after only a short pause. The next passes use the "
+          "main card after the full wait; the second card is tried again in "
+          f"{LEARN_RETRY_SECONDS / 60:.0f} minutes. What was said is looked at again on the "
+          "pass after your next message.", file=sys.stderr)
+
+
 def learning_llm(llm: Callable[[str], Optional[str]]) -> Callable[[str], Optional[str]]:
     """The learner's model call, moved to the second card when the
-    "learning" feature is working there; `llm` itself otherwise. If the
-    second card does not answer, the original call is made, which is
-    exactly what happened before this module existed."""
+    "learning" feature is working there; `llm` itself otherwise.
+
+    If the second card does not answer, and this pass waited only the short
+    pause (learning_idle_seconds), the pass is SKIPPED - `llm` is not called
+    - because the main card was never given the full quiet it needs (K13:
+    it used to fall back to the main card after 10 seconds). For the next
+    LEARN_RETRY_SECONDS the learner then does exactly what it did before
+    this module existed: the full wait, then `llm`."""
+    short, _LEARN["short"] = _LEARN["short"], False
     try:
-        lane = lane_for("learning")
+        lane = _learning_lane()
     except Exception:
         lane = None
     if lane is None:
+        if short:
+            # The pause was shortened for a lane that is gone now.
+            _say_skipped()
+            return _skip_pass
         return llm
 
     def ask(prompt: str) -> Optional[str]:
         out = generate(lane, prompt)
-        return out if out is not None else llm(prompt)
+        if out is not None:
+            return out
+        first = time.monotonic() - _LEARN["failed_at"] >= LEARN_RETRY_SECONDS
+        _LEARN["failed_at"] = time.monotonic()
+        if short:
+            if first:
+                _say_skipped()
+            return None
+        return llm(prompt)
     return ask
 
 
@@ -1609,6 +1658,7 @@ def _reset_for_tests() -> None:
         _WITHDRAWN.clear()
         _LAST_ANY.clear()
     _TAGS.clear()
+    _LEARN.update(failed_at=-1e9, short=False)
     try:
         _LANE.stop("reset")
     except Exception:

@@ -27,6 +27,8 @@ never done):
     reverses; the install lists have it.
   - the committed jarvis-desktop fixture equals a fresh run.
 """
+import contextlib
+import io
 import json
 import os
 import re
@@ -748,6 +750,44 @@ def t_long_context_needs_more_room():
         det = SC.detect(fresh=True)
     check("the 12 GB card's planned lane has more room than jarvis-primary's 16,384",
           SC._feature_model("long_context", det)[1] > 16384)
+
+
+def t_learning_on_a_lane_that_does_not_answer():
+    # K13: the pause was cut to 10 s because the lane existed, and when the
+    # lane then failed (here a stand-in second Ollama answering 404) the
+    # pass fell back to the MAIN card after only those 10 s.
+    import urllib.error
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, learning=True)
+        real = w.http_json
+
+        def http(url, payload=None, timeout=2.0):
+            if url.endswith("/api/generate"):
+                w.http.append((url, payload))
+                raise urllib.error.HTTPError(url, 404, "model not found", None, None)
+            return real(url, payload, timeout)
+        SC._http_json = http
+        main = []
+        llm = lambda p: main.append(p) or "from the main card"
+        check("the lane is there: the pause is shortened to 10 s",
+              SC.learning_idle_seconds(45.0) == 10.0)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out = SC.learning_llm(llm)("remember this")
+        check("the lane answers 404 after that short pause: the pass is skipped, the main "
+              "card is NOT asked", out is None and main == [], (out, main))
+        check("... and it says so", "this pass was skipped" in err.getvalue())
+        check("the next pass waits the full time", SC.learning_idle_seconds(45.0) == 45.0)
+        check("... and then uses the main card, exactly as before the second card",
+              SC.learning_llm(llm) is llm)
+        SC._LEARN["failed_at"] -= SC.LEARN_RETRY_SECONDS + 1
+        check("after LEARN_RETRY_SECONDS the second card is tried again",
+              SC.learning_idle_seconds(45.0) == 10.0)
+        SC._LEARN["short"] = False
+        main.clear()
+        out = SC.learning_llm(llm)("x")
+        check("a pass that had the full wait may still fall back to the main card",
+              out == "from the main card" and main == ["x"], (out, main))
 
 
 def t_hooks_when_on():
