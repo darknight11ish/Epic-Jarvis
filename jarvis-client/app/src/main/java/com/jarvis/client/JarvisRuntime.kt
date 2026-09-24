@@ -541,7 +541,8 @@ object JarvisRuntime {
 
     private fun describe(e: ApiError): String = when (e) {
         ApiError.BadToken ->
-            "The desktop refused that token. Check it in the HUD's settings and paste it again."
+            "The desktop refused that token. On the PC, open Jarvis Desktop's Settings, " +
+                "press \"Show the token for my phone\" and type it in again."
         ApiError.NotFound ->
             "Reached something at that address, but it is not a Jarvis server."
         ApiError.AlreadyHandled -> "Already handled elsewhere."

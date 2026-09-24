@@ -43,15 +43,9 @@ class ClientSettings(context: Context) {
     /**
      * The base URL. `http` rather than `https`: the desktop serves plain HTTP
      * over the tailnet, which is why the network security config exists at all.
+     * A name typed without a port gets Jarvis's, 4719 - see [BaseUrl].
      */
-    fun baseUrl(): String? {
-        val h = _host.value
-        if (h.isEmpty()) return null
-        return when {
-            h.startsWith("http://") || h.startsWith("https://") -> h.trimEnd('/')
-            else -> "http://$h".trimEnd('/')
-        }
-    }
+    fun baseUrl(): String? = BaseUrl.normalise(_host.value)
 
     private companion object {
         const val PREFS = "jarvis_client"

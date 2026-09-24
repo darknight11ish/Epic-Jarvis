@@ -319,7 +319,8 @@ private fun ConnectionCard(
 private fun plainReason(detail: String): String = when {
     detail == "Token refused" ->
         "The desktop refused this phone's token. Tap Change desktop or token and " +
-            "paste the one from the desktop's HUD settings."
+            "type in the one Jarvis Desktop shows under Settings, \"Show the token " +
+            "for my phone\"."
     detail.startsWith("No keepalive for ") ->
         "The desktop went quiet: nothing has been heard from it for " +
             detail.removePrefix("No keepalive for ") + "."

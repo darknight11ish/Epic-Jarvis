@@ -142,7 +142,7 @@ fun PairingScreen(
             value = host,
             onValueChange = setHost,
             label = "Desktop address",
-            placeholder = "your-desktop.tailnet.ts.net:4719  (or ….nord for Meshnet)",
+            placeholder = "your-desktop.tailnet.ts.net:4719  (or ….nord:4719 for Meshnet)",
             // Plain words first. The old text ended on "the network security
             // config can permit a name but cannot express a CIDR range", which
             // is true and useless to someone who has not written an Android
@@ -150,7 +150,8 @@ fun PairingScreen(
             supportingText = "The desktop's name on your private network: its " +
                 "Tailscale name (ends in .ts.net) or its NordVPN Meshnet name (ends " +
                 "in .nord). A number like 100.x will not work, because Android only " +
-                "lets this app use names it has been told about.",
+                "lets this app use names it has been told about. Leave off :4719 and " +
+                "it is added for you.",
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Next,
@@ -163,7 +164,7 @@ fun PairingScreen(
             onValueChange = { token = it },
             password = true,
             label = if (hasToken) "Replace token" else "Pairing token",
-            placeholder = "The token from the desktop's HUD settings",
+            placeholder = "On the PC: Settings, Show the token for my phone",
             supportingText = if (hasToken) {
                 "A token is stored. Leave this blank to keep it."
             } else {
