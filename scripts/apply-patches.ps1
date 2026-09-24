@@ -291,6 +291,7 @@ $SHIPPED = @(
     'jarvis_second_card.py'      # second-card.patch; the second graphics card's switches
     'jarvis_wiki.py'             # wiki.patch; the wiki builder (runs only on the second card)
     'jarvis_turn.py'             # voice-turn.patch: Smart Turn, "finished, or only paused?"
+    'jarvis_wakebank.py'         # other voices' "hey Jarvis" (numbers): the owner's wake-word verifier trains against it
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

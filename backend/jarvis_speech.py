@@ -27,6 +27,8 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
     2. Silero VAD: is there speech?      only noise      -> refused, nothing else runs
     3. wake word (source=wake_word only): is it switched on, and is
        "hey Jarvis" in the clip?         no              -> refused, not checked, not transcribed
+       (once "Train my voice" has built it, the owner's own verifier
+       has the last word here - jarvis_wakeword.py, "THE OWNER'S OWN")
     4. the owner check (jarvis_voice)    not the owner   -> refused, not transcribed
     5. speech-to-text
     6. wake word only: does the transcript START with "hey Jarvis"? The
@@ -736,6 +738,18 @@ def _wake_spotter_state() -> dict:
                 "why": f"could not read it ({type(exc).__name__})"}
 
 
+def _verifier_state() -> dict:
+    """{trained, positives, why} - never raises."""
+    if jarvis_wakeword is None or not hasattr(jarvis_wakeword, "verifier_status"):
+        return {"trained": False, "positives": 0,
+                "why": "jarvis_wakeword.py is missing or older than the verifier"}
+    try:
+        return jarvis_wakeword.verifier_status()
+    except Exception as exc:
+        return {"trained": False, "positives": 0,
+                "why": f"could not read it ({type(exc).__name__})"}
+
+
 # --------------------------------------------------------------------------
 #   status()
 # --------------------------------------------------------------------------
@@ -974,6 +988,9 @@ def status() -> dict:
             "spotter": {"available": bool(spotter.get("available")),
                         "engine": str(spotter.get("engine", "")),
                         "why": str(spotter.get("why", ""))},
+            # The owner's own "hey Jarvis" check (jarvis_wakeword's
+            # verifier), built on the PC when "Train my voice" is approved.
+            "verifier": _verifier_state(),
         },
         "audio_in": dict(AUDIO_IN),
         # "Finished, or only paused?" - see _turn_state().

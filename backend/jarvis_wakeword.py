@@ -49,10 +49,43 @@ scaled to -1..1 - that is what the mel model was exported with.
 
 NOTHING IS KEPT. No audio, score history or clip is written to disk or
 logged. A clip goes in, one verdict comes out.
+
+THE OWNER'S OWN "HEY JARVIS" (added 2026-09-24). openWakeWord's answer to
+"it fires on other people" is a "custom verifier": a second, tiny model
+trained on ONE person's "hey Jarvis" that runs only when the first model
+is at least a little interested (score >= 0.1) and then decides instead of
+it. It is a logistic regression - 1,536 weights and a bias - over the same
+16 x 96 numbers the first model looks at. openWakeWord trains it with
+scikit-learn; this file trains the same shape with a few lines of numpy
+(train_verifier), because scikit-learn is 30 MB of dependency for one
+dot product.
+
+What it learns from:
+  positive  the moments the spotter fires in the owner's own "Train my
+            voice" sentences that start with "hey Jarvis"
+  negative  everything else the owner said in the same training, and a
+            BANK of other voices saying "hey Jarvis" (jarvis_wakebank.py:
+            voices synthesised with Piper's LibriTTS-R model, never the
+            owner, shipped as numbers, not audio)
+The bank is what makes it about the owner's VOICE rather than about the
+phrase: trained on the owner alone it still let 55% of other (synthetic)
+voices through; with the bank, 6% - while letting every one of the owners'
+own through (backend/README.md, "Voice, part two").
+
+It is built on the PC when the "Train my voice" card is approved, from the
+same clips (build_verifier, here), and saved next to the voice print
+(voice/wake-verifier*.json) by jarvis_voice_enroll.py - this module still
+writes nothing itself.
+It is used on the PC only: the phone's own spotter has no verifier, and
+every clip the phone sends is checked here, with it, before anything else.
+No verifier file means the first model decides alone, exactly as before.
 """
 from __future__ import annotations
 
+import json
+import math
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -244,7 +277,9 @@ class Spotter:
         self.feats = self.m.emb.run(None, {self.m.emb_in: wins[..., None].astype(np.float32)})[0].reshape(-1, 96)
         self.steps = 0
 
-    def feed(self, samples) -> list:
+    def feed(self, samples, windows: Optional[list] = None) -> list:
+        """`windows`, if given, gets the 16 x 96 window each score was made
+        from, in step with the scores (for the verifier)."""
         x = np.concatenate([self.pending, np.asarray(samples, dtype=np.float32)])
         scores = []
         n = (len(x) // CHUNK) * CHUNK
@@ -255,6 +290,8 @@ class Spotter:
             s = self.m.score(self.feats[-EMB_WINDOW:])
             self.steps += 1
             scores.append(0.0 if self.steps <= WARMUP_SCORES else s)
+            if windows is not None:
+                windows.append(self.feats[-EMB_WINDOW:].copy())
         self.pending = x[n:]
         return scores
 
@@ -302,10 +339,33 @@ class Spot:
     at: float = 0.0
     threshold: float = 0.5
     why: str = ""
+    #: The owner's verifier decided (there is one, and the first model was
+    #: at least a little interested). Its best probability is
+    #: `verifier_score`; `score` stays the first model's.
+    verified: bool = False
+    verifier_score: float = 0.0
 
 
-def spot(samples, sample_rate: int = SAMPLE_RATE) -> Spot:
-    """Is "hey Jarvis" anywhere in this clip? `samples` are floats in -1..1."""
+def _clip_steps(models, samples, sample_rate: int):
+    """(scores, windows) for one clip, streamed exactly as spot() does."""
+    x = to_16k(samples, sample_rate)
+    lead = np.zeros(int(LEAD_IN_SECONDS * SAMPLE_RATE), dtype=np.float32)
+    # Half a second of silence after, so a phrase at the very end of the clip
+    # has its last step scored.
+    tail = np.zeros(SAMPLE_RATE // 2, dtype=np.float32)
+    pcm = np.clip(np.concatenate([lead, x, tail]), -1.0, 1.0) * 32767.0
+    windows: list = []
+    with _LOCK:
+        scores = Spotter(models).feed(pcm, windows)
+    return np.asarray(scores, dtype=np.float32), windows
+
+
+def spot(samples, sample_rate: int = SAMPLE_RATE, mic: str = "") -> Spot:
+    """Is "hey Jarvis" anywhere in this clip? `samples` are floats in -1..1.
+
+    With the owner's verifier for `mic` (or the one without a mic), it has
+    the last word on every step where the first model scored at least
+    VERIFIER_GATE - openWakeWord's own rule for custom verifiers."""
     thr = threshold()
     if np is None:
         return Spot(False, threshold=thr, why="numpy is not installed")
@@ -313,21 +373,218 @@ def spot(samples, sample_rate: int = SAMPLE_RATE) -> Spot:
     if models is None:
         why = status()["why"] or "the wake-word models could not be loaded"
         return Spot(False, threshold=thr, why=why)
-    x = to_16k(samples, sample_rate)
-    lead = np.zeros(int(LEAD_IN_SECONDS * SAMPLE_RATE), dtype=np.float32)
-    # Half a second of silence after, so a phrase at the very end of the clip
-    # has its last step scored.
-    tail = np.zeros(SAMPLE_RATE // 2, dtype=np.float32)
-    pcm = np.clip(np.concatenate([lead, x, tail]), -1.0, 1.0) * 32767.0
-    with _LOCK:
-        scores = Spotter(models).feed(pcm)
-    if not scores:
+    scores, windows = _clip_steps(models, samples, sample_rate)
+    if not len(scores):
         return Spot(True, threshold=thr)
     best = int(np.argmax(scores))
     score = float(scores[best])
     at = max(0.0, (best + 1) * CHUNK / SAMPLE_RATE - LEAD_IN_SECONDS)
-    return Spot(True, heard=score >= thr, score=round(score, 4),
-                at=round(at, 2), threshold=thr)
+    ver = load_verifier(mic)
+    gated = [i for i, s in enumerate(scores) if s >= VERIFIER_GATE]
+    if ver is None or not gated:
+        return Spot(True, heard=score >= thr, score=round(score, 4),
+                    at=round(at, 2), threshold=thr)
+    probs = ver.probabilities(np.stack([windows[i] for i in gated]))
+    k = int(np.argmax(probs))
+    v = float(probs[k])
+    at = max(0.0, (gated[k] + 1) * CHUNK / SAMPLE_RATE - LEAD_IN_SECONDS)
+    return Spot(True, heard=v >= ver.threshold, score=round(score, 4), at=round(at, 2),
+                threshold=thr, verified=True, verifier_score=round(v, 4))
+
+
+# --------------------------------------------------------------------------
+#   The owner's verifier: a second stage that knows the owner's "hey Jarvis"
+# --------------------------------------------------------------------------
+
+#: The first model must score at least this for the verifier to be asked
+#: (openWakeWord's `custom_verifier_threshold`).
+VERIFIER_GATE = 0.1
+#: The verifier's own bar. 0.4, not openWakeWord's 0.5: with every Kokoro
+#: voice in turn as "the owner", 0.4 let all 33 of the owners' own "hey
+#: Jarvis" clips through and 21 of 330 other voices'; 0.5 turned 4 of the
+#: owners away (13 of 330 others through). Refusing the owner is the
+#: failure people notice, and the full voice check still follows.
+VERIFIER_THRESHOLD = 0.4
+VERIFIER_VERSION = 1
+#: Fewer "hey Jarvis" training sentences than this that the spotter heard,
+#: and no verifier is built - it would learn one recording, not a voice.
+MIN_VERIFIER_CLIPS = 2
+#: openWakeWord's own C for its verifier's logistic regression is 0.001 (a
+#: lot of smoothing). With the bank of other voices, 0.01 separated the
+#: owner from the others best at the bar above; 0.003 needed a bar so low
+#: (0.2) to keep every owner that 38 of 330 others got through. Measured on
+#: synthetic voices - backend/README.md, "Voice, part two".
+VERIFIER_C = 0.01
+#: A "hey Jarvis" sentence's windows this many steps (80 ms each) after
+#: the phrase are the owner saying something else - negatives.
+_AFTER_PHRASE = 20
+
+
+def _voice_dir() -> Path:
+    """The folder the voice print is in (jarvis_voice.PROFILE_PATH's), so
+    the verifier always sits beside the voice it was trained with - also
+    when a test points the voice print somewhere temporary."""
+    try:
+        import jarvis_voice
+        return Path(jarvis_voice.PROFILE_PATH).parent
+    except Exception:
+        return _config_dir() / "voice"
+
+
+def verifier_path(mic: str = "") -> Path:
+    """voice/wake-verifier.json, or wake-verifier-<mic>.json - beside the
+    voice print, which is where the rest of the owner's voice lives."""
+    safe = "".join(c for c in str(mic or "").lower() if c.isalnum())[:16]
+    name = f"wake-verifier-{safe}.json" if safe else "wake-verifier.json"
+    return _voice_dir() / name
+
+
+class Verifier:
+    """A loaded verifier: logit = window . w + b, over the flattened 16 x 96
+    window (the standard-scaling is folded into w and b when saved)."""
+
+    def __init__(self, doc: dict):
+        w = np.asarray(doc["w"], dtype=np.float64)
+        if w.shape != (EMB_WINDOW * 96,) or not np.all(np.isfinite(w)):
+            raise ValueError("verifier weights have the wrong shape")
+        self.w = w
+        self.b = float(doc["b"])
+        if not math.isfinite(self.b):
+            raise ValueError("verifier bias is not a number")
+        self.threshold = min(0.99, max(0.05, float(doc.get("threshold", VERIFIER_THRESHOLD))))
+        self.positives = int(doc.get("positives", 0))
+        self.mic = str(doc.get("mic", ""))
+
+    def probabilities(self, windows):
+        x = np.asarray(windows, dtype=np.float64).reshape(len(windows), -1)
+        z = np.clip(x @ self.w + self.b, -60, 60)
+        return 1.0 / (1.0 + np.exp(-z))
+
+
+_VER_CACHE: dict = {}
+
+
+def _read_verifier(p: Path) -> Optional[Verifier]:
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    key = (str(p), st.st_size, st.st_mtime_ns)
+    with _LOCK:
+        if key in _VER_CACHE:
+            return _VER_CACHE[key]
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict) or doc.get("version") != VERIFIER_VERSION:
+            raise ValueError("not a verifier this version reads")
+        ver = Verifier(doc)
+    except Exception:
+        # Unreadable: the first model decides alone, as it did before any
+        # verifier existed. verifier_status() says so.
+        ver = None
+    with _LOCK:
+        _VER_CACHE.clear()
+        _VER_CACHE[key] = ver
+    return ver
+
+
+def load_verifier(mic: str = "") -> Optional[Verifier]:
+    """The verifier for `mic`, else the one trained without a mic, else None."""
+    for p in dict.fromkeys((verifier_path(mic), verifier_path(""))):
+        if p.is_file():
+            return _read_verifier(p)
+    return None
+
+
+def verifier_status(mic: str = "") -> dict:
+    """For status(): is there a verifier, from how much, and is it readable."""
+    for p in dict.fromkeys((verifier_path(mic), verifier_path(""))):
+        if p.is_file():
+            ver = _read_verifier(p)
+            if ver is None:
+                return {"trained": False, "positives": 0,
+                        "why": f"{p.name} could not be read - train your voice again"}
+            return {"trained": True, "positives": ver.positives, "why": ""}
+    return {"trained": False, "positives": 0,
+            "why": ("not trained yet - it is built when you train your voice, from the "
+                    "sentences that start with \"hey Jarvis\"")}
+
+
+def _fit_logistic(x, y, c: float = VERIFIER_C, iters: int = 3000):
+    """L2 logistic regression by gradient descent on standardised inputs -
+    scikit-learn's LogisticRegression(C=c) objective, without scikit-learn.
+    Returns (w, b) for the RAW inputs, the scaling folded in."""
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    mu = x.mean(axis=0)
+    sd = x.std(axis=0) + 1e-6
+    z = (x - mu) / sd
+    n = len(y)
+    w = np.zeros(z.shape[1])
+    b = 0.0
+    lam = 1.0 / (c * n)
+    for _ in range(iters):
+        p = 1.0 / (1.0 + np.exp(-np.clip(z @ w + b, -60, 60)))
+        w -= 0.1 * (z.T @ (p - y) / n + lam * w)
+        b -= 0.1 * float(np.mean(p - y))
+    w_raw = w / sd
+    return w_raw, b - float(mu @ w_raw)
+
+
+def _bank():
+    """Other voices' "hey Jarvis" windows (float32, n x 1536), or None."""
+    try:
+        import jarvis_wakebank
+        return jarvis_wakebank.windows()
+    except Exception:
+        return None
+
+
+def build_verifier(clips, sample_rate: int = SAMPLE_RATE, mic: str = "") -> dict:
+    """Builds the owner's verifier from the "Train my voice" clips (float
+    samples in -1..1, one array per sentence). Never raises, never writes:
+    the answer says whether it was built (`doc` is then the file's content,
+    for jarvis_voice_enroll to save) and, if not, why in plain words.
+
+    Positives are the windows where the spotter fires (>= its threshold) in
+    the clips it fires on at all; negatives are every window of the other
+    clips, the windows well after the phrase in the "hey Jarvis" ones, and
+    the bank of other voices."""
+    if np is None:
+        return {"built": False, "why": "numpy is not installed"}
+    models = _load()
+    if models is None:
+        return {"built": False, "why": status()["why"] or "the wake-word models could not be loaded"}
+    thr = threshold()
+    pos, neg, heard = [], [], 0
+    for c in clips:
+        scores, windows = _clip_steps(models, c, sample_rate)
+        if not len(scores):
+            continue
+        if float(scores.max()) >= thr:
+            heard += 1
+            pos += [windows[i] for i in np.where(scores >= thr)[0]]
+            neg += windows[int(np.argmax(scores)) + _AFTER_PHRASE:]
+        else:
+            neg += windows
+    if heard < MIN_VERIFIER_CLIPS:
+        return {"built": False, "clips": heard,
+                "why": (f"\"hey Jarvis\" was heard in {heard} of the sentences; it needs "
+                        f"at least {MIN_VERIFIER_CLIPS}")}
+    bank = _bank()
+    x = [np.asarray(w, dtype=np.float32).reshape(-1) for w in pos + neg]
+    y = [1] * len(pos) + [0] * len(neg)
+    if bank is not None and len(bank):
+        x += list(np.asarray(bank, dtype=np.float32))
+        y += [0] * len(bank)
+    w, b = _fit_logistic(np.stack(x), np.asarray(y))
+    doc = {"version": VERIFIER_VERSION, "model": PHRASE_MODELS.get(phrase(), ""),
+           "mic": str(mic or ""), "w": [round(float(v), 7) for v in w], "b": float(b),
+           "threshold": VERIFIER_THRESHOLD, "gate": VERIFIER_GATE,
+           "positives": len(pos), "negatives": len(y) - len(pos), "clips": heard,
+           "bank": int(len(bank)) if bank is not None else 0, "created": time.time()}
+    return {"built": True, "clips": heard, "positives": len(pos), "bank": doc["bank"],
+            "doc": doc}
 
 
 # --------------------------------------------------------------------------

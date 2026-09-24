@@ -75,6 +75,22 @@ https://github.com/dscripka/openWakeWord (David Scripka)
   is Apache-2.0 and is not used; jarvis_wakeword.py and WakeSpotter.kt
   re-implement its streaming steps. The embedding model is derived from
   Google's speech_embedding (Apache-2.0).
+  The owner's "hey Jarvis" verifier (backend/jarvis_wakeword.py,
+  build_verifier) follows openWakeWord's custom-verifier design
+  (openwakeword/custom_verifier_model.py, Apache-2.0: a logistic regression
+  over the embedding window, asked when the first model scores at least
+  0.1); no openWakeWord code is copied - it is re-written in numpy.
+
+backend/jarvis_wakebank.py - generated numbers, not audio
+  openWakeWord embeddings (the model above, so CC BY-NC-SA 4.0 applies to
+  them as its output) of synthetic voices saying "hey Jarvis", made by
+  tools/gen_wakebank.py with Piper's en_US-libritts_r-medium voice
+  (https://github.com/rhasspy/piper, MIT; model card: fine-tuned on
+  LibriTTS-R, http://www.openslr.org/141/, CC BY 4.0 - attribution:
+  "LibriTTS-R: A Restored Multi-Speaker Text-to-Speech Corpus", Koizumi et
+  al., 2023, derived from LibriTTS / LibriSpeech, CC BY 4.0). The Piper
+  voice itself is not shipped; it was downloaded from the sherpa-onnx
+  releases (vits-piper-en_US-libritts_r-medium) only to make these numbers.
 
 ONNX Runtime 1.22.0 (Microsoft), MIT - https://github.com/microsoft/onnxruntime
   The Android library runs the models on the phone

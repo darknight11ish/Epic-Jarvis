@@ -24,6 +24,11 @@ No network, no microphone. What it proves:
   7. 48 kHz audio (the desktop's microphone) is filtered, not folded.
   8. With the real models: synthesised "hey Jarvis" clips are heard and
      ordinary sentences are not; speech-to-text hears the command.
+  9. The owner's verifier: it is built only from clips the spotter heard
+     "hey Jarvis" in, holds numbers and never audio, decides on every step
+     the first model is at least a little interested in (and only those),
+     falls back to the first model when missing or unreadable, and - with
+     the real models - keeps its owner while turning other voices away.
 """
 import array
 import ast
@@ -415,6 +420,111 @@ def t_48k_is_filtered_not_folded():
 
 # ----------------------------------------------------- 8. real models --
 
+# ------------------------------------------------------- 9. verifier --
+
+def _fake_steps(table):
+    """_clip_steps stand-in: each clip is an int naming (scores, windows)."""
+    def f(models, clip, rate):
+        scores, wins = table[int(clip[0])]
+        return np.asarray(scores, dtype=np.float32), list(wins)
+    return f
+
+
+def _win(v):
+    return np.full((W.EMB_WINDOW, 96), v, dtype=np.float32)
+
+
+def t_the_verifier():
+    rng = np.random.default_rng(3)
+    own = lambda: _win(1.0) + rng.normal(0, 0.05, (16, 96)).astype(np.float32)   # noqa: E731
+    other = lambda: _win(-1.0) + rng.normal(0, 0.05, (16, 96)).astype(np.float32)  # noqa: E731
+    # Clips 0-2: "hey Jarvis" (the spotter fires on two steps); 3-5: other speech.
+    table = {i: ([0.0, 0.9, 0.8, 0.0] + [0.0] * 25, [other(), own(), own()] + [other()] * 26)
+             for i in range(3)}
+    table.update({i: ([0.0] * 20, [other() for _ in range(20)]) for i in range(3, 6)})
+    clips = [np.full(10, i, dtype=np.float32) for i in range(6)]
+    with Env(), mock.patch.object(W, "_load", return_value=object()),             mock.patch.object(W, "_clip_steps", _fake_steps(table)),             mock.patch.object(W, "_bank", return_value=np.stack([other().reshape(-1)] * 5)):
+        out = W.build_verifier(clips)
+        check("built from the three clips the spotter heard", out["built"] and out["clips"] == 3
+              and out["positives"] == 6 and out["bank"] == 5, {k: out[k] for k in out if k != "doc"})
+        doc = out["doc"]
+        check("the file is weights and counts - 1,536 numbers, a bias, no audio",
+              len(doc["w"]) == 1536 and isinstance(doc["b"], float)
+              and set(doc) == {"version", "model", "mic", "w", "b", "threshold", "gate",
+                               "positives", "negatives", "clips", "bank", "created"}, sorted(doc))
+        few = W.build_verifier(clips[:1] + clips[3:])
+        check("one 'hey Jarvis' sentence is not enough, and says why",
+              not few["built"] and "1 of the sentences" in few["why"], few)
+        with mock.patch.object(W, "_load", return_value=None):
+            nomodel = W.build_verifier(clips)
+        check("no wake-word model: not built, and says why", not nomodel["built"]
+              and nomodel["why"], nomodel)
+
+        p = W.verifier_path("")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(__import__("json").dumps(doc), encoding="utf-8")
+        ver = W.load_verifier("phone")
+        check("a mic with no verifier of its own falls back to the general one", ver is not None)
+        check("the verifier tells the owner from the others",
+              ver.probabilities(np.stack([own(), own()])).min() > 0.9
+              and ver.probabilities(np.stack([other(), other()])).max() < 0.1)
+        st = W.verifier_status()
+        check("status says trained, from how many windows", st["trained"] and st["positives"] == 6, st)
+
+        # spot(): first model interested (>= 0.1) on step 1 only.
+        def steps_for(win_at_1, base=0.3):
+            return (np.asarray([0.0, base, 0.05], np.float32), [other(), win_at_1, own()])
+        with mock.patch.object(W, "_clip_steps", lambda m, c, r: steps_for(own())):
+            s = W.spot(np.zeros(100, np.float32))
+        check("the owner at a weak first score (0.3 < 0.5) is heard, through the verifier",
+              s.heard and s.verified and s.verifier_score > 0.9 and s.score == 0.3, s)
+        with mock.patch.object(W, "_clip_steps", lambda m, c, r: steps_for(other(), base=0.95)):
+            s = W.spot(np.zeros(100, np.float32))
+        check("another voice at a strong first score (0.95) is turned away",
+              not s.heard and s.verified and s.verifier_score < 0.1, s)
+        with mock.patch.object(W, "_clip_steps", lambda m, c, r: (
+                np.asarray([0.05, 0.02], np.float32), [own(), own()])):
+            s = W.spot(np.zeros(100, np.float32))
+        check("below the 0.1 gate the verifier is not asked (openWakeWord's rule)",
+              not s.heard and not s.verified, s)
+
+        p.write_text("{not json", encoding="utf-8")
+        with mock.patch.object(W, "_clip_steps", lambda m, c, r: steps_for(other(), base=0.95)):
+            s = W.spot(np.zeros(100, np.float32))
+        check("an unreadable verifier: the first model decides alone, as before",
+              s.heard and not s.verified, s)
+        check("...and status says to train again", not W.verifier_status()["trained"]
+              and "train" in W.verifier_status()["why"], W.verifier_status())
+        p.write_text(__import__("json").dumps({**doc, "w": doc["w"][:10]}), encoding="utf-8")
+        check("weights of the wrong size are refused", W.load_verifier() is None)
+        p.unlink()
+        check("no verifier file: the first model decides alone", W.load_verifier() is None)
+        check("status carries the verifier for the phone and desktop",
+              S.status()["wake"]["verifier"]["trained"] is False)
+
+
+def t_enrolment_builds_and_replaces_the_verifier():
+    import json
+    import jarvis_voice_enroll as E
+    good = {"built": True, "clips": 3, "positives": 6, "bank": 5,
+            "doc": {"version": 1, "w": [0.0] * 1536, "b": 0.0, "positives": 6}}
+    with Env():
+        p = W.verifier_path("")
+        with mock.patch.object(W, "build_verifier", return_value=good):
+            line = E._wake_verifier([b"\x00\x01" * 1600] * 3)
+        check("an approved training saves the verifier beside the voice print",
+              p.is_file() and json.loads(p.read_text())["positives"] == 6
+              and p.parent == V.PROFILE_PATH.parent and "built from 3" in line, line)
+        with mock.patch.object(W, "build_verifier",
+                               return_value={"built": False, "why": "no hey Jarvis heard"}):
+            line = E._wake_verifier([b"\x00\x01" * 1600] * 3)
+        check("a new voice print with no verifier deletes the OLD one (it was the old voice's)",
+              not p.exists() and "no hey Jarvis heard" in line, line)
+        with mock.patch.object(W, "build_verifier", side_effect=RuntimeError("boom")):
+            line = E._wake_verifier([b"\x00\x01" * 1600] * 3)
+        check("a crash in building it is named, not raised", "RuntimeError" in line, line)
+
+
 def t_real_models():
     root = os.environ.get("JARVIS_TEST_VOICE_MODELS")
     if not root:
@@ -463,6 +573,40 @@ def t_real_models():
               not misses, misses)
         noise = (np.random.default_rng(1).normal(0, 0.01, 32000)).astype(np.float32)
         check("the VAD finds no speech in noise", S._speech_span(noise, 16000) is None)
+
+        # The owner's verifier, end to end: "Train my voice" sentences from
+        # one voice (Kokoro 9), then "hey Jarvis" from it and from two others.
+        # None of Kokoro's voices is in the bank (that is Piper's).
+        def said(text, sid):
+            with mock.patch.object(S, "_cfg", lambda k, d=None, sid=sid:
+                                   sid if k == "tts_speaker_id" else fake(real_s)(k, d)):
+                return S._read_wav(S.say(text))
+        training = ("Hey Jarvis, what's on my calendar today?",
+                    "The quick brown fox jumps over the lazy dog.",
+                    "Hey Jarvis, turn the lights down a little.",
+                    "Please remind me to call my sister on Thursday.",
+                    "Hey Jarvis, play some quiet music.",
+                    "What is the weather going to be like this weekend?",
+                    "Hey Jarvis, set a timer for ten minutes.",
+                    "Six thick thistle sticks stood by the gate.")
+        clips = [W.to_16k(*said(t, 9)) for t in training]
+        out = W.build_verifier(clips)
+        check("a verifier is built from the four 'hey Jarvis' sentences",
+              out["built"] and out["clips"] >= 3 and out["bank"] > 100,
+              {k: v for k, v in out.items() if k != "doc"})
+        if out.get("built"):
+            with Env():
+                p = W.verifier_path("")
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(__import__("json").dumps(out["doc"]), encoding="utf-8")
+                own = W.spot(*said("Hey Jarvis, what time is it?", 9))
+                others = [W.spot(*said("Hey Jarvis, what time is it?", sid)) for sid in (0, 5)]
+            check(f"...which lets its owner through ({own.verifier_score:.2f})",
+                  own.heard and own.verified, own)
+            check("...and turns two other voices away "
+                  f"({[round(o.verifier_score, 2) for o in others]}, their first scores "
+                  f"{[round(o.score, 2) for o in others]})",
+                  not any(o.heard for o in others), others)
     S.reload_engines()
 
 
@@ -473,7 +617,8 @@ if __name__ == "__main__":
                t_order_the_owner_is_heard_and_the_phrase_removed, t_follow_up_window,
                t_no_spotter_is_said_not_crashed, t_push_to_talk_is_unchanged,
                t_the_switch_is_one_card, t_the_spotter_module_writes_and_logs_nothing,
-               t_48k_is_filtered_not_folded, t_real_models):
+               t_48k_is_filtered_not_folded, t_the_verifier,
+               t_enrolment_builds_and_replaces_the_verifier, t_real_models):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

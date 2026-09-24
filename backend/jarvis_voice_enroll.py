@@ -34,6 +34,17 @@ voice print by jarvis_voice.enroll() and dropped. Denied, timed out, refused,
 or the enrolment failed: dropped. Either way the list is cleared in a
 `finally`, so no path keeps them.
 
+THE "HEY JARVIS" CHECK, FROM THE SAME CLIPS (added 2026-09-24). When the
+card is approved and the voice print is made, the same clips also build the
+owner's wake-word verifier (jarvis_wakeword.build_verifier: the moments
+"hey Jarvis" is heard in the sentences that start with it, against the
+rest and a bank of other voices), saved beside the voice print. No second
+card: it is part of the change the owner just approved - "this is my
+voice". If it cannot be built (too few "hey Jarvis" sentences heard, no
+wake-word model), the enrolment still stands and any OLD verifier is
+deleted, because it described the voice that was just replaced. The
+outcome says which (`wake_check`).
+
 ONE AT A TIME. While a card is waiting, a second training is refused with a
 409 rather than replacing the first. Replacing sounds friendlier and is
 worse: the first card would still be on screen (the gate has no call to take
@@ -219,6 +230,43 @@ def _spawn(fn: Callable[[], None]) -> None:
     threading.Thread(target=fn, name="jarvis-voice-enroll", daemon=True).start()
 
 
+def _wake_verifier(clips: list) -> str:
+    """Builds the "hey Jarvis" verifier from the approved clips (16 kHz PCM
+    bytes) and saves it beside the voice print. Returns one line for the
+    outcome. Never raises: this must never undo an approved enrolment."""
+    try:
+        import numpy as np
+        import jarvis_wakeword as W
+    except Exception:
+        return "not built: the wake-word module is not installed"
+    p = None
+    try:
+        p = W.verifier_path("")
+        samples = [np.frombuffer(bytes(c[: len(c) // 2 * 2]), dtype="<i2")
+                   .astype(np.float32) / 32768.0 for c in clips]
+        out = W.build_verifier(samples, SAMPLE_RATE)
+        if not out.get("built"):
+            _drop(p)
+            return "not built: " + str(out.get("why", "no reason given"))[:160]
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps(out["doc"]), encoding="utf-8")
+        tmp.replace(p)
+        return f"built from {out['clips']} \"hey Jarvis\" sentences"
+    except Exception as exc:
+        if p is not None:
+            _drop(p)
+        return f"not built ({type(exc).__name__})"
+
+
+def _drop(p) -> None:
+    """Removes a verifier that no longer matches the voice print."""
+    try:
+        p.unlink()
+    except (FileNotFoundError, OSError):
+        pass
+
+
 def _finish(pid: str, outcome: str, **extra) -> dict:
     """Records the outcome and DROPS THE CLIPS. Every path ends here."""
     global _PENDING, _LAST
@@ -234,7 +282,15 @@ def _finish(pid: str, outcome: str, **extra) -> dict:
     return last
 
 
-def _decide(pid: str, *, gate: Callable, enroll: Callable) -> dict:
+def _note_last(pid_outcome: str, **extra) -> None:
+    """Adds to the last outcome, if it is still the one named."""
+    with _LOCK:
+        if _LAST is not None and _LAST.get("outcome") == pid_outcome:
+            _LAST.update(extra)
+
+
+def _decide(pid: str, *, gate: Callable, enroll: Callable,
+            wake_check: Callable = _wake_verifier) -> dict:
     """Raise the card for staged set `pid`, wait for the answer, act on it.
     Blocks - runs on its own thread (see stage)."""
     global _PENDING
@@ -277,17 +333,26 @@ def _decide(pid: str, *, gate: Callable, enroll: Callable) -> dict:
             return _finish(pid, "failed", request_id=rid,
                            reason="the recordings were gone")
         try:
-            prof = enroll(clips)
-        except Exception as exc:
-            # ValueError from enroll() is its own plain sentence ("no usable
-            # audio in those clips"); anything else is named, not quoted.
-            why = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
-            return _finish(pid, "failed", request_id=rid, reason=why[:200])
+            try:
+                prof = enroll(clips)
+            except Exception as exc:
+                # ValueError from enroll() is its own plain sentence ("no
+                # usable audio in those clips"); anything else is named, not
+                # quoted.
+                why = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+                return _finish(pid, "failed", request_id=rid, reason=why[:200])
+            # Enrolled: said at once, so the phone stops showing "waiting for
+            # the card" while the "hey Jarvis" check is built - from the same
+            # approved clips, under the same card, taking up to a minute.
+            done = _finish(pid, "enrolled", request_id=rid,
+                           samples=int(getattr(prof, "samples", 0) or 0),
+                           embedder=str(getattr(prof, "embedder", "")),
+                           wake_check="being built from the same sentences")
+            wake = str(wake_check(clips))
+            _note_last(pid_outcome="enrolled", wake_check=wake)
+            return {**done, "wake_check": wake}
         finally:
             clips.clear()
-        return _finish(pid, "enrolled", request_id=rid,
-                       samples=int(getattr(prof, "samples", 0) or 0),
-                       embedder=str(getattr(prof, "embedder", "")))
     finally:
         # Belt and braces: whatever happened above, the staged audio is gone.
         with _LOCK:
@@ -299,7 +364,8 @@ def _decide(pid: str, *, gate: Callable, enroll: Callable) -> dict:
 def stage(body: bytes, *, gate: Optional[Callable] = None,
           tier_of: Optional[Callable[[str], str]] = None,
           enroll: Optional[Callable] = None,
-          spawn: Optional[Callable] = None) -> tuple:
+          spawn: Optional[Callable] = None,
+          wake_check: Optional[Callable] = None) -> tuple:
     """POST /api/voice/enroll. Returns (http_status, payload).
 
     Checks the clips, stores them in memory, raises ONE card on a background
@@ -309,6 +375,7 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
     gate = gate or _gate
     tier_of = tier_of or _tier_of
     enroll = enroll or _enroll
+    wake_check = wake_check or _wake_verifier
     spawn = spawn or _spawn
 
     with _LOCK:
@@ -351,7 +418,7 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
 
     def work():
         try:
-            _decide(pid, gate=gate, enroll=enroll)
+            _decide(pid, gate=gate, enroll=enroll, wake_check=wake_check)
         except Exception:
             _finish(pid, "failed", reason="unexpected error")
 
@@ -377,7 +444,8 @@ def state() -> dict:
             out["clips"] = p["count"]
             out["expires_in"] = max(0, int(p["since"] + p["timeout"] - time.time()))
         if _LAST is not None:
-            out["last"] = {k: _LAST[k] for k in ("outcome", "at", "samples", "reason")
+            out["last"] = {k: _LAST[k] for k in ("outcome", "at", "samples", "reason",
+                                                 "wake_check")
                            if k in _LAST}
     out["limits"] = {"min_clips": MIN_CLIPS, "max_clips": MAX_CLIPS,
                      "min_seconds": MIN_SECONDS, "max_seconds": MAX_SECONDS}

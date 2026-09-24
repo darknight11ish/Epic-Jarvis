@@ -4865,6 +4865,74 @@ route's answers, that nothing is written or logged, and the patch). With
 `$env:JARVIS_TEST_VOICE_MODELS` set as above it also runs the real model on
 Kokoro sentences.
 
+## "Is it YOU saying hey Jarvis?" - the wake-word verifier
+
+**What it does.** The "hey Jarvis" model reacts to anyone saying something
+like "hey Jarvis". Now, when you train your voice, the PC also learns how
+*you* say it, and uses that as a second check on every "hey Jarvis" it
+hears. openWakeWord (the wake-word project Jarvis uses) calls this a
+*custom verifier*: a tiny extra model (1,536 numbers) that looks at the same
+sound fingerprint as the first one and answers "is this the owner's hey
+Jarvis?". It only runs when the first model is at least a little interested,
+and then it has the last word.
+
+**Where it runs.** On the PC only, in `jarvis_wakeword.py`: every clip the
+phone or the desktop sends as "hey Jarvis" is checked there before anything
+else. **It is not on the phone**, and that is a choice, not an oversight:
+putting it there would mean sending numbers made from your voice to the
+phone and keeping them there, and it would gain little - the phone already
+sends nothing until its own spotter hears "hey Jarvis", and the PC checks
+every clip again, with this verifier, before your voice is even compared.
+What a false "hey Jarvis" on the phone costs is one clip sent to your own
+PC and dropped there.
+
+**How it is built.** From the same "Train my voice" clips, when you approve
+that card - no second card, because it is part of the same change ("this is
+my voice"). It needs the sentences that start with "hey Jarvis" (the phone
+asks for four; at least two must be heard). It is saved next to your voice
+print (`voice\wake-verifier*.json`: numbers, never audio). If you train
+again and it cannot be built, the old one is deleted, because it described
+the old voice. No verifier means the first model decides alone, exactly as
+before.
+
+**What it learns from, and why there is a big file of numbers.** Trained on
+your voice alone, a verifier still let most *other* voices through: it had
+never heard anyone else say the phrase. So it is also shown a bank of
+other voices saying "hey Jarvis" - `jarvis_wakebank.py`, 2,204 moments from
+300 clips of 150 synthetic voices (Piper's LibriTTS-R voice), stored as the
+model's numbers, not audio (900 KB). `tools/gen_wakebank.py` rebuilds it.
+
+**Measured** (all synthetic: every Kokoro voice in turn played "the owner",
+trained from the twelve phone sentences, then tested on "hey Jarvis" clips
+from itself and the ten other Kokoro voices - none of which are in the bank):
+
+| | the owner's own "hey Jarvis" let through | another voice's "hey Jarvis" let through |
+|---|---|---|
+| no verifier (before) | 33 of 33 | 330 of 330 |
+| verifier trained on the owner only (openWakeWord's recipe) | 33 of 33 | 182 of 330 (55%) |
+| **this verifier** (with the bank, bar 0.4) | **33 of 33** | **21 of 330 (6%)** |
+
+Building it takes about 45 seconds on the dev container's CPU, after the
+card is approved; the training shows as done straight away and the "hey
+Jarvis" check follows ("built from 4 "hey Jarvis" sentences" in the phone's
+Last training line).
+
+**It is not the voice check.** Anything it lets through still goes through
+the full owner check (your voice print) and the "must start with hey
+Jarvis" check before a word is acted on - this only turns other people away
+earlier.
+
+**"vad_threshold"** (openWakeWord's option to ignore the wake word unless
+the speech detector heard speech just before): on the PC this is already
+the case - Silero VAD runs on every clip first and a clip with no speech
+never reaches the spotter. Not added on the phone (it would need a third
+model running there); every clip the phone sends is VAD-checked on the PC.
+
+**Not checked:** real voices (the numbers above are synthetic voices from
+one model family against a bank from another), and how it copes with a
+cold, a different room, or a different microphone - retrain if "hey Jarvis"
+starts being ignored.
+
 ---
 
 ---

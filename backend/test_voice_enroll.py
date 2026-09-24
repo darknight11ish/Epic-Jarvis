@@ -55,6 +55,12 @@ import _skeleton  # noqa: E402
 
 SRC = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
+
+# Every enrolment here, real or fake, lands in a temporary folder. Approving
+# a card also rebuilds (or deletes) the "hey Jarvis" verifier that sits
+# beside the voice print, and this suite, run on the owner's PC, must never
+# touch theirs.
+V.PROFILE_PATH = Path(tempfile.mkdtemp(prefix="jarvis-enrol-suite-")) / "owner.json"
 TOKEN = "tok_SECRET_do_not_log_4471"
 
 
@@ -368,11 +374,18 @@ def t_nothing_logs_audio_or_tokens():
 
     # The module's source: no print, no logging, no file writes. The clips
     # live in memory only - "never written to disk" is checked, not claimed.
+    # ONE write is allowed, and pinned: _wake_verifier saves the "hey
+    # Jarvis" verifier - json.dumps of build_verifier's doc, weights and
+    # counts, never audio (what that doc holds is checked in
+    # test_wakeword.py's verifier tests).
     tree = ast.parse((HERE / "jarvis_voice_enroll.py").read_text(encoding="utf-8"))
+    saver = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                 and n.name == "_wake_verifier")
+    saver_nodes = {id(n) for n in ast.walk(saver)}
     # wave.open(io.BytesIO(...)) reads a clip that is already in memory;
     # every other open() would be a file.
     calls = {getattr(n.func, "id", None) or getattr(n.func, "attr", None)
-             for n in ast.walk(tree) if isinstance(n, ast.Call)
+             for n in ast.walk(tree) if isinstance(n, ast.Call) and id(n) not in saver_nodes
              and not (isinstance(n.func, ast.Attribute) and n.func.attr == "open"
                       and getattr(n.func.value, "id", "") == "wave"
                       and n.args and isinstance(n.args[0], ast.Call)
@@ -380,6 +393,10 @@ def t_nothing_logs_audio_or_tokens():
     bad = calls & {"print", "open", "write_bytes", "write_text", "mkstemp", "NamedTemporaryFile",
                    "info", "debug", "warning", "exception", "error"}
     check("jarvis_voice_enroll.py has no print, logging or file write", not bad, f"{bad}")
+    writes = [ast.unparse(n) for n in ast.walk(saver) if isinstance(n, ast.Call)
+              and getattr(n.func, "attr", "") in ("write_text", "write_bytes", "open")]
+    check("...except the verifier, which writes json.dumps(out['doc']) and nothing else",
+          writes == ["tmp.write_text(json.dumps(out['doc']), encoding='utf-8')"], writes)
     imports = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
                for a in n.names} | {n.module for n in ast.walk(tree)
                                     if isinstance(n, ast.ImportFrom) and n.module}
