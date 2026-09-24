@@ -129,7 +129,7 @@ Ranked by how much each helps Jarvis learn over time. Approve by number. Effort:
 - Where each fact came from: the fact links to its proposal, its source and its time (`memory-safety.patch:386-390`). Only the name of the extraction model is missing.
 - Undo for self-changes: rollback settings, an undo shelf and git restore points (`jarvis-framework.toml:131-148, 737-766, 862-869`). Not yet enforced (`:150`).
 - The model never picks its own permission tier. Unknown tiers default to "ask" (`skill-notes.patch:39-51`).
-- Your "no" to an action becomes a proposed standing rule (`gate-outcome.patch:25-60`).
+- Your "no" to an action becomes a proposed standing rule (`gate-outcome.patch:25-60`). *Since then (2026-09-24):* except for actions that always ask anyway and that you start yourself with a button (turning on the second card or the big model, installing or switching a model, the wiki, Jarvis changing its own settings or code, and a few more). For those a "no" answers that one card and proposes nothing, because "do not do this without asking me" would say nothing new. The list is `_NO_RULE_FROM_DENIAL` in `gate-outcome.patch`.
 - A log of every routing decision, tool call and gate outcome, with private details removed (`jarvis-framework.toml:198-214`).
 - A privacy-first model router (`backend/rebuilt/jarvis_router.py:328`).
 
