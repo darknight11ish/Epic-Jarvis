@@ -932,10 +932,13 @@ link and let going quieter through.
 ## 12. The second graphics card (added 2026-09-24)
 
 `backend/second-card.patch` and `backend/jarvis_second_card.py`. The owner's
-guide is `docs/SECOND-CARD.md`. **The phone calls both** (2026-09-24: Mind
-screen, "Second graphics card", `SecondCardPlate.kt` / `net/SecondCard.kt`);
-the desktop does not yet. `tools/check_parity.py` keeps `/api/second-card` as
-`planned` until the desktop calls it too, then it becomes `ported`.
+guide is `docs/SECOND-CARD.md`. **Both apps call both** (2026-09-24). The
+phone: Mind screen, "Second graphics card" (`SecondCardPlate.kt` /
+`net/SecondCard.kt`), and chat's photo button. The desktop: Settings, "Second
+graphics card" (`get_second_card` / `set_second_card` in `commands.rs`,
+granted to the settings window only), and `vision.rs`, which reads it before
+deciding whether pictures can be sent. `tools/check_parity.py` records
+`/api/second-card` as `ported`.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|

@@ -49,7 +49,7 @@ everyday chat is never slowed by it.
 
 **If a model is not installed**, the switch can still be on; the feature just
 waits, and its status line says which model to install. Install it the usual
-way: Brain window, Models, or `ollama pull <name>` in a terminal (for example
+way: Brain window, Faculties, Models (the Install box), or `ollama pull <name>` in a terminal (for example
 `ollama pull qwen3:14b`).
 
 ## What happens when a switch is on
@@ -116,9 +116,13 @@ program uses which card, so a "yes" is a good sign, not a guarantee.
 card" section, under Model. It shows what Jarvis found, the main switch and
 one switch per feature. Turning one on raises the approval card; the switch
 says "Waiting for you to approve the card on your PC or phone" until you
-answer it. With Pictures working, chat gets a Photo button. **On the desktop**
-the Brain window's switches are being built separately; until they are, the
-phone is the only place to switch these on.
+answer it. With Pictures working, chat gets a Photo button.
+
+**On the desktop:** Settings, "Second graphics card". The same list, the main
+switch and one switch per feature; turning one on raises the same approval
+card. It also shows the one-line command that keeps everyday chat on the main
+card, with a Copy button. With Pictures working, a screenshot question goes to
+the second card, and the answer's badge says "on the second graphics card".
 
 **Then measure before trusting it** (CLAUDE.md: "installed and measured").
 With a feature on, ask something that uses it and watch `nvidia-smi` in a
