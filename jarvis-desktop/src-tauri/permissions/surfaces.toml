@@ -280,6 +280,12 @@ permissions = [
   # the other settings-only powers rather than anywhere a chat page can reach.
   "allow-get-autostart",
   "allow-set-autostart",
+  # "Security": the app lock, Windows Hello for approvals and for private
+  # answers (lock.rs). Here and nowhere else, because lowering one is the
+  # power to switch a lock off. The command itself asks Windows Hello before
+  # anything is loosened, so even this window cannot lower one silently.
+  "allow-get-security-settings",
+  "allow-set-security-settings",
 ]
 
 # ---------------------------------------------------------------------------
@@ -352,6 +358,15 @@ permissions = [
   # "Both are true": one proposal, one decision, like decide above.
   "allow-brain-memory-keep-both",
 ]
+
+# Show, on the Brain's memory lists while "Windows Hello for private
+# answers" is on (lock.rs). It asks Windows Hello and, when the owner
+# confirms, lets brain_read return the entries until they have been away
+# longer than "Lock again after". It changes no setting and no memory.
+[[set]]
+identifier = "private-reveal"
+description = "Show the Brain's hidden memory lists, after Windows Hello confirms it is the owner. Changes nothing."
+permissions = ["allow-reveal-private-answers"]
 
 # The wiki builder (backend/wiki.patch). Reading the list of documents and
 # following one job are reads; "Add to wiki" only raises ONE approval card

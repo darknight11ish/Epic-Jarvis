@@ -49,7 +49,8 @@
 //!
 //! ## The two ways a Deny click arrives
 //!
-//! Both end in the same `decide_approval` call, and both are needed:
+//! Both end in `commands::deny_from_notification` - the same sending path
+//! `decide_approval` uses, with no way to approve - and both are needed:
 //!
 //! - **Jarvis already running** - `tauri-plugin-single-instance`'s callback
 //!   in `lib.rs` gets the relaunch's argv and answers there.
@@ -210,8 +211,10 @@ pub fn deny_id_from_argv(argv: &[String]) -> Option<&str> {
         .filter(|id| !id.is_empty())
 }
 
-/// Answers a Deny reached this way with the same call the in-app card and
-/// the quickbar use - `decide_approval`, not a second signing path. Runs on
+/// Answers a Deny reached this way through the same sending path the in-app
+/// card and the quickbar use (`commands::deny_from_notification`, which ends
+/// in the same function as `decide_approval`), not a second signing path -
+/// and one that cannot approve, whatever it is handed. Runs on
 /// its own task: the single-instance callback and [`decide_denied_at_startup`]
 /// that call this are not `async` themselves, and a decision this shape must
 /// not block whichever of those the app is currently inside.
@@ -219,9 +222,9 @@ pub fn decide_denied_detached(app: &AppHandle, id: &str) {
     let app = app.clone();
     let id = id.to_string();
     tauri::async_runtime::spawn(async move {
-        // `option_id: None` - a toast Deny names no plan, and denying never
-        // needs to: refusing all of them is one answer however many there are.
-        if let Err(e) = crate::commands::decide_approval(app, id.clone(), false, None).await {
+        // No option: a toast Deny names no plan, and denying never needs to -
+        // refusing all of them is one answer however many there are.
+        if let Err(e) = crate::commands::deny_from_notification(app, id.clone()).await {
             crate::logfile::log(&format!(
                 "[jarvis] notification Deny for {id} did not go through: {e}"
             ));
@@ -248,7 +251,8 @@ const STARTUP_DENY_WAIT: std::time::Duration = std::time::Duration::from_secs(45
 /// path for a while before one was here; now the claim is true.
 ///
 /// It waits, rather than deciding immediately, because
-/// `commands::decide_approval` refuses outright while the event stream is
+/// the decision path (`commands::deny_from_notification`, like
+/// `decide_approval`) refuses outright while the event stream is
 /// stale - which it is on every cold start until the stream connects. Firing
 /// straight away would have swapped a silent no-op for a logged one.
 ///

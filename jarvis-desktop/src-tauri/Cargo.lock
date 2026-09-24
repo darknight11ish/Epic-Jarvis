@@ -2342,6 +2342,7 @@ dependencies = [
  "tokio",
  "window-vibrancy",
  "windows 0.61.3",
+ "windows-future 0.2.1",
  "windows-sys 0.59.0",
  "xcap",
 ]
