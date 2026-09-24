@@ -20,6 +20,14 @@ missing module):
         card), falling back to Kokoro with the reason recorded; every call's
         timing is kept in memory (say_timings(), status()'s tts.timings)
     jarvis_speech.set_wake_enabled(bool)   -> {"ok": bool, ...}
+    jarvis_speech.barge_in(raw, mic=...)   -> {"stop": bool, "reason", ...}
+        since 2026-09-24 (voice-flow.patch, ?source=barge_in): while Jarvis
+        talks, "is that the owner's voice (or the word stop)? then stop" -
+        NEVER transcribed; jarvis_voice_flow.py decides
+    jarvis_speech.moment_reply()           -> (200, WAV) | (503, dict)
+        the "One moment." clip in the voice in use now (GET /api/voice/moment)
+    hear(..., waited_ms=...)               TAKES_WAIT: the app's own wait for the
+        owner to finish, kept only as a number in status()'s flow.timings
 
 ORDER MATTERS, and this is the one invariant that must never move: `hear()`
 verifies the SPEAKER through `jarvis_voice` before it ever runs speech-to-
@@ -30,6 +38,8 @@ The safe failure is to say nothing back, not to say something quietly wrong.
 
 The whole order, since 2026-09-23 (each step can only refuse, never add):
 
+    0. source=barge_in (2026-09-24): Jarvis is talking; barge_in() answers
+       "stop or not" and NOTHING below runs - no speech-to-text, ever
     1. read the WAV                      bad file        -> refused
     2. Silero VAD: is there speech?      only noise      -> refused, nothing else runs
     3. wake word (source=wake_word only): is it switched on, and is
@@ -457,6 +467,8 @@ def reload_engines() -> None:
         jarvis_turn.reload()
     except Exception:
         pass
+    # The warm-up and the "One moment." clip were made with the old ones.
+    _flow("reset_warm")
 
 
 # --------------------------------------------------------------------------
@@ -959,7 +971,10 @@ def status() -> dict:
     listed capability the owner then finds does not work is worse than one
     honestly reported missing.
 
-    Cheap: file checks only. No model is loaded to answer this.
+    Cheap: file checks only. No model is loaded to answer this. (Since
+    2026-09-24 the first call also STARTS jarvis_voice_flow's warm-up and
+    the "One moment." clip on a thread of their own - this reply does not
+    wait for either; `[voice] warm_engines = false` stops the first.)
 
     TWO SHAPES IN ONE REPLY, on purpose. The flat keys (enabled, enrolled,
     stt_available, ...) are what this module always returned. The nested
@@ -1103,6 +1118,12 @@ def status() -> dict:
             # The stricter check (2026-09-24) - see _strict_state().
             **_strict_state(voice),
         },
+        # Since 2026-09-24 (jarvis_voice_flow.py, docs/JARVIS-API.md
+        # section 17): interrupting Jarvis by talking, the "One moment."
+        # clip, the engines kept warm, and each spoken turn's delay in
+        # numbers. Reading it the first time starts the warm-up in the
+        # background; this reply does not wait for it.
+        "flow": _flow_status(voice),
     }
 
 
@@ -1297,17 +1318,34 @@ def _too_short_reason(spoken: float, need: float) -> str:
             f"speech; a command needs at least {need:.1f}) - say a little more")
 
 
-def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
+def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
+         waited_ms=None) -> Heard:
     """One complete WAV utterance in. Never transcribes before the speaker
     is checked - see the module docstring for the whole order and why it is
     load-bearing, not a style choice.
 
     `mic`: "phone" or "desktop" (anything else counts as none named) - the
     clip is checked against that microphone's own voice print, and its own
-    "hey Jarvis" verifier, falling back as jarvis_voice.lookup_order says."""
+    "hey Jarvis" verifier, falling back as jarvis_voice.lookup_order says.
+
+    `source="barge_in"` (since 2026-09-24): Jarvis is talking and the app
+    heard speech. Answered by barge_in() - stop or not - and NEVER
+    transcribed; voice-flow.patch sends those clips there without coming
+    here, and this is the same answer for a route that does not.
+
+    `waited_ms`: how long the app waited for the owner to finish before
+    sending (its Smart Turn wait), for the delay's numbers only."""
     mic = str(mic or "").strip().lower()
     if mic not in ("phone", "desktop"):
         mic = ""
+    if source == SOURCE_BARGE_IN:
+        b = barge_in(raw, mic=mic)
+        return Heard(False, source=source, available=bool(b.get("available")),
+                     stop=bool(b.get("stop")), reason=str(b.get("reason") or ""),
+                     seconds=float(b.get("seconds") or 0.0))
+    t_in = time.monotonic()
+    steps = {}
+    cold = _stt_cache is _UNSET
     parsed = _read_wav(raw)
     if parsed is None:
         return Heard(False, source=source, available=False,
@@ -1318,7 +1356,9 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
 
     # 2. Is there any speech at all? Silero VAD, when installed. A cough, a
     #    door, the fan: refused here, before anything else looks at it.
+    t = time.monotonic()
     span = _speech_span(samples, sample_rate)
+    steps["vad"] = (time.monotonic() - t) * 1000.0
     if span is None:
         return Heard(False, source=source, seconds=seconds,
                      reason="no speech in that recording")
@@ -1335,6 +1375,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
     # 3. The wake word. Switched on? Then: is "hey Jarvis" in it?
     via_window = False
     spot = None
+    t = time.monotonic()
     if wake:
         if not _wake_enabled():
             # available=False: not "this clip was not for Jarvis" but "this
@@ -1377,6 +1418,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
                 return Heard(False, source=source, seconds=seconds,
                              wake_score=spot.score,
                              reason="no \"hey Jarvis\" in that recording")
+        steps["wake"] = (time.monotonic() - t) * 1000.0
 
     # 3b. Long enough to be sure it is the owner? (2026-09-24.) A speaker
     #     model has little to go on in a second of speech, so a command
@@ -1396,6 +1438,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
                              "rather than skipping the owner check")
 
     # 4. The owner check.
+    t = time.monotonic()
     try:
         embedder = jarvis_voice.EcapaEmbedder()
     except Exception:
@@ -1411,6 +1454,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
     if mic and _takes(jarvis_voice.verify, "mic"):
         kw["mic"] = mic
     verdict = jarvis_voice.verify(samples, embedder, **kw)
+    steps["owner_check"] = (time.monotonic() - t) * 1000.0
     common = dict(score=verdict.score, threshold=verdict.threshold,
                   source=source, mode=verdict.mode, seconds=seconds,
                   wake_score=spot.score if spot else 0.0,
@@ -1428,15 +1472,25 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
                      **common)
 
     # 5. The words.
+    t = time.monotonic()
     try:
         text = _transcribe(samples, sample_rate)
     except Exception as exc:
         return Heard(True, available=False, wake_heard=wake,
                      reason=f"transcription failed ({type(exc).__name__})",
                      **common)
+    steps["stt"] = (time.monotonic() - t) * 1000.0
     engine = f"{STT_ENGINE}:{_stt_files()[0]}"
 
+    def timed(words: str) -> None:
+        # One row of numbers for the delay (jarvis_voice_flow): only for a
+        # clip that became words, which is a turn the owner waits on.
+        if words:
+            _flow("note_heard", t_in, steps, source=source, mic=mic,
+                  waited_ms=waited_ms, cold=cold)
+
     if not wake or via_window:
+        timed(text)
         return Heard(True, text=text, engine=engine, wake_heard=wake,
                      question_private=_question_private(text), **common)
 
@@ -1458,6 +1512,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
         _note_short(mic)
         return Heard(True, text="", engine=engine, wake_heard=True, too_short=True,
                      min_seconds=need, reason=_too_short_reason(spoken, need), **common)
+    timed(rest)
     return Heard(True, text=rest, engine=engine, wake_heard=True,
                  question_private=_question_private(rest), **common)
 
@@ -1479,33 +1534,57 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     # plays it ("phone" / "desktop"), when the route says; "" counts for both.
     _remember_said(text, mic)
     t0 = time.monotonic()
+    # The delay (jarvis_voice_flow): the first sentence of a spoken turn's
+    # answer marks when its first sound was ready. Numbers only.
+    mark = _flow("say_started")
+    samples, rate, engine, voice, fallback, note, failed = _synthesise(text)
+    if samples is None:
+        _note_timing("none", voice, text, t0, 0.0, fallback, note, failed=failed)
+        return None
+    _note_timing(engine, voice, text, t0, len(samples) / float(rate), fallback, note)
+    wav = _write_wav(samples, rate)
+    if mark is not None:
+        try:
+            mark.audio_ready((time.monotonic() - t0) * 1000.0)
+        except Exception:
+            pass
+    return wav
+
+
+def _synthesise(text: str, *, start_better: bool = True) -> tuple:
+    """The sound for `text`, and nothing else - no timing row, nothing
+    remembered: (samples | None, sample_rate, engine, voice, fallback, note,
+    failed). say() is this plus its bookkeeping; jarvis_voice_flow makes the
+    "One moment." clip with it.
+
+    A custom voice first (jarvis_voices.py, since 2026-09-24). None means
+    the built-in voice is the one chosen; a result without audio means the
+    custom voice could not be used, and says why - then Kokoro speaks.
+    `start_better=False` never STARTS the better voice's program on the
+    second card for this sound (it is used if it is already running)."""
     voice, fallback, note = "builtin", "", ""
-    # A custom voice first (jarvis_voices.py, since 2026-09-24). None means
-    # the built-in voice is the one chosen; a result without audio means the
-    # custom voice could not be used, and says why - then Kokoro speaks.
     try:
         import jarvis_voices
     except Exception:
         jarvis_voices = None
     if jarvis_voices is not None:
         try:
-            custom = jarvis_voices.speak(text)
+            if not start_better and _takes(jarvis_voices.speak, "start_better"):
+                custom = jarvis_voices.speak(text, start_better=False)
+            else:
+                custom = jarvis_voices.speak(text)
         except Exception as exc:
             custom = None
             fallback = f"the custom voice failed ({type(exc).__name__})"
         if custom is not None:
             voice, note = custom.voice, custom.note
             if custom.ok:
-                wav = _write_wav(custom.samples, custom.sample_rate)
-                _note_timing(custom.engine, voice, text, t0,
-                             len(custom.samples) / float(custom.sample_rate), "", note)
-                return wav
+                return (custom.samples, custom.sample_rate, custom.engine, voice, "",
+                        note, "")
             fallback = custom.why
     engine = _tts_engine()
     if engine is None:
-        _note_timing("none", voice, text, t0, 0.0, fallback, note,
-                     failed="no Kokoro voice is installed")
-        return None
+        return None, 0, "none", voice, fallback, note, "no Kokoro voice is installed"
     try:
         audio = engine.generate(
             text,
@@ -1513,15 +1592,74 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
             speed=float(_cfg("tts_speed", 1.0) or 1.0),
         )
     except Exception:
-        _note_timing("none", voice, text, t0, 0.0, fallback, note, failed="Kokoro failed")
-        return None
+        return None, 0, "none", voice, fallback, note, "Kokoro failed"
     if audio is None or len(audio.samples) == 0:
-        _note_timing("none", voice, text, t0, 0.0, fallback, note,
-                     failed="Kokoro made no sound")
+        return None, 0, "none", voice, fallback, note, "Kokoro made no sound"
+    return audio.samples, audio.sample_rate, "kokoro", voice, fallback, note, ""
+
+
+# --------------------------------------------------------------------------
+#   jarvis_voice_flow.py: interrupting by talking, the delay, "One moment."
+# --------------------------------------------------------------------------
+
+SOURCE_BARGE_IN = "barge_in"
+#: hear() takes `waited_ms` (voice-flow.patch checks this before passing it).
+TAKES_WAIT = True
+
+
+def _flow(name: str, *args, **kwargs):
+    """Calls jarvis_voice_flow.<name>, or None when that file is missing or
+    the call fails - the delay is bookkeeping, and bookkeeping must never be
+    the reason a voice turn fails."""
+    try:
+        import jarvis_voice_flow
+        return getattr(jarvis_voice_flow, name)(*args, **kwargs)
+    except Exception:
         return None
-    _note_timing("kokoro", voice, text, t0, len(audio.samples) / float(audio.sample_rate),
-                 fallback, note)
-    return _write_wav(audio.samples, audio.sample_rate)
+
+
+def barge_in(raw: bytes, mic: str = "") -> dict:
+    """POST /api/voice/utterance?source=barge_in: "should Jarvis stop
+    talking?" - `{"stop": bool, "available": bool, "why", "reason", ...}`,
+    never words. jarvis_voice_flow.barge_in says how it decides. Without
+    that file the answer is always "do not stop"."""
+    try:
+        import jarvis_voice_flow
+    except Exception:
+        return {"stop": False, "available": False, "source": SOURCE_BARGE_IN,
+                "why": "not_installed", "seconds": 0.0, "ms": 0.0,
+                "reason": "jarvis_voice_flow.py is not in the backend folder"}
+    return jarvis_voice_flow.barge_in(raw, mic=mic)
+
+
+def moment_reply() -> tuple:
+    """GET /api/voice/moment -> (200, WAV bytes) or (503, {"available":
+    false, "error", "why"}). The "One moment." clip in the voice in use now."""
+    try:
+        import jarvis_voice_flow
+    except Exception:
+        return 503, {"available": False, "error": "the \"One moment.\" clip is not installed "
+                     "on this PC", "why": "jarvis_voice_flow.py is not in the backend folder"}
+    got = jarvis_voice_flow.moment()
+    if got.get("ok") and got.get("wav"):
+        return 200, got["wav"]
+    return 503, {"available": False, "error": "no \"One moment.\" clip right now",
+                 "why": str(got.get("why") or "")}
+
+
+def _flow_status(voice: Optional[dict] = None) -> dict:
+    """status()'s `flow` block; the same shape, all off, without the file."""
+    got = _flow("status", voice=voice)
+    if isinstance(got, dict):
+        return got
+    why = "jarvis_voice_flow.py is not in the backend folder"
+    return {"available": False,
+            "barge_in": {"enabled": False, "available": False, "why": why, "min_seconds": 0.0,
+                         "bar": "", "stop_word": False},
+            "moment": {"enabled": False, "text": "", "key": "", "ready": False, "voice": "",
+                       "engine": "", "seconds": None, "after_ms": 0, "why": why},
+            "warm": {"enabled": False, "state": "off", "seconds": None, "steps": {}},
+            "timings": [], "summary": []}
 
 
 # --------------------------------------------------------------------------

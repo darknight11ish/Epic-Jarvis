@@ -1415,10 +1415,15 @@ class Spoken:
 
 
 def speak(text: str, speed: Optional[float] = None, *,
-          check: Optional[Callable] = None) -> Optional[Spoken]:
+          check: Optional[Callable] = None, start_better: bool = True) -> Optional[Spoken]:
     """None: the built-in voice is the one chosen - carry on as before.
     Otherwise a Spoken: with audio, use it; without, use the built-in voice
-    because of `why`. Never raises for anything expected."""
+    because of `why`. Never raises for anything expected.
+
+    `start_better=False` (the "One moment." clip, jarvis_voice_flow.py,
+    made in the background): the better voice is used only if its program
+    is already running and ready - that clip never STARTS it on the second
+    card; ZipVoice makes it instead."""
     st = _read_state()
     vid = st["active"]
     if vid == BUILTIN:
@@ -1435,7 +1440,7 @@ def speak(text: str, speed: Optional[float] = None, *,
         return Spoken(voice=vid, why=f"the custom voice \"{v.name}\" is not used: "
                                      + str(chk.get("why") or "it failed the owner check"))
     note = ""
-    if st["better_voice"]:
+    if st["better_voice"] and (start_better or (_F5.state == "ready" and _F5.alive())):
         out = _F5.speak(text, v, speed)
         if out[0] is not None:
             samples, rate, took = out

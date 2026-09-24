@@ -38,6 +38,114 @@
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
+      "flow": {
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
       "gate": {
         "cohort": {
           "small": null,
@@ -367,6 +475,114 @@
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": false,
+      "flow": {
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "Jarvis has not learned your voice yet. Use Train my voice; until then only \"stop\" interrupts it"
+        },
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
       "gate": {
         "cohort": {
           "small": null,
@@ -686,6 +902,114 @@
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
+      "flow": {
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
       "gate": {
         "cohort": {
           "small": null,
@@ -1015,6 +1339,114 @@
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
+      "flow": {
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
       "gate": {
         "cohort": {
           "small": null,
@@ -1344,6 +1776,114 @@
       "embedder": "sherpa-onnx:fixture00000",
       "enabled": true,
       "enrolled": true,
+      "flow": {
+        "available": true,
+        "barge_in": {
+          "available": true,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": true,
+          "why": ""
+        },
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "warming",
+          "steps": {}
+        }
+      },
       "gate": {
         "cohort": {
           "small": null,
@@ -1683,6 +2223,114 @@
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
+      "flow": {
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
       "gate": {
         "cohort": {
           "small": null,
@@ -2023,6 +2671,114 @@
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
+      "flow": {
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
       "gate": {
         "cohort": {
           "small": null,
@@ -2352,6 +3108,114 @@
       "embedder": "spectral-v1",
       "enabled": true,
       "enrolled": true,
+      "flow": {
+        "available": true,
+        "barge_in": {
+          "available": false,
+          "bar": "balanced",
+          "enabled": true,
+          "min_seconds": 1.0,
+          "stop_word": false,
+          "why": "no voice-ID model is installed, so Jarvis cannot tell your voice from anyone else's and will not take spoken commands - install the voice-ID model (backend/README.md, \"Install the better voice check\")"
+        },
+        "moment": {
+          "after_ms": 1000,
+          "enabled": true,
+          "engine": "kokoro",
+          "key": "34c972a65e5f",
+          "ready": false,
+          "seconds": null,
+          "text": "One moment.",
+          "voice": "builtin",
+          "why": ""
+        },
+        "summary": [
+          {
+            "label": "waiting for you to finish (in the app)",
+            "median_ms": null,
+            "step": "end_wait_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "Smart Turn on this PC",
+            "median_ms": null,
+            "step": "turn_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "finding the speech",
+            "median_ms": null,
+            "step": "vad_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "checking it is you",
+            "median_ms": null,
+            "step": "owner_check_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "speech to text",
+            "median_ms": null,
+            "step": "stt_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the app passing the words to the chat",
+            "median_ms": null,
+            "step": "to_chat_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the model's first word",
+            "median_ms": null,
+            "step": "model_first_word_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "the rest of the first sentence",
+            "median_ms": null,
+            "step": "first_sentence_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "making the first sentence's sound",
+            "median_ms": null,
+            "step": "say_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "on this PC: from your words arriving to the first sound ready",
+            "median_ms": null,
+            "step": "first_audio_ms",
+            "turns": 0,
+            "worst_ms": null
+          },
+          {
+            "label": "in all: from you finishing to the first sound ready",
+            "median_ms": null,
+            "step": "total_ms",
+            "turns": 0,
+            "worst_ms": null
+          }
+        ],
+        "timings": [],
+        "warm": {
+          "enabled": true,
+          "seconds": null,
+          "state": "waiting",
+          "steps": {}
+        }
+      },
       "gate": {
         "cohort": {
           "small": null,
