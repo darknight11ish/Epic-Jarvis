@@ -1,0 +1,16 @@
+{
+  "bpm": 120,
+  "dur": 35,
+  "hits": {
+    "ignite": 0.0, "hey": 2.0, "nothing": 3.5,
+    "learns": 5.5, "propose": 7.5, "keep": 8.75, "stash": 9.0,
+    "timeline": 10.0, "retire": 11.0, "asof": 12.0,
+    "voice": 13.0, "match": 14.0, "reject": 14.5,
+    "turn": 15.5, "paused": 16.0, "resume": 16.5,
+    "phone": 17.0, "swipe": 18.25, "approved": 18.5,
+    "reply": 19.0, "stop": 20.0, "interrupt": 20.5,
+    "today": 22.0, "ready": 24.0, "tiles": [24.25, 24.5, 24.75, 25.0, 25.25],
+    "next": 27.0, "choices": [28.0, 28.5, 29.0],
+    "outro": 30.0, "pc": 31.0, "rules": 32.0, "logo": 33.0, "end": 35.0
+  }
+}

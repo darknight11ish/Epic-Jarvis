@@ -1,9 +1,0 @@
-{
-  "compositions/components/chromatic-aberration-wipe.html": "9fe4c850d546039c67781ae3e51f8528517295b1a366bf2939b1b6da6a922466",
-  "compositions/components/grain-overlay.html": "97a0da8f26feca9574abcf08b8186cef10ea4819b2aeabc30547ae16ed9ae80d",
-  "compositions/components/headline-slam.html": "b16ac28b01bf7f352d6a3f267838253de85794cd9bedd8065b48d7675e9295cd",
-  "compositions/components/rgb-glitch-text.html": "ca732686dde84890e658b9f3900b9e58735d8e7fe0f516ba8dbce094caa9099b",
-  "compositions/components/scramble-reveal.html": "c59d9ecbcc69d3fe02e72ad8ed6fd53d6bf67150d26d6cbdaff97d0000fa7cb6",
-  "compositions/components/telemetry-hud.html": "cd6d5b261646f8edf55cce3ce8be6d05f5a2cc388b5fa55e2b00bf0a1173f704",
-  "compositions/vfx-anamorphic-flare.html": "877be3facfc9b4becd2a9d297de950c58ccc332e8939c0f892a98519974e50f3"
-}

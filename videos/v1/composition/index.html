@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Jarvis: Your Rules</title>
+    <script src="assets/vendor/gsap.min.js"></script>
+    <script src="assets/timing.js"></script>
+    <script src="assets/audio-data.js"></script>
+    <script src="assets/reactor.js" charset="utf-8"></script>
+    <style>
+      @font-face { font-family: "Chakra Petch"; font-weight: 500; src: url("assets/fonts/chakra-petch-500.woff2") format("woff2"); }
+      @font-face { font-family: "Chakra Petch"; font-weight: 600; src: url("assets/fonts/chakra-petch-600.woff2") format("woff2"); }
+      @font-face { font-family: "Chakra Petch"; font-weight: 700; src: url("assets/fonts/chakra-petch-700.woff2") format("woff2"); }
+      @font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url("assets/fonts/ibm-plex-mono-400.woff2") format("woff2"); }
+      @font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url("assets/fonts/ibm-plex-mono-500.woff2") format("woff2"); }
+      @font-face { font-family: "IBM Plex Sans"; font-weight: 400; src: url("assets/fonts/ibm-plex-sans-400.woff2") format("woff2"); }
+
+      :root {
+        --void: #04070c; --plate: #0a1119; --plate2: #0e1822; --line: #17293a; --line-hot: #22405a;
+        --ink: #dbe7f2; --dim: #8fa3b8; --dimmer: #5c7085;
+        --ice: #6fe3ff; --ember: #ff9b52; --amber: #ffb648; --violet: #ae7bff; --verdant: #5fe0a8; --rose: #ff7b86;
+        --mach: "Chakra Petch", sans-serif; --mono: "IBM Plex Mono", monospace; --body: "IBM Plex Sans", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--void); color: var(--ink); font-family: var(--body); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--void); }
+      .layer { position: absolute; inset: 0; }
+      .clip { position: absolute; inset: 0; }
+
+      /* ---------- world background ---------- */
+      #bg {
+        background:
+          radial-gradient(ellipse 60% 55% at 50% 48%, rgba(46, 168, 204, 0.07), transparent 70%),
+          linear-gradient(rgba(34, 64, 90, 0.16) 1px, transparent 1px) 0 0 / 80px 80px,
+          linear-gradient(90deg, rgba(34, 64, 90, 0.16) 1px, transparent 1px) 0 0 / 80px 80px,
+          var(--void);
+      }
+
+      /* ---------- the reactor ---------- */
+      #hero-wrap { position: absolute; left: 460px; top: 40px; width: 1000px; height: 1000px; }
+      #hero { display: block; width: 1000px; height: 1000px; }
+
+      /* ---------- type ---------- */
+      .mach { font-family: var(--mach); font-weight: 700; text-transform: uppercase; letter-spacing: -0.01em; line-height: 0.95; }
+      .mono { font-family: var(--mono); font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
+      .gt { position: relative; display: block; }
+      .gt > span { display: block; white-space: nowrap; }
+      .gt > .gr, .gt > .gb { position: absolute; inset: 0; mix-blend-mode: screen; }
+      .gt > .gr { color: #ff6a86; transform: translateX(var(--gr, 0px)); }
+      .gt > .gb { color: #22d3ee; transform: translateX(var(--gb, 0px)); }
+      .gt > .gm { position: relative; }
+      .center-x { position: absolute; left: 0; right: 0; display: flex; justify-content: center; }
+      .glow-ink { text-shadow: 0 0 40px rgba(111, 227, 255, 0.25); }
+
+      /* scene 2 */
+      #s2 .line { bottom: 120px; font-size: 150px; }
+      /* scene 3 */
+      #room { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: visible; }
+      #s3t .col { position: absolute; left: 130px; top: 250px; font-size: 132px; line-height: 1.04; display: flex; flex-direction: column; gap: 14px; }
+      .tag { position: absolute; left: 1290px; top: 540px; width: 0; height: 0; }
+      .tag > b { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); padding: 10px 18px; border: 1.5px solid var(--ice); background: rgba(10, 17, 25, 0.9); color: var(--ice); font: 500 24px var(--mono); letter-spacing: 0.16em; white-space: nowrap; }
+      #room-label { position: absolute; left: 1290px; top: 955px; width: 0; }
+      #room-label > b { position: absolute; transform: translateX(-50%); white-space: nowrap; color: var(--dim); font: 500 22px var(--mono); letter-spacing: 0.3em; }
+      /* scene 4 */
+      #s4 .line { bottom: 130px; font-size: 112px; }
+      /* scene 5 */
+      .state-col { position: absolute; left: 1080px; top: 300px; display: flex; flex-direction: column; gap: 10px; }
+      .state-col .it { font-size: 96px; color: var(--dim); }
+      .state-col .word { font-size: 160px; }
+      .pill { display: inline-flex; align-items: center; gap: 14px; margin-top: 22px; padding: 10px 20px; border: 1.5px solid currentColor; font: 500 26px var(--mono); letter-spacing: 0.22em; width: max-content; }
+      .pill i { width: 14px; height: 14px; border-radius: 50%; background: currentColor; display: block; }
+      /* scene 6 */
+      #reply { position: absolute; left: 260px; right: 260px; bottom: 100px; padding: 26px 34px; border: 1.5px solid var(--line-hot); background: rgba(6, 10, 16, 0.86); font: 400 38px var(--mono); color: var(--ink); letter-spacing: 0.01em; }
+      #reply .who { color: var(--ice); margin-right: 18px; }
+      #reply .cut { color: var(--rose); margin-left: 14px; font-size: 24px; letter-spacing: 0.2em; }
+      #s6b .line { top: 300px; font-size: 290px; }
+      #s6c .line { bottom: 110px; font-size: 92px; }
+      #speech-tag { position: absolute; left: 0; right: 0; top: 118px; text-align: center; color: var(--dim); font: 500 24px var(--mono); letter-spacing: 0.3em; }
+      /* scene 7 */
+      #s7a .line { top: 430px; font-size: 108px; font-weight: 600; text-transform: none; }
+      #s7a .you { position: absolute; left: 0; right: 0; top: 370px; text-align: center; color: var(--ember); font: 500 26px var(--mono); letter-spacing: 0.3em; }
+      .left-col { position: absolute; left: 130px; top: 330px; display: flex; flex-direction: column; gap: 8px; }
+      .left-col .big { font-size: 150px; }
+      .left-col .mid { font-size: 118px; }
+      .left-col .sub { margin-top: 28px; color: var(--dim); font: 500 28px var(--mono); letter-spacing: 0.26em; }
+      #phone { position: absolute; left: 1250px; top: 95px; width: 440px; height: 900px; border-radius: 64px; background: #0b1016; border: 2px solid #2a3a4a; box-shadow: 0 0 0 10px #05080c, 0 40px 120px rgba(0, 0, 0, 0.8), 0 0 90px rgba(255, 182, 72, 0.12); }
+      #phone .screen { position: absolute; inset: 14px; border-radius: 52px; background: #05070b; overflow: hidden; }
+      #phone .notch { position: absolute; left: 50%; top: 14px; width: 120px; height: 30px; margin-left: -60px; border-radius: 20px; background: #000; }
+      #phone .link { position: absolute; left: 30px; right: 30px; top: 64px; display: flex; align-items: center; gap: 12px; font: 500 20px var(--mono); letter-spacing: 0.12em; color: var(--amber); }
+      #phone .link i { width: 12px; height: 12px; border-radius: 50%; background: currentColor; display: block; }
+      #phone-face { position: absolute; left: 61px; top: 104px; width: 290px; height: 290px; }
+      #card { position: absolute; left: 22px; right: 22px; top: 420px; padding: 24px 24px 22px; border-radius: 22px; background: var(--plate2); border: 1.5px solid rgba(255, 182, 72, 0.55); }
+      #card .kick { font: 500 16px var(--mono); letter-spacing: 0.2em; color: var(--amber); }
+      #card .title { margin-top: 12px; font: 600 32px var(--mach); color: var(--ink); }
+      #card .sum { margin-top: 6px; font: 400 19px var(--body); color: var(--dim); }
+      #card .risk { margin-top: 16px; font: 400 17px var(--body); color: var(--ink); line-height: 1.35; }
+      #card .risk b { color: var(--verdant); font-weight: 400; margin-right: 6px; }
+      #card .exp { margin-top: 14px; font: 500 19px var(--mono); color: var(--amber); letter-spacing: 0.04em; }
+      #card .btns { margin-top: 18px; display: flex; gap: 12px; }
+      #card .btns span { flex: 1; text-align: center; padding: 13px 0; border-radius: 14px; font: 600 21px var(--mach); }
+      #card .ok { background: var(--verdant); color: #04130c; }
+      #card .no { border: 1.5px solid var(--line-hot); color: var(--dim); }
+      #approved { position: absolute; left: 0; right: 0; top: 540px; display: flex; justify-content: center; }
+      #approved b { padding: 16px 30px; border-radius: 40px; border: 2px solid var(--verdant); color: var(--verdant); font: 600 30px var(--mach); letter-spacing: 0.04em; }
+      #finger { position: absolute; left: 1330px; top: 745px; width: 64px; height: 64px; border-radius: 50%; background: rgba(255, 255, 255, 0.28); border: 3px solid rgba(255, 255, 255, 0.85); box-shadow: 0 0 30px rgba(255, 255, 255, 0.35); }
+      /* scene 8 */
+      #desk { position: absolute; left: 110px; top: 250px; width: 820px; height: 540px; border-radius: 18px; background: #070b11; border: 1.5px solid var(--line-hot); box-shadow: 0 40px 120px rgba(0, 0, 0, 0.8); overflow: hidden; }
+      #desk .bar { height: 54px; display: flex; align-items: center; gap: 16px; padding: 0 22px; border-bottom: 1px solid var(--line); background: var(--plate); }
+      #desk .bar .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--verdant); box-shadow: 0 0 12px var(--verdant); }
+      #desk .route { padding: 5px 12px; border: 1.5px solid var(--ice); color: var(--ice); font: 500 18px var(--mono); letter-spacing: 0.2em; }
+      #desk .chip { padding: 5px 10px; border: 1px solid var(--line-hot); color: var(--dim); font: 500 18px var(--mono); }
+      #desk .ttl { margin-left: auto; color: var(--dim); font: 500 18px var(--mono); letter-spacing: 0.2em; }
+      #desk-face { position: absolute; left: 245px; top: 88px; width: 330px; height: 330px; }
+      #desk .cap { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; color: var(--dim); font: 500 20px var(--mono); letter-spacing: 0.3em; }
+      #phone2 { position: absolute; left: 1420px; top: 200px; width: 330px; height: 660px; border-radius: 50px; background: #0b1016; border: 2px solid #2a3a4a; box-shadow: 0 0 0 8px #05080c, 0 40px 120px rgba(0, 0, 0, 0.8); }
+      #phone2 .screen { position: absolute; inset: 12px; border-radius: 40px; background: #05070b; overflow: hidden; }
+      #phone2 .link { position: absolute; left: 26px; top: 46px; display: flex; align-items: center; gap: 10px; color: var(--verdant); font: 500 18px var(--mono); letter-spacing: 0.12em; }
+      #phone2 .link i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; display: block; }
+      #phone2-face { position: absolute; left: 43px; top: 150px; width: 220px; height: 220px; }
+      #mesh { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: visible; }
+      #mesh-label { position: absolute; left: 1175px; top: 568px; width: 0; }
+      #mesh-label b { position: absolute; transform: translateX(-50%); white-space: nowrap; color: var(--ice); font: 500 22px var(--mono); letter-spacing: 0.3em; }
+      #cloud-label { position: absolute; left: 1175px; top: 60px; width: 0; }
+      #cloud-label b { position: absolute; transform: translateX(-50%); white-space: nowrap; color: var(--rose); font: 500 20px var(--mono); letter-spacing: 0.3em; }
+      #s8 .line { bottom: 70px; font-size: 96px; }
+      #s8b .line { bottom: 76px; font-size: 80px; }
+      /* scene 9 */
+      #scrim { background: radial-gradient(ellipse 48% 42% at 50% 50%, rgba(4, 7, 12, 0.78), rgba(4, 7, 12, 0.2) 70%, transparent); }
+      .outro-stack { position: absolute; left: 0; right: 0; top: 262px; display: flex; flex-direction: column; align-items: center; gap: 20px; font-size: 150px; }
+      #wordmark { position: absolute; left: 0; right: 0; top: 880px; text-align: center; color: var(--ice); font: 500 34px var(--mono); letter-spacing: 1.1em; padding-left: 1.1em; }
+
+      /* ---------- HUD ---------- */
+      #hud { pointer-events: none; }
+      .br { position: absolute; width: 64px; height: 64px; overflow: visible; }
+      .br path { fill: none; stroke: rgba(219, 231, 242, 0.55); stroke-width: 3; }
+      .br.tl { left: 40px; top: 40px; }
+      .br.tr { right: 40px; top: 40px; }
+      .br.bl { left: 40px; bottom: 40px; }
+      .br.brr { right: 40px; bottom: 40px; }
+      .hud-t { position: absolute; font: 500 19px var(--mono); letter-spacing: 0.2em; color: var(--dim); white-space: nowrap; }
+      #hud-tl { left: 64px; top: 56px; }
+      #hud-tl2 { left: 64px; top: 86px; color: var(--dim); }
+      #hud-tr { right: 64px; top: 56px; text-align: right; }
+      #hud-tr i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 12px; vertical-align: 1px; }
+      #hud-bl { left: 64px; bottom: 58px; color: var(--dim); }
+      #hud-br { right: 64px; bottom: 58px; color: var(--dim); }
+
+      /* ---------- finish ---------- */
+      #scan { background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px); opacity: 0.35; pointer-events: none; }
+      #vignette { background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.6)); pointer-events: none; }
+      #flash { background: #eaf6ff; opacity: 0; pointer-events: none; }
+      #fade { background: #000; opacity: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <!-- RGB split: red and blue channels pulled apart, recombined with screen. -->
+      <filter id="rgbsplit" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
+        <feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r" />
+        <feOffset id="rgb-r" in="r" dx="0" dy="0" result="ro" />
+        <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g" />
+        <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b" />
+        <feOffset id="rgb-b" in="b" dx="0" dy="0" result="bo" />
+        <feBlend in="ro" in2="g" mode="screen" result="rg" />
+        <feBlend in="rg" in2="bo" mode="screen" />
+      </filter>
+    </svg>
+
+    <div id="root" data-composition-id="jarvis-brag" data-start="0" data-width="1920" data-height="1080" data-duration="25">
+      <div id="camera" class="layer">
+        <div id="push" class="layer">
+          <div id="punch" class="layer">
+            <div id="shake" class="layer">
+              <div id="bg" class="layer"></div>
+
+              <!-- Outro backdrop: registry block, mounted under the reactor. -->
+              <div
+                id="flare-host"
+                data-composition-id="vfx-anamorphic-flare"
+                data-composition-src="compositions/vfx-anamorphic-flare.html"
+                data-variable-values='{"tint":"#8a7bff","backdrop":"#04070c","intensity":9,"streakLength":1.8,"emitters":90,"timeScale":0.6}'
+                style="filter: grayscale(1) sepia(0.7) hue-rotate(208deg) saturate(3.2) brightness(1.05)"
+                data-start="21"
+                data-duration="4"
+                data-track-index="1"
+                data-width="1920"
+                data-height="1080"
+              ></div>
+
+              <!-- Scene 3: the room -->
+              <section id="s3" class="clip" data-start="3.5" data-duration="2" data-track-index="2">
+                <svg id="room" viewBox="0 0 1920 1080">
+                  <circle id="room-ring" cx="1290" cy="540" r="390" fill="none" stroke="#6fe3ff" stroke-width="3" stroke-opacity="0.8" />
+                  <circle id="room-ring2" cx="1290" cy="540" r="404" fill="none" stroke="#6fe3ff" stroke-width="1" stroke-opacity="0.3" stroke-dasharray="4 14" />
+                </svg>
+              </section>
+
+              <!-- The reactor: jarvis-desktop/src/faces.html, drawn every frame. -->
+              <div id="hero-wrap"><canvas id="hero" width="1400" height="1400"></canvas></div>
+
+              <section id="s3t" class="clip" data-start="3.5" data-duration="2" data-track-index="3">
+                <div class="tag" id="tag0"><b>EMAIL</b></div>
+                <div class="tag" id="tag1"><b>FILES</b></div>
+                <div class="tag" id="tag2"><b>MEMORY</b></div>
+                <div class="tag" id="tag3"><b>KEYS</b></div>
+                <div id="room-label"><b>THE ROOM = YOUR PC</b></div>
+                <div class="col mach">
+                  <div class="gt" id="n1" data-text="NOTHING"></div>
+                  <div class="gt" id="n2" data-text="LEAVES"></div>
+                  <div class="gt" id="n3" data-text="THE ROOM."></div>
+                </div>
+              </section>
+
+              <section id="s2" class="clip" data-start="2" data-duration="1.5" data-track-index="3">
+                <div class="center-x line mach"><div class="gt glow-ink" id="hey" data-text="&quot;Hey Jarvis.&quot;"></div></div>
+              </section>
+
+              <section id="s4" class="clip" data-start="5.5" data-duration="2" data-track-index="3">
+                <div class="center-x line mach"><div class="gt glow-ink" id="alive" data-text="A face that's alive."></div></div>
+              </section>
+
+              <section id="s5a" class="clip" data-start="7.5" data-duration="1" data-track-index="3">
+                <div class="state-col mach" id="st-listen">
+                  <div class="it">IT</div>
+                  <div class="gt word" style="color: var(--ember)" data-text="LISTENS."></div>
+                  <div class="pill" style="color: var(--ember)"><i></i>LISTENING</div>
+                </div>
+              </section>
+              <section id="s5b" class="clip" data-start="8.5" data-duration="1" data-track-index="3">
+                <div class="state-col mach" id="st-think">
+                  <div class="it">IT</div>
+                  <div class="gt word" style="color: var(--violet)" data-text="THINKS."></div>
+                  <div class="pill" style="color: var(--violet)"><i></i>THINKING</div>
+                </div>
+              </section>
+              <section id="s5c" class="clip" data-start="9.5" data-duration="1" data-track-index="3">
+                <div class="state-col mach" id="st-speak">
+                  <div class="it">IT</div>
+                  <div class="gt word" style="color: var(--ice)" data-text="SPEAKS."></div>
+                  <div class="pill" style="color: var(--ice)"><i></i>SPEAKING</div>
+                </div>
+              </section>
+
+              <section id="s6" class="clip" data-start="10.5" data-duration="1.9" data-track-index="3">
+                <div id="speech-tag">SPEECH UNDERSTOOD ON YOUR PC</div>
+                <div id="reply"><span class="who">JARVIS ▸</span><span id="reply-text"></span><span id="reply-cut" class="cut">[INTERRUPTED]</span></div>
+              </section>
+              <section id="s6b" class="clip" data-start="11.5" data-duration="1" data-track-index="4">
+                <div class="center-x line mach"><div class="gt" id="stop" data-text="&quot;STOP.&quot;"></div></div>
+              </section>
+              <section id="s6c" class="clip" data-start="11.9" data-duration="1.1" data-track-index="3">
+                <div class="center-x line mach"><div class="gt glow-ink" id="interrupt" data-text="Interrupt it mid-sentence."></div></div>
+              </section>
+
+              <section id="s7a" class="clip" data-start="13" data-duration="1" data-track-index="3">
+                <div class="you">YOU ▸ SAID</div>
+                <div class="center-x line mach"><div class="gt" id="ask" data-text="&quot;Lock the front door.&quot;"></div></div>
+              </section>
+
+              <section id="s7" class="clip" data-start="14" data-duration="4.35" data-track-index="3">
+                <div class="left-col mach" id="asks">
+                  <div class="gt big" data-text="IT ASKS"></div>
+                  <div class="gt big" style="color: var(--amber)" data-text="FIRST."></div>
+                </div>
+                <div class="left-col mach" id="onecard">
+                  <div class="gt mid" data-text="ONE CARD."></div>
+                  <div class="gt mid" style="color: var(--verdant)" data-text="ONE DECISION."></div>
+                  <div class="sub">NEVER APPROVED AUTOMATICALLY</div>
+                </div>
+                <div id="phone-rig">
+                  <div id="phone">
+                    <div class="screen">
+                      <div class="notch"></div>
+                      <div class="link" id="phone-link" data-layout-allow-occlusion><i></i><span id="phone-link-text">Waiting on you</span></div>
+                      <canvas id="phone-face" width="360" height="360"></canvas>
+                      <div id="approved"><b>✓ Approved</b></div>
+                      <div id="card">
+                        <div class="kick">APPROVAL · SMART HOME</div>
+                        <div class="title">Lock the front door</div>
+                        <div class="sum">Home Assistant · lock</div>
+                        <div class="risk"><b>↔</b>Swipe right to approve, left to deny — a lock can keep someone out.</div>
+                        <div class="exp" id="expires">Expires in 0m 47s</div>
+                        <div class="btns"><span class="ok">Approve</span><span class="no">Deny</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div id="finger"></div>
+              </section>
+
+              <section id="s8" class="clip" data-start="18" data-duration="3" data-track-index="5">
+                <div id="s8-in" class="layer" style="background: var(--void)">
+                  <div class="layer" style="background: inherit; background-image: linear-gradient(rgba(34,64,90,.16) 1px, transparent 1px), linear-gradient(90deg, rgba(34,64,90,.16) 1px, transparent 1px); background-size: 80px 80px"></div>
+                  <svg id="mesh" viewBox="0 0 1920 1080">
+                    <defs>
+                      <filter id="soft" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="6" /></filter>
+                    </defs>
+                    <path id="cloud-path" d="M1175 505 L1175 215" stroke="#ff7b86" stroke-width="3" stroke-dasharray="10 12" fill="none" />
+                    <g id="cloud">
+                      <path d="M1120 200 a38 38 0 0 1 8 -75 a52 52 0 0 1 98 -8 a40 40 0 0 1 22 83 z" fill="none" stroke="#8fa3b8" stroke-width="3" />
+                    </g>
+                    <g id="cloud-x" stroke="#ff7b86" stroke-width="7" stroke-linecap="round">
+                      <line x1="1150" y1="330" x2="1200" y2="380" />
+                      <line x1="1200" y1="330" x2="1150" y2="380" />
+                    </g>
+                    <path id="mesh-glow" d="M930 520 C 1080 470, 1270 470, 1420 530" stroke="#6fe3ff" stroke-width="16" stroke-opacity="0.35" fill="none" filter="url(#soft)" />
+                    <path id="mesh-line" d="M930 520 C 1080 470, 1270 470, 1420 530" stroke="#6fe3ff" stroke-width="3.5" fill="none" />
+                    <g id="packets" fill="#b8f4ff"></g>
+                  </svg>
+                  <div id="mesh-label"><b>PRIVATE MESH</b></div>
+                  <div id="cloud-label"><b>NO PUBLIC TUNNEL</b></div>
+                  <div id="desk">
+                    <div class="bar"><div class="dot"></div><div class="route">LOCAL</div><div class="chip">#obs</div><div class="chip">#log</div><div class="ttl">JARVIS · DESKTOP</div></div>
+                    <canvas id="desk-face" width="400" height="400"></canvas>
+                    <div class="cap">MODEL ▸ YOUR GRAPHICS CARD</div>
+                  </div>
+                  <div id="phone2">
+                    <div class="screen">
+                      <div class="link"><i></i>Linked</div>
+                      <canvas id="phone2-face" width="270" height="270"></canvas>
+                    </div>
+                  </div>
+                </div>
+                <div id="wipe-edge" style="position: absolute; top: 0; bottom: 0; left: 0; width: 10px; background: #eaf6ff; box-shadow: -14px 0 0 rgba(255,42,85,.7), 14px 0 0 rgba(34,211,238,.7), 0 0 60px #eaf6ff"></div>
+              </section>
+
+              <section id="s8a" class="clip" data-start="18" data-duration="1.5" data-track-index="6">
+                <div class="center-x line mach" style="bottom: 118px; font-size: 96px"><div class="gt glow-ink" id="gpu" data-text="Your GPU. Not their cloud."></div></div>
+              </section>
+              <section id="s8b" class="clip" data-start="19.5" data-duration="1.5" data-track-index="6">
+                <div class="center-x line mach" style="bottom: 124px; font-size: 80px"><div class="gt glow-ink" id="stay" data-text="Email. Files. Memory. Stay local."></div></div>
+              </section>
+
+              <section id="s9" class="clip" data-start="21" data-duration="4" data-track-index="6">
+                <div id="scrim" class="layer"></div>
+                <div class="outro-stack mach">
+                  <div class="gt glow-ink" id="o1" data-text="YOUR ASSISTANT."></div>
+                  <div class="gt glow-ink" id="o2" data-text="YOUR PC."></div>
+                  <div class="gt glow-ink" id="o3" style="color: #c7b8ff" data-text="YOUR RULES."></div>
+                </div>
+                <div id="wordmark">JARVIS</div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <div id="scan" class="layer"></div>
+      <!-- registry: grain-overlay -->
+      <div id="grain-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100">
+        <div class="grain-texture"></div>
+      </div>
+      <div id="vignette" class="layer"></div>
+      <!-- HUD: attribute-drawn brackets and text-at-time readouts (telemetry-hud technique). -->
+      <div id="hud" class="layer">
+        <svg class="br tl" viewBox="0 0 64 64"><path d="M2 62 L2 2 L62 2" /></svg>
+        <svg class="br tr" viewBox="0 0 64 64"><path d="M2 2 L62 2 L62 62" /></svg>
+        <svg class="br bl" viewBox="0 0 64 64"><path d="M2 2 L2 62 L62 62" /></svg>
+        <svg class="br brr" viewBox="0 0 64 64"><path d="M2 62 L62 62 L62 2" /></svg>
+        <div class="hud-t" id="hud-tl">JARVIS // LOCAL-FIRST</div>
+        <div class="hud-t" id="hud-tl2"></div>
+        <div class="hud-t" id="hud-tr"><i id="hud-dot"></i><span id="hud-state"></span></div>
+        <div class="hud-t" id="hud-bl"></div>
+        <div class="hud-t" id="hud-br"></div>
+      </div>
+      <div id="flash" class="layer"></div>
+      <div id="fade" class="layer"></div>
+
+      <audio id="score" src="assets/music/score.mp3" data-start="0" data-duration="25" data-track-index="20" data-volume="1"></audio>
+    </div>
+
+    <style>
+      #grain-overlay .grain-texture {
+        position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+        background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        opacity: 0.13;
+      }
+    </style>
+
+    <script>
+      (function () {
+        "use strict";
+        var H = window.TIMING.hits;
+        var AD = window.AUDIO_DATA;
+        var R = window.REACTOR;
+        var FPS = 30;
+        // Render every tween on the seek that reaches it. GSAP otherwise defers a
+        // tween's first render to the next tick, and the capture engine
+        // screenshots before that tick: the frame showed the previous frame's
+        // transforms.
+        gsap.defaults({ lazy: false });
+        var tl = gsap.timeline({ paused: true });
+
+        /* ---------- setup: glitch-text copies (rgb-glitch-text structure) ---------- */
+        Array.prototype.forEach.call(document.querySelectorAll(".gt[data-text]"), function (el) {
+          var s = el.getAttribute("data-text");
+          ["gr", "gb", "gm"].forEach(function (c) {
+            var sp = document.createElement("span");
+            sp.className = c; sp.textContent = s; el.appendChild(sp);
+          });
+          el.style.setProperty("--gr", "0px"); el.style.setProperty("--gb", "0px");
+          // The red/cyan copies sit exactly under the solid copy by design (rgb-glitch-text).
+          el.setAttribute("data-layout-allow-overlap", "");
+          Array.prototype.forEach.call(el.children, function (c) { c.setAttribute("data-layout-allow-overlap", ""); });
+        });
+
+        /* ---------- deterministic helpers ---------- */
+        function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+        function audioAt(t) { var i = clamp(Math.floor(t * AD.fps), 0, AD.low.length - 1); return { low: AD.low[i], rms: AD.rms[i] }; }
+        var GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*+?<>/";
+        function hashi(n) { n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); return (n ^ (n >>> 16)) >>> 0; }
+        // Scramble-reveal: characters lock left to right; the rest roll through glyphs.
+        function scramble(text, t0, dur, t, seed) {
+          if (t < t0) return "";
+          var k = clamp((t - t0) / dur, 0, 1);
+          if (k >= 1) return text;
+          var lock = Math.floor(k * text.length), frame = Math.floor(t * FPS), out = "";
+          for (var i = 0; i < text.length; i++) {
+            var ch = text.charAt(i);
+            if (ch === " " || i < lock) out += ch;
+            else out += GLYPHS.charAt(hashi(seed * 977 + i * 131 + frame * 7919) % GLYPHS.length);
+          }
+          return out;
+        }
+        function setAll(el, s) { var c = el.children; for (var i = 0; i < c.length; i++) c[i].textContent = s; }
+
+        /* ---------- the reactor schedule ---------- */
+        // [start, face, state, hardCut]
+        var HERO = [
+          [0.0, "arc", "standby", 1], [1.0, "arc", "idle", 0], [H.hey, "arc", "listening", 1], [H.nothing, "arc", "idle", 1],
+          [H.montage[0], "geodesic", "thinking", 1], [H.montage[1], "rime", "idle", 1], [H.montage[2], "fullerene", "listening", 1], [H.montage[3], "spiral", "thinking", 1],
+          [H.listens, "arc", "listening", 1], [H.thinks, "arc", "thinking", 0], [H.speaks, "arc", "speaking", 0], [H.stop, "arc", "idle", 1],
+          [H.ask, "arc", "listening", 0], [H.outro, "arc", "thinking", 1]
+        ];
+        function segIndex(t) { var k = 0; for (var i = 0; i < HERO.length; i++) { if (t >= HERO[i][0]) k = i; else break; } return k; }
+        function heroPhase(t) {
+          var ph = 0, sp = null, dt = 1 / 120;
+          for (var x = 0; x < t; x += dt) {
+            var s = HERO[segIndex(x)];
+            var target = R.speedOf(s[1], s[2]);
+            if (x < 2) target *= 1 + 5 * Math.exp(-x / 0.45);   // ignition: spin up, settle
+            if (sp === null) sp = target;
+            sp += (target - sp) * Math.min(1, dt / 0.22);
+            ph += sp * Math.min(dt, t - x);
+          }
+          return ph;
+        }
+        function micAmp(t) { return clamp(0.3 + 0.6 * Math.abs(Math.sin(t * 6.7)) * (0.55 + 0.45 * Math.sin(t * 2.3 + 1)), 0, 1); }
+        function voiceAmp(t) { return clamp(0.25 + 0.6 * Math.pow(Math.abs(Math.sin(t * 8.9) * Math.sin(t * 3.1 + 0.4)), 0.7), 0, 1); }
+        function ampFor(state, t) { return state === "listening" ? micAmp(t) : state === "speaking" ? voiceAmp(t) : 0.2; }
+        function colourAt(i, t) {
+          var s = HERO[i], c = R.colours(s[2], t, ampFor(s[2], t));
+          if (!s[3] && i > 0) {
+            var k = (t - s[0]) / 0.3;   // the kit's colour crossfade
+            if (k < 1) { var p = R.colours(HERO[i - 1][2], t, ampFor(HERO[i - 1][2], t)), e = k * k * (3 - 2 * k); c = { a: R.mix(p.a, c.a, e), b: R.mix(p.b, c.b, e) }; }
+          }
+          return c;
+        }
+
+        var heroCv = document.getElementById("hero");
+        var surfaces = {};
+        R.faces.forEach(function (f) { surfaces[f.id] = R.surface(heroCv, f.id); });
+        var phoneS = R.surface(document.getElementById("phone-face"), "arc");
+        var deskS = R.surface(document.getElementById("desk-face"), "arc");
+        var phone2S = R.surface(document.getElementById("phone2-face"), "arc");
+        function clearCanvas(s) { s.g.setTransform(1, 0, 0, 1, 0, 0); s.g.clearRect(0, 0, s.canvas.width, s.canvas.height); }
+
+        /* ---------- S8 mesh packets: path sampled once at setup ---------- */
+        var meshPath = document.getElementById("mesh-line"), meshLen = meshPath.getTotalLength(), MESH = [];
+        for (var q = 0; q <= 200; q++) { var pt = meshPath.getPointAtLength((q / 200) * meshLen); MESH.push([pt.x, pt.y]); }
+        var packets = [];
+        for (var p = 0; p < 7; p++) {
+          var c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          c.setAttribute("r", p % 2 ? "5" : "7"); document.getElementById("packets").appendChild(c); packets.push(c);
+        }
+
+        /* ---------- HUD text ---------- */
+        var CONTEXT = [
+          [0, "HOST ▸ YOUR PC"], [H.hey, "WAKE WORD ▸ HEY JARVIS"], [H.nothing, "PRIVATE ▸ EMAIL · FILES · MEMORY · KEYS"],
+          [H.montage[0], "SPEC ▸ ONE PALETTE · TWO RENDERERS"], [H.reply, "SPEECH ▸ UNDERSTOOD ON YOUR PC"],
+          [H.ask, "APPROVAL ▸ REQUIRED · NEVER AUTOMATIC"], [H.private, "LINK ▸ PRIVATE MESH · NO PUBLIC TUNNEL"], [H.outro, "JARVIS ▸ YOUR ASSISTANT"]
+        ];
+        var STATE_LABEL = { standby: "STANDBY", idle: "IDLE", listening: "LISTENING", thinking: "THINKING", speaking: "SPEAKING", approval: "WAITING ON YOU" };
+        var el = function (id) { return document.getElementById(id); };
+        var hudTl2 = el("hud-tl2"), hudState = el("hud-state"), hudDot = el("hud-dot"), hudBl = el("hud-bl"), hudBr = el("hud-br");
+        var nLines = [el("n1"), el("n2"), el("n3")];
+        var replyText = el("reply-text"), replyCut = el("reply-cut"), expires = el("expires"), phoneLinkText = el("phone-link-text"), phoneLink = el("phone-link");
+        var REPLY = "Today's note: pick up the new filters, then call the";
+        var grain = document.querySelector("#grain-overlay .grain-texture");
+
+        function render(t) {
+          var a = audioAt(t);
+          var si = segIndex(t), seg = HERO[si];
+          var heroOn = t < H.phone || t >= H.outro;
+          var state = seg[2];
+
+          /* hero reactor */
+          if (heroOn) {
+            var col = colourAt(si, t);
+            var active = state !== "idle" && state !== "standby";
+            var s = surfaces[seg[1]];
+            clearCanvas(s);
+            R.draw(s, {
+              t: t, phase: heroPhase(t), state: state, amp: ampFor(state, t), beat: a.low * 0.8,
+              col: col, glow: (active ? 0.3 : 0.18) + a.low * 0.45, clear: false, quality: 1.2
+            });
+          }
+
+          /* phone approval face (S7) */
+          var approved = t >= H.approved - 0.1;
+          if (t >= H.phone && t < H.private + 0.4) {
+            var pst = approved ? "idle" : "approval";
+            clearCanvas(phoneS);
+            R.draw(phoneS, { t: t, phase: t * R.speedOf("arc", pst), state: pst, amp: 0.2, beat: a.low * 0.5, glow: 0.35, clear: false, fxAge: t - H.phone });
+            var left = 47 - Math.floor(clamp(t - H.phone, 0, 20));
+            expires.textContent = "Expires in 0m " + left + "s";
+            phoneLinkText.textContent = approved ? "Linked" : "Waiting on you";
+            phoneLink.style.color = approved ? "var(--verdant)" : "var(--amber)";
+          }
+
+          /* desktop + phone faces (S8) */
+          if (t >= H.private && t < H.outro) {
+            clearCanvas(deskS); clearCanvas(phone2S);
+            R.draw(deskS, { t: t, phase: t * 0.22, state: "idle", beat: a.low, glow: 0.3, clear: false });
+            R.draw(phone2S, { t: t, phase: t * 0.22 + 1.3, state: "idle", beat: a.low, glow: 0.3, clear: false });
+            for (var k = 0; k < packets.length; k++) {
+              var u = ((t - H.private) * 0.55 + k / packets.length) % 1;
+              var dir = k % 2 ? 1 - u : u, m = MESH[Math.round(dir * 200)];
+              packets[k].setAttribute("cx", m[0]); packets[k].setAttribute("cy", m[1]);
+              packets[k].setAttribute("opacity", String(Math.sin(u * Math.PI)));
+            }
+          }
+
+          /* scramble-decoded lines */
+          if (t >= H.nothing && t < H.montage[0]) {
+            ["NOTHING", "LEAVES", "THE ROOM."].forEach(function (w, i) { setAll(nLines[i], scramble(w, H.nothing + i * 0.1, 0.38, t, 11 + i)); });
+          }
+
+          /* streaming reply, then the cut */
+          if (t >= H.reply && t < H.interrupt + 0.5) {
+            var n = Math.floor(clamp((t - H.reply - 0.05) / 0.9, 0, 1) * REPLY.length);
+            var cut = t >= H.stop;
+            replyText.textContent = REPLY.slice(0, n) + (cut ? " —" : Math.floor(t * 4) % 2 ? "▌" : " ");
+            replyCut.style.opacity = cut ? "1" : "0";
+            replyText.style.opacity = cut ? "0.4" : "1";
+          }
+
+          /* HUD */
+          var ctx = CONTEXT[0];
+          for (var c2 = 0; c2 < CONTEXT.length; c2++) if (t >= CONTEXT[c2][0]) ctx = CONTEXT[c2];
+          hudTl2.textContent = scramble(ctx[1], ctx[0], 0.35, t, 90 + Math.round(ctx[0] * 10));
+          var hudStateId = heroOn ? state : approved ? (t >= H.private ? "idle" : "idle") : "approval";
+          var label = STATE_LABEL[hudStateId];
+          if (!heroOn && approved && t < H.private) label = "APPROVED";
+          if (t >= H.private && t < H.outro) label = "LINKED";
+          hudState.textContent = label;
+          var dotCol = R.colours(hudStateId, t, 0.3).a;
+          if (label === "APPROVED" || label === "LINKED") dotCol = "#5fe0a8";
+          hudDot.style.background = dotCol;
+          hudDot.style.boxShadow = "0 0 12px " + dotCol;
+          var face = heroOn ? seg[1] : "arc", fm = null;
+          R.faces.forEach(function (f) { if (f.id === face) fm = f; });
+          hudBl.textContent = "REACTOR ▸ " + fm.name.toUpperCase() + " · " + fm.geo.toUpperCase();
+          var fr = Math.floor(t * FPS + 1e-6), ss = Math.floor(fr / FPS), ff = fr % FPS;
+          hudBr.textContent = "00:00:" + String(ss).padStart(2, "0") + ":" + String(ff).padStart(2, "0") + "  ·  120 BPM";
+
+          /* film grain, stepped once per frame at a seeded offset */
+          var gh = hashi(fr + 17);
+          grain.style.transform = "translate(" + (((gh % 31) - 15)) + "%," + ((((gh >>> 8) % 31) - 15)) + "%)";
+          applyCamera(t);
+        }
+
+        /* ---------- one driver owns every per-frame value ---------- */
+        var clock = { t: 0 };
+        tl.to(clock, { t: 25, duration: 25, ease: "none", onUpdate: function () { render(clock.t); } }, 0);
+
+        /* ---------- camera + reactor framing: pure functions of t ----------
+         * Written per frame from the same driver as the faces, not as tweens:
+         * under the capture engine the #hero-wrap tweens landed one seek late
+         * (the frame at 14.9s showed the transform for 8.1s), while everything
+         * this driver writes was always current. */
+        var EASE = { none: function (k) { return k; } };
+        ["expo.out", "power1.out", "power2.out", "sine.in", "sine.out", "sine.inOut"].forEach(function (n) { EASE[n] = gsap.parseEase(n); });
+        // Hits: RGB split + flash + punch-in. Strength 0..1. Never more than two a second.
+        var HITS = [
+          [H.hey, 1], [H.nothing, 0.6], [H.montage[0], 0.6], [H.montage[1], 0.45], [H.montage[2], 0.45], [H.montage[3], 0.45],
+          [H.listens, 0.6], [H.thinks, 0.5], [H.speaks, 0.5], [H.stop, 1], [H.ask, 0.4], [H.phone, 0.6], [H.approved, 0.35],
+          [H.private, 0.8], [H.local, 0.4], [H.outro, 1], [H.pc, 0.7], [H.rules, 0.85], [H.logo, 0.35]
+        ];
+        // [start, duration, from, to, ease] — each segment owns x, y, scale, opacity.
+        var FRAMES = [
+          [0, 2, { x: 0, y: 0, s: 0.55, o: 1 }, { s: 0.8 }, "expo.out"],
+          [H.hey, 1.5, { x: 0, y: -70, s: 0.92, o: 1 }, { s: 0.98 }, "power1.out"],
+          [H.nothing, 2, { x: 330, y: 0, s: 0.4, o: 1 }, { s: 0.43 }, "none"],
+          [H.montage[0], 0.5, { x: -36, y: -40, s: 1.2, o: 1 }, { x: 0, s: 1 }, "expo.out"],
+          [H.montage[1], 0.5, { x: 36, y: -40, s: 1.2, o: 1 }, { x: 0, s: 1 }, "expo.out"],
+          [H.montage[2], 0.5, { x: -36, y: -40, s: 1.2, o: 1 }, { x: 0, s: 1 }, "expo.out"],
+          [H.montage[3], 0.5, { x: 36, y: -40, s: 1.2, o: 1 }, { x: 0, s: 1 }, "expo.out"],
+          [H.listens, 3, { x: -430, y: 0, s: 0.9, o: 1 }, { s: 1.0 }, "sine.inOut"],
+          [H.reply, 1, { x: 0, y: -90, s: 0.72, o: 1 }, { s: 0.78 }, "sine.in"],
+          [H.stop, 1.5, { x: 0, y: -90, s: 0.64, o: 1 }, { s: 0.66 }, "none"],
+          [H.ask, 1, { x: 0, y: -40, s: 0.6, o: 0.4 }, { s: 0.66 }, "none"],
+          [H.phone, H.outro - H.phone, { x: 0, y: 0, s: 0.6, o: 0 }, {}, "none"],
+          [H.outro, 4, { x: 0, y: 0, s: 1.25, o: 1 }, { s: 1.45 }, "sine.inOut"]
+        ];
+        var PUSH = [[0, 2, 1, 1.035, "sine.out"], [H.hey, 5.5, 1, 1, "none"], [H.listens, 3, 1, 1.03, "sine.inOut"], [H.reply, 10.5, 1, 1, "none"], [H.outro, 4, 1, 1.04, "sine.inOut"]];
+        var heroWrap = el("hero-wrap"), camera = el("camera"), pushEl = el("push"), punchEl = el("punch"), shakeEl = el("shake"), flashEl = el("flash");
+        var rgbR = el("rgb-r"), rgbB = el("rgb-b");
+        function lerp(a, b, k) { return a + (b - a) * k; }
+        function applyCamera(t) {
+          var f = FRAMES[0];
+          for (var i = 0; i < FRAMES.length; i++) if (t >= FRAMES[i][0]) f = FRAMES[i];
+          var k = EASE[f[4]](clamp((t - f[0]) / f[1], 0, 1)), a = f[2], b = f[3];
+          var x = lerp(a.x, b.x === undefined ? a.x : b.x, k), y = lerp(a.y, b.y === undefined ? a.y : b.y, k);
+          var sc = lerp(a.s, b.s === undefined ? a.s : b.s, k), op = lerp(a.o, b.o === undefined ? a.o : b.o, k);
+          heroWrap.style.transform = "translate(" + x.toFixed(2) + "px," + y.toFixed(2) + "px) scale(" + sc.toFixed(4) + ")";
+          heroWrap.style.opacity = op.toFixed(3);
+          // ignition: the reactor opens from its core
+          heroWrap.style.clipPath = t < 1.6 ? "circle(" + (75 * EASE["expo.out"](clamp((t - 0.1) / 1.5, 0, 1))).toFixed(2) + "% at 50% 50%)" : "none";
+
+          var pu = PUSH[0];
+          for (var j = 0; j < PUSH.length; j++) if (t >= PUSH[j][0]) pu = PUSH[j];
+          pushEl.style.transform = "scale(" + lerp(pu[2], pu[3], EASE[pu[4]](clamp((t - pu[0]) / pu[1], 0, 1))).toFixed(4) + ")";
+
+          var punch = 1, flash = 0, split = 0, sx = 0, sy = 0;
+          for (var h = 0; h < HITS.length; h++) {
+            var at = HITS[h][0], st = HITS[h][1], d = t - at;
+            if (d < 0 || d > 0.45) continue;
+            punch = Math.max(punch, 1 + 0.05 * st * (1 - EASE["expo.out"](clamp(d / 0.42, 0, 1))));
+            flash = Math.max(flash, 0.2 * st * (1 - EASE["power2.out"](clamp(d / 0.2, 0, 1))));
+            split = Math.max(split, 22 * st * (1 - EASE["power2.out"](clamp(d / 0.3, 0, 1))));
+            if (st >= 0.8) {   // headline-slam's three-frame landing shake
+              var fi = Math.floor((d - 0.02) * FPS);
+              if (fi === 0) { sx = 14 * st; sy = -8 * st; } else if (fi === 1) { sx = -10 * st; sy = 6 * st; }
+            }
+          }
+          punchEl.style.transform = "scale(" + punch.toFixed(4) + ")";
+          shakeEl.style.transform = "translate(" + sx.toFixed(1) + "px," + sy.toFixed(1) + "px)";
+          flashEl.style.opacity = flash.toFixed(3);
+          camera.style.filter = split > 0.4 ? "url(#rgbsplit)" : "none";
+          rgbR.setAttribute("dx", (-split).toFixed(2));
+          rgbB.setAttribute("dx", split.toFixed(2));
+        }
+
+        /* ---------- HUD brackets draw on (attribute dashoffset) ---------- */
+        Array.prototype.forEach.call(document.querySelectorAll(".br path"), function (path, i) {
+          var len = path.getTotalLength();
+          path.setAttribute("stroke-dasharray", String(len));
+          tl.fromTo(path, { attr: { "stroke-dashoffset": len } }, { attr: { "stroke-dashoffset": 0 }, duration: 0.7, ease: "power2.inOut" }, 0.25 + i * 0.08);
+        });
+        tl.fromTo(".hud-t", { opacity: 0 }, { opacity: 1, duration: 0.4, stagger: 0.06, ease: "power1.out" }, 0.5);
+
+        /* ---------- type entrances ---------- */
+        function slam(target, at, opts) {
+          opts = opts || {};
+          tl.fromTo(target, { scale: opts.from || 1.5, opacity: 0, filter: "blur(18px)" },
+                    { scale: 1, opacity: 1, filter: "blur(0px)", duration: opts.dur || 0.32, ease: "expo.out", immediateRender: true }, at);
+        }
+        function glitch(target, at, reach) {
+          reach = reach || 12;
+          tl.fromTo(target, { "--gr": "0px", "--gb": "0px" }, { "--gr": -reach + "px", "--gb": reach + "px", duration: 0.05, repeat: 5, yoyo: true, ease: "steps(1)", immediateRender: true }, at);
+        }
+        slam("#hey", H.hey); glitch("#hey", H.hey + 0.04, 16);
+        nLines.forEach(function (n, i) { tl.fromTo(n, { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.3, ease: "power3.out", immediateRender: true }, H.nothing + i * 0.1); });
+        glitch("#n3", H.nothing + 0.55, 10);
+        var RING_LEN = 2 * Math.PI * 390;
+        tl.fromTo("#room-ring", { attr: { "stroke-dasharray": RING_LEN + " " + RING_LEN, "stroke-dashoffset": RING_LEN } }, { attr: { "stroke-dashoffset": 0 }, duration: 0.45, ease: "power2.inOut", immediateRender: false }, H.nothing);
+        tl.fromTo("#room-ring2", { opacity: 0, rotation: 0, svgOrigin: "1290 540" }, { opacity: 1, rotation: 40, duration: 2, ease: "none", immediateRender: true }, H.nothing);
+        var HIT_AT = H.nothing + 0.57;   // tags reach the wall
+        [-140, -40, 40, 140].forEach(function (deg, i) {
+          var r = deg * Math.PI / 180, cx = Math.cos(r), sy = Math.sin(r);
+          tl.fromTo("#tag" + i, { x: 0, y: 0, opacity: 0, scale: 0.6 }, { x: 348 * cx, y: 348 * sy, opacity: 1, scale: 1, duration: 0.45, ease: "power2.in", immediateRender: true }, HIT_AT - 0.45);
+          tl.to("#tag" + i, { x: 238 * cx, y: 238 * sy, duration: 0.7, ease: "expo.out" }, HIT_AT);
+        });
+        tl.fromTo("#room-ring", { attr: { "stroke-width": 12 }, strokeOpacity: 1 }, { attr: { "stroke-width": 3 }, strokeOpacity: 0.8, duration: 0.45, ease: "power2.out", immediateRender: false }, HIT_AT);
+        tl.fromTo("#room-label", { opacity: 0 }, { opacity: 1, duration: 0.3, immediateRender: true }, H.nothing + 0.8);
+        slam("#alive", H.montage[0], { from: 1.25 }); glitch("#alive", H.montage[2], 8);
+        ["#st-listen", "#st-think", "#st-speak"].forEach(function (id, i) {
+          var at = [H.listens, H.thinks, H.speaks][i];
+          tl.fromTo(id + " .it", { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.25, ease: "power3.out", immediateRender: true }, at);
+          slam(id + " .word", at + 0.03, { from: 1.35 }); glitch(id + " .word", at + 0.05, 12);
+          tl.fromTo(id + " .pill", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.25, ease: "power2.out", immediateRender: true }, at + 0.1);
+        });
+        tl.fromTo("#reply", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.25, ease: "power3.out", immediateRender: true }, H.reply);
+        tl.fromTo("#speech-tag", { opacity: 0 }, { opacity: 1, duration: 0.3, immediateRender: true }, H.reply + 0.1);
+        slam("#stop", H.stop, { from: 1.9, dur: 0.18 }); glitch("#stop", H.stop + 0.02, 26);
+        slam("#interrupt", H.interrupt - 0.1, { from: 1.2 });
+        slam("#ask", H.ask, { from: 1.3 }); tl.fromTo("#s7a .you", { opacity: 0 }, { opacity: 1, duration: 0.2, immediateRender: true }, H.ask);
+
+        /* ---------- S7: the phone asks ---------- */
+        tl.fromTo("#phone-rig", { y: 760, rotation: 4 }, { y: 0, rotation: 0, duration: 0.6, ease: "expo.out", immediateRender: true }, H.phone);
+        tl.fromTo("#asks", { opacity: 0 }, { opacity: 1, duration: 0.01, immediateRender: false }, H.phone);
+        slam("#asks .gt:first-child", H.phone + 0.1, { from: 1.3 }); slam("#asks .gt:last-child", H.phone + 0.22, { from: 1.3 });
+        glitch("#asks .gt:last-child", H.phone + 0.3, 12);
+        tl.set("#asks", { opacity: 0 }, H.approved);
+        tl.fromTo("#onecard", { opacity: 0 }, { opacity: 1, duration: 0.01, immediateRender: false }, H.approved);
+        tl.set("#onecard", { opacity: 0 }, 0);
+        slam("#onecard .gt:nth-child(1)", H.approved, { from: 1.3 }); slam("#onecard .gt:nth-child(2)", H.approved + 0.12, { from: 1.3 });
+        tl.fromTo("#onecard .sub", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.3, immediateRender: true }, H.approved + 0.35);
+        // the swipe
+        tl.fromTo("#finger", { opacity: 0, scale: 1.4, x: 0 }, { opacity: 1, scale: 1, duration: 0.2, ease: "power2.out", immediateRender: false }, H.swipe - 0.25);
+        tl.set("#finger", { opacity: 0 }, 0);
+        tl.to("#finger", { x: 300, duration: 0.35, ease: "power2.in" }, H.swipe);
+        tl.to("#finger", { opacity: 0, duration: 0.15 }, H.swipe + 0.35);
+        tl.fromTo("#card", { x: 0, rotation: 0, opacity: 1 }, { x: 460, rotation: 9, opacity: 0, duration: 0.42, ease: "power2.in", immediateRender: true }, H.swipe + 0.05);
+        tl.fromTo("#approved", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)", immediateRender: false }, H.approved - 0.1);
+        tl.set("#approved", { opacity: 0 }, 0);
+
+        /* ---------- S8: chromatic wipe in (chromatic-aberration-wipe recipe), then the mesh ---------- */
+        tl.fromTo("#s8-in", { clipPath: "inset(0 0 0 100%)" }, { clipPath: "inset(0 0 0 0%)", duration: 0.38, ease: "power3.inOut", immediateRender: true }, H.private);
+        tl.fromTo("#wipe-edge", { x: 1920, opacity: 1 }, { x: -20, duration: 0.38, ease: "power3.inOut", immediateRender: true }, H.private);
+        tl.to("#wipe-edge", { opacity: 0, duration: 0.05 }, H.private + 0.38);
+        tl.fromTo("#desk", { x: -80, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "expo.out", immediateRender: true }, H.private + 0.15);
+        tl.fromTo("#phone2", { x: 80, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "expo.out", immediateRender: true }, H.private + 0.22);
+        var ml = meshLen;
+        tl.fromTo("#mesh-line", { attr: { "stroke-dasharray": ml + " " + ml, "stroke-dashoffset": ml } }, { attr: { "stroke-dashoffset": 0 }, duration: 0.5, ease: "power2.inOut", immediateRender: true }, H.private + 0.35);
+        tl.fromTo("#mesh-glow", { opacity: 0 }, { opacity: 1, duration: 0.4, immediateRender: true }, H.private + 0.6);
+        tl.fromTo("#mesh-label", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, immediateRender: true }, H.private + 0.7);
+        tl.fromTo("#cloud", { opacity: 0 }, { opacity: 1, duration: 0.3, immediateRender: true }, H.private + 0.3);
+        tl.fromTo("#cloud-path", { opacity: 0 }, { opacity: 1, duration: 0.2, immediateRender: true }, H.private + 0.4);
+        // the path to the cloud breaks
+        tl.to("#cloud-path", { x: 10, duration: 0.04, repeat: 5, yoyo: true, ease: "steps(1)" }, H.private + 0.8);
+        tl.to("#cloud-path", { opacity: 0.15, duration: 0.1 }, H.private + 1.02);
+        tl.fromTo("#cloud-x", { opacity: 0, scale: 1.8, svgOrigin: "1175 355" }, { opacity: 1, scale: 1, duration: 0.25, ease: "back.out(2)", immediateRender: false }, H.private + 1.0);
+        tl.set("#cloud-x", { opacity: 0 }, 0);
+        tl.fromTo("#cloud-label", { opacity: 0 }, { opacity: 1, duration: 0.25, immediateRender: true }, H.private + 1.1);
+        slam("#gpu", H.private + 0.12, { from: 1.25 }); glitch("#gpu", H.private + 0.2, 12);
+        slam("#stay", H.local, { from: 1.25 }); glitch("#stay", H.local + 0.05, 10);
+
+        /* ---------- S9: your rules ---------- */
+        tl.fromTo("#scrim", { opacity: 0 }, { opacity: 1, duration: 0.3, immediateRender: true }, H.outro);
+        [["#o1", H.outro], ["#o2", H.pc], ["#o3", H.rules]].forEach(function (o) {
+          slam(o[0], o[1], { from: 1.6, dur: 0.4 }); glitch(o[0], o[1] + 0.03, 14);
+        });
+        tl.fromTo("#wordmark", { opacity: 0, scale: 1.35, filter: "blur(10px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.6, ease: "expo.out", immediateRender: true }, H.logo);
+        tl.fromTo("#fade", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power1.in", immediateRender: false }, H.end - 0.6);
+
+        render(0);
+        window.__timelines["jarvis-brag"] = tl;
+      })();
+    </script>
+  </body>
+</html>

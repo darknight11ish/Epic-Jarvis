@@ -47,7 +47,8 @@ __pycache__/
 # Rust / Tauri build output
 jarvis-desktop/src-tauri/target/
 
-# /brag skill scratch output: re-runnable timestamped duplicates and the
-# npm install inside the composition (node_modules/ above already covers it)
-# are not committed; the current brag-output/ deliverable is.
+# /brag skill scratch output. The skill renders into brag-output/ (or a
+# timestamped brag-output-*/); finished videos are copied into videos/vN/
+# and committed there. node_modules/ above keeps npm installs out.
+brag-output/
 brag-output-*/
