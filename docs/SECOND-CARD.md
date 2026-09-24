@@ -36,10 +36,10 @@ The main switch must be on before any feature can be.
 
 | Feature | What it does | Model | Memory on the card |
 |---|---|---|---|
-| **Longer conversations** (`long_context`) | When a chat grows past what the main card has room for, that answer is written on the second card, which can read the whole conversation. Short chats stay on the fast main card. | 12 GB card: `qwen3:14b` with room for 16,384 tokens. 11 GB card (2080 Ti) or 10 GB: `qwen3:8b` with room for 32,768. | 10.4 GB / 7.7 GB |
-| **Pictures** (`vision`) | A message with a picture (a screenshot from Alt+Shift+S) goes to a picture-reading model on the second card, so Jarvis actually sees it. Pictures still never go to the internet. | `qwen2.5vl:7b` | about 6.7 GB (**an estimate** - see "Not checked" below) |
-| **Learning in the background** (`learning`) | The memory learner (which suggests facts for you to review) runs on the second card, so it never slows chat down, and it waits only 10 seconds of quiet instead of 45. | same as Longer conversations | shared |
-| **Browser control** (`browser_control`) | Jarvis can work a web page for you, one approved step at a time. Needs Longer conversations on too, and `"browser_control"` in `[tools].enabled`. | same as Longer conversations | shared |
+| **Longer conversations** (`long_context`) | When a chat grows past what the main card has room for, that answer is written on the second card, which has room for twice as much of it (32,768 tokens; the everyday model on the main card has 16,384). Short chats stay on the fast main card. | `qwen3:8b` with room for 32,768 tokens, on any capable card (10, 11 or 12 GB). | about 7.7 GB |
+| **Pictures** (`vision`) | A message with a picture (a screenshot from Alt+Shift+S) goes to a picture-reading model on the second card, so Jarvis actually sees it. Pictures still never go to the internet. | `qwen2.5vl:7b` | about 7.2 GB (**an estimate** - see "Not checked" below) |
+| **Learning in the background** (`learning`) | The memory learner (which suggests facts for you to review) runs on the second card, so it never slows chat down, and it waits only 10 seconds of quiet instead of 45. If the second card does not answer, that pass is skipped (it is not moved to the main card after only the short wait). For the next 10 minutes learning then works as it did before: the full wait, on the main card. After that the second card is tried again. | same as Longer conversations | shared |
+| **Browser control** (`browser_control`) | Jarvis can work a web page for you, one approved step at a time. Needs Longer conversations on too, and `"browser_control"` in `[tools].enabled`. Its approval card is a different kind from the others (`second_card_browser_enable` in `jarvis-framework.toml`, which must stay `"ask"`), and it says plainly that the pages are on the internet, so what Jarvis types or clicks there reaches that website. | same as Longer conversations | shared |
 | **Wiki builder** (`wiki`) | Turns documents you put in your vault's `Jarvis Wiki/Sources` folder into linked wiki pages, one approval card each. See "Wiki builder" below. | same as Longer conversations | shared |
 
 The second card holds **one model at a time**. If Pictures and Longer
@@ -50,7 +50,7 @@ everyday chat is never slowed by it.
 **If a model is not installed**, the switch can still be on; the feature just
 waits, and its status line says which model to install. Install it the usual
 way: Brain window, Faculties, Models (the Install box), or `ollama pull <name>` in a terminal (for example
-`ollama pull qwen3:14b`).
+`ollama pull qwen3:8b`).
 
 ## What happens when a switch is on
 
@@ -62,6 +62,18 @@ that:
 - can see **only the second card** (it is told the card's id, which starts
   `GPU-`).
 - holds one model at a time, with the compact `q8_0` memory format.
+
+**It waits while the big model is using this card.** If the big model
+([BIG-MODEL.md](BIG-MODEL.md)) is running on the second card, turning a
+switch on is refused with "Not now: the big model is using the ...", and
+says when it will stop. Try again once it has stopped. The two never run on
+the card at the same time.
+
+**`flash_attention = "off"` is refused.** If `[second_card]` in
+`jarvis-framework.toml` says `flash_attention = "off"`, the second copy of
+Ollama does not start, and the switch says why: the compact memory format
+cannot work with it off. Delete that line (or set it to `"auto"`, the
+default) and it starts.
 
 **Standby frees this card too.** Choosing Standby (tray menu or phone)
 stops this copy, which frees everything it held on the card. It stays
@@ -95,15 +107,18 @@ looks like this - **use the one Jarvis shows, not this example**, because the
 id below is made up:
 
 ```powershell
-[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'
+[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'
 ```
 
 To find the id yourself: run `nvidia-smi -L` and copy the `GPU-...` part of
 the 2080 Super's line.
 
-What it does: it sets one setting for your Windows user, which Ollama reads
-when it starts. Nothing is written to a file. To undo it later:
-`[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', $null, 'User')`.
+What it does: it sets two settings for your Windows user, which Ollama reads
+when it starts. The first says "use only the main card". The second
+(`OLLAMA_VULKAN=0`) turns off Ollama's other way of reaching graphics cards
+(Vulkan), which ignores the first setting and could still reach the second
+card. Nothing is written to a file. To undo both later:
+`[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', $null, 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', $null, 'User')`.
 
 Jarvis checks this for you, as well as it can (`main_ollama_pinned`): it
 reads that setting, and asks `nvidia-smi` whether an Ollama it did not start
@@ -113,7 +128,7 @@ program uses which card, so a "yes" is a good sign, not a guarantee.
 ## Switching on
 
 1. Fit the card, run `nvidia-smi`, run the command above.
-2. Install the models you want (`ollama pull qwen3:14b`, `ollama pull
+2. Install the models you want (`ollama pull qwen3:8b`, `ollama pull
    qwen2.5vl:7b`).
 3. Turn on the main switch, then a feature. Each one raises one approval
    card that says which card, which model, how much memory, and that nothing
@@ -122,8 +137,10 @@ program uses which card, so a "yes" is a good sign, not a guarantee.
 **On the phone:** open Mind (the button on Home), then the "Second graphics
 card" section, under Model. It shows what Jarvis found, the main switch and
 one switch per feature. Turning one on raises the approval card; the switch
-says "Waiting for you to approve the card on your PC or phone" until you
-answer it. With Pictures working, chat gets a Photo button.
+says "Waiting for your approval. Approve it on your PC or on this phone's
+Home screen." until you answer it. If the card ends without turning the
+switch on, a line under the switch says how (for example "You said no, so
+"Pictures" stays off."). With Pictures working, chat gets a Photo button.
 
 **On the desktop:** Settings, "Second graphics card". The same list, the main
 switch and one switch per feature; turning one on raises the same approval
@@ -177,11 +194,13 @@ Everything is inside `<your vault>/Jarvis Wiki/`, never anywhere else:
 - `Pages/` - one page per topic, person or thing. Each starts with
   `sources: [...]` (the documents it came from) and links to other pages
   with `[[Page name]]`, so Obsidian's graph and backlinks work.
-- `index.md` - one line per page.
+- `index.md` - one line per page. New lines are added at the end.
 - `log.md` - one entry per document added, like
-  `## [2026-09-24] ingest | spring-meeting.md`.
+  `## [2026-09-24] ingest | spring-meeting.md`, added at the end.
 - `.versions/` - before a page is changed, its old copy is saved here. To
-  undo a change, copy the old file back into `Pages/`.
+  undo a change, copy the old file back into `Pages/`. Only pages get a
+  copy: `index.md` and `log.md` are only ever added to, never rewritten, so
+  no copy of them is kept. To undo a line there, delete it by hand.
 - Your document in `Sources` is never changed.
 
 A document already added and not changed since shows "in the wiki" and is
@@ -195,9 +214,16 @@ pages.
 - Write more than 12 pages from one document, or a page over 6,000
   characters, or a page anywhere but `Jarvis Wiki/Pages`. A plan that tries
   is refused whole, with the reason.
-- Load anything from the internet. A picture link from the internet in a
-  page becomes a plain link, so opening the page in Obsidian fetches
-  nothing.
+- Load anything from outside your vault. A picture that is not a file in
+  your vault (a web address, or a file or network path elsewhere) becomes
+  a plain link, so opening the page in Obsidian fetches nothing.
+- Write HTML beyond simple formatting. Only a short list of harmless tags
+  (bold, tables, lists, headings and the like) is allowed; a page with
+  anything else is refused, with the reason.
+- Put markup in `index.md`. Each page's one-line summary is written there
+  as plain text: the `<`, `>`, `[`, `]` and backtick characters are taken
+  out, and the approval card shows the summary exactly as it will be
+  written.
 - Work on two documents at once. The second waits for the first.
 
 ### Not checked yet, said plainly
@@ -229,7 +255,8 @@ estimate (about 3 bytes per token, on the cautious side).
   and NVIDIA's documents that CUDA accepts them. It has not been run on your
   two cards.
 - **The picture model's size.** ollama.com could not be reached from where
-  this was written. 6.7 GB is worked out from the model's published shape;
+  this was written. 7.2 GB (with room for 32,768 tokens) is worked out from
+  the model's published shape;
   run `ollama show qwen2.5vl:7b` after installing it to see the real one.
 - **Whether `qwen2.5vl:7b` takes tools.** Not assumed: a picture turn on the
   second card is offered no tools.

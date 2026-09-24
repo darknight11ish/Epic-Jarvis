@@ -797,9 +797,14 @@ def _files_present(*paths: str) -> bool:
     return all(p and Path(p).is_file() for p in paths)
 
 
-#: What `/api/voice/utterance` takes. Fixed, and the server does not
-#: convert: see docs/JARVIS-API.md §5. `max_seconds` is what the phone uses
-#: as its recording cap.
+#: What `/api/voice/utterance` asks for: see docs/JARVIS-API.md §5. Both
+#: clients send exactly this - the phone resamples (Recorder.kt), and the
+#: desktop averages its channels and resamples before sending (voice.rs
+#: `to_server_format`). The server is more forgiving than this says: a
+#: 16-bit WAV at another rate or with more channels is still read
+#: (`_read_wav` averages the channels, and the real rate is passed on to
+#: the models, which resample). `max_seconds` is what the phone uses as its
+#: recording cap.
 AUDIO_IN = {
     "format": "WAV, 16-bit mono PCM",
     "sample_rate": 16000,
@@ -1269,8 +1274,9 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "") -> Heard:
         embedder = jarvis_voice.EcapaEmbedder()
     except Exception:
         embedder = jarvis_voice.Embedder()
-    # The real sample rate goes with the clip: the desktop records at its
-    # microphone's own rate, and the speaker model resamples when told it.
+    # The real sample rate goes with the clip. Both clients send 16 kHz now,
+    # but an older desktop (before 2026-09-24) sent its microphone's own
+    # rate, and the speaker model resamples when told it.
     # Only to a jarvis_voice.py that takes it - an older copy on the PC
     # would raise TypeError here, and this call is not wrapped.
     kw = {}

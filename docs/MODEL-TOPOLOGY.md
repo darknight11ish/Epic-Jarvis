@@ -333,8 +333,16 @@ generate noticeably slower on it than on the 2080 Super. A 14B model is also
 roughly twice the bytes to read per token of an 8B. Expect the second card to
 be the **bigger or longer-context lane, not the fast one**.
 
-**The plan, not yet decided:**
+**The plan (updated 2026-09-24):**
 
+- On the 2060, the longer-conversation lane is **Qwen 3 8B at 32K**
+  (7.69 GiB), not the 14B at 16K above. The 14B fits on paper, but 16K is
+  the same room the everyday model already has on the main card
+  (`jarvis-primary`, 16,384 tokens), so a conversation too long for the
+  main card would have been cut down on the 2060 just the same, only more
+  slowly. The 8B at 32K has twice the room. (With the 1 GB gap llama.cpp
+  keeps free, HARDWARE-PROFILES.md section 3 also puts the 14B at 16K
+  slightly over 12 GB.) Measure on the real card before changing this.
 - Keep the everyday 8B chat on the 2080 Super, where it is fastest.
 - Use the 2060 as the "second, larger-context lane" that
   `backend/jarvis_browser_control.py` says it is waiting for, and for any
@@ -364,9 +372,12 @@ family, fast memory. The 14B at 12K would fit with little room and gives
 less context than the main card's 8B at 16K, so it is not offered.
 
 **Built, and switched off** (2026-09-24): `backend/jarvis_second_card.py`
-picks between these by the card's reported memory (11.5 GiB and up counts as
-a 12 GB card), starts the second Ollama on it, and does nothing until the
-owner turns a switch on through an approval card. It leaves
+gives every capable second card (10 GB and up, the 2060 12 GB and a 2080 Ti
+included) the same lane, Qwen 3 8B at 32K (`LONG_BIG` and `LONG_SMALL`,
+which are now the same). It starts the second Ollama on that card, and does
+nothing until the owner turns a switch on through an approval card. A
+conversation moves to that lane only when the lane has more room than the
+everyday model (`jarvis_agent.py`). It leaves
 `OLLAMA_FLASH_ATTENTION` unset on that second Ollama too, for the reason in
 "Setup" above. The owner's guide is [SECOND-CARD.md](SECOND-CARD.md).
 

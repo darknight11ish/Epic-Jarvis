@@ -771,10 +771,11 @@ class JarvisApi(
      * One complete utterance in, one verdict out.
      *
      * The only route on this server whose body is not JSON. The audio is
-     * already 16 kHz 16-bit mono PCM in a WAV container — resampled on this
-     * device, because the server refuses anything else rather than carrying a
-     * resampler in the most exposed code it has: these are bytes from the
-     * network arriving *before* the gate.
+     * 16 kHz 16-bit mono PCM in a WAV container, resampled on this device
+     * (Recorder.kt). That is the format the server asks for (`audio_in` in
+     * /api/voice/status), and the desktop sends the same since 2026-09-24.
+     * The server does still accept another rate or stereo: it averages the
+     * channels and hands the real rate to its speech models, which resample.
      *
      * Uses the general [client], whose read timeout is the generous one rather
      * than [shortCall]'s 15s. Verification and transcription happen before the

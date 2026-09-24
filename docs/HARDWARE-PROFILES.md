@@ -246,6 +246,11 @@ all-NVIDIA PC (`envconfig/config.go:234`; the Vulkan folder is then skipped:
 rather than switching Vulkan off, so the second Ollama can see the 2080
 Super through Vulkan too.
 
+*Since then (2026-09-24): fixed.* `lane_env` now sets `OLLAMA_VULKAN=0`
+for the second Ollama, and `pin_command` (the one-line command for the
+everyday Ollama) sets it too, beside `CUDA_VISIBLE_DEVICES`. Both are in
+`backend/jarvis_second_card.py`. Still not run on a real two-card PC.
+
 **Two cards, one Ollama, or two Ollamas?** One Ollama *can* hold model A on
 card 0 and model B on card 1 using `main_gpu`, but not reliably:
 
@@ -510,6 +515,14 @@ Each item: what is written today, what the source says now, and what to do.
 | 7 | The second-card features need a *second* card of ≥ 10 GB (`jarvis_second_card.py:133-139`, `:400-422`, `:478`). | One 16 or 24 GB card can hold chat plus pictures in one Ollama (2.4). | Generalise to "spare capacity" (4.3). |
 | 8 | "Turing is the floor" for the second card (`jarvis_second_card.py`, docstring). | Pascal runs `q8_0` through slower kernels; it does not fail (2.2). | Keep Turing as the floor for *recommended* lanes; allow Pascal as "best effort" rather than "not capable". |
 
+*Since then (2026-09-24):* row 2 is fixed - `pin_command` and `lane_env`
+both set `OLLAMA_VULKAN=0` now. Row 3's refusal is built: `[second_card]
+flash_attention = "off"` stops the second Ollama from starting, with a
+sentence saying why (`_flash_refusal`). Row 5 is superseded: a 12 GB second
+card now gets `qwen3:8b` with 32,768 tokens (7.69 GiB), not `qwen3:14b`, so
+that the lane has more room than the everyday model (`LONG_BIG` in
+`jarvis_second_card.py`). The table above is kept as it was written.
+
 ---
 
 ## 4. The design
@@ -647,6 +660,11 @@ only *where* a lane runs):
 - `pin_command` / `main_pin`: add `OLLAMA_VULKAN=0` on all-NVIDIA PCs, and
   check the `user overrode visible devices` line in Ollama's log as well as
   the user setting.
+  *Since then (2026-09-24):* the `OLLAMA_VULKAN=0` parts and the
+  `flash_attention = "off"` refusal are done. `main_pin` does not read
+  Ollama's log yet: it still checks `CUDA_VISIBLE_DEVICES` and `nvidia-smi`
+  only. It does not check `OLLAMA_VULKAN` either, so someone who ran the
+  older one-setting command is still told the everyday Ollama is pinned.
 - The status text says "spare capacity on the <card>" rather than "the
   second card" when the lane is on the chat card.
 
@@ -750,6 +768,15 @@ the 11 GB (7.36 + 1.93 = 9.29 / 11) + qwen2.5vl:3b on the 8 GB
 | Fastest answers | qwen3:4b, 32K - 4.94 (2080 Super) | chat (32K) | qwen2.5vl:7b, 8K - 6.38 (2060) | A 7.37 / 8 · B 6.38 + 1.93 = 8.31 / 12 | Long lane off (cannot beat 32K). |
 | Smartest answers | qwen3:14b, 12K - 9.77 (**2060, slower**) | qwen3:4b, 32K - 4.94 (2080 Super) | qwen2.5vl:3b, 8K - 3.65 (2080 Super) | A 4.94 + 2.43 = 7.37 / 8 · B 9.77 + 1.93 = 11.70 / 12 | Chat on the slower card: biggest model, noticeably slower words (~2/3 the memory speed, plus twice the bytes per word). |
 | Most features | qwen3:8b, 6K - 5.42 (2080 Super) | qwen3:14b, 12K - 9.77 (2060) | qwen2.5vl:7b, 8K - 6.38 (2060) | A `████████████████` 7.85 / 8 · B `████████████████` 11.70 / 12 | Lanes take turns on the 2060. Chat only 6K (decision 1 gives 12K). |
+
+*Since then (2026-09-24):* the code does not follow this row. Presets are
+not built, so the everyday model is still `jarvis-primary` with 16,384
+tokens, and a 14B lane with 12K would have **less** room than that. The
+code now moves a long conversation to the second card only when the lane
+has more room than the everyday model (`jarvis_agent.py`, the
+`long_context` choice), and plans `qwen3:8b` with 32K for a 12 GB card
+(`LONG_BIG` in `jarvis_second_card.py`) - the "monitor on the 12" row
+below. This row only makes sense together with its own 6K chat.
 
 **8 + 12 GB, monitor on the 12** (A 6.07, B 9.57)
 
@@ -958,6 +985,8 @@ memory (`available`) - which is the measured desktop share for 4.1.
   model switch.
 - The one-command line in SECOND-CARD.md is superseded by the generated one
   (it adds `OLLAMA_VULKAN=0`); the old line keeps working as it does today.
+  *Since then (2026-09-24):* the line SECOND-CARD.md shows (`pin_command`)
+  already adds `OLLAMA_VULKAN=0`, without waiting for presets.
 
 ---
 
@@ -987,6 +1016,8 @@ one-line command** (`OLLAMA_VULKAN=0`; the default is on,
 `envconfig/config.go:234`). The second-card lane's environment must set it
 too, not just remove `GGML_VK_VISIBLE_DEVICES` (a bug in today's
 `jarvis_second_card.py`, on the bug audit's fix list).
+*Since then (2026-09-24): fixed* - `lane_env` and `pin_command` both set
+`OLLAMA_VULKAN=0`.
 (Offered: leave it on.)
 
 **4. Spark-X2.5-4B: test later**, once the second card is installed and

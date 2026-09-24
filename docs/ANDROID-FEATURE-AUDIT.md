@@ -92,7 +92,7 @@ Microsoft called it intended design).
 
 | audit item | the phone already has | the phone needs |
 |---|---|---|
-| **Voice loop** | Push-to-talk (`voice/VoiceSession.kt`); audio goes to the PC for STT — correct, and decided: `/api/voice/utterance` returns `client_fallback_ok: false` on purpose; server TTS with a platform-voice fallback (`audio/Speaker.kt`) | Close the Google-TTS leak (P0); stream audio up in chunks and play TTS as it arrives (P1). Barge-in stays headphones-only on the phone — decided in `ANDROID-VOICE-FALLBACK.md`, still right: the `VOICE_RECOGNITION` mic path the owner-voice check needs is the one without echo cancellation. |
+| **Voice loop** | Push-to-talk (`voice/VoiceSession.kt`); audio goes to the PC for STT — correct, and decided: `/api/voice/utterance` returns `client_fallback_ok: false` on purpose; server TTS with a platform-voice fallback (`audio/Speaker.kt`) | Close the Google-TTS leak (P0); stream audio up in chunks and play TTS as it arrives (P1). Barge-in stays headphones-only on the phone — decided in `ANDROID-VOICE-FALLBACK.md`, still right: the `VOICE_RECOGNITION` mic path the owner-voice check needs is the one without echo cancellation. *(Since then, 2026-09-24: no longer headphones-only - see the note under P1 below.)* |
 | **Second GPU / 14B** | — | Nothing. At most, show which model answered on the Checks screen. |
 | **MCP / more tools** | Approval cards (`ui/approval/ApprovalCard.kt`), lock-screen Deny, biometric confirmation for irreversible actions (`ui/approval/BiometricGate.kt`) | Nothing per tool. The notice text is generated on the PC from the action name (`notice_for()`), so an action the phone has never heard of renders correctly with no phone code. Verify that (P2). |
 | **Scheduled tasks** | Digest with "Mark read (approves nothing)", mute-until-tomorrow (`ui/screens/InboxScreen.kt`) | Nothing at first. Authoring from the phone can come later. |
@@ -150,6 +150,8 @@ If it does stream: chunked upload from `Recorder.kt`, and `AudioTrack`
 streaming playback in `Speaker.kt` that begins on the first chunk. Keep the
 mic on `VOICE_RECOGNITION`. Barge-in is headphones-only, detected via
 `AudioManager`.
+
+*Since then (2026-09-24):* phone barge-in is no longer headphones-only. While Jarvis is speaking, the "hey Jarvis" listener (`WakeWordService.kt`, `listenWhileAnswering`) records on `VOICE_COMMUNICATION` with Android's echo canceller switched on, and the reply is played on the voice-call path the canceller works with. It is on by default only on phones that have an echo canceller (`BargeIn.enabled` in `StopWord.kt`). The talk button and "Train my voice" still record on `VOICE_RECOGNITION`. Not yet measured on a real phone: the voice print was trained on `VOICE_RECOGNITION` clips, so a sentence recorded on the call path may score lower in the PC's voice check (a refusal, never a false pass).
 
 ### P2 — Make it a real companion
 

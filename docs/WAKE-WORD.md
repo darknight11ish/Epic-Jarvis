@@ -26,7 +26,11 @@ built, kept because its reasoning still holds. What was decided and built:
   server on the same PC runs it: the desktop app cuts the room's sound into
   sentences and sends each over loopback only (it refuses a non-loopback
   server address), and the server drops any without the phrase before the
-  owner check or speech-to-text. Either way the PC checks the phrase again,
+  owner check or speech-to-text. *Since then (2026-09-24):* that address is
+  checked again right before every clip is sent and every Smart Turn check
+  (`wake_audio_refusal` in `voice.rs`), not only when listening starts, and
+  changing the server address in Settings stops listening, with a line
+  saying so. Turn it on again to listen with the new address. Either way the PC checks the phrase again,
   then the voice, then transcribes - and the transcript must start with
   "hey Jarvis", which stops "...the computer was called Jarvis".
 - **§2's service**: `service/WakeWordService.kt`, its own foreground service

@@ -163,6 +163,12 @@ there - so the old line here showed passing suites as FAIL. `py -3`, not
 `python`: on a fresh Windows 11, `python` is a Microsoft Store shortcut, not
 Python.
 
+The "Test it" lines further down are meant to be run the same way: one
+line, pasted into PowerShell while you are in this repository's folder.
+Most of them set `JARVIS_BACKEND` first; if one does not, set it with the
+first half of the line above. Change the path if your backend folder is
+somewhere else.
+
 `apply-patches.ps1` sets that variable and runs them for you. Without it the
 suites look in their own folder, which is right in the dev container — the
 modules are symlinked in there — and wrong everywhere else. CI runs them
@@ -233,7 +239,18 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   `jarvis_skill_discovery.py`, `jarvis_speed.py`, `jarvis_owned_tables.py`,
   `jarvis_agent.py`, `jarvis_voice_enroll.py`, `jarvis_speech.py`,
   `jarvis_task_control.py`, `jarvis_note_capture.py`,
-  `jarvis_power_switch.py`, and `jarvis_wakeword.py` ("hey Jarvis");
+  `jarvis_power_switch.py`, `jarvis_wakeword.py` ("hey Jarvis"),
+  `jarvis_token_store.py` (the pairing token, kept in Windows Credential
+  Manager), `jarvis_second_card.py`, `jarvis_wiki.py`, `jarvis_big_model.py`,
+  `jarvis_turn.py` (Smart Turn: "finished, or only paused?"),
+  `jarvis_wakebank.py` and `jarvis_stopword.py` (the numbers the wake word
+  and the "stop" word are checked against);
+- two small safety modules the others use (added 2026-09-24):
+  `jarvis_local_http.py`, so calls to services on this PC (Ollama, Joplin,
+  the second card) never go through a proxy, which would be another
+  machine; and `jarvis_child_env.py`, so a program Jarvis starts (the
+  second Ollama, colibri) gets only an allowlist of environment settings
+  and none of your tokens or keys;
 - the tools `jarvis_agent.py` offers: `jarvis_research.py`,
   `jarvis_ui_control.py`, `jarvis_android_control.py`,
   `jarvis_browser_control.py`, `jarvis_calendar.py`, `jarvis_email.py`,
@@ -382,8 +399,8 @@ client can say when the review queue has stopped accepting work.
 
 ### Test it
 
-```
-python3 backend/test_memory_safety.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_safety.py
 ```
 
 Fifty checks, run against real sqlite stores in a temp dir. Roughly a third are
@@ -417,8 +434,8 @@ is there, plus a boot line so its absence is visible next time.
 
 ### Test it
 
-```
-python3 backend/test_events_pump.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_events_pump.py
 ```
 
 Ten checks: that a changed queue publishes exactly one event and an unchanged
@@ -500,8 +517,8 @@ weight and should not sit behind that review.
 
 ## Test it
 
-```
-python3 backend/test_appearance.py "path/to/patched/jarvis_hud.py"
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_appearance.py
 ```
 
 Fourteen checks against the real `jarvis-visual-spec.json`: that all fifty
@@ -569,8 +586,8 @@ The patch does three things:
 
 ### Test it
 
-```
-python3 backend/test_gate_push.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_gate_push.py
 ```
 
 Ten checks against a stubbed network and a stubbed framework — nothing is sent
@@ -682,7 +699,7 @@ correct.
 ## Test it
 
 ```powershell
-python test_documents_honesty.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_documents_honesty.py
 ```
 
 Sixteen checks. `_has_table` is lifted out of `jarvis_hud.py` with `ast` and
@@ -783,7 +800,7 @@ request.
 ## Test it
 
 ```powershell
-python test_memory_prefix.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_prefix.py
 ```
 
 Sixteen checks. The ordering expression is lifted out of `jarvis_hud.py` with
@@ -873,7 +890,7 @@ ignore it, which every `switch` on `kind` in both clients already does.
 ## Test it
 
 ```powershell
-python test_extraction_wiring.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_extraction_wiring.py
 ```
 
 Twenty-two checks. `_Learner` is lifted out of `jarvis_hud.py` with `ast` and
@@ -940,7 +957,7 @@ contract honest and machine-readable so the client fix has something to read.
 ## Test it
 
 ```powershell
-python test_voice_503.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_voice_503.py
 ```
 
 Nineteen checks. `_no_speech` and `_SAY_FALLBACK` are lifted out of the source
@@ -1061,7 +1078,7 @@ the call `jarvis_voice_enroll.py` already makes; OFF stays immediate.
 ## Test it
 
 ```powershell
-python test_speech.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_speech.py
 ```
 
 Twenty-two checks, against the real `sherpa_onnx` package and the real
@@ -1194,7 +1211,7 @@ on a client is future work for whoever has `jarvis_gate.py` open.
 ## Test it
 
 ```powershell
-python test_degrade_filter.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_degrade_filter.py
 ```
 
 Eleven checks. The degrade loop is lifted out of `jarvis_hud.py` with `ast` and
@@ -1353,7 +1370,7 @@ still commute.
 ## Test it
 
 ```powershell
-python test_memory_pane.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_pane.py
 ```
 
 Forty-one checks. The switch and the query-string clamp are lifted out of
@@ -1427,7 +1444,7 @@ crate for one lookup is a new thing to audit and pin.
 ## Test it
 
 ```powershell
-python test_token_file.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_token_file.py
 ```
 
 Seventeen checks against the real `_resolve_token`, lifted with `ast`. A second
@@ -1852,7 +1869,7 @@ Needs `memory-noise`: its context is that patch's `state IN
 ## Test it
 
 ```powershell
-python test_decide_once.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_decide_once.py
 ```
 
 Fourteen checks. The concurrency one is real, not simulated — real threads,
@@ -2252,7 +2269,7 @@ model calls directly.
 ### Test it
 
 ```powershell
-python test_ollama_direct.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_ollama_direct.py
 ```
 
 Structural checks, over the source, that the endpoint fix is what it claims
@@ -2526,8 +2543,7 @@ Checked and rejected, with the evidence, because the review didn't have
 ### Test it
 
 ```powershell
-python test_agent.py
-python test_tool_calling_wiring.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_agent.py; py -3 backend\test_tool_calling_wiring.py
 ```
 
 `test_agent.py` runs the real loop end to end against a scripted fake model
@@ -2803,8 +2819,7 @@ case has not been tested here.
 ### Test it
 
 ```powershell
-python test_browser_control.py
-python test_browser_control_live.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_browser_control.py; py -3 backend\test_browser_control_live.py
 ```
 
 `test_browser_control.py`: forty-nine scenarios, 185 checks, no real browser,
@@ -2931,7 +2946,7 @@ on your machine.
 ### Test it
 
 ```powershell
-python test_calendar.py; python test_email.py; python test_notes.py; python test_home_control.py; python test_integrations_wiring.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_calendar.py; py -3 backend\test_email.py; py -3 backend\test_notes.py; py -3 backend\test_home_control.py; py -3 backend\test_integrations_wiring.py
 ```
 
 One hundred and seventy-three checks across five files, no real CalDAV
@@ -3159,7 +3174,7 @@ own test.
 ## Test it
 
 ```powershell
-python test_memory_intake.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_intake.py
 ```
 
 Part A (the new module on its own) runs anywhere. Part B needs
@@ -3180,7 +3195,7 @@ other two in this directory; this is the third.
 ## `import_history.py` — feed an old Claude or Gemini export into the review queue
 
 ```powershell
-cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; python "C:\Users\pcadmin\Epic-Jarvis\backend\import_history.py" --claude "C:\path\to\claude-export.zip" --gemini "C:\path\to\takeout.zip"
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 "C:\Users\pcadmin\Epic-Jarvis\backend\import_history.py" --claude "C:\path\to\claude-export.zip" --gemini "C:\path\to\takeout.zip"
 ```
 
 (One or both of `--claude`/`--gemini`. Run it from the backend folder, or
@@ -3234,7 +3249,7 @@ what to adjust.
 ### Test it
 
 ```powershell
-python test_import_history.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_import_history.py
 ```
 
 Eighteen checks, against synthetic export files - no real conversation data,
@@ -3333,10 +3348,7 @@ machine** - the exact shape section 3d already specifies:
 ## Test it
 
 ```powershell
-python test_task_control.py
-python test_ui_control.py
-python test_android_control.py
-python test_browser_control.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_task_control.py; py -3 backend\test_ui_control.py; py -3 backend\test_android_control.py; py -3 backend\test_browser_control.py
 ```
 
 Fourteen checks for the new module, plus three new cases in each of the
@@ -3497,7 +3509,7 @@ the answer still gets a `turn_id`, with no facts recorded.
 ## Test it
 
 ```powershell
-python test_feedback.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_feedback.py
 ```
 
 74 checks with the patched backend present. Without a backend folder, the 48
@@ -3641,10 +3653,8 @@ updated `jarvis_agent.py` must be copied too - it is what writes the
 
 ## Test it
 
-```
-python3 backend/test_skill_discovery.py
-python3 backend/test_skill_suggest.py
-python3 backend/test_agent.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_skill_discovery.py; py -3 backend\test_skill_suggest.py; py -3 backend\test_agent.py
 ```
 
 `test_skill_discovery.py` (108 checks) writes through the real
@@ -3719,7 +3729,7 @@ a table with that name is already there. It also refuses
 ## Test it
 
 ```powershell
-python test_documents_owned.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_documents_owned.py
 ```
 
 Twenty checks in the container, and four more on your PC once the patch is
@@ -3808,7 +3818,7 @@ would be noise.
 ## Test it
 
 ```powershell
-python test_speed_record.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_speed_record.py
 ```
 
 Sixty-three checks with no network (opening a socket fails the test) and a
@@ -3919,7 +3929,7 @@ call the Models screen makes, or from `JARVIS_MODEL` when that is set.
 ## Test it
 
 ```powershell
-python test_selftest_doctor.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_selftest_doctor.py
 ```
 
 Thirty-six checks with a fake Ollama that records every URL. It checks that
@@ -3962,7 +3972,7 @@ produces a value into the real thing that reads it:
   `asOfSeconds` under node, in the same time zones.
 
 ```powershell
-python backend\test_memory_honesty.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_memory_honesty.py
 ```
 
 Needs `git` for the learner checks and `node` for the date check; without
@@ -4013,8 +4023,8 @@ the run went on to the rehearsal. **If you ever saw "jarvis_hud.py 2026-09-18
 
 ## Test it
 
-```
-python backend\test_learning_integration.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_learning_integration.py
 ```
 
 22 checks without a backend folder (the stack order, the retire card's
@@ -4122,7 +4132,11 @@ that works" at the end of this file).
 sends that. The speaker model is now told the real rate and copes. The basic
 spectral check is not, and a voice trained at 16 kHz on the phone may score
 differently from the desktop's microphone. One more reason for the better
-check.
+check. *Since fixed (2026-09-24):* the desktop app now turns its recording
+into 16 kHz, one channel, before sending it (`to_server_format` in
+`jarvis-desktop/src-tauri/src/voice.rs`), so both clients send the same
+rate. It is still a different microphone from the phone's, so scores can
+still differ a little between the two.
 
 ## Install the better voice check (recommended)
 
@@ -4322,8 +4336,8 @@ nothing if the patch does not fit.
 
 ## Test it
 
-```
-python backend\test_cloud_one_turn.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_cloud_one_turn.py
 ```
 
 Runs the patch's own lines on a request carrying a private earlier question
@@ -4425,8 +4439,8 @@ API. The first real run is the real test.
 
 ## Test it
 
-```
-python backend\test_note_capture.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_note_capture.py
 ```
 
 70 checks. The ones that matter most: nothing is written without an allowed
@@ -4509,8 +4523,8 @@ Windows.
 
 **Test it.**
 
-```
-python backend\test_obsidian_notes.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_obsidian_notes.py
 ```
 
 100 checks, no Obsidian and no network. Among them: the settings shapes real
@@ -4563,8 +4577,8 @@ them — if not, the answer says the model stayed loaded.
 
 ## Test it
 
-```
-python backend\test_power_switch.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_power_switch.py
 ```
 
 26 checks: the mode changes only on an allowed verdict; denied, timed out and a
@@ -5121,8 +5135,8 @@ depends on it: the countdown just does not appear.
 
 ## Test it
 
-```
-python backend\test_approval_contract.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_approval_contract.py
 ```
 
 It also builds one set of approval rows from the real `notice_for` and this
@@ -5213,10 +5227,8 @@ real context number `/api/ps` reports.
 
 ## Test it
 
-```
-python backend\test_chat_stream.py
-python backend\test_chat_stream_contract.py
-python backend\test_agent.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_chat_stream.py; py -3 backend\test_chat_stream_contract.py; py -3 backend\test_agent.py
 ```
 
 `test_chat_stream.py`: one request per answer, the Content-Type matches the
@@ -5235,8 +5247,8 @@ desktop's - and fails if either copy is stale. The phone
 (`jarvis-desktop/tests/chat-stream.mjs`) each read those cases with their
 real readers. After changing `jarvis_agent.py`, regenerate them:
 
-```
-python backend\test_chat_stream_contract.py --write
+```powershell
+py -3 backend\test_chat_stream_contract.py --write
 ```
 
 ---
@@ -5267,8 +5279,8 @@ Copy-Item -LiteralPath "C:\Users\pcadmin\Epic-Jarvis\backend\rebuilt\jarvis_rout
 
 ## Test it
 
-```
-python backend\test_router_private_terms.py
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_router_private_terms.py
 ```
 
 Reads the real config and puts every entry, typed the way a person types it,
@@ -5446,10 +5458,12 @@ started. `jarvis-desktop/tests/fixtures/second-card-cases.json` is the real
 `status()` output in six named cases, for the desktop and phone to build
 against; the test fails if it is stale.
 
-# `wiki.patch` and `jarvis_wiki.py` — the wiki builder, on the second card only
+# `wiki.patch` and `jarvis_wiki.py` — the wiki builder, on the second card (or the big model)
 
 **What it is.** Your documents, turned into linked pages in your Obsidian
-vault by the model on the second graphics card. The idea is Andrej
+vault by the model on the second graphics card - or by the big model, if
+you have switched it on for the wiki (see the big model's section below).
+The idea is Andrej
 Karpathy's "LLM wiki"; no code was taken from any other wiki project. How to
 use it is in [`docs/SECOND-CARD.md`](../docs/SECOND-CARD.md), "Wiki builder";
 this section is what the code does.
@@ -5485,9 +5499,16 @@ The two dot-names are hidden, so the notes search and Obsidian skip them.
   `Pages/<name>.md` (one level, a sane name, no `..`, no Windows device
   name, no link out of the wiki); at most 12 pages; at most 6,000 characters
   a page; only pages it was shown may be updated, and only missing ones
-  created (ignoring case, as Windows does); no HTML that loads or runs
-  something; a picture from the internet (`![](https://...)`) becomes a
-  plain link, because Obsidian would fetch it when the page opens. A source
+  created (ignoring case, as Windows does). The page text is held to an
+  allowlist (`_ALLOWED_TAGS`): only simple formatting HTML such as `<b>`,
+  `<table>` or `<details>`, with only harmless attributes (`class`,
+  `title`, `align`, ...), and anything else is refused rather than
+  trimmed. A picture that is not a file inside the vault (`https:`,
+  `file:`, `//host`, `\\server`) becomes a plain link, because Obsidian
+  would fetch it when the page opens. A code block may only be labelled
+  with a plain language name, so a plugin such as Dataview cannot run it.
+  Each page's one-line summary goes into `index.md` as plain text: the
+  `<`, `>`, `[`, `]` and backtick characters are taken out. A source
   that does not fit the lane's context with the index and the answer is
   refused as "too big", with the numbers — never cut short. An answer that
   is not JSON, not the shape asked for, or cut off (`done_reason: "length"`)
