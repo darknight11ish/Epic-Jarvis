@@ -755,7 +755,8 @@ def t_hooks_when_on():
     sent = _turn(msgs, lane_for=lambda f: LANE14 if f == "long_context" else None)
     check("long history, long_context working: sent to the second card, whole",
           sent[0][0] == "http://127.0.0.1:11435/v1/chat/completions"
-          and sent[0][1]["model"] == "qwen3:14b" and sent[0][1]["messages"] == msgs)
+          and sent[0][1]["model"] == "qwen3:14b"
+          and sent[0][1]["messages"] == [{"role": "system", "content": AG.LANE_SYSTEM}] + msgs)
     short = [{"role": "user", "content": "hi"}]
     sent = _turn(short, lane_for=lambda f: LANE14 if f == "long_context" else None)
     check("a short conversation stays on the main card", sent[0][0].startswith("http://127.0.0.1:11434"))

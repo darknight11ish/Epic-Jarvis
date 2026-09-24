@@ -948,6 +948,40 @@ def t_the_default_recorder_is_used_when_none_is_passed():
           len(RECORDED) == before + 1, f"{before} -> {len(RECORDED)}")
 
 
+def t_a_second_card_turn_carries_the_jarvis_system_block():
+    # T4: second-card turns (long context, pictures) went to library models
+    # with no Jarvis SYSTEM block, so the invariants were never said there.
+    import re
+    mf = (Path(__file__).resolve().parent / "jarvis-primary.Modelfile").read_text(encoding="utf-8")
+    m = re.search(r'^SYSTEM """(.*?)"""', mf, re.S | re.M)
+    check("LANE_SYSTEM is the Modelfile's SYSTEM block, exactly",
+          m is not None and AG.LANE_SYSTEM == m.group(1), "they differ: copy the block again")
+
+    def run(lane_choice):
+        sent = []
+
+        def opener(url, body):
+            sent.append((url, body))
+            return W.FakeResponse(W.stream([("content", "ok"), ("done", "stop")]))
+        msgs = [{"role": "system", "content": "recalled facts"},
+                {"role": "user", "content": "hello"}]
+        AG.run_local_turn(msgs, "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+                          stream_out=lambda b: None, open_stream=opener, enabled_tools=None,
+                          context_length=16384, on_step=lambda s: None,
+                          record_chain=lambda s: None, keepalive_seconds=60, status_delay=60,
+                          lane_choice=lane_choice)
+        return sent[0][1]["messages"], msgs
+    for feature, model in (("long_context", "qwen3:8b"), ("vision", "qwen2.5vl:7b")):
+        lane = AG.LaneChoice("http://127.0.0.1:11435", model, 32768, feature, "test")
+        got, msgs = run(lane)
+        check(f"a {feature} turn on the second card starts with the Jarvis SYSTEM block",
+              got[0] == {"role": "system", "content": AG.LANE_SYSTEM} and got[1:] == msgs,
+              got[:2])
+    got, msgs = run(None)
+    check("a turn on the main card is unchanged (its model has the block built in)",
+          got == msgs, got[:2])
+
+
 if __name__ == "__main__":
     for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
@@ -977,7 +1011,8 @@ if __name__ == "__main__":
                t_steps_say_what_happened_in_order,
                t_a_step_carries_no_text_ever,
                t_a_step_sink_that_raises_never_breaks_the_turn,
-               t_the_default_step_sink_is_the_event_bus):
+               t_the_default_step_sink_is_the_event_bus,
+               t_a_second_card_turn_carries_the_jarvis_system_block):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
