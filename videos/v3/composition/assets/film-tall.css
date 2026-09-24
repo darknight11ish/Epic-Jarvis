@@ -7,12 +7,14 @@ body.tall .cap.big, body.tall .cap.big b { font-size: 84px; }
 body.tall .cap.prev { bottom: 450px; font-size: 44px; }
 body.tall .cap.prev b { font-size: 44px; }
 
-body.tall #h-ask { left: 70px; top: 200px; font-size: 80px; }
-body.tall #desk { left: 120px; top: 330px; width: 840px; }
+body.tall #h-ask { left: 70px; top: 190px; font-size: 76px; }
+body.tall #desk { left: 220px; top: 330px; width: 640px; }
 body.tall #desk .where { font-size: 28px; }
-body.tall #desk-card { width: 840px; }
-body.tall #desk-clear { width: 840px; top: 150px; font-size: 44px; }
-body.tall #phone { left: 325px; top: 690px; }
+body.tall #desk-card { width: 640px; }
+body.tall #browser { width: 640px; }
+body.tall #b-note { display: none; }
+body.tall .ready-chip { left: 220px; top: 290px; font-size: 26px; }
+body.tall #phone { left: 325px; top: 700px; }
 
 body.tall #m-sept { left: 70px; top: 230px; font-size: 140px; }
 body.tall #h-keep { left: 70px; top: 420px; font-size: 80px; }

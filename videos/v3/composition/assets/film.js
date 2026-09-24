@@ -156,7 +156,11 @@
         if (t >= d[0] && t < d[1]) sc = 1 + 0.018 * E.io((t - d[0]) / (d[1] - d[0]));
       }
       var p = cfg.push;
-      if (p && t >= p.at && t < p.until) { sc = lerp(1, p.to, prog(t, p.at, p.len, E.io)); origin = p.origin; }
+      if (p && t >= p.at && t < p.until) {
+        sc = lerp(1, p.to, prog(t, p.at, p.len, E.io));
+        if (has(p.back) && t >= p.back) sc = lerp(sc, 1, prog(t, p.back, 0.7, E.io));
+        origin = p.origin;
+      }
       if (has(H.stop) && t >= H.stop && t < (H.outro || 1e9)) {      // hold still on "stop"
         for (var j = 0; j < cfg.drift.length; j++) { var q = cfg.drift[j]; if (H.stop >= q[0] && H.stop <= q[1]) sc = 1 + 0.018 * E.io((H.stop - q[0]) / (q[1] - q[0])); }
       }
@@ -186,7 +190,7 @@
     function approval(t) {
       if (!has(H.cards)) return;
       appear($("desk"), t, H.cards, { d: 0.55, dy: 60, e: E.settle });
-      appear($("phone"), t, H.cards - (H.phoneIn || 0.25), { d: 0.6, dy: 120, e: E.out3 });
+      appear($("phone"), t, H.cards - (H.phoneIn || 0.25), { d: 0.6, dy: 120, e: E.out3, out: cfg.phoneOut, outD: 0.4, outDy: -80 });
       appear($("phone-where"), t, H.cards + 0.3, { d: 0.4, dy: 10 });
       appear($("pcard"), t, H.cards + 2 / FPS, { d: 0.5, dy: 60, e: E.settle, out: H.approved, outD: 0.3, outDy: 30 });
       appear($("h-ask1"), t, H.ask, { d: 0.5, out: H.shout - 0.25, outD: 0.25 });
@@ -213,7 +217,32 @@
       }
       appear($("p-done"), t, H.approved + 0.1, { d: 0.35, dy: 0, s0: 0.8, e: E.settle });
       appear($("desk-card"), t, H.cards, { d: 0.01, dy: 0, out: H.clear, outD: 0.3, outDy: 24 });
-      appear($("desk-clear"), t, H.clear + 0.25, { d: 0.4, dy: 12 });
+      appear($("ready-chip"), t, H.ready, { d: 0.5, dy: 10 });
+      browser(t);
+    }
+
+    /* The visible browser: only the two approved steps, on the one allowed site. */
+    var URL = "library.example.org/account";
+    function browser(t) {
+      if (!has(H.browser)) return;
+      appear($("browser"), t, H.browser, { d: 0.55, dy: 50, e: E.settle });
+      appear($("b-note"), t, H.browser + 0.6, { d: 0.5, dy: 10 });
+      var u = $("b-url"); if (u) u.textContent = URL.slice(0, Math.floor(clamp((t - H.step1) / 0.35, 0, 1) * URL.length));
+      var page = document.querySelector("#browser .bpage");
+      if (page) page.style.opacity = t < H.step1 + 0.3 ? "0" : prog(t, H.step1 + 0.3, 0.25, E.out2).toFixed(3);
+      appear($("b-step"), t, H.step2, { d: 0.3, dy: 8, out: H.renewed + 0.4, outD: 0.3 });
+      var btn = $("b-renew1"), due = $("b-due1");
+      if (btn) {
+        var on = t >= H.step2 && t < H.renewed;
+        btn.classList.toggle("hot", on);
+        btn.style.transform = "scale(" + (t >= H.click && t < H.click + 0.14 ? 0.93 : 1) + ")";
+        btn.style.visibility = t >= H.renewed ? "hidden" : "visible";
+      }
+      if (due) {
+        var done = t >= H.renewed;
+        due.textContent = done ? "Renewed · due 5 Nov" : "Due Friday";
+        due.classList.toggle("ok", done);
+      }
     }
 
     /* ---------- scenes 4-6 ---------- */

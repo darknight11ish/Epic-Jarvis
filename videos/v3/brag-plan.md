@@ -26,6 +26,8 @@ They talked it through in three rounds, with the owner's updated brief (`docs/VI
 
 The owner's own calls, which are final:
 - no smart home or garage door;
+- the risky request is the visible browser doing an approved task on one website, labelled "ready";
+- no "next: any 8 GB card";
 - no "one person's own build / not in any app store" line;
 - the hardware wording is "a PC with an 8 GB graphics card";
 - dark and "a little cinematic";
@@ -38,17 +40,18 @@ B = the owner's working branch, `claude/admiring-ritchie-5urg5h`.
 | on screen | status | evidence |
 |---|---|---|
 | "Hey Jarvis" only listens once you switch it on. | today | B `backend/README.md`, "Hey Jarvis", steps 1-2: off until approved. |
-| You: "Hey Jarvis, clear out my Downloads folder." A card appears on the PC and the phone. | today | B `backend/jarvis_agent.py`: `shell_exec` is in `NEEDS_A_PERSON`, and its card reads "Run this command:" plus the command. The gate action is `run_shell_on_host = "ask"` (`jarvis-framework.toml`). The same card shows on both apps: `docs/JARVIS-API.md`. |
+| You: "Hey Jarvis, renew my library book." A card for a browser plan appears on the PC and the phone. | **ready**, labelled on screen "switches on with a second graphics card" | Browser control is built (B `backend/jarvis_browser_control.py`) and ships off: it needs the second card and "Longer conversations" (B `docs/SECOND-CARD.md`). The card text on screen is the module's own `describe()`, run on the plan: the allowed site, every step with its reason, and "If you say no". The same card shows on both apps (`docs/JARVIS-API.md`). |
+| The browser is visible, and does only the approved steps on the one allowed site. | ready | `_HEADLESS = False`: "Launched NOT headless on purpose: the owner should be able to see the tab Jarvis is driving." `run()` executes only the enumerated steps, re-checking each one, and stops if the page leaves the allowed sites, asks a question, opens a tab or starts a download. The library site is sample data. |
 | An AI assistant that asks before it acts. Every time. | today | Nothing is ever auto-approved: `docs/ARCHITECTURE.md` and CLAUDE.md rule 4. |
-| The phone asks for a fingerprint. | today, **phone only** | B `jarvis-client/.../BiometricGate.kt` `required()`: anything irreversible or outbound. `run_shell_on_host` is ("no", "outbound"), `backend/ui-control-wiring.patch`. The fingerprint sheet is Android's own BiometricPrompt, titled with the card's title and its "why". The desktop fingerprint is still being built and is not shown. |
+| The phone asks for a fingerprint. | today, **phone only** | B `jarvis-client/.../BiometricGate.kt` `required()`: anything unclassified, outbound or irreversible. `control_browser`'s risk entry is in the owner's gate and not in this repo, so the card shows it unclassified, which asks for a fingerprint by itself. The sheet is Android's own BiometricPrompt: the card's title, then "Check the card before you confirm." The desktop fingerprint is still being built and is not shown. |
 | Nobody can shout "yes" at it. You tap to approve. | today, by code; no test yet | The chat tool list has no approve or decide tool (B `backend/jarvis_agent.py`). The phone's voice path approves nothing (B `VoiceSession.kt:176`). |
 | Your email, your files, and what it knows about you stay on your PC. | today | B `docs/ARCHITECTURE.md` §4. The router only *offers* a cloud model, never takes one without a yes, and private turns get no offer at all (B `backend/rebuilt/jarvis_router.py:366`, e68c04a). |
 | June: "You drink coffee." September: "You're off coffee this month.", with **Keep / Discard**. | today | Real captures of Brain › Memory (`jarvis-desktop/src/brain.html`): the "What did you know on…" view and the proposal card. |
 | It asks before it remembers, too. | today | Nothing enters memory until you press Keep (the Learning panel's own words). Turning learning on asks first too (B c7e17c8). |
 | The old fact is set aside, not deleted. | today | Brain › Memory: "Retired facts are shown, greyed. Nothing here is deleted." |
 | You: "Stop." Jarvis stops mid-word. | today, **while "Hey Jarvis" is on** | B 311739e, `voice.rs`. Tested on computer voices, not yet on a real phone. Cutting in just by talking is "coming soon" and is **not** shown. |
-| Today: a PC with an 8 GB NVIDIA graphics card. | today | `docs/MODEL-TOPOLOGY.md`. B `backend/rebuilt/jarvis_compute.py` reads the card through NVIDIA's `nvidia-smi`. |
-| Next: any 8 GB card, up to two. | **next** (a design, not built) | B `docs/HARDWARE-PROFILES.md`: "Nothing here is built". |
+| Runs on a PC with an 8 GB NVIDIA graphics card. | today | `docs/MODEL-TOPOLOGY.md`. B `backend/rebuilt/jarvis_compute.py` reads the card through NVIDIA's `nvidia-smi`, so today it has to be NVIDIA. |
+| Ready for a second graphics card. | ready | B `docs/SECOND-CARD.md`: built, and switched off until the card is there. |
 | No subscription. | today | Ollama and the models are free. No paid service is needed. |
 
 ## Deliberately not claimed
@@ -57,6 +60,7 @@ B = the owner's working branch, `claude/admiring-ritchie-5urg5h`.
 - **"Answers only to your voice."** It checks the voice first, but that was only tested on computer-made voices.
 - **"Knows when you have finished a sentence."** It sometimes calls a pause "finished" (B `backend/README.md`).
 - **The smart home.** It is built, but the owner does not want it advertised.
+- **"Any 8 GB card".** It is only a design (B `docs/HARDWARE-PROFILES.md`), with no card to test it on and no date, so the owner took it out.
 - **Speeds, scores or accuracy numbers, competitor names, and the Play Store.** The brief's hard rules forbid them.
 
 ## Honest limits of the picture

@@ -45,10 +45,10 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 
 /* ---------- 2-3: desktop + phone ---------- */
 #h-ask, #h-shout { left: 150px; top: 120px; font-size: 72px; }
-#desk { position: absolute; left: 110px; top: 470px; width: 860px; }
+#desk { position: absolute; left: 110px; top: 430px; width: 820px; }
 #desk .where { margin-bottom: 16px; }
-#desk-card { display: block; width: 860px; }
-#desk-clear { position: absolute; left: 0; top: 150px; width: 860px; text-align: center; font: 400 34px var(--body); color: var(--verdant); opacity: 0; }
+#desk-card { display: block; width: 820px; }
+#desk-clear-unused { position: absolute; left: 0; top: 150px; width: 860px; text-align: center; font: 400 34px var(--body); color: var(--verdant); opacity: 0; }
 #phone { position: absolute; left: 1240px; top: 70px; width: 430px; height: 900px; border-radius: 62px; background: #0b1016;
          border: 2px solid #2a3a4a; box-shadow: 0 0 0 10px #05080c, 0 40px 120px rgba(0, 0, 0, 0.8); }
 #phone-where { position: absolute; left: 1240px; width: 430px; top: 1000px; text-align: center; }
@@ -124,3 +124,27 @@ body { margin: 0; background: var(--void); color: var(--ink); font-family: var(-
 .cap.prev { bottom: 190px; font-size: 38px; opacity: 0; }
 .cap.prev b { font-size: 38px; }
 .cap.prev span { color: var(--dimmer); }
+
+/* ---------- the "ready" label and the visible browser ---------- */
+.ready-chip { position: absolute; left: 110px; top: 372px; font: 400 26px var(--body); color: var(--dim); opacity: 0; }
+.ready-chip b { display: inline-block; margin-right: 12px; padding: 3px 14px; border-radius: 20px; border: 2px solid var(--violet);
+                color: var(--violet); font: 500 22px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; vertical-align: 2px; }
+#browser { position: absolute; left: 0; top: 36px; width: 820px; border-radius: 16px; overflow: hidden; background: #f4f5f7; opacity: 0;
+           box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06); }
+#browser .bbar { display: flex; align-items: center; gap: 9px; height: 54px; padding: 0 18px; background: #dfe3e8; }
+#browser .bbar > i { display: block; width: 13px; height: 13px; border-radius: 50%; background: #b8bec6; }
+#browser .url { flex: 1; margin-left: 14px; height: 34px; border-radius: 17px; background: #fff; padding: 0 16px; display: flex; align-items: center; gap: 8px;
+                font: 400 19px var(--body); color: #2a2f36; }
+#browser .lock { font-size: 13px; opacity: 0.6; }
+#browser .bpage { padding: 26px 34px 30px; color: #1d232b; font-family: var(--body); position: relative; }
+#browser .bh { font: 400 26px var(--body); color: #4a535e; margin-bottom: 18px; }
+#browser .bh b { color: #1d232b; font-weight: 400; }
+#browser .brow { display: flex; align-items: center; gap: 18px; padding: 16px 0; border-top: 1px solid #dde1e6; font-size: 24px; }
+#browser .bt { flex: 1; }
+#browser .bd { color: #6a737e; font-size: 21px; }
+#browser .bd.ok { color: #0e8a57; }
+#browser .bb { padding: 8px 20px; border-radius: 8px; background: #1f5fbf; color: #fff; font-size: 20px; }
+#browser .bb.hot { box-shadow: 0 0 0 4px #fff, 0 0 0 8px var(--accent), 0 0 24px 6px rgba(56, 240, 255, 0.6); }
+#browser .bstep { position: absolute; right: 30px; top: 18px; padding: 6px 14px; border-radius: 8px; background: #0b1016; color: var(--accent);
+                  font: 500 18px var(--mono); opacity: 0; }
+#b-note { left: 0; right: auto; width: 820px; top: 450px; font-size: 32px; opacity: 0; }

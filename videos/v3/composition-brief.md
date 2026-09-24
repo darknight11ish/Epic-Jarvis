@@ -19,7 +19,7 @@
   - `assets/film-tall.css` re-lays the same scenes out for an upright phone. Nothing is cropped from the landscape version. Words stay clear of the top 200 px and the bottom 300 px.
 - **The reactor faces** are the app's own code, from `jarvis-desktop/src/faces.html` (`tools/extract-reactor.mjs`): the big one, and the small one on the phone, whose "waiting on you" clock is real.
 - **Real screens** (`assets/ui/`) are captures of the desktop app's own windows with sample data:
-  - the quick-ask approval card for a `run_shell_on_host` request;
+  - the quick-ask approval card for a browser plan (`control_browser`), its text from `jarvis_browser_control.describe()`;
   - Brain › Memory's proposal card;
   - the "What did you know on…" view;
   - the facts list with a retired fact.
@@ -33,4 +33,4 @@
   - the reactor crossfades between states;
   - cards slide in and settle;
   - the fingerprint ring fills;
-  - the phone and the PC clear together.
+  - the phone and the PC clear together, then the visible browser does the approved steps.
