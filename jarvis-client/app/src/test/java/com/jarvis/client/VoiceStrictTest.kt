@@ -440,21 +440,28 @@ class VoiceStrictTest {
         )
     }
 
+    /**
+     * A real status as a PC from before the sensitive-facts setting sends it
+     * (`sensitive_memory` taken out), so these lines do not change when the
+     * fixture is regenerated with the new field.
+     */
+    private fun noSensitive(case: String) = view(case).copy(sensitiveMemory = "")
+
     @Test
     fun `now line`() {
         val remembers = "; answers using what Jarvis remembers are read aloud."
         assertEquals("Voice check: Very strict; private answers stay on screen$remembers",
-            StrictVoice.nowLine(view("trained_three_rounds")))
+            StrictVoice.nowLine(noSensitive("trained_three_rounds")))
         assertEquals("Voice check: Balanced; private answers stay on screen$remembers",
-            StrictVoice.nowLine(view("balanced")))
+            StrictVoice.nowLine(noSensitive("balanced")))
         assertEquals("Voice check: Very strict; private answers may be read aloud.",
-            StrictVoice.nowLine(view("voice_is_enough")))
+            StrictVoice.nowLine(noSensitive("voice_is_enough")))
         assertEquals("Voice check: Very strict; private answers stay on screen; answers using what " +
             "Jarvis remembers stay on screen.",
-            StrictVoice.nowLine(view("trained_three_rounds").copy(memory = VoiceStrict.MEMORY_ON_SCREEN)))
+            StrictVoice.nowLine(noSensitive("trained_three_rounds").copy(memory = VoiceStrict.MEMORY_ON_SCREEN)))
         // An older PC (no memory setting): the line says nothing about it.
         assertEquals("Voice check: Very strict; private answers stay on screen.",
-            StrictVoice.nowLine(view("trained_three_rounds").copy(memory = "")))
+            StrictVoice.nowLine(noSensitive("trained_three_rounds").copy(memory = "")))
     }
 
     @Test
@@ -476,5 +483,169 @@ class VoiceStrictTest {
             VoiceStrict.settingBody(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ON_SCREEN))
         assertEquals("Keep on screen", StrictVoice.label(VoiceStrict.MEMORY, VoiceStrict.MEMORY_ON_SCREEN))
         assertNotNull(StrictVoice.label(VoiceStrict.STRICTNESS, VoiceStrict.VERY_STRICT))
+    }
+
+    // ------------------- sensitive saved facts (the owner's decision 13) --
+    //
+    // The phone voice fixture (tools/gen_phone_voice_cases.py) does not carry
+    // `sensitive_memory` yet - the backend regenerates it. So these build the
+    // field INTO a real status where they need it, the way an older PC's
+    // status is made above by taking fields out.
+
+    /** A real status with `gate.sensitive_memory` (and `gate.settings.sensitive_memory`) set. */
+    private fun withSensitive(case: String, value: String, inSettings: Boolean = true): JsonObject {
+        val s = status(case) - "gate"
+        val gate = status(case)["gate"]!!.jsonObject
+        val settings = gate["settings"]?.jsonObject.orEmpty() - "sensitive_memory"
+        val newGate = gate - "sensitive_memory" - "settings" +
+            ("sensitive_memory" to JsonPrimitive(value)) +
+            ("settings" to JsonObject(if (inSettings) settings + ("sensitive_memory" to JsonPrimitive(value)) else settings))
+        return JsonObject(s + ("gate" to JsonObject(newGate)))
+    }
+
+    /** A real status with no `sensitive_memory` anywhere - an older PC. */
+    private fun withoutSensitive(case: String): JsonObject {
+        val gate = status(case)["gate"]!!.jsonObject
+        val settings = gate["settings"]?.jsonObject.orEmpty() - "sensitive_memory"
+        return JsonObject(
+            status(case) + ("gate" to JsonObject(gate - "sensitive_memory" + ("settings" to JsonObject(settings)))),
+        )
+    }
+
+    @Test
+    fun `the sensitive setting is read from the gate, and only when the PC reports it`() {
+        val v = VoiceStrict.parse(withSensitive("trained_three_rounds", VoiceStrict.SENSITIVE_ON_SCREEN))
+        assertEquals(VoiceStrict.SENSITIVE_ON_SCREEN, v.sensitiveMemory)
+        assertEquals(
+            VoiceStrict.SENSITIVE_ALOUD,
+            VoiceStrict.parse(withSensitive("trained_three_rounds", VoiceStrict.SENSITIVE_ALOUD)).sensitiveMemory,
+        )
+        // An older PC: "" - the screen does not offer it.
+        assertEquals("", VoiceStrict.parse(withoutSensitive("trained_three_rounds")).sensitiveMemory)
+        assertEquals("", VoiceStrict.parse(withSensitive("trained_three_rounds", "")).sensitiveMemory)
+        // A damaged value is the strict one, never "aloud".
+        assertEquals(
+            VoiceStrict.SENSITIVE_ON_SCREEN,
+            VoiceStrict.parse(withSensitive("trained_three_rounds", "SENSITIVE_ALOUD!")).sensitiveMemory,
+        )
+        // The talk-button half still decodes with the field in it.
+        assertTrue(VoiceStrict.read(withSensitive("trained_three_rounds", VoiceStrict.SENSITIVE_ALOUD)) is ApiResult.Ok)
+    }
+
+    @Test
+    fun `the sensitive setting - on screen by default, on screen is immediate, reading aloud asks`() {
+        val v = VoiceStrict.parse(withSensitive("trained_three_rounds", VoiceStrict.SENSITIVE_ON_SCREEN))
+        assertTrue(StrictVoice.isCurrent(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ON_SCREEN, v))
+        assertFalse(StrictVoice.isCurrent(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ALOUD, v))
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ALOUD))
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ON_SCREEN))
+        // Read aloud is held on a stale link; keeping on screen never is.
+        assertEquals("stale", StrictVoice.blocker(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ALOUD, v, "stale"))
+        assertNull(StrictVoice.blocker(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ALOUD, v, null))
+        val aloud = v.copy(sensitiveMemory = VoiceStrict.SENSITIVE_ALOUD)
+        assertNull(StrictVoice.blocker(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ON_SCREEN, aloud, "stale"))
+        // It holds even under "voice check is enough", so it is never greyed for that.
+        assertTrue(StrictVoice.settingOpen(VoiceStrict.SENSITIVE_MEMORY, aloud.copy(privacy = VoiceStrict.VOICE_IS_ENOUGH)))
+        assertNull(
+            StrictVoice.blocker(
+                VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ON_SCREEN,
+                aloud.copy(privacy = VoiceStrict.VOICE_IS_ENOUGH), null,
+            ),
+        )
+        // An older PC does not offer it.
+        assertEquals(
+            StrictVoice.NOT_ON_THIS_PC,
+            StrictVoice.blocker(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ON_SCREEN, v.copy(sensitiveMemory = ""), null),
+        )
+        // A card for it already waiting.
+        val waiting = v.copy(pendingKind = "setting", pendingSetting = VoiceStrict.SENSITIVE_MEMORY,
+            pendingValue = VoiceStrict.SENSITIVE_ALOUD)
+        assertEquals(
+            "A card for this is already waiting. " + com.jarvis.client.net.Approvals.WHERE,
+            StrictVoice.blocker(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ALOUD, waiting, null),
+        )
+        assertEquals(
+            "Waiting for your approval to change this to \"Read aloud\". " + com.jarvis.client.net.Approvals.WHERE,
+            StrictVoice.waitingLine(VoiceStrict.SENSITIVE_MEMORY, waiting),
+        )
+        // The body is the PC's own mode, and nothing but this setting's two values goes in it.
+        assertEquals(
+            "{\"mode\":\"sensitive_memory\",\"value\":\"sensitive_aloud\"}",
+            VoiceStrict.settingBody(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ALOUD),
+        )
+        assertEquals(
+            "{\"mode\":\"sensitive_memory\",\"value\":\"sensitive_on_screen\"}",
+            VoiceStrict.settingBody(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ON_SCREEN),
+        )
+        assertTrue(runCatching { VoiceStrict.settingBody(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.MEMORY_ALOUD) }.isFailure)
+        assertTrue(runCatching { VoiceStrict.settingBody(VoiceStrict.MEMORY, VoiceStrict.SENSITIVE_ALOUD) }.isFailure)
+        assertTrue(runCatching { VoiceStrict.settingBody("sensitive", VoiceStrict.SENSITIVE_ALOUD) }.isFailure)
+    }
+
+    @Test
+    fun `the sensitive plate uses the contract's words`() {
+        assertEquals("Answers that use sensitive saved facts", StrictVoice.SENSITIVE_MEMORY_TITLE)
+        assertEquals(
+            listOf("Keep on screen (recommended)", "Read aloud"),
+            StrictVoice.SENSITIVE_MEMORY.map { it.label },
+        )
+        assertEquals(
+            listOf(VoiceStrict.SENSITIVE_ON_SCREEN, VoiceStrict.SENSITIVE_ALOUD),
+            StrictVoice.SENSITIVE_MEMORY.map { it.value },
+        )
+        assertEquals(
+            "Answers that use a saved fact about your health, money, passwords or other people are shown, " +
+                "not read aloud.",
+            StrictVoice.SENSITIVE_MEMORY[0].detail,
+        )
+        assertEquals(
+            "Those answers are read aloud when your voice passes the check. Anyone near the speaker will " +
+                "hear them.",
+            StrictVoice.SENSITIVE_MEMORY[1].detail,
+        )
+        assertEquals("Keep on screen", StrictVoice.label(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ON_SCREEN))
+        assertEquals("Read aloud", StrictVoice.label(VoiceStrict.SENSITIVE_MEMORY, VoiceStrict.SENSITIVE_ALOUD))
+        // The last setting card, in the same shape as the others.
+        fun last(value: String, outcome: String) =
+            VoiceStrict.Last(outcome = outcome, setting = VoiceStrict.SENSITIVE_MEMORY, value = value)
+        assertEquals("Approved: \"Read aloud\" is on now.",
+            StrictVoice.lastLine(last(VoiceStrict.SENSITIVE_ALOUD, "setting_changed")))
+        assertEquals("You said no, so \"Keep on screen\" stays.",
+            StrictVoice.lastLine(last(VoiceStrict.SENSITIVE_ALOUD, "denied")))
+        assertEquals("You made it stricter while the card waited, so approving it changed nothing.",
+            StrictVoice.lastLine(last(VoiceStrict.SENSITIVE_ALOUD, "withdrawn")))
+    }
+
+    @Test
+    fun `the now line names the sensitive setting, even under voice check is enough`() {
+        val v = VoiceStrict.parse(withSensitive("trained_three_rounds", VoiceStrict.SENSITIVE_ON_SCREEN))
+        assertEquals(
+            "Voice check: Very strict; private answers stay on screen; answers using what Jarvis remembers " +
+                "are read aloud; answers using sensitive saved facts stay on screen.",
+            StrictVoice.nowLine(v),
+        )
+        assertEquals(
+            "Voice check: Very strict; private answers may be read aloud; answers using sensitive saved " +
+                "facts are read aloud.",
+            StrictVoice.nowLine(VoiceStrict.parse(withSensitive("voice_is_enough", VoiceStrict.SENSITIVE_ALOUD))),
+        )
+    }
+
+    @Test
+    fun `the voice check screen shows the fourth plate only when the PC reports it`() {
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        var screen: java.io.File? = null
+        while (dir != null && screen == null) {
+            screen = java.io.File(dir, "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/VoiceCheckScreen.kt")
+                .takeIf { it.isFile }
+            dir = dir.parentFile
+        }
+        val src = requireNotNull(screen).readText()
+        val at = src.indexOf("if (strict.sensitiveMemory.isNotBlank()) {")
+        assertTrue(at >= 0)
+        val block = src.substring(at, at + 500)
+        assertTrue(block, block.contains("title = StrictVoice.SENSITIVE_MEMORY_TITLE"))
+        assertTrue(block, block.contains("setting = VoiceStrict.SENSITIVE_MEMORY"))
+        assertTrue(block, block.contains("choices = StrictVoice.SENSITIVE_MEMORY"))
     }
 }

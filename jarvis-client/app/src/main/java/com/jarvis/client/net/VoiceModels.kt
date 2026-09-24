@@ -452,6 +452,15 @@ data class Heard(
      */
     @SerialName("memory_aloud") val memoryAloud: Boolean = false,
     /**
+     * May an answer that uses a SENSITIVE saved fact (health, money,
+     * passwords, other people) be read aloud? True only when the owner chose
+     * "Read aloud" for those (`sensitive_memory: sensitive_aloud`) AND a real
+     * voice check passed. False - and missing, from a PC older than the
+     * owner's decision of 2026-09-24 - keeps such answers on screen, even
+     * when [privateAloud] or [memoryAloud] is true (voice/PrivateAloud.kt).
+     */
+    @SerialName("sensitive_aloud") val sensitiveAloud: Boolean = false,
+    /**
      * The clip had less speech than a command needs, so the PC would not
      * act on it (since 2026-09-24; false from an older PC). [reason] is the
      * PC's own "say a little more" sentence, and it is shown as it is.

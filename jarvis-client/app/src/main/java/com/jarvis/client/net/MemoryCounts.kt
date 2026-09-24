@@ -41,12 +41,14 @@ object MemoryCounts {
 
     /** What to say after the switch was pressed, from the PC's answer. */
     fun learningSaid(on: Boolean, outcome: DesktopWrite.Outcome): String = when (outcome) {
-        is DesktopWrite.Outcome.Waiting ->
-            "Waiting for your approval to turn learning on. ${Approvals.WHERE}"
+        is DesktopWrite.Outcome.Waiting -> waitingLine()
         is DesktopWrite.Outcome.Refused -> "Not changed. ${outcome.why}"
         is DesktopWrite.Outcome.Done -> outcome.said?.let { DesktopWrite.asSentence(it) }
-            ?: if (on) "Learning is on." else "Learning is off. Nothing new will be proposed."
+            ?: if (on) "Background learning is on." else "Background learning is off. Nothing new will be proposed."
     }
+
+    /** While the ON card waits. "Background learning", as everywhere this switch is named. */
+    fun waitingLine(): String = "Waiting for your approval to turn background learning on. ${Approvals.WHERE}"
 
     private fun JsonObject.prim(key: String): JsonPrimitive? = this[key] as? JsonPrimitive
 
@@ -92,13 +94,15 @@ object MemoryCounts {
     /**
      * The learning line. Since automatic learning (docs/JARVIS-API.md section
      * 19) not every fact needs a yes any more, so this no longer says so: the
-     * "Learn automatically" switch under it says which way that is.
+     * "Learn automatically" switch under it says which way that is. This
+     * switch is "background learning" everywhere it is named (fit audit,
+     * 2026-09-24), so it is never mistaken for "Learn automatically".
      */
     fun learningLine(on: Boolean?): String = when (on) {
-        true -> "Learning is on: Jarvis reads your conversations for facts. \"Learn automatically\", " +
-            "below, says whether it saves them without asking."
-        false -> "Learning is off: nothing new is proposed. A message that starts " +
+        true -> "Background learning is on: Jarvis reads your conversations for facts. " +
+            "\"Learn automatically\", below, says whether it saves them without asking."
+        false -> "Background learning is off: nothing new is proposed. A message that starts " +
             "\"Remember:\" still makes a card. Turning it on asks you first, with an approval card."
-        null -> "Couldn't tell whether learning is on."
+        null -> "Couldn't tell whether background learning is on."
     }
 }

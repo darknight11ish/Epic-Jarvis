@@ -33,10 +33,28 @@ class PrivateAloudTest {
     private fun heard(case: String): Heard =
         JarvisJson.decodeFromJsonElement(Heard.serializer(), answers["heard"]!!.jsonObject[case]!!)
 
-    private fun header(case: String, injected: Int? = null): String {
-        val o = answers["route"]!!.jsonObject[case]!!.jsonObject
-        val withFacts = if (injected == null) o else JsonObject(o + ("injected_facts" to JsonPrimitive(injected)))
-        return withFacts.toString()
+    /**
+     * A real router header with `injected_facts` and `injected_sensitive`
+     * set as asked. [sensitive] null takes `injected_sensitive` OUT, which is
+     * what a PC from before the owner's decision of 2026-09-24 sends.
+     */
+    private fun header(case: String, injected: Int? = null, sensitive: Int? = null): String {
+        val o = answers["route"]!!.jsonObject[case]!!.jsonObject - "injected_sensitive"
+        val withFacts = if (injected == null) o else o + ("injected_facts" to JsonPrimitive(injected))
+        val withSensitive = if (sensitive == null) withFacts else withFacts + ("injected_sensitive" to JsonPrimitive(sensitive))
+        return JsonObject(withSensitive).toString()
+    }
+
+    /**
+     * A real utterance reply with `sensitive_aloud` set. The phone voice
+     * fixture (tools/gen_phone_voice_cases.py) does not carry the field yet
+     * - its regeneration is the backend's - so it is written in here.
+     */
+    private fun heardWith(case: String, sensitiveAloud: Boolean): Heard {
+        val o = answers["heard"]!!.jsonObject[case]!!.jsonObject
+        return JarvisJson.decodeFromJsonElement(
+            Heard.serializer(), JsonObject(o + ("sensitive_aloud" to JsonPrimitive(sensitiveAloud))),
+        )
     }
 
     private val live = PrivateAloud.Watch(runs = 4, drops = 1, live = true)
@@ -74,10 +92,10 @@ class PrivateAloudTest {
     @Test
     fun `remembered facts are read aloud by default - the owner's choice`() {
         assertTrue(heard("plain_question").memoryAloud)
-        assertTrue(may(heard("plain_question"), header("plain", injected = 3)))
+        assertTrue(may(heard("plain_question"), header("plain", injected = 3, sensitive = 0)))
         // Asking about memory is not a private question while memory is aloud.
         assertFalse(heard("memory_question").questionPrivate)
-        assertTrue(may(heard("memory_question"), header("plain", injected = 2)))
+        assertTrue(may(heard("memory_question"), header("plain", injected = 2, sensitive = 0)))
     }
 
     @Test
@@ -117,7 +135,7 @@ class PrivateAloudTest {
     @Test
     fun `voice check is enough reads it all`() {
         val h = heard("voice_is_enough")
-        assertTrue(may(h, header("private", injected = 5), live.copy(runs = 9)))
+        assertTrue(may(h, header("private", injected = 5, sensitive = 0), live.copy(runs = 9)))
     }
 
     @Test
@@ -131,6 +149,61 @@ class PrivateAloudTest {
         // ...and is then held to the same rule: read only when nothing says private.
         assertFalse(may(older, header("plain", injected = 1)))
         assertTrue(may(older, header("plain")))
+    }
+
+    // ------------------------- sensitive saved facts (owner, 2026-09-24) --
+
+    @Test
+    fun `the header's sensitive count is read, and fails closed when it is missing`() {
+        assertEquals(2, PrivateAloud.route(header("plain", injected = 3, sensitive = 2)).injectedSensitive)
+        assertEquals(0, PrivateAloud.route(header("plain", injected = 3, sensitive = 0)).injectedSensitive)
+        // Missing, with facts in the answer: every one may be sensitive.
+        assertEquals(3, PrivateAloud.route(header("plain", injected = 3)).injectedSensitive)
+        // Missing, with no facts: nothing sensitive.
+        assertEquals(0, PrivateAloud.route(header("plain", injected = 0)).injectedSensitive)
+        assertEquals(0, PrivateAloud.route(header("plain")).injectedSensitive)
+        // Not a real count (a string, negative): treated as missing - closed.
+        val o = answers["route"]!!.jsonObject["plain"]!!.jsonObject + ("injected_facts" to JsonPrimitive(2))
+        assertEquals(2, PrivateAloud.route(JsonObject(o + ("injected_sensitive" to JsonPrimitive("0"))).toString()).injectedSensitive)
+        assertEquals(2, PrivateAloud.route(JsonObject(o + ("injected_sensitive" to JsonPrimitive(-1))).toString()).injectedSensitive)
+        assertEquals(PrivateAloud.SILENT_ROUTE, PrivateAloud.route(null))
+    }
+
+    @Test
+    fun `an answer that used a sensitive saved fact stays on screen, even with memories read aloud`() {
+        val h = heard("plain_question")
+        assertTrue(h.memoryAloud)
+        // The fixture predates the field: missing reads as false.
+        assertFalse(h.sensitiveAloud)
+        assertFalse(may(h, header("plain", injected = 3, sensitive = 1)))
+        assertTrue(may(h, header("plain", injected = 3, sensitive = 0)))
+        // A PC that does not say which facts were sensitive: on screen.
+        assertFalse(may(h, header("plain", injected = 3)))
+    }
+
+    @Test
+    fun `even voice check is enough keeps a sensitive fact on screen`() {
+        val h = heard("voice_is_enough")
+        assertTrue(h.privateAloud)
+        assertFalse(may(h, header("plain", injected = 2, sensitive = 1)))
+        assertFalse(may(h, header("plain", injected = 2)))
+        // ...until the owner chose to hear them, and this voice passed a real check.
+        assertTrue(may(heardWith("voice_is_enough", sensitiveAloud = true), header("plain", injected = 2, sensitive = 1)))
+    }
+
+    @Test
+    fun `sensitive aloud opens only the sensitive step, nothing else`() {
+        val h = heardWith("plain_question", sensitiveAloud = true)
+        assertTrue(h.sensitiveAloud)
+        assertTrue(may(h, header("plain", injected = 2, sensitive = 2)))
+        // Missing count, facts in it: also allowed - the owner said sensitive ones may be read.
+        assertTrue(may(h, header("plain", injected = 2)))
+        // Email, notes, the router's private gate and tools still stay on screen.
+        assertFalse(may(heardWith("private_question", sensitiveAloud = true), header("no_cloud_lane")))
+        assertFalse(may(h, header("private", injected = 2, sensitive = 2)))
+        assertFalse(may(h, header("plain", injected = 2, sensitive = 2), live.copy(runs = 5)))
+        // With memories kept on screen, facts in the answer still keep it there.
+        assertFalse(may(heardWith("memory_on_screen", sensitiveAloud = true), header("plain", injected = 2, sensitive = 2)))
     }
 
     @Test

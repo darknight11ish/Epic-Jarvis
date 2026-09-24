@@ -471,15 +471,47 @@ class JarvisApi(
     // shapes, the words and the rules; these only carry them.
 
     /** `GET /api/memory/learning`: the two automatic-learning switches and their cards. */
-    suspend fun autoLearnSettings(): ApiResult<JsonObject> = probe(AutoLearn.SETTINGS_PATH)
+    suspend fun autoLearnSettings(): ApiResult<JsonObject> = probeKeeping503(AutoLearn.SETTINGS_PATH)
 
-    /** One switch. ON answers 202 waiting while its approval card is up; OFF is immediate. */
+    /**
+     * One switch. ON answers 202 waiting while its approval card is up; OFF is
+     * immediate, and withdraws an ON card still waiting.
+     */
     suspend fun setAutoLearn(which: AutoLearn.Which, on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(which.path, AutoLearn.enabledBody(on))
 
     /** `GET /api/memory/auto`: one page of the facts saved without a card, newest first. */
     suspend fun autoFacts(before: Double? = null, limit: Int = AutoLearn.PAGE): ApiResult<JsonObject> =
-        probe(AutoLearn.listPath(before, limit))
+        probeKeeping503(AutoLearn.listPath(before, limit))
+
+    /**
+     * [probe], except that a 503 keeps its body: `ApiError.Server(503, body)`
+     * instead of [ApiError.NotAvailable], so the PC's own `error` ("automatic
+     * learning is not installed on this PC, ...") reaches the owner
+     * ([AutoLearn.readFailure]). Only the automatic-learning reads use it;
+     * every other route's 503 is unchanged.
+     */
+    private suspend fun probeKeeping503(path: String): ApiResult<JsonObject> = withContext(Dispatchers.IO) {
+        val target = url(path) ?: return@withContext ApiResult.Failed(
+            ApiError.Unreachable("No desktop address set"),
+        )
+        val req = Request.Builder().url(target).get().authed().build()
+        runCatching {
+            shortCall.newCall(req).execute().use {
+                if (it.code == 503) {
+                    return@use ApiResult.Failed(ApiError.Server(503, it.body?.string().orEmpty().take(2000)))
+                }
+                if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                val text = it.body?.string().orEmpty()
+                runCatching {
+                    when (val el = JarvisJson.parseToJsonElement(text)) {
+                        is JsonObject -> ApiResult.Ok(el)
+                        else -> ApiResult.Failed(ApiError.Malformed("not a JSON object"))
+                    }
+                }.getOrElse { ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json")) }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+    }
 
     /**
      * `POST /api/memory/forget`: ONE fact, retired rather than deleted. The

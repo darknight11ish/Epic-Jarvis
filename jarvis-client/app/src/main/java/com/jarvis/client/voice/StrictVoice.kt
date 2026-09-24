@@ -23,9 +23,15 @@ import kotlin.math.roundToInt
  *   now, with a setting to make it more strict"): answers that use it are
  *   READ ALOUD by default, or KEPT ON SCREEN. Offered only when the PC
  *   reports the setting.
+ * - Sensitive saved facts (the owner's decision, 2026-09-24): an answer that
+ *   uses a saved fact about health, money, passwords or other people is
+ *   KEPT ON SCREEN by default - even when memories are read aloud, and even
+ *   under "voice check is enough" - or READ ALOUD. Offered only when the PC
+ *   reports the setting.
  *
  * The same shape as every other switch that widens what Jarvis does:
- * LOOSENING (balanced, voice is enough) raises one approval card on the PC
+ * LOOSENING (balanced, voice is enough, memories or sensitive facts read
+ * aloud) raises one approval card on the PC
  * and changes nothing until it is approved - so it is held on a stale link
  * (rule 4). TIGHTENING applies at once and always goes: it only narrows.
  */
@@ -89,6 +95,30 @@ object StrictVoice {
 
     const val MEMORY_TITLE = "Answers that use what Jarvis remembers"
 
+    /**
+     * Answers that use a SENSITIVE saved fact - health, money, passwords,
+     * other people (the owner's decision, 2026-09-24): kept on screen by
+     * default, even when answers that use memories are read aloud and even
+     * under "voice check is enough". Reading them aloud is the looser choice
+     * and raises the voice card. Offered only when the PC reports it.
+     */
+    val SENSITIVE_MEMORY: List<Choice> = listOf(
+        Choice(
+            VoiceStrict.SENSITIVE_ON_SCREEN,
+            "Keep on screen (recommended)",
+            "Answers that use a saved fact about your health, money, passwords or other people are " +
+                "shown, not read aloud.",
+        ),
+        Choice(
+            VoiceStrict.SENSITIVE_ALOUD,
+            "Read aloud",
+            "Those answers are read aloud when your voice passes the check. Anyone near the speaker " +
+                "will hear them.",
+        ),
+    )
+
+    const val SENSITIVE_MEMORY_TITLE = "Answers that use sensitive saved facts"
+
     const val PRIVACY_ONLY_VERY_STRICT =
         "\"Voice check is enough\" can only be chosen while the check is very strict."
 
@@ -109,15 +139,25 @@ object StrictVoice {
     const val NOT_ON_THIS_PC =
         "Your PC does not have these settings yet. Run the patch script on the PC first."
 
-    /** The label for [value], in the same words as the choices above. */
-    fun label(setting: String, value: String): String {
-        val list = when (setting) {
-            VoiceStrict.STRICTNESS -> STRICTNESS
-            VoiceStrict.MEMORY -> MEMORY
-            else -> PRIVACY
-        }
-        return list.firstOrNull { it.value == value }?.label?.removeSuffix(" (recommended)") ?: value
+    /** [setting]'s choices. */
+    fun choices(setting: String): List<Choice> = when (setting) {
+        VoiceStrict.STRICTNESS -> STRICTNESS
+        VoiceStrict.MEMORY -> MEMORY
+        VoiceStrict.SENSITIVE_MEMORY -> SENSITIVE_MEMORY
+        else -> PRIVACY
     }
+
+    /** What [setting] is on the PC now, as the view read it ("" when not said). */
+    private fun current(setting: String, view: VoiceStrict.View): String = when (setting) {
+        VoiceStrict.STRICTNESS -> view.strictness
+        VoiceStrict.MEMORY -> view.memory
+        VoiceStrict.SENSITIVE_MEMORY -> view.sensitiveMemory
+        else -> view.privacy
+    }
+
+    /** The label for [value], in the same words as the choices above. */
+    fun label(setting: String, value: String): String =
+        choices(setting).firstOrNull { it.value == value }?.label?.removeSuffix(" (recommended)") ?: value
 
     /** What is set now, as one line, or null when the PC has not said. */
     fun nowLine(view: VoiceStrict.View): String? {
@@ -134,7 +174,13 @@ object StrictVoice {
             VoiceStrict.MEMORY_ON_SCREEN -> "; answers using what Jarvis remembers stay on screen"
             else -> ""
         }
-        return "Voice check: $how; $priv$mem."
+        // Said even under "voice check is enough": sensitive facts have their own setting.
+        val sens = when (view.sensitiveMemory) {
+            VoiceStrict.SENSITIVE_ALOUD -> "; answers using sensitive saved facts are read aloud"
+            VoiceStrict.SENSITIVE_ON_SCREEN -> "; answers using sensitive saved facts stay on screen"
+            else -> ""
+        }
+        return "Voice check: $how; $priv$mem$sens."
     }
 
     /**
@@ -150,6 +196,7 @@ object StrictVoice {
         return when {
             !view.settings -> NOT_ON_THIS_PC
             setting == VoiceStrict.MEMORY && view.memory.isBlank() -> NOT_ON_THIS_PC
+            setting == VoiceStrict.SENSITIVE_MEMORY && view.sensitiveMemory.isBlank() -> NOT_ON_THIS_PC
             !settingOpen(setting, view) -> MEMORY_WHILE_VOICE_IS_ENOUGH
             loosening && linkBlocker != null -> linkBlocker
             setting == VoiceStrict.PRIVACY && value == VoiceStrict.VOICE_IS_ENOUGH && !view.isVeryStrict ->
@@ -162,11 +209,7 @@ object StrictVoice {
 
     /** Whether [value] is what the PC has now - pressing it does nothing. */
     fun isCurrent(setting: String, value: String, view: VoiceStrict.View): Boolean =
-        when (setting) {
-            VoiceStrict.STRICTNESS -> view.strictness
-            VoiceStrict.MEMORY -> view.memory
-            else -> view.privacy
-        } == value
+        current(setting, view) == value
 
     /** A card to loosen [setting] is waiting: one line saying so, or null. */
     fun waitingLine(setting: String, view: VoiceStrict.View): String? {
@@ -209,18 +252,9 @@ object StrictVoice {
 
     /** The value a denied card for [last] left in place. */
     private fun stays(last: VoiceStrict.Last, view: VoiceStrict.View?): String {
-        val now = when (last.setting) {
-            VoiceStrict.STRICTNESS -> view?.strictness
-            VoiceStrict.MEMORY -> view?.memory
-            else -> view?.privacy
-        }
+        val now = view?.let { current(last.setting, it) }
         if (!now.isNullOrBlank()) return now
-        val list = when (last.setting) {
-            VoiceStrict.STRICTNESS -> STRICTNESS
-            VoiceStrict.MEMORY -> MEMORY
-            else -> PRIVACY
-        }
-        return list.firstOrNull { it.value != last.value }?.value ?: last.value
+        return choices(last.setting).firstOrNull { it.value != last.value }?.value ?: last.value
     }
 
     /**

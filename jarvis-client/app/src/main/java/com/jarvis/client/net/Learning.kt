@@ -317,15 +317,17 @@ object MemoryCards {
     /**
      * Plain lines from the queue's `setup` block worth showing under the
      * cards: why the last "Remember:" was NOT queued (a queued one is already
-     * a card, labelled "your own words"), and how many repeat cards were
-     * dropped. Both sentences are the backend's own, shown as they are.
+     * a card, labelled "your own words"), or that it was saved automatically
+     * (`auto_saved`, automatic learning: no card, so this note is the only
+     * place that says where it went), and how many repeat cards were
+     * dropped. All are the backend's own sentences, shown as they are.
      */
     fun setupNotes(payload: JsonObject?): List<String> {
         val setup = payload?.get("setup") as? JsonObject ?: return emptyList()
         val out = mutableListOf<String>()
         (setup["remember_last"] as? JsonObject)?.let { last ->
             val note = last.str("note")
-            if (note != null && last.bool("queued") == false) {
+            if (note != null && (last.bool("queued") == false || last.bool("auto_saved") == true)) {
                 out += "Your last \"Remember:\" message: $note"
             }
         }

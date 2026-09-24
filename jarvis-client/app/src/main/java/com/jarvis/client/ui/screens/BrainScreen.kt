@@ -1341,7 +1341,7 @@ private fun MemoryQueue(
             if (items.isEmpty()) {
                 Text(
                     "Nothing is waiting. Either Jarvis has not heard anything " +
-                        "worth keeping, or learning is off.",
+                        "worth keeping, or background learning is off.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = chrome.textMid,
                 )

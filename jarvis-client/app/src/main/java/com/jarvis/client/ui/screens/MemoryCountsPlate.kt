@@ -87,9 +87,7 @@ internal fun MemoryCountsSection(canAct: Boolean = false, onOpenAutoList: () -> 
             }
             Gap(6)
             Text(
-                if (cardWaiting) "Waiting for your approval to turn learning on. " +
-                    com.jarvis.client.net.Approvals.WHERE
-                else MemoryCounts.learningLine(learning),
+                if (cardWaiting) MemoryCounts.waitingLine() else MemoryCounts.learningLine(learning),
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textMid,
             )

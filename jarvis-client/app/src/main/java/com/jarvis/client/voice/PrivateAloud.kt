@@ -25,6 +25,12 @@ import kotlinx.serialization.json.doubleOrNull
  *  2. the chat answer's `X-Jarvis-Route` header has no `gate: "private"`,
  *     and - only when `memory_aloud` is false - no `injected_facts` above 0
  *     (remembered facts went into it);
+ *  2b. and, whatever `private_aloud` and `memory_aloud` say, no SENSITIVE
+ *     saved fact went into it (`injected_sensitive` above 0 - or missing
+ *     while `injected_facts` is above 0, which fails closed) unless the
+ *     reply's `sensitive_aloud` is true: the owner's decision of 2026-09-24,
+ *     "sensitive saved facts stay on screen", with a voice setting to allow
+ *     it (`sensitive_memory` on the Voice check screen);
  *  3. no tool ran while it was being written (the `step` event,
  *     `tool_started` / `tool_finished`) - and that is only known while the
  *     event stream is live, so an unknown counts as "a tool may have run".
@@ -45,20 +51,39 @@ object PrivateAloud {
     /** What is said instead of a private answer. */
     const val ON_SCREEN = "It's on your screen."
 
-    /** What the chat answer's `X-Jarvis-Route` header says about privacy. */
-    data class Route(val privateGate: Boolean, val injectedFacts: Int)
+    /**
+     * What the chat answer's `X-Jarvis-Route` header says about privacy.
+     * [injectedSensitive] is how many of the [injectedFacts] are about a
+     * sensitive topic (health, money, passwords, other people) - see [route]
+     * for a header that does not say.
+     */
+    data class Route(val privateGate: Boolean, val injectedFacts: Int, val injectedSensitive: Int = 0)
 
     /** No header, or one that cannot be read: it says nothing either way. */
     val SILENT_ROUTE = Route(privateGate = false, injectedFacts = 0)
 
+    /**
+     * Reads the header. `injected_sensitive` (the owner's decision of
+     * 2026-09-24: sensitive saved facts stay on screen) FAILS CLOSED: when it
+     * is missing, or not a real count, while `injected_facts` is above 0,
+     * every one of those facts counts as possibly sensitive - a PC that does
+     * not say is not taken to mean "none".
+     */
     fun route(header: String?): Route {
         if (header.isNullOrBlank()) return SILENT_ROUTE
         val o = runCatching { JarvisJson.parseToJsonElement(header.trim()) as? JsonObject }.getOrNull()
             ?: return SILENT_ROUTE
         val gate = (o["gate"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.lowercase()
-        val facts = (o["injected_facts"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
-            ?.takeIf { it.isFinite() } ?: 0.0
-        return Route(privateGate = gate == "private", injectedFacts = if (facts > 0) facts.coerceAtMost(1e6).toInt().coerceAtLeast(1) else 0)
+        val facts = count(o, "injected_facts") ?: 0
+        val sensitive = count(o, "injected_sensitive") ?: facts
+        return Route(privateGate = gate == "private", injectedFacts = facts, injectedSensitive = sensitive)
+    }
+
+    /** A real, non-negative JSON number under [key], as a count (anything above 0 is at least 1); null otherwise. */
+    private fun count(o: JsonObject, key: String): Int? {
+        val d = (o[key] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
+            ?.takeIf { it.isFinite() && it >= 0 } ?: return null
+        return if (d > 0) d.coerceAtMost(1e6).toInt().coerceAtLeast(1) else 0
     }
 
     /**
@@ -92,12 +117,19 @@ object PrivateAloud {
      * @param toolsKnown the event stream was live the whole time, so a tool
      *   that ran would have been heard of
      * @param memoryAloud the utterance reply's `memory_aloud` (false when missing)
+     * @param sensitiveAloud the utterance reply's `sensitive_aloud` (false when
+     *   missing): the owner chose "Read aloud" for answers that use sensitive
+     *   saved facts, and this voice passed a real check
      */
     fun mayRead(heard: com.jarvis.client.net.Heard, route: Route?, start: Watch, now: Watch): Boolean =
         mayRead(
             heard.privateAloud, heard.questionPrivate, route, toolRan(start, now), toolsKnown(start, now),
             memoryAloud = heard.memoryAloud,
+            sensitiveAloud = heard.sensitiveAloud,
         )
+
+    /** Whether saved facts about a sensitive topic went into this answer ([route]'s fail-closed count). */
+    fun usesSensitive(route: Route): Boolean = route.injectedSensitive > 0
 
     fun mayRead(
         privateAloud: Boolean,
@@ -106,11 +138,17 @@ object PrivateAloud {
         toolRan: Boolean,
         toolsKnown: Boolean,
         memoryAloud: Boolean = false,
+        sensitiveAloud: Boolean = false,
     ): Boolean = when {
+        // Before the header, nothing is known - and nothing has arrived to read.
+        route == null -> false
+        // Sensitive saved facts stay on screen (the owner's decision,
+        // 2026-09-24) unless the owner chose to hear them - even under
+        // "voice check is enough" or "read aloud" for memories.
+        usesSensitive(route) && !sensitiveAloud -> false
         // The owner chose "voice check is enough", and this voice passed it.
         privateAloud -> true
         questionPrivate -> false
-        route == null -> false
         route.privateGate -> false
         route.injectedFacts > 0 && !memoryAloud -> false
         toolRan -> false
