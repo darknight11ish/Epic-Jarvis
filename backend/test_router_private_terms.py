@@ -154,12 +154,30 @@ def t_the_hud_call_shape_still_works():
     check("and None for an ordinary one", RT._PRIVATE.search("how do rivers work") is None)
 
 
+def t_an_ollama_cloud_model_is_never_local():
+    """Ollama runs "-cloud" models through 127.0.0.1 but answers on
+    ollama.com. Set as the "local" model, memory used to be injected into
+    every turn (the memory-safety red team, 2026-09-24)."""
+    for name in ("gpt-oss:120b-cloud", "deepseek-v3.1:671b-cloud",
+                 "qwen3-coder:480b-cloud", "kimi-k2:1t-cloud", "glm-4.6:cloud",
+                 "GPT-OSS:120B-CLOUD"):
+        d = RT.choose("what's on my calendar", name, [])
+        check(f"{name}: not local, no memory injected",
+              not RT.is_local_lane(name, name) and d.inject_memory is False, d)
+    for name in ("llama3.1:8b", "qwen3:8b", "cloudy-llama:8b", "mycloud:latest",
+                 "jarvis-local"):
+        d = RT.choose("what's on my calendar", name, [])
+        check(f"CONTROL {name}: still local, memory still injected",
+              RT.is_local_lane(name, name) and d.inject_memory is True, d)
+
+
 if __name__ == "__main__":
     for fn in (t_every_config_topic_keeps_a_turn_local,
                t_the_built_in_list_covers_the_topics_on_its_own,
                t_the_note_stores_without_their_app_names,
                t_a_word_added_to_the_config_takes_effect,
-               t_the_hud_call_shape_still_works):
+               t_the_hud_call_shape_still_works,
+               t_an_ollama_cloud_model_is_never_local):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

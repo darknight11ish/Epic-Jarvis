@@ -384,9 +384,28 @@ def is_local_lane(lane: str, local_model: str = "") -> bool:
     opens the socket, which is the only place it can be checked honestly.
     """
     lane = str(lane or "")
+    # Ollama's own cloud models ("gpt-oss:120b-cloud", "glm-4.6:cloud") are
+    # run THROUGH the local Ollama but answered on ollama.com. The address is
+    # 127.0.0.1 and the name can be the configured local model, so neither
+    # check below can see it - only the name's "cloud" tag can. Such a lane
+    # is never local, whatever else it matches, so memory is never injected
+    # into it. Found by the memory-safety red team, 2026-09-24.
+    if is_remote_model(lane):
+        return False
     if local_model and lane == local_model:
         return True
     return bool(re.search(r"local|jarvis-primary|ollama", lane, re.I))
+
+
+# The tag Ollama gives a model it runs on its own servers: ":cloud" or a
+# size followed by "-cloud" ("120b-cloud"). Matched on the tag only, so a
+# local model whose NAME merely contains "cloud" is not caught by accident.
+_REMOTE_TAG = re.compile(r":(?:[^:/]*-)?cloud$", re.I)
+
+
+def is_remote_model(name: str) -> bool:
+    """Is this an Ollama model that is answered off this machine?"""
+    return bool(_REMOTE_TAG.search(str(name or "").strip()))
 
 
 def complexity(query: str) -> float:

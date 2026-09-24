@@ -1211,6 +1211,28 @@ ships is the part that matters most and is fully verified: the secret never
 reaches a cloud lane. Turning the after-the-fact notice into an actual card
 on a client is future work for whoever has `jarvis_gate.py` open.
 
+## Ollama's "cloud" models are not local, whatever the address says (2026-09-24)
+
+Ollama can run some models on its own servers: their names end in a
+`cloud` tag (`gpt-oss:120b-cloud`, `glm-4.6:cloud`). They are reached
+through the local Ollama at 127.0.0.1, so an address check cannot see
+them, and if one was the switched-to "local" model, `is_local_lane()`
+said yes because the lane *was* the local model by name. `choose()` then
+injected memory into every turn, and it went to ollama.com. Found by the
+memory-safety red team, reproduced before the fix.
+
+`jarvis_router.is_remote_model()` now matches that tag (on the tag only, so
+a local model whose name merely contains "cloud" is not caught), and
+`is_local_lane()` answers no for it before anything else. Tested in
+`test_router_private_terms.py` with five real cloud names and five local
+controls.
+
+**Still open, for the security audit:** the switch and install routes
+live in the owner's `jarvis_models.py`, which is not in this repo, so they
+do not refuse such a name yet, and the learner checks only `OLLAMA_URL`'s
+address, not the model's name. Both are on the automatic-learning build's
+list of required guards.
+
 ## Test it
 
 ```powershell
