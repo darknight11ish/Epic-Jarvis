@@ -4,6 +4,7 @@
 appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a23a	2026-09-15T03:11:39+00:00	Three honesty fixes: /api/visual-spec, the HUD proposal handler, INSTALL
 appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30+00:00	I invented a NameError, then reported it twice as a finding
 appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27+00:00	The backend route, written against the real jarvis_hud.py
+auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
 big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14+00:00	Big model: big-model.patch, the install lists, and parity
 bitemporal.patch	bitemporal/688640e.patch	688640efca47502ec38032394fa127eabb03101b	2026-09-15T03:28:09+00:00	bitemporal.patch: the second time axis, and a surface that shows it
 chat-history.patch	chat-history/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53+00:00	Backend: keep chat history on the PC, encrypted (chat-history.patch)
