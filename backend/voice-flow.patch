@@ -1,0 +1,70 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1568,9 +1568,31 @@
+                 from urllib.parse import parse_qs as _voice_qs
+                 voice_mic = ((_voice_qs(self.path.split("?", 1)[1]).get("mic") or [""])[0]
+                              if "?" in self.path else "")
+-                if getattr(jarvis_speech, "TAKES_MIC", False):
++                # voice-flow.patch: `source=barge_in` - Jarvis is talking and the
++                # app heard speech over it. The answer is only "stop or not"
++                # ({"stop": bool, "reason", ...}): the clip is never turned into
++                # words, and nothing after this line runs for it. A
++                # jarvis_speech.py older than that answers "do not stop" here -
++                # it is never handed to hear(), which would transcribe it.
++                if src == "barge_in":
++                    if not hasattr(jarvis_speech, "barge_in"):
++                        return self._send(200, {
++                            "stop": False, "available": False, "source": "barge_in",
++                            "why": "not_installed",
++                            "reason": "this PC's jarvis_speech.py is older than "
++                                      "interrupting Jarvis by talking"})
++                    return self._send(200, jarvis_speech.barge_in(raw, mic=voice_mic))
++                # How long the app waited for the owner to finish (?waited_ms=),
++                # kept only as a number for the delay's timings - passed to a
++                # jarvis_speech.py that says it takes it.
++                voice_wait = ((_voice_qs(self.path.split("?", 1)[1]).get("waited_ms")
++                               or [""])[0] if "?" in self.path else "")
++                if getattr(jarvis_speech, "TAKES_WAIT", False):
++                    heard = jarvis_speech.hear(raw, source=src, mic=voice_mic,
++                                               waited_ms=voice_wait)
++                elif getattr(jarvis_speech, "TAKES_MIC", False):
+                     heard = jarvis_speech.hear(raw, source=src, mic=voice_mic)
+                 else:
+                     heard = jarvis_speech.hear(raw, source=src)
+             except Exception as exc:
+                 return self._send(500, {"error": type(exc).__name__})
+@@ -2004,8 +2026,34 @@
+             try:
+                 return self._send(200, jarvis_voices.status())
+             except Exception as exc:
+                 return self._send(500, {"available": False, "error": type(exc).__name__})
+
++        if path == "/api/voice/moment":
++            # voice-flow.patch - "One moment.": a short clip in the voice Jarvis
++            # speaks in now (a custom voice too), for an app to play when no
++            # sound has started about a second after the owner finished. Made
++            # once per voice and kept in memory (jarvis_voice_flow.py); a WAV,
++            # like /api/voice/say, or 503 with the reason when there is none.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_speech
++            except ImportError as exc:
++                return self._send(*_no_speech(exc, fallback_ok=True, reason=_SAY_FALLBACK))
++            if not hasattr(jarvis_speech, "moment_reply"):
++                return self._send(503, {"available": False,
++                                        "error": "this PC's jarvis_speech.py is older than "
++                                                 "the \"One moment.\" clip"})
++            try:
++                code, out = jarvis_speech.moment_reply()
++            except Exception as exc:
++                return self._send(500, {"available": False, "error": type(exc).__name__})
++            if code == 200:
++                return self._send(200, out, ctype="audio/wav")
++            return self._send(code, out)
++
+         if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
+                     "/api/compute", "/api/memory/facts", "/api/memory/export"):
+             if not _origin_ok(self):

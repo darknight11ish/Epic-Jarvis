@@ -1607,6 +1607,68 @@ def verify(audio, embedder=None, sample_rate: Optional[int] = None,
     return v
 
 
+def embed_with(model, audio, sample_rate: Optional[int] = None) -> list:
+    """One clip through one model, as a plain list of floats ([] when it
+    cannot be read) - never raises. For comparing a clip with something
+    that is not a voice print (jarvis_voice_flow compares it with Jarvis's
+    own voice)."""
+    try:
+        return _as_vector(_embed(model, audio, sample_rate))
+    except Exception:
+        return []
+
+
+def judge(audio, embedder=None, sample_rate: Optional[int] = None, mic: str = "",
+          strictness: str = BALANCED, strong=None) -> tuple:
+    """(Verdict, the clip's vector, the model that decided) - "does this
+    sound like the owner's voice print?", and nothing else.
+
+    For interrupting Jarvis by talking (jarvis_voice_flow.barge_in), where
+    the only thing a yes can do is stop Jarvis speaking. So, unlike
+    verify(): it is not counted towards the owner's repeat rate (it is not
+    a command they had to say again), and `broad` mode is a NO - "any voice
+    is accepted" would let the TV stop Jarvis, which is exactly what this
+    must not do. Every other refusal is verify()'s own, in its words.
+
+    `strictness`: which bar (balanced by default: a stop that should not
+    have happened only cuts a reply short). The vector and model are None
+    whenever no voice was compared."""
+    mode = str(_cfg("mode", "owner") or "owner").strip().lower()
+    if not bool(_cfg("enabled", True)):
+        return Verdict(False, mode=mode, reason="voice is switched off in the config"), None, None
+    if mode == "broad":
+        return (Verdict(False, mode=mode,
+                        reason=("the voice check is in broad mode (any voice is accepted), so "
+                                "it cannot tell your voice from anyone else's")), None, None)
+    prof, label = find_profile(mic)
+    if prof is None:
+        return (Verdict(False, mode=mode,
+                        reason="no enrolled voice profile - run enrolment first"), None, None)
+    emb = embedder or Embedder()
+    if not getattr(emb, "semantic", False):
+        return Verdict(False, threshold=prof.threshold, mode=mode, reason=NO_MODEL_REASON), None, None
+    if prof.embedder and emb.name != prof.embedder:
+        return (Verdict(False, threshold=prof.threshold, mode=mode,
+                        reason=(f"profile was enrolled with {prof.embedder!r} but "
+                                f"{emb.name!r} is loaded - re-enrol to use it")), None, None)
+    if strictness not in STRICTNESS:
+        strictness = BALANCED
+    strong = _pick_strong(strong, emb, strictness)
+    asked = [m for m, _role in plan(strictness, emb, strong, prof)]
+    try:
+        vecs = _vectors(audio, asked[0], asked[1] if len(asked) > 1 else None, sample_rate)
+    except Exception as exc:
+        return (Verdict(False, threshold=prof.threshold, mode=mode,
+                        reason=f"could not read the audio ({type(exc).__name__})"), None, None)
+    v, compared = _judge(vecs, prof, emb, strong, strictness)
+    v.mode = mode
+    if not compared:
+        return v, None, None
+    v.voice_print = label
+    decider = asked[-1]
+    return v, vecs.get(decider.name) or None, decider
+
+
 def measure(clips: list, embedder=None, sample_rate: Optional[int] = None,
             mic: str = "", strong=None, seconds: Optional[list] = None) -> dict:
     """The guided "how often would I have to repeat myself?" test: the

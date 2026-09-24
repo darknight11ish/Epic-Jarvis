@@ -5,7 +5,8 @@
 > is the detail.
 
 
-Forty-one patches against the Jarvis backend, each with an executable test
+Forty-eight patches against the Jarvis backend (counted 2026-09-24, after
+`voice-flow.patch`), each with an executable test
 (counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
 refuses to run if a `.patch` file here is missing from it). The paragraphs
 below were written as the list grew, so the counts in them are the count at
@@ -104,6 +105,7 @@ on a throwaway copy instead.
 | `big-model.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The big model (slow), all switched off.** Adds `GET`/`POST /api/big-model` (three switches; each ON is one approval card, `big_model_enable`), `GET /api/deep` and `POST /api/deep/ask` (deep questions, answered in the background), and the approval notice's words for the new action. Last in the list, after `wiki.patch` (textual). Needs `jarvis_big_model.py` — see its own section, at the end, and `docs/BIG-MODEL.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 | `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. |
+| `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -6187,3 +6189,138 @@ container that wrote them - `pwsh` was refused there - and were read by
 hand for Windows PowerShell 5.1 problems); the LibriSpeech step's
 download; the apps (they have not been changed); and how the stronger
 model's licence reads on its NGC page.
+
+---
+
+# The voice flow: `voice-flow.patch` and `jarvis_voice_flow.py`
+
+Three things the owner decided on 2026-09-24, built on the PC first. **The
+apps do not use any of it yet** - two other sessions are building the voice
+screens. `docs/JARVIS-API.md` section 17 is exactly what they build against.
+
+## What it does, in plain words
+
+**1. Interrupting Jarvis by talking.** While Jarvis is speaking, an app can
+send what its microphone hears to the PC and ask one question: "should
+Jarvis stop?" The PC says yes for **your** voice (your voice print) and for
+the word "stop" (from anyone, as before). It says no for the TV, for other
+people, and for Jarvis's own voice coming back through the speakers - it
+compares the sound with Jarvis's voices too (your custom voice if one is
+active, the "One moment." clip, and a sentence of the built-in voice made on
+your PC). **The sound is never turned into words**, and a yes does nothing
+but stop the talking. It uses the "balanced" bar even if you chose "very
+strict" for commands: a stop that should not have happened only cuts a reply
+short.
+
+**2. The delay, measured and cut.** For every spoken question that became
+words, the PC writes down how long each step took - numbers only, never the
+words, the last 20, in memory (gone when Jarvis restarts). The one line under
+"Owner steps" prints them. **What was cut:** the voice engines used to load
+inside your first spoken question after Jarvis started (a few seconds of
+waiting). Now they load in the background as soon as an app first asks the
+PC about voice. **What was checked and left alone:** both apps already start
+speaking the first sentence as soon as it is complete, and the "is it you?"
+check still runs before speech-to-text, always.
+
+**3. "One moment."** If nothing has started playing about a second after you
+finish, an app can play a short "One moment." in the voice Jarvis is using.
+The PC makes it once per voice and keeps it; the apps decide when to play it,
+and never over the answer.
+
+**The switches** are three lines in the `[voice]` part of
+`jarvis-framework.toml`, all on unless you set them false (they are written
+there as comments): `barge_in_enabled`, `one_moment_enabled`,
+`warm_engines`. The apps cannot change them. None needs an approval card:
+none of them acts on anything or sends anything anywhere.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put it in** (from this repository's folder), then restart Jarvis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. See how long each voice engine takes to load on your PC**, and how long
+it takes once loaded. It prints a small table on the screen; nothing is saved
+and nothing is recorded (it runs each engine on silence):
+
+```powershell
+Push-Location "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 .\jarvis_voice_flow.py --measure; Pop-Location
+```
+
+**3. After you have asked Jarvis a few things out loud, print the delay,
+step by step** (median and worst, in milliseconds). Jarvis must be running.
+It reads your pairing token into `$t` without showing it; the table is
+printed on the screen only:
+
+```powershell
+Push-Location "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $t = (py -3 .\jarvis_token_store.py show); Pop-Location; $h = @{ 'X-Jarvis-Token' = $t; 'X-Jarvis-Client' = 'hud' }; $f = (Invoke-RestMethod -Uri http://127.0.0.1:4719/api/voice/status -Headers $h).flow; if (-not $f) { Write-Host 'No voice timings on this Jarvis yet: apply the patches, then restart Jarvis.' -ForegroundColor Yellow } else { $f.summary | Select-Object @{n='step';e={$_.label}}, turns, median_ms, worst_ms | Format-Table -AutoSize; Write-Host ('Spoken turns counted: ' + @($f.timings).Count + '. Engines: ' + $f.warm.state + '. Printed here only; nothing was saved to a file.') }
+```
+
+Until the apps send `waited_ms`, the first line ("waiting for you to finish")
+stays empty on the phone; the desktop's Smart Turn line fills in by itself.
+
+**4. Test it against your backend:**
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_voice_flow.py
+```
+
+## What the code does
+
+- `jarvis_voice_flow.py` (new, shipped whole): `barge_in()`, the timing
+  rows (`note_heard`, `chat_started`, `say_started`, `summary`), the
+  "One moment." clip (`moment()`, cached by a key of the voice, engine,
+  built-in speaker and speed), and the warm-up (`warm()`, `ensure_warm()`).
+- `jarvis_speech.py`: `hear(source="barge_in")` hands the clip to
+  `barge_in()` before anything else (no speech-to-text, ever); `hear()`
+  times its steps and takes `waited_ms`; `say()` is split into
+  `_synthesise()` (the sound) and its bookkeeping, and marks the first
+  sound of a spoken turn's answer; `status()` has a `flow` block, whose
+  first read starts the warm-up.
+- `jarvis_voice.py`: `judge()` - "does this sound like the owner's print?"
+  without counting it as a command, and a NO in broad mode (where
+  `verify()` says yes to anyone); `embed_with()`.
+- `jarvis_voices.py`: `speak(..., start_better=False)`, so making the clip
+  never starts the better voice's program on the second card.
+- `jarvis_agent.py`: marks the answer's first word and first complete
+  sentence. `jarvis_turn.py`: notes how long Smart Turn took.
+- `voice-flow.patch`: the `barge_in` branch in the utterance route (before
+  `hear()`, and "do not stop" from an older `jarvis_speech.py` - never
+  `hear()`), `waited_ms` passed on, and `GET /api/voice/moment`.
+
+## What was measured, and on what
+
+In this repository's container, **not your PC**: a 4-core processor, the
+real model files (Silero VAD, Parakeet speech-to-text, Kokoro, the small
+voice-ID model), and synthetic voices (Kokoro speakers) standing in for you,
+a stranger and Jarvis. The owner check was run and timed, then forced to
+"yes" so speech-to-text could be timed too.
+
+| | before (engines loaded during the turn) | after (warmed in the background first) |
+|---|---|---|
+| first spoken question: from the clip arriving to its words | 3.3-3.6 s (2.3-2.6 s of it loading speech-to-text) | 0.42-0.59 s |
+| first sentence's sound (Kokoro) | 2.4-3.2 s | 1.3-1.6 s |
+| a later question, either way | about 0.44-0.53 s | the same |
+| the warm-up itself, in the background | - | 8-10 s |
+
+Later runs, while other work was loading the same processor, were slower
+across the board (first question 3.3-6.5 s before, 0.56-1.06 s after; first
+sound 2.2-3.6 s after) - the gain held, the exact numbers did not.
+
+Interrupting by talking, same voices, 48 clips (four sentences, cut to
+1.2, 1.5 and 2 seconds, as an app would send them): **it stopped for the
+"owner" 4 times out of 12 - every 2-second clip, none of the shorter ones**
+(too little speech, or not enough to pass the print); **0 times for 24
+stranger clips and 12 clips of the built-in voice**; speech-to-text ran 0
+times; each answer took 139-273 ms. So the apps should send about 2 seconds
+of sound.
+
+**Not checked, said plainly:** your voice, your microphones and your room;
+Jarvis's custom-voice comparison with real models (only with stand-in
+numbers - no custom voice was made here); a real Ollama (the first-word and
+first-sentence numbers were checked with a scripted model); anything on
+Windows. The PowerShell lines above could not be run here - `pwsh` was
+refused by this container's sandbox - so they were read by hand for Windows
+PowerShell 5.1 problems.

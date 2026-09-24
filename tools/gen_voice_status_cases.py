@@ -44,6 +44,7 @@ import jarvis_turn as T  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
+import jarvis_voice_flow as F  # noqa: E402
 
 #: The fixed values the changing ones are replaced with (see the docstring).
 FIXED_TIME = 1790000000.0
@@ -101,6 +102,10 @@ class World:
             mock.patch.object(V, "PROFILE_PATH", self.profile),
             mock.patch.object(W, "model_dir", return_value=wake_dir),
             mock.patch.object(T, "model_path", return_value=turn_file),
+            # The warm-up and the "One moment." clip start on a thread of
+            # their own (jarvis_voice_flow): not started here, so every run
+            # writes the same file.
+            mock.patch.object(F, "_spawn", lambda fn: None),
         ]
         for p in self.patches:
             p.start()
@@ -121,6 +126,8 @@ class World:
         # whole process: a suite that ran before this (test_voice_contract.py
         # runs this generator in-process) must not show up in them.
         V._reset_repeat_for_tests()
+        # The same for the delay's numbers and the warm-up (jarvis_voice_flow).
+        F._reset_for_tests()
         return self
 
     def train(self, mic: str, freq: float, clips: int = 3):

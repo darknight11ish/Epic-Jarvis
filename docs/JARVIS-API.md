@@ -445,7 +445,8 @@ only what Jarvis itself said it did.
 | Endpoint | Method | Body / params | Desktop | Android | Notes |
 |---|---|---|---|---|---|
 | `/api/voice/status` | GET | — | **no** | `JarvisApi.kt:553` | Phone calls it before showing a mic button; failure returns refusing defaults. |
-| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop` | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. |
+| `/api/voice/utterance` | POST | **WAV bytes**, `?source=push_to_talk\|wake_word&mic=phone\|desktop`; since 2026-09-24 also `source=barge_in` and `&waited_ms=` (section 17, neither app yet) | `voice.rs:335` | `JarvisApi.kt:574` | The one route whose body is not JSON. `mic` (2026-09-24, `voice-mic.patch`) picks that microphone's voice print. `source=barge_in` answers "stop or not" and is never transcribed (`voice-flow.patch`). |
+| `/api/voice/moment` | GET | - → WAV bytes | **not yet** | **not yet** | The "One moment." clip in the voice in use now (section 17, `voice-flow.patch`). 503 with `why` when there is none. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
 | `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"`, and since 2026-09-24 `"train"` / `"strictness"` / `"privacy"` / `"measure"` (§16, neither app yet) | **no** | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
@@ -458,6 +459,12 @@ only what Jarvis itself said it did.
 "zipvoice" | "f5", "fallback"}` - `fallback` is the sentence saying why the
 built-in voice is used instead of the chosen one, or `""`) and `timings` (the
 last five rows of section 15's `timings`).
+
+**Since 2026-09-24 `/api/voice/status` also carries `flow`** (section 17):
+interrupting Jarvis by talking (`source=barge_in`), the "One moment." clip
+(`GET /api/voice/moment`), the engines kept warm, and each spoken turn's
+delay step by step, in numbers. The first status read starts the warm-up in
+the background; the reply does not wait for it.
 
 **The audio format: 16-bit PCM in a WAV container. The two apps send
 different rates, and the server copes with both** (checked against the code
@@ -1577,3 +1584,176 @@ know that the model will call the email or calendar tool; the rule above is
 the apps' best information until the chat route says so at the end of the
 answer. `jarvis_voice.may_speak(private, origin)` is the helper that route
 should call when it does.
+
+## 17. Interrupting by talking, the delay, and "One moment." (added 2026-09-24)
+
+`backend/voice-flow.patch` and `backend/jarvis_voice_flow.py` (with small
+changes in `jarvis_speech.py`, `jarvis_voice.py`, `jarvis_voices.py`,
+`jarvis_turn.py` and `jarvis_agent.py`). The owner's three decisions of
+2026-09-24. **Built on the backend first; neither app uses any of it yet** -
+this section is what they build against. One new route
+(`GET /api/voice/moment`, `planned` in `tools/check_parity.py`); the rest
+is on routes both apps already call. How it works, and the owner's one-line
+commands, are in `backend/README.md`, "The voice flow".
+
+**Check before you send.** Everything below exists only when
+`GET /api/voice/status` has a `flow` block. **Never send
+`source=barge_in` to a PC whose status has no `flow` block, or whose
+`flow.barge_in.available` is not `true`**: an older `jarvis_speech.hear()`
+treats any `source` other than `wake_word` as push-to-talk, so it would
+check the clip and, if it was the owner, TRANSCRIBE it. (Whether the
+owner's route refuses an unknown `source` before that is not visible from
+this repository.)
+
+### The `flow` block of `/api/voice/status`
+
+```
+"flow": {
+  "available": true,                      false: jarvis_voice_flow.py is missing (everything else below then off/empty)
+  "barge_in": {"enabled": bool,           [voice] barge_in_enabled (default true)
+               "available": bool,         the PC can tell your voice now: switched on, a voice print, a voice-ID model, not broad mode
+               "why": str,                why not, a sentence to show ("" when available)
+               "min_seconds": 1.0,        least speech it judges (the VAD's span, about 0.4 s of words)
+               "bar": "balanced",         the voice-print bar it uses, whatever commands use
+               "stop_word": bool},        this PC can also hear "stop" in a barge-in clip
+  "moment":   {"enabled": bool,           [voice] one_moment_enabled (default true)
+               "text": "One moment.",
+               "key": str,                changes whenever the clip would sound different (another voice, engine, speaker, speed)
+               "ready": bool,             the clip for `key` is made; GET /api/voice/moment answers at once
+               "voice": "builtin" | "<id>", "engine": "kokoro" | "zipvoice" | "f5",
+               "seconds": float | null,   how long the clip lasts, once ready
+               "after_ms": 1000,          a suggestion only: the apps decide when to play it
+               "why": str},               why there is none, when there is none
+  "warm":     {"enabled": bool,           [voice] warm_engines (default true)
+               "state": "waiting" | "warming" | "ready" | "off",
+               "seconds": float | null, "steps": {"speech_check": ms, "speech_to_text": ms, ...}},
+  "timings":  [ROW, ...],                 oldest first, at most 20, in memory only
+  "summary":  [{"step", "label", "turns", "median_ms", "worst_ms"}, ...]   one line per step, over `timings`
+}
+```
+
+The three switches are `[voice]` lines in `jarvis-framework.toml`, read and
+never written by a route - the same as `turn_enabled`. No app can change
+them; each app keeps its own per-device switch for whether to use them (both
+apps already have "Interrupt Jarvis while it talks"). None is an approval
+card: interrupting only stops Jarvis's own speech, the clip is Jarvis's own
+words, the warm-up loads what is already installed, and none of them sends
+anything anywhere.
+
+### 1. Interrupting Jarvis by talking - `source=barge_in`
+
+```
+POST /api/voice/utterance?source=barge_in&mic=phone|desktop      body: one WAV, as for any utterance
+-> 200 {"stop": bool, "available": bool, "source": "barge_in",
+        "why": "owner_voice" | "stop_word"                        (stop: true)
+             | "not_owner" | "jarvis_voice" | "too_short" | "no_speech" | "unreadable"
+             | "stop_ignored" | "not_ready" | "off" | "not_installed",   (stop: false)
+        "reason": "<a sentence>", "seconds": <clip length>, "ms": <how long the PC took>}
+```
+
+- **Send it only while Jarvis is speaking** (reply audio playing), only with
+  `flow.barge_in.available` true and the app's own switch on, and hold it on
+  a stale link like every other request. Send what the microphone heard
+  from when speech started; measured here on synthetic voices (not the
+  owner's), the owner was recognised from 2-second clips and **not** from
+  1.2-1.5 second ones, so about 2 s of sound is the suggestion.
+- **`stop: true`**: silence the reply at once - exactly what an app already
+  does for a wake-word reply with `stop: true`. **Do nothing else**: it is
+  not a command, and there are no words in it. **`stop: false`**: carry on
+  speaking; show nothing, except `reason` for `stop_ignored` if you like.
+  **`available: false`**: stop sending barge-in clips until the status says
+  otherwise (show `flow.barge_in.why` in settings).
+- **What stops it:** the owner's voice (the voice print for `mic`, at the
+  balanced bar), and the word "stop" said by anyone (the same stop-word
+  model and 30-second echo guard as a wake-word clip). **What does not:**
+  anyone else (the TV, a visitor), Jarvis's own voice through the speakers
+  (the clip is also compared with the active custom voice's recording, the
+  cached "One moment." clip and a sentence of the built-in voice made on the
+  PC; `why: "jarvis_voice"` when it was at least as close to one of those
+  as to the owner), a clip with too little speech, broad mode.
+- **Never transcribed.** No speech-to-text runs for it, on the PC or
+  anywhere; the check does not count towards the owner's "had to say it
+  again" numbers; nothing is kept. "Hey Jarvis, ..." said over a reply
+  stops the reply and nothing more: to have the question answered, send
+  the same clip again as `source=wake_word`, which makes every check it
+  always made (the desktop already sends such a sentence as a new
+  question).
+- Through a route without `voice-flow.patch` but with this
+  `jarvis_speech.py`, the reply is the usual utterance reply with `stop`,
+  `reason`, `ok: false` and `text: ""` - read `stop` and it means the same.
+
+### 2. The delay, step by step - `&waited_ms=` and `flow.timings`
+
+An app MAY add `&waited_ms=<whole milliseconds>` to a push-to-talk or
+wake-word utterance: from the moment its own speech detector last heard
+speech to the moment it sends the clip (its Smart Turn pause included).
+0-60000; anything else is ignored. It is only ever kept as that number.
+
+One `ROW` per spoken turn that became words (a refused clip makes none).
+Every value is a number of milliseconds, `null` when not known, or as
+shown - **never words**:
+
+```
+{"at": <unix seconds>, "mic": "phone" | "desktop" | "", "source": "push_to_talk" | "wake_word",
+ "cold": bool,               speech-to-text had to be loaded during this turn
+ "end_wait_ms",              the app's own wait (waited_ms); null if not sent
+ "turn_ms",                  Smart Turn on this PC, if the desktop asked it in the 5 s before
+ "vad_ms", "wake_ms",        finding the speech; "stop" and "hey Jarvis" (wake-word clips only)
+ "owner_check_ms", "stt_ms", checking it is the owner; speech-to-text
+ "heard_ms",                 from the clip arriving to its words being ready (all of the above)
+ "chat_ms",                  ... to the chat request starting on this PC
+ "first_token_ms",           ... to the answer's first word
+ "first_sentence_ms",        ... to its first complete sentence (".", "!" or "?" and a space)
+ "say_start_ms",             ... to the first /api/voice/say of the answer arriving
+ "say_ms",                   how long that first say() took to make its sound
+ "first_audio_ms",           from the clip arriving to that sound being ready on this PC
+ "total_ms"}                 end_wait_ms + first_audio_ms, when both are known
+```
+
+`summary` lists these steps: `end_wait_ms`, `turn_ms`, `vad_ms`,
+`owner_check_ms`, `stt_ms`, `to_chat_ms` (the app passing the words on),
+`model_first_word_ms`, `first_sentence_ms` (the rest of the first
+sentence), `say_ms`, `first_audio_ms`, `total_ms` - each with `label`
+(fixed words to show), `turns` (how many rows had it), `median_ms` and
+`worst_ms`.
+
+**How a row is put together, honestly:** by time, not by an id. A chat
+turn on the local model starting within 20 s of a voice turn's words is
+taken as its answer, and the first `/api/voice/say` within 120 s after that
+as its first sound. A typed question inside that window would be counted
+as the answer - numbers only, so a wrong guess is a wrong number and
+nothing more. Not measured: a cloud answer, and the time for the sound to
+reach the app and start playing (the app can add its own).
+
+### 3. "One moment." - `GET /api/voice/moment`
+
+```
+GET /api/voice/moment    -> 200, Content-Type audio/wav: "One moment." (mono, 16-bit, the voice's own rate)
+                         -> 503 {"available": false, "error": str, "why": str}   none right now (switched off,
+                                                                                nothing can speak, ...)
+```
+
+Token and `X-Jarvis-Client: hud` as always; 401 / 403 as for any route.
+
+- **It is in the voice Jarvis speaks in now**, custom voices included. The
+  PC makes it once per voice (`flow.moment.key`) and keeps it in memory;
+  when the voice changes, the key changes and it is made again - in the
+  background as soon as a status read notices, so it is normally `ready`
+  before anyone asks. Making it never starts the better voice's program on
+  the second card.
+- **For the apps:** fetch it when `flow.moment.key` differs from the one you
+  have, and keep it. When the owner has finished speaking and **no reply
+  sound has started** about `after_ms` later (the apps decide the exact
+  time), play it - **once per turn at most, and never over the reply**: if
+  the reply's first sound arrives while it plays, stop it (or let it end,
+  it is under a second) before the reply starts. Not after a refused clip,
+  a barge-in, or a "stop". It is Jarvis's own voice, so the barge-in check
+  above already counts it as Jarvis, not the owner.
+
+**What an app should build** (suggested, for both): extend the existing
+"Interrupt Jarvis while it talks" switch so that, while Jarvis speaks,
+speech the microphone hears is sent as `source=barge_in` (with the rules in
+1); a "Say 'One moment' if I'm kept waiting" switch (on by default) that
+plays the clip as in 3; send `waited_ms` on every utterance; and a "Voice
+delay" panel showing `flow.summary` (the `label`, `median_ms` and
+`worst_ms` columns), with `flow.warm.state`.

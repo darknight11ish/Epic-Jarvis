@@ -269,6 +269,14 @@ $PATCHES = @(
     # copied in; without it the route answers 503 rather than switching on
     # with no card.
     'learning-asks.patch'
+    # Interrupting Jarvis by talking (?source=barge_in on /api/voice/utterance:
+    # "stop or not", never transcribed), the app's own wait (?waited_ms=) for
+    # the delay's numbers, and GET /api/voice/moment (the "One moment." clip).
+    # Its context is voice-mic's lines in the utterance route and voices'
+    # GET route, so it goes after both - last, like every new patch. Needs
+    # jarvis_voice_flow.py copied in; without it barge_in answers "do not
+    # stop" and the clip route answers 503.
+    'voice-flow.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -328,6 +336,7 @@ $SHIPPED = @(
     'jarvis_f5_worker.py'        # the better voice (F5-TTS) as its own program on the second card; jarvis_voices.py starts it
     'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
+    'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

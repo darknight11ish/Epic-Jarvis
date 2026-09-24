@@ -331,7 +331,17 @@ def handle(raw: bytes) -> tuple:
     if isinstance(parsed, str):
         return 400, {"error": parsed}
     x, sr = parsed
-    return 200, predict(x, sr).as_dict()
+    t = predict(x, sr)
+    if t.ran:
+        # How long Smart Turn took, for the delay's numbers
+        # (jarvis_voice_flow.py, /api/voice/status flow.timings). A number
+        # only; a missing module changes nothing.
+        try:
+            import jarvis_voice_flow
+            jarvis_voice_flow.note_smart_turn(t.ms)
+        except Exception:
+            pass
+    return 200, t.as_dict()
 
 
 if __name__ == "__main__":

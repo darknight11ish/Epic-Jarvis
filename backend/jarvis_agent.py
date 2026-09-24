@@ -1612,6 +1612,44 @@ def _read_line(raw: bytes, rnd: _Round, on_text: Callable[[str], None]) -> None:
     _read_chunk(obj, rnd, on_text)
 
 
+#: A complete sentence the way both apps find one to speak: ".", "!" or "?"
+#: and then whitespace (the phone's SpeechText.findSentences, the desktop's
+#: checkForSpeakableSentence in main.js).
+_SENTENCE_DONE = re.compile(r"[.!?]\s")
+
+
+def _voice_mark():
+    """jarvis_voice_flow.chat_started(): this turn's timing mark when it is
+    the answer to a spoken turn, else None. Never raises."""
+    try:
+        import jarvis_voice_flow
+        return jarvis_voice_flow.chat_started()
+    except Exception:
+        return None
+
+
+def _voice_timing(voice: dict, text: str) -> None:
+    """Marks the first word, then the first complete sentence. Keeps one
+    character between calls (a sentence may end in one piece and its space
+    arrive in the next) and nothing else. Never raises: timing must never
+    be the reason an answer fails."""
+    mark = voice.get("mark")
+    if mark is None or voice["sentence"]:
+        return
+    try:
+        if not voice["word"]:
+            voice["word"] = True
+            mark.first_token()
+        if _SENTENCE_DONE.search(voice["tail"] + text):
+            voice["sentence"] = True
+            voice["tail"] = ""
+            mark.first_sentence()
+        else:
+            voice["tail"] = text[-1:]
+    except Exception:
+        voice["mark"] = None
+
+
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    stream_out: Callable[[bytes], None],
                    enabled_tools: Optional[set] = None,
@@ -1727,6 +1765,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
     answer: list = []
     said = {"any": False, "gap": False}
+    # The delay of a spoken turn (jarvis_voice_flow.py): when this answer's
+    # first word and first complete sentence arrive, as numbers. None - and
+    # nothing is measured - when this turn is not the answer to one.
+    voice = {"mark": _voice_mark(), "tail": "", "word": False, "sentence": False}
     cid = f"chatcmpl-jarvis-{int(time.time() * 1000)}"
     created = int(time.time())
     finish: Optional[str] = None
@@ -1746,6 +1788,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         said["gap"] = False
         said["any"] = True
         answer.append(text)
+        _voice_timing(voice, text)
         if out.sse and not out.send(_sse(_chunk(cid, created, cur["model"], {"content": text}))):
             raise ClientGone()
 

@@ -449,6 +449,17 @@ already exist (`/api/voice/enroll`, which only the phone calls today;
 `/api/voice/status` and `/api/voice/utterance`), so `tools/check_parity.py`
 cannot see the gap; this line is the record of it.
 
+**On the backend, in neither app yet, NOT on purpose** (2026-09-24, both
+apps should get it; two other sessions were building the voice screens as
+this landed): the voice flow (`docs/JARVIS-API.md` §17,
+`jarvis_voice_flow.py`, `voice-flow.patch`) - interrupting Jarvis by
+talking (`?source=barge_in` on `/api/voice/utterance`: "stop or not",
+never transcribed), the "One moment." clip (`GET /api/voice/moment`,
+`planned` in `tools/check_parity.py`), `&waited_ms=` on each utterance, and
+the `flow` block of `/api/voice/status` (the delay step by step, in
+numbers). Only the clip route is new, so it is the only part
+`tools/check_parity.py` can see; this line is the record of the rest.
+
 ---
 
 ## 9. Where the backend lives
@@ -470,8 +481,8 @@ That asymmetry is worth stating once: **this repo is version-controlled and the
 thing it patches is not.** A patch here can always be recovered. The file it
 edits cannot.
 
-Forty-five patches (counted in `scripts/apply-patches.ps1`'s list on
-2026-09-24), applied in that list's order. The order matters: many patches
+Forty-eight patches (counted in `scripts/apply-patches.ps1`'s list on
+2026-09-24, after `voice-flow.patch`), applied in that list's order. The order matters: many patches
 edit lines an earlier one wrote, and the list's comments say which. Above
 all, `memory-safety` must land first: without it the first accepted proposal
 retires a roughly-matching unrelated fact, permanently, and `retire()` has
