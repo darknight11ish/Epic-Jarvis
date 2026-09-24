@@ -874,6 +874,17 @@ def _reconcile(sw: dict, det: dict) -> None:
         _LANE.state, _LANE.why = "failed", f"unexpected error ({type(exc).__name__})"
 
 
+def lane_state() -> str:
+    """"off", "starting", "running" or "failed": the second Ollama's state as
+    last seen. Reads only; starts and stops nothing. jarvis_big_model.py asks
+    this before it would put colibri on the second card (it will not while
+    this lane is starting or running)."""
+    try:
+        return str(_LANE.state)
+    except Exception:
+        return "unknown"
+
+
 def shutdown() -> None:
     """Stops the second Ollama if this module started it. At process exit."""
     try:

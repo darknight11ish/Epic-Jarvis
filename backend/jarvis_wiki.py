@@ -36,6 +36,19 @@ Ollama (127.0.0.1:11435) is running and its model is installed. Otherwise
 nothing runs, and GET /api/wiki says why. The model is ONLY that local lane:
 there is no other model call in this file and no fallback to any other.
 
+THE BIG MODEL (jarvis_big_model.py, added 2026-09-24). When the owner has
+switched the big model on for the wiki (its main switch and its "wiki"
+switch, each approved with a card), the wiki uses
+jarvis_big_model.lane_for("wiki") INSTEAD - colibri on 127.0.0.1 - and the
+second card's lane is not asked at all. That lane starts colibri on demand
+and is None while it loads, so a job waits in "reading", saying so, rather
+than failing - and it never switches lanes: a job that started on the big
+model finishes on it or fails with the reason, and never quietly moves to
+the second card. With the big model's wiki switch off, nothing here changes.
+colibri does not constrain its output to a JSON schema (see
+jarvis_big_model.py), so on that lane the schema is given as instructions
+and the same strict validation below decides.
+
 THE PERMISSION MODEL (docs/ARCHITECTURE.md section 3), with one honest
 difference:
 
@@ -148,8 +161,38 @@ _LOOPBACK = ("127.0.0.1", "localhost", "::1")
 #   Things the tests replace
 # --------------------------------------------------------------------------
 
+def _big():
+    """jarvis_big_model, or None when it is not installed here."""
+    try:
+        import jarvis_big_model
+        return jarvis_big_model
+    except Exception:
+        return None
+
+
+def _big_selected() -> bool:
+    """Has the owner chosen the big model for the wiki? Reads one small
+    file; starts nothing. False when the module is not installed."""
+    bm = _big()
+    try:
+        return bool(bm is not None and bm.selected(FEATURE))
+    except Exception:
+        return False
+
+
+def _is_big_lane(lane) -> bool:
+    return getattr(lane, "protocol", "") == "openai"
+
+
 def _lane():
-    """The second card's lane for the wiki, or None. Never raises."""
+    """The wiki's lane, or None. The big model's when the owner switched it
+    on for the wiki (and then ONLY that one); else the second card's. Never
+    raises."""
+    if _big_selected():
+        try:
+            return _big().lane_for(FEATURE)
+        except Exception:
+            return None
     try:
         import jarvis_second_card
         return jarvis_second_card.lane_for(FEATURE)
@@ -157,8 +200,25 @@ def _lane():
         return None
 
 
+def _big_state() -> tuple:
+    """(state, why) of the big model for the wiki - see
+    jarvis_big_model.job_state. Starts nothing."""
+    try:
+        return _big().job_state(FEATURE)
+    except Exception as exc:
+        return "failed", f"the big model could not be asked ({type(exc).__name__})"
+
+
+def _big_why(why: str) -> str:
+    return ("The wiki builder is set to use the big model. It says: "
+            + why[:1].upper() + why[1:].rstrip(".") + ".")
+
+
 def _off_why() -> str:
-    """Why the lane is not there, in the second card's own words."""
+    """Why the lane is not there, in the second card's own words (or the
+    big model's, when that is the wiki's lane)."""
+    if _big_selected():
+        return _big_why(_big_state()[1])
     try:
         import jarvis_second_card
         for f in jarvis_second_card.status().get("features") or []:
@@ -554,7 +614,14 @@ def _post_json(url: str, body: dict, timeout: float = MODEL_TIMEOUT) -> dict:
 
 def default_call(lane, body: dict) -> dict:
     """One /api/chat call on the lane. A model or Ollama that does not know
-    `think` is asked again without it."""
+    `think` is asked again without it. The big model's lane speaks
+    colibri's OpenAI-compatible API instead: jarvis_big_model.wiki_call
+    takes the same body and answers in the same shape."""
+    if _is_big_lane(lane):
+        bm = _big()
+        if bm is None:
+            raise Refused("the big model's module is not installed here")
+        return bm.wiki_call(lane, body)
     url = f"{str(lane.url).rstrip('/')}/api/chat"
     try:
         return _post_json(url, body)
@@ -570,7 +637,12 @@ class Refused(Exception):
     """The plan cannot go ahead; the message is the plain reason."""
 
 
+def _who(lane) -> str:
+    return "the big model" if _is_big_lane(lane) else "the model on the second card"
+
+
 def _ask(lane, call: Callable, system: str, user: str, schema: dict, num_predict: int) -> dict:
+    who = _who(lane)
     body = {"model": lane.model, "stream": False, "think": False, "format": schema,
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": user}],
@@ -583,11 +655,11 @@ def _ask(lane, call: Callable, system: str, user: str, schema: dict, num_predict
     except Refused:
         raise
     except urllib.error.HTTPError as exc:
-        raise Refused(f"the model on the second card answered HTTP {exc.code}")
+        raise Refused(f"{who} answered HTTP {exc.code}")
     except urllib.error.URLError as exc:
-        raise Refused(f"the model on the second card could not be reached ({exc.reason})")
+        raise Refused(f"{who} could not be reached ({exc.reason})")
     except Exception as exc:
-        raise Refused(f"the model on the second card could not be asked ({type(exc).__name__})")
+        raise Refused(f"{who} could not be asked ({type(exc).__name__})")
     if not isinstance(out, dict):
         raise Refused("the model's answer was not in the shape Ollama gives")
     if out.get("done_reason") == "length":
@@ -768,6 +840,8 @@ class Plan:
     changes: list = field(default_factory=list)
     reason_empty: str = ""
     already: bool = False
+    #: "second_card" or "big_model": which lane wrote the plan (the card says).
+    on: str = "second_card"
     id: str = field(default_factory=lambda: time.strftime("%Y%m%d-%H%M%S")
                     + "-" + secrets.token_hex(3))
     if_refused: str = IF_REFUSED
@@ -882,6 +956,7 @@ def plan(source: str, *, lane=None, call: Optional[Callable] = None) -> Plan:
         p.reason_empty = "the wiki model is not on this PC, so it is not asked"
         return p
     p.model, p.num_ctx = str(lane.model), int(lane.num_ctx)
+    p.on = "big_model" if _is_big_lane(lane) else "second_card"
     w = where()
     if w.why:
         p.reason_empty = w.why
@@ -934,7 +1009,10 @@ def describe(p: Plan) -> str:
     lines = [f'Add "{p.source}" to your wiki?', ""]
     if p.summary:
         lines += [f"What it is about, as the model read it: {p.summary}", ""]
-    lines.append(f"The model on the second graphics card ({p.model}, on this PC) proposes:")
+    if p.on == "big_model":
+        lines.append(f"The big model ({p.model}, run by colibri on this PC) proposes:")
+    else:
+        lines.append(f"The model on the second graphics card ({p.model}, on this PC) proposes:")
     for c in creates:
         lines.append(f"  new page     {c.path} - {c.summary}")
     for c in updates:
@@ -1098,12 +1176,29 @@ _ACTIVE = ("reading", "waiting", "writing")
 
 
 def status(*, lane_for: Optional[Callable] = None, why: Optional[Callable] = None) -> dict:
-    """GET /api/wiki. Reads the disk; writes nothing; asks no model."""
-    lane = (lane_for or (lambda: _lane()))()
-    available = lane is not None
+    """GET /api/wiki. Reads the disk; writes nothing; asks no model. With
+    the big model chosen for the wiki it does not start colibri either: it
+    says whether a job could run, and the job starts it."""
+    big_ctx = 0
+    if lane_for is None and why is None and _big_selected():
+        lane = None
+        try:
+            pk = _big().peek(FEATURE)
+        except Exception as exc:
+            pk = {"available": False, "why": f"it could not be asked ({type(exc).__name__})",
+                  "num_ctx": 0, "name": None}
+        available = bool(pk.get("available"))
+        big_ctx = int(pk.get("num_ctx") or 0)
+        why_text = (f"Ready: the big model ({pk.get('name')}), run by colibri on this PC. It "
+                    f"starts when you add a document and can take minutes to load."
+                    if available else _big_why(str(pk.get("why") or "it is not ready")))
+    else:
+        lane = (lane_for or (lambda: _lane()))()
+        available = lane is not None
+        why_text = (f"Ready: {lane.why}." if available and getattr(lane, "why", "")
+                    else "Ready." if available else (why or _off_why)())
     out = {"available": available,
-           "why": (f"Ready: {lane.why}." if available and getattr(lane, "why", "")
-                   else "Ready." if available else (why or _off_why)()),
+           "why": why_text,
            "vault_folder_ok": False, "folder_why": "", "folder": None,
            "sources": [], "recent": [], "pages": 0, "running": None,
            "reads": list(READABLE)}
@@ -1121,7 +1216,7 @@ def status(*, lane_for: Optional[Callable] = None, why: Optional[Callable] = Non
     out["folder"] = w.wiki
     out["pages"] = len(_existing_pages(w))
     out["recent"] = recent_log(w)
-    num_ctx = int(getattr(lane, "num_ctx", 0) or FALLBACK_NUM_CTX)
+    num_ctx = int(getattr(lane, "num_ctx", 0) or big_ctx or FALLBACK_NUM_CTX)
     idx_tokens = estimate_tokens(index_listing(w))
     cache = _load_cache(w)
     names = sorted(n for n in os.listdir(w.sub(SOURCES_DIR)) if not n.startswith("."))
@@ -1150,8 +1245,54 @@ _REFUSED_WORDS = {
 }
 
 
+def _wait_sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _wait_for_big(job_id: str):
+    """The big model's lane, once colibri has loaded; None after the job is
+    marked failed with the reason. The job stays "reading" while it waits.
+    It never falls back to the second card: the owner chose the big model."""
+    bm = _big()
+    try:
+        limit = float(bm._load_minutes()) * 60 + 120 if bm is not None else 0.0
+    except Exception:
+        limit = 22 * 60.0
+    deadline = time.monotonic() + limit
+    while True:
+        if bm is None or not _big_selected():
+            _set(job_id, state="failed",
+                 message=("Not added: the big model was switched off for the wiki while this "
+                          "document waited for it. Nothing was written. (A job never moves "
+                          "to the second card by itself - add it again.)"))
+            return None
+        lane = _lane()
+        if lane is not None and _is_big_lane(lane):
+            return lane
+        st, why = _big_state()
+        if st not in ("loading", "busy"):
+            _set(job_id, state="failed",
+                 message=f"Not added: {_big_why(why)} Nothing was written.")
+            return None
+        if time.monotonic() > deadline:
+            _set(job_id, state="failed",
+                 message=("Not added: the big model did not finish loading in time. Nothing "
+                          "was written."))
+            return None
+        _set(job_id, message=(f"Waiting for the big model: {why[:1].upper() + why[1:]}. "
+                              f"No card yet, and nothing is written."))
+        _wait_sleep(5.0)
+
+
 def _worker(job_id: str, source: str, lane, call, gate_check) -> None:
     try:
+        if lane is None:
+            lane = _wait_for_big(job_id)
+            if lane is None:
+                _audit("failed", {"job": job_id, "source": source})
+                return
+            _set(job_id, message=("The big model is reading it. No card yet, and nothing "
+                                  "is written."))
         p = plan(source, lane=lane, call=call)
         if p.reason_empty:
             _set(job_id, state="refused",
@@ -1219,13 +1360,30 @@ def ingest(source, *, lane_for: Optional[Callable] = None, call: Optional[Callab
     source = source.strip()
     if any(c in source for c in "/\\:\x00") or source.startswith(".") or ".." in source:
         return 400, {"ok": False, "state": "refused", "error": "that is not the name of a file in Sources"}
-    lane = (lane_for or (lambda: _lane()))()
-    if lane is None:
-        return 503, {"ok": False, "state": "refused", "error": _off_why()}
+    big = lane_for is None and _big_selected()
+    waiting = ""
+    if big:
+        # The big model, and only it: lane_for starts colibri if it is not
+        # running, and is None until it has loaded - then the job waits.
+        lane = _lane()
+        if lane is None:
+            st, bwhy = _big_state()
+            if st not in ("loading", "busy"):
+                return 503, {"ok": False, "state": "refused", "error": _big_why(bwhy)}
+            waiting = bwhy
+        try:
+            num_ctx = int(lane.num_ctx) if lane is not None else int(_big().peek(FEATURE)["num_ctx"])
+        except Exception:
+            num_ctx = FALLBACK_NUM_CTX
+    else:
+        lane = (lane_for or (lambda: _lane()))()
+        if lane is None:
+            return 503, {"ok": False, "state": "refused", "error": _off_why()}
+        num_ctx = int(lane.num_ctx)
     w = where()
     if w.why:
         return 503, {"ok": False, "state": "refused", "error": w.why}
-    s = read_source(w, source, num_ctx=int(lane.num_ctx),
+    s = read_source(w, source, num_ctx=num_ctx,
                     index_tokens=estimate_tokens(index_listing(w)), cache=_load_cache(w))
     if s.state == "in_wiki":
         return 409, {"ok": False, "state": "refused", "error": f'"{source}" is already in the wiki, unchanged.'}
@@ -1237,9 +1395,15 @@ def ingest(source, *, lane_for: Optional[Callable] = None, call: Optional[Callab
             return 409, {"ok": False, "state": "refused", "error": (f'the wiki builder is already working on '
                                                 f'"{busy["source"]}" - wait for that one')}
         job_id = "wiki_" + secrets.token_hex(8)
+        if big and lane is None:
+            msg = (f"Waiting for the big model: {waiting[:1].upper() + waiting[1:]}. No card "
+                   f"yet, and nothing is written.")
+        elif big:
+            msg = "The big model is reading it. No card yet, and nothing is written."
+        else:
+            msg = "The model on the second card is reading it. No card yet, and nothing is written."
         _jobs[job_id] = {"id": job_id, "state": "reading", "source": source,
-                         "message": ("The model on the second card is reading it. No card "
-                                     "yet, and nothing is written."),
+                         "message": msg,
                          "created": time.time(), "updated": time.time()}
         while len(_jobs) > _MAX_JOBS:
             _jobs.pop(min(_jobs, key=lambda k: _jobs[k]["created"]))

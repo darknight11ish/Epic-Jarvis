@@ -151,6 +151,13 @@ second_card_enable        = "ask"
 # written without asking; "never" turns "Add to wiki" off.
 wiki_update               = "ask"
 
+# --- The big model (slow), with colibri (docs/BIG-MODEL.md) --------------
+# Turning on a big-model switch (Brain window or phone) is one approval
+# card. It lets Jarvis start colibri on this PC when a background job needs
+# it, reachable from this PC only (127.0.0.1). Turning a switch OFF never
+# asks. Must stay "ask": anything else and the switch refuses to turn on.
+big_model_enable          = "ask"
+
 
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES
@@ -460,6 +467,64 @@ keep_alive = "30m"
 # "auto" leaves it to Ollama, which is what docs/MODEL-TOPOLOGY.md says to
 # do. "on" forces it; "off" turns it off.
 flash_attention = "auto"
+
+# ------------------------------------------------------------------------
+# 9c. THE BIG MODEL, SLOW (docs/BIG-MODEL.md)
+# ------------------------------------------------------------------------
+# A very large model run by colibri, for background jobs only: the wiki
+# builder and deep questions. Never chat, voice or approvals. HOW it runs,
+# not WHETHER: the switches are set from the Brain window or the phone,
+# each through an approval card, and kept in big-model.json next to this
+# file. Everything is off until then.
+#
+# Windows folders go in SINGLE quotes ('D:\models\x'): in double quotes a
+# backslash means something else and the file would not be read.
+[big_model]
+# The folder you unpacked colibri's Windows release into - the one that
+# holds coli.cmd. Empty: look for coli.cmd on PATH.
+coli_path = ''
+# colibri listens on 127.0.0.1 (this PC only - that part cannot be changed)
+# on this port. Not 11434 or 11435: those are the two Ollamas.
+port = 8765
+# colibri is started when a job needs it and stopped this many minutes
+# after the last one. The medium model holds about 24 GB of memory while
+# it runs, so it is not left running.
+idle_minutes = 10
+# How much text (in tokens) the model is given room for.
+ctx = 16384
+# "off": colibri never touches a graphics card (the default). "on": it may
+# use the SECOND card only - never the main one - and only when Jarvis sees
+# a capable second card whose own features are not running. The prebuilt
+# Windows release has no graphics-card support for RTX 20 cards: see
+# docs/BIG-MODEL.md, "The graphics card" before setting this.
+cuda = "off"
+# Which model each job uses, by its id below. Empty: the wiki uses the
+# first "medium" model and deep questions the first "giant" one.
+wiki_model = ""
+deep_model = ""
+# Giant models: how much memory colibri may plan to use (GB, at least 16).
+giant_ram_gb = 16
+# How long a deep question's answer may be (tokens), and how long Jarvis
+# waits for a model to load and for an answer (minutes).
+deep_max_tokens = 2048
+load_minutes = 20
+answer_minutes = 60
+
+# The models, one [[big_model.models]] block each. Remove the # in front of
+# a block's lines once that model is downloaded, and put its real folder in
+# `dir`. `kind` is "medium" (needs about 24 GB of memory) or "giant".
+#
+# [[big_model.models]]
+# id = "qwen36"
+# name = "Qwen3.6-35B-A3B"
+# dir = 'D:\models\qwen36_i4_gs64'
+# kind = "medium"
+#
+# [[big_model.models]]
+# id = "dsv4-flash"
+# name = "DeepSeek V4 Flash"
+# dir = 'E:\models\DeepSeek-V4-Flash'
+# kind = "giant"
 
 # ------------------------------------------------------------------------
 # 10. INITIATIVE - acting without being asked
