@@ -263,6 +263,22 @@ jobs:
             $got = [IO.File]::ReadAllText($Path)
             if ($got -ne $Want) { throw "$Why - $(Get-Diff $got $Want)" }
           }
+          # What the SCRIPT leaves. Windows git with its default
+          # core.autocrlf=true reads a file as LF and writes it back CRLF -
+          # measured here on 2026-09-24: all 40 lines came back CRLF, the
+          # content otherwise identical. Python reads both the same, and git
+          # reads it back as LF again, so a second run still recognises every
+          # patch (case 2 checks exactly that). So the content must match
+          # exactly, and the endings must be ONE kind throughout - a file
+          # with some CRLF lines and some LF lines is refused.
+          function Assert-Result([string] $Path, [string] $Want, [string] $Why) {
+            $got = [IO.File]::ReadAllText($Path)
+            $cr = ([regex]::Matches($got, "`r`n")).Count
+            $lf = ([regex]::Matches($got, "`n")).Count
+            if (($got -replace "`r`n", "`n") -ne $Want) { throw "$Why - $(Get-Diff $got $Want)" }
+            if ($cr -ne 0 -and $cr -ne $lf) { throw "$Why - mixed line endings: $cr of $lf lines are CRLF" }
+            return $got
+          }
           # A 40-line jarvis_hud.py with some lines changed (0-based index).
           function Get-Hud([hashtable] $Changes) {
             $lines = @(1..40 | ForEach-Object { "line $_" })
@@ -334,7 +350,7 @@ jobs:
           $r = Invoke-Native 'powershell' ($runArgs + @($be))
           $r.Out
           if ($r.Code -ne 0) { throw "the run on a backend with an older patch exited $($r.Code)" }
-          Assert-Text $hud (Get-Hud $three) "the result is not what the current list gives"
+          $after = Assert-Result $hud (Get-Hud $three) "the result is not what the current list gives"
           if ($r.Out -notmatch 'OLDER version') { throw "it did not say it found an older version" }
           if ($r.Out -notmatch 'toy-two\.patch from 2026-09-01 \(commit aaaaaaa\)') { throw "it did not name the older version it found" }
           $bk = @(Get-ChildItem -Directory -LiteralPath $be -Filter '_jarvis-backup-*')
@@ -346,7 +362,8 @@ jobs:
           $r = Invoke-Native 'powershell' ($runArgs + @($be))
           if ($r.Code -ne 0) { throw "the second run exited $($r.Code)`n$($r.Out)" }
           if ($r.Out -notmatch 'already applied') { throw "the second run did not find everything applied`n$($r.Out)" }
-          Assert-Text $hud (Get-Hud $three) "the second run changed the file"
+          # Byte for byte: a second run must not touch the file at all.
+          Assert-Text $hud $after "the second run changed the file"
           "a second run found everything applied"
 
           # 3. A text of the second patch that was never published: refused,
@@ -370,7 +387,7 @@ jobs:
           Write-Lf $hud3 (Get-Hud @{})
           $r = Invoke-Native 'powershell' ($runArgs + @($be3))
           if ($r.Code -ne 0) { throw "the run on a fresh backend exited $($r.Code)`n$($r.Out)" }
-          Assert-Text $hud3 (Get-Hud $three) "a fresh backend did not get the current list"
+          [void](Assert-Result $hud3 (Get-Hud $three) "a fresh backend did not get the current list")
           "a fresh backend got the whole current list"
           # Explicitly: the runner ends a powershell step with the LAST native
           # exit code, and case 3 above expects one that is not 0.
