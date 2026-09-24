@@ -136,15 +136,16 @@ rollback_model            = "auto"
 power_manage              = "auto"
 
 # --- The second graphics card -------------------------------------------
-# Turning on any second-card switch (Brain window or phone) is one approval
-# card. It starts a second copy of Ollama on this PC, reachable from this PC
+# Turning on any second-card switch (the desktop's Settings, or the phone's
+# Mind screen) is one approval card. It starts a second copy of Ollama on this PC, reachable from this PC
 # only (127.0.0.1), on the second card. Turning a switch OFF never asks. Must
 # stay "ask": anything else and the switch refuses to turn on at all.
 second_card_enable        = "ask"
 
 # --- The wiki builder (Brain window or phone: "Add to wiki") -------------
 # Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
-# that Jarvis Wiki folder, on this PC, using the model on the second card.
+# that Jarvis Wiki folder, on this PC, using the model on the second card -
+# or the big model instead, if you switched the big model on for the wiki.
 # Nothing leaves this PC, and the earlier copy of any page it changes is
 # kept in Jarvis Wiki/.versions. "ask" shows you the card (every page it
 # would write) first. You may lower it to "notify" or "auto" to have pages
@@ -152,8 +153,8 @@ second_card_enable        = "ask"
 wiki_update               = "ask"
 
 # --- The big model (slow), with colibri (docs/BIG-MODEL.md) --------------
-# Turning on a big-model switch (Brain window or phone) is one approval
-# card. It lets Jarvis start colibri on this PC when a background job needs
+# Turning on a big-model switch (the desktop's Settings, or the phone's
+# Mind screen) is one approval card. It lets Jarvis start colibri on this PC when a background job needs
 # it, reachable from this PC only (127.0.0.1). Turning a switch OFF never
 # asks. Must stay "ask": anything else and the switch refuses to turn on.
 big_model_enable          = "ask"
@@ -421,7 +422,7 @@ review_queue_max = 200
 # "implemented": false. There is no "either way" to run in yet.
 enabled = false
 # While disabled, a once-a-day card in the Brain window's Memory tab (and
-# on the phone's Brain screen) says it is not built yet and offers to
+# on the phone's Mind screen) says it is not built yet and offers to
 # record that you want it. Turning it on runs nothing. Set remind = false
 # to stop being asked.
 remind = true
@@ -454,8 +455,8 @@ primary_gpu = ""
 # 9b. THE SECOND GRAPHICS CARD (docs/SECOND-CARD.md)
 # ------------------------------------------------------------------------
 # HOW the second card is used, not WHETHER: the on/off switches are not in
-# this file. They are set from the Brain window or the phone, each one
-# through an approval card, and kept in second-card.json next to this file.
+# this file. They are set from the desktop's Settings or the phone's Mind
+# screen, each one through an approval card, and kept in second-card.json next to this file.
 # Everything is off until then, and nothing can be turned on until Jarvis
 # sees a capable second card (Turing or newer, 10 GB or more).
 [second_card]
@@ -465,7 +466,9 @@ port = 11435
 # How long a model stays loaded on the second card after its last use.
 keep_alive = "30m"
 # "auto" leaves it to Ollama, which is what docs/MODEL-TOPOLOGY.md says to
-# do. "on" forces it; "off" turns it off.
+# do. "on" forces it; "off" turns it off - but "off" cannot be combined
+# with the compact q8_0 memory format the second card uses: llama.cpp then
+# refuses to load the model (docs/HARDWARE-PROFILES.md, section 2.2).
 flash_attention = "auto"
 
 # ------------------------------------------------------------------------
@@ -473,8 +476,8 @@ flash_attention = "auto"
 # ------------------------------------------------------------------------
 # A very large model run by colibri, for background jobs only: the wiki
 # builder and deep questions. Never chat, voice or approvals. HOW it runs,
-# not WHETHER: the switches are set from the Brain window or the phone,
-# each through an approval card, and kept in big-model.json next to this
+# not WHETHER: the switches are set from the desktop's Settings or the
+# phone's Mind screen, each through an approval card, and kept in big-model.json next to this
 # file. Everything is off until then.
 #
 # Windows folders go in SINGLE quotes ('D:\models\x'): in double quotes a
