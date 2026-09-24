@@ -147,6 +147,14 @@ Also decided 2026-09-24, after the safety research
 - **Passwords, PINs, account numbers and ID numbers always wait for the
   owner's yes**, even with "Also remember sensitive topics automatically"
   on. That setting covers health, money and the other sensitive topics only.
+- **"Erase the words" joins Forget.** Forget still hides a fact and keeps its
+  history. A second action, "Erase the words", wipes the fact's text for
+  good (and its search entry); only the dates stay, so the history shows
+  that something was erased. It asks "are you sure?" first, like Forget.
+- **Hands-free voice stays as trusted as the talk button.** The owner chose
+  to leave it as it is (the research's "only trust the button" option was
+  offered and declined). The voice check's wording says plainly that it
+  cannot tell a recording or a copy from the real voice.
 
 ## Every new feature gets its own audit, without being asked
 
