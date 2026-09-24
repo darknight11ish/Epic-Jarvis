@@ -2105,16 +2105,32 @@ def _run_deep(jid: str) -> None:
     except Exception as exc:
         return _fail_deep(jid, f"the big model could not be asked ({type(exc).__name__})")
     secs = max(_mono() - t0, 0.001)
+    cut = finish == "length"
+    if re.search(r"(?s)<think>(?!.*</think>)", text):
+        # The reasoning never closed: the model was stopped mid-thought, and
+        # everything it wrote is reasoning, not an answer. Kept as nothing
+        # rather than saved as if it were the answer.
+        if cut:
+            return _fail_deep(jid, f"the big model reached the {_deep_max_tokens():,}-token "
+                                   f"limit ([big_model] deep_max_tokens) while still thinking, "
+                                   f"before it wrote any answer. Raise the limit, or ask a "
+                                   f"narrower question")
+        return _fail_deep(jid, "the big model stopped while still thinking, before it wrote "
+                               "any answer")
+    # Speed counts every word the model wrote, its reasoning included: the
+    # time was spent on all of it (K5). Counting only the answer made a
+    # model that reasoned for ten minutes look a hundred times slower.
+    words = len(re.sub(r"</?think>", " ", text).split())
     text = re.sub(r"(?s)<think>.*?</think>", "", text).strip()
     if not text:
         return _fail_deep(jid, "the big model gave an empty answer")
-    cut = finish == "length"
     text = text[:MAX_ANSWER_CHARS]
     tokens = usage.get("completion_tokens")
-    m = _measure("deep_questions", lane.model, tokens, secs, len(text.split()))
+    m = _measure("deep_questions", lane.model, tokens, secs, words)
     why = (f"Answered in {m['seconds']:.0f} s by {name}"
            + (f", {m['tokens_per_s']} tokens a second" if m["tokens_per_s"] else "")
-           + (f" ({m['words_per_s']} words a second)" if m["words_per_s"] else "")
+           + (f" (about {m['words_per_s']} words a second, its reasoning included)"
+              if m["words_per_s"] else "")
            + ". The time includes reading the question.")
     if cut:
         why += (f" The answer stopped at the {_deep_max_tokens():,}-token limit "

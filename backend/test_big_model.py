@@ -742,6 +742,43 @@ class _Colibri(BaseHTTPRequestHandler):
         pass
 
 
+def t_deep_question_speed_and_cut_reasoning():
+    # K5: words a second counted only the answer, after the <think> block
+    # was removed - 906 words written in 600 s read as 0.01 words a second.
+    think = "<think>" + " ".join(["reasoning"] * 900) + "</think>"
+    with World(answer=think + "\nBecause of Rayleigh scattering of sunlight.",
+               answer_tokens=1200, chat_seconds=600.0) as w:
+        w.switches(master=True, deep_questions=True)
+        BM.ask("Why is the sky blue?")
+        j = BM.deep_status()["jobs"][0]
+        check("the answer kept is the answer, without the reasoning",
+              j["state"] == "done" and j["answer"] == "Because of Rayleigh scattering of sunlight.")
+        check("words a second counts every word written, reasoning included (906 in 600 s)",
+              j["words_per_s"] == 1.51 and j["tokens_per_s"] == 2.0, j)
+        m = BM.status()["measured"]["deep_questions"]
+        check("status keeps both speeds", m["words_per_s"] == 1.51 and m["tokens_per_s"] == 2.0, m)
+        check("the sentence says tokens first, and that words include the reasoning",
+              "2.0 tokens a second (about 1.51 words a second, its reasoning included)" in j["why"],
+              j["why"])
+    # A reasoning block that never closed: cut off before any answer.
+    with World(answer="<think>" + " ".join(["hmm"] * 50), finish="length") as w:
+        w.switches(master=True, deep_questions=True)
+        BM.ask("Prove it.")
+        j = BM.deep_status()["jobs"][0]
+        check("reasoning cut off at the token limit: failed, honestly, no answer saved",
+              j["state"] == "failed" and "answer" not in j and "while still thinking" in j["why"]
+              and "deep_max_tokens" in j["why"], j)
+        kept = [r for r in BM._load_deep() if r["id"] == j["id"]]
+        check("and the raw reasoning is not written to deep-questions.jsonl as an answer",
+              kept and not kept[0].get("answer"), kept)
+    with World(answer="<think>" + " ".join(["hmm"] * 50)) as w:
+        w.switches(master=True, deep_questions=True)
+        BM.ask("Prove it.")
+        j = BM.deep_status()["jobs"][0]
+        check("reasoning never closed, not at the limit: failed too, said plainly",
+              j["state"] == "failed" and "before it wrote any answer" in j["why"], j)
+
+
 def t_deep_questions():
     srv = HTTPServer(("127.0.0.1", 0), _Colibri)
     port = srv.server_address[1]

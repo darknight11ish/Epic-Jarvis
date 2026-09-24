@@ -51,7 +51,7 @@
           "state": "done",
           "tokens": 12,
           "tokens_per_s": 1.5,
-          "why": "Answered in 8 s by DeepSeek V4 Flash, 1.5 tokens a second (1.12 words a second). The time includes reading the question.",
+          "why": "Answered in 8 s by DeepSeek V4 Flash, 1.5 tokens a second (about 1.12 words a second, its reasoning included). The time includes reading the question.",
           "words_per_s": 1.12
         }
       ],
@@ -93,7 +93,7 @@
           "state": "done",
           "tokens": 12,
           "tokens_per_s": 1.5,
-          "why": "Answered in 8 s by DeepSeek V4 Flash, 1.5 tokens a second (1.12 words a second). The time includes reading the question.",
+          "why": "Answered in 8 s by DeepSeek V4 Flash, 1.5 tokens a second (about 1.12 words a second, its reasoning included). The time includes reading the question.",
           "words_per_s": 1.12
         }
       ],
