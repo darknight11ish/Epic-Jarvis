@@ -103,12 +103,7 @@ CLASSIFICATION = {
     "/api/notes/capture": ("ported", ""),
     "/api/pending": ("ported", ""),
     "/api/power": ("ported", ""),
-    # Still `planned`, not `ported`: the phone calls it now (Mind screen's
-    # "Second graphics card" plate, and chat's photo button), but `ported`
-    # needs the desktop to call it too - rule 4 above fails a `ported` route
-    # the desktop does not call. The desktop's side is being built
-    # separately; once it calls this, the tool warns, and this becomes `ported`.
-    "/api/second-card": ("planned", "The second graphics card's switches (backend/second-card.patch, 2026-09-24). Both apps are to show it: the desktop's Brain and the phone's Mind. Read-only list plus one switch at a time; each ON is an approval card. The phone's side is built (SecondCardPlate.kt, 2026-09-24); the desktop's is not yet."),
+    "/api/second-card": ("ported", "The second graphics card's switches (backend/second-card.patch, 2026-09-24). Desktop: Settings, Second graphics card (vision.rs reads it for pictures). Phone: Mind screen's Second graphics card plate, and chat's photo button. What was found plus one switch at a time; each ON is an approval card."),
     "/api/retrieve": ("todo", "The HUD's retrieval trace (which facts an answer reached for). Not in JARVIS-API.md yet; decide what it should show before porting."),
     "/api/show": ("not-backend", "Ollama's /api/show on loopback: does the model take pictures (vision.rs)."),
     "/api/shutdown": ("deliberate", "Shutting the backend down from a phone is a foot-gun: the phone would then have nothing to reach and no way to undo it."),
