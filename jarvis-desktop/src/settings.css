@@ -694,3 +694,21 @@ select:focus-visible {
 .sc-command { flex-wrap: nowrap; }
 .sc-command input { flex: 1; min-width: 0; }
 .sc-command .btn.small { margin-left: 0; flex: none; }
+
+/* --------------------------------------------------------------------------
+   Big model (slow). The second graphics card's pieces, reused: `.sc-gpu`
+   list entries for what was found, `.sc-switch` rows, `.sc-line` words. A
+   model's `note` (for example a giant model on a SATA drive) is a warning,
+   so it gets the warning edge.
+   -------------------------------------------------------------------------- */
+
+#bm-state[data-tone="bad"] { color: var(--bad-text); }
+
+#big-model .sc-gpu[data-state="missing"] { border-left: 3px solid var(--warn); }
+
+#big-model .sc-gpu .bm-warn {
+  margin-top: 3px;
+  padding-left: 8px;
+  border-left: 3px solid var(--warn);
+  color: var(--text);
+}

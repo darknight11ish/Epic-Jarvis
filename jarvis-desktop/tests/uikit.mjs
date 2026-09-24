@@ -52,6 +52,17 @@ export const SECOND_CARD = JSON.parse(fsSync.readFileSync(path.join(
   "utf8")).cases;
 
 /**
+ * The backend's real big-model answers - jarvis_big_model.status() (the
+ * `status_*` cases), deep_status() (`deep_*`) and the POST answers
+ * (`post_*`, `ask_*`, each `{status, body}`) - written by
+ * tools/gen_big_model_cases.py. Never hand-made: pick a case by name, e.g.
+ * `BIG_MODEL.status_ready_off`.
+ */
+export const BIG_MODEL = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "big-model-cases.json"),
+  "utf8")).cases;
+
+/**
  * Where the browser is.
  *
  * Playwright's own resolution is wrong in the container these were written in
@@ -364,7 +375,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -710,6 +721,60 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
           }
+          // commands.rs get_big_model / set_big_model. `status` is a real
+          // status() from BIG_MODEL; the Rust passes a 200 on as is.
+          // `unavailable` is its answer for a 404, or the 503 `{"available":
+          // false}` of a backend without jarvis_big_model.py; `getFails` /
+          // `setFails` are the sentence it rejects with.
+          case "get_big_model": {
+            const bm = window.__bigModel;
+            bm.reads += 1;
+            if (bm.getFails) throw new Error(bm.getFails);
+            if (bm.unavailable) {
+              return { available: false, why: "This PC's Jarvis does not have the big model part yet. Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            return JSON.parse(JSON.stringify(bm.status));
+          }
+          case "set_big_model": {
+            const bm = window.__bigModel;
+            bm.changes.push({ switch: args.switch, enabled: args.enabled });
+            if (bm.setFails) throw new Error(bm.setFails);
+            // What jarvis_big_model.request_change does to status(): ON puts
+            // the switch in `pending` and answers the real
+            // post_master_on_pending body (a card is up, NOTHING is on); OFF
+            // clears it at once, with the backend's "<label> is off.".
+            const st = bm.status;
+            const row = (st.switches || []).find((s) => s.id === args.switch);
+            if (args.enabled) {
+              if (!st.pending.includes(args.switch)) st.pending.push(args.switch);
+              return JSON.parse(JSON.stringify(bm.onAnswer));
+            }
+            if (args.switch === "master") st.enabled = false;
+            else if (row) row.enabled = false;
+            st.pending = st.pending.filter((p) => p !== args.switch);
+            const label = args.switch === "master" ? "The big model" : `"${row ? row.name : args.switch}"`;
+            return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
+          }
+          // commands.rs get_deep / ask_deep. `status` is a real
+          // deep_status(); `askAnswers` are real POST bodies (the 202 job, or
+          // a refusal the Rust passes on as an answer), used in turn, the
+          // last one repeating. `askFails` is the sentence it rejects with.
+          case "get_deep": {
+            const d = window.__deep;
+            d.reads += 1;
+            if (d.getFails) throw new Error(d.getFails);
+            if (d.unavailable) {
+              return { available: false, why: "This PC's Jarvis does not have the big model part yet. Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            return JSON.parse(JSON.stringify(d.status));
+          }
+          case "ask_deep": {
+            const d = window.__deep;
+            d.asks.push(args.question);
+            if (d.askFails) throw new Error(d.askFails);
+            const next = d.askAnswers.length > 1 ? d.askAnswers.shift() : d.askAnswers[0];
+            return JSON.parse(JSON.stringify(next));
+          }
           case "set_theme": return args.theme;
           case "brain_read": {
             const out = {};
@@ -833,6 +898,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__secondCard = { reads: 0, changes: [], getFails: null, setFails: null,
                           unavailable: false, ...(secondCard || {}) };
   window.__secondCard.status = JSON.parse(JSON.stringify(window.__secondCard.status || null));
+  // Unset, the PC as it is today: colibri not installed yet (the real
+  // `status_not_installed`), and deep questions off (`deep_off`).
+  window.__bigModel = { reads: 0, changes: [], getFails: null, setFails: null,
+                        unavailable: false, ...(bigModel || {}) };
+  window.__bigModel.status = JSON.parse(JSON.stringify(window.__bigModel.status || null));
+  window.__deep = { reads: 0, asks: [], askAnswers: [], getFails: null, askFails: null,
+                    unavailable: false, ...(deep || {}) };
+  window.__deep.status = JSON.parse(JSON.stringify(window.__deep.status || null));
+  window.__deep.askAnswers = JSON.parse(JSON.stringify(window.__deep.askAnswers));
   window.__vision = vision || { model: "qwen3:8b", vision: false,
     reason: "Ollama lists what qwen3:8b can do, and pictures are not on the list." };
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
@@ -874,6 +948,11 @@ export async function open(browser, base, file, data, viewport) {
     secondCard: { status: SECOND_CARD.one_card },
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,
+    // A scenario names only what it changes; the real POST answers stay.
+    bigModel: { status: BIG_MODEL.status_not_installed,
+                onAnswer: BIG_MODEL.post_master_on_pending.body, ...(data && data.bigModel) },
+    deep: { status: BIG_MODEL.deep_off, askAnswers: [BIG_MODEL.ask_accepted.body],
+            ...(data && data.deep) },
   });
   await page.goto(`${base}/${file}`);
   await page.waitForTimeout(500);

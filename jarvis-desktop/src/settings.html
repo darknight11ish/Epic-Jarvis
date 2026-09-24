@@ -360,6 +360,71 @@
         </div>
       </section>
 
+      <!-- ── Big model (slow) ─────────────────────────────────────────────
+           Read from GET /api/big-model (settings.js, big-model part). colibri
+           runs a model much bigger than a graphics card holds, on the
+           processor and the SSD, for background jobs only: the wiki builder
+           and deep questions. Never chat, voice or approvals. Every switch is
+           OFF until the owner turns it on, and can only be turned on once
+           Jarvis has found everything it needs (`detected.capable`). Turning
+           one ON raises an approval card and changes nothing by itself;
+           turning one OFF happens at once. docs/BIG-MODEL.md is the guide. -->
+      <section class="card" id="big-model">
+        <h2>Big model (slow)</h2>
+        <p class="note">
+          A much bigger model than your graphics card can hold, for jobs
+          nobody is waiting on: the wiki builder, and "deep questions" (one
+          question answered carefully in the background). A free program
+          called colibri runs it on this computer's processor and SSD. It is
+          slow: expect minutes per answer, not seconds. It is never used for
+          chat, voice or approvals. Everything here is off until you turn it
+          on. Turning something on shows you an approval card first; turning
+          something off happens at once. Nothing here sends anything off this
+          computer.
+        </p>
+        <p class="sc-line" data-tone="warn" id="bm-unverified-note">
+          None of colibri's speed claims have been checked on this PC. The
+          speeds on colibri's own pages come from other people's computers.
+        </p>
+
+        <p class="state" id="bm-state" role="status">Checking for the big model…</p>
+
+        <div id="bm-body" hidden>
+          <h3 class="subhead">What Jarvis found</h3>
+          <p class="note" id="bm-found"></p>
+          <ul class="sc-cards" id="bm-parts"></ul>
+
+          <h3 class="subhead">Models</h3>
+          <ul class="sc-cards" id="bm-models"></ul>
+
+          <h3 class="subhead">Switches</h3>
+          <p class="sc-blocked" id="bm-blocked" hidden></p>
+          <div class="sc-switches" id="bm-switches"></div>
+          <div class="row">
+            <span class="status" id="bm-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead">The engine (colibri)</h3>
+          <p class="note">
+            colibri only runs while a job needs it. It listens on this
+            computer only - not your network, not the internet - and only
+            answers Jarvis.
+          </p>
+          <p class="sc-line" id="bm-engine"></p>
+          <p class="sc-line" id="bm-address"></p>
+
+          <h3 class="subhead">Graphics card</h3>
+          <p class="sc-line" id="bm-cuda"></p>
+
+          <h3 class="subhead">The key colibri is started with</h3>
+          <p class="sc-line" id="bm-key"></p>
+
+          <h3 class="subhead">How fast it really is on this PC</h3>
+          <ul class="sc-cards" id="bm-measured"></ul>
+          <p class="sc-line" data-tone="warn" id="bm-unverified"></p>
+        </div>
+      </section>
+
       <section class="card">
         <h2>Frequently asked questions</h2>
         <p class="note">

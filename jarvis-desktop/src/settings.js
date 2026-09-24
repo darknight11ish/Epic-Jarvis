@@ -1554,4 +1554,386 @@ document.addEventListener("visibilitychange", () => {
 });
 loadSecondCard();
 
+/* ==========================================================================
+   Big model (slow)
+   --------------------------------------------------------------------------
+   colibri, a separate program, runs a model far bigger than a graphics card
+   holds, on the processor and the SSD, for background jobs only: the wiki
+   builder and deep questions - never chat, voice or approvals
+   (docs/BIG-MODEL.md). Read from `get_big_model` (GET /api/big-model, the
+   backend's jarvis_big_model.status() - its real shape is
+   tests/fixtures/big-model-cases.json), written one switch at a time with
+   `set_big_model`.
+
+   The same shape as the second graphics card above, on purpose: every
+   switch is OFF until the owner turns it on, and none can be turned on until
+   the backend says everything was found (`detected.capable`). Turning one ON
+   approves nothing - the backend raises ONE approval card and answers
+   `pending: true`, and the switch stays off until the owner says yes on that
+   card. So this re-reads when the approval queue changes, when the window
+   comes back into view, and gently every few seconds while a card waits (or
+   while colibri is loading, which takes minutes). Turning OFF is immediate.
+
+   Every sentence about what was found comes from the backend (`why`,
+   `note`, `key_where`, `unverified`); nothing here guesses. The key colibri
+   is started with never reaches this page - only where it is kept.
+   ========================================================================== */
+
+const bm = {
+  card: $("big-model"),
+  state: $("bm-state"),
+  body: $("bm-body"),
+  found: $("bm-found"),
+  parts: $("bm-parts"),
+  models: $("bm-models"),
+  blocked: $("bm-blocked"),
+  switches: $("bm-switches"),
+  status: $("bm-status"),
+  engine: $("bm-engine"),
+  address: $("bm-address"),
+  cuda: $("bm-cuda"),
+  key: $("bm-key"),
+  measured: $("bm-measured"),
+  unverified: $("bm-unverified"),
+};
+
+const BM_UPDATE =
+  "This PC's Jarvis does not have the big model part yet. Update the backend by running apply-patches.ps1, then open this again.";
+/** The main switch has no row in `switches`; these are its words. */
+const BM_MASTER = {
+  id: "master",
+  name: "Use the big model",
+  what: "The main switch. Neither job below can be turned on until this one is on.",
+};
+const BM_ENGINE = { off: "Off", loading: "Loading", ready: "Ready", failed: "Failed" };
+const BM_KIND = { medium: "medium model", giant: "giant model" };
+/** Said even when the backend's own sentence is missing - the owner's rule. */
+const BM_UNVERIFIED =
+  "None of colibri's speed claims have been checked on this PC. The numbers here, from your own jobs, are the first real ones.";
+
+let bmReadSeq = 0;
+let bmBusy = false;
+let bmPollTimer = null;
+/** When the gentle re-reading stops; 0 while nothing is waiting. */
+let bmPollUntil = 0;
+/** Switches with a card waiting at the last read, to say how each ended. */
+let bmWaiting = new Set();
+let bmPainted = false;
+
+/** `scSentence`, except that colibri keeps its own lower-case name. */
+function bmSentence(text) {
+  return /^\s*colibri\b/.test(String(text || "")) ? scClause(text) : scSentence(text);
+}
+
+/** A number of gigabytes as the owner reads it: "3,100 GB", "25.3 GB". */
+function bmGb(value) {
+  const n = Number(value);
+  if (value === null || value === undefined || !Number.isFinite(n)) return "";
+  return `${n.toLocaleString("en-US", { maximumFractionDigits: 1 })} GB`;
+}
+
+function bmSeconds(value) {
+  const s = Math.round(Number(value));
+  if (!Number.isFinite(s) || s < 0) return "";
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ${s % 60} s`;
+  return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+}
+
+/** One entry in a list: a name, and lines under it. */
+function bmItem(name, lines, { tone, state } = {}) {
+  const item = scNode("li", "sc-gpu");
+  if (state) item.dataset.state = state;
+  item.append(scNode("span", "sc-gpu-name", name));
+  for (const line of lines) {
+    if (!line) continue;
+    const text = typeof line === "string" ? line : line.text;
+    const node = scNode("span", "sc-gpu-role", text);
+    if (typeof line === "object" && line.warn) node.classList.add("bm-warn");
+    item.append(node);
+  }
+  if (tone) item.dataset.tone = tone;
+  return item;
+}
+
+function bmParts(detected) {
+  const colibri = detected.colibri || {};
+  const python = detected.python || {};
+  const ram = detected.ram || {};
+  // Python is looked for only once colibri is found; the backend says "not
+  // checked" then, which is not the same as missing.
+  const found = (thing) => (thing.found === true ? "found"
+    : /^\s*not checked/i.test(String(thing.why || "")) ? "not checked yet" : "not found");
+  const memory = [bmGb(ram.total_gb) && `${bmGb(ram.total_gb)} in total`,
+    bmGb(ram.available_gb) && `${bmGb(ram.available_gb)} free right now`].filter(Boolean);
+  return [
+    bmItem(`colibri: ${found(colibri)}`, [bmSentence(colibri.why)],
+      { state: colibri.found === true ? "ok" : "missing" }),
+    bmItem(`Python 3: ${found(python)}`, [bmSentence(python.why)],
+      { state: python.found === true ? "ok" : "missing" }),
+    bmItem("Memory", [memory.length ? `${memory.join(", ")}.` : "Jarvis could not read this PC's memory."]),
+  ];
+}
+
+function bmModelItem(model) {
+  const kind = BM_KIND[model.kind] || "model";
+  const drive = String(model.drive || "").trim();
+  const type = model.drive_type && model.drive_type !== "unknown" ? model.drive_type : "drive type unknown";
+  const free = bmGb(model.free_gb);
+  const lines = [
+    model.dir ? `Folder: ${model.dir}` : "",
+    drive ? `On ${drive} (${type}), ${free ? `${free} free` : "free space unknown"}.` : "",
+    bmGb(model.need_gb) ? `Needs about ${bmGb(model.need_gb)} of free memory to run.` : "",
+    bmSentence(model.why),
+    model.note ? { text: bmSentence(model.note), warn: true } : "",
+  ];
+  return bmItem(`${model.name || model.id || "A model"} (${kind})`, lines,
+    { state: model.usable === true ? "ok" : "missing" });
+}
+
+/**
+ * Whether a switch may be changed now, and if not, why - in words. Only
+ * turning ON is ever held back: a switch that is on can always be turned off.
+ */
+function bmHeld(sw, status) {
+  if (sw.pending) return SC_WAITING;
+  if (sw.enabled) return "";
+  const detected = status.detected || {};
+  if (detected.capable !== true) {
+    return `Can't be turned on yet: ${scClause(detected.why) || "Jarvis has not found everything the big model needs."}`;
+  }
+  if (sw.id !== "master" && status.enabled !== true) return `Turn on "${BM_MASTER.name}" first.`;
+  return "";
+}
+
+function bmMasterSwitch(status) {
+  const detected = status.detected || {};
+  let why = "Off.";
+  if (status.enabled && status.active) why = "On.";
+  else if (status.enabled) {
+    why = `On, but it cannot run: ${scClause(detected.why) || "something it needs is missing."} Your choice is kept.`;
+  }
+  return { ...BM_MASTER, enabled: status.enabled === true,
+    pending: (status.pending || []).includes("master"), why };
+}
+
+function bmSwitchRow(sw, status) {
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = sw.id;
+  row.dataset.state = sw.pending ? "waiting" : sw.enabled ? "on" : "off";
+
+  const label = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `bm-switch-${sw.id}`;
+  input.checked = Boolean(sw.enabled);
+  const held = bmHeld(sw, status);
+  input.disabled = Boolean(held);
+  const text = scNode("span", "", sw.name);
+  text.append(scNode("span", "toggle-detail", sw.what || ""));
+  label.append(input, text);
+  row.append(label);
+
+  const lines = scNode("div", "sc-lines");
+  const describedBy = [];
+  const addLine = (className, words) => {
+    if (!words) return;
+    const line = scNode("p", className, words);
+    line.id = `bm-${sw.id}-${className.split(" ").pop()}`;
+    describedBy.push(line.id);
+    lines.append(line);
+  };
+  addLine("sc-why", bmSentence(sw.why));
+  const capable = (status.detected || {}).capable === true;
+  if (sw.pending) addLine("sc-held sc-waiting", SC_WAITING);
+  // With nothing found, the one line above the switches says why for all of
+  // them. Nor twice when the backend's own line already says it ("Off. Turn
+  // on the big model itself first.").
+  else if (held && capable && !/\bfirst\b/i.test(String(sw.why || ""))) addLine("sc-held", held);
+  if (held && !capable) describedBy.push("bm-blocked");
+  if (sw.id !== "master") {
+    const model = String(sw.model_name || sw.model || "").trim();
+    addLine("sc-model", model ? `Model: ${model}.` : "No model is chosen for this job yet.");
+  }
+  if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
+  row.append(lines);
+
+  input.addEventListener("change", () => bmToggle(sw, input));
+  return row;
+}
+
+function bmMeasuredItem(sw, m, names) {
+  if (!m || typeof m !== "object") return bmItem(sw.name, ["Not measured on this PC yet."], { state: "none" });
+  const model = names[m.model] || m.model || "the big model";
+  const when = Number(m.at) > 0
+    ? new Date(Number(m.at) * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : "";
+  const lines = [
+    `${m.words_per_s} words a second (${m.tokens_per_s} tokens a second).`,
+    `${m.tokens} tokens in ${bmSeconds(m.seconds)}, by ${model}${when ? `, ${when}` : ""}.`,
+  ];
+  return bmItem(sw.name, lines, { state: "measured" });
+}
+
+function bmShowProblem(words) {
+  bm.body.hidden = true;
+  bm.state.hidden = false;
+  bm.state.dataset.tone = "bad";
+  bm.state.textContent = words;
+  bmPainted = false;
+  bmStopPoll();
+}
+
+function bmPaint(status) {
+  const detected = status.detected || {};
+  const jobs = status.switches.filter((s) => s && typeof s.id === "string");
+  const pending = new Set(Array.isArray(status.pending) ? status.pending : []);
+  const models = Array.isArray(detected.models) ? detected.models : [];
+  const names = Object.fromEntries(models.map((m) => [m.id, String(m.name || m.id)]));
+
+  bm.state.hidden = true;
+  delete bm.state.dataset.tone;
+  bm.body.hidden = false;
+
+  bm.found.textContent = bmSentence(detected.why) || "Jarvis did not say what it found.";
+  bm.parts.replaceChildren(...bmParts(detected));
+  bm.models.replaceChildren(...(models.length ? models.map(bmModelItem)
+    : [bmItem("No models set up", ["Add them to jarvis-framework.toml, [big_model] - docs/BIG-MODEL.md, step 3, says how."])]));
+
+  bm.blocked.hidden = detected.capable === true;
+  bm.blocked.textContent = detected.capable === true ? ""
+    : `Nothing here can be turned on until Jarvis finds colibri, Python 3, a model and enough ` +
+      `memory and disk: ${scClause(detected.why)} The switches are shown so you can see what is there.`;
+
+  const rows = [bmMasterSwitch(status)].concat(jobs.map((s) => ({
+    ...s, enabled: s.enabled === true, pending: pending.has(s.id) })));
+  const focused = document.activeElement && document.activeElement.id;
+  bm.switches.replaceChildren(...rows.map((sw) => bmSwitchRow(sw, status)));
+  if (focused && focused.startsWith("bm-switch-")) {
+    const again = document.getElementById(focused);
+    if (again) again.focus();
+  }
+
+  const engine = status.engine || {};
+  bm.engine.textContent = `${BM_ENGINE[engine.state] || "Unknown"}. ${bmSentence(engine.why)}`.trim() +
+    (engine.busy === true ? " It is working on a job right now." : "");
+  bm.engine.dataset.tone = engine.state === "ready" ? "ok" : engine.state === "failed" ? "bad" : "";
+  const idle = Number(engine.idle_minutes);
+  bm.address.textContent = [
+    engine.listens_on ? `Listens on ${engine.listens_on} - this computer only.` : "",
+    Number.isFinite(idle) && idle > 0 ? `Stops ${idle} minute${idle === 1 ? "" : "s"} after its last job.` : "",
+  ].filter(Boolean).join(" ");
+  bm.address.hidden = !bm.address.textContent;
+
+  const cuda = status.cuda || {};
+  bm.cuda.textContent = bmSentence(cuda.why) || "Jarvis did not say whether a graphics card is used.";
+  bm.cuda.dataset.tone = cuda.setting === "on" && cuda.usable === false ? "bad" : "";
+
+  const where = String(status.key_where || "").trim();
+  const lead = { "not-made-yet": "Not made yet. It is ", "credential-manager": "Kept in ",
+    "this-run-only": "Kept for this run only: " }[status.key_kept] || "Where it is kept: ";
+  bm.key.textContent = where
+    ? `${lead}${scClause(where)} The key itself is never shown here, and only colibri on this PC is given it.`
+    : "Jarvis did not say where the key is kept.";
+
+  const measured = status.measured && typeof status.measured === "object" ? status.measured : {};
+  bm.measured.replaceChildren(...jobs.map((sw) => bmMeasuredItem(sw, measured[sw.id], names)));
+  bm.unverified.textContent = String(status.unverified || "").trim() || BM_UNVERIFIED;
+
+  // How each card that was waiting ended.
+  if (bmPainted) {
+    const byId = Object.fromEntries(jobs.map((s) => [s.id, s]));
+    for (const id of bmWaiting) {
+      if (pending.has(id)) continue;
+      const name = id === "master" ? BM_MASTER.name : (byId[id] && byId[id].name) || id;
+      const on = id === "master" ? status.enabled === true : Boolean(byId[id] && byId[id].enabled);
+      report(bm.status, on ? `"${name}" is on.` : `"${name}" was not turned on: the card was denied or ran out of time.`,
+        on ? "ok" : null);
+      announce(bm.status.textContent);
+    }
+  }
+  bmPainted = true;
+  bmWaiting = pending;
+  if (pending.size || engine.state === "loading") bmStartPoll();
+  else bmStopPoll();
+}
+
+async function loadBigModel() {
+  if (!IS_TAURI || !bm.card) return;
+  const seq = ++bmReadSeq;
+  let answer;
+  try {
+    answer = await invoke("get_big_model");
+  } catch (error) {
+    if (seq !== bmReadSeq) return;
+    bmShowProblem(`Jarvis could not be asked about the big model. ${scProblemWords(error)}`);
+    return;
+  }
+  if (seq !== bmReadSeq) return;
+  if (answer && answer.available === false) {
+    bmShowProblem(typeof answer.why === "string" && answer.why ? answer.why : BM_UPDATE);
+    return;
+  }
+  if (!answer || typeof answer !== "object" || !answer.detected || !Array.isArray(answer.switches)) {
+    bmShowProblem(`Jarvis's answer about the big model could not be read. ${BM_UPDATE}`);
+    return;
+  }
+  bmPaint(answer);
+}
+
+function bmStartPoll() {
+  if (!bmPollUntil) bmPollUntil = Date.now() + SC_POLL_FOR_MS;
+  clearTimeout(bmPollTimer);
+  bmPollTimer = null;
+  if (Date.now() > bmPollUntil) return;
+  bmPollTimer = setTimeout(() => {
+    bmPollTimer = null;
+    if (!document.hidden) loadBigModel();
+  }, SC_POLL_MS);
+}
+
+function bmStopPoll() {
+  clearTimeout(bmPollTimer);
+  bmPollTimer = null;
+  bmPollUntil = 0;
+}
+
+/** One switch, one request. ON raises a card and nothing more. */
+async function bmToggle(sw, input) {
+  const turnOn = input.checked;
+  if (bmBusy) {
+    input.checked = !turnOn;
+    return;
+  }
+  bmBusy = true;
+  input.disabled = true;
+  report(bm.status, turnOn ? `Asking to turn on "${sw.name}"…` : `Turning off "${sw.name}"…`);
+  try {
+    const out = await invoke("set_big_model", { switch: sw.id, enabled: turnOn });
+    if (turnOn && out && out.pending === true) {
+      report(bm.status, SC_WAITING, "ok");
+      announce(`"${sw.name}": ${SC_WAITING}`);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(bm.status, out.message, "ok");
+    } else {
+      report(bm.status, turnOn ? `"${sw.name}" is on.` : `"${sw.name}" is off.`, "ok");
+    }
+  } catch (error) {
+    report(bm.status, scProblemWords(error), "bad");
+    announce(bm.status.textContent, "assertive");
+  } finally {
+    bmBusy = false;
+  }
+  // The switch shows what Jarvis says, never what was clicked.
+  await loadBigModel();
+}
+
+onQueue(() => {
+  if (bmWaiting.size) loadBigModel();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadBigModel();
+});
+loadBigModel();
+
 loadUpdate();
