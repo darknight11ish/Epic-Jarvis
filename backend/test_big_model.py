@@ -254,6 +254,31 @@ def t_switches():
         check("unknown switch: 400", BM.request_change("chat", True)[0] == 400)
         check("enabled must be a boolean", BM.handle_post({"switch": "wiki", "enabled": 1})[0] == 400)
         check("a body that is not an object: 400", BM.handle_post([1])[0] == 400)
+    # AP-4: the master card says what comes back; a job's card answered after
+    # the master switch went off does not turn the job on.
+    with World() as w:
+        seen = []
+        gate = lambda a, d, p: seen.append(p) or Verdict(True, "ask", "approved")
+        w.switches(master=False, wiki=True)
+        BM.request_change("master", True, gate=gate)
+        check("master card with a job left on: says it works again at once",
+              seen and "If you say yes: \"Wiki builder\" works again at once" in seen[0], seen)
+        seen.clear()
+        w.switches(master=False)
+        BM.request_change("master", True, gate=gate)
+        check("master card with no job on: says no job uses it yet",
+              seen and "no job uses it yet" in seen[0], seen)
+        held = []
+        BM.request_change("deep_questions", True,
+                          gate=lambda a, d, p: Verdict(True, "ask", "approved"),
+                          spawn=held.append)
+        BM.request_change("master", False)
+        held[0]()
+        check("job approved after master went OFF: stays off, refused with the reason",
+              BM._read_switches()["deep_questions"] is False
+              and BM._LAST["deep_questions"]["outcome"] == "refused"
+              and "switch was turned off" in BM._LAST["deep_questions"]["reason"],
+              BM._LAST.get("deep_questions"))
     with World(colibri=False) as w:
         seen = []
         code, out = BM.request_change("master", True, gate=lambda *a: seen.append(a))

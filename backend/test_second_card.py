@@ -253,6 +253,46 @@ def t_switches():
     with G.World(G.SMI["2080s_1080"]):
         code, out = SC.request_change("master", True, gate=lambda *a: None)
         check("ON with an old second card: 503, says why", code == 503 and "older than Turing" in out["error"])
+    # AP-4: the cards say exactly what starts if the owner says yes.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        seen = []
+        gate = lambda a, d, p: seen.append(p) or Verdict(True, "ask", "approved")
+        w.switches(master=True, long_context=True, browser_control=True)
+        SC.request_change("master", False)
+        check("master OFF keeps the owner's feature choices",
+              SC._read_switches()["features"]["long_context"] is True
+              and SC._read_switches()["features"]["browser_control"] is True)
+        SC.request_change("master", True, gate=gate)
+        check("master card with features left on: names them, never 'nothing starts yet'",
+              seen and "nothing starts yet" not in seen[0]
+              and "\"Longer conversations\" and \"Browser control\" start working again at once"
+              in seen[0], seen)
+        check("... and approving it really starts the lane (the card was true)",
+              len(w.started) == 1 and w.running())
+        seen.clear()
+        SC.request_change("long_context", False)
+        check("Longer conversations OFF keeps Browser control's choice",
+              SC._read_switches()["features"]["browser_control"] is True)
+        SC.request_change("long_context", True, gate=gate)
+        check("the long_context card says Browser control comes back too",
+              seen and "\"Browser control\" is still switched on from before, so it starts "
+              "working again too" in seen[0], seen)
+        seen.clear()
+        w.switches(master=False)
+        SC.request_change("master", True, gate=gate)
+        check("master card with nothing left on: 'nothing starts yet'",
+              seen and "nothing starts yet" in seen[0], seen)
+        # A feature's card answered after the main switch went off.
+        held = []
+        SC.request_change("vision", True, gate=lambda a, dd, p: Verdict(True, "ask", "approved"),
+                          spawn=held.append)
+        SC.request_change("master", False)
+        held[0]()
+        check("feature approved after master went OFF: stays off, refused with the reason",
+              SC._read_switches()["features"]["vision"] is False
+              and SC._LAST["vision"]["outcome"] == "refused"
+              and "main second-card switch was turned off" in SC._LAST["vision"]["reason"],
+              SC._LAST.get("vision"))
     # The approval must never be automatic: the module never calls approve.
     src = (HERE / "jarvis_second_card.py").read_text(encoding="utf-8")
     code_only = re.sub(r'(?s)""".*?"""', "", src)

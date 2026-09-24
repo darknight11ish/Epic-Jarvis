@@ -1565,8 +1565,10 @@ _LAST: dict = {}
 _WITHDRAWN: set = set()
 
 
-def describe_on(switch: str, det: dict) -> str:
-    """The approval card. Every word from here; what refusing costs is on it."""
+def describe_on(switch: str, det: dict, sw: Optional[dict] = None) -> str:
+    """The approval card. Every word from here; what refusing costs is on it.
+    It says exactly what comes back if the owner says yes (AP-4)."""
+    sw = sw if sw is not None else _read_switches()
     ram = det.get("ram") or {}
     lines = []
     if switch == "master":
@@ -1575,6 +1577,15 @@ def describe_on(switch: str, det: dict) -> str:
         lines.append("")
         lines.append("Which models: " + "; ".join(
             f"{r['name']} ({r['kind']}), in {r['dir']}" for r in rows) + ".")
+        back = [JOB_NAMES[j] for j in JOBS if sw.get(j)]
+        if back:
+            lines.append(
+                "If you say yes: " + " and ".join(f"\"{n}\"" for n in back)
+                + (" works" if len(back) == 1 else " work") + " again at once - you left "
+                + ("it" if len(back) == 1 else "them") + " switched on.")
+        else:
+            lines.append("If you say yes: no job uses it yet. \"Wiki builder\" and \"Deep "
+                         "questions\" each have their own switch and their own card.")
     else:
         r = _model_for(switch, det)
         lines.append(f"Use the big model for \"{JOB_NAMES[switch]}\"?")
@@ -1670,6 +1681,10 @@ def _decide(switch: str, pid: str, gate: Callable) -> None:
     if withdrawn:
         return _finish(switch, pid, "withdrawn", "you turned it off while the card was waiting",
                        rid)
+    if switch != "master" and not _read_switches()["master"]:
+        # Checked again now, not only when the card went up.
+        return _finish(switch, pid, "refused",
+                       "the big-model switch was turned off while the card waited", rid)
     why = _can_turn_on(switch, detect(fresh=True))
     if why:
         return _finish(switch, pid, "refused", f"no longer possible: {why}", rid)

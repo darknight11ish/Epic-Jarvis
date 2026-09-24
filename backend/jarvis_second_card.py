@@ -1265,8 +1265,29 @@ def _shares_with_big_model() -> str:
             "until it stops.")
 
 
-def describe_on(feature: str, det: dict) -> str:
-    """The approval card. Every word from here; what refusing costs is on it."""
+def _would_work(feature: str, sw: dict) -> list:
+    """The features that are working once `feature` is turned on, given the
+    owner's other switches as they are - every choice is kept while the
+    main switch or a feature it needs is off, so approving one card can
+    bring back others. In the apps' order."""
+    after = {"master": sw["master"], "features": dict(sw["features"])}
+    if feature == "master":
+        after["master"] = True
+    else:
+        after["features"][feature] = True
+    ok = {"capable": True}
+    return [f for f in FEATURE_IDS if _feature_active(f, after, ok)]
+
+
+def _names(ids: list) -> str:
+    names = [f"\"{_BY_ID[i]['name']}\"" for i in ids]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
+    """The approval card. Every word from here; what refusing costs is on it.
+    It says exactly what starts if the owner says yes (AP-4)."""
+    sw = sw if sw is not None else _read_switches()
     s = det["second"]
     p = det.get("primary") or {}
     card = f"the {s['name']} ({_gb(s['total_mb'])}, id {s['uuid']})"
@@ -1274,12 +1295,20 @@ def describe_on(feature: str, det: dict) -> str:
             f"listens on {HOST}:{_port()} - this PC only, not your network or the "
             f"internet. Nothing leaves this PC.") + _shares_with_big_model()
     if feature == "master":
+        back = _would_work("master", sw)
+        if back:
+            yes = (f"If you say yes: {_names(back)} start{'s' if len(back) == 1 else ''} "
+                   f"working again at once - you left "
+                   f"{'it' if len(back) == 1 else 'them'} switched on. {lane} Every other "
+                   "feature stays off; each has its own switch and its own card.")
+        else:
+            yes = ("If you say yes: nothing starts yet. Each feature (Longer conversations, "
+                   "Pictures, Learning in the background, Browser control, Wiki builder) has "
+                   f"its own switch and its own card. Once one of them is on, {lane}")
         return (
             "Let Jarvis use the second graphics card?\n\n"
             f"Which card: {card}.\n\n"
-            "If you say yes: nothing starts yet. Each feature (Longer conversations, "
-            "Pictures, Learning in the background, Browser control, Wiki builder) has its "
-            f"own switch and its own card. Once one of them is on, {lane}\n\n"
+            f"{yes}\n\n"
             "If you did not just ask for this, say no.\n\n"
             f"If you say no: nothing changes. Everything keeps running on the "
             f"{p.get('name', 'main card')}.")
@@ -1293,6 +1322,14 @@ def describe_on(feature: str, det: dict) -> str:
     if installed is False:
         inst = (f"\n\n{model} is not installed yet. The switch will be on, but the "
                 f"feature waits until it is installed.")
+    ok = {"capable": True}
+    also = [x for x in _would_work(feature, sw)
+            if x != feature and not _feature_active(x, sw, ok)]
+    if also:
+        one = len(also) == 1
+        inst += (f"\n\nAlso: {_names(also)} {'is' if one else 'are'} still switched on from "
+                 f"before, so {'it starts' if one else 'they start'} working again too, "
+                 f"at once.")
     return (
         f"Turn on \"{f['name']}\" on the second graphics card?\n\n"
         f"What it does: {f['what']}\n\n"
@@ -1350,6 +1387,19 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
     if withdrawn:
         return _finish(feature, pid, "withdrawn",
                        "you turned it off while the card was waiting", rid)
+    if feature != "master":
+        # Checked again now, not only when the card went up: the main switch
+        # (or a feature this one needs) may have been turned off meanwhile.
+        cur = _read_switches()
+        if not cur["master"]:
+            return _finish(feature, pid, "refused",
+                           "the main second-card switch was turned off while the card "
+                           "waited", rid)
+        gone = [d for d in _BY_ID[feature]["needs"] if not cur["features"].get(d)]
+        if gone:
+            return _finish(feature, pid, "refused",
+                           f"it needs {_names(gone)}, which was turned off while the card "
+                           f"waited", rid)
     if not detect(fresh=True).get("capable"):
         return _finish(feature, pid, "refused", "the second card is not there any more", rid)
     err = _write_switch(feature, True)
