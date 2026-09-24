@@ -385,7 +385,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -752,6 +752,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return JSON.parse(JSON.stringify(vs.status));
           }
+          // commands.rs get_backend_capabilities: the NAMES the Rust makes
+          // of /api/version's capabilities. `answer` is that; `fails` is the
+          // sentence it rejects with.
+          case "get_backend_capabilities": {
+            const c = window.__caps;
+            c.reads += 1;
+            if (c.fails) throw new Error(c.fails);
+            return JSON.parse(JSON.stringify(c.answer));
+          }
           // voice.rs set_wake_word. What jarvis_speech.set_wake_enabled does
           // to status(): ON puts a card up (`pending`, NOTHING is on) and
           // answers the real `wake_on_pending`; OFF turns it off at once, and
@@ -964,6 +973,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__voice = { reads: 0, changes: [], getFails: null, setFails: null,
                      unavailable: false, ...(voice || {}) };
   window.__voice.status = JSON.parse(JSON.stringify(window.__voice.status || null));
+  // Unset, what commands.rs makes of backend/rebuilt/jarvis_events.hello()
+  // run with none of the owner's own modules (its Rust test pins the same).
+  window.__caps = { reads: 0, fails: null,
+                    answer: { server: "jarvis-hud", api: 1, on: ["memory", "power", "voice"],
+                              off: ["appearance", "approvals", "connectors", "models", "persona", "skills"] },
+                    ...(caps || {}) };
   window.__vision = vision || { model: "qwen3:8b", vision: false,
     reason: "Ollama lists what qwen3:8b can do, and pictures are not on the list." };
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));

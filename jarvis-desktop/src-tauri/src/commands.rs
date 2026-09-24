@@ -2550,6 +2550,183 @@ pub async fn set_second_card(
     second_card_change_answer(status, &body)
 }
 
+// ---------------------------------------------------------------------------
+// "This backend supports": the capabilities GET /api/version reports
+// ---------------------------------------------------------------------------
+
+/// Whether one `capabilities` entry means "present" - the phone's
+/// `asCapabilityFlag` (ApiModels.kt), so both apps show the same list.
+///
+/// `true`, a non-empty object (a capability that carries detail, like
+/// `power`), or a non-empty string other than "false". Anything else -
+/// `false`, `{}`, a number, `null`, a list - is absent: a client that hides
+/// what it could have shown is a smaller failure than one that shows what
+/// is not there.
+pub(crate) fn capability_present(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Bool(b) => *b,
+        serde_json::Value::String(s) => !s.is_empty() && !s.eq_ignore_ascii_case("false"),
+        serde_json::Value::Object(m) => !m.is_empty(),
+        _ => false,
+    }
+}
+
+/// [`get_backend_capabilities`]'s reading of `GET /api/version`: the
+/// server's name, the API number and two sorted lists of capability NAMES -
+/// what it has and what it reports not having. Only the names leave here;
+/// what a capability carries (`power` carries the mode and quiet hours) is
+/// not passed on, because the page shows names only.
+pub(crate) fn capabilities_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if !(200..300).contains(&status) {
+        if status == 404 {
+            return Err(
+                "Something answered at that address, but it is not a Jarvis server that \
+                 reports what it supports."
+                    .to_string(),
+            );
+        }
+        return Err(backend_refusal(status, body));
+    }
+    let version = serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .filter(|v| v.is_object())
+        .ok_or_else(|| "Jarvis answered, but not in a way this app can read.".to_string())?;
+    let mut on = Vec::new();
+    let mut off = Vec::new();
+    if let Some(caps) = version.get("capabilities").and_then(|c| c.as_object()) {
+        for (name, value) in caps {
+            if capability_present(value) {
+                on.push(name.clone());
+            } else {
+                off.push(name.clone());
+            }
+        }
+    }
+    on.sort();
+    off.sort();
+    Ok(serde_json::json!({
+        "server": version.get("server").and_then(|s| s.as_str()).unwrap_or(""),
+        "api": version.get("api").and_then(|a| a.as_i64()),
+        "on": on,
+        "off": off,
+    }))
+}
+
+/// What the Jarvis server says it supports: `GET /api/version`'s
+/// `capabilities`, as two lists of names - the list the phone shows under
+/// "This backend". Read only.
+///
+/// Settings window only (permissions/surfaces.toml, `settings-surface`). The
+/// token goes out in `X-Jarvis-Token` through [`jarvis_headers`], with
+/// `X-Jarvis-Client: hud`, like every other call to Jarvis, and is never
+/// logged or put in an error.
+#[tauri::command]
+pub async fn get_backend_capabilities(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(format!("{base}/api/version"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    capabilities_answer(status, &body)
+}
+
+#[cfg(test)]
+mod capabilities_tests {
+    use super::{capabilities_answer, capability_present};
+    use serde_json::json;
+
+    #[test]
+    fn present_means_what_it_means_on_the_phone() {
+        for yes in [
+            json!(true),
+            json!({"mode": "active"}),
+            json!("on"),
+            json!("yes"),
+        ] {
+            assert!(capability_present(&yes), "{yes} should count");
+        }
+        for no in [
+            json!(false),
+            json!({}),
+            json!(""),
+            json!("false"),
+            json!("FALSE"),
+            json!(1),
+            json!(null),
+            json!([true]),
+        ] {
+            assert!(!capability_present(&no), "{no} should not count");
+        }
+    }
+
+    #[test]
+    fn names_only_sorted_in_two_lists() {
+        let body = json!({
+            "api": 1,
+            "server": "jarvis_hud",
+            "capabilities": {
+                "voice": true,
+                "approvals": true,
+                "power": {"mode": "quiet", "why": "you set it", "quiet_hours": "22-7"},
+                "appearance": false,
+                "second_card": {},
+                "models": "true"
+            }
+        })
+        .to_string();
+        let got = capabilities_answer(200, &body).expect("reads");
+        assert_eq!(got["on"], json!(["approvals", "models", "power", "voice"]));
+        assert_eq!(got["off"], json!(["appearance", "second_card"]));
+        assert_eq!(got["server"], "jarvis_hud");
+        assert_eq!(got["api"], 1);
+        // What a capability carries does not leave: names only.
+        assert!(!got.to_string().contains("quiet_hours"));
+    }
+
+    #[test]
+    fn the_rebuilt_hello_reads_as_the_phone_would_read_it() {
+        // backend/rebuilt/jarvis_events.hello()'s `capabilities`, run on
+        // 2026-09-24 with none of the owner's own modules present (so most
+        // are false); `power` and `voice` shortened, their shape kept.
+        let body = json!({"api": 1, "server": "jarvis-hud", "capabilities": {
+            "approvals": false, "memory": true, "models": false, "skills": false,
+            "power": {"mode": "active", "why": "startup", "quiet_hours": false},
+            "voice": {"enabled": true, "mode": "owner", "enrolled": false},
+            "persona": false, "appearance": false, "connectors": {}
+        }})
+        .to_string();
+        let got = capabilities_answer(200, &body).expect("reads");
+        assert_eq!(got["on"], json!(["memory", "power", "voice"]));
+        assert_eq!(
+            got["off"],
+            json!([
+                "appearance",
+                "approvals",
+                "connectors",
+                "models",
+                "persona",
+                "skills"
+            ])
+        );
+    }
+
+    #[test]
+    fn an_old_or_odd_answer_is_a_sentence() {
+        let bare = capabilities_answer(200, r#"{"api": 1}"#).expect("reads");
+        assert_eq!(bare["on"], json!([]));
+        assert_eq!(bare["off"], json!([]));
+        assert!(capabilities_answer(200, "<html>").is_err());
+        let gone = capabilities_answer(404, "").unwrap_err();
+        assert!(gone.contains("not a Jarvis server"), "{gone}");
+        let refused = capabilities_answer(401, r#"{"error": "token required"}"#).unwrap_err();
+        assert_eq!(refused, "Token required");
+    }
+}
+
 #[cfg(test)]
 mod second_card_tests {
     use super::{

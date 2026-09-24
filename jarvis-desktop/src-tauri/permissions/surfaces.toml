@@ -239,6 +239,10 @@ permissions = [
   # approved, so it sits with the other settings-only powers. It approves
   # nothing itself - ON only raises the card - and there is no form that
   # sends more than one switch.
+  # "What this backend supports": the capability names GET /api/version
+  # reports, the list the phone shows under "This backend". A read, names
+  # only - what a capability carries (power's mode, say) is not passed on.
+  "allow-get-backend-capabilities",
   "allow-get-second-card",
   "allow-set-second-card",
   # "Big model (slow)": what was found (colibri, Python, memory, the models

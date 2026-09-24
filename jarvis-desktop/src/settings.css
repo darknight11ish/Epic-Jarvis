@@ -613,6 +613,34 @@ select:focus-visible {
 
 .about-fact a:hover { text-decoration: underline; }
 
+/* "What this backend supports": capability names as small labels that wrap,
+   the phone's chips. The "not on this backend" ones are quieter. */
+#caps-state[data-tone="bad"] { color: var(--bad-text); }
+
+.caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 12px;
+  padding: 0;
+}
+
+.caps li {
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.caps[data-muted="true"] li {
+  border-color: var(--line-soft);
+  color: var(--text-muted);
+}
+
 /* --------------------------------------------------------------------------
    Second graphics card. Built from the same pieces as the rest of the page:
    `.toggle` rows for the switches, `.note` words, `.status` results. A switch

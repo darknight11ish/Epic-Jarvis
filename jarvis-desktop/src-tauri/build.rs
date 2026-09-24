@@ -93,6 +93,10 @@ fn main() {
             // Settings' "Second graphics card": read what was found and the
             // switches, and turn ONE switch on or off. ON only raises an
             // approval card. Settings window only.
+            // Settings' "What this backend supports": the capability NAMES
+            // GET /api/version reports, as the phone lists them. Read only.
+            // Settings window only.
+            "get_backend_capabilities",
             "get_second_card",
             "set_second_card",
             // Settings' "Big model (slow)" (backend/big-model.patch): read

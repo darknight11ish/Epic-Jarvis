@@ -2231,4 +2231,76 @@ document.addEventListener("visibilitychange", () => {
 });
 loadVoice();
 
+/* ==========================================================================
+   What this backend supports
+   --------------------------------------------------------------------------
+   `get_backend_capabilities`: GET /api/version's `capabilities`, as two
+   sorted lists of NAMES - what the server says it has, and what it says it
+   does not - decided the phone's way (ApiModels.kt `asCapabilityFlag`, ported
+   to commands.rs `capability_present`). The phone shows the same list under
+   "This backend". Names only; nothing a capability carries reaches the page.
+   Read when the window opens, when it comes back into view, and when the
+   link connects again (a restarted backend may have gained a part).
+   ========================================================================== */
+
+const caps = {
+  state: $("caps-state"),
+  body: $("caps-body"),
+  server: $("caps-server"),
+  serverRow: $("caps-server-row"),
+  api: $("caps-api"),
+  on: $("caps-on"),
+  none: $("caps-none"),
+  offHeading: $("caps-off-heading"),
+  off: $("caps-off"),
+};
+let capsSeq = 0;
+
+function capsNames(list) {
+  return (Array.isArray(list) ? list : []).filter((n) => typeof n === "string" && n);
+}
+
+async function loadCapabilities() {
+  if (!IS_TAURI || !caps.state) return;
+  const seq = ++capsSeq;
+  let answer;
+  try {
+    answer = await invoke("get_backend_capabilities");
+  } catch (error) {
+    if (seq !== capsSeq) return;
+    caps.body.hidden = true;
+    caps.state.hidden = false;
+    caps.state.dataset.tone = "bad";
+    caps.state.textContent = `Jarvis could not be asked what it supports. ${scProblemWords(error)}`;
+    return;
+  }
+  if (seq !== capsSeq) return;
+  const on = capsNames(answer && answer.on);
+  const off = capsNames(answer && answer.off);
+  caps.state.hidden = true;
+  delete caps.state.dataset.tone;
+  caps.body.hidden = false;
+  const server = answer && typeof answer.server === "string" ? answer.server.trim() : "";
+  caps.serverRow.hidden = !server;
+  caps.server.textContent = server;
+  caps.api.textContent = answer && Number.isInteger(answer.api) ? String(answer.api) : "not reported";
+  caps.on.replaceChildren(...on.map((n) => scNode("li", "", n)));
+  caps.on.hidden = !on.length;
+  caps.none.hidden = on.length > 0;
+  caps.off.replaceChildren(...off.map((n) => scNode("li", "", n)));
+  caps.off.hidden = !off.length;
+  caps.offHeading.hidden = !off.length;
+}
+
+let capsConnected = null;
+onLink((l) => {
+  const connected = Boolean(l && l.connected);
+  if (connected && capsConnected === false) loadCapabilities();
+  capsConnected = connected;
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadCapabilities();
+});
+loadCapabilities();
+
 loadUpdate();

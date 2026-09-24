@@ -691,6 +691,7 @@ pub fn run() {
             commands::reveal_pairing_token,
             commands::get_second_card,
             commands::set_second_card,
+            commands::get_backend_capabilities,
             commands::get_big_model,
             commands::set_big_model,
             appearance::get_appearance,

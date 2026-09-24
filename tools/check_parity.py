@@ -156,7 +156,7 @@ CLASSIFICATION = {
     "/api/task/stop": ("ported", ""),
     "/api/undo": ("ported", ""),
     "/api/undo/revert": ("ported", ""),
-    "/api/version": ("ported", ""),
+    "/api/version": ("ported", "The handshake. Both apps also list its capabilities by name: desktop Settings, \"What this backend supports\" (its own card, after About) (get_backend_capabilities); phone, \"This backend\"."),
     "/api/visual-spec": ("deliberate", "The phone bundles its own copy of the spec and checks it in a unit test (SpecDriftTest); JARVIS-API.md: the phone never fetches it."),
     "/api/voice/say": ("ported", ""),
     "/api/voice/status": ("ported", "What the PC's voice can do. Desktop: \"hey Jarvis\" listening reads it (voice.rs), and Settings, Voice shows it read-only (get_voice_status). Phone: Platform checks, Your voice and the wake-word card."),

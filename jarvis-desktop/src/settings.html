@@ -775,6 +775,36 @@
             </dd>
           </div>
         </dl>
+
+      </section>
+
+      <section class="card" id="backend-supports">
+      <!-- What the Jarvis server says it has: GET /api/version's
+           capabilities, by name (settings.js, "This backend supports"). The
+           same list the phone shows under "This backend". -->
+      <h2 id="caps-heading">What this backend supports</h2>
+      <p class="note">
+        The parts the Jarvis server this app talks to says it has, by the
+        names it uses for them. Your phone lists the same names, so the
+        two can be compared.
+      </p>
+      <p class="state" id="caps-state" role="status">Asking Jarvis…</p>
+      <div id="caps-body" hidden>
+        <dl class="about-facts">
+          <div class="about-fact" id="caps-server-row">
+            <dt>Server</dt>
+            <dd id="caps-server">—</dd>
+          </div>
+          <div class="about-fact">
+            <dt>API</dt>
+            <dd id="caps-api">—</dd>
+          </div>
+        </dl>
+        <ul class="caps" id="caps-on" aria-labelledby="caps-heading"></ul>
+        <p class="note" id="caps-none" hidden>None reported.</p>
+        <h3 class="subhead" id="caps-off-heading" hidden>Not on this backend</h3>
+        <ul class="caps" id="caps-off" data-muted="true" aria-labelledby="caps-off-heading" hidden></ul>
+      </div>
       </section>
 
       <footer class="page-foot">
