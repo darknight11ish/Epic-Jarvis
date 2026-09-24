@@ -1283,13 +1283,39 @@ $pass = 0; $fail = @()
 $prev = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 
-foreach ($t in $tests) {
-    $out = & $py.Exe $t.FullName 2>&1
-    if ($LASTEXITCODE -eq 0) { Ok $t.Name; $pass++ }
-    else {
-        Bad $t.Name
-        $fail += @{ Name = $t.Name; Output = ($out | Out-String).Trim() }
+# The suites run real code that writes - the audit log, approval queues,
+# switch files. Without this, one run put 131 fake events into your real
+# audit log in .openjarvis\logs. So for this run the config folder and the
+# audit log are a temporary folder, deleted afterwards. run_suites.py works
+# out the variables (the same ones CI's runner uses), one KEY=VALUE a line.
+$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $Stamp)
+$savedEnv = @{}
+$stateLines = & $py.Exe (Join-Path $PatchDir 'run_suites.py') --state-env $stateDir 2>$null
+foreach ($line in @($stateLines)) {
+    $parts = "$line" -split '=', 2
+    if ($parts.Count -eq 2 -and $parts[0] -and $parts[1]) {
+        $savedEnv[$parts[0]] = [Environment]::GetEnvironmentVariable($parts[0], 'Process')
+        [Environment]::SetEnvironmentVariable($parts[0], $parts[1], 'Process')
     }
+}
+if ($savedEnv.Count -eq 0) {
+    Say "  (Could not move the tests' state to a temporary folder; they may write to your real audit log.)" Yellow
+}
+
+try {
+    foreach ($t in $tests) {
+        $out = & $py.Exe $t.FullName 2>&1
+        if ($LASTEXITCODE -eq 0) { Ok $t.Name; $pass++ }
+        else {
+            Bad $t.Name
+            $fail += @{ Name = $t.Name; Output = ($out | Out-String).Trim() }
+        }
+    }
+} finally {
+    foreach ($k in @($savedEnv.Keys)) {
+        [Environment]::SetEnvironmentVariable($k, $savedEnv[$k], 'Process')
+    }
+    Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 $ErrorActionPreference = $prev
