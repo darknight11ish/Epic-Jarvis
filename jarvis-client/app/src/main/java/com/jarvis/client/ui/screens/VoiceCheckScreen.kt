@@ -39,11 +39,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * "Voice check": how strict Jarvis is about the owner's voice, whether
- * private answers may be read aloud, the guided "how often would I have to
- * say it twice?" test, and how often that really happened.
+ * private answers, answers that use memories, and answers that use
+ * sensitive saved facts may be read aloud, the guided "how often would I
+ * have to say it twice?" test, and how often that really happened.
  *
- * The two settings follow the shape of every other switch that widens what
- * Jarvis does: the LOOSER choice (balanced; voice check is enough) asks -
+ * The settings follow the shape of every other switch that widens what
+ * Jarvis does: the LOOSER choice (balanced; voice check is enough; read
+ * aloud) asks -
  * one approval card on the PC, nothing changes until it is approved, and it
  * is held on a stale link. The STRICTER choice applies at once and always
  * goes. What is shown as chosen is what the PC last SAID, never what was
@@ -305,6 +307,20 @@ private fun CheckPlates(
                         strict = strict,
                         busy = busy,
                         note = note?.takeIf { it.first == VoiceStrict.MEMORY }?.second,
+                        onPick = onPick,
+                    )
+                }
+                // Sensitive saved facts (the owner's decision, 2026-09-24) -
+                // only when the PC reports the setting. Always open: it holds
+                // even under "voice check is enough".
+                if (strict.sensitiveMemory.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.SENSITIVE_MEMORY_TITLE,
+                        setting = VoiceStrict.SENSITIVE_MEMORY,
+                        choices = StrictVoice.SENSITIVE_MEMORY,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.SENSITIVE_MEMORY }?.second,
                         onPick = onPick,
                     )
                 }

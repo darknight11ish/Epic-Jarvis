@@ -42,11 +42,19 @@ object VoiceStrict {
     /** Answers that use what Jarvis remembers (the owner's choice, 2026-09-24): aloud by default. */
     const val MEMORY_ALOUD = "memory_aloud"
     const val MEMORY_ON_SCREEN = "memory_on_screen"
+    /**
+     * Answers that use a SENSITIVE saved fact (the owner's decision,
+     * 2026-09-24): kept on screen by default, even when memories are read
+     * aloud; "read aloud" is the looser choice and asks first.
+     */
+    const val SENSITIVE_ON_SCREEN = "sensitive_on_screen"
+    const val SENSITIVE_ALOUD = "sensitive_aloud"
 
-    /** The two `mode`s that change a setting, and what each value is called on the wire. */
+    /** The `mode`s that change a setting, and what each value is called on the wire. */
     const val STRICTNESS = "strictness"
     const val PRIVACY = "privacy"
     const val MEMORY = "memory"
+    const val SENSITIVE_MEMORY = "sensitive_memory"
 
     /** `repeat.very_strict` / `repeat.balanced` - since the PC's voice module started. */
     data class Counts(
@@ -113,6 +121,12 @@ object VoiceStrict {
         val privacy: String = "",
         /** "memory_aloud", "memory_on_screen", or "" from a PC older than that setting. */
         val memory: String = "",
+        /**
+         * "sensitive_on_screen", "sensitive_aloud", or "" from a PC older than
+         * that setting (the screen then does not offer it). Any other value
+         * the PC sends is read as the strict one.
+         */
+        val sensitiveMemory: String = "",
         val voiceIsEnoughAllowed: Boolean = false,
         /** A spoken command needs at least this many seconds of speech (0 = not said). */
         val minCommandSeconds: Double = 0.0,
@@ -200,6 +214,17 @@ object VoiceStrict {
         return Session(o.str("mic"), o.flag("add"), rounds, o.int("clips"), o.int("expires_in"))
     }
 
+    /**
+     * `gate.sensitive_memory` as the screen reads it: "" (an older PC - not
+     * offered) stays "", the two known values stay, and anything else is the
+     * strict one - never read as "aloud" by accident.
+     */
+    fun sensitiveMemory(raw: String): String = when (raw) {
+        "" -> ""
+        SENSITIVE_ALOUD -> SENSITIVE_ALOUD
+        else -> SENSITIVE_ON_SCREEN
+    }
+
     /** Reads the stricter check out of a whole `/api/voice/status` body. Never throws. */
     fun parse(status: JsonObject?): View {
         val gate = status?.obj("gate") ?: return View()
@@ -218,6 +243,9 @@ object VoiceStrict {
             strictness = gate.str("strictness"),
             privacy = gate.str("privacy"),
             memory = gate.str("memory"),
+            sensitiveMemory = sensitiveMemory(gate.str("sensitive_memory").ifEmpty {
+                settings?.str("sensitive_memory").orEmpty()
+            }),
             voiceIsEnoughAllowed = settings?.flag("voice_is_enough_allowed") ?: false,
             minCommandSeconds = settings?.num("min_command_seconds") ?: 0.0,
             rounds = training?.flag("rounds") ?: false,
@@ -296,19 +324,30 @@ object VoiceStrict {
     /** Drops every round the PC is holding. Never raises a card, so it is never held back. */
     const val CANCEL_BODY = "{\"mode\":\"train\",\"cancel\":true}"
 
-    /** `{"mode": "strictness" | "privacy" | "memory", "value": ...}`. Only this app's fixed words go in. */
+    /** Each setting's two values, strict first. */
+    private val VALUES: Map<String, Set<String>> = mapOf(
+        STRICTNESS to setOf(VERY_STRICT, BALANCED),
+        PRIVACY to setOf(PRIVATE_ON_SCREEN, VOICE_IS_ENOUGH),
+        MEMORY to setOf(MEMORY_ON_SCREEN, MEMORY_ALOUD),
+        SENSITIVE_MEMORY to setOf(SENSITIVE_ON_SCREEN, SENSITIVE_ALOUD),
+    )
+
+    /**
+     * `{"mode": "strictness" | "privacy" | "memory" | "sensitive_memory",
+     * "value": ...}`. Only this app's fixed words go in, and only a value of
+     * that setting's own.
+     */
     fun settingBody(setting: String, value: String): String {
-        require(setting == STRICTNESS || setting == PRIVACY || setting == MEMORY) { "not a voice setting: $setting" }
-        require(
-            value in setOf(VERY_STRICT, BALANCED, PRIVATE_ON_SCREEN, VOICE_IS_ENOUGH, MEMORY_ALOUD, MEMORY_ON_SCREEN),
-        ) { "not a value: $value" }
+        val values = requireNotNull(VALUES[setting]) { "not a voice setting: $setting" }
+        require(value in values) { "not a value of $setting: $value" }
         return "{\"mode\":\"$setting\",\"value\":\"$value\"}"
     }
 
     /** Whether choosing [value] for [setting] LOOSENS it - which is the one that asks first. */
     fun isLoosening(setting: String, value: String): Boolean =
         (setting == STRICTNESS && value == BALANCED) || (setting == PRIVACY && value == VOICE_IS_ENOUGH) ||
-            (setting == MEMORY && value == MEMORY_ALOUD)
+            (setting == MEMORY && value == MEMORY_ALOUD) ||
+            (setting == SENSITIVE_MEMORY && value == SENSITIVE_ALOUD)
 
     // ------------------------------------------------------------ answers --
 
