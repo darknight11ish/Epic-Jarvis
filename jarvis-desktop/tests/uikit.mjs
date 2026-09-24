@@ -404,8 +404,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
         window.__calls.push([cmd, args]);
         switch (cmd) {
           case "get_link_state": return state;
-          case "get_pending_approvals":
-            return { count: pending.length, items: pending, stale: state.stale };
+          case "get_pending_approvals": {
+            // A scenario whose queue changes mid-test (a card raised by a
+            // click, then denied) sets window.__pendingNow; unset, the
+            // scenario's fixed `pending`.
+            const items = window.__pendingNow || pending;
+            return { count: items.length, items, stale: state.stale };
+          }
           case "get_digest": return digest;
           case "mark_digest_seen": return { ok: true, marked: 3 };
           case "set_attention_muted": return { muted: args.muted };
