@@ -93,6 +93,14 @@ run()       Executes an approved plan. `approved` has no default of True.
 `socket.connect` to raise, so "opens no socket" is a fact rather than a
 comment. Copy that shape.
 
+In the chat tool loop (`jarvis_agent.py`) a model's tool request is checked
+against the tool's schema **before** `plan()`: a broken one never reaches a
+card. Tool output is cleaned of chat markers and labelled as data before the
+model reads it, and a card proposed after outside text says so under "What
+shaped this request:" - which tools were read, and which values came from
+that text, not the owner. The card still shows the plan in full; this only
+adds to it. `backend/README.md`, "Outside text in the tool loop".
+
 ### Two rules that are easy to get wrong
 
 **`allowed` is not "a human decided".** `jarvis_gate.check()` returns

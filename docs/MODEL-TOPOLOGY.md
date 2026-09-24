@@ -266,7 +266,7 @@ work needs the whole file resident, so 16K is the floor.
 | **Any 7B/8B at Q8_0** | Weights alone are 7.54–8.10 GiB, over the 6.90 ceiling before a single KV byte. Not close. If any planning table shows these as viable, that is the biggest error in it. |
 | **Q5_K_M at 8B** | Costs 0.76 GiB over Q4_K_M and buys little that is measurable. On this card it is the quantisation that turns a working 16K into a spilling 8K. |
 | **Phi-4-mini 3.8B** | The trap. 128 KiB/token — *identical* to Llama 3.1 8B (32 layers × 8 kv_heads × 128), plus a 200,064-token vocabulary inflating the embeddings. You pay 8B KV costs for 3.8B capability. Picking it "for context headroom" buys weight headroom, not context headroom. |
-| **DeepSeek-R1-Distill-Qwen-7B** | Qwen 3 8B's thinking mode covers the same ground from a model already loaded. Reasoning traces plus a strict JSON schema is also a known-bad pairing: the grammar forbids the `<think>` block the model is trained to emit first. |
+| **DeepSeek-R1-Distill-Qwen-7B** | Qwen 3 8B's thinking mode covers the same ground from a model already loaded. (This row used to add that thinking plus a strict JSON schema is a known-bad pairing because the grammar forbids the `<think>` block. That is out of date: current Ollama applies a `format` grammar only after the thinking has closed - `llm/llama_server.go`, the header comment and "A format on a thinking response applies after the closing string", read at Ollama `5f4b01e`, 2026-09-24, not run.) |
 | **Gemma 3 4B** | 0.81 GiB of vision tower for a feature nothing uses, and multimodal force-disables context shift (`ctx_shift is not supported by multimodal`), so it hard-errors at the boundary instead of degrading. |
 | **Ministral 8B** | Same KV cost as Qwen 3 8B with no compensating advantage. |
 
@@ -282,6 +282,20 @@ The failure mode migrates rather than disappearing: from malformed JSON to
 **well-formed JSON with a wrong argument value**, which `jarvis_structured.validate()`
 cannot catch and `jarvis_gate` has to. That module's own comment already says
 it — *"GRAMMAR-VALID IS NOT AUTHORISED"*.
+
+**But tool calls are not held to a grammar.** All of the above is about
+`format`. A tool call is different: for every model with Ollama's own
+tool-call reader (Qwen 3, Qwen 3.5, Gemma 4, Ministral and others,
+`model/parsers/parsers.go`), Ollama lets the model write freely and reads the
+call out of the text afterwards; no grammar is applied while it writes. So a
+**malformed tool call is possible** - arguments that are not JSON, a missing
+field - and Qwen 3's reader does not check the call against the tool's
+schema at all (`model/parsers/qwen3.go`, `parseQwen3ToolCall`: `_ = tools`).
+When it cannot read the call it cancels the answer with "failed to parse
+JSON: ..." (`server/routes.go`, `parserErr`). `jarvis_agent.py` checks every
+call against its schema before anything is prepared, and asks once more when
+Ollama cannot read one (`backend/README.md`, "Outside text in the tool
+loop"). Read at Ollama `5f4b01e`, 2026-09-24, not run.
 
 **Keep the embedder on the CPU.** bge-small is ~130 MB through fastembed/ONNX.
 On the GPU it would cost ~0.2 GiB *and* contend for the same SMs mid-utterance.

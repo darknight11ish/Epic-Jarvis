@@ -463,9 +463,16 @@ clone), whether Ollama has a tag for it, or how well it calls tools.
 `model/parsers/parsers.go:56`) and for Qwen3-VL (`parsers.go:66-68`). Models
 without one go through llama.cpp's own chat-template handling
 (`llm/llama_server.go:3-6`). Which parser a given ollama.com model uses is
-set in its published manifest, which I could not read. **So: Qwen 3 is the
+set in its published manifest, which I could not read. ~~So: Qwen 3 is the
 best-supported tool-calling family in this Ollama by source; nothing else
-on the list is verified.** Qwen3-VL (4B/8B) would be the natural pictures
+on the list is verified.~~ **Out of date (checked 2026-09-24 at Ollama
+`5f4b01e`, by reading, not running):** Ollama now also has its own readers
+for `qwen3.5`, `gemma4` and `ministral` (`model/parsers/parsers.go`). The
+Qwen 3.5 one hands the call to the Qwen3-Coder reader, which converts each
+argument to the type the tool's schema asks for
+(`model/parsers/qwen3coder.go`, `parseToolCall` / `parseValue`) - more
+forgiving than Qwen 3's, which checks nothing against the schema. How well
+each model *picks* tools is still unmeasured. Qwen3-VL (4B/8B) would be the natural pictures
 model *with* tools if its ollama.com manifest uses the `qwen3-vl` parser -
 worth checking on the PC before choosing it over Qwen2.5-VL.
 
