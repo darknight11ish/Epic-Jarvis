@@ -340,6 +340,21 @@ data class HomeState(
      * button opens it. See [QuickNotePlate].
      */
     val quickNoteOpen: Boolean = false,
+    /**
+     * Offer the Photo button: the PC says its second graphics card's
+     * Pictures feature is working ([com.jarvis.client.net.SecondCard.visionAvailable]).
+     * Hidden otherwise - without it the everyday model would get a picture
+     * it cannot see.
+     */
+    val pictureOffered: Boolean = false,
+    /**
+     * The line for a picture waiting to go with the next question, or null
+     * when none is attached. See [com.jarvis.client.net.ChatPicture]. The
+     * picture itself is never in this state - only its size, in words.
+     */
+    val pictureLine: String? = null,
+    /** True while a picked photo is being made small enough to send. */
+    val pictureBusy: Boolean = false,
 )
 
 @Immutable
@@ -407,6 +422,10 @@ data class HomeActions(
         { NoteCapture.Targets.Unknown("not checked yet") },
     /** Open or close the quick-note field. */
     val onQuickNoteOpenChange: (Boolean) -> Unit = {},
+    /** Open Android's photo picker. No storage permission: the picker hands over one photo. */
+    val onAttachPicture: () -> Unit = {},
+    /** Drop the attached picture without sending it. */
+    val onRemovePicture: () -> Unit = {},
 )
 
 @Composable
@@ -1937,10 +1956,26 @@ private fun Composer(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
     VoiceStrips(state, actions)
+    // A picture waiting to go with the next question. Dismiss drops it.
+    if (state.pictureBusy) {
+        VoiceStrip("Preparing the picture…", tone = chrome.textMid)
+    } else if (state.pictureLine != null) {
+        VoiceStrip(state.pictureLine, tone = chrome.textMid, onDismiss = actions.onRemovePicture)
+    }
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
     ) {
+        // Only while the PC's Pictures feature works - see HomeState.pictureOffered.
+        if (state.pictureOffered) {
+            Quiet(
+                "Photo",
+                color = chrome.textMid,
+                enabled = state.link == LinkState.CONNECTED && !state.streaming && !state.pictureBusy,
+                onClick = actions.onAttachPicture,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
         // BasicTextField rather than OutlinedTextField: the Material one brings
         // its own container, its own 56dp minimum, its own label animation and
         // its own notched outline, none of which belong in a design made of

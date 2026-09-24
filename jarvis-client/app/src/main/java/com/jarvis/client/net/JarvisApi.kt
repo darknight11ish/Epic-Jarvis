@@ -856,11 +856,11 @@ class JarvisApi(
      * OpenAI shape `/v1/chat/completions` expects. A bare `message` key is
      * not one of those, so the backend had nothing to read it as.
      *
-     * `has_image` is always false here: this client has no screenshot
-     * capture, so there is never an image to route the turn toward. `auto`
-     * mirrors the desktop's own `true` - matched rather than guessed,
-     * because the desktop side is the one already confirmed against the
-     * backend.
+     * `has_image` is true only with a [picture] - a photo the owner picked,
+     * sent only while the PC's second-card Pictures feature works (see
+     * [ChatPicture]). `auto` mirrors the desktop's own `true` - matched
+     * rather than guessed, because the desktop side is the one already
+     * confirmed against the backend.
      *
      * [history] is the conversation so far - earlier questions and the
      * answers to them, already trimmed to fit - sent ahead of [message] so a
@@ -868,9 +868,13 @@ class JarvisApi(
      * follow-up started from nothing. See [ChatHistory] for what is kept,
      * how much, and why.
      */
-    fun chatCall(message: String, history: List<ChatHistory.Exchange> = emptyList()): Call? {
+    fun chatCall(
+        message: String,
+        history: List<ChatHistory.Exchange> = emptyList(),
+        picture: String? = null,
+    ): Call? {
         val target = url("/api/chat") ?: return null
-        val body = ChatHistory.requestBody(history, message)
+        val body = ChatHistory.requestBody(history, message, picture)
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()
         return client.newCall(req)

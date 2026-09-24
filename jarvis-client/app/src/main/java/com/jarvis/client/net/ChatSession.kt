@@ -95,7 +95,8 @@ class ChatSession(private val api: JarvisApi) {
     /**
      * One line to show under the answer, or null: that it was cut short at
      * the length limit (it used to look finished), and/or that a cloud model
-     * wrote it rather than this user's PC (read from `X-Jarvis-Route`).
+     * wrote it rather than this user's PC, or that the PC's second graphics
+     * card did (both read from `X-Jarvis-Route`).
      */
     val answerNote: StateFlow<String?> = _answerNote.asStateFlow()
 
@@ -144,8 +145,16 @@ class ChatSession(private val api: JarvisApi) {
      * concurrently - the voice loop's own sentence-streaming TTS uses this to
      * start speaking before the answer has finished arriving, without ever
      * touching [reply] itself.
+     *
+     * [picture], when given, is a `data:image/jpeg;base64,` URI ([ChatPicture])
+     * sent inside this one question. It is not kept: only the words join
+     * [history], so it is never sent again with a later question.
      */
-    suspend fun send(message: String, onDelta: ((String) -> Unit)? = null): String? {
+    suspend fun send(
+        message: String,
+        onDelta: ((String) -> Unit)? = null,
+        picture: String? = null,
+    ): String? {
         cancel()
         _reply.value = ""
         _error.value = null
@@ -163,7 +172,7 @@ class ChatSession(private val api: JarvisApi) {
         // what this question was asked in the light of.
         val earlier = _history.value
         val askedIn = conversation
-        val c = api.chatCall(message, earlier)
+        val c = api.chatCall(message, earlier, picture)
         if (c == null) {
             _error.value = "No desktop address set"
             return null
@@ -272,6 +281,10 @@ class ChatSession(private val api: JarvisApi) {
                     // Where it was made. Only a cloud answer gets a line: an
                     // answer from this user's own PC is the normal case.
                     val cloud = ChatChunkParser.whereFromRouteHeader(routeHeader) == "cloud"
+                    // Or the second graphics card (`second_card` in the same
+                    // header, second-card.patch): still this PC, but not the
+                    // everyday model, so it gets a line of its own.
+                    val secondCard = SecondCard.routeFromHeader(routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened
                     // to be buffered.
                     //
@@ -428,6 +441,7 @@ class ChatSession(private val api: JarvisApi) {
                                 null
                             },
                             if (cloud && !failed) "Answered by a cloud model, not on your PC." else null,
+                            if (secondCard != null && !cloud && !failed) SecondCard.routeNote(secondCard) else null,
                         ).joinToString(" ").ifEmpty { null }
                     }
                 }

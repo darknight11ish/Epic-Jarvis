@@ -317,7 +317,8 @@ object JarvisRuntime {
      * `/api/second-card`: what the PC found, and the second-card switches
      * ([com.jarvis.client.net.SecondCard]). Read on each connect, on the Mind
      * screen, after every switch, and after an approval is decided while one
-     * of its cards was waiting.
+     * of its cards was waiting. Chat reads it too: a picture is only offered
+     * while the PC says Pictures is working.
      */
     private val _secondCard = MutableStateFlow<SecondCard.Read>(SecondCard.Read.NotAsked)
     val secondCard: StateFlow<SecondCard.Read> = _secondCard.asStateFlow()
@@ -925,7 +926,7 @@ object JarvisRuntime {
         refreshStatus()
         refreshPending()
         refreshAttention()
-        // One small read, so the second-card switches are known.
+        // One small read, so chat knows whether a picture can be offered.
         refreshSecondCard()
     }
 
@@ -1130,6 +1131,23 @@ object JarvisRuntime {
         if (enabled && result is ApiResult.Ok) refreshPending()
         refreshSecondCard()
         return SecondCard.replyLine(result)
+    }
+
+    /**
+     * Why a picture cannot be sent right now, or null when it can: asks the
+     * PC again first, so a Pictures switch turned off since the last read
+     * stops the send rather than handing the picture to a model that cannot
+     * see it.
+     */
+    suspend fun pictureBlocker(): String? {
+        actionBlocker()?.let { return it }
+        refreshSecondCard()
+        val read = _secondCard.value
+        if (SecondCard.visionAvailable(read)) return null
+        val why = (read as? SecondCard.Read.Loaded)?.status?.feature(SecondCard.VISION)?.why
+            ?: SecondCard.readLine(read)
+        return "The picture was not sent: Pictures on the second graphics card is not " +
+            "working right now" + (why?.let { " ($it)" } ?: "") + "."
     }
 
     /**

@@ -11,6 +11,7 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
@@ -39,10 +40,12 @@ import com.jarvis.client.face.FaceQuality
 import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
+import com.jarvis.client.platform.PictureEncoder
 import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PowerWatch
 import com.jarvis.client.net.PendingItem
@@ -176,6 +179,36 @@ class MainActivity : FragmentActivity() {
     private val assistantRolePermission = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { permissionTick.intValue += 1 }
+
+    /**
+     * A photo to send with the next question, made small enough for the PC,
+     * or null. In memory only - never saved, never in a Bundle (a rotation
+     * drops it; the owner picks it again). See [ChatPicture].
+     */
+    private val picture = mutableStateOf<ChatPicture.Ready?>(null)
+
+    /** True while a picked photo is being decoded and shrunk. */
+    private val pictureBusy = mutableStateOf(false)
+
+    /**
+     * Android's photo picker (API 33+ has it built in): the owner chooses one
+     * photo and the app may read that one. No storage permission is asked
+     * for, and nothing is copied to the app's own storage - the photo is read
+     * once, straight into [PictureEncoder].
+     */
+    private val pickPicture = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        pictureBusy.value = true
+        lifecycleScope.launch {
+            when (val out = PictureEncoder.encode(this@MainActivity, uri)) {
+                is PictureEncoder.Outcome.Ok -> picture.value = out.picture
+                is PictureEncoder.Outcome.Failed -> JarvisRuntime.setNotice(out.why)
+            }
+            pictureBusy.value = false
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1410,6 +1443,11 @@ class MainActivity : FragmentActivity() {
                             chatWaiting = chatWaiting,
                             answerNote = answerNote,
                             quickNoteOpen = quickNoteOpen.value,
+                            // The second card's Pictures feature, as the PC
+                            // last reported it. The send asks again first.
+                            pictureOffered = SecondCard.visionAvailable(secondCard),
+                            pictureLine = picture.value?.let { ChatPicture.attachedLine(it) },
+                            pictureBusy = pictureBusy.value,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1432,9 +1470,35 @@ class MainActivity : FragmentActivity() {
                                 onDraftChange = { draft = it },
                                 onSend = {
                                     val text = draft
-                                    draft = ""
-                                    scope.launch { chat.send(text) }
+                                    val pic = picture.value
+                                    if (pic == null) {
+                                        draft = ""
+                                        scope.launch { chat.send(text) }
+                                    } else {
+                                        // With a picture, the PC is asked first
+                                        // whether Pictures still works; if not,
+                                        // nothing is sent and the draft and the
+                                        // picture stay where they are.
+                                        scope.launch {
+                                            val why = JarvisRuntime.pictureBlocker()
+                                            if (why != null) {
+                                                JarvisRuntime.setNotice(why)
+                                            } else {
+                                                draft = ""
+                                                picture.value = null
+                                                chat.send(text, picture = pic.dataUri)
+                                            }
+                                        }
+                                    }
                                 },
+                                onAttachPicture = {
+                                    pickPicture.launch(
+                                        PickVisualMediaRequest.Builder()
+                                            .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                            .build(),
+                                    )
+                                },
+                                onRemovePicture = { picture.value = null },
                                 onInterrupt = { chat.cancel() },
                                 onNewConversation = { chat.newConversation() },
                                 // A fingerprint instead of a tap for anything that

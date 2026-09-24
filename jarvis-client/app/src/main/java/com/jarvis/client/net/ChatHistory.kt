@@ -113,27 +113,43 @@ object ChatHistory {
      * The OpenAI-shaped `messages` array: each earlier pair as a user turn and
      * an assistant turn, oldest first, then the new question last. Only those
      * two roles, and only `role` and `content` on each.
+     *
+     * With a [picture] (a `data:image/jpeg;base64,` URI), the new question's
+     * `content` is the words and then the picture ([ChatPicture.userContent]),
+     * the shape the desktop sends. Earlier turns are always words only.
      */
-    fun messages(window: List<Exchange>, question: String): JsonArray = buildJsonArray {
-        for (ex in window) {
-            add(turn("user", ex.question))
-            add(turn("assistant", ex.answer))
+    fun messages(window: List<Exchange>, question: String, picture: String? = null): JsonArray =
+        buildJsonArray {
+            for (ex in window) {
+                add(turn("user", ex.question))
+                add(turn("assistant", ex.answer))
+            }
+            if (picture == null) {
+                add(turn("user", question))
+            } else {
+                add(
+                    buildJsonObject {
+                        put("role", "user")
+                        put("content", ChatPicture.userContent(question, picture))
+                    },
+                )
+            }
         }
-        add(turn("user", question))
-    }
 
     /**
      * The whole `/api/chat` body. Built as JSON rather than by gluing strings,
      * so a quote, a newline or an emoji in any turn cannot break out of its
-     * field. `has_image` is always false: this client has no screenshot
-     * capture. `auto` mirrors the desktop's own `true`.
+     * field. `has_image` is true only when a [picture] rides in the newest
+     * message - the PC routes on it and keeps the turn local. `auto` mirrors
+     * the desktop's own `true`.
      */
-    fun requestBody(window: List<Exchange>, question: String): String = buildJsonObject {
-        put("messages", messages(window, question))
-        put("has_image", false)
-        put("stream", true)
-        put("auto", true)
-    }.toString()
+    fun requestBody(window: List<Exchange>, question: String, picture: String? = null): String =
+        buildJsonObject {
+            put("messages", messages(window, question, picture))
+            put("has_image", picture != null)
+            put("stream", true)
+            put("auto", true)
+        }.toString()
 
     private fun turn(role: String, content: String): JsonObject = buildJsonObject {
         put("role", role)
