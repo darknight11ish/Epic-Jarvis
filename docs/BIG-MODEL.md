@@ -242,9 +242,19 @@ model, how much memory and disk, that it listens on `127.0.0.1` only, and
 that nothing leaves this PC. Turning a switch off is immediate and stops
 colibri if nothing else needs it.
 
-The Brain window and the phone will get these switches next. Until then, in
-PowerShell, **in your Jarvis backend folder** (one line each; the first reads
-your pairing token into `$t` without showing it):
+**On the phone:** open Mind (the button on Home), then the "Big model
+(slow)" section, under "Second graphics card". It shows what Jarvis found,
+the main switch and one switch per job. The main switch can only be turned
+on once Jarvis has found everything it needs. Turning a switch on raises the
+approval card; the switch says "Waiting for you to approve the card on your
+PC or phone" until you answer it. Right below it, "Deep questions" has the
+box to ask one ("Ask slowly") and the recent answers. The phone does not
+notify you when an answer is ready; look in that list.
+
+**On the desktop** the Brain window's switches are being built separately.
+Until they are, use the phone, or PowerShell, **in your Jarvis backend
+folder** (one line each; the first reads your pairing token into `$t`
+without showing it):
 
 ```powershell
 $t = (py -3 .\jarvis_token_store.py show); $h = @{ 'X-Jarvis-Token' = $t; 'X-Jarvis-Client' = 'hud' }; Invoke-RestMethod -Method Post -Uri http://127.0.0.1:4719/api/big-model -Headers $h -ContentType 'application/json' -Body '{"switch":"master","enabled":true}'

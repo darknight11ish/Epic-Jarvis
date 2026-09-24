@@ -1096,8 +1096,11 @@ state is final, then read `GET /api/wiki` again.
 `backend/big-model.patch` and `backend/jarvis_big_model.py`; the owner's
 guide is `docs/BIG-MODEL.md`. A very large model run by colibri on the PC,
 for two background jobs only: the wiki builder and deep questions. Never
-chat, voice or approvals. **Neither app calls these routes yet**;
-`tools/check_parity.py` records all three as `planned`.
+chat, voice or approvals. **The phone calls all three** (2026-09-24: Mind
+screen, "Big model (slow)" and "Deep questions", `BigModelPlate.kt` /
+`net/BigModel.kt`); the desktop does not yet. `tools/check_parity.py` keeps
+all three `planned` until the desktop calls them too, then they become
+`ported`.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
@@ -1157,11 +1160,15 @@ restart; questions still waiting when the backend stops are lost.
 
 **The event.** When a deep question finishes, the event stream carries kind
 `deep` with `{"id", "state": "done"|"failed"}` - a doorbell, never the
-question or the answer. On it, read `GET /api/deep`. Neither app handles this
-kind yet (ARCHITECTURE.md §6 asks for the handler in the same change; the
-apps come next). Until they do, poll `GET /api/deep` while a job is
-`queued`, `loading` or `thinking`. There is no event for the switches: read
-`GET /api/big-model` again after a card is decided.
+question or the answer. On it, read `GET /api/deep`. **The phone handles
+it** (`JarvisRuntime.onEvent`: it re-reads `GET /api/deep`, and
+`GET /api/big-model` for the measured speed); the desktop does not yet.
+States change between `queued`, `loading` and `thinking` with no event, so
+the phone also re-reads `GET /api/deep` every 20 s while a job is in one of
+those states and its plate is on screen, and at no other time. There is no
+event for the switches: read `GET /api/big-model` again after a card is
+decided (the phone does, on the `approval` event, while one of its cards
+waits).
 
 **The wiki.** With the big model's `wiki` switch on, `GET /api/wiki`'s
 `why` names the big model, and `POST /api/wiki/ingest` may answer 202 while

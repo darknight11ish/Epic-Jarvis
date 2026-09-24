@@ -67,9 +67,14 @@ ROUTE = re.compile(r"/api/[a-zA-Z0-9/_-]+")
 # "planned"      - on the backend, for both apps, and neither calls it yet
 CLASSIFICATION = {
     "/api/appearance": ("ported", ""),
-    "/api/big-model": ("planned", "The big model (slow) with colibri: what was found and its three switches, each ON an approval card (backend/big-model.patch, 2026-09-24). Both apps, next."),
-    "/api/deep": ("planned", "Deep questions and their answers, newest first (backend/big-model.patch). Both apps, next."),
-    "/api/deep/ask": ("planned", "Queue one deep question for the big model; no card per question, the switch was approved (backend/big-model.patch). Both apps, next."),
+    # Still `planned`, not `ported`: the phone calls all three now (Mind
+    # screen's "Big model (slow)" and "Deep questions" plates), but `ported`
+    # needs the desktop to call them too - rule 4 above fails a `ported`
+    # route the desktop does not call. The desktop's side is being built
+    # separately; once it calls these, the tool warns, and they become `ported`.
+    "/api/big-model": ("planned", "The big model (slow) with colibri: what was found and its three switches, each ON an approval card (backend/big-model.patch, 2026-09-24). Both apps are to show it. The phone's side is built (BigModelPlate.kt, 2026-09-24); the desktop's is not yet."),
+    "/api/deep": ("planned", "Deep questions and their answers, newest first (backend/big-model.patch). The phone's side is built (Mind screen, Deep questions); the desktop's is not yet."),
+    "/api/deep/ask": ("planned", "Queue one deep question for the big model; no card per question, the switch was approved (backend/big-model.patch). The phone's side is built (Ask slowly, held on a stale link); the desktop's is not yet."),
     "/api/approve": ("ported", ""),
     "/api/attention": ("ported", ""),
     "/api/attention/mute": ("ported", ""),
