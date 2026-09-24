@@ -508,7 +508,7 @@ function paintSettings() {
   if (!view) return;
   const group = (box, list, chosen, setting, disabled) => {
     box.replaceChildren(...list.map((c) => {
-      const b = node("button", "choice", c.label);
+      const b = node("button", "choice", VT.choiceText(c));
       b.type = "button";
       b.dataset.value = c.id;
       b.setAttribute("aria-pressed", String(c.id === chosen));
@@ -522,14 +522,17 @@ function paintSettings() {
     (c) => c.id === "voice_is_enough" && !view.voiceIsEnoughAllowed && view.privacy !== "voice_is_enough");
   say($("vt-strictness-note"), VT.STRICTNESS.find((c) => c.id === view.strictness).detail);
   let privacyNote = VT.PRIVACY.find((c) => c.id === view.privacy).detail;
-  if (!view.voiceIsEnoughAllowed) privacyNote += " \"Voice check is enough\" can only be chosen while the check is very strict.";
+  if (!view.voiceIsEnoughAllowed) privacyNote += ` ${VT.VOICE_IS_ENOUGH_NOTE}`;
   say($("vt-privacy-note"), privacyNote);
   const memBox = $("vt-memory-box");
   if (memBox) {
     memBox.hidden = !view.memory;
     if (view.memory) {
-      group($("vt-memory"), VT.MEMORY, view.memory, "memory");
-      say($("vt-memory-note"), VT.MEMORY.find((c) => c.id === view.memory).detail);
+      // "Voice check is enough" reads these aloud already: neither choice
+      // would change anything, so neither can be pressed.
+      const moot = VT.memoryMoot(view);
+      group($("vt-memory"), VT.MEMORY, view.memory, "memory", () => moot);
+      say($("vt-memory-note"), moot ? VT.MEMORY_MOOT_NOTE : VT.MEMORY.find((c) => c.id === view.memory).detail);
     }
   }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);

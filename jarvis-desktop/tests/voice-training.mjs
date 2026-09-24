@@ -162,10 +162,42 @@ await check("the settings: very strict and on screen by default, voice-is-enough
   assert.equal(VT.settingReply(A("tighten_already"), WHERE).text, "It was already set that way.");
   assert.equal(VT.settingReply(A("privacy_while_balanced"), WHERE).text,
     "Private answers can only be read aloud while the voice check is very strict - make it very strict first.");
-  assert.equal(W.lastTrainingLine(S.balanced.gate.training.last), "The change was approved: the voice check is now \"Balanced\".");
-  assert.equal(W.lastTrainingLine(S.voice_is_enough.gate.training.last),
-    "The change was approved: private answers asked by voice are now \"Voice check is enough\".");
+  assert.equal(W.lastTrainingLine(S.balanced.gate.training.last, S.balanced), "Approved: \"Balanced\" is on now.");
+  assert.equal(W.lastTrainingLine(S.voice_is_enough.gate.training.last, S.voice_is_enough),
+    "Approved: \"Voice check is enough\" is on now.");
   assert.equal(W.lastTrainingLine(S.cancelled.gate.training.last), "The last training was cancelled, and its recordings were deleted.");
+});
+
+await check("how a strictness, privacy or memory card ended: the words both apps use, never a training's", async () => {
+  // The real `last` shape (the balanced status's), with the setting and
+  // outcome of each card. "(recommended)" is never in the sentence.
+  const card = (setting, value, outcome) => ({ ...S.balanced.gate.training.last, setting, value, outcome });
+  const now = S.strong_ready; // very strict, on screen, memory read aloud
+  const cases = [
+    [card("memory", "memory_aloud", "setting_changed"), "Approved: \"Read aloud\" is on now."],
+    [card("memory", "memory_aloud", "denied"), "You said no, so \"Read aloud\" stays."],
+    [card("memory", "memory_aloud", "timed_out"), "Nobody answered the card in time, so nothing changed."],
+    [card("memory", "memory_aloud", "withdrawn"), "You made it stricter while the card waited, so approving it changed nothing."],
+    [card("strictness", "balanced", "denied"), "You said no, so \"Very strict\" stays."],
+    [card("privacy", "voice_is_enough", "denied"), "You said no, so \"Stay on screen\" stays."],
+    [card("privacy", "voice_is_enough", "timed_out"), "Nobody answered the card in time, so nothing changed."],
+    [card("strictness", "balanced", "withdrawn"), "You made it stricter while the card waited, so approving it changed nothing."],
+  ];
+  for (const [last, want] of cases) {
+    const got = W.lastTrainingLine(last, now);
+    assert.equal(got, want, `${last.setting} ${last.outcome}`);
+    assert.doesNotMatch(got, /training|recommended/i);
+  }
+  assert.equal(W.lastTrainingLine(card("memory", "memory_on_screen", "failed")),
+    "The change to answers that use what Jarvis remembers failed.");
+  // No status to name what stayed: still not a training's words.
+  assert.equal(W.lastTrainingLine(card("memory", "memory_aloud", "denied")), "You said no, so nothing changed.");
+  // The buttons say which is recommended; the sentences above do not.
+  assert.deepEqual([VT.STRICTNESS, VT.PRIVACY, VT.MEMORY].map((l) => l.map(VT.choiceText)), [
+    ["Very strict (recommended)", "Balanced"],
+    ["Stay on screen (recommended)", "Voice check is enough"],
+    ["Read aloud (recommended)", "Keep on screen"],
+  ]);
 });
 
 await check("\"asked you to repeat\" and the guided test, in plain words", async () => {
@@ -445,6 +477,26 @@ await check("answers that use memories: read aloud by default; keeping them on s
   assert.equal(hidden, true);
   assert.equal(VT.loosens("memory", "memory_aloud"), true);
   assert.equal(VT.loosens("memory", "memory_on_screen"), false);
+});
+
+await check("while \"voice check is enough\" is on, the memory choices are disabled and say why", async () => {
+  const page = await open(S.voice_is_enough);
+  const got = await page.evaluate(() => ({
+    disabled: [...document.querySelectorAll("#vt-memory button")].map((b) => b.disabled),
+    labels: [...document.querySelectorAll("#vt-strictness button, #vt-privacy button, #vt-memory button")].map((b) => b.textContent),
+    note: document.getElementById("vt-memory-note").textContent,
+  }));
+  await page.close();
+  assert.deepEqual(got.disabled, [true, true]);
+  assert.equal(got.note,
+    "\"Voice check is enough\" already reads these answers aloud. Choose \"Stay on screen\" above to use this setting.");
+  assert.deepEqual(got.labels, ["Very strict (recommended)", "Balanced", "Stay on screen (recommended)",
+    "Voice check is enough", "Read aloud (recommended)", "Keep on screen"]);
+  // CONTROL: on screen, both can be pressed.
+  const on = await open(S.strong_ready);
+  const free = await on.evaluate(() => [...document.querySelectorAll("#vt-memory button")].map((b) => b.disabled));
+  await on.close();
+  assert.deepEqual(free, [false, false]);
 });
 
 await check("the guided test: 20 sentences, one request, the result in words", async () => {

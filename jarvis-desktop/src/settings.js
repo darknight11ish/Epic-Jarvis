@@ -2232,7 +2232,7 @@ function vcPaint(status) {
                        tone: voiceIsTrained(status) ? "ok" : "warn" });
   vc.prints.replaceChildren(...voicePrintLines(status).map(vcPrintItem));
   vcLine(vc.check, voiceCheckLine(status));
-  vcLine(vc.last, lastTrainingLine(((status.gate || {}).training || {}).last));
+  vcLine(vc.last, lastTrainingLine(((status.gate || {}).training || {}).last, status));
   vcLine(vc.talk, voiceTalkLine(status));
 
   const wake = wakeInfo(status, APPROVE_WHERE);

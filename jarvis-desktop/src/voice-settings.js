@@ -21,7 +21,7 @@
  * @module voice-settings
  */
 
-import { settingLabel } from "./voice-training.js";
+import { currentSetting, settingLabel } from "./voice-training.js";
 
 const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 const yes = (v) => v === true;
@@ -133,17 +133,23 @@ export function checkLine(status) {
   };
 }
 
-/** The two settings a card can loosen, as a sentence names them. */
-const SETTING_NAMES = { strictness: "how strict the voice check is", privacy: "private answers" };
+/** The three settings a card can loosen, as a sentence names them. */
+const SETTING_NAMES = {
+  strictness: "how strict the voice check is",
+  privacy: "private answers",
+  memory: "answers that use what Jarvis remembers",
+};
 
 /**
  * How the last training - or the last card to change a voice setting -
  * ended, or null. The phone's `lastLine` for the outcomes it has, and the
  * ones the stricter check (docs/JARVIS-API.md section 16) added: a
  * training cancelled or left to expire, "train more" (`added`), and a
- * strictness or privacy card (`setting`, `value`).
+ * strictness, privacy or memory card (`setting`, `value`), in the words
+ * both apps use. `status` (the whole voice status) names the choice that
+ * stayed when a card was said no to.
  */
-export function lastTrainingLine(last) {
+export function lastTrainingLine(last, status) {
   const l = obj(last);
   const outcome = String(l.outcome || "");
   const reason = String(l.reason || "").trim().replace(/\.$/, "");
@@ -153,17 +159,16 @@ export function lastTrainingLine(last) {
     switch (outcome) {
       case "setting_changed": {
         const label = settingLabel(l.setting, l.value);
-        if (!label) return "The change was approved.";
-        return l.setting === "strictness"
-          ? `The change was approved: the voice check is now "${label}".`
-          : `The change was approved: private answers asked by voice are now "${label}".`;
+        return label ? `Approved: "${label}" is on now.` : "Approved: the change is on now.";
       }
-      case "denied":
-        return `Your change to ${setting} was denied on the card. Nothing changed.`;
+      case "denied": {
+        const label = settingLabel(l.setting, currentSetting(status, l.setting));
+        return label ? `You said no, so "${label}" stays.` : "You said no, so nothing changed.";
+      }
       case "timed_out":
-        return `Nobody answered the card to change ${setting} in time. Nothing changed.`;
+        return "Nobody answered the card in time, so nothing changed.";
       case "withdrawn":
-        return `The card to change ${setting} did nothing: you made it stricter again while it waited.`;
+        return "You made it stricter while the card waited, so approving it changed nothing.";
       case "refused":
         return `Your PC refused the change to ${setting}${because}`;
       case "failed":

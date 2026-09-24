@@ -385,6 +385,7 @@ export const STRICTNESS = Object.freeze([
   {
     id: "very_strict",
     label: "Very strict",
+    recommended: true,
     detail: "Needs about 2 seconds of speech and a close match. Best at turning other people away; now and then it may ask you to say it again.",
   },
   {
@@ -398,6 +399,7 @@ export const PRIVACY = Object.freeze([
   {
     id: "private_on_screen",
     label: "Stay on screen",
+    recommended: true,
     detail: "When you ask by voice, answers from your email, calendar or notes are shown on screen, not read aloud. Typing on your own PC or phone is not affected.",
   },
   {
@@ -412,6 +414,7 @@ export const MEMORY = Object.freeze([
   {
     id: "memory_aloud",
     label: "Read aloud",
+    recommended: true,
     detail: "When you ask by voice, answers that use what Jarvis remembers about you are read aloud. Anyone near the speaker will hear them. Questions about email, your calendar, notes, health or money still stay on screen.",
   },
   {
@@ -430,6 +433,35 @@ function choiceWords(setting, value) {
 export function settingLabel(setting, value) {
   const c = choiceWords(setting, value);
   return c ? c.label : "";
+}
+
+/** A choice as its button shows it: "Very strict (recommended)". Every
+ *  sentence that names a choice uses the plain `label`. */
+export function choiceText(c) {
+  return c ? `${c.label}${c.recommended ? " (recommended)" : ""}` : "";
+}
+
+/** Under the privacy choices while the check is not very strict. */
+export const VOICE_IS_ENOUGH_NOTE = "\"Voice check is enough\" can only be chosen while the check is very strict.";
+
+/** Under the memory choices while "voice check is enough" is on: that
+ *  already reads every private answer aloud, memory included (private-
+ *  speech.js lets `private_aloud` through first), so neither choice here
+ *  would change anything, and both are disabled. */
+export const MEMORY_MOOT_NOTE =
+  "\"Voice check is enough\" already reads these answers aloud. Choose \"Stay on screen\" above to use this setting.";
+
+/** Whether the memory choices do nothing now (see MEMORY_MOOT_NOTE). */
+export function memoryMoot(view) {
+  return Boolean(view && view.privacy === "voice_is_enough");
+}
+
+/** The value `setting` has now, by the PC's status, or "" when not said. */
+export function currentSetting(status, setting) {
+  const view = settingsView(status);
+  if (!view) return "";
+  return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
+    : setting === "memory" ? view.memory : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
