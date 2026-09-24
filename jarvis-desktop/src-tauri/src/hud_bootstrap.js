@@ -22,11 +22,12 @@
  * keystore" when it was a bare JSON string, and then had to be corrected):
  * a token typed into Settings is in Windows Credential Manager, which is
  * DPAPI-encrypted to the Windows user (token_store.rs, since 2026-09-23).
- * Two exceptions, both named in Settings: if Credential Manager refuses it,
- * it falls back to plain JSON in tauri-plugin-store's file under %APPDATA%;
- * and a token nobody typed is the backend's own ~/.openjarvis/token, a plain
- * file under the user profile that the backend itself reads. Once injected,
- * the token is also in this page's memory, as below.
+ * A token Credential Manager refuses is not saved at all (since 2026-09-24;
+ * it used to fall back to plain JSON under %APPDATA%). A token nobody typed
+ * is the backend's own, which the backend keeps in Credential Manager too
+ * (token-store.patch) - or, on a backend not yet updated, in its old plain
+ * file ~/.openjarvis/token, which Settings then names. Once injected, the
+ * token is also in this page's memory, as below.
  *
  * So instead: intercept the assignment. The page does
  *

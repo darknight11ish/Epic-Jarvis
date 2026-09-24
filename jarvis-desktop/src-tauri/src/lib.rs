@@ -256,12 +256,12 @@ pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload:
 ///
 /// The initialisation script (`hud_bootstrap.js`) injects them once, when the
 /// window is built - and on a first launch that is BEFORE the backend has
-/// started and written its token file, so the page got an empty token and
+/// started and made its token, so the page got an empty token and
 /// every request it made was refused (401) until the app was restarted. The
 /// page-load fallback that follows only re-sent when the page had no base,
 /// and it always has one. So this runs on every page load and on every link
 /// change (`stream::publish_link`) - the stream connecting is the moment the
-/// backend, and so its token file, certainly exists - and does nothing when
+/// backend, and so its token, certainly exists - and does nothing when
 /// the page already agrees. The token goes only into the page, as the
 /// bootstrap already puts it; it is not logged.
 pub fn configure_hud(app: &AppHandle) {

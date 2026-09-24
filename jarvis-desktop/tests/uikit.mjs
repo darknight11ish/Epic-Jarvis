@@ -346,7 +346,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -387,11 +387,14 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                                 { name: "litellm", online: false, optional: true }] };
           case "get_api_settings": {
             // Mirrors commands.rs pick_token: typed (Credential Manager),
-            // then the environment, then the backend's own file; empty is
+            // then the environment, then the backend's own token - from
+            // Credential Manager, else its old plain-text file; empty is
             // "not set" at every step.
             const s = window.__apiSettings;
             const source = s.typedToken ? "credential-manager"
-              : s.envToken ? "environment" : s.backendFileToken ? "backend-file" : null;
+              : s.envToken ? "environment"
+              : s.backendCmToken ? "backend-credential-manager"
+              : s.backendFileToken ? "backend-file" : null;
             return { base: s.base, hasToken: s.hasToken === false ? false : Boolean(source),
                      tokenSource: s.hasToken === false ? null : source,
                      bindAddress: window.__apiSettings.bindAddress,
@@ -400,7 +403,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "reveal_pairing_token": {
             const s = window.__apiSettings;
-            const t = s.typedToken || s.envToken || s.backendFileToken;
+            const t = s.typedToken || s.envToken || s.backendCmToken || s.backendFileToken;
             if (!t) throw new Error("there is no token yet - start Jarvis once and it makes one for itself");
             return t;
           }
@@ -410,6 +413,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 args.bindAddress && window.__bindAddressRefuses.includes(args.bindAddress)) {
               throw new Error(window.__bindAddressRefusalMessage || "refused");
             }
+            // commands.rs refuses the whole save when Credential Manager
+            // refuses the token - it never falls back to a plain-text copy.
+            if (args.token && window.__tokenSaveRefuses) throw new Error(window.__tokenSaveRefuses);
             if (args.base !== undefined) window.__apiSettings.base = args.base || "";
             if (args.token) { window.__apiSettings.typedToken = args.token; delete window.__apiSettings.hasToken; }
             if (args.token === "") window.__apiSettings.typedToken = null;
@@ -754,6 +760,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                             typedToken: null, envToken: null, backendFileToken: "backend-made-token",
                             ...(apiSettings || {}) };
   window.__bindAddressRefuses = bindAddressRefuses || null;
+  window.__tokenSaveRefuses = tokenSaveRefuses || null;
   window.__bindAddressRefusalMessage = bindAddressRefusalMessage || null;
   window.__vision = vision || { model: "qwen3:8b", vision: false,
     reason: "Ollama lists what qwen3:8b can do, and pictures are not on the list." };
@@ -789,7 +796,7 @@ export async function open(browser, base, file, data, viewport) {
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
     taskActionFails: null, taskNoteFails: null, noteJobs: null,
     heard: null, captureFails: null, speakFails: null, autoListenFails: null, speakDelayMs: 0,
-    memoryRefuses: null, learningFloor: false, apiSettings: null,
+    memoryRefuses: null, learningFloor: false, apiSettings: null, tokenSaveRefuses: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     vision: null,
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },

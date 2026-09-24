@@ -213,6 +213,13 @@ $PATCHES = @(
     # content_type(), and the patched code then falls back to the plain
     # relay exactly as before.
     'chat-stream.patch'
+    # The pairing token moves out of the plain file token-file.patch wrote,
+    # into Windows Credential Manager (CLAUDE.md rule 3). Its context is
+    # token-file's _resolve_token and banner, with loopback-too's and
+    # bind-wildcard's lines around them, so it goes after all three; nothing
+    # else touches those lines. Needs jarvis_token_store.py copied in; without
+    # it the backend runs with no token (this PC only) and says so.
+    'token-store.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -259,6 +266,7 @@ $SHIPPED = @(
     'jarvis_power_switch.py'     # power-mode.patch
     # --- end task controls ---
     'jarvis_wakeword.py'         # "hey Jarvis": jarvis_speech.py calls it for wake-word clips
+    'jarvis_token_store.py'      # token-store.patch; the pairing token in Credential Manager
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it
@@ -1251,7 +1259,7 @@ Say ""
 if ($fail.Count -eq 0) {
     Ok "$pass suites passed. The backend is patched and proven."
     Say ""
-    Say "Start it (one line), and watch what it prints for the token file:" Cyan
+    Say "Start it (one line), and watch its 'token' line - it should say Windows Credential Manager:" Cyan
     Say "    & `"$($py.Exe)`" `"$hudPath`"" Cyan
 } else {
     Bad "$pass passed, $($fail.Count) failed."

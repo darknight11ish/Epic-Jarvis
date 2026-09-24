@@ -875,7 +875,7 @@ jobs:
             "" \
             "Signed with the project's debug key, which CI restores from the \`DEBUG_KEYSTORE_B64\` repository secret; it is not in the repository. Builds signed with that same key install over each other in place, keeping the pairing. The key was replaced on 19 Sep 2026, because the old one had been committed to a public repository." \
             "" \
-            "If \`adb install -r\` says \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`, the copy on the phone was signed with the OLD key. Uninstall it once (\`adb uninstall com.jarvis.client\`, or long-press the app, Uninstall), install this one, and pair again with the token from \`%USERPROFILE%\\.openjarvis\\token\` on the PC. Uninstalling deletes the pairing and anything still queued offline.")
+            "If \`adb install -r\` says \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`, the copy on the phone was signed with the OLD key. Uninstall it once (\`adb uninstall com.jarvis.client\`, or long-press the app, Uninstall), install this one, and pair again with the token from the desktop app (Settings, Connection, Show the token for my phone) or \`py -3 jarvis_token_store.py show\` in the backend folder. Uninstalling deletes the pairing and anything still queued offline.")
           title="Jarvis client - latest build ($GITHUB_REF_NAME @ $short)"
 
           # Replace the old build WITHOUT a moment of having none. The old

@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Thirty-six patches against the Jarvis backend, each with an executable test
+Forty patches against the Jarvis backend, each with an executable test
 (counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
 refuses to run if a `.patch` file here is missing from it). The paragraphs
 below were written as the list grew, so the counts in them are the count at
@@ -1369,6 +1369,12 @@ correction rather than as "now" regardless of what was sent.
 ---
 
 # `token-file.patch`
+
+> **Where the token is kept changed on 2026-09-24:** `token-store.patch` (its
+> own section, at the end of this file) moves it from the plain file below
+> into Windows Credential Manager, to make CLAUDE.md rule 3 true. What this
+> section says about *why* there is a token still holds; what it says about
+> the file describes the old behaviour.
 
 **The Android client has never been pairable, on any install, since it was
 written.**
@@ -4859,3 +4865,77 @@ through the real router: each one keeps a long question local (and, as a
 control, the same question without it goes to a cloud lane). Also: the
 built-in list covers the topics with no config at all, and a word added to
 the config takes effect with no code change.
+
+
+# `token-store.patch` and `jarvis_token_store.py` — the pairing token, out of the plain file
+
+**What was wrong.** CLAUDE.md rule 3 says any key is "kept out of anything the
+app writes to disk in plain text". `token-file.patch` broke it: the backend
+wrote its pairing token to `~/.openjarvis/token` as plain text. And the
+desktop app, when Windows Credential Manager refused a token typed into
+Settings, fell back to saving it in its settings file as plain text. So the
+rule read stricter than the product was.
+
+**What it does now.**
+
+- `jarvis_token_store.py` keeps the backend's token in Windows Credential
+  Manager as `Jarvis Backend/pairing token` — a generic credential, the token
+  as UTF-8 bytes, for this Windows user on this PC: exactly the format the
+  desktop's `token_store.rs` already used for a typed token. Standard library
+  only (`ctypes` calling `CredReadW` / `CredWriteW` / `CredDeleteW`); nothing
+  to install.
+- `token-store.patch` replaces `_resolve_token` in `jarvis_hud.py` with a call
+  to it, and the banner prints *where* the token is, never the token.
+- **An old file is moved, not lost.** The first start writes its token into
+  Credential Manager, reads it back, and deletes the file only when the two
+  match — so the phone stays paired. If the file and Credential Manager
+  disagree, the file wins: with this patch in place nothing writes the file,
+  so a file that exists came from the old code after the move (e.g. after
+  `-Revert`) and is what the phone was last paired with.
+- **Nothing is ever written to a file.** If Credential Manager refuses, the
+  token is used for that run only and the banner says the phone will need
+  pairing again after a restart (set `HUD_TOKEN` yourself to avoid it). If the
+  old file cannot be moved, it is left exactly as it was, and the banner says
+  it is still plain text.
+- **If `jarvis_token_store.py` is missing**, the backend runs with no token
+  (this PC only; the phone cannot pair) and says so — it does not fall back
+  to writing the file.
+- **The desktop** reads the backend's token from Credential Manager
+  (`token_store::read_backend`), then the old file (read only, for a backend
+  not yet updated), and Settings names which. A token typed into Settings
+  that Credential Manager refuses is now refused outright, with the reason,
+  instead of being written to the settings file.
+
+**For the owner, in the backend folder:**
+`py -3 jarvis_token_store.py show` prints the token (to type into the phone),
+`where` says where it is kept, `forget` deletes it so the next start makes a
+new one (every device then pairs again).
+
+**What it does not change, plainly:** any program running as you can still
+ask Credential Manager for the token, just as it could read the file. What
+changes is that it is not on disk as readable text — in a backup, a copied or
+synced profile folder, or a file search. The phone's token was already
+encrypted (Android Keystore, `TokenStore.kt`). Other keys the backend uses —
+`JARVIS_GITHUB_TOKEN`, `JARVIS_JOPLIN_TOKEN`, `JARVIS_CALDAV_PASSWORD` and the
+like — are read from environment variables, which the app never writes.
+
+**Order.** After `token-file`, `loopback-too` and `bind-wildcard`: its context
+is `_resolve_token` and the banner, with their lines around it. Nothing else
+touches those lines. Needs `jarvis_token_store.py` copied in (the script does).
+
+## Test it
+
+```powershell
+python test_token_store.py
+python test_token_file.py
+```
+
+`test_token_store.py` runs anywhere: every branch of `resolve()` against a
+stand-in store, with a check after each that no file was written and the
+banner holds no token; that the desktop reads the same name the backend
+writes; and a rehearsal of the patch on top of the three before it, forwards
+and back, with the patched `_resolve_token` run. On Windows it also does a
+live round trip through the real Credential Manager under a throwaway name
+(CI's `credential-manager` job). `test_token_file.py` runs the installed
+`_resolve_token` against a stand-in store — never your real saved token —
+and fails on a `jarvis_hud.py` without this patch.

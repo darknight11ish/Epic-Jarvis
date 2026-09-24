@@ -42,8 +42,9 @@ fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. To get past it:
    `adb uninstall com.jarvis.client`
 2. Install the new APK (`adb install jarvis-client-<commit>.apk`, or open it
    on the phone).
-3. Pair again: host and port as before, and the token from
-   `%USERPROFILE%\.openjarvis\token` on the PC.
+3. Pair again: host and port as before, and the token - on the PC, the
+   desktop app's **Settings → Connection → Show the token for my phone**
+   (or `py -3 jarvis_token_store.py show` in the backend folder).
 
 Uninstalling deletes the old pairing and anything still waiting in the
 phone's offline queue. Every build after that installs over the last one

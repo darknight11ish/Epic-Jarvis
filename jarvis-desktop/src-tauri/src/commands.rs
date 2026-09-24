@@ -128,8 +128,9 @@ const MAX_CHAT_LINE_BYTES: usize = 4 * 1024 * 1024;
 /// A store file rather than the page's `localStorage`, per DESKTOP-BUILD §3.1:
 /// the port can change without a rebuild, and reading it from Rust means the
 /// token reaches the webview only as the `JARVIS.set()` call at page load.
-/// The pairing token is NOT kept here any more - it is in Windows Credential
-/// Manager (`token_store.rs`) - except as a fallback when that refuses it.
+/// The pairing token is NOT kept here - it is in Windows Credential Manager
+/// (`token_store.rs`). An older version kept it here as plain text; that copy
+/// is moved out at startup ([`migrate_plain_token`]) and is only ever read.
 pub const SETTINGS_STORE: &str = "jarvis-desktop.json";
 
 /// Default API base. `JARVIS_HUD_PORT` defaults to 4719 in `jarvis_hud.py`;
@@ -161,12 +162,16 @@ pub fn jarvis_base(app: &AppHandle) -> String {
 pub enum TokenSource {
     /// Typed into Settings, kept in Windows Credential Manager.
     CredentialManager,
-    /// Typed into Settings, kept in the settings file as plain text: an
-    /// older version saved it there, or Credential Manager refused it.
+    /// Typed into Settings by an older version, still in the settings file
+    /// as plain text because Credential Manager refused the move. Read only;
+    /// nothing here writes a token to that file any more.
     SettingsFile,
     /// `JARVIS_TOKEN` / `HUD_TOKEN` in the environment.
     Environment,
-    /// The backend's own `~/.openjarvis/token`.
+    /// The backend's own token, in Credential Manager (`BACKEND_TARGET`).
+    BackendCredentialManager,
+    /// The backend's own OLD plain-text `~/.openjarvis/token`, read only until
+    /// the backend (with token-store.patch) moves it into Credential Manager.
     BackendFile,
 }
 
@@ -176,6 +181,7 @@ impl TokenSource {
             TokenSource::CredentialManager => "credential-manager",
             TokenSource::SettingsFile => "settings-file",
             TokenSource::Environment => "environment",
+            TokenSource::BackendCredentialManager => "backend-credential-manager",
             TokenSource::BackendFile => "backend-file",
         }
     }
@@ -190,25 +196,28 @@ impl TokenSource {
 /// no token and the backend answered 401 until the app was reconfigured.
 ///
 /// The settings-file copy wins over Credential Manager because it only
-/// exists when it is the newest: left by an older version (moved at the
-/// next start, [`migrate_plain_token`]) or written because Credential
-/// Manager refused the newest one.
+/// exists when an older version left it there and Credential Manager refused
+/// the move ([`migrate_plain_token`]) - so it is what was typed last.
+///
+/// The backend's own token comes last: from Credential Manager, or else from
+/// its old plain-text file, which a backend without token-store.patch still
+/// writes. Both are only read here.
 pub(crate) fn pick_token(
     settings_file: Option<String>,
     credential_manager: Option<String>,
     environment: Option<String>,
-    backend_file: impl FnOnce() -> Option<String>,
+    backend: impl FnOnce() -> Option<(String, TokenSource)>,
 ) -> Option<(String, TokenSource)> {
     let clean = |t: Option<String>| t.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
     clean(settings_file)
         .map(|t| (t, TokenSource::SettingsFile))
         .or_else(|| clean(credential_manager).map(|t| (t, TokenSource::CredentialManager)))
         .or_else(|| clean(environment).map(|t| (t, TokenSource::Environment)))
-        .or_else(|| clean(backend_file()).map(|t| (t, TokenSource::BackendFile)))
+        .or_else(|| backend().and_then(|(t, source)| clean(Some(t)).map(|t| (t, source))))
 }
 
 /// The pairing token and where it came from: typed into Settings first
-/// (see [`pick_token`] for the order), then the environment, then the file
+/// (see [`pick_token`] for the order), then the environment, then the token
 /// the backend made for itself.
 pub fn jarvis_token_with_source(app: &AppHandle) -> Option<(String, TokenSource)> {
     use tauri_plugin_store::StoreExt;
@@ -225,7 +234,7 @@ pub fn jarvis_token_with_source(app: &AppHandle) -> Option<(String, TokenSource)
         settings_file,
         credential_manager,
         jarvis_token().cloned(),
-        || token_from_config_dir(app),
+        || backend_token(app),
     )
 }
 
@@ -274,13 +283,26 @@ pub fn migrate_plain_token(app: &AppHandle) {
     }
 }
 
-/// The token the backend writes for itself on first run.
+/// The token the backend makes for itself on first run.
 ///
-/// Third and last, deliberately: something typed into Settings wins, then the
+/// Last, deliberately: something typed into Settings wins, then the
 /// environment, then this. It exists so the two halves agree without the owner
-/// configuring anything — the server now always has a token, and a desktop
-/// that did not know where to find it would be locked out of its own backend
-/// by a secret generated on its behalf.
+/// configuring anything — the server always has a token, and a desktop that
+/// did not know where to find it would be locked out of its own backend by a
+/// secret generated on its behalf.
+///
+/// Credential Manager first (`backend/jarvis_token_store.py` keeps it there).
+/// A failure to read it falls through rather than stops, to the old
+/// plain-text file - which only a backend WITHOUT token-store.patch still
+/// has, and which the patched backend deletes once it has moved it.
+fn backend_token(app: &AppHandle) -> Option<(String, TokenSource)> {
+    if let Ok(Some(t)) = crate::token_store::read_backend() {
+        return Some((t, TokenSource::BackendCredentialManager));
+    }
+    token_from_config_dir(app).map(|t| (t, TokenSource::BackendFile))
+}
+
+/// The backend's OLD plain-text token file. Read, never written.
 ///
 /// `OPENJARVIS_CONFIG_DIR` is honoured because the backend honours it. Reading
 /// a different directory from the one the server wrote to is the whole failure
@@ -532,7 +554,8 @@ pub fn get_api_settings(app: AppHandle) -> serde_json::Value {
         "base": jarvis_base(&app),
         "hasToken": jarvis_token_for(&app).is_some(),
         // Where it came from, by name - "credential-manager",
-        // "settings-file", "environment" or "backend-file" - never the token.
+        // "settings-file", "environment", "backend-credential-manager" or
+        // "backend-file" - never the token.
         // Settings only offers "Clear" for the first two, the ones typed there.
         "tokenSource": jarvis_token_with_source(&app).map(|(_, source)| source.as_str()),
         "bindAddress": supervised_bind_address(&app).unwrap_or_default(),
@@ -721,15 +744,17 @@ fn inet_aton(s: &str) -> Option<u32> {
 /// Persists the base URL, the token and the supervised bind address —
 /// each optional, so a caller can change one without resending the others.
 ///
-/// The token goes to Windows Credential Manager (`token_store.rs`), not the
-/// settings file. If Credential Manager refuses it, it is still saved - in
-/// the settings file, as before - and the returned note says so, so the
-/// owner is never left unpaired and never misled about where it is.
+/// The token goes to Windows Credential Manager (`token_store.rs`) and
+/// nowhere else. If Credential Manager refuses it, it is NOT saved - an
+/// error says so and why, and nothing else in the call is saved either.
+/// It used to fall back to the settings file as plain text, which is exactly
+/// what CLAUDE.md rule 3 forbids.
 ///
 /// An empty token means **clear what was typed here**: it is removed from
-/// both places, and the app goes back to the environment or the backend's
-/// own token file. It is never saved as `""` - that value used to be read as
-/// "the token is empty" and lock the app out of its own backend.
+/// Credential Manager and from any old settings-file copy, and the app goes
+/// back to the environment or the backend's own token. It is never saved as
+/// `""` - that value used to be read as "the token is empty" and lock the app
+/// out of its own backend.
 ///
 /// Returns a note for Settings to show, or `None` when there is nothing to add.
 #[tauri::command]
@@ -756,10 +781,6 @@ pub fn set_api_settings(
         validate_bind_address(bind_address)?;
     }
 
-    let mut note = None;
-    if let Some(base) = base {
-        store.set("base", serde_json::Value::String(base));
-    }
     if let Some(token) = token.map(|t| t.trim().to_string()) {
         if token.is_empty() {
             match token_store::delete() {
@@ -774,14 +795,19 @@ pub fn set_api_settings(
                 Ok(()) => {
                     store.delete("token");
                 }
+                // Before anything else in this call is written, so a refused
+                // token does not leave a half-saved change behind.
                 Err(e) => {
-                    store.set("token", serde_json::Value::String(token));
-                    note = Some(format!(
-                        "The token was saved in the settings file as plain text, because {e}."
-                    ));
+                    return Err(format!(
+                        "The token was NOT saved, because {e}. Nothing was written to disk. \
+                         Try again, or set the JARVIS_TOKEN environment variable instead."
+                    ))
                 }
             }
         }
+    }
+    if let Some(base) = base {
+        store.set("base", serde_json::Value::String(base));
     }
     if let Some(bind_address) = bind_address {
         store.set("bind_address", serde_json::Value::String(bind_address));
@@ -789,7 +815,7 @@ pub fn set_api_settings(
     store
         .save()
         .map_err(|e| format!("unable to write the settings store: {e}"))?;
-    Ok(note)
+    Ok(None)
 }
 
 /// Checks a base URL before it is persisted.
@@ -2667,15 +2693,24 @@ mod token_tests {
         Some(v.to_string())
     }
 
+    /// What `backend_token` hands back: the backend's own token and where
+    /// it was found.
+    fn file(v: &str) -> Option<(String, TokenSource)> {
+        Some((v.to_string(), TokenSource::BackendFile))
+    }
+    fn backend_cm(v: &str) -> Option<(String, TokenSource)> {
+        Some((v.to_string(), TokenSource::BackendCredentialManager))
+    }
+
     /// The lockout: "Clear token" saved "", and "" was taken as the token.
     #[test]
     fn an_empty_saved_token_falls_through_to_the_backend_file() {
-        let got = pick_token(s(""), None, None, || s("from-file"));
+        let got = pick_token(s(""), None, None, || file("from-file"));
         assert_eq!(
             got,
             Some(("from-file".to_string(), TokenSource::BackendFile))
         );
-        let got = pick_token(s("   "), s(""), None, || s("from-file"));
+        let got = pick_token(s("   "), s(""), None, || file("from-file"));
         assert_eq!(
             got,
             Some(("from-file".to_string(), TokenSource::BackendFile))
@@ -2693,15 +2728,33 @@ mod token_tests {
 
     #[test]
     fn a_typed_token_wins_and_credential_manager_is_where_it_normally_lives() {
-        let got = pick_token(None, s("typed"), s("env"), || s("file"));
+        let got = pick_token(None, s("typed"), s("env"), || file("file"));
         assert_eq!(
             got,
             Some(("typed".to_string(), TokenSource::CredentialManager))
         );
     }
 
-    /// The settings-file copy exists only when it is the newest (left by an
-    /// older version, or Credential Manager refused the latest), so it wins.
+    /// The backend's own token is reported by where it was found, so
+    /// Settings can say "kept in Credential Manager" or "still a plain file".
+    #[test]
+    fn the_backends_own_token_keeps_its_source() {
+        let got = pick_token(None, None, None, || backend_cm("made-by-backend"));
+        assert_eq!(
+            got,
+            Some((
+                "made-by-backend".to_string(),
+                TokenSource::BackendCredentialManager
+            ))
+        );
+        assert_eq!(
+            TokenSource::BackendCredentialManager.as_str(),
+            "backend-credential-manager"
+        );
+    }
+
+    /// The settings-file copy exists only when an older version left it and
+    /// Credential Manager refused the move, so it is what was typed last.
     #[test]
     fn a_settings_file_copy_beats_an_older_credential_manager_one() {
         let got = pick_token(s("newer"), s("older"), None, || None);
@@ -2710,13 +2763,14 @@ mod token_tests {
 
     #[test]
     fn nothing_anywhere_is_none_not_an_empty_token() {
-        assert_eq!(pick_token(s(""), s(""), s(""), || s("")), None);
+        assert_eq!(pick_token(s(""), s(""), s(""), || file("")), None);
+        assert_eq!(pick_token(s(""), s(""), s(""), || backend_cm("  ")), None);
         assert_eq!(pick_token(None, None, None, || None), None);
     }
 
     #[test]
     fn values_are_trimmed() {
-        let got = pick_token(None, None, None, || s("  tok\n"));
+        let got = pick_token(None, None, None, || file("  tok\n"));
         assert_eq!(got.map(|(t, _)| t), s("tok"));
     }
 }

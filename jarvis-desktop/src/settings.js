@@ -154,9 +154,10 @@ async function act(button, target, work) {
 /** Where the token in use came from, in words. Never the token. */
 const TOKEN_SOURCE = {
   "credential-manager": "set here, kept in Windows Credential Manager",
-  "settings-file": "set here, kept in the settings file as plain text",
+  "settings-file": "set here by an older version, still in the settings file as plain text",
   environment: "from the JARVIS_TOKEN / HUD_TOKEN environment variable",
-  "backend-file": "Jarvis's own, from its token file",
+  "backend-credential-manager": "Jarvis's own, kept in Windows Credential Manager",
+  "backend-file": "Jarvis's own, still in its old plain-text file - update the backend (apply-patches.ps1) to move it",
 };
 
 async function loadConnection() {

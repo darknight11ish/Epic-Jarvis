@@ -8,8 +8,10 @@
  *   token and stopped - never reaching the environment or the backend's own
  *   token file - so every request went out with no token and got 401.
  * - The typed token sat in jarvis-desktop.json as plain text. It now lives
- *   in Windows Credential Manager (token_store.rs), with the settings file
- *   only as a fallback that Settings names out loud.
+ *   in Windows Credential Manager (token_store.rs). Since 2026-09-24 there
+ *   is no plain-text fallback at all (CLAUDE.md rule 3): a token Credential
+ *   Manager refuses is not saved, and Settings says so. The backend's own
+ *   token moved into Credential Manager the same day (token-store.patch).
  * - The phone's pairing screen says "the token from the desktop", and the
  *   desktop never showed it. Settings now has "Show the token for my phone".
  *
@@ -86,15 +88,33 @@ await check("with nothing to fall back to, Clear says Jarvis may refuse this app
   assert.match(said, /No other token was found/);
 });
 
-await check("a note from Rust (token kept in the settings file) is shown, not swallowed", async () => {
-  const page = await open({ apiSettings: {
-    saveNote: "The token was saved in the settings file as plain text, because Windows Credential Manager refused: saving failed (Windows error 1312)." } });
+await check("a token Credential Manager refuses is NOT saved, and Settings says so", async () => {
+  const page = await open({ tokenSaveRefuses: "The token was NOT saved, because Windows Credential Manager refused: saving failed (Windows error 1312). Nothing was written to disk. Try again, or set the JARVIS_TOKEN environment variable instead." });
   await page.locator("#token").fill("a-new-token");
   await page.locator("#save-connection").click();
   await page.waitForTimeout(250);
   const said = await status(page);
+  const tone = await page.locator("#connection-status").getAttribute("data-tone");
+  const state = await page.locator("#token-state").innerText();
   await page.close();
-  assert.match(said, /plain text/, `the fallback was not mentioned: "${said}"`);
+  assert.match(said, /NOT saved/, `the refusal was not shown: "${said}"`);
+  assert.equal(tone, "bad");
+  assert.doesNotMatch(state, /set here/, "the page claims a token was set here");
+});
+
+await check("Jarvis's own token in Credential Manager is named as such", async () => {
+  const page = await open({ apiSettings: { backendCmToken: "backend-cm-token", backendFileToken: null } });
+  const state = await page.locator("#token-state").innerText();
+  await page.close();
+  assert.match(state, /Jarvis's own, kept in Windows Credential Manager/);
+});
+
+await check("Jarvis's own token still in the old file says to update the backend", async () => {
+  const page = await open();
+  const state = await page.locator("#token-state").innerText();
+  await page.close();
+  assert.match(state, /old plain-text file/);
+  assert.match(state, /apply-patches/);
 });
 
 /* ── Showing it for the phone ────────────────────────────────────────────── */
@@ -146,9 +166,13 @@ await check("CONTROL: Clear never stores an empty token", async () => {
   const body = set.slice(0, set.indexOf("\n}\n"));
   assert.match(body, /if token\.is_empty\(\) \{[\s\S]*?store\.delete\("token"\)/,
     "clearing does not delete the key");
-  const writes = body.match(/store\.set\("token"/g) || [];
-  assert.equal(writes.length, 1, "more than the one fallback write of the token");
-  assert.match(body, /Err\(e\) => \{\s*store\.set\("token"/, "the plain-text write is not the fallback");
+  // CLAUDE.md rule 3: no plain-text copy, not even as a fallback.
+  assert.doesNotMatch(body, /store\.set\("token"/, "the token is written to the settings file");
+  assert.match(body, /Err\(e\) => \{\s*return Err\(/, "a refused token does not stop the save");
+  // The token is dealt with before anything else is put in the store, so a
+  // refused token cannot leave a half-saved change behind.
+  assert.ok(body.indexOf("token_store::write(&token)") < body.indexOf('store.set("base"'),
+    "the base is put in the store before the token is tried");
 });
 
 await check("CONTROL: the typed token goes to Windows Credential Manager", async () => {

@@ -220,9 +220,11 @@ cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 
 
 Read what it prints at the top. Three lines matter:
 
-- A `token` line naming `...\.openjarvis\token` - the pairing token was made
-  (step 1.5 applied the patch that makes it). No token line means it could
-  not write that file; check the folder's permissions.
+- A `token` line saying `in Windows Credential Manager` - the pairing token
+  was made and saved (step 1.5 applied the patches that do it). If it says
+  `NOT SAVED` or `STILL IN THE OLD PLAIN-TEXT FILE` instead, the lines under
+  it say why. No token line at all means `jarvis_token_store.py` is missing
+  from the backend folder; run step 1.5 again.
 - `routing off - jarvis_router.py / jarvis_recall.py not found` — **this
   message names the wrong file.** It prints both names whichever is missing.
   Check which one you actually lack.
@@ -458,22 +460,31 @@ TOML, `jarvis_hud._bind_address()` returns `100.64.1.5`. Verified, not assumed.
 `JARVIS_HUD_BIND` still wins over the file, so the command above is still the
 quickest way to do it once. Use the TOML if you want it to persist.
 
-**The token is now made for you.** On first run the backend writes a random one
-to `%USERPROFILE%\.openjarvis\token` and the desktop app reads it from there,
-so neither end needs configuring. To get it for the phone, open the desktop
-app's **Settings → Connection → Show the token for my phone** and type what
-it shows into the phone's Token box (it hides itself again after a minute).
-Without the desktop app, this one line in PowerShell prints it:
-`Get-Content "$env:USERPROFILE\.openjarvis\token"`
+**The token is now made for you.** On first run the backend makes a random one
+and saves it in **Windows Credential Manager** (as `Jarvis Backend/pairing
+token` - never a plain file, per CLAUDE.md rule 3), and the desktop app reads
+it from there, so neither end needs configuring. To get it for the phone, open
+the desktop app's **Settings → Connection → Show the token for my phone** and
+type what it shows into the phone's Token box (it hides itself again after a
+minute). Without the desktop app, this one line in PowerShell prints it (change
+the path if your backend folder is elsewhere):
+`cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_token_store.py show`
 
-Setting `HUD_TOKEN` yourself still wins and nothing is written in that case —
-useful if you would rather choose it. Delete the file to get a new one; the
-phone then has to be re-paired, which is also how you unpair a device you no
-longer have.
+If an older backend left the token in the plain file
+`%USERPROFILE%\.openjarvis\token`, the first start after `apply-patches.ps1`
+moves it into Credential Manager, checks it arrived, and deletes the file - so
+the phone stays paired. The banner says `moved out of the plain-text file`.
 
-If the boot banner does not print a `token` line, the backend could not write
-that file. Check the permissions on the folder. It will still run on loopback
-without one, but the phone cannot pair.
+Setting `HUD_TOKEN` yourself still wins and nothing is saved in that case —
+useful if you would rather choose it. To get a new token (which is also how
+you unpair a device you no longer have), run
+`py -3 jarvis_token_store.py forget` in the backend folder and start Jarvis
+again; every device then has to pair again.
+
+If the banner says `NOT SAVED`, Credential Manager refused the token: Jarvis
+uses it for that run only and writes nothing to disk, so the phone would need
+pairing again after every restart. The lines under it give the Windows error.
+Setting `HUD_TOKEN` yourself avoids it.
 
 ### 3.3 Pair
 
@@ -499,7 +510,9 @@ without one, but the phone cannot pair.
    has the three steps (uninstall once, install, pair again).
 3. Open it → Pairing → host `yourpc.tailnet.ts.net:4719` (Tailscale) or
    `yourpc.nord:4719` (Meshnet, e.g. `marioirelan11-alps.nord:4719`), then the
-   token from `%USERPROFILE%\.openjarvis\token`.
+   token: on the PC, the desktop app's **Settings → Connection → Show the
+   token for my phone** (or `py -3 jarvis_token_store.py show` in the
+   backend folder).
 4. Connect.
 
 ### 3.4 When it fails
@@ -518,11 +531,12 @@ phone gets a 401 that looks like a token mismatch.
 
 ## Uninstalling
 
-The uninstaller leaves your settings behind, including **the pairing token**:
-in plain text in the `.openjarvis` folder, and — if you ever typed a token into
-Settings — in Windows Credential Manager (Control Panel → Credential Manager →
-Windows Credentials → "Jarvis Desktop/pairing token"; select it and press
-Remove). To remove everything else:
+The uninstaller leaves your settings behind, including **the pairing token**,
+in Windows Credential Manager (Control Panel → Credential Manager → Windows
+Credentials): "Jarvis Backend/pairing token" (the one Jarvis made) and, if you
+ever typed a token into Settings, "Jarvis Desktop/pairing token". Select each
+and press Remove. A backend older than 2026-09-24 also left it in plain text
+as `.openjarvis\token` in your user folder. To remove everything else:
 
 ```
 %APPDATA%\com.jarvis.desktop\
@@ -572,13 +586,18 @@ rather than your fault.
     Windows keeps saved network passwords. An older version kept it in the
     app's settings file under `%APPDATA%` as plain text; the first start of
     this version moves it across, checks it arrived, and only then deletes
-    the plain-text copy. If Credential Manager ever refuses it, the app keeps
-    it in the settings file instead (so you are never unpaired) and Settings
-    says so next to the token.
-  - The token **the backend makes for itself** is still a plain file,
-    `%USERPROFILE%\.openjarvis\token`, because that file is how the backend
-    and the desktop agree on a token without you typing anything. It is
-    inside your user folder, which Windows already keeps readable only by
-    you, the system and administrators. Anything running as you can read it.
+    the plain-text copy. If Credential Manager refuses that move, the old
+    copy is left as it was (so you are not unpaired) and Settings says so.
+    A NEW token Credential Manager refuses is not saved at all (since
+    2026-09-24; it used to fall back to the settings file) - Settings says
+    so, and nothing is written to disk.
+  - The token **the backend makes for itself** is in Credential Manager too
+    (since 2026-09-24, `token-store.patch`), as `Jarvis Backend/pairing
+    token`. It used to be a plain file, `%USERPROFILE%\.openjarvis\token`;
+    the first start after the update moves it in and deletes the file.
+  - What this does not change: any program running as you can still ask
+    Credential Manager for either token, just as it could read the old
+    file. What changes is that neither sits on disk as readable text - in a
+    backup, a copied or synced folder, or a file search.
     On Linux and macOS the backend also sets the file to owner-only.
 - **Do not run the OpenJarvis copy you downloaded.** It writes into the same `%USERPROFILE%\.openjarvis\` folder as Jarvis, including a `documents` table in `memory.db`; with `documents-owned.patch` applied Jarvis ignores that table, but nothing stops OpenJarvis changing the folder.

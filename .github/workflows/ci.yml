@@ -113,6 +113,21 @@ jobs:
       - name: Desktop / phone parity
         run: python tools/check_parity.py
 
+  credential-manager:
+    # The pairing token lives in Windows Credential Manager (CLAUDE.md rule 3,
+    # backend/jarvis_token_store.py). Linux has no Credential Manager, so the
+    # backend job above only tests the logic against a stand-in; this runs the
+    # real ctypes calls - write, read back, move an old file in, delete - on
+    # real Windows, under a throwaway name, never a real token.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Token store, live against Credential Manager
+        run: python backend/test_token_store.py
+
   powershell-5:
     # The owner runs these scripts in Windows PowerShell 5.1, not 7. 5.1 does
     # not know `??`, `?:`, `&&` or `||`, and reads a script file that has no

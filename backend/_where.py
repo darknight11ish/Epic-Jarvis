@@ -112,6 +112,7 @@ SHIPPED = (
     "jarvis_voice_enroll.py", "jarvis_speech.py",
     "jarvis_task_control.py", "jarvis_note_capture.py", "jarvis_power_switch.py",
     "jarvis_wakeword.py",
+    "jarvis_token_store.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",

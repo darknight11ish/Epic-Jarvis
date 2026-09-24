@@ -64,12 +64,12 @@
                  placeholder="leave blank to keep the current one" />
         </label>
         <p class="note">
-          Jarvis makes its own token the first time it runs, in the file
-          <code>.openjarvis\token</code> in your user folder
-          (<code>%USERPROFILE%\.openjarvis\token</code>). This app reads it
-          from there, so you only need to paste one here if you changed it.
+          Jarvis makes its own token the first time it runs and keeps it in
+          Windows Credential Manager too, as
+          <code>Jarvis Backend/pairing token</code>. This app reads it from
+          there, so you only need to paste one here if you changed it.
           <strong>Clear token</strong> forgets one you typed here and goes
-          back to that file.
+          back to Jarvis's own.
         </p>
 
         <div class="field" id="pairing">
@@ -368,8 +368,8 @@
               name ending in <code>.ts.net</code>, or the Meshnet name ending
               in <code>.nord</code> (like
               <code>marioirelan11-alps.nord</code>), followed by
-              <code>:4719</code>. The phone also needs the token, which is in
-              the file <code>.openjarvis\token</code> in your user folder.
+              <code>:4719</code>. The phone also needs the token: press
+              <strong>Show the token for my phone</strong> above.
               Leave the box blank and nothing changes: Jarvis stays reachable
               from this computer alone.
             </p>

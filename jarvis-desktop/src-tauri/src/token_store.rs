@@ -13,22 +13,32 @@
 //!
 //! ## The three promises
 //!
-//! 1. **Never lose the pairing.** Every failure here falls back to the old
-//!    place, the settings file, rather than dropping the token. A token that
-//!    cannot be stored securely is still stored; Settings says where.
-//! 2. **Move the old value once, then remove it.** [`migrate`] copies a token
-//!    found in the settings file into the credential store, reads it back, and
-//!    only when the read-back matches deletes the plain-text copy.
+//! 1. **Never write the token as plain text.** A token Credential Manager
+//!    refuses is not saved anywhere; Settings says so and why
+//!    (`set_api_settings`). It used to fall back to the settings file.
+//! 2. **Move an old value once, then remove it - never lose it.**
+//!    [`plan_migration`] copies a token an older version left in the settings
+//!    file into the credential store, reads it back, and only when the
+//!    read-back matches deletes the plain-text copy. If it cannot, the old
+//!    copy is left where it was (not rewritten) so the pairing survives.
 //! 3. **Never log the token.** Errors carry the Windows error code, never the
 //!    value.
 //!
+//! The backend keeps its OWN token here too, under [`BACKEND_TARGET`]; this
+//! app only reads that one ([`read_backend`]).
+//!
 //! On anything but Windows there is no credential store here: every call
-//! reports [`Unavailable`](StoreError::Unavailable) and the caller keeps the
-//! settings file, exactly as before. The product is a Windows app; this only
-//! keeps the Linux/macOS build honest.
+//! reports [`Unavailable`](StoreError::Unavailable). The product is a Windows
+//! app; this only keeps the Linux/macOS build honest.
 
 /// The name the token is filed under in Credential Manager.
 pub const TARGET: &str = "Jarvis Desktop/pairing token";
+
+/// The name the BACKEND files its own token under (`backend/jarvis_token_store.py`,
+/// `TARGET` there - `test_token_store.py` checks the two are the same text).
+/// Read-only from here: the backend makes it, moves its old plain-text file
+/// into it, and is the only thing that writes it.
+pub const BACKEND_TARGET: &str = "Jarvis Backend/pairing token";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StoreError {
@@ -86,7 +96,7 @@ pub fn plan_migration(
 
 #[cfg(windows)]
 mod imp {
-    use super::{StoreError, TARGET};
+    use super::StoreError;
     use windows_sys::Win32::Foundation::{GetLastError, ERROR_NOT_FOUND};
     use windows_sys::Win32::Security::Credentials::{
         CredDeleteW, CredFree, CredReadW, CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE,
@@ -100,8 +110,8 @@ mod imp {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
-    pub fn read() -> Result<Option<String>, StoreError> {
-        let target = wide(TARGET);
+    pub fn read(name: &str) -> Result<Option<String>, StoreError> {
+        let target = wide(name);
         let mut cred: *mut CREDENTIALW = std::ptr::null_mut();
         // SAFETY: `target` is a NUL-terminated UTF-16 buffer that outlives the
         // call; `cred` is an out-pointer CredReadW fills on success and that
@@ -137,7 +147,7 @@ mod imp {
         Ok(if text.is_empty() { None } else { Some(text) })
     }
 
-    pub fn write(token: &str) -> Result<(), StoreError> {
+    pub fn write(name: &str, token: &str) -> Result<(), StoreError> {
         let bytes = token.as_bytes();
         if bytes.len() > MAX_BLOB {
             return Err(StoreError::Failed(format!(
@@ -145,7 +155,7 @@ mod imp {
                 MAX_BLOB
             )));
         }
-        let mut target = wide(TARGET);
+        let mut target = wide(name);
         let mut user = wide("jarvis");
         let mut blob = bytes.to_vec();
         // SAFETY: zeroed is a valid CREDENTIALW (all integers and null
@@ -173,8 +183,8 @@ mod imp {
         Ok(())
     }
 
-    pub fn delete() -> Result<(), StoreError> {
-        let target = wide(TARGET);
+    pub fn delete(name: &str) -> Result<(), StoreError> {
+        let target = wide(name);
         // SAFETY: `target` is a NUL-terminated UTF-16 buffer that outlives
         // the call.
         let ok = unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) };
@@ -195,13 +205,13 @@ mod imp {
 mod imp {
     use super::StoreError;
 
-    pub fn read() -> Result<Option<String>, StoreError> {
+    pub fn read(_name: &str) -> Result<Option<String>, StoreError> {
         Err(StoreError::Unavailable)
     }
-    pub fn write(_token: &str) -> Result<(), StoreError> {
+    pub fn write(_name: &str, _token: &str) -> Result<(), StoreError> {
         Err(StoreError::Unavailable)
     }
-    pub fn delete() -> Result<(), StoreError> {
+    pub fn delete(_name: &str) -> Result<(), StoreError> {
         Err(StoreError::Unavailable)
     }
 }
@@ -224,7 +234,7 @@ pub fn read() -> Result<Option<String>, StoreError> {
             return Ok(known.clone());
         }
     }
-    let got = imp::read()?;
+    let got = imp::read(TARGET)?;
     remember(Some(got.clone()));
     Ok(got)
 }
@@ -232,7 +242,7 @@ pub fn read() -> Result<Option<String>, StoreError> {
 /// Asks Credential Manager itself, past the cache - for checking that a
 /// write really landed before the plain-text copy is deleted.
 pub fn read_fresh() -> Result<Option<String>, StoreError> {
-    let got = imp::read()?;
+    let got = imp::read(TARGET)?;
     remember(Some(got.clone()));
     Ok(got)
 }
@@ -240,7 +250,7 @@ pub fn read_fresh() -> Result<Option<String>, StoreError> {
 /// Saves (or replaces) the token in Credential Manager.
 pub fn write(token: &str) -> Result<(), StoreError> {
     remember(None);
-    imp::write(token)?;
+    imp::write(TARGET, token)?;
     remember(Some(Some(token.to_string())));
     Ok(())
 }
@@ -248,9 +258,19 @@ pub fn write(token: &str) -> Result<(), StoreError> {
 /// Removes the token from Credential Manager. Not an error when there was none.
 pub fn delete() -> Result<(), StoreError> {
     remember(None);
-    imp::delete()?;
+    imp::delete(TARGET)?;
     remember(Some(None));
     Ok(())
+}
+
+/// The token the backend made for itself, if Credential Manager holds one.
+///
+/// Asked every time, not cached: on a first run the backend makes it moments
+/// after this app starts, and `jarvis_token_store.py forget` removes it while
+/// the app is open - a remembered answer would be wrong in both cases.
+/// Reading a credential is a local call, cheap next to the request it is for.
+pub fn read_backend() -> Result<Option<String>, StoreError> {
+    imp::read(BACKEND_TARGET)
 }
 
 #[cfg(test)]
