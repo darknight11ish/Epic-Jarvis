@@ -463,7 +463,7 @@ backend routes, in both directions; the rest are listed here only.
 | what | why |
 |---|---|
 | The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
-| Rewording a stored fact (`/api/memory/edit`), and forgetting one that was not saved automatically | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone is to call it for facts in the "Saved automatically" list (JARVIS-API §19; planned). |
+| Rewording a stored fact (`/api/memory/edit`), and forgetting one that was not saved automatically | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19). |
 | Exporting all memory (`/api/memory/export`) | A copy of everything Jarvis knows does not belong on a phone that can be lost. |
 | Shutting the backend down (`/api/shutdown`) | The phone would then have nothing to reach and no way to undo it. |
 | Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
