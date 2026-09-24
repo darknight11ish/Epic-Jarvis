@@ -128,7 +128,7 @@ use std::time::{Duration, Instant};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::{jarvis_base, jarvis_client, jarvis_headers};
 use crate::events::{VOICE_HEARD, VOICE_SPEECH_STARTED};
@@ -356,6 +356,26 @@ pub struct HeardReply {
     pub stop: bool,
 }
 
+impl HeardReply {
+    /// "Listening cannot carry on", in the shape the quickbar already reads
+    /// that from (`available: false` with the reason).
+    pub(crate) fn unavailable(reason: String) -> Self {
+        Self {
+            is_owner: false,
+            text: String::new(),
+            score: 0.0,
+            threshold: 0.0,
+            available: false,
+            source: "wake_word".to_string(),
+            reason,
+            wake_heard: false,
+            awake: false,
+            awake_seconds: 0.0,
+            stop: false,
+        }
+    }
+}
+
 impl From<HeardRaw> for HeardReply {
     fn from(raw: HeardRaw) -> Self {
         Self {
@@ -392,11 +412,15 @@ fn encode_wav(spec: hound::WavSpec, samples: &[i16]) -> Result<Vec<u8>, String> 
     Ok(cursor.into_inner())
 }
 
-/// Encodes `samples` as a WAV and posts it to `/api/voice/utterance`. Shared
-/// by push-to-talk and automatic listening; only `source` differs between
-/// them.
+/// Encodes `samples` as a WAV and posts it to `/api/voice/utterance` at
+/// `base`. Shared by push-to-talk and automatic listening; only `source`
+/// differs between them. `base` is passed in rather than read here so the
+/// wake-word listener sends to exactly the address it has just checked is
+/// loopback ([`wake_audio_refusal`]) - reading it again here would leave a
+/// gap for Settings to change it in between.
 async fn post_utterance(
     app: &AppHandle,
+    base: &str,
     spec: hound::WavSpec,
     samples: &[i16],
     source: &str,
@@ -411,8 +435,7 @@ async fn post_utterance(
     // older than 2026-09-24 ignores it). See backend/voice-mic.patch.
     let response = jarvis_client(Some(UTTERANCE_TIMEOUT))?
         .post(format!(
-            "{}/api/voice/utterance?source={source}&mic={MIC_DESKTOP}",
-            jarvis_base(app)
+            "{base}/api/voice/utterance?source={source}&mic={MIC_DESKTOP}"
         ))
         .headers(jarvis_headers(app)?)
         .header("Content-Type", "audio/wav")
@@ -421,7 +444,7 @@ async fn post_utterance(
         .await
         .map_err(|e| {
             if e.is_connect() {
-                format!("could not reach the Jarvis server at {}", jarvis_base(app))
+                format!("could not reach the Jarvis server at {base}")
             } else {
                 format!("sending the recording failed: {e}")
             }
@@ -558,7 +581,10 @@ pub async fn stop_voice_capture(
         .map(|m| m.into_inner().unwrap_or_default())
         .unwrap_or_else(|arc| arc.lock().map(|g| g.clone()).unwrap_or_default());
 
-    post_utterance(&app, spec, &raw_samples, "push_to_talk").await
+    // Push-to-talk may go to a server elsewhere: holding the button is a
+    // deliberate act, unlike the room audio the wake-word listener sends.
+    let base = jarvis_base(&app);
+    post_utterance(&app, &base, spec, &raw_samples, "push_to_talk").await
 }
 
 /// If a recording is in progress, discards it without sending anything -
@@ -696,16 +722,19 @@ pub(crate) fn turn_usable(status: &serde_json::Value) -> bool {
     flag("enabled") && flag("available")
 }
 
-/// Asks the server whether the utterance so far is finished. `Ok(None)`:
-/// the server cannot say (no model) - the caller stops asking.
+/// Asks the server at `base` whether the utterance so far is finished.
+/// `Ok(None)`: the server cannot say (no model) - the caller stops asking.
+/// `base` must already have passed [`wake_audio_refusal`]: this is room
+/// audio, sent before any wake word was heard.
 async fn ask_turn(
     app: &AppHandle,
+    base: &str,
     spec: hound::WavSpec,
     samples: &[i16],
 ) -> Result<Option<bool>, String> {
     let wav = encode_wav(spec, samples)?;
     let response = jarvis_client(Some(TURN_TIMEOUT))?
-        .post(format!("{}/api/voice/turn", jarvis_base(app)))
+        .post(format!("{base}/api/voice/turn"))
         .headers(jarvis_headers(app)?)
         .header("Content-Type", "audio/wav")
         .body(wav)
@@ -766,6 +795,24 @@ pub(crate) fn is_loopback_base(base: &str) -> bool {
             .unwrap_or(false)
 }
 
+/// Why wake-word audio may NOT go to `base`, or `None` when it may.
+///
+/// Checked when listening starts AND again before every clip and every
+/// Smart Turn check leaves this PC (`run_vad_loop`): the address is read
+/// from Settings on every request, so a check made only at the start let a
+/// base changed afterwards - to a server elsewhere - receive every sentence
+/// said in the room.
+pub(crate) fn wake_audio_refusal(base: &str) -> Option<String> {
+    if is_loopback_base(base) {
+        return None;
+    }
+    Some(format!(
+        "\"Hey Jarvis\" listening only works with the Jarvis server on this PC. \
+         It is set to {base}, and every sentence said in the room would be sent \
+         there before the wake word was heard."
+    ))
+}
+
 /// What `/api/voice/status` says about starting wake-word listening here.
 #[derive(Debug, PartialEq)]
 pub(crate) enum WakeReadiness {
@@ -816,12 +863,8 @@ pub(crate) fn wake_readiness(status: &serde_json::Value) -> WakeReadiness {
 /// whether Smart Turn may be asked (see [`turn_usable`]).
 async fn ensure_wake_ready(app: &AppHandle) -> Result<bool, String> {
     let base = jarvis_base(app);
-    if !is_loopback_base(&base) {
-        return Err(format!(
-            "\"Hey Jarvis\" listening only works with the Jarvis server on this PC. \
-             It is set to {base}, and every sentence said in the room would be sent \
-             there before the wake word was heard."
-        ));
+    if let Some(why) = wake_audio_refusal(&base) {
+        return Err(why);
     }
     let client = jarvis_client(Some(WAKE_CHECK_TIMEOUT))?;
     let unreachable = |e: reqwest::Error| {
@@ -1132,6 +1175,15 @@ fn run_vad_loop(
                         PauseStep::Cut => true,
                         PauseStep::Listen => false,
                         PauseStep::Ask => {
+                            // Room audio is about to leave this thread: only
+                            // to this PC, checked now and not only when
+                            // listening started (see wake_audio_refusal).
+                            let base = jarvis_base(app);
+                            if let Some(why) = wake_audio_refusal(&base) {
+                                drop(buf);
+                                stop_listening_because(app, why);
+                                return;
+                            }
                             *asked = true;
                             analysed_to = Some(buf.len());
                             let from = buf.len().saturating_sub(turn_window).max(*started_at_index);
@@ -1140,7 +1192,7 @@ fn run_vad_loop(
                             // the microphone keeps filling the buffer.
                             drop(buf);
                             let answer =
-                                tauri::async_runtime::block_on(ask_turn(app, spec, &window));
+                                tauri::async_runtime::block_on(ask_turn(app, &base, spec, &window));
                             buf = samples
                                 .lock()
                                 .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -1165,6 +1217,14 @@ fn run_vad_loop(
                         pause_step(silence_elapsed, speech_elapsed, true, false) == PauseStep::Cut;
                 }
                 if should_cut {
+                    // The same check as before a Smart Turn question: this
+                    // clip goes only to a server on this PC.
+                    let base = jarvis_base(app);
+                    if let Some(why) = wake_audio_refusal(&base) {
+                        drop(buf);
+                        stop_listening_because(app, why);
+                        return;
+                    }
                     let clip: Vec<i16> = buf[*started_at_index..buf.len()].to_vec();
                     // Reset for the next utterance. Everything captured
                     // during this cut's own send() is preserved - it just
@@ -1178,6 +1238,7 @@ fn run_vad_loop(
                     let app = app.clone();
                     let heard = tauri::async_runtime::block_on(post_utterance(
                         &app,
+                        &base,
                         spec,
                         &clip,
                         "wake_word",
@@ -1230,6 +1291,26 @@ pub fn stop_automatic_listening(state: State<AutoListenState>) -> Result<(), Str
     Ok(())
 }
 
+/// Stops "hey Jarvis" listening from this side - the listener's own thread,
+/// or a Settings change - and tells the quickbar why, through the same
+/// "not available" `VOICE_HEARD` it already handles by saying the reason
+/// once and switching its button off. Does nothing when nothing is
+/// listening, so a Settings change with the listener off says nothing.
+pub(crate) fn stop_listening_because(app: &AppHandle, why: String) {
+    let Some(state) = app.try_state::<AutoListenState>() else {
+        return;
+    };
+    let taken = state
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
+    if let Some(active) = taken {
+        let _ = active.stop_tx.send(());
+        let _ = app.emit(VOICE_HEARD, HeardReply::unavailable(why));
+    }
+}
+
 #[cfg(test)]
 mod wake_tests {
     use super::*;
@@ -1255,6 +1336,39 @@ mod wake_tests {
         ] {
             assert!(!is_loopback_base(no), "{no}");
         }
+    }
+
+    #[test]
+    fn wake_audio_goes_only_to_this_pc() {
+        // Checked before every clip and every turn check (run_vad_loop), not
+        // only at start: a base changed to another machine mid-listen must
+        // be refused the moment the next clip is ready.
+        for ok in [
+            "http://127.0.0.1:4719",
+            "http://localhost:4719",
+            "http://[::1]:4719",
+        ] {
+            assert_eq!(wake_audio_refusal(ok), None, "{ok}");
+        }
+        for no in [
+            "http://100.64.0.7:4719",
+            "http://192.168.1.20:4719",
+            "https://jarvis.example.com",
+            "http://127.0.0.1.example.com:4719",
+            "",
+        ] {
+            let why = wake_audio_refusal(no).expect(no);
+            assert!(
+                why.contains("only works with the Jarvis server on this PC"),
+                "{why}"
+            );
+        }
+        // The refusal reaches the quickbar as "not available", which it
+        // already turns into "say why, switch the button off".
+        let reply = HeardReply::unavailable("why".to_string());
+        assert!(!reply.available);
+        assert_eq!(reply.reason, "why");
+        assert!(!reply.wake_heard && !reply.is_owner && reply.text.is_empty());
     }
 
     #[test]

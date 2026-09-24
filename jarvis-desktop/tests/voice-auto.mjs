@@ -4,6 +4,7 @@
  * mock, since none of this has run against a real microphone.
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import * as K from "./uikit.mjs";
 
 const { base, close } = await K.serve();
@@ -133,6 +134,53 @@ await check("an unavailable engine turns automatic listening off and sends nothi
   assert.equal(pressed, "false", "automatic listening should have turned itself off");
   assert.ok(voice.includes("auto-stop"), JSON.stringify(voice));
   assert.ok(!sent.some(([cmd]) => cmd === "stream_chat"));
+});
+
+// T2 (audit 3): the loopback rule was checked only when listening started,
+// while every clip and every Smart Turn check read the address again. These
+// read the Rust: the rule must run before EACH send, on the very address
+// the send then uses, and a changed address must stop listening.
+const rustSrc = (rel) => fs.readFileSync(new URL(`../src-tauri/src/${rel}`, import.meta.url), "utf8");
+const fnBody = (src, sig) => {
+  const at = src.indexOf(sig);
+  assert.ok(at > -1, `${sig} is gone`);
+  const rest = src.slice(at);
+  return rest.slice(0, rest.indexOf("\n}\n"));
+};
+
+await check("CONTROL (Rust): every wake-word clip and turn check is re-checked for loopback, on the address it is sent to", async () => {
+  const voice = rustSrc("voice.rs");
+  const loop = fnBody(voice, "fn run_vad_loop(");
+  for (const send of ["ask_turn(", "post_utterance("]) {
+    const at = loop.indexOf(send);
+    assert.ok(at > -1, `run_vad_loop no longer calls ${send}`);
+    const before = loop.slice(0, at);
+    const check = before.lastIndexOf("wake_audio_refusal(&base)");
+    const read = before.lastIndexOf("let base = jarvis_base(app);");
+    assert.ok(check > -1 && read > -1 && read < check, `${send} is not preceded by its own loopback check`);
+    // Nothing between the check and the send may read the address again.
+    assert.doesNotMatch(before.slice(check), /jarvis_base\(/, `${send} re-reads the address after the check`);
+    assert.match(before.slice(check), /stop_listening_because\(app, why\);\s*return;/);
+  }
+  assert.match(loop, /ask_turn\(\s*app, &base,/);
+  assert.match(loop, /post_utterance\(\s*&app,\s*&base,/);
+  // The senders use the address they are given, never their own read.
+  for (const sig of ["async fn ask_turn(", "async fn post_utterance("]) {
+    assert.doesNotMatch(fnBody(voice, sig), /jarvis_base\(/, `${sig} reads the address itself`);
+  }
+  // Start uses the same rule.
+  assert.match(fnBody(voice, "async fn ensure_wake_ready("), /wake_audio_refusal\(&base\)/);
+});
+
+await check("CONTROL (Rust): changing the server address in Settings stops \"hey Jarvis\" listening", async () => {
+  const set = fnBody(rustSrc("commands.rs"), "pub fn set_api_settings(");
+  const save = set.lastIndexOf(".save()");
+  const stop = set.indexOf("crate::voice::stop_listening_because(");
+  assert.ok(stop > save, "set_api_settings does not stop listening after the address changes");
+  assert.match(set, /if base_after != base_before \{/);
+  // And the stop reaches the quickbar in the shape it already acts on.
+  const stopFn = fnBody(rustSrc("voice.rs"), "pub(crate) fn stop_listening_because(");
+  assert.match(stopFn, /app\.emit\(VOICE_HEARD, HeardReply::unavailable\(why\)\)/);
 });
 
 await check("CONTROL: no page error from any of the above", async () => {

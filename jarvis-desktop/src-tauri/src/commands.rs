@@ -806,6 +806,7 @@ pub fn set_api_settings(
             }
         }
     }
+    let base_before = jarvis_base(&app);
     if let Some(base) = base {
         store.set("base", serde_json::Value::String(base));
     }
@@ -815,6 +816,21 @@ pub fn set_api_settings(
     store
         .save()
         .map_err(|e| format!("unable to write the settings store: {e}"))?;
+    // "Hey Jarvis" listening sends room audio to the server address, and was
+    // started against the old one. It stops, and says so; turning it on
+    // again checks the new address from scratch (voice.rs
+    // wake_audio_refusal - which also runs before every clip, so this is
+    // the early, visible half of the same rule, not the only guard).
+    let base_after = jarvis_base(&app);
+    if base_after != base_before {
+        crate::voice::stop_listening_because(
+            &app,
+            format!(
+                "The Jarvis server address changed to {base_after}, so listening for \
+                 \"hey Jarvis\" stopped. Turn it on again to listen with the new address."
+            ),
+        );
+    }
     Ok(None)
 }
 
