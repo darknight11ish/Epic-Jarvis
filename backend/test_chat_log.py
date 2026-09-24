@@ -370,6 +370,33 @@ def t_off_records_nothing():
         w.done()
 
 
+def t_paging_skips_nothing_in_the_same_second():
+    """Three conversations updated within one second, one per page: every
+    one of them is reached by "Load older" (the audit's case: page 2 came
+    back empty and two conversations were never shown)."""
+    w = World()
+    try:
+        for i, frac in enumerate((0.2, 0.5, 0.9)):
+            w.clock.t = 1000 + frac
+            w.log.record_turn(req(f"q {i}", cid=f"conv-same{i:02d}"), turn=local("a"))
+        seen, before = [], None
+        for _ in range(6):
+            q = "limit=1" + (f"&before={before}" if before is not None else "")
+            code, body = H.handle_get("/api/history", q)
+            rows = body["conversations"]
+            if not rows:
+                break
+            seen += [r["id"] for r in rows]
+            before = body["conversations"][-1]["updated"]
+        check("all three are reached, none skipped, none twice", sorted(seen) ==
+              ["conv-same00", "conv-same01", "conv-same02"], seen)
+        code, body = H.handle_get("/api/history", "limit=1")
+        check("a page never splits a second: all three come on the first page",
+              len(body["conversations"]) == 3, body)
+    finally:
+        w.done()
+
+
 def t_list_paging_and_conversation_routes():
     w = World()
     try:
@@ -592,6 +619,94 @@ def t_off_while_waiting_withdraws_it():
               and H.state()["last"]["outcome"] == "withdrawn", H.state())
     finally:
         w.done()
+
+
+def t_audit_fixes_2026_09_24():
+    """The chat history audit's findings, each reproduced before the fix."""
+    # 1. Two requests on first use: one key, the one Credential Manager kept.
+    import threading as _th
+    import time as _time
+
+    class SlowStore:
+        def __init__(self):
+            self.value, self.lock = None, _th.Lock()
+
+        def read(self):
+            _time.sleep(0.05)
+            return self.value
+
+        def write(self, text):
+            self.value = text
+
+    store = SlowStore()
+    d = Path(tempfile.mkdtemp(prefix="jarvis-history-race-"))
+    try:
+        log = H.ChatLog(d / "h.db", d / "h.json", H.CredentialKey(store_factory=lambda: store))
+        errs = []
+
+        def use():
+            try:
+                log._cipher()
+            except Exception as exc:
+                errs.append(exc)
+        ts = [_th.Thread(target=use) for _ in range(2)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        again = H.ChatLog(d / "h.db", d / "h.json", H.CredentialKey(store_factory=lambda: store))
+        check("two requests on first use: no error, and after a restart the history opens",
+              not errs and again._recording()[0] is not None, (errs, again._recording()[1]))
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    # 2. ON, OFF, ON: a fresh card, and OFF shows nothing waiting.
+    w = World()
+    try:
+        w.log.set_enabled(False)
+        c = Card(w)
+        c.req({"enabled": True})
+        c.req({"enabled": False})
+        check("after OFF nothing is shown as waiting", H.state()["waiting"] is False)
+        code, out = c.req({"enabled": True})
+        check("a second ON raises its own card", code == 202 and len(c.later) == 2
+              and "already waiting" not in out["message"], out)
+        c.later[1]()
+        c.later[0]()
+        check("the new card turns history on; the old one changes nothing shown",
+              w.log.settings()["enabled"] is True and H.state()["last"]["outcome"] == "enabled",
+              H.state())
+    finally:
+        w.done()
+    # 3. Words sent with a picture keep a less-trusted tag.
+    w = World()
+    try:
+        pic = [{"type": "text", "text": "what is this email"},
+               {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA"}}]
+        for i, prov in enumerate(("pasted", "clipboard", "shared", None, "typed", "voice")):
+            body = req("x", cid=f"conv-pic{i:03d}", prov=prov)
+            body["messages"][-1]["content"] = pic
+            w.log.record_turn(body)
+        got = [w.log.get(f"conv-pic{i:03d}")["turns"][0]["provenance"] for i in range(6)]
+        check("pasted/clipboard/shared keep their tag, missing is unknown, typed/voice -> caption",
+              got == ["pasted", "clipboard", "shared", "unknown", "picture_caption",
+                      "picture_caption"], got)
+    finally:
+        w.done()
+    # 4. One real transcript verifies ONE voice turn.
+    w = World()
+    try:
+        w.log.note_transcript("turn the lights off", strictness="very_strict",
+                              model="m", mode="owner")
+        w.log.record_turn(req("turn the lights off", cid="conv-voice01", prov="voice"))
+        w.log.record_turn(req("turn the lights off", cid="conv-voice02", prov="voice",
+                              device="hud"))
+        a = w.log.get("conv-voice01")["turns"][0]["provenance"]
+        b = w.log.get("conv-voice02")["turns"][0]["provenance"]
+        check("the first claim is voice, a second claim of the same words is not",
+              (a, b) == ("voice", "voice_unverified"), (a, b))
+    finally:
+        w.done()
+    # 5. An id with a trailing newline is not a conversation id.
+    check("a trailing newline is refused", H._CID.fullmatch("abcdefgh\n") is None
+          and H._CID.fullmatch("abcdefgh") is not None)
 
 
 def t_one_card_at_a_time_and_bad_input():

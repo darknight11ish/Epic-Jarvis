@@ -53,6 +53,7 @@ _LOCK = threading.Lock()
 _PENDING: dict = {}          # {"id", "since"} while an ON card waits
 _WITHDRAWN: set = set()
 _LAST: dict = {}             # {"outcome", "why", "at"} - how the last card ended
+_LATEST: dict = {}           # {"id"} - the card raised most recently; only it sets _LAST
 
 
 def _gate(action: str, detail: dict, prompt: str):
@@ -85,6 +86,10 @@ def _finish(pid: str, outcome: str, why: str = "") -> None:
         if _PENDING.get("id") == pid:
             _PENDING.clear()
         _WITHDRAWN.discard(pid)
+        if _LATEST.get("id") not in (None, pid):
+            # An older, withdrawn card answered after a newer one was raised:
+            # its outcome must not be shown as the newer card's.
+            return
         _LAST.clear()
         _LAST.update(outcome=outcome, why=why, at=time.time())
     _audit("learning.card", {"outcome": outcome})
@@ -135,7 +140,11 @@ def request(enabled, apply: Callable[[bool], dict], *, gate: Optional[Callable] 
     if not enabled:
         with _LOCK:
             if _PENDING:
+                # Withdrawn AND no longer the waiting card: approving it does
+                # nothing, and a later ON raises a fresh card instead of
+                # pointing at this one (chat history audit, 2026-09-24).
                 _WITHDRAWN.add(_PENDING["id"])
+                _PENDING.clear()
         out = dict(apply(False) or {})
         out.setdefault("ok", True)
         out.update(waiting=False, message="Learning is off.")
@@ -153,6 +162,7 @@ def request(enabled, apply: Callable[[bool], dict], *, gate: Optional[Callable] 
                                     "your approval."}
         pid = _uuid.uuid4().hex
         _PENDING.update(id=pid, since=time.time())
+        _LATEST["id"] = pid
     try:
         spawn(lambda: _decide(pid, apply, gate, tier_of))
     except Exception:
@@ -175,3 +185,4 @@ def _reset_for_tests() -> None:
         _PENDING.clear()
         _WITHDRAWN.clear()
         _LAST.clear()
+        _LATEST.clear()

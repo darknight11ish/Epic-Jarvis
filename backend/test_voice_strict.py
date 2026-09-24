@@ -415,6 +415,11 @@ def t_memory_answers_aloud_by_default():
               not V.looks_private("what do you remember about my sister"))
         check("but email, notes and health still are",
               V.looks_private("read my notes") and V.looks_private("what's in my inbox"))
+        check("health and money questions are private, as both apps promise",
+              all(V.looks_private(q) for q in ("how much money do I have left",
+                                                "what did my doctor say", "how is my health",
+                                                "what's my wifi password"))
+              and not V.looks_private("turn the lights off"))
         E._reset_for_tests()
         code, out, gate = _setting("memory", "memory_on_screen")
         check("memory_on_screen: immediate, no card", code == 200 and out["changed"]

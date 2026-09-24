@@ -1800,7 +1800,17 @@ def _reset_repeat_for_tests() -> None:
 #: what Jarvis remembers. A backstop list for when jarvis_router (which has
 #: the full one) cannot be imported.
 _PRIVATE_WORDS = ("email", "e-mail", "inbox", "calendar", "appointment", "meeting",
-                  "note", "notes", "journal")
+                  "note", "notes", "journal",
+                  # Health and money: both apps promise a question about these
+                  # stays on screen (the "read memories aloud" choice). The
+                  # router's list only had narrower words (medical, bank,
+                  # salary...), so "how much money do I have left" was spoken
+                  # (fit audit, 2026-09-24).
+                  "health", "doctor", "doctors", "medicine", "medication", "medications",
+                  "pills", "therapy", "therapist", "hospital", "symptoms",
+                  "money", "debt", "debts", "loan", "loans", "mortgage", "savings",
+                  "income", "spending", "budget",
+                  "password", "passwords", "pin")
 #: Asking about what Jarvis remembers counts as private only while the owner
 #: keeps memory answers on screen (the "memory" setting).
 _MEMORY_WORDS = ("remember", "memory", "memories")

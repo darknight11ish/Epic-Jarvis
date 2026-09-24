@@ -103,6 +103,20 @@ def t_off_while_waiting_withdraws_it():
     w.run_card()
     check("turned off while the card waited: the approval does not turn it on",
           w.applied == [False] and L.state()["last"]["outcome"] == "withdrawn", w.applied)
+    # ON, OFF, ON again: the second ON raises a FRESH card - it used to point
+    # at the withdrawn one, which then did nothing when approved.
+    w = World()
+    w.req(True)
+    w.req(False)
+    check("after OFF nothing is shown as waiting", L.state()["waiting"] is False, L.state())
+    code, out = w.req(True)
+    check("a second ON raises its own card", code == 202 and len(w.later) == 2
+          and "already waiting" not in out["message"], (code, out, len(w.later)))
+    w.later[1]()
+    w.later[0]()
+    check("the new card turns it on; the old one ending later changes nothing shown",
+          w.applied == [False, True] and L.state()["last"]["outcome"] == "enabled",
+          (w.applied, L.state()))
 
 
 def t_one_card_at_a_time():

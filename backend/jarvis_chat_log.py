@@ -72,6 +72,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -110,7 +111,7 @@ KEEP_DAYS = (0, 30, 90, 365)
 VOICE_WINDOW = 600          # a transcript counts as voice for 10 minutes
 TITLE_CHARS = 80
 LIST_DEFAULT, LIST_MAX = 30, 100
-_CID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+_CID = re.compile(r"[A-Za-z0-9_-]{8,64}")   # used with fullmatch: no trailing newline
 _SWEEP_EVERY = 86400
 _VACUUM_EVERY = 3600
 _CHECK = b"jarvis chat history"
@@ -339,6 +340,15 @@ class ChatLog:
 
     def _cipher(self):
         """The AES-GCM object, or KeyUnavailable with the reason in words."""
+        # The whole of it under the lock, the key provider included: two
+        # requests on first use each made a key, and the one cached for this
+        # process could differ from the one Credential Manager kept - after a
+        # restart the history could not be opened at all (chat history
+        # audit, 2026-09-24, reproduced).
+        with self._lock:
+            return self._cipher_locked()
+
+    def _cipher_locked(self):
         if self._aead is not None:
             return self._aead
         if not self._crypto:
@@ -349,7 +359,7 @@ class ChatLog:
         if not isinstance(key, (bytes, bytearray)) or len(key) != 32:
             raise KeyUnavailable("the chat history key is not a 32-byte key")
         aead = AESGCM(bytes(key))
-        with self._lock, closing(self._connect()) as c:
+        with closing(self._connect()) as c:
             row = c.execute("SELECT v FROM meta WHERE k='check'").fetchone()
             if row is None:
                 with c:
@@ -461,8 +471,10 @@ class ChatLog:
                                               "model": str(model), "mode": str(mode)})
 
     def _heard_facts(self, text: str):
+        # Used up on the first match: one spoken sentence verifies ONE chat
+        # turn, not any number of claims of it for ten minutes.
         with self._lock:
-            got = self._heard.get(_hash(text))
+            got = self._heard.pop(_hash(text), None)
         if got is None or self._clock() - got[0] > VOICE_WINDOW:
             return None
         return got[1]
@@ -488,7 +500,7 @@ class ChatLog:
         at = float(at) if isinstance(at, (int, float)) and not isinstance(at, bool) else now
         device = body.get("device") if body.get("device") in DEVICES else "unknown"
         cid = body.get("conversation_id")
-        if not (isinstance(cid, str) and _CID.match(cid)):
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
             # An older app sends none. Its turns are kept together per app
             # and per day rather than lost or scattered one per request.
             cid = "untagged-" + device + "-" + time.strftime("%Y%m%d", time.localtime(at))
@@ -503,7 +515,10 @@ class ChatLog:
             prov = m.get("provenance")
             prov = prov if prov in PROVENANCES else "unknown"
             voice_check = None
-            if picture:
+            if picture and prov in ("typed", "voice"):
+                # Only the owner's own words become "picture_caption". Pasted,
+                # clipboard and shared text sent with a picture keep their
+                # less-trusted tag, and a missing tag stays "unknown".
                 prov = "picture_caption"
             elif prov == "voice":
                 facts = self._heard_facts(text)
@@ -593,14 +608,27 @@ class ChatLog:
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id AND"
                "   t.read_outside=1)"
                " FROM conversations c")
-        args: list = []
-        if isinstance(before, (int, float)) and not isinstance(before, bool):
-            sql += " WHERE c.updated < ?"
-            args.append(float(before))
-        sql += " ORDER BY c.updated DESC LIMIT ?"
-        args.append(limit)
+        # Paging by whole seconds (`updated` goes out as one, and comes back
+        # as `before`). A page never splits a second: when its last row shares
+        # a second with rows the LIMIT cut off, those rows join this page. So
+        # `before` can safely mean "strictly older seconds" - nothing is
+        # skipped and nothing repeats (chat history audit, 2026-09-24: rows in
+        # the boundary's second used to be skipped).
+        where, args = "", []
+        if isinstance(before, (int, float)) and not isinstance(before, bool) \
+                and math.isfinite(before):
+            where = " WHERE c.updated < ?"
+            args.append(float(math.floor(before)))
         with self._lock, closing(self._connect()) as c:
-            rows = c.execute(sql, args).fetchall()
+            rows = c.execute(sql + where + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
+                             args + [limit]).fetchall()
+            if len(rows) == limit:
+                sec = math.floor(rows[-1][3] or 0)
+                have = {r[0] for r in rows}
+                rest = c.execute(sql + " WHERE c.updated >= ? AND c.updated < ?"
+                                 " ORDER BY c.updated DESC, c.id DESC",
+                                 [float(sec), float(sec + 1)]).fetchall()
+                rows += [r for r in rest if r[0] not in have]
         for cid, title, started, updated, device, n, voice, outside in rows:
             out["conversations"].append({
                 "id": cid, "title": self._title(aead, cid, title),
@@ -619,7 +647,7 @@ class ChatLog:
         """The whole conversation, or None if there is no such one. Raises
         KeyUnavailable when it cannot be opened."""
         self._housekeeping()
-        if not (isinstance(cid, str) and _CID.match(cid)) or not self.db_path.exists():
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:
             conv = c.execute("SELECT title FROM conversations WHERE id=?", (cid,)).fetchone()
@@ -655,7 +683,7 @@ class ChatLog:
 
     def delete(self, cid) -> bool:
         """One conversation. True if there was one. There is no delete-all."""
-        if not (isinstance(cid, str) and _CID.match(cid)) or not self.db_path.exists():
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return False
         with self._lock, closing(self._connect()) as c:
             with c:
@@ -715,6 +743,7 @@ _LOCK = threading.Lock()
 _PENDING: dict = {}          # {"id", "since"} while an ON card waits
 _WITHDRAWN: set = set()
 _LAST: dict = {}             # {"outcome", "why", "at"} - how the last card ended
+_LATEST: dict = {}           # {"id"} - the card raised most recently; only it sets _LAST
 
 
 def _gate(action: str, detail: dict, prompt: str):
@@ -747,6 +776,10 @@ def _finish(pid: str, outcome: str, why: str = "") -> None:
         if _PENDING.get("id") == pid:
             _PENDING.clear()
         _WITHDRAWN.discard(pid)
+        if _LATEST.get("id") not in (None, pid):
+            # An older, withdrawn card answered after a newer one was raised:
+            # its outcome must not be shown as the newer card's.
+            return
         _LAST.clear()
         _LAST.update(outcome=outcome, why=why, at=time.time())
     _audit("history.card", {"outcome": outcome})
@@ -824,7 +857,11 @@ def request_settings(body, *, gate: Optional[Callable] = None,
     if not value:
         with _LOCK:
             if _PENDING:
+                # Withdrawn AND no longer the waiting card: approving it does
+                # nothing, and a later ON raises a fresh card instead of
+                # pointing at this one (chat history audit, 2026-09-24).
                 _WITHDRAWN.add(_PENDING["id"])
+                _PENDING.clear()
         try:
             log.set_enabled(False)
         except Exception as exc:
@@ -846,6 +883,7 @@ def request_settings(body, *, gate: Optional[Callable] = None,
         pid = None if _PENDING else _uuid.uuid4().hex
         if pid is not None:
             _PENDING.update(id=pid, since=time.time())
+        _LATEST["id"] = pid
     if pid is None:
         # status() reads the card state under _LOCK, so not inside it.
         out = log.status()
@@ -877,6 +915,7 @@ def _reset_for_tests() -> None:
         _PENDING.clear()
         _WITHDRAWN.clear()
         _LAST.clear()
+        _LATEST.clear()
 
 
 # ------------------------------------------------------------- the routes
@@ -909,7 +948,7 @@ def handle_get(path: str, query: str = "") -> tuple:
         return 200, log.list(limit=limit, before=before)
     if path == "/api/history/conversation":
         cid = q.get("id", "")
-        if not _CID.match(cid or ""):
+        if not _CID.fullmatch(cid or ""):
             return 400, {"error": "need ?id=<conversation id>"}
         try:
             conv = log.get(cid)
