@@ -1620,7 +1620,7 @@ object JarvisRuntime {
                 val compute = async { api.probe("/api/compute").asSection() }
                 val memory = async { api.probe(MemoryCards.PENDING_PATH).asSection() }
                 val ledger = async { api.probe("/api/ledger").asSection() }
-                val skills = async { api.probe("/api/skills").asSection() }
+                val skills = async { api.probe(com.jarvis.client.net.Skills.PATH).asSection() }
                 val initiative = async { api.probe("/api/initiative").asSection() }
                 val contentRisk = async { api.probe("/api/content-risk").asSection() }
                 val secondCardRead = async { refreshSecondCard() }
@@ -2308,6 +2308,33 @@ object JarvisRuntime {
             is ApiResult.Failed -> "Not marked read. " +
                 (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error))
         }
+
+    // ----------------------------------------------------------- skills ----
+
+    /**
+     * Removes one skill ([com.jarvis.client.net.Skills]), after the Mind
+     * screen's own "are you sure". Not held on a stale link: it only takes
+     * something away, the same rule as every OFF here - and the desktop does
+     * not hold it either. If the PC raises a card for it, that is said.
+     * The list is read again either way.
+     *
+     * @return the sentence to show under the list.
+     */
+    suspend fun removeSkill(name: String): String {
+        val said = when (val r = writeNoticingCards { api.removeSkill(name) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Skills.removeSaid(name, r.value)
+            is ApiResult.Failed -> "Not removed. " +
+                (com.jarvis.client.net.Skills.failure(r.error) ?: describe(r.error))
+        }
+        refreshSkills()
+        return said
+    }
+
+    /** Just the skills list - all a removal can have changed. */
+    suspend fun refreshSkills() {
+        val (skills, read) = api.probe(com.jarvis.client.net.Skills.PATH).asSection()
+        _brain.update { it.copy(skills = skills, skillsRead = read) }
+    }
 
     /**
      * Sends one change whose answer's shape is not written down, and counts

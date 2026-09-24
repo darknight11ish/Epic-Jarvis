@@ -467,7 +467,11 @@ fun BrainScreen(
                 )
             }
             item(key = "skills") {
-                Probed("Skills", brain.skills, "Installed, with scan verdicts", brain.skillsRead, retry)
+                // Read as the desktop reads it, with Remove (SkillsPlate.kt).
+                // An answer with no list falls back to its raw keys, as before.
+                SkillsSection(data = brain.skills) {
+                    Probed("Skills", brain.skills, "Installed, with scan verdicts", brain.skillsRead, retry)
+                }
             }
 
             item(key = "capabilities") {

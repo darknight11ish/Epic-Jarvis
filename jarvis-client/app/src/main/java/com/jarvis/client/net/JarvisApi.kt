@@ -452,6 +452,16 @@ class JarvisApi(
     /** Mark everything new as read - the consume, where [watchReport] is the peek. */
     suspend fun watchSeen(): ApiResult<DesktopWrite.Outcome> = postWrite(Watch.SEEN_PATH, Watch.SEEN_BODY)
 
+    // ----------------------------------------------------------- skills ----
+
+    /**
+     * Removes one skill: `{"name": ..., "remove": true}`, as the desktop sends
+     * it. Removal only - there is no route that installs a skill, because
+     * installing runs the scanner and the gate on the PC.
+     */
+    suspend fun removeSkill(name: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(Skills.DECIDE_PATH, Skills.removeBody(name))
+
     /**
      * A POST whose answer's shape is not written down - read by
      * [DesktopWrite.classify], which uses no field it has not seen the
