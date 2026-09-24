@@ -333,6 +333,29 @@ class LearningTest {
         assertTrue(MemoryCards.setupNotes(obj("""{"pending": []}""")).isEmpty())
     }
 
+    @Test
+    fun `a Remember saved automatically says where it went, queued or not`() {
+        // Fit audit item 15: jarvis_auto_learn sets auto_saved and its note
+        // on a "Remember:" it saved without a card - there is no card to show,
+        // so this note is the only thing that says where it went.
+        val note = "Saved automatically. You can forget it under \"Saved automatically\"."
+        for (queued in listOf("true", "false")) {
+            val notes = MemoryCards.setupNotes(
+                obj(
+                    """{"setup": {"remember_last": {"queued": $queued, "auto_saved": true,
+                        "note": "Saved automatically. You can forget it under \"Saved automatically\"."}}}""",
+                ),
+            )
+            assertEquals(queued, listOf("Your last \"Remember:\" message: $note"), notes)
+        }
+        // auto_saved false (or missing) with queued true: still not repeated.
+        assertTrue(
+            MemoryCards.setupNotes(
+                obj("""{"setup": {"remember_last": {"queued": true, "auto_saved": false, "note": "Queued."}}}"""),
+            ).isEmpty(),
+        )
+    }
+
     // ------------------------------------------------------------- speed --
 
     private val speedBlock = """

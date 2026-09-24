@@ -2699,11 +2699,34 @@ object JarvisRuntime {
      */
     suspend fun setAutoLearn(which: com.jarvis.client.net.AutoLearn.Which, on: Boolean): String {
         if (on) actionBlocker()?.let { return it }
+        // OFF withdraws an ON card still waiting (the PC's own rule): approving
+        // it later changes nothing. The card stays in the queue until it is
+        // answered, so the ones up now are noted, and no longer make the
+        // switch read "waiting" ([autoWithdrawn]).
+        val up: Set<String> = if (on) emptySet() else com.jarvis.client.net.AutoLearn.cardIds(
+            _pending.value.map { it.id to it.action }, which,
+        )
         return when (val r = writeNoticingCards { api.setAutoLearn(which, on) }) {
-            is ApiResult.Ok -> com.jarvis.client.net.AutoLearn.said(which, on, r.value)
-            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+            is ApiResult.Ok -> {
+                if (up.isNotEmpty() && r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) {
+                    _autoWithdrawn.update { (it + up).toList().takeLast(50).toSet() }
+                }
+                com.jarvis.client.net.AutoLearn.said(which, on, r.value)
+            }
+            is ApiResult.Failed ->
+                com.jarvis.client.net.AutoLearn.switchFailure(r.error) ?: ("Not changed. " + describe(r.error))
         }
     }
+
+    private val _autoWithdrawn = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * The approval cards an automatic-learning switch's OFF withdrew while
+     * they waited. Still in the queue (the PC cannot take a card back), but
+     * approving one changes nothing, so the switch does not read "waiting"
+     * for it. Ids only; kept for this run of the app.
+     */
+    val autoWithdrawn: StateFlow<Set<String>> = _autoWithdrawn.asStateFlow()
 
     /**
      * Forgets ONE automatically saved fact, after Mind's confirm. Held on a

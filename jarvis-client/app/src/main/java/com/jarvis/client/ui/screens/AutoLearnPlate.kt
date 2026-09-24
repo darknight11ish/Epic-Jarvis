@@ -42,8 +42,9 @@ import java.time.ZoneId
  * for your approval" while that card is in the queue - found by its action,
  * so a card raised on the desktop counts too. ON is greyed while the link is
  * down or stale, and the runtime refuses it again ([JarvisRuntime.setAutoLearn]).
- * OFF always goes. Not while a card is already up, or before the PC has said
- * which way a switch is.
+ * OFF always goes - including while an ON card waits, which withdraws that
+ * card ([JarvisRuntime.autoWithdrawn]). Never a second ON while one waits,
+ * and nothing before the PC has said which way a switch is.
  *
  * @param learningOn the background learning switch above these, which
  *   "Learn automatically" depends on.
@@ -61,9 +62,10 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
     var said by remember { mutableStateOf<String?>(null) }
 
     val queue by JarvisRuntime.pending.collectAsState()
-    val actions = queue.map { it.action }
-    val autoCard = AutoLearn.cardWaiting(actions, AutoLearn.Which.AUTO)
-    val sensitiveCard = AutoLearn.cardWaiting(actions, AutoLearn.Which.SENSITIVE)
+    val withdrawn by JarvisRuntime.autoWithdrawn.collectAsState()
+    val cards = queue.map { it.id to it.action }
+    val autoCard = AutoLearn.cardWaiting(cards, AutoLearn.Which.AUTO, withdrawn)
+    val sensitiveCard = AutoLearn.cardWaiting(cards, AutoLearn.Which.SENSITIVE, withdrawn)
     // A card leaving the queue (approved, denied or expired) reads the
     // switches again, so the lines say what really happened.
     var seen by remember { mutableStateOf(false to false) }
@@ -90,7 +92,8 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
                     }
                     is ApiResult.Failed -> {
                         unsupported = r.error == ApiError.NotFound && l.error == ApiError.NotFound
-                        readError = if (unsupported) null else JarvisRuntime.noticeFor(r.error)
+                        readError = if (unsupported) null else
+                            AutoLearn.readFailure(r.error) ?: JarvisRuntime.noticeFor(r.error)
                     }
                 }
             }
@@ -112,21 +115,27 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
         SwitchRow(
             title = which.title,
             detail = which.under,
-            checked = switch == AutoLearn.Switch.ON,
+            // Waiting shows the switch in the position it was asked for, so
+            // it can be turned OFF - which takes the request back. The line
+            // under it says it is only waiting, never that it is on.
+            checked = switch == AutoLearn.Switch.ON || switch == AutoLearn.Switch.WAITING,
             enabled = busy == null && when (switch) {
-                AutoLearn.Switch.ON -> true
+                AutoLearn.Switch.ON, AutoLearn.Switch.WAITING -> true
                 AutoLearn.Switch.OFF -> canAct
-                AutoLearn.Switch.WAITING, AutoLearn.Switch.UNKNOWN -> false
+                AutoLearn.Switch.UNKNOWN -> false
             },
             onChange = { want ->
-                busy = which
-                said = null
-                scope.launch {
-                    try {
-                        said = JarvisRuntime.setAutoLearn(which, want)
-                    } finally {
-                        busy = null
-                        reads += 1
+                // Never a second ON while one waits.
+                if (AutoLearn.mayPress(switch, want)) {
+                    busy = which
+                    said = null
+                    scope.launch {
+                        try {
+                            said = JarvisRuntime.setAutoLearn(which, want)
+                        } finally {
+                            busy = null
+                            reads += 1
+                        }
                     }
                 }
             },
@@ -138,7 +147,17 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
             color = if (switch == AutoLearn.Switch.WAITING) chrome.warnInk else chrome.textMid,
         )
         AutoLearn.lastLine(status?.last(which), switch)?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        AutoLearn.lastDetail(status?.last(which), switch)?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        // The PC's own words when its settings file is damaged (both
+        // switches then read off) - under "Learn automatically", once.
+        if (which == AutoLearn.Which.AUTO) {
+            AutoLearn.whyLine(status)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+            }
         }
     }
     readError?.let {
@@ -154,12 +173,15 @@ internal fun AutoLearnSwitches(canAct: Boolean, learningOn: Boolean?, refresh: I
 /**
  * "Saved automatically" on Mind - every fact Jarvis saved without a card,
  * newest first, with "Load older", a small "said aloud" mark for voice, and
- * a Forget on each. Forget asks first (the desktop's Forget words), and is
- * held while the link is down or stale, like the desktop's.
+ * a Forget on each. Forget asks first ([AutoLearn.FORGET_CONFIRM], one
+ * wording for both apps), and is held while the link is down or stale, like
+ * the desktop's. One line under the title says History's Delete does not
+ * forget a fact ([AutoLearn.HISTORY_NOTE]).
  *
  * Read from the PC when Mind shows it, on Refresh, after a Forget, and on
- * every `memory_saved` event ([JarvisRuntime.autoTick]). Nothing of it is
- * kept on the phone.
+ * every `memory_saved` event ([JarvisRuntime.autoTick]) - a read again keeps
+ * the older pages "Load older" brought in ([AutoLearn.refreshed]). Nothing
+ * of it is kept on the phone.
  *
  * "Hide memory lists and chat history" (Security) replaces it with
  * [HiddenSection] until Show is confirmed, like Mind's other memory lists.
@@ -188,13 +210,20 @@ internal fun SavedAutomaticallySection(
     var confirmId by remember { mutableStateOf<Long?>(null) }
     var busyId by remember { mutableStateOf<Long?>(null) }
     var said by remember { mutableStateOf<String?>(null) }
+    // "Learn automatically", as the list's own answer says it: the empty
+    // list says so when it is off.
+    var autoOn by remember { mutableStateOf<Boolean?>(null) }
 
     LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.autoFacts()) {
             is ApiResult.Ok -> {
                 val page = AutoLearn.page(r.value)
-                facts = page.facts
-                mayHaveOlder = page.mayHaveOlder
+                // Pages already brought in by "Load older" stay (the
+                // desktop's refreshRows): a new fact must not cost them.
+                val (rows, more) = AutoLearn.refreshed(facts, page, mayHaveOlder)
+                facts = rows
+                mayHaveOlder = more
+                autoOn = page.status.auto
                 readError = null
             }
             is ApiResult.Failed -> readError = AutoLearn.listFailure(r.error) ?: JarvisRuntime.noticeFor(r.error)
@@ -205,13 +234,15 @@ internal fun SavedAutomaticallySection(
         Plate {
             val shown = facts
             val err = readError
+            Text(AutoLearn.HISTORY_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            Gap(6)
             when {
                 shown == null -> Text(
                     if (err != null) "Couldn't read what was saved: $err" else "Reading…",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
-                shown.isEmpty() -> Text(AutoLearn.EMPTY, style = MaterialTheme.typography.bodySmall,
+                shown.isEmpty() -> Text(AutoLearn.emptyLine(autoOn), style = MaterialTheme.typography.bodySmall,
                     color = chrome.textMid)
             }
             if (shown != null && err != null) {

@@ -32,15 +32,22 @@ import java.time.ZoneId
  *
  * The routes, all with the pairing token like every other:
  * - `GET /api/memory/learning` - `auto`, `auto_sensitive`, `auto_waiting`,
- *   `sensitive_waiting`, `auto_last`, `sensitive_last`.
+ *   `sensitive_waiting`, `auto_last`, `sensitive_last`, and `why`: the PC's
+ *   own sentence when its settings file is damaged (both switches then read
+ *   off, fail closed), "" otherwise.
  * - `POST /api/memory/learning/auto` and `/api/memory/learning/sensitive`,
- *   `{"enabled": bool}`: OFF 200 at once; ON 202 and one card; a tier other
- *   than `ask` 503.
+ *   `{"enabled": bool}`: OFF 200 at once, and it withdraws an ON card still
+ *   waiting (approving that card then changes nothing); ON 202 and one card;
+ *   a tier other than `ask` 503.
  * - `GET /api/memory/auto?limit=30&before=<saved_at>` - the auto-saved facts
  *   still in use, newest first: `{"facts": [{"id", "text", "saved_at",
  *   "provenance", "device"}], "auto", "auto_sensitive"}`.
  * - `POST /api/memory/forget {"id"}` - ONE fact. Retired, not deleted; no undo.
  * - The `memory_saved` event: `{"ids": [...]}` only, never the text.
+ *
+ * A 503 from the switches' or the list's routes is automatic learning (or
+ * the memory under it) not running on the PC: the PC's own `error` is shown
+ * when it sent one, else [NOT_RUNNING] ([readFailure], [switchFailure]).
  *
  * THE PHONE STORES NONE OF IT. The list is read from the PC when Mind shows
  * it and dropped when Mind is left. No fact's text is ever put in a
@@ -97,8 +104,12 @@ object AutoLearn {
 
     // -------------------------------------------------------- reading ---
 
-    /** How the last ON card ended (`{"outcome", "why", "at"}`), as the PC said it. */
-    data class Last(val outcome: String, val why: String?)
+    /**
+     * How the last ON card ended (`{"outcome", "why", "message", "at"}`), as
+     * the PC said it. [message] is the PC's plain sentence for the owner;
+     * [why] is the technical reason, kept out of the main line.
+     */
+    data class Last(val outcome: String, val why: String?, val message: String? = null)
 
     /** The settings. A field the PC did not send is null (or false for the waiting flags). */
     data class Status(
@@ -108,6 +119,12 @@ object AutoLearn {
         val sensitiveWaiting: Boolean = false,
         val autoLast: Last? = null,
         val sensitiveLast: Last? = null,
+        /**
+         * The PC's `why`: its own sentence when the settings file is damaged
+         * or unreadable (both switches then read off). Null when all is well
+         * or the PC did not say.
+         */
+        val why: String? = null,
     ) {
         fun on(which: Which): Boolean? = when (which) {
             Which.AUTO -> auto
@@ -136,7 +153,7 @@ object AutoLearn {
     private fun JsonObject.last(key: String): Last? {
         val o = this[key] as? JsonObject ?: return null
         val outcome = o.str("outcome") ?: return null
-        return Last(outcome, o.str("why"))
+        return Last(outcome, o.str("why"), o.str("message"))
     }
 
     /** `GET /api/memory/learning`. */
@@ -147,6 +164,7 @@ object AutoLearn {
         sensitiveWaiting = body.flag(Which.SENSITIVE.waitingKey) == true,
         autoLast = body.last(Which.AUTO.lastKey),
         sensitiveLast = body.last(Which.SENSITIVE.lastKey),
+        why = body.str("why"),
     )
 
     /**
@@ -166,8 +184,23 @@ object AutoLearn {
     fun cardWaiting(actions: List<String?>, which: Which): Boolean = actions.any { it == which.action }
 
     /**
+     * The same, from the queue's (id, action) pairs, leaving out the cards
+     * [withdrawn] by turning the switch OFF while they waited. Such a card
+     * stays in the queue until it is answered or runs out (the PC cannot take
+     * a card back), but approving it changes nothing, so it is not "waiting".
+     */
+    fun cardWaiting(cards: List<Pair<String, String?>>, which: Which, withdrawn: Set<String>): Boolean =
+        cards.any { (id, action) -> action == which.action && id !in withdrawn }
+
+    /** The ids of [which]'s ON cards in the queue - the ones an OFF withdraws. */
+    fun cardIds(cards: List<Pair<String, String?>>, which: Which): Set<String> =
+        cards.filter { it.second == which.action }.mapTo(HashSet()) { it.first }
+
+    /**
      * ON only when the PC says it is on. Waiting while the ON card is in the
      * queue or the PC says one is waiting - never "on" before a real approval.
+     * A waiting switch can still be turned OFF, which withdraws the card; only
+     * a second ON is refused ([mayPress]).
      */
     fun switchState(status: Status?, which: Which, cardInQueue: Boolean): Switch = when {
         status?.on(which) == true -> Switch.ON
@@ -175,6 +208,22 @@ object AutoLearn {
         status?.on(which) == false -> Switch.OFF
         else -> Switch.UNKNOWN
     }
+
+    /**
+     * Whether pressing a switch that shows [switch], asking for [want], may be
+     * sent. OFF always may - it only narrows, and while a card waits it
+     * withdraws it. ON only from OFF: never a second ON while one waits, and
+     * never before the PC has said which way it is. Holding ON on a stale
+     * link is the runtime's ([com.jarvis.client.JarvisRuntime.setAutoLearn]).
+     */
+    fun mayPress(switch: Switch, want: Boolean): Boolean = when (switch) {
+        Switch.ON, Switch.WAITING -> !want
+        Switch.OFF -> want
+        Switch.UNKNOWN -> false
+    }
+
+    /** Said under a waiting switch: turning it off is how to take the request back. */
+    const val WITHDRAW_HINT = "Turning it off takes the request back."
 
     fun waitingLine(which: Which): String = when (which) {
         Which.AUTO -> "Waiting for your approval to turn on learning automatically. ${Approvals.WHERE}"
@@ -190,7 +239,7 @@ object AutoLearn {
      */
     fun stateLine(which: Which, switch: Switch, learningOn: Boolean?, autoOn: Boolean?): String {
         val base = when (switch) {
-            Switch.WAITING -> return waitingLine(which)
+            Switch.WAITING -> return waitingLine(which) + " " + WITHDRAW_HINT
             Switch.UNKNOWN -> return when (which) {
                 Which.AUTO -> "Couldn't tell whether Jarvis learns automatically."
                 Which.SENSITIVE -> "Couldn't tell whether sensitive topics are remembered automatically."
@@ -205,29 +254,79 @@ object AutoLearn {
                 Which.SENSITIVE -> "Off. Sensitive facts wait for your yes, as a card."
             } + " Turning it on asks you first, with an approval card."
         }
+        // The background-learning note goes under "Learn automatically" only:
+        // said once, like the desktop's, not again under the sensitive switch.
         val caveat = when {
-            learningOn == false -> " Learning is off, so nothing is saved automatically until it is on."
-            which == Which.SENSITIVE && autoOn == false ->
-                " Learn automatically is off, so this changes nothing until it is on."
+            which == Which.AUTO && learningOn == false -> " $LEARNING_OFF_NOTE"
+            which == Which.SENSITIVE && autoOn == false -> " $SENSITIVE_NEEDS_AUTO"
             else -> ""
         }
         return if (switch == Switch.ON) base + caveat else base
     }
 
     /**
+     * The desktop's sentence (auto-learn.js `LEARNING_OFF_NOTE`), one wording
+     * for both apps: "Learn automatically" means nothing while background
+     * learning is off.
+     */
+    const val LEARNING_OFF_NOTE =
+        "Background learning is off, so nothing is saved automatically. Start learning above to use this."
+
+    const val SENSITIVE_NEEDS_AUTO = "\"Learn automatically\" is off, so this changes nothing until it is on."
+
+    /** A refused card, when the PC sent no plain sentence of its own. */
+    const val REFUSED_LINE = "Your PC's settings do not let this be approved, so it stayed off."
+
+    /** An approved card whose change could not be saved, when the PC sent no sentence. */
+    const val FAILED_LINE = "It was approved, but your PC could not save the change, so it stayed off."
+
+    const val WITHDRAWN_LINE = "You turned it off while the card waited, so approving it changed nothing."
+
+    /**
      * One line about how the last ON card ended, when it did not turn the
      * switch on and the switch is still off. Null otherwise - an approved
-     * card needs no line, the switch says it.
+     * card needs no line, the switch says it. A refused or failed card says
+     * the PC's plain `message`; its technical `why` is [lastDetail]'s.
      */
     fun lastLine(last: Last?, switch: Switch): String? {
         if (last == null || switch != Switch.OFF) return null
         return when (last.outcome) {
             "denied" -> "The last request to turn it on was denied."
             "timed_out" -> "The last request to turn it on expired without an answer."
-            "refused", "failed" -> "The last request to turn it on did not go through" +
-                (last.why?.let { ": ${it.trimEnd('.')}." } ?: ".")
+            "refused" -> last.message?.let { DesktopWrite.asSentence(it) } ?: REFUSED_LINE
+            "failed" -> last.message?.let { DesktopWrite.asSentence(it) } ?: FAILED_LINE
+            "withdrawn" -> WITHDRAWN_LINE
             else -> null
         }
+    }
+
+    /**
+     * The technical reason under [lastLine], small, for a refused or failed
+     * card whose PC said one - or null. Never the main line.
+     */
+    fun lastDetail(last: Last?, switch: Switch): String? {
+        if (last == null || switch != Switch.OFF) return null
+        if (last.outcome != "refused" && last.outcome != "failed") return null
+        return last.why?.let { "Details from your PC: " + DesktopWrite.asSentence(it) }
+    }
+
+    /**
+     * The PC's `why` about its settings file (damaged or unreadable), shown
+     * under "Learn automatically" as the PC wrote it - or null when it said
+     * nothing.
+     */
+    fun whyLine(status: Status?): String? = status?.why?.let { DesktopWrite.asSentence(it) }
+
+    /**
+     * Said when a switch's POST failed, for the failures the routes document;
+     * null for the rest (the runtime's own words then). A 503 that carried
+     * the PC's `error` never gets here: that is already a refusal in its own
+     * words (`DesktopWrite.classify`).
+     */
+    fun switchFailure(e: ApiError): String? = when (e) {
+        ApiError.NotAvailable -> "Not changed. $NOT_RUNNING"
+        is ApiError.Server -> if (e.code == 503) "Not changed. " + (pcError(e.body) ?: NOT_RUNNING) else null
+        else -> null
     }
 
     /** What to say after a switch was pressed, from the PC's answer. */
@@ -319,16 +418,51 @@ object AutoLearn {
     const val VOICE_MARK = "said aloud"
     const val EMPTY = "Nothing has been saved automatically yet."
 
+    /** Said, after [EMPTY], while "Learn automatically" is off. */
+    const val EMPTY_WHILE_OFF = "\"Learn automatically\" is off."
+
+    /** The empty list's words. [auto] is "Learn automatically", as the list's own answer said it. */
+    fun emptyLine(auto: Boolean?): String = if (auto == false) "$EMPTY $EMPTY_WHILE_OFF" else EMPTY
+
+    /** One line under the list's title: History's Delete is not a Forget. */
+    const val HISTORY_NOTE =
+        "Deleting a conversation from History does not forget facts learned from it - use Forget here."
+
+    /**
+     * The list read again - on Refresh or a `memory_saved` event - with the
+     * older pages "Load older" already brought in kept under it: the
+     * desktop's `refreshRows` (auto-learn.js), by `saved_at`. [page] is the
+     * new first page. Facts in [shown] older than its oldest are kept; the
+     * rest are what the page says, so one forgotten elsewhere drops out. A
+     * first page that was not full means there is nothing older, so nothing
+     * older is kept. Returns the rows, and whether there may be more;
+     * [moreBefore] is what the last "Load older" said about that.
+     */
+    fun refreshed(shown: List<Fact>?, page: Page, moreBefore: Boolean): Pair<List<Fact>, Boolean> {
+        val fresh = page.facts
+        if (!page.mayHaveOlder) return fresh to false
+        val edge = olderThan(fresh) ?: return fresh to true
+        val ids = fresh.mapTo(HashSet()) { it.id }
+        val older = shown.orEmpty().filter { f ->
+            f.id !in ids && f.savedAt?.let { it < edge } == true
+        }
+        return (fresh + older) to (if (older.isNotEmpty()) moreBefore else true)
+    }
+
     // --------------------------------------------------------- forget ---
 
     fun forgetBody(id: Long): String = "{\"id\":$id}"
 
-    /** Asked before a Forget is sent - the desktop's Forget words. */
+    /**
+     * Asked before a Forget is sent - the owner kept this question
+     * (2026-09-24), because forgetting cannot be undone. One wording for
+     * both apps.
+     */
     const val FORGET_CONFIRM =
-        "Stop recalling this? It stays in the history but Jarvis will not use it again. " +
+        "Jarvis keeps a record that it once knew this, but will not use it again. " +
             "This cannot be undone."
 
-    const val FORGOTTEN = "Forgotten. It stays in the history and will not be recalled."
+    const val FORGOTTEN = "Forgotten. Jarvis will not use it again."
 
     /** Said when the PC answers 404: there is no such fact, so it is not recalled either way. */
     const val ALREADY_GONE = "Jarvis had no such fact any more."
@@ -363,12 +497,35 @@ object AutoLearn {
         else -> null
     }
 
-    /** Why the list could not be read, when the route says something specific. */
-    fun listFailure(e: ApiError): String? = when (e) {
+    /** Said for a 503 from the automatic-learning routes when the PC sent no `error`. */
+    const val NOT_RUNNING = "Automatic learning is not running on your PC right now."
+
+    /**
+     * The PC's `error` out of a 503's body (`{"error": "..."}`), as a
+     * sentence, or null when there is none. [body] is the raw text the route
+     * sent, which `JarvisApi.probeKeeping503` keeps for these routes.
+     */
+    fun pcError(body: String?): String? {
+        if (body.isNullOrBlank()) return null
+        val o = runCatching { JarvisJson.parseToJsonElement(body) as? JsonObject }.getOrNull() ?: return null
+        return o.str("error")?.let { DesktopWrite.asSentence(it) }
+    }
+
+    /**
+     * Why the switches or the list could not be read, when the route says
+     * something specific: no such route, or a 503 - in the PC's own words
+     * when it sent them, else [NOT_RUNNING]. Null for the rest (the
+     * runtime's own words then).
+     */
+    fun readFailure(e: ApiError): String? = when (e) {
         ApiError.NotFound -> "Your PC's Jarvis does not have automatic learning yet."
-        ApiError.NotAvailable -> "Jarvis's memory is not running on your PC right now."
+        ApiError.NotAvailable -> NOT_RUNNING
+        is ApiError.Server -> if (e.code == 503) pcError(e.body) ?: NOT_RUNNING else null
         else -> null
     }
+
+    /** Why the list could not be read: [readFailure]. */
+    fun listFailure(e: ApiError): String? = readFailure(e)
 
     // ---------------------------------------------------------- event ---
 

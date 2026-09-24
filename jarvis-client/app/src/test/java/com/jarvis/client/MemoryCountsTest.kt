@@ -75,9 +75,9 @@ class MemoryCountsTest {
         assertEquals(true, MemoryCounts.learning(obj("""{"available":true,"facts":[],"learning":true}""")))
         assertEquals(false, MemoryCounts.learning(obj("""{"learning":false}""")))
         assertNull(MemoryCounts.learning(obj("""{"facts":[]}""")))
-        assertTrue(MemoryCounts.learningLine(true).startsWith("Learning is on"))
-        assertTrue(MemoryCounts.learningLine(false).startsWith("Learning is off"))
-        assertTrue(MemoryCounts.learningLine(null).startsWith("Couldn't tell"))
+        assertTrue(MemoryCounts.learningLine(true).startsWith("Background learning is on"))
+        assertTrue(MemoryCounts.learningLine(false).startsWith("Background learning is off"))
+        assertEquals("Couldn't tell whether background learning is on.", MemoryCounts.learningLine(null))
     }
 
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
@@ -109,15 +109,17 @@ class MemoryCountsTest {
     @Test
     fun onWaitsForTheCardAndNeverSaysOn() {
         val waiting = MemoryCounts.learningSaid(true, DesktopWrite.Outcome.Waiting("anything"))
-        assertTrue(waiting, waiting.startsWith("Waiting for your approval to turn learning on."))
+        assertTrue(waiting, waiting.startsWith("Waiting for your approval to turn background learning on."))
         assertTrue(waiting.endsWith(Approvals.WHERE))
+        // The plate's own waiting line is the same sentence (fit audit item 27).
+        assertEquals(MemoryCounts.waitingLine(), waiting)
         // The PC's real 202 answer, through the same classifier the switch uses.
         val real = DesktopWrite.classify(
             202,
             obj("""{"ok":true,"waiting":true,"enabled":false,"message":"Waiting for your approval."}"""),
         )
         assertTrue(real is ApiResult.Ok && real.value is DesktopWrite.Outcome.Waiting)
-        assertEquals("Learning is off. Nothing new will be proposed.",
+        assertEquals("Background learning is off. Nothing new will be proposed.",
             MemoryCounts.learningSaid(false, DesktopWrite.Outcome.Done(null)))
         assertEquals("Learning is off.", MemoryCounts.learningSaid(false, DesktopWrite.Outcome.Done("Learning is off.")))
         assertTrue(MemoryCounts.learningSaid(true, DesktopWrite.Outcome.Refused("It must be 'ask'."))

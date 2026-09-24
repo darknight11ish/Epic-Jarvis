@@ -140,18 +140,60 @@ class AutoLearnTest {
     @Test
     fun theLinesSayWhatIsTrue() {
         assertTrue(AutoLearn.stateLine(Which.AUTO, Switch.ON, true, true).startsWith("On."))
-        assertFalse(AutoLearn.stateLine(Which.AUTO, Switch.ON, true, true).contains("Learning is off"))
-        // "Learn automatically" means nothing while background learning is off, and says so.
-        assertTrue(AutoLearn.stateLine(Which.AUTO, Switch.ON, false, true).contains("Learning is off"))
+        assertFalse(AutoLearn.stateLine(Which.AUTO, Switch.ON, true, true).contains("learning is off"))
+        // "Learn automatically" means nothing while background learning is
+        // off, and says so - in the desktop's sentence (fit audit item 10).
+        assertEquals(
+            "Background learning is off, so nothing is saved automatically. Start learning above to use this.",
+            AutoLearn.LEARNING_OFF_NOTE,
+        )
+        assertTrue(AutoLearn.stateLine(Which.AUTO, Switch.ON, false, true).endsWith(" " + AutoLearn.LEARNING_OFF_NOTE))
+        // ...said once, under "Learn automatically", not again under the sensitive switch.
+        assertFalse(AutoLearn.stateLine(Which.SENSITIVE, Switch.ON, false, true).contains("Background learning"))
         // The sensitive switch depends on "Learn automatically".
         assertTrue(
             AutoLearn.stateLine(Which.SENSITIVE, Switch.ON, true, false)
-                .contains("Learn automatically is off"),
+                .endsWith("\"Learn automatically\" is off, so this changes nothing until it is on."),
         )
         val off = AutoLearn.stateLine(Which.AUTO, Switch.OFF, true, false)
         assertTrue(off, off.startsWith("Off.") && off.contains("asks you first"))
-        assertEquals(AutoLearn.waitingLine(Which.SENSITIVE), AutoLearn.stateLine(Which.SENSITIVE, Switch.WAITING, true, true))
+        // Waiting says how to take the request back (red team R6).
+        assertEquals(
+            AutoLearn.waitingLine(Which.SENSITIVE) + " Turning it off takes the request back.",
+            AutoLearn.stateLine(Which.SENSITIVE, Switch.WAITING, true, true),
+        )
         assertTrue(AutoLearn.stateLine(Which.AUTO, Switch.UNKNOWN, null, null).startsWith("Couldn't tell"))
+    }
+
+    @Test
+    fun offIsAllowedWhileTheCardWaitsButASecondOnIsNot() {
+        // Red team R6: OFF while an ON card waits withdraws it on the PC.
+        assertTrue(AutoLearn.mayPress(Switch.WAITING, want = false))
+        assertFalse(AutoLearn.mayPress(Switch.WAITING, want = true))
+        assertTrue(AutoLearn.mayPress(Switch.OFF, want = true))
+        assertTrue(AutoLearn.mayPress(Switch.ON, want = false))
+        assertFalse(AutoLearn.mayPress(Switch.ON, want = true))
+        assertFalse(AutoLearn.mayPress(Switch.UNKNOWN, want = true))
+        assertFalse(AutoLearn.mayPress(Switch.UNKNOWN, want = false))
+    }
+
+    @Test
+    fun aWithdrawnCardNoLongerMakesTheSwitchWait() {
+        val cards = listOf("c1" to "learning_auto_enable", "c2" to "switch_model", "c3" to "learning_sensitive_enable")
+        assertTrue(AutoLearn.cardWaiting(cards, Which.AUTO, emptySet()))
+        assertEquals(setOf("c1"), AutoLearn.cardIds(cards, Which.AUTO))
+        assertEquals(setOf("c3"), AutoLearn.cardIds(cards, Which.SENSITIVE))
+        // OFF withdrew c1: it stays in the queue until answered, but it is not "waiting".
+        assertFalse(AutoLearn.cardWaiting(cards, Which.AUTO, setOf("c1")))
+        assertTrue(AutoLearn.cardWaiting(cards, Which.SENSITIVE, setOf("c1")))
+        // A fresh ON after that raises a new card, which does wait.
+        assertTrue(AutoLearn.cardWaiting(cards + ("c4" to "learning_auto_enable"), Which.AUTO, setOf("c1")))
+        // The PC read after the OFF: off, nothing waiting - the switch reads OFF.
+        val after = AutoLearn.status(obj("""{"auto":false,"auto_sensitive":false,"auto_waiting":false}"""))
+        assertEquals(
+            Switch.OFF,
+            AutoLearn.switchState(after, Which.AUTO, AutoLearn.cardWaiting(cards, Which.AUTO, setOf("c1"))),
+        )
     }
 
     @Test
@@ -167,16 +209,66 @@ class AutoLearnTest {
             "The last request to turn it on was denied.",
             AutoLearn.lastLine(AutoLearn.Last("denied", null), Switch.OFF),
         )
+        // Refused (fit audit item 28): the PC's plain `message` - or, from a
+        // PC that sends none, the fixed sentence. The technical `why` is
+        // never in the main line; it is the small detail under it.
+        val technical = AutoLearn.Last("refused", "the gate answered at tier 'auto', which is not a person saying yes")
         assertEquals(
-            "The last request to turn it on did not go through: the gate answered at tier 'auto'.",
-            AutoLearn.lastLine(AutoLearn.Last("refused", "the gate answered at tier 'auto'"), Switch.OFF),
+            "Your PC's settings do not let this be approved, so it stayed off.",
+            AutoLearn.lastLine(technical, Switch.OFF),
         )
+        assertEquals(AutoLearn.REFUSED_LINE, AutoLearn.lastLine(technical, Switch.OFF))
+        assertFalse(AutoLearn.lastLine(technical, Switch.OFF)!!.contains("tier"))
+        assertEquals(
+            "Details from your PC: The gate answered at tier 'auto', which is not a person saying yes.",
+            AutoLearn.lastDetail(technical, Switch.OFF),
+        )
+        assertEquals(
+            "Your PC's settings do not let this be approved, so it stayed off.",
+            AutoLearn.lastLine(
+                AutoLearn.Last("refused", "tier", "your PC's settings do not let this be approved, so it stayed off"),
+                Switch.OFF,
+            ),
+        )
+        // The PC's own message, read off the real field.
+        val read = AutoLearn.status(
+            obj("""{"auto":false,"auto_last":{"outcome":"refused","why":"tier 'auto'","message":"Not allowed here.","at":1.0}}"""),
+        )
+        assertEquals("Not allowed here.", AutoLearn.lastLine(read.autoLast, Switch.OFF))
+        assertTrue(AutoLearn.lastLine(AutoLearn.Last("failed", "OSError"), Switch.OFF)!!.endsWith("so it stayed off."))
+        assertNull(AutoLearn.lastDetail(AutoLearn.Last("refused", null), Switch.OFF))
+        assertNull(AutoLearn.lastDetail(AutoLearn.Last("denied", "x"), Switch.OFF))
+        assertNull(AutoLearn.lastDetail(technical, Switch.ON))
         assertTrue(AutoLearn.lastLine(AutoLearn.Last("timed_out", null), Switch.OFF)!!.contains("expired"))
         assertNull(AutoLearn.lastLine(AutoLearn.Last("enabled", null), Switch.OFF))
-        assertNull(AutoLearn.lastLine(AutoLearn.Last("withdrawn", "you turned it off"), Switch.OFF))
+        // Turned off while the card waited, then approved: nothing changed, and it says so.
+        assertEquals(
+            "You turned it off while the card waited, so approving it changed nothing.",
+            AutoLearn.lastLine(AutoLearn.Last("withdrawn", "you turned it off"), Switch.OFF),
+        )
         assertNull(AutoLearn.lastLine(AutoLearn.Last("denied", null), Switch.ON))
         assertNull(AutoLearn.lastLine(AutoLearn.Last("denied", null), Switch.WAITING))
         assertNull(AutoLearn.lastLine(null, Switch.OFF))
+    }
+
+    @Test
+    fun theSettingsFilesWhyIsShown() {
+        // Fit audit item 1: the PC's own sentence when its settings file is damaged.
+        val damaged = AutoLearn.status(
+            obj(
+                """{"auto":false,"auto_sensitive":false,"auto_waiting":false,"sensitive_waiting":false,""" +
+                    """"auto_last":null,"sensitive_last":null,"why":"the automatic learning settings file """ +
+                    """is damaged, so nothing is saved automatically"}""",
+            ),
+        )
+        assertEquals(
+            "The automatic learning settings file is damaged, so nothing is saved automatically.",
+            AutoLearn.whyLine(damaged),
+        )
+        // All well: the PC sends "" - no line.
+        assertNull(AutoLearn.whyLine(AutoLearn.status(obj("""{"auto":true,"auto_sensitive":false,"why":""}"""))))
+        assertNull(AutoLearn.whyLine(AutoLearn.status(obj("""{"auto":true}"""))))
+        assertNull(AutoLearn.whyLine(null))
     }
 
     @Test
@@ -318,7 +410,16 @@ class AutoLearnTest {
         assertTrue(AutoLearn.forgetFailure(ApiError.Server(409, ""))!!.startsWith("Not forgotten."))
         assertNull(AutoLearn.forgetFailure(ApiError.Server(500, "")))
         assertNull(AutoLearn.forgetFailure(ApiError.BadToken))
-        assertTrue(AutoLearn.FORGET_CONFIRM.contains("cannot be undone"))
+    }
+
+    @Test
+    fun forgetUsesTheOneWordingForBothApps() {
+        // Fit audit item 25; the owner kept the question (decision 24).
+        assertEquals(
+            "Jarvis keeps a record that it once knew this, but will not use it again. This cannot be undone.",
+            AutoLearn.FORGET_CONFIRM,
+        )
+        assertEquals("Forgotten. Jarvis will not use it again.", AutoLearn.FORGOTTEN)
     }
 
     @Test
@@ -328,6 +429,113 @@ class AutoLearnTest {
             AutoLearn.listFailure(ApiError.NotFound),
         )
         assertNull(AutoLearn.listFailure(ApiError.BadToken))
+    }
+
+    @Test
+    fun a503SaysThePcsOwnWordsNeverThatMemoryIsNotRunning() {
+        // Fit audit item 6. The route's real 503 bodies (auto-learn.patch).
+        val notInstalled = """{"available":false,"error":"automatic learning is not installed on this PC, """ +
+            """so every fact waits for your yes","reason":"copy backend\\jarvis_auto_learn.py into the backend folder"}"""
+        assertEquals(
+            "Automatic learning is not installed on this PC, so every fact waits for your yes.",
+            AutoLearn.readFailure(ApiError.Server(503, notInstalled)),
+        )
+        assertEquals(
+            "Memory layer not importable.",
+            AutoLearn.listFailure(ApiError.Server(503, """{"error": "memory layer not importable"}""")),
+        )
+        // No body, or one without `error`: the fixed sentence.
+        for (e in listOf(ApiError.NotAvailable, ApiError.Server(503, ""), ApiError.Server(503, "<html>"),
+            ApiError.Server(503, """{"ok":false}"""))) {
+            assertEquals(e.toString(), "Automatic learning is not running on your PC right now.", AutoLearn.readFailure(e))
+            assertFalse(AutoLearn.readFailure(e)!!.contains("memory is not running"))
+        }
+        assertNull(AutoLearn.readFailure(ApiError.Server(500, "{\"error\":\"x\"}")))
+        // A switch's POST: a 503 with a body is already the PC's refusal
+        // (DesktopWrite); one without says the same fixed sentence.
+        val refused = DesktopWrite.classify(503, obj("""{"ok":false,"error":"could not raise the approval card"}"""))
+        assertEquals(
+            "Not changed. Could not raise the approval card.",
+            AutoLearn.said(Which.AUTO, true, (refused as ApiResult.Ok).value),
+        )
+        assertEquals(
+            "Not changed. Automatic learning is not running on your PC right now.",
+            AutoLearn.switchFailure(ApiError.NotAvailable),
+        )
+        assertNull(AutoLearn.switchFailure(ApiError.BadToken))
+        // The wiring: the switches' reads use the same words.
+        val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
+        assertTrue(plate.contains("AutoLearn.readFailure(r.error) ?: JarvisRuntime.noticeFor(r.error)"))
+        val rt = repoFile("$main/JarvisRuntime.kt").readText()
+        val set = rt.substring(rt.indexOf("suspend fun setAutoLearn("))
+        assertTrue(set.substring(0, set.indexOf("\n    }\n")).contains("AutoLearn.switchFailure(r.error)"))
+        val api = repoFile("$main/net/JarvisApi.kt").readText()
+        assertTrue(api.contains("suspend fun autoLearnSettings(): ApiResult<JsonObject> = probeKeeping503("))
+        assertTrue(api.contains("probeKeeping503(AutoLearn.listPath(before, limit))"))
+    }
+
+    @Test
+    fun theEmptyListSaysSoAndWhetherLearningAutomaticallyIsOff() {
+        // Fit audit item 7.
+        assertEquals("Nothing has been saved automatically yet.", AutoLearn.emptyLine(true))
+        assertEquals("Nothing has been saved automatically yet.", AutoLearn.emptyLine(null))
+        assertEquals(
+            "Nothing has been saved automatically yet. \"Learn automatically\" is off.",
+            AutoLearn.emptyLine(false),
+        )
+        // Fit audit item 14: one line under the title.
+        assertEquals(
+            "Deleting a conversation from History does not forget facts learned from it - use Forget here.",
+            AutoLearn.HISTORY_NOTE,
+        )
+        val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
+        assertTrue(plate.contains("Text(AutoLearn.HISTORY_NOTE"))
+        assertTrue(plate.contains("AutoLearn.emptyLine(autoOn)"))
+    }
+
+    private fun fact(id: Long, at: Double?) = AutoLearn.Fact(id, "fact $id", at, "typed", "phone")
+
+    private fun pageOf(vararg f: AutoLearn.Fact, full: Boolean) =
+        AutoLearn.Page(f.toList(), mayHaveOlder = full, status = AutoLearn.Status(auto = true, autoSensitive = false))
+
+    @Test
+    fun aRefreshKeepsThePagesLoadOlderBroughtIn() {
+        // Red team R8: page one (10, 9) and a "Load older" page (8, 7) shown.
+        val shown = listOf(fact(10, 100.0), fact(9, 90.0), fact(8, 80.0), fact(7, 70.0))
+        // A new fact (11) arrives: the first page is now 11, 10 - full.
+        val (rows, more) = AutoLearn.refreshed(shown, pageOf(fact(11, 110.0), fact(10, 100.0), full = true), true)
+        assertEquals(listOf(11L, 10L, 9L, 8L, 7L), rows.map { it.id })
+        assertTrue(more)
+        // "Load older" had said there was nothing more: that stays said.
+        assertFalse(AutoLearn.refreshed(shown, pageOf(fact(11, 110.0), fact(10, 100.0), full = true), false).second)
+        // 9 was forgotten elsewhere and is inside the new first page's span: it drops out.
+        val (r2, _) = AutoLearn.refreshed(shown, pageOf(fact(10, 100.0), fact(8, 80.0), full = true), true)
+        assertEquals(listOf(10L, 8L, 7L), r2.map { it.id })
+        // A first page that was not full: nothing older exists, nothing older is kept.
+        val (r3, m3) = AutoLearn.refreshed(shown, pageOf(fact(10, 100.0), full = false), true)
+        assertEquals(listOf(10L), r3.map { it.id })
+        assertFalse(m3)
+        // Nothing shown yet (the first read): just the page.
+        val (r4, m4) = AutoLearn.refreshed(null, pageOf(fact(10, 100.0), fact(9, 90.0), full = true), false)
+        assertEquals(listOf(10L, 9L), r4.map { it.id })
+        assertTrue(m4)
+        // A shown fact with no time cannot be placed, so it is not kept below.
+        val (r5, _) = AutoLearn.refreshed(shown + fact(3, null), pageOf(fact(10, 100.0), fact(9, 90.0), full = true), true)
+        assertEquals(listOf(10L, 9L, 8L, 7L), r5.map { it.id })
+        // The plate uses it.
+        val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
+        assertTrue(plate.contains("AutoLearn.refreshed(facts, page, mayHaveOlder)"))
+    }
+
+    @Test
+    fun offWhileWaitingIsWiredAndWithdrawsInTheRuntime() {
+        val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
+        assertTrue(plate.contains("AutoLearn.Switch.ON, AutoLearn.Switch.WAITING -> true"))
+        assertTrue(plate.contains("if (AutoLearn.mayPress(switch, want)) {"))
+        assertTrue(plate.contains("AutoLearn.cardWaiting(cards, AutoLearn.Which.AUTO, withdrawn)"))
+        val rt = repoFile("$main/JarvisRuntime.kt").readText()
+        val set = body(rt, "suspend fun setAutoLearn(")
+        assertTrue(set, set.contains("_autoWithdrawn.update"))
     }
 
     // ------------------------------------------------------------ event ---
