@@ -57,6 +57,11 @@ export const SENTENCES = Object.freeze([
  * learned. Each is a request of the kind the owner really makes, long
  * enough (about two to four seconds) to clear very strict's two seconds of
  * speech when read at an ordinary pace.
+ *
+ * THE ONE LIST (2026-09-24): the phone's `StrictVoice.MEASURE_SENTENCES`
+ * is a copy of this, word for word, so both apps' results are about the
+ * same sentences. Change it here and there together; tests/voice-training
+ * .mjs compares the two files.
  */
 export const TEST_SENTENCES = Object.freeze([
   "Hey Jarvis, what time is my first meeting tomorrow?",
@@ -385,6 +390,7 @@ export const STRICTNESS = Object.freeze([
   {
     id: "very_strict",
     label: "Very strict",
+    recommended: true,
     detail: "Needs about 2 seconds of speech and a close match. Best at turning other people away; now and then it may ask you to say it again.",
   },
   {
@@ -398,6 +404,7 @@ export const PRIVACY = Object.freeze([
   {
     id: "private_on_screen",
     label: "Stay on screen",
+    recommended: true,
     detail: "When you ask by voice, answers from your email, calendar or notes are shown on screen, not read aloud. Typing on your own PC or phone is not affected.",
   },
   {
@@ -412,6 +419,7 @@ export const MEMORY = Object.freeze([
   {
     id: "memory_aloud",
     label: "Read aloud",
+    recommended: true,
     detail: "When you ask by voice, answers that use what Jarvis remembers about you are read aloud. Anyone near the speaker will hear them. Questions about email, your calendar, notes, health or money still stay on screen.",
   },
   {
@@ -430,6 +438,35 @@ function choiceWords(setting, value) {
 export function settingLabel(setting, value) {
   const c = choiceWords(setting, value);
   return c ? c.label : "";
+}
+
+/** A choice as its button shows it: "Very strict (recommended)". Every
+ *  sentence that names a choice uses the plain `label`. */
+export function choiceText(c) {
+  return c ? `${c.label}${c.recommended ? " (recommended)" : ""}` : "";
+}
+
+/** Under the privacy choices while the check is not very strict. */
+export const VOICE_IS_ENOUGH_NOTE = "\"Voice check is enough\" can only be chosen while the check is very strict.";
+
+/** Under the memory choices while "voice check is enough" is on: that
+ *  already reads every private answer aloud, memory included (private-
+ *  speech.js lets `private_aloud` through first), so neither choice here
+ *  would change anything, and both are disabled. */
+export const MEMORY_MOOT_NOTE =
+  "\"Voice check is enough\" already reads these answers aloud. Choose \"Stay on screen\" above to use this setting.";
+
+/** Whether the memory choices do nothing now (see MEMORY_MOOT_NOTE). */
+export function memoryMoot(view) {
+  return Boolean(view && view.privacy === "voice_is_enough");
+}
+
+/** The value `setting` has now, by the PC's status, or "" when not said. */
+export function currentSetting(status, setting) {
+  const view = settingsView(status);
+  if (!view) return "";
+  return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
+    : setting === "memory" ? view.memory : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule. */
@@ -547,6 +584,93 @@ export function measureLines(result) {
     lines.push("This was measured with the small voice-ID model, because the stronger one is not installed.");
   }
   return lines;
+}
+
+/* ── The "someone else" check ────────────────────────────────────────── */
+
+/**
+ * Three sentences for another person to read, so the PC can see how close a
+ * different voice gets. The phone's `VoiceTraining.OTHER_SENTENCES`, word
+ * for word.
+ */
+export const OTHER_SENTENCES = Object.freeze([
+  "Hey Jarvis, what time is it?",
+  "Can you read me the news headlines?",
+  "Turn the heating up a couple of degrees.",
+]);
+
+/** The phone's `CHECK_INTRO`, with "this phone" made "this PC's microphone". */
+export const CHECK_INTRO =
+  "Want to make sure Jarvis turns other people away? Ask someone else to read 3 sentences into this PC's microphone. Your PC compares them with your voice and suggests a setting. Nothing changes unless you approve it.";
+
+/** Under the "use the stricter setting" button. */
+export const CHECK_CARD_NOTE = "Nothing changes until you approve the card.";
+
+/**
+ * Whether the check may be offered: the PC says it understands it
+ * (`gate.training.calibrate` - an older PC would read the other person's
+ * clips as a TRAINING), and a voice print this microphone can be compared
+ * with exists (this PC's own, or the phone's or the older one it falls back
+ * to). The phone's `canCheck`.
+ */
+export function canCheck(status) {
+  const s = obj(status);
+  const gate = obj(s.gate);
+  if (s.available === false || !yes(obj(gate.training).calibrate)) return false;
+  const prints = obj(gate.prints);
+  return ["desktop", "phone", "general"].some((k) => yes(obj(prints[k]).trained));
+}
+
+/** "0.52" - always two places, always a dot. */
+export function score(v) {
+  return num(v).toFixed(2);
+}
+
+/**
+ * The PC's answer to the check, in words: `{ok, text, suggested, model}`.
+ * The phone's `checkResult`; "would pass" is the PC's own verdict
+ * (`passed_count`) when it sends one - with the stricter check a voice can
+ * clear the bar and still be turned away - and the scores against the bar
+ * otherwise. `suggested` is set only when it is stricter than now.
+ */
+export function checkResult(answer) {
+  const c = obj(answer);
+  if (typeof c.error === "string" && c.error.trim()) {
+    return { ok: false, text: sentence(c.error), suggested: null, model: "" };
+  }
+  if (c.ok !== true) {
+    return { ok: false, text: sentence(c.message) || "Your PC could not compare the voices.", suggested: null, model: "" };
+  }
+  const threshold = num(c.threshold);
+  const theirs = (Array.isArray(c.scores) ? c.scores : []).filter((x) => typeof x === "number" && Number.isFinite(x));
+  const passed = Number.isInteger(c.passed_count) && c.passed_count >= 0
+    ? c.passed_count
+    : theirs.filter((x) => x >= threshold).length;
+  let head;
+  if (!theirs.length) head = "None of the clips could be scored.";
+  else if (passed === 0) head = `Good: none of their ${theirs.length} clips would pass as you now.`;
+  else head = `${passed} of their ${theirs.length} clips would pass as you now.`;
+  const sug = typeof c.suggested === "number" && Number.isFinite(c.suggested) ? c.suggested : null;
+  let tail;
+  if (sug !== null && sug > threshold + 0.005) {
+    tail = ` A stricter setting, ${score(sug)} (now ${score(threshold)}), would turn them away and still let you in.`;
+  } else if (sug !== null) {
+    tail = " Your current setting already sits between you and them.";
+  } else {
+    tail = ` ${sentence(c.message) || "Their voice came too close to yours to suggest a stricter setting."}`;
+  }
+  const model = c.model === "strong" || c.model === "small" ? c.model : "";
+  return { ok: true, text: head + tail, suggested: sug !== null && sug > threshold + 0.005 ? sug : null, model };
+}
+
+/** What the PC answered to the threshold card, in words: `{text, tone}`. */
+export function thresholdReply(answer, approveWhere) {
+  const a = obj(answer);
+  if (typeof a.error === "string" && a.error.trim()) return { text: sentence(a.error), tone: "bad" };
+  if (a.ok === true) {
+    return { text: `Waiting for your approval. Approve it ${approveWhere} — nothing changes until you do.`, tone: "ok" };
+  }
+  return { text: "Your PC did not say whether it raised the card.", tone: "bad" };
 }
 
 /** The guided test's first screen. */

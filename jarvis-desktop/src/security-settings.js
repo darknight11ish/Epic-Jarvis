@@ -125,7 +125,7 @@ export function relockNote(settings) {
     "Settings before Windows Hello is asked again.";
   return s.appLock || s.privateAnswers
     ? base
-    : `${base} It matters once App lock or private answers is on.`;
+    : `${base} It matters once App lock, or Windows Hello for memory lists and chat history, is on.`;
 }
 
 /** `where` is APPROVE_WHERE (jarvis-link.js), the one phrase for it. */

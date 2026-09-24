@@ -19,7 +19,7 @@
 //! * **Windows Hello for approvals** - "Risky only" (the default, and the
 //!   phone's rule: [`is_risky`]) or "Every approval". There is no third
 //!   value below "Risky only", so the type itself cannot express "never".
-//! * **Windows Hello for private answers** - off by default. On: the Brain's
+//! * **Windows Hello for memory lists and chat history** - off by default. On: the Brain's
 //!   memory lists come back from [`crate::brain::brain_read`] with the
 //!   entries taken out ([`redact_private`]) until Show passes Windows Hello,
 //!   and so does its chat history list (`brain/history.rs`, which also will

@@ -98,6 +98,11 @@ await check("what each lock covers is said plainly, gaps included", async () => 
   assert.match(s.appLockDetail, /widget and the HUD window are not locked/);
   assert.match(s.privateDetail, /memory lists/);
   assert.match(s.privateDetail, /Galaxy picture and answers in the Jarvis bar are not hidden/);
+  // Named for what it hides (one wording, 2026-09-24), in its status lines too.
+  assert.match(s.all, /Windows Hello for memory lists and chat history/);
+  assert.doesNotMatch(s.all, /Windows Hello for private answers|private answers is on/);
+  assert.match(S.relockNote(S.DEFAULTS),
+    /It matters once App lock, or Windows Hello for memory lists and chat history, is on\.$/);
 });
 
 await check("tightening: one change sent, and the switch shows what Rust stored", async () => {

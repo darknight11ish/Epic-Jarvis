@@ -18,12 +18,17 @@
  *   - the chat reply's `X-Jarvis-Route` has no `gate: "private"`;
  *   - only when `memory_aloud` is not true: it has no `injected_facts`
  *     above 0 (remembered facts went in);
- *   - no tool ran while it was being written. The stream carries no
- *     tool receipt (section 4), so "a tool ran" is read from the only sign
- *     it gives: `: jarvis-status working` (a tool running) or `approval`
- *     (a tool's card waiting). A tool that finishes in under 1.5 seconds
- *     says neither (jarvis_agent.STATUS_DELAY_SECONDS) - that gap is the
- *     server's, and the doc says so.
+ *   - no tool ran while it was being written - and that is only known
+ *     while the event stream is live, so an unknown counts as "a tool may
+ *     have run". Exactly the phone's rule (jarvis-client
+ *     voice/PrivateAloud.kt). A tool that ran is read from the `step`
+ *     event (docs/JARVIS-API.md section 2): `phase` `tool_started` or
+ *     `tool_finished`, counted from the moment the question was sent to
+ *     the moment each sentence is spoken (`createToolWatch`). The chat
+ *     stream's `: jarvis-status working` / `approval` still counts too, but
+ *     it is not enough on its own: the PC sends it only after 1.5 seconds
+ *     (jarvis_agent.STATUS_DELAY_SECONDS), so a quick `calendar_read` or
+ *     `email_read` says nothing there. The `step` event has no such delay.
  *
  * Otherwise Jarvis says one fixed line instead, `PRIVATE_LINE`, once.
  * `private_aloud: true` (the owner chose "voice check is enough", and the
@@ -54,11 +59,66 @@ export function privacyFromHeard(heard) {
   };
 }
 
+/** Does a `step` event's `data` say a tool ran (started, or finished)?
+ *  A refused tool did not run. The phone's `PrivateAloud.isToolRun`. */
+export function isToolRun(data) {
+  const phase = data && typeof data === "object" ? data.phase : undefined;
+  return phase === "tool_started" || phase === "tool_finished";
+}
+
+/**
+ * What this window knows about tools, as counters: `runs` (`step` events
+ * that said a tool ran), `drops` (times the event stream stopped being
+ * live, or fell off the back of the server's ring) and `live` (connected
+ * and not stale now). Two snapshots - one when the question was sent, one
+ * when a sentence is about to be spoken - say whether a tool ran in
+ * between, and whether this window could have heard of it. The phone's
+ * `PrivateAloud.Watch`, kept the same way.
+ */
+export function createToolWatch() {
+  let runs = 0;
+  let drops = 0;
+  let live = false;
+  return {
+    /** A `jarvis-link` state (`{connected, stale}`). */
+    link(state) {
+      const now = Boolean(state && state.connected === true && state.stale === false);
+      if (live && !now) drops += 1;
+      live = now;
+    },
+    /** A fanned-out bus frame, `{kind, id, data}`. */
+    event(frame) {
+      if (frame && frame.kind === "step" && isToolRun(frame.data)) runs += 1;
+    },
+    /** `jarvis-resync`: events were missed. */
+    resync() {
+      drops += 1;
+    },
+    snapshot() {
+      return { runs, drops, live };
+    },
+  };
+}
+
+/** A tool ran between two snapshots. */
+export function toolRanBetween(start, now) {
+  if (!start || !now) return false;
+  return now.runs !== start.runs;
+}
+
+/** The stream was live at both snapshots and did not drop in between, so a
+ *  tool that ran would have been heard of. A missing snapshot: not known. */
+export function toolsKnownBetween(start, now) {
+  if (!start || !now) return false;
+  return start.live === true && now.live === true && start.drops === now.drops;
+}
+
 /**
  * May this answer be read aloud? `ctx`: `{privateAloud, questionPrivate,
- * memoryAloud}`
- * from the question, `route` (the route line's object: `gate`,
- * `injected_facts`) and `toolRan`.
+ * memoryAloud}` from the question, `route` (the route line's object:
+ * `gate`, `injected_facts`), `toolRan`, and `toolsKnown` (the event stream
+ * was live the whole time; anything but `true` counts as "a tool may have
+ * run", as on the phone).
  */
 export function mayReadAloud(ctx) {
   const c = ctx && typeof ctx === "object" ? ctx : {};
@@ -69,5 +129,6 @@ export function mayReadAloud(ctx) {
   const facts = Number(route.injected_facts);
   if (Number.isFinite(facts) && facts > 0 && c.memoryAloud !== true) return false;
   if (c.toolRan === true) return false;
+  if (c.toolsKnown !== true) return false;
   return true;
 }

@@ -44,7 +44,9 @@ import {
   deleteQuestion,
   DENIED_REPLY,
   deviceTag,
+  keepConfirm,
   keepLabel,
+  keepNeedsConfirm,
   keepReply,
   KEEP_CHOICES,
   notRecordingLine,
@@ -54,6 +56,7 @@ import {
   PAGE as HISTORY_PAGE,
   readConversation,
   readHistory,
+  refreshRows,
   renderTranscript,
   rowMeta,
   SWITCH_DETAIL,
@@ -902,10 +905,25 @@ function modelCardGone(ask) {
   }, MODEL_ASK_GRACE_MS);
 }
 
+/** Whether the approval queue holds a card to turn learning on, wherever it
+ *  was raised (`learning_enable`, docs/JARVIS-API.md `/api/memory/learning`). */
+function learningCardWaiting(queue = currentQueue()) {
+  const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
+  return items.some((item) => item && item.action === "learning_enable");
+}
+let learningCardSeen = false;
+
 /** The learning card left the queue: read the switch after the backend has
  *  had a moment to apply an approval. On: the line goes (renderLearning).
  *  Still off: it was denied or ran out of time, and that is said. */
 onQueue((queue) => {
+  // A learning card raised elsewhere (the phone, or another window) came
+  // or went: the waiting line follows it, as History's does.
+  const waitingNow = learningCardWaiting(queue);
+  if (waitingNow !== learningCardSeen) {
+    learningCardSeen = waitingNow;
+    if (state.view === "memory") renderLearning();
+  }
   const ask = state.learningAsk;
   if (!ask || !ask.cardId || ask.gone) return;
   const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
@@ -1341,7 +1359,7 @@ async function memoryWrite(command, args, okText) {
 }
 
 /* ==========================================================================
-   Private answers - Settings' "Windows Hello for private answers"
+   Private answers - Settings' "Windows Hello for memory lists and chat history"
 
    While it is on, brain_read hands the two memory lists back EMPTY, with
    `hidden: true` and how many there were (lock.rs redact_private). The
@@ -1487,7 +1505,9 @@ function renderLearning() {
   }
   dom.memoryLearning.append(dl);
 
-  if (state.learningAsk) {
+  // Our own click, or a card raised elsewhere - the history switch's rule
+  // (`chats.ask || v.waiting`), read from the queue.
+  if (state.learningAsk || (!on && learningCardWaiting())) {
     dom.memoryLearning.append(el("p", "hint learning-waiting",
       `Waiting for your approval to turn learning on. Approve it ${APPROVE_WHERE}.`));
   }
@@ -2061,8 +2081,13 @@ async function loadHistory() {
   try {
     const v = readHistory(await invoke("brain_history_list", { before: null, limit: HISTORY_PAGE }));
     chats.view = v;
-    chats.rows = v.conversations;
-    chats.more = v.conversations.length >= HISTORY_PAGE;
+    // The re-read every 15 seconds replaces the newest page only: pages
+    // "Load older" brought in stay, and so does a conversation opened
+    // from one of them. A hidden list (Windows Hello) keeps nothing.
+    const kept = v.hidden ? { rows: v.conversations, more: false }
+      : refreshRows(chats.rows, v.conversations, HISTORY_PAGE, chats.more);
+    chats.rows = kept.rows;
+    chats.more = kept.more;
     chats.error = "";
     if (v.enabled) chats.ask = null; // the card was approved
     if (chats.openId && !chats.rows.some((c) => c.id === chats.openId)) {
@@ -2285,6 +2310,9 @@ function paintHistorySettings() {
   select.addEventListener("change", async () => {
     const days = Number(select.value);
     select.value = String(v.keepDays);
+    // A shorter period (or any, from "Never") deletes conversations now,
+    // with no undo: asked first, the phone's question word for word.
+    if (keepNeedsConfirm(v.keepDays, days) && !window.confirm(keepConfirm(days))) return;
     select.disabled = true;
     select.dataset.busy = "true";
     await setKeepDays(days);

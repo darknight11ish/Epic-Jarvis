@@ -47,16 +47,17 @@ export const KEEP_CHOICES = Object.freeze([
 /** One page of the list (the PC's default). */
 export const PAGE = 30;
 
-/** Which app a conversation was had in: the row's tag, and its longer title. */
+/** Which app a conversation was had in: the row's tag, and its longer
+ *  title. The tags are the phone's too (one wording, 2026-09-24). */
 export const DEVICE_TAGS = Object.freeze({
   desktop: { tag: "PC", words: "Had in the Jarvis bar on this PC." },
   hud: { tag: "HUD", words: "Had in the HUD window on this PC." },
   phone: { tag: "phone", words: "Had on your phone." },
 });
 
-/** The row tag for a device; one the PC did not name is just "chat". */
+/** The row tag for a device; one the PC did not name is "unknown". */
 export function deviceTag(device) {
-  return DEVICE_TAGS[device] || { tag: "chat", words: "" };
+  return DEVICE_TAGS[device] || { tag: "unknown", words: "The PC did not say which app this was had in." };
 }
 
 /**
@@ -76,10 +77,11 @@ export const PROVENANCE_WORDS = Object.freeze({
   unknown: "not known where from",
 });
 
+/** The tainted line: under an opened conversation that read outside text,
+ *  and the title of each "read outside text" mark. The phone's words too. */
 export const TAINT_TITLE =
   "In this conversation Jarvis read text that did not come from you - a web " +
-  "page, a file, an email or another tool's output. From that point on, what " +
-  "was said is not treated as your own words.";
+  "page, a file, an email or another tool's output - from the marked message on.";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const text = (v) => (typeof v === "string" ? v : "");
@@ -98,10 +100,47 @@ export function keepLabel(days) {
 }
 
 /**
+ * Whether choosing `to` deletes something now, and so asks first: any
+ * limit, when there was none ("Never") or a longer one. Going back to
+ * "Never", or to a longer limit, deletes nothing. The phone's
+ * `ChatLog.keepNeedsConfirm`.
+ */
+export function keepNeedsConfirm(from, to) {
+  if (!Number.isFinite(to) || to === 0) return false;
+  return !Number.isFinite(from) || from === 0 || to < from;
+}
+
+/** The question asked (`window.confirm`) before such a change. Both apps. */
+export function keepConfirm(to) {
+  return `Delete every conversation older than ${keepLabel(to).toLowerCase()} from your PC now, ` +
+    "and from then on? This cannot be undone.";
+}
+
+/**
+ * The next list read, with the older pages already loaded kept under it.
+ * The fresh first page replaces the newest rows; the rows "Load older"
+ * brought in stay when they are older than everything on that page (a
+ * conversation that moved up is not shown twice). A first page that was
+ * not full means there is nothing older, so nothing older is kept.
+ * Returns `{rows, more}`.
+ */
+export function refreshRows(shown, page, pageSize, moreBefore) {
+  const fresh = Array.isArray(page) ? page : [];
+  const full = fresh.length >= pageSize;
+  if (!full) return { rows: fresh, more: false };
+  const edge = olderThan(fresh);
+  const ids = new Set(fresh.map((c) => c.id));
+  const older = (Array.isArray(shown) ? shown : []).filter(
+    (c) => !ids.has(c.id) && edge !== null && c.updated !== null && c.updated < edge
+  );
+  return { rows: [...fresh, ...older], more: older.length ? moreBefore : true };
+}
+
+/**
  * `GET /api/history`'s answer, read. `available: false` is an older backend
  * (Rust answers `{available: false, why}` for a 404). `hidden` is "Windows
- * Hello for private answers" holding the list back (Rust took the
- * conversations out, and kept how many there were).
+ * Hello for memory lists and chat history" holding the list back (Rust
+ * took the conversations out, and kept how many there were).
  */
 export function readHistory(answer) {
   const a = answer && typeof answer === "object" ? answer : {};
@@ -240,11 +279,7 @@ export function keepReply(days, out) {
  */
 export function renderTranscript(box, conv, { el }) {
   box.replaceChildren();
-  if (conv.tainted) {
-    box.append(el("p", "history-taint-note",
-      "Jarvis read text that did not come from you in this conversation (marked below). " +
-      "From there on, what was said is not treated as your own words."));
-  }
+  if (conv.tainted) box.append(el("p", "history-taint-note", TAINT_TITLE));
   if (!conv.turns.length) {
     box.append(el("p", "empty", "Nothing was kept from this conversation."));
     return;

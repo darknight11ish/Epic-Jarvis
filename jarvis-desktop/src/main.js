@@ -99,6 +99,7 @@ import {
   fetchDigest,
   injectTaskNote,
   markDigestSeen,
+  onEvent,
   onLink,
   onQueue,
   pauseTask,
@@ -114,7 +115,15 @@ import {
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode } from "./voice.js";
 import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
-import { mayReadAloud, privacyFromHeard, PRIVATE_LINE, TOOL_WORDS } from "./private-speech.js";
+import {
+  createToolWatch,
+  mayReadAloud,
+  privacyFromHeard,
+  PRIVATE_LINE,
+  TOOL_WORDS,
+  toolRanBetween,
+  toolsKnownBetween,
+} from "./private-speech.js";
 // The renderer the answer card and the approval preview use - see markdown.js.
 import { escapeHtml, renderMarkdown } from "./markdown.js";
 import {
@@ -326,11 +335,14 @@ const state = {
   routeFromHeader: false,
   /** The private-answer rule (private-speech.js), for a voice turn: what the
    *  utterance reply said (`privateAloud`, `questionPrivate`), the route
-   *  line (`gate`, `injected_facts`), whether a tool ran while the answer
-   *  was written, and whether "It's on your screen." was said already. */
+   *  line (`gate`, `injected_facts`), whether `: jarvis-status` said a
+   *  tool ran, the tool counters when the question was sent (`toolStart`,
+   *  a `toolWatch` snapshot), and whether "It's on your screen." was said
+   *  already. */
   voicePrivacy: null,
   turnRoute: null,
   toolRan: false,
+  toolStart: null,
   privateLineSaid: false,
   /** Cancels whichever transport is streaming; null when idle. */
   abort: null,
@@ -420,6 +432,11 @@ const state = {
    *  level of scrollback, shown folded in the card until dismissed. */
   previousAnswer: null,
 };
+
+/** Tools that ran (`step` events) and drops of the event stream, for the
+ *  private-answer rule - fed below, where this window subscribes to the
+ *  link (private-speech.js `createToolWatch`). */
+const toolWatch = createToolWatch();
 
 /** How many prompts `state.promptHistory` keeps. Older ones fall off the front. */
 const PROMPT_HISTORY_LIMIT = 50;
@@ -2353,6 +2370,10 @@ async function send(promptText, provenance = "typed") {
   state.turnRoute = null;
   state.toolRan = false;
   state.privateLineSaid = false;
+  // Where the tool counters stood when the question was sent: a `step`
+  // event after this, or a drop in the event stream, keeps the rest of a
+  // voice answer on screen (private-speech.js).
+  state.toolStart = toolWatch.snapshot();
   // A new answer starts from no blocks, or the first paragraph of the second
   // reply never gets its entrance.
   paintedBlocks = 0;
@@ -2772,11 +2793,24 @@ function enqueueSpeech(text) {
 /** The owner's private-answer rule for this voice turn (private-speech.js):
  *  may what it says be read aloud? */
 function speakableNow() {
+  const now = toolWatch.snapshot();
   return mayReadAloud({
     ...(state.voicePrivacy || {}),
     route: state.turnRoute,
-    toolRan: state.toolRan,
+    toolRan: state.toolRan || toolRanBetween(state.toolStart, now),
+    toolsKnown: toolsKnownBetween(state.toolStart, now),
   });
+}
+
+/** Something may have made the voice answer being read private - a tool
+ *  ran, or the event stream stopped being able to say. What is queued is
+ *  dropped and the fixed line said instead, once. */
+function recheckSpeech() {
+  // Nothing queued and no voice answer still arriving: nothing to hold back.
+  if (!speechQueue.length && !state.voiceTurn) return;
+  if (speakableNow()) return;
+  speechQueue = [];
+  sayPrivateLineOnce();
 }
 
 /** Instead of a private answer, one fixed line - once per answer. */
@@ -3449,6 +3483,19 @@ followZoom(() => syncWindowHeight());
 syncPrimerKeys();
 syncTaskControls();
 startVoice(dom.root);
+// Subscribed before the link starts, so the first state it reports counts.
+onLink((link) => {
+  toolWatch.link(link);
+  recheckSpeech();
+});
+onEvent((frame) => {
+  toolWatch.event(frame);
+  if (frame && frame.kind === "step") recheckSpeech();
+});
+listen("jarvis-resync", () => {
+  toolWatch.resync();
+  recheckSpeech();
+});
 startLink();
 
 let lastConnected = null;

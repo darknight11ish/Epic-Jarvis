@@ -512,7 +512,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (reply && typeof onmessage === "function") {
               const chunks = Array.isArray(reply) ? reply : [reply];
               for (const chunk of chunks) {
-                onmessage(chunk);
+                // `{emit, payload}` is not a chunk: it is a Tauri event sent
+                // at that point in the answer - a `step` event on the bus,
+                // say, or the link going stale - the other road into the
+                // window, interleaved the way the real app sees them.
+                if (chunk && typeof chunk === "object" && typeof chunk.emit === "string") {
+                  window.__emit(chunk.emit, chunk.payload);
+                } else {
+                  onmessage(chunk);
+                }
                 await new Promise((r) => setTimeout(r, 0));
               }
             }
@@ -778,6 +786,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "cancel_voice_training":
           case "measure_voice":
           case "set_voice_setting":
+          case "check_voice_with_someone_else":
+          case "propose_voice_threshold":
           case "get_custom_voices":
           case "create_custom_voice":
           case "set_active_voice":
@@ -811,6 +821,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.measure));
               case "set_voice_setting":
                 return JSON.parse(JSON.stringify(v.settings[args.value] || v.settings.default));
+              // The "someone else" check and its threshold card: a scenario
+              // gives the answers (`check`, `threshold`).
+              case "check_voice_with_someone_else":
+                return JSON.parse(JSON.stringify(v.check || null));
+              case "propose_voice_threshold":
+                return JSON.parse(JSON.stringify(v.threshold || null));
               case "get_custom_voices":
                 v.reads += 1;
                 if (v.voicesUnavailable) {

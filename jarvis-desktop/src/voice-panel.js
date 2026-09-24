@@ -11,9 +11,11 @@
  * What changes anything goes one way only: making Jarvis stricter, going
  * back to the built-in voice, deleting a voice and turning the better voice
  * off happen at once; finishing a training, loosening a setting, adding a
- * voice, switching to one and turning the better voice on only raise ONE
- * approval card, and the page says "waiting for your approval" until the
- * PC says how it ended. While the event stream is stale those are held
+ * voice, switching to one, turning the better voice on and using the
+ * stricter bar the "someone else" check suggests only raise ONE approval
+ * card, and the page says "waiting for your approval" until the PC says
+ * how it ended. The guided test and the "someone else" check itself change
+ * nothing. While the event stream is stale those are held
  * (by the Rust too, not only here). Nothing here approves anything.
  *
  * settings.js reads GET /api/voice/status and hands it to
@@ -508,7 +510,7 @@ function paintSettings() {
   if (!view) return;
   const group = (box, list, chosen, setting, disabled) => {
     box.replaceChildren(...list.map((c) => {
-      const b = node("button", "choice", c.label);
+      const b = node("button", "choice", VT.choiceText(c));
       b.type = "button";
       b.dataset.value = c.id;
       b.setAttribute("aria-pressed", String(c.id === chosen));
@@ -522,14 +524,17 @@ function paintSettings() {
     (c) => c.id === "voice_is_enough" && !view.voiceIsEnoughAllowed && view.privacy !== "voice_is_enough");
   say($("vt-strictness-note"), VT.STRICTNESS.find((c) => c.id === view.strictness).detail);
   let privacyNote = VT.PRIVACY.find((c) => c.id === view.privacy).detail;
-  if (!view.voiceIsEnoughAllowed) privacyNote += " \"Voice check is enough\" can only be chosen while the check is very strict.";
+  if (!view.voiceIsEnoughAllowed) privacyNote += ` ${VT.VOICE_IS_ENOUGH_NOTE}`;
   say($("vt-privacy-note"), privacyNote);
   const memBox = $("vt-memory-box");
   if (memBox) {
     memBox.hidden = !view.memory;
     if (view.memory) {
-      group($("vt-memory"), VT.MEMORY, view.memory, "memory");
-      say($("vt-memory-note"), VT.MEMORY.find((c) => c.id === view.memory).detail);
+      // "Voice check is enough" reads these aloud already: neither choice
+      // would change anything, so neither can be pressed.
+      const moot = VT.memoryMoot(view);
+      group($("vt-memory"), VT.MEMORY, view.memory, "memory", () => moot);
+      say($("vt-memory-note"), moot ? VT.MEMORY_MOOT_NOTE : VT.MEMORY.find((c) => c.id === view.memory).detail);
     }
   }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
@@ -661,6 +666,131 @@ function startTest() {
 }
 
 /* ==========================================================================
+   The "someone else" check, and the stricter bar it may suggest
+   ========================================================================== */
+
+/** `view`: "idle", "reading" (the reader draws) or "result". */
+const others = { view: "idle", result: null, proposing: false, note: "", tone: "" };
+
+function paintOthers() {
+  const box = $("vt-others");
+  const head = $("vt-others-head");
+  if (!box || !head || !status) return;
+  if (others.view === "reading") return;
+  // Offered only to a PC that understands it: an older one would read the
+  // other person's clips as a training (VT.canCheck).
+  const shown = others.view === "result" || VT.canCheck(status);
+  box.hidden = !shown;
+  head.hidden = !shown;
+  if (!shown) return;
+  const nodes = [];
+  if (others.view === "result" && others.result) {
+    const r = others.result;
+    nodes.push(line("Someone else's voice", "", "vt-head"));
+    const said = line(r.text, r.ok ? "" : "bad", "sc-line vt-others-result");
+    said.setAttribute("role", "status");
+    nodes.push(said);
+    if (r.suggested !== null) {
+      const row = node("div", "row");
+      // The card is held on a stale link (rule 4); the check was not.
+      row.append(button(`Use ${VT.score(r.suggested)} (asks for approval)`, () => proposeStricter(),
+        { disabled: others.proposing || linkStale, id: "vt-others-use" }));
+      nodes.push(row);
+      nodes.push(line(VT.CHECK_CARD_NOTE, "", "note"));
+      const why = others.note || (linkStale ? HELD : "");
+      if (why) {
+        const p = line(why, others.note ? others.tone : "warn", "sc-line vt-others-note");
+        p.setAttribute("role", "status");
+        nodes.push(p);
+      }
+    }
+    const row = node("div", "row");
+    row.append(button("Done", () => {
+      others.view = "idle";
+      others.result = null;
+      others.note = "";
+      paintOthers();
+    }, { ghost: true }));
+    nodes.push(row);
+  } else {
+    nodes.push(line(VT.CHECK_INTRO, "", "note"));
+    const row = node("div", "row");
+    row.append(button("Start the check", () => startOthers(), { id: "vt-others-start" }));
+    nodes.push(row);
+  }
+  box.replaceChildren(...nodes);
+}
+
+function startOthers() {
+  others.view = "reading";
+  others.result = null;
+  others.note = "";
+  const box = $("vt-others");
+  const toResult = (result) => {
+    others.view = "result";
+    others.result = result;
+    paintOthers();
+  };
+  makeReader(box, {
+    items: VT.OTHER_SENTENCES.map((text, i) => ({ slot: `o${i}`, text })),
+    head: "Someone else's voice: ask them to read these",
+    maxSeconds: VT.limits(status).maxSeconds - 0.2,
+    sendLabel: "Compare them",
+    sendNote: "Their recordings are scored on your PC and thrown away. Nothing changes and no card is raised.",
+    // Nothing changes and no card is raised, so a stale link does not hold it.
+    cardSend: false,
+    onSend: async (slots) => {
+      let result;
+      try {
+        result = VT.checkResult(await invoke("check_voice_with_someone_else", { slots }));
+      } catch (error) {
+        // The recordings are gone either way (the app drops them), so the
+        // reader cannot send them again: the result view says what happened.
+        result = { ok: false, text: problemWords(error), suggested: null, model: "" };
+      }
+      toResult(result);
+      return { ok: true, text: result.text, tone: result.ok ? "ok" : "bad" };
+    },
+    onCancel: () => {
+      cancelRecording();
+      invoke("discard_voice_samples", { prefix: "o" }).catch(() => {});
+      others.view = "idle";
+      paintOthers();
+    },
+  });
+}
+
+async function proposeStricter() {
+  const r = others.result;
+  if (!r || r.suggested === null || others.proposing) return;
+  if (linkStale) {
+    others.note = HELD;
+    others.tone = "bad";
+    announce(HELD, "assertive");
+    paintOthers();
+    return;
+  }
+  others.proposing = true;
+  others.note = "Asking…";
+  others.tone = "";
+  paintOthers();
+  try {
+    const answer = await invoke("propose_voice_threshold", { threshold: r.suggested, model: r.model || null });
+    const reply = VT.thresholdReply(answer, APPROVE_WHERE);
+    others.note = reply.text;
+    others.tone = reply.tone;
+  } catch (error) {
+    others.note = problemWords(error);
+    others.tone = "bad";
+  } finally {
+    others.proposing = false;
+  }
+  announce(others.note, others.tone === "bad" ? "assertive" : "polite");
+  paintOthers();
+  await reload();
+}
+
+/* ==========================================================================
    The voice-ID model, and the PC's own note
    ========================================================================== */
 
@@ -695,6 +825,7 @@ export function paintVoicePanel(voiceStatus) {
   paintSettings();
   paintRepeat();
   paintTest();
+  paintOthers();
 }
 
 /* ==========================================================================
@@ -1003,6 +1134,7 @@ export function startVoicePanel(opts = {}) {
     linkStale = Boolean(l && l.stale);
     if (was !== linkStale) {
       if (train.reader && train.view === "reading") train.reader.draw();
+      if (others.view === "result") paintOthers();
       if (cv.status) paintAdd();
     }
   });

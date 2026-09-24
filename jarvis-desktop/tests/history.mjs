@@ -15,7 +15,7 @@
  *   leaves the queue; OFF is immediate; ON is greyed on a stale link;
  * - "Delete conversations older than": Never / 30 days / 90 days / 1 year;
  * - `why_not` said plainly when nothing new is being kept;
- * - "Windows Hello for private answers" holds the list back too.
+ * - "Windows Hello for memory lists and chat history" holds the list back too.
  *
  * The answers are the shapes in the contract (section 3). The backend is
  * built to the same contract in parallel; when its generated fixtures land
@@ -29,7 +29,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   addPage,
+  deviceTag,
+  keepConfirm,
+  keepNeedsConfirm,
   keepReply,
+  refreshRows,
+  TAINT_TITLE,
   notRecordingLine,
   OFF_REPLY,
   olderThan,
@@ -379,8 +384,76 @@ await check("why nothing new is kept is shown plainly", async () => {
   assert.equal(text, why);
 });
 
+await check("a shorter keep period asks first, in both apps' words; a no sends nothing", async () => {
+  const page = await historyTab({ conversations: many(3), status: { keep_days: 90 } });
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.dismiss(); });
+  await page.locator("#history-keep").selectOption("30");
+  await page.waitForTimeout(300);
+  const afterNo = await page.evaluate(() => window.__history.settings);
+  const shown = await page.locator("#history-keep").inputValue();
+  // Longer, or back to Never: nothing is deleted now, so nothing is asked.
+  let askedAgain = false;
+  page.on("dialog", (d) => { askedAgain = true; d.dismiss(); });
+  await page.locator("#history-keep").selectOption("365");
+  await page.waitForTimeout(400);
+  const afterLonger = await page.evaluate(() => window.__history.settings);
+  await page.close();
+  assert.equal(asked,
+    "Delete every conversation older than 30 days from your PC now, and from then on? This cannot be undone.");
+  assert.deepEqual(afterNo, [], "a no still changed the period");
+  assert.equal(shown, "90", "the choice moved although nothing was sent");
+  assert.equal(askedAgain, false, "a longer period asked");
+  assert.deepEqual(afterLonger, [{ enabled: null, keepDays: 365 }]);
+  // The rule, in full: any period from Never, a shorter one; nothing else.
+  assert.deepEqual([[0, 30], [0, 365], [90, 30], [365, 90], [30, 90], [30, 0], [90, 90], [null, 30]]
+    .map(([f, t]) => keepNeedsConfirm(f, t)), [true, true, true, true, false, false, false, true]);
+  assert.equal(keepConfirm(365),
+    "Delete every conversation older than 1 year from your PC now, and from then on? This cannot be undone.");
+});
+
+await check("the 15-second re-read keeps the older pages and the open conversation", async () => {
+  const convs = many(31);
+  const last = convs[30];
+  const page = await historyTab({ conversations: convs,
+    transcripts: { [last.id]: { id: last.id, title: last.title, tainted: false,
+      turns: [{ role: "user", text: "the oldest one", at: last.updated, provenance: "typed" }] } } });
+  await page.getByRole("button", { name: "Load older" }).click();
+  await page.waitForTimeout(250);
+  await page.locator(`#history-list .row-item[data-id="${last.id}"]`).getByRole("button", { name: "Open" }).click();
+  await page.waitForTimeout(250);
+  // The re-read the tab does every 15 seconds - the same loadHistory the
+  // private-answers events call, so one of those drives it here.
+  await page.evaluate(() => window.__emit("private-hidden", {}));
+  await page.waitForTimeout(300);
+  const rows = await page.locator("#history-list .row-item").count();
+  const transcript = await page.locator("#history-transcript").innerText();
+  const firstPageReads = await page.evaluate(() => window.__history.reads.filter((r) => r.before == null).length);
+  await page.close();
+  assert.ok(firstPageReads >= 2, "the list was not read again");
+  assert.equal(rows, 31, "the page Load older brought in was dropped");
+  assert.match(transcript, /the oldest one/, "the open conversation was closed");
+  // The rule on its own: a moved row is not shown twice; a short first page keeps nothing older.
+  const first = readHistory({ ...LIST, conversations: many(30) }).conversations;
+  const older = readHistory({ ...LIST, conversations: many(32) }).conversations.slice(30);
+  const moved = { ...older[0], updated: NOW };
+  const r = refreshRows([...first, ...older], [moved, ...first.slice(0, 29)], 30, true);
+  assert.deepEqual(r.rows.map((c) => c.id), [moved.id, ...first.slice(0, 29).map((c) => c.id), first[29].id, older[1].id],
+    "the row pushed off the first page stays, under it");
+  assert.equal(r.more, true);
+  assert.deepEqual(refreshRows([...first, ...older], first.slice(0, 5), 30, true), { rows: first.slice(0, 5), more: false });
+});
+
+await check("which app, and the tainted line: the words both apps use", async () => {
+  assert.deepEqual(["desktop", "hud", "phone", "", "watch"].map((d) => deviceTag(d).tag),
+    ["PC", "HUD", "phone", "unknown", "unknown"]);
+  assert.equal(TAINT_TITLE, "In this conversation Jarvis read text that did not come from you - a web page, " +
+    "a file, an email or another tool's output - from the marked message on.");
+});
+
 await check("the keep choice sends one keep_days and says how many went", async () => {
   const page = await historyTab({ conversations: many(3), deletedByKeep: 2 });
+  page.once("dialog", (d) => d.accept());
   await page.locator("#history-keep").selectOption("30");
   await page.waitForTimeout(400);
   const sent = await page.evaluate(() => window.__history.settings);
