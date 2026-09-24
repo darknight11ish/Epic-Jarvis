@@ -5970,7 +5970,9 @@ a card.
    - Word lists for each topic, in **English, Spanish, French, German,
      Italian, Portuguese, Dutch and Polish**, matched with accents removed
      ("embarazada", "Schwangerschaft", "w ciąży"). Every other language
-     only has its word for "password" here; anything else in it is left to
+     only has its word for "password" here - plus, since round 2, a few
+     core health, money and family words in Swedish, Turkish, and Hindi and
+     Japanese written in Latin letters. Anything else in them is left to
      layer 2.
    - The **shapes** of secrets and numbers: a 3-8 digit code next to a
      lock word ("alarm", "safe", "unlocks with", "code", "PIN", in eight
@@ -5990,10 +5992,22 @@ a card.
      facts about someone who never agreed to be remembered, and your rule
      is "when unsure: flagged". Not flagged: a famous name as a taste ("I'm
      a fan of Terry Pratchett"), pets and things ("My dog is called Max"),
-     and your own name ("My name is Tom").
+     and your own name ("My name is Tom"). Since round 2, a group with no
+     "my" in front ("cooking for friends") is not flagged either; "my
+     friends" still is.
    - A list of harmless phrases that contain a flagged word, blanked out
      first: "bank holiday", "Doctor Who", "sick of the rain", "password
      manager", "child process", "5k run".
+   - **Added in round 2** (see "Round 2" below): the general words for a
+     secret ("password", "PIN", "API key", "2FA", "door code") count only
+     with the secret next to them ("password is X", "pw: X", "pass
+     Gr33nTea!"), or a habit that gives it away ("same password", "my
+     birthday backwards", "the street I grew up on"). So "I keep the API
+     key in an env var" is no longer a card, and "my password is sunflower"
+     now is. Software about a topic ("a budgeting app", "the password
+     field"), a book or show title after "reading"/"watching", jokes
+     ("addicted to Hollow Knight", "allergic to meetings") and a pet's
+     health are blanked too.
 2. **The local model.** When the patterns find nothing, it asks the SAME
    local model the learner uses (the second card's learning lane when that
    is working, otherwise the main Ollama) one short question and wants a
@@ -6020,9 +6034,12 @@ automatically:":
 | another person | about another person, a sensitive topic |
 
 "About someone else's health" (and so on) when another person is in the
-same sentence. When only the model flagged it: "the local model was not
-sure it is free of sensitive topics", or why it could not answer ("took too
-long", "did not answer", "is a cloud model").
+same sentence - but not when the sentence is about you: "I came out to my
+parents" says "about sexuality or sex life", and "my old landlord is suing
+me" says "about arrests, courts or a criminal record" (fixed in round 2;
+before, both said "someone else's"). When only the model flagged it: "the
+local model was not sure it is free of sensitive topics", or why it could
+not answer ("took too long", "did not answer", "is a cloud model").
 
 **The numbers, said plainly.** Measured with the patterns alone (no model
 runs in the development container), on `backend/sensitive_cases/dev.jsonl`:
@@ -6052,15 +6069,81 @@ The after-tuning numbers only prove every line in the file is handled: the
 same person wrote the lines and the patterns. A separate held-out set,
 written by someone else, is the fair test.
 
-**What it cannot catch.** A language other than the eight (except its word
-for "password"), slang and euphemisms ("I'm on the wagon", "I got the snip", "pain in
-my stomach after eating"), spelling mistakes, a name not on the list ("Xiomara is
-pregnant" is caught by "pregnant", but "Xiomara likes jazz" is not), and a
-secret that looks like a plain word ("my Netflix is sunflower"). For all of
-those only the local model stands between the fact and being saved - and
-the model can be wrong too. **How good the model layer is has not been
-measured**: no model runs in the container. The command below measures it
-on your PC.
+**The first held-out set, and round 2.** A separate agent wrote 963 lines
+(623 sensitive, 340 harmless, in the eight languages plus Swedish, Turkish,
+and Hindi and Japanese in Latin letters) without seeing the lists. Measured
+on the patterns above, before round 2 (the fair, honest number):
+
+| | caught | harmless lines flagged |
+|---|---|---|
+| all lines | **86.8%** (541 of 623) | **15.3%** (52 of 340) |
+| credentials / health / money | 94.4% / 81.0% / 84.6% | |
+| identity / special / location / other people | 94.8% / 82.8% / 72.3% / 99.0% | |
+| without the 31 lines marked AMBIGUOUS | 87.0% | 13.5% |
+
+(The first version of the check, the one word list, scored 49.8% caught
+and 20.9% flagged on the same lines - as reported by the session that ran
+that measurement; round 2 did not re-measure it.)
+
+Round 2 then used those lines as **training material**: for each miss, the
+kind of wording it stood for got a general rule, meant to catch its unseen
+relatives too - medical specialties and "-oscopy" words in every language,
+lab values ("HbA1c", "ferritin", "CD4"), blood-pressure readings,
+misspellings, "on the spectrum", "type 2", "the snip"; arrears in any
+spelling, credit records (Schufa, Serasa, Kronofogden), benefits by their
+national names, pay rises in per cent, cash in hand; a username and password
+pair, an unlock pattern; prison slang ("did time", "inside"), police
+searches, fines and points, tribunals and courts in every language,
+religions and castes by name, party membership by short name ("lid van de
+SP"), marches; a hidden key, doors that do not lock, alarms not set, away
+dates, a home described by landmarks, living alone in eight languages;
+birth dates said informally ("born in '92", "I turn 40 on the 2nd of June").
+False positives were cut the same way, by kind: see the list above. The
+lines are now `backend/sensitive_cases/heldout1.jsonl` - **it was a
+held-out set until round 2; it is not one any more.** On it, after round 2:
+100% caught (623 of 623), 0.6% flagged (2 of 340: "I get hay fever every
+June" and "I play chess with my dad on Sundays" - both kept on purpose: a
+health condition, and a relation, where your rule says "when unsure:
+flagged"). That number is fitted to those lines, so it proves nothing about
+new wording.
+
+**How well round 2 generalises, said plainly.** The round-2 author also
+wrote their own lines (`backend/sensitive_cases/round2.jsonl`, 708 lines).
+Two batches were written *after* the rules and measured before anything
+was changed for them:
+
+- the first fresh batch: 79.8% caught before round 2, **81.6%** with the
+  round-2 rules; 13.4% → 9.0% of harmless lines flagged. So the rules
+  caught little of genuinely new wording. Its misses then became more
+  general rules (a body part with a medical word - "my kidneys are only
+  working at 40 percent"; "maxed out"; being held in the cells; conditions
+  by their initials, "I have POTS").
+- the second fresh batch, after that: 87.1% → **90.1%** caught; 7.6% →
+  **0%** of harmless lines flagged. Five of its ten misses were then fixed
+  too ("je vis seule", "I came out last year"), which makes its numbers
+  flattering from then on.
+
+Both batches were written by the same author as the rules, so even these
+flatter the check. The fair test is a second held-out set being written by
+someone else now; it has not been measured here. A guess, not a
+measurement: roughly nine new sensitive lines in ten caught by the patterns
+alone, and somewhere between 1% and 10% of harmless lines flagged.
+
+On the development file, round 2 changed nothing that mattered: still 100%
+of 777 lines in the eight languages, 0 of 259 harmless flagged, and the
+tricky ones down from 6 of 93 flagged to 2.
+
+**What it cannot catch.** A language other than the eight (except a few
+core words), slang and euphemisms it has not seen ("the endo wants me on a
+pump", "they found a shadow on my lung", "pain in my stomach after
+eating"), a name not on the list ("Xiomara is pregnant" is caught by
+"pregnant", but "Xiomara likes jazz" is not), a routine said without a
+time word ("the kids get the bus from the corner"), and a secret that
+looks like a plain word with no password word next to it ("my Netflix is
+sunflower"). For all of those only the local model stands between the
+fact and being saved - and the model can be wrong too. **How good the
+model layer is has not been measured**: no model runs in the container.
+The command below measures it on your PC.
 
 **Speed.** The pattern layer takes about half a millisecond per fact (measured here). The
 model question is asked only when the patterns find nothing, once per fact,

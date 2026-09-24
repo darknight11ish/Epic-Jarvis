@@ -2337,17 +2337,36 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    "ethnicity", "immigration status", "arrests, courts or a criminal
    record"), "about where someone can be found, ...", "about another
    person, ..."; "about someone else's health, ..." when another person is
-   in the same sentence; and, from the model, "the local model was not sure
-   it is free of sensitive topics" or why it gave no answer. Measured on
-   the development set (`backend/sensitive_cases/dev.jsonl`, patterns only):
-   every one of its 777 sensitive lines in the eight languages is caught
-   and none of its 259 plainly harmless lines is flagged - but that is
-   after tuning on those lines; a batch written later and measured before
-   tuning caught 78.9% (health 55%). What it cannot catch, the local model
-   has to: other languages, slang and euphemisms, unlisted names, a
-   password that looks like a word. The model layer has not been measured
-   with a real model yet (`backend/README.md`, "The sensitive-topic
-   check", has the command).
+   in the same sentence and the sentence is not about the owner ("I came
+   out to my parents" is "about sexuality or sex life"); and, from the
+   model, "the local model was not sure it is free of sensitive topics" or
+   why it gave no answer. The general words for a secret ("password", "PIN",
+   "API key", "2FA") count only with the secret or a give-away habit next to
+   them ("I keep the API key in an env var" is not a card).
+
+   The numbers, patterns only (no model runs where they were measured):
+   - **fair, measured before round 2** on the first held-out set (963 lines
+     written by someone who never saw the lists): 86.8% of sensitive lines
+     caught (credentials 94%, health 81%, money 85%, identity 95%, special
+     83%, location 72%, other people 99%), 15.3% of harmless lines flagged;
+   - **after round 2**, which used those same lines as training material
+     (now `backend/sensitive_cases/heldout1.jsonl`, no longer held out):
+     100% caught, 0.6% flagged - fitted to those lines, so not a fair test;
+   - **new wording** written by the round-2 author after the rules and
+     measured once before any change for it: 81.6% caught in a first batch
+     (79.8% before round 2) and 90.1% in a second (87.1% before), with
+     9.0% and 0% of harmless lines flagged (13.4% and 7.6% before). Same
+     author as the rules, so these flatter too;
+   - the development set (`dev.jsonl`): still all 777 lines in the eight
+     languages caught, none of its 259 plainly harmless lines flagged.
+
+   A second held-out set, written by someone else, is the fair test of
+   round 2; it had not been measured when this was written. What the
+   patterns cannot catch, the local model has to: other languages, slang
+   and euphemisms they have not seen, unlisted names, a password that looks
+   like a word with no password word next to it. The model layer has not
+   been measured with a real model yet (`backend/README.md`, "The
+   sensitive-topic check", has the command).
 
 **"Remember: ..."** is saved without a card only with a **colon**, on **one
 line**, at most 600 characters, from a typed or verified-voice live turn,

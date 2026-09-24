@@ -10,6 +10,13 @@ Runs anywhere; no model and no network are needed. What it proves:
    alone, the layer that works with no model. Per category and per language
    numbers are printed. The corpus has every category and every language,
    with both labels.
+   Round 2 (2026-09-24) adds two more files, measured the same way:
+   heldout1.jsonl, the first held-out set (963 lines, written by someone who
+   never saw the lists; training material since round 2): recall at least
+   98% overall and 95% per category, false positives at most 5%, and all of
+   it measured in under 3 seconds; and round2.jsonl, the round-2 author's own
+   lines: recall at least 97%, false positives at most 3%. Plus one check
+   per round-2 rule, and the owner's own topics named as the owner's.
 2. Every attack case from the earlier audits is flagged, word for word: the
    memory audit's attack_sensitive.py (38), the auto-learning red team's
    zz_attack1/2/5 lists and FIXLIST R1, and the memory-safety research's
@@ -64,6 +71,8 @@ import jarvis_sensitive as S  # noqa: E402
 
 PASSED, FAILED = [], []
 DEV = HERE / "sensitive_cases" / "dev.jsonl"
+HELDOUT1 = HERE / "sensitive_cases" / "heldout1.jsonl"
+ROUND2 = HERE / "sensitive_cases" / "round2.jsonl"
 LANGS = ("en", "es", "fr", "de", "it", "pt", "nl", "pl")
 
 
@@ -121,6 +130,111 @@ def t_the_development_corpus():
     other = [r for r in res["results"] if r.get("expect") == "model"]
     check("lines in languages the lists do not cover are marked expect=model, and counted "
           f"apart ({len(other)})", other and all(r["lang"] not in LANGS for r in other))
+
+
+def _numbers(path, label):
+    rows = S._load_cases(str(path))
+    t0 = time.time()
+    res = S.measure(rows, with_model=False)
+    took = time.time() - t0
+    import io
+    buf = io.StringIO()
+    got = S.report(res, with_model=False, show=True, out=buf)
+    print(f"\n  -- {label} (patterns only, no model) --")
+    for line in buf.getvalue().splitlines():
+        print("  " + line)
+    return rows, res, got, took
+
+
+def t_the_first_held_out_set():
+    """sensitive_cases/heldout1.jsonl: 963 lines written by someone who never
+    saw the lists. It was the held-out test until round 2 (2026-09-24), when it
+    became training material: the round-2 word classes were built from its
+    misses. So these numbers are no longer a fair test - they only stop the
+    classes it taught from being lost again. The thresholds leave room for a
+    later round to trade a line or two: recall at least 98% overall and 95%
+    in every category, false positives at most 5%."""
+    rows, res, got, took = _numbers(HELDOUT1, "the first held-out set, now training material")
+    check(f"heldout1.jsonl is the whole first held-out set ({len(rows)} lines)", len(rows) == 963)
+    a, n = got["recall"]
+    check(f"heldout1: recall >= 98% ({a}/{n})", n and a / n >= 0.98, got["recall"])
+    b, m = got["fp_harmless"]
+    check(f"heldout1: false positives <= 5% ({b}/{m})", m and b / m <= 0.05, got["fp_harmless"])
+    for cat in S.CATEGORIES:
+        g = [r for r in res["results"] if r["sensitive"] and r["category"] == cat]
+        hit = sum(1 for r in g if r["by_patterns"])
+        check(f"heldout1: recall for {cat} >= 95% ({hit}/{len(g)})", g and hit / len(g) >= 0.95)
+    check(f"heldout1: all 963 lines measure in about a second ({took:.2f} s; limit 3 s for a "
+          "slower PC)", took < 3.0, took)
+
+
+def t_the_round_two_lines():
+    """sensitive_cases/round2.jsonl: the round-2 author's own lines - one per
+    class of held-out miss (written before the rules), everyday harmless lines
+    aimed at the new rules, and two fresh batches written afterwards to check
+    them. Same author as the rules, so the numbers flatter; the thresholds
+    guard the classes: recall at least 97%, false positives at most 3%."""
+    rows, res, got, took = _numbers(ROUND2, "round 2's own lines")
+    a, n = got["recall"]
+    check(f"round2: recall >= 97% ({a}/{n})", n and a / n >= 0.97, got["recall"])
+    b, m = got["fp_harmless"]
+    check(f"round2: false positives <= 3% ({b}/{m})", m and b / m <= 0.03, got["fp_harmless"])
+
+
+def t_round_two_classes():
+    """One line per round-2 rule that is not just a word: each is its own
+    check, so a later change that breaks one says which."""
+    flagged = {
+        # a password word with a value, a code right after it, or a give-away habit
+        "my password is sunflower": "credentials",
+        "vpn user owner01 pass Gr33nTea!": "credentials",
+        "router admin is admin / admin123": "credentials",
+        "the password is the street I grew up on": "credentials",
+        "door code at work changed to C1492X": "credentials",
+        "my PIN is my birthday backwards": "credentials",
+        # found by round 2's own audit of the password rule
+        "my password is correct horse battery staple": "credentials",
+        "the password for the NAS is also the wifi one": "credentials",
+        "I never change my passwords": "credentials",
+        "I write my PINs on my cards": "credentials",
+        "my ssh key has no passphrase": "credentials",
+        "my password is too simple, it's just qwerty": "credentials",
+        "I was addicted to amphetamines": "health",
+        "my sugar was 14 this morning": "health",
+        # a named street plus a routine; a home by landmarks
+        "I park on Fern Street overnight": "location",
+        "our flat's opposite the Tesco on Station Road": "location",
+        # a party by its short name; a condition by its initials
+        "ik ben lid van de SP": "special",
+        "I have POTS": "health",
+        # a birth date said informally
+        "born in '92, 12th jan": "identity",
+        "I turn 40 on the 2nd of June": "identity",
+    }
+    for text, cat in flagged.items():
+        p = S.patterns(text)
+        check(f"flagged, {cat}: {text!r}", p["sensitive"] and cat in p["categories"], p)
+    harmless = [
+        # security talk with no secret in it
+        "I keep the API key in an env var, never in the repo",
+        "two-factor is on for all my accounts", "I prefer passkeys over passwords",
+        "git says my SSH key is fine now", "the office door code changed again",
+        "the API key is also in the vault", "went to the product demo",
+        "the test fixture logs in a fake user with password \"changeme\"",
+        # software about a topic; a title; hyperbole
+        "I'm building a budgeting app for fun", "the password field should show a strength meter",
+        "I'm reading The Psychology of Money", "addicted to Hollow Knight right now",
+        "I'm allergic to meetings before 10",
+        # a pet's health; a group with no "my"; the owner's own wedding
+        "my cat's on antibiotics for an ear infection", "I'm cooking for friends on Saturday",
+        "I'm getting married next June!",
+        # sightseeing, studying, a public figure
+        "we visited a mosque in Istanbul on holiday", "I study the history of religion",
+        "my favourite author is Terry Pratchett",
+    ]
+    for text in harmless:
+        p = S.patterns(text)
+        check(f"not flagged: {text!r}", not p["sensitive"], p)
 
 
 # ====================================================== 2. the attack cases
@@ -220,6 +334,27 @@ def t_the_owners_own_special_topics_are_not_someone_elses():
                        ("I'm mixed race", "about ethnicity, a sensitive topic")):
         v = S.classify(text, use_model=False)
         check(f"{text!r}: {want!r}", v["reason"] == want and v["categories"] == ["special"], v)
+    # Round 2: the owner's own topic with another person also named. These
+    # used to say "someone else's" (checked against the first held-out set).
+    for text, want in (
+            ("I came out to my parents last year", "about sexuality or sex life, a sensitive topic"),
+            ("came out as trans to my parents last week",
+             "about sexuality or sex life, a sensitive topic"),
+            ("The owner is a lesbian and lives with her girlfriend.",
+             "about sexuality or sex life, a sensitive topic"),
+            ("me and the wife are swingers", "about sexuality or sex life, a sensitive topic"),
+            ("I told my boss I'm gay", "about sexuality or sex life, a sensitive topic"),
+            ("my old landlord is suing me",
+             "about arrests, courts or a criminal record, a sensitive topic"),
+            ("I'm in the Communist Party, don't tell work",
+             "about politics or union membership, a sensitive topic")):
+        v = S.classify(text, use_model=False)
+        check(f"the owner's own: {text!r}: {want!r}", v["reason"] == want
+              and "special" in v["categories"], v)
+    for text in ("My brother is gay", "I think my sister is pregnant", "She was arrested",
+                 "The owner's sister is pregnant", "I told my boss my sister is ill"):
+        v = S.classify(text, use_model=False)
+        check(f"someone else's: {text!r}", "someone else's" in v["reason"], v)
     v = S.classify("My brother is gay", use_model=False)
     check("'My brother is gay': someone else's", v["reason"] ==
           "about someone else's sexuality or sex life, a sensitive topic", v)
