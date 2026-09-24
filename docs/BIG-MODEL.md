@@ -280,8 +280,10 @@ questions are asked in the Brain window, Memory tab, "Deep questions".
 **On the phone:** open Mind (the button on Home), then the "Big model
 (slow)" section, under "Second graphics card". It shows what Jarvis found,
 the main switch and one switch per job. Turning a switch on raises the
-approval card; the switch says "Waiting for you to approve the card on your
-PC or phone" until you answer it. Right below it, "Deep questions" has the
+approval card; the switch says "Waiting for your approval. Approve it on
+your PC or on this phone's Home screen." until you answer it. If the card
+ends without turning the switch on, a line under the switch says how (for
+example "You said no, so ... stays off."). Right below it, "Deep questions" has the
 box to ask one ("Ask slowly") and the recent answers. The phone does not
 notify you when an answer is ready; look in that list.
 
@@ -328,6 +330,21 @@ $t = (py -3 .\jarvis_token_store.py show); $h = @{ 'X-Jarvis-Token' = $t; 'X-Jar
 The state goes `queued` → `loading` (colibri starting, can take minutes) →
 `thinking` → `done` (or `failed`, with the reason in `why`). At most three
 questions can be waiting or running at once; they are answered one at a time.
+If the big model is already working on another job (a wiki page, say), the
+question waits, and its line says the big model is busy and what with; it
+starts when that job is done.
+
+A few things that fail on purpose, rather than saving something wrong:
+
+- **An answer cut off while the model was still thinking.** Models like
+  this one first write their reasoning between `<think>` and `</think>`,
+  then the answer. If the model stops before `</think>` (it hit the length
+  limit, `[big_model] deep_max_tokens`, or just stopped), everything it
+  wrote was reasoning, not an answer. The question is marked `failed`, with
+  the reason, and nothing is saved.
+- **After a failure, a new question tries again at once.** When the big
+  model fails to start, Jarvis normally waits a minute before trying it
+  again. Asking a new question skips that wait.
 
 **Where the answers are kept:** `deep-questions.jsonl` in your Jarvis settings
 folder, on this PC - your own question and answer, like a chat you chose to
@@ -343,9 +360,11 @@ can take an hour and should survive a restart.
 ## How fast is it, really?
 
 Every deep question records how long it took, how many tokens (pieces of
-words) the model wrote, and tokens and words per second. The time includes
-reading your question, so it is a little slower than colibri's "decode"
-figures. To list them (the file is in your settings folder; this changes
+words) the model wrote, and tokens and words per second. The words counted
+include the model's reasoning (the part between `<think>` and `</think>`),
+not only the answer you see, because the time was spent writing all of it.
+The time includes reading your question, so it is a little slower than
+colibri's "decode" figures. To list them (the file is in your settings folder; this changes
 nothing):
 
 ```powershell
