@@ -35,12 +35,12 @@ const check = async (name, fn) => {
 const pumpLines = (body) => body.split("\n").map((l) => l.replace(/\r$/, "")).filter((l) => l.trim());
 
 /** The route line pump_chat sends first (commands.rs route_line_from_header:
- *  lane, where and gate only - checked against this same fixture by the
+ *  lane, where, gate and second_card only - checked against this same fixture by the
  *  Rust test `the_route_line_is_built_from_the_real_header`). */
 const routeLine = (header) => {
   const h = JSON.parse(header);
   const out = {};
-  for (const k of ["lane", "where", "gate"]) if (typeof h[k] === "string") out[k] = h[k];
+  for (const k of ["lane", "where", "gate", "second_card"]) if (typeof h[k] === "string") out[k] = h[k];
   return "\u001fjarvis-route:" + JSON.stringify(out);
 };
 

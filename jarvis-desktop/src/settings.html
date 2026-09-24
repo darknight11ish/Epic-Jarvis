@@ -300,6 +300,66 @@
         </div>
       </section>
 
+      <!-- ── Second graphics card ─────────────────────────────────────────
+           Read from GET /api/second-card (settings.js, second-card part).
+           Every switch is OFF until the owner turns it on, and can only be
+           turned on once Jarvis sees a capable second card. Turning one ON
+           raises an approval card and changes nothing by itself; turning
+           one OFF happens at once. docs/SECOND-CARD.md is the owner's guide. -->
+      <section class="card" id="second-card">
+        <h2>Second graphics card</h2>
+        <p class="note">
+          With a second graphics card in this computer, Jarvis can use it for
+          longer conversations, pictures and more, and everyday chat stays
+          fast on your main card. Everything here is off until you turn it
+          on. Turning something on shows you an approval card first;
+          turning something off happens at once. Nothing here sends anything
+          off this computer.
+        </p>
+
+        <p class="state" id="sc-state" role="status">Checking your graphics cards…</p>
+
+        <div id="sc-body" hidden>
+          <h3 class="subhead">What Jarvis found</h3>
+          <p class="note" id="sc-found"></p>
+          <ul class="sc-cards" id="sc-cards"></ul>
+
+          <h3 class="subhead">Switches</h3>
+          <p class="sc-blocked" id="sc-blocked" hidden></p>
+          <div class="sc-switches" id="sc-switches"></div>
+          <div class="row">
+            <span class="status" id="sc-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead">The second copy of Ollama</h3>
+          <p class="note">
+            Ollama is the program that runs the models. While a switch here
+            is on, Jarvis runs a second copy of it that uses only the second
+            card and that only this computer can reach.
+          </p>
+          <p class="sc-line" id="sc-lane"></p>
+
+          <h3 class="subhead">Keep everyday chat on the main card</h3>
+          <p class="sc-line" id="sc-pinned"></p>
+          <div id="sc-pin" hidden>
+            <p class="note">
+              Run this once. It sets one Windows setting for your user
+              account, so your everyday Ollama only uses the main card and
+              leaves the second one free. Nothing is written to any file.
+              To run it: press Copy, open PowerShell from the Start menu,
+              paste it in and press Enter. Then quit Ollama (right-click its
+              icon by the clock) and start it again.
+            </p>
+            <div class="row sc-command">
+              <input id="sc-pin-command" type="text" readonly spellcheck="false" autocomplete="off"
+                     aria-label="The PowerShell command that keeps everyday Ollama on the main card" />
+              <button class="btn ghost small" id="sc-pin-copy" type="button">Copy</button>
+            </div>
+            <span class="status" id="sc-pin-status" role="status"></span>
+          </div>
+        </div>
+      </section>
+
       <section class="card">
         <h2>Frequently asked questions</h2>
         <p class="note">

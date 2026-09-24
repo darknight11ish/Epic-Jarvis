@@ -995,10 +995,16 @@ function routeFromHeader(route) {
         ? "cloud"
         : "local";
   const cloud = where === "cloud";
+  const lane = typeof route.lane === "string" && route.lane ? route.lane : null;
+  // second-card.patch: on a turn the second graphics card answered, `lane`
+  // is the model really answering and `second_card` says why ("long_context"
+  // or "vision"). It is still this PC, so still Local - the badge says which
+  // card, in words, rather than a second badge.
+  const second = typeof route.second_card === "string" && route.second_card;
   return {
     tier: cloud ? "cloud" : "local",
     label: cloud ? "Cloud" : "Local",
-    model: typeof route.lane === "string" && route.lane ? route.lane : null,
+    model: lane && second ? `${lane} on the second graphics card` : lane,
   };
 }
 
@@ -1122,7 +1128,8 @@ function pictureNoticeWords(check) {
       `Your current model${model} can't see pictures, so it would answer as if ` +
       `the picture were not there. A picture model such as qwen2.5vl can be ` +
       `installed later - it needs more graphics memory; your planned second ` +
-      `graphics card would help. The picture is never sent to an online model ` +
+      `graphics card would help (once it is in, turn on Pictures in Settings, ` +
+      `under Second graphics card). The picture is never sent to an online model ` +
       `instead. Send your words without it?`
     );
   }

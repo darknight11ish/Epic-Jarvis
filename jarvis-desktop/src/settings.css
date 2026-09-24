@@ -612,3 +612,85 @@ select:focus-visible {
 }
 
 .about-fact a:hover { text-decoration: underline; }
+
+/* --------------------------------------------------------------------------
+   Second graphics card. Built from the same pieces as the rest of the page:
+   `.toggle` rows for the switches, `.note` words, `.status` results. A switch
+   that cannot be turned on yet stays on screen, disabled, with its reason
+   in words beside it - never greyed out with nothing said.
+   -------------------------------------------------------------------------- */
+
+#sc-state[data-tone="bad"] { color: var(--bad-text); }
+
+.sc-cards {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.sc-gpu {
+  display: flex;
+  flex-direction: column;
+  padding: 7px 10px;
+  margin-top: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+
+.sc-gpu[data-role="second"] { border-color: var(--line); }
+
+.sc-gpu-name { font-size: 12.5px; color: var(--text); }
+.sc-gpu-role { font-size: 11.5px; color: var(--text-muted); }
+
+.sc-blocked {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.sc-switch {
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sc-switch:first-child { border-top: none; padding-top: 0; }
+
+.sc-switch .toggle { margin-bottom: 4px; align-items: flex-start; }
+.sc-switch .toggle input { margin-top: 2px; flex: none; }
+
+/* A switch that cannot be turned on yet says why in the line under it, and
+   its name stays at full contrast so it can still be read. */
+.sc-switch .toggle:has(input:disabled) { cursor: default; }
+
+.sc-lines { padding-left: 23px; }
+
+.sc-lines p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.sc-lines .sc-why { color: var(--text); }
+.sc-lines .sc-waiting { color: var(--accent-text); font-weight: 600; }
+
+.sc-line {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.sc-line[data-tone="ok"] { color: var(--ok-text); }
+.sc-line[data-tone="bad"] { color: var(--bad-text); }
+.sc-line[data-tone="warn"] {
+  padding-left: 8px;
+  border-left: 3px solid var(--warn);
+}
+
+.sc-command { flex-wrap: nowrap; }
+.sc-command input { flex: 1; min-width: 0; }
+.sc-command .btn.small { margin-left: 0; flex: none; }

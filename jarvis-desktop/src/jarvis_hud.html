@@ -1604,7 +1604,13 @@ async function send(){
       const routeRaw = res.headers.get("X-Jarvis-Route");
       if(routeRaw){
         const route = JSON.parse(routeRaw);
-        $("r-model").textContent = route.lane || "—";
+        // second-card.patch: `second_card` is set only on a turn the second
+        // graphics card answered; `lane` is then the model really answering.
+        const secondCard = typeof route.second_card === "string" && route.second_card;
+        $("r-model").textContent = route.lane
+          ? route.lane + (secondCard ? " on the second graphics card" : "")
+          : "—";
+        $("chip-model").title = secondCard ? "Answered on the second graphics card" : "";
         $("r-gate").textContent = route.gate || "—";
         $("r-why").textContent = route.reason || "—";
         $("r-complexity").textContent = (route.complexity ?? 0).toFixed(2);

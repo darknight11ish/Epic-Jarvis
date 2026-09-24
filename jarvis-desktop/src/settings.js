@@ -32,6 +32,7 @@ import {
   followZoom,
   linkWords,
   onLink,
+  onQueue,
   reconnect,
   setZoom,
   start as startLink,
@@ -1157,5 +1158,400 @@ document.addEventListener("click", (event) => {
     window.open(anchor.href, "_blank", "noopener");
   }
 });
+
+/* ==========================================================================
+   Second graphics card
+   --------------------------------------------------------------------------
+   Everything built for a second graphics card, all OFF (docs/SECOND-CARD.md).
+   Read from `get_second_card` (GET /api/second-card, the backend's
+   jarvis_second_card.status() - its real shape is
+   tests/fixtures/second-card-cases.json), written one switch at a time with
+   `set_second_card`.
+
+   Turning a switch ON approves nothing: the backend raises ONE approval card
+   and answers `pending: true`, and the switch stays off until the owner says
+   yes on that card, in the Jarvis bar, on the widget or on the phone. There
+   is no event for the card being decided, so this re-reads when the approval
+   queue changes (the "approvals-changed" signal every window gets), when the
+   window comes back into view, and gently every few seconds while a card is
+   waiting. Turning a switch OFF is immediate.
+
+   Every word about the cards comes from the backend's own sentences (`why`,
+   `pin_note`); nothing here guesses what a card can do.
+   ========================================================================== */
+
+const sc = {
+  card: $("second-card"),
+  state: $("sc-state"),
+  body: $("sc-body"),
+  found: $("sc-found"),
+  cards: $("sc-cards"),
+  blocked: $("sc-blocked"),
+  switches: $("sc-switches"),
+  status: $("sc-status"),
+  lane: $("sc-lane"),
+  pinned: $("sc-pinned"),
+  pin: $("sc-pin"),
+  pinCommand: $("sc-pin-command"),
+  pinCopy: $("sc-pin-copy"),
+  pinStatus: $("sc-pin-status"),
+};
+
+/** The same words the Brain's model install uses while its card waits. */
+const SC_WAITING =
+  "Waiting for your approval. The card is in the Jarvis bar and on the widget — nothing changes until you approve it there.";
+const SC_UPDATE =
+  "This PC's Jarvis does not have the second graphics card part yet. Update the backend by running apply-patches.ps1, then open this again.";
+/** The main switch has no row in `features`; these are its words. */
+const SC_MASTER = {
+  id: "master",
+  name: "Use the second graphics card",
+  what: "The main switch. None of the switches below can be turned on until this one is on.",
+};
+const SC_ROLE = {
+  primary: "the one chat runs on",
+  second: "the second card",
+  unused: "not used",
+};
+const SC_LANE = { off: "Off", starting: "Starting", running: "Running", failed: "Failed" };
+/** How often, and for how long, to re-read while a card waits. */
+const SC_POLL_MS = 5000;
+const SC_POLL_FOR_MS = 10 * 60 * 1000;
+
+let scLast = null;
+let scReadSeq = 0;
+let scBusy = false;
+let scPollTimer = null;
+/** When the gentle re-reading stops; 0 while no card waits. */
+let scPollUntil = 0;
+/** Switches with a card waiting at the last read, to say how each ended. */
+let scWaiting = new Set();
+
+/** A backend sentence as a sentence: first letter up, one full stop. */
+function scSentence(text) {
+  const s = String(text || "").trim().replace(/[.\s]+$/, "");
+  return s ? `${s.charAt(0).toUpperCase()}${s.slice(1)}.` : "";
+}
+
+/** A backend sentence after a colon: as it was written, with one full stop. */
+function scClause(text) {
+  const s = String(text || "").trim().replace(/[.\s]+$/, "");
+  return s ? `${s}.` : "";
+}
+
+/** An error in words. The Rust side only ever rejects with a sentence; if
+ *  anything else arrives (a bridge error, JSON), it is not shown as is. */
+function scProblemWords(error) {
+  const said = String((error && error.message) || error || "").trim();
+  if (!said || /[{}<>]|::|not allowed|undefined|null/i.test(said) || said.length > 300) {
+    return "Try again in a moment, or restart Jarvis Desktop.";
+  }
+  return said;
+}
+
+function scNode(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function scGigabytes(mb) {
+  const n = Number(mb);
+  return Number.isFinite(n) && n > 0 ? `${Math.round(n / 1024)} GB` : "";
+}
+
+/** The model a feature uses, and whether it is installed - with the exact
+ *  name to type when it is not. There is no catalogue: the Brain's Install
+ *  box is the existing way, a typed name and an approval card. */
+function scModelLine(feature) {
+  const model = typeof feature.model === "string" ? feature.model.trim() : "";
+  if (!model) return "The model is chosen once a capable second card is found.";
+  if (feature.model_installed === true) return `Model: ${model}, installed.`;
+  if (feature.model_installed === false) {
+    return `Model: ${model}, not installed yet. To install it, open the Brain window, go to ` +
+      `Faculties, then Models, type ${model} in the Install box and press Install. ` +
+      "Nothing downloads until you approve that card too.";
+  }
+  return `Model: ${model}. Jarvis could not check whether it is installed.`;
+}
+
+function scMemoryLine(feature) {
+  const gib = Number(feature.memory_gib);
+  if (feature.memory_gib === null || feature.memory_gib === undefined || !Number.isFinite(gib)) {
+    return "";
+  }
+  return `Uses about ${gib.toFixed(1)} GB of the second card's memory.`;
+}
+
+/**
+ * Whether a switch may be changed now, and if not, why - in words.
+ * Only turning ON is ever held back: OFF only narrows what runs, so a switch
+ * that is on can always be turned off, even with the card gone.
+ */
+function scHeld(sw, status, names) {
+  if (sw.pending) return SC_WAITING;
+  if (sw.enabled) return "";
+  const detected = status.detected || {};
+  if (detected.capable !== true) {
+    return `Can't be turned on yet: ${scClause(detected.why) || "no capable second graphics card was found."}`;
+  }
+  if (sw.id !== "master" && status.enabled !== true) {
+    return `Turn on "${SC_MASTER.name}" first.`;
+  }
+  const missing = (sw.needs || []).filter((need) => !names.enabled.has(need));
+  if (missing.length) {
+    return `Needs ${missing.map((m) => `"${names.byId[m] || m}"`).join(" and ")} on first.`;
+  }
+  return "";
+}
+
+function scSwitchRow(sw, status, names) {
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = sw.id;
+  row.dataset.state = sw.pending ? "waiting" : sw.enabled ? "on" : "off";
+
+  const label = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `sc-switch-${sw.id}`;
+  input.checked = Boolean(sw.enabled);
+  const held = scHeld(sw, status, names);
+  input.disabled = Boolean(held);
+  const text = scNode("span", "", sw.name);
+  text.append(scNode("span", "toggle-detail", sw.what || ""));
+  label.append(input, text);
+  row.append(label);
+
+  const lines = scNode("div", "sc-lines");
+  const describedBy = [];
+  const addLine = (className, words) => {
+    if (!words) return;
+    const line = scNode("p", className, words);
+    line.id = `sc-${sw.id}-${className.split(" ").pop()}`;
+    describedBy.push(line.id);
+    lines.append(line);
+  };
+  addLine("sc-why", sw.why);
+  const capable = (status.detected || {}).capable === true;
+  if (sw.pending) addLine("sc-held sc-waiting", SC_WAITING);
+  // With no capable card, the one line above the switches says why for all
+  // of them, rather than the same sentence under each.
+  // Nor twice when the backend's own line already says it ("Off. Needs
+  // Longer conversations on first.").
+  else if (held && capable && !String(sw.why || "").includes(held.replace(/"/g, ""))) {
+    addLine("sc-held", held);
+  }
+  if (held && !capable) describedBy.push("sc-blocked");
+  if (sw.id !== "master") {
+    addLine("sc-model", scModelLine(sw));
+    addLine("sc-memory", scMemoryLine(sw));
+  }
+  if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
+  row.append(lines);
+
+  input.addEventListener("change", () => scToggle(sw, input));
+  return row;
+}
+
+function scCardItem(card) {
+  const item = scNode("li", "sc-gpu");
+  item.dataset.role = String(card.role || "unused");
+  const size = scGigabytes(card.total_mb);
+  item.append(scNode("span", "sc-gpu-name", `${card.name || "A graphics card"}${size ? ` (${size})` : ""}`));
+  const role = SC_ROLE[card.role] || SC_ROLE.unused;
+  item.append(scNode("span", "sc-gpu-role", `${role.charAt(0).toUpperCase()}${role.slice(1)}. ${scSentence(card.why)}`.trim()));
+  return item;
+}
+
+/** The master switch in the same shape as a feature row. */
+function scMasterSwitch(status) {
+  const detected = status.detected || {};
+  const pending = (status.pending || []).includes("master");
+  let why = "Off.";
+  if (status.enabled && status.active) why = "On.";
+  else if (status.enabled) {
+    why = `On, but it cannot run: ${scClause(detected.why) || "no capable second card was found."} Your choice is kept.`;
+  }
+  return { ...SC_MASTER, enabled: status.enabled === true, pending, needs: [], why };
+}
+
+function scShowProblem(words) {
+  scLast = null;
+  sc.body.hidden = true;
+  sc.state.hidden = false;
+  sc.state.dataset.tone = "bad";
+  sc.state.textContent = words;
+  scStopPoll();
+}
+
+function scPaint(status) {
+  const previous = scLast;
+  scLast = status;
+  const detected = status.detected || {};
+  const features = status.features.filter((f) => f && typeof f.id === "string");
+  const pending = new Set(Array.isArray(status.pending) ? status.pending : []);
+
+  sc.state.hidden = true;
+  delete sc.state.dataset.tone;
+  sc.body.hidden = false;
+
+  // What was found, in the backend's own words.
+  sc.found.textContent = scSentence(detected.why) || "Jarvis did not say what it found.";
+  const cards = Array.isArray(detected.cards) ? detected.cards : [];
+  sc.cards.replaceChildren(...cards.map(scCardItem));
+  sc.cards.hidden = !cards.length;
+
+  sc.blocked.hidden = detected.capable === true;
+  sc.blocked.textContent = detected.capable === true ? ""
+    : `Nothing here can be turned on until Jarvis finds a capable second graphics card ` +
+      `(an RTX 20 series or newer, with 10 GB or more): ${scClause(detected.why)} ` +
+      "The switches are shown so you can see what is coming.";
+
+  const names = {
+    byId: Object.fromEntries(features.map((f) => [f.id, String(f.name || f.id)])),
+    enabled: new Set(features.filter((f) => f.enabled === true).map((f) => f.id)),
+  };
+  const rows = [scMasterSwitch(status)].concat(features.map((f) => ({
+    ...f, enabled: f.enabled === true, pending: pending.has(f.id),
+    needs: Array.isArray(f.needs) ? f.needs : [],
+  })));
+  // Keep the keyboard where it was across a repaint.
+  const focused = document.activeElement && document.activeElement.id;
+  sc.switches.replaceChildren(...rows.map((sw) => scSwitchRow(sw, status, names)));
+  if (focused && focused.startsWith("sc-switch-")) {
+    const again = document.getElementById(focused);
+    if (again) again.focus();
+  }
+
+  // The second Ollama.
+  const lane = status.lane || {};
+  const laneWord = SC_LANE[lane.state] || "Unknown";
+  sc.lane.textContent = `${laneWord}. ${scSentence(lane.why)}`.trim();
+  sc.lane.dataset.tone = lane.state === "running" ? "ok" : lane.state === "failed" ? "bad" : "";
+
+  // Everyday Ollama pinned to the main card.
+  sc.pinned.textContent = scSentence(status.pin_note) ||
+    "Jarvis could not tell whether your everyday Ollama is kept on the main card.";
+  sc.pinned.dataset.tone = status.main_ollama_pinned === true ? "ok"
+    : status.main_ollama_pinned === false ? "warn" : "";
+  const command = typeof status.pin_command === "string" ? status.pin_command.trim() : "";
+  sc.pin.hidden = !command;
+  sc.pinCommand.value = command;
+
+  // How each card that was waiting ended.
+  if (previous) {
+    for (const id of scWaiting) {
+      if (pending.has(id)) continue;
+      const name = id === "master" ? SC_MASTER.name : names.byId[id] || id;
+      const on = id === "master" ? status.enabled === true : names.enabled.has(id);
+      report(sc.status, on ? `"${name}" is on.` : `"${name}" was not turned on: the card was denied or ran out of time.`,
+        on ? "ok" : null);
+      announce(sc.status.textContent);
+    }
+  }
+  scWaiting = pending;
+  if (pending.size) scStartPoll();
+  else scStopPoll();
+}
+
+async function loadSecondCard() {
+  if (!IS_TAURI || !sc.card) return;
+  const seq = ++scReadSeq;
+  let answer;
+  try {
+    answer = await invoke("get_second_card");
+  } catch (error) {
+    if (seq !== scReadSeq) return;
+    scShowProblem(`Jarvis could not be asked about your graphics cards. ${scProblemWords(error)}`);
+    return;
+  }
+  if (seq !== scReadSeq) return;
+  if (answer && answer.available === false) {
+    scShowProblem(typeof answer.why === "string" && answer.why ? answer.why : SC_UPDATE);
+    return;
+  }
+  if (!answer || typeof answer !== "object" || !answer.detected || !Array.isArray(answer.features)) {
+    scShowProblem(`Jarvis's answer about your graphics cards could not be read. ${SC_UPDATE}`);
+    return;
+  }
+  scPaint(answer);
+}
+
+function scStartPoll() {
+  if (!scPollUntil) scPollUntil = Date.now() + SC_POLL_FOR_MS;
+  clearTimeout(scPollTimer);
+  scPollTimer = null;
+  // Gently, and not forever: after ten minutes a card nobody has answered is
+  // left to the approval-queue signal and to the window coming back into view.
+  if (Date.now() > scPollUntil) return;
+  scPollTimer = setTimeout(() => {
+    scPollTimer = null;
+    // Not while the window is hidden; coming back into view re-reads.
+    if (!document.hidden) loadSecondCard();
+  }, SC_POLL_MS);
+}
+
+function scStopPoll() {
+  clearTimeout(scPollTimer);
+  scPollTimer = null;
+  scPollUntil = 0;
+}
+
+/** One switch, one request. ON raises a card and nothing more. */
+async function scToggle(sw, input) {
+  const turnOn = input.checked;
+  if (scBusy) {
+    input.checked = !turnOn;
+    return;
+  }
+  scBusy = true;
+  input.disabled = true;
+  report(sc.status, turnOn ? `Asking to turn on "${sw.name}"…` : `Turning off "${sw.name}"…`);
+  try {
+    const out = await invoke("set_second_card", { feature: sw.id, enabled: turnOn });
+    if (turnOn && out && out.pending === true) {
+      report(sc.status, SC_WAITING, "ok");
+      announce(`"${sw.name}": ${SC_WAITING}`);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(sc.status, out.message, "ok");
+    } else {
+      report(sc.status, turnOn ? `"${sw.name}" is on.` : `"${sw.name}" is off.`, "ok");
+    }
+  } catch (error) {
+    report(sc.status, scProblemWords(error), "bad");
+    announce(sc.status.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  // The switch shows what Jarvis says, never what was clicked: ON stays off
+  // until the card is approved.
+  await loadSecondCard();
+}
+
+if (sc.pinCopy) {
+  sc.pinCopy.addEventListener("click", async () => {
+    sc.pinCommand.select();
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(sc.pinCommand.value);
+      copied = true;
+    } catch {
+      try { copied = document.execCommand("copy"); } catch { copied = false; }
+    }
+    report(sc.pinStatus, copied ? "Copied. Paste it into PowerShell and press Enter." : "Select it and press Ctrl+C.",
+      copied ? "ok" : null);
+  });
+}
+
+// The approval-decided signal: the queue changes when a card is answered
+// (or expires). Only worth a read while one of these cards is waiting.
+onQueue(() => {
+  if (scWaiting.size) loadSecondCard();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadSecondCard();
+});
+loadSecondCard();
 
 loadUpdate();

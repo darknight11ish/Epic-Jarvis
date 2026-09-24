@@ -43,6 +43,15 @@ export const NOTE_TARGETS = JSON.parse(fsSync.readFileSync(path.join(
   "test", "resources", "contract", "note-targets.json"), "utf8"));
 
 /**
+ * The backend's real `GET /api/second-card` answers - jarvis_second_card.status(),
+ * one per named case, written by tools/gen_second_card_cases.py. Never
+ * hand-made: a test picks a case by name, e.g. `SECOND_CARD.capable_off`.
+ */
+export const SECOND_CARD = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "second-card-cases.json"),
+  "utf8")).cases;
+
+/**
  * Where the browser is.
  *
  * Playwright's own resolution is wrong in the container these were written in
@@ -355,7 +364,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard }) {
   const listeners = {};
   window.__calls = [];
   const state = {
@@ -667,6 +676,40 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           // scenario sets `vision`; unset, the model is the text-only one
           // this project actually runs.
           case "local_model_vision": return window.__vision;
+          // commands.rs get_second_card / set_second_card. `status` is a
+          // real status() from SECOND_CARD; the Rust passes a 200 on as is.
+          // `unavailable` is what it answers for a 404, or the 503
+          // `{"available": false}` of a backend without the module; `getFails`
+          // / `setFails` are the sentence it rejects with.
+          case "get_second_card": {
+            const sc = window.__secondCard;
+            sc.reads += 1;
+            if (sc.getFails) throw new Error(sc.getFails);
+            if (sc.unavailable) {
+              return { available: false, why: "This PC's Jarvis does not have the second graphics card part yet. Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            return JSON.parse(JSON.stringify(sc.status));
+          }
+          case "set_second_card": {
+            const sc = window.__secondCard;
+            sc.changes.push({ feature: args.feature, enabled: args.enabled });
+            if (sc.setFails) throw new Error(sc.setFails);
+            // What jarvis_second_card.request_change does to status(): ON
+            // puts the switch in `pending` (a card is up, NOTHING is on);
+            // OFF clears it at once.
+            const st = sc.status;
+            const row = (st.features || []).find((f) => f.id === args.feature);
+            if (args.enabled) {
+              if (!st.pending.includes(args.feature)) st.pending.push(args.feature);
+              return { ok: true, enabled: false, pending: true,
+                       message: "Approve the card on your PC or phone to turn it on. Nothing changes until you do." };
+            }
+            if (args.feature === "master") st.enabled = false;
+            else if (row) row.enabled = false;
+            st.pending = st.pending.filter((p) => p !== args.feature);
+            const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
+            return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
+          }
           case "set_theme": return args.theme;
           case "brain_read": {
             const out = {};
@@ -786,6 +829,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__bindAddressRefuses = bindAddressRefuses || null;
   window.__tokenSaveRefuses = tokenSaveRefuses || null;
   window.__bindAddressRefusalMessage = bindAddressRefusalMessage || null;
+  // Unset, the PC as it is today: one graphics card (the real `one_card`).
+  window.__secondCard = { reads: 0, changes: [], getFails: null, setFails: null,
+                          unavailable: false, ...(secondCard || {}) };
+  window.__secondCard.status = JSON.parse(JSON.stringify(window.__secondCard.status || null));
   window.__vision = vision || { model: "qwen3:8b", vision: false,
     reason: "Ollama lists what qwen3:8b can do, and pictures are not on the list." };
   window.__emit = (n, p) => (listeners[n] || []).forEach(f => f({ payload: p }));
@@ -824,6 +871,7 @@ export async function open(browser, base, file, data, viewport) {
     memoryRefuses: null, learningFloor: false, apiSettings: null, tokenSaveRefuses: null,
     bindAddressRefuses: null, bindAddressRefusalMessage: null, chatReplies: null,
     vision: null,
+    secondCard: { status: SECOND_CARD.one_card },
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
     ...data,
   });
