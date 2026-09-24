@@ -226,6 +226,19 @@ def t_switches():
         held[0]()
         check("OFF while waiting, then approved: the later OFF wins",
               SC._read_switches()["features"]["vision"] is False)
+        # AP-5: two full rounds; the first card is answered last.
+        cards = []
+        yes = lambda a, dd, p: Verdict(True, "ask", "approved")
+        SC.request_change("vision", True, gate=yes, spawn=cards.append)
+        SC.request_change("vision", False)
+        SC.request_change("vision", True, gate=yes, spawn=cards.append)
+        SC.request_change("vision", False)
+        cards[0]()
+        check("two ON/OFF rounds, the FIRST card approved: the later OFF still wins",
+              len(cards) == 2 and SC._read_switches()["features"]["vision"] is False)
+        cards[1]()
+        check("... and the second card too",
+              SC._read_switches()["features"]["vision"] is False)
         code, out = SC.request_change("vision", True, gate=gate, tier_of=lambda a: "auto")
         check("tier not 'ask': refused before any card", code == 503 and "must" in out["error"]
               and "be 'ask'" in out["error"])

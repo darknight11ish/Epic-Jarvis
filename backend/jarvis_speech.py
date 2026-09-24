@@ -463,6 +463,11 @@ WAKE_ACTION = "change_own_config"
 _WAKE_LOCK = threading.Lock()
 _WAKE_PENDING: Optional[dict] = None      # {"id", "since", "timeout", "withdrawn"}
 _WAKE_LAST: Optional[dict] = None         # how the last card ended
+#: Every card switched off while it waited and not yet answered, by its id.
+#: A SET, not a flag on _WAKE_PENDING: a new ON replaces _WAKE_PENDING, and
+#: the flag went with it - after two ON/OFF rounds, approving the FIRST card
+#: turned the wake word on although the owner's last word was OFF.
+_WAKE_WITHDRAWN: set = set()
 
 
 def _wake_enabled() -> bool:
@@ -540,6 +545,7 @@ def _wake_finish(pid: str, outcome: str, **extra) -> dict:
     with _WAKE_LOCK:
         if _WAKE_PENDING is not None and _WAKE_PENDING["id"] == pid:
             _WAKE_PENDING = None
+        _WAKE_WITHDRAWN.discard(pid)
         _WAKE_LAST = {"outcome": outcome, "at": time.time(),
                       **{k: v for k, v in extra.items() if k in ("reason",)}}
         last = dict(_WAKE_LAST)
@@ -578,8 +584,7 @@ def _wake_decide(pid: str, gate: Callable) -> dict:
         return _wake_finish(pid, "refused", request_id=rid,
                             reason=str(getattr(v, "reason", "refused"))[:200])
     with _WAKE_LOCK:
-        withdrawn = bool(_WAKE_PENDING and _WAKE_PENDING["id"] == pid
-                         and _WAKE_PENDING.get("withdrawn"))
+        withdrawn = pid in _WAKE_WITHDRAWN
     if withdrawn:
         # Switched off again while the card waited: the later "off" wins, so
         # approving a stale card cannot turn the microphone back on.
@@ -610,6 +615,7 @@ def set_wake_enabled(enabled: bool, *, gate: Optional[Callable] = None,
         with _WAKE_LOCK:
             if _WAKE_PENDING is not None:
                 _WAKE_PENDING["withdrawn"] = True
+                _WAKE_WITHDRAWN.add(_WAKE_PENDING["id"])
         err = _write_wake(False)
         _close_awake()
         if err:
@@ -686,6 +692,7 @@ def _reset_wake_for_tests() -> None:
     with _WAKE_LOCK:
         _WAKE_PENDING = None
         _WAKE_LAST = None
+        _WAKE_WITHDRAWN.clear()
     _close_awake()
 
 

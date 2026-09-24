@@ -1226,6 +1226,11 @@ def status() -> dict:
 _PENDING_LOCK = threading.Lock()
 _PENDING: dict = {}        # feature -> {"id", "since", "withdrawn"}
 _LAST: dict = {}           # feature -> how its last card ended
+#: Every card switched off while it waited and not yet answered, by its id.
+#: A SET, not a flag on _PENDING: a new ON replaces _PENDING[feature], and
+#: the flag went with it - after two ON/OFF rounds, approving the FIRST
+#: card turned the switch on although the owner's last word was OFF.
+_WITHDRAWN: set = set()
 
 
 def _tier(action: str) -> str:
@@ -1304,6 +1309,7 @@ def _finish(feature: str, pid: str, outcome: str, reason: str = "",
     with _PENDING_LOCK:
         if feature in _PENDING and _PENDING[feature]["id"] == pid:
             del _PENDING[feature]
+        _WITHDRAWN.discard(pid)
         _LAST[feature] = {"outcome": outcome, "reason": reason[:200]}
     _audit("second_card.decided", {"feature": feature, "outcome": outcome,
                                    **({"request_id": request_id} if request_id else {})})
@@ -1340,8 +1346,7 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
             return _finish(feature, pid, outcome, "", rid)
         return _finish(feature, pid, "refused", str(getattr(v, "reason", "refused")), rid)
     with _PENDING_LOCK:
-        withdrawn = bool(_PENDING.get(feature, {}).get("id") == pid
-                         and _PENDING[feature].get("withdrawn"))
+        withdrawn = pid in _WITHDRAWN
     if withdrawn:
         return _finish(feature, pid, "withdrawn",
                        "you turned it off while the card was waiting", rid)
@@ -1374,6 +1379,7 @@ def request_change(feature: str, enabled: bool, *, gate: Optional[Callable] = No
         with _PENDING_LOCK:
             if feature in _PENDING:
                 _PENDING[feature]["withdrawn"] = True
+                _WITHDRAWN.add(_PENDING[feature]["id"])
         err = _write_switch(feature, False)
         if err:
             return 500, {"error": err}
@@ -1455,6 +1461,7 @@ def _reset_for_tests() -> None:
     with _PENDING_LOCK:
         _PENDING.clear()
         _LAST.clear()
+        _WITHDRAWN.clear()
     _TAGS.clear()
     try:
         _LANE.stop("reset")

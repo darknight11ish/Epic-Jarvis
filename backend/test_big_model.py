@@ -237,6 +237,18 @@ def t_switches():
         held[0]()
         check("OFF while the card waited, then approved: the later OFF wins",
               BM._read_switches()["wiki"] is False)
+        # AP-5: two full rounds; the first card is answered last.
+        cards = []
+        yes = lambda a, dd, p: Verdict(True, "ask", "approved")
+        BM.request_change("wiki", True, gate=yes, spawn=cards.append)
+        BM.request_change("wiki", False)
+        BM.request_change("wiki", True, gate=yes, spawn=cards.append)
+        BM.request_change("wiki", False)
+        cards[0]()
+        check("two ON/OFF rounds, the FIRST card approved: the later OFF still wins",
+              len(cards) == 2 and BM._read_switches()["wiki"] is False)
+        cards[1]()
+        check("... and the second card too", BM._read_switches()["wiki"] is False)
         code, out = BM.request_change("wiki", True, gate=gate, tier_of=lambda a: "auto")
         check("tier not 'ask': refused before any card", code == 503 and "'ask'" in out["error"])
         check("unknown switch: 400", BM.request_change("chat", True)[0] == 400)

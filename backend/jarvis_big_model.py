@@ -1558,6 +1558,11 @@ def _last_measured(job: str) -> Optional[dict]:
 _PENDING_LOCK = threading.Lock()
 _PENDING: dict = {}
 _LAST: dict = {}
+#: Every card switched off while it waited and not yet answered, by its id.
+#: A SET, not a flag on _PENDING: a new ON replaces _PENDING[switch], and the
+#: flag went with it - after two ON/OFF rounds, approving the FIRST card
+#: turned the switch on although the owner's last word was OFF.
+_WITHDRAWN: set = set()
 
 
 def describe_on(switch: str, det: dict) -> str:
@@ -1611,6 +1616,7 @@ def _finish(switch: str, pid: str, outcome: str, reason: str = "", request_id=No
     with _PENDING_LOCK:
         if switch in _PENDING and _PENDING[switch]["id"] == pid:
             del _PENDING[switch]
+        _WITHDRAWN.discard(pid)
         _LAST[switch] = {"outcome": outcome, "reason": reason[:200]}
     _audit("big_model.decided", {"switch": switch, "outcome": outcome,
                                  **({"request_id": request_id} if request_id else {})})
@@ -1660,8 +1666,7 @@ def _decide(switch: str, pid: str, gate: Callable) -> None:
             return _finish(switch, pid, outcome, "", rid)
         return _finish(switch, pid, "refused", str(getattr(v, "reason", "refused")), rid)
     with _PENDING_LOCK:
-        withdrawn = bool(_PENDING.get(switch, {}).get("id") == pid
-                         and _PENDING[switch].get("withdrawn"))
+        withdrawn = pid in _WITHDRAWN
     if withdrawn:
         return _finish(switch, pid, "withdrawn", "you turned it off while the card was waiting",
                        rid)
@@ -1693,6 +1698,7 @@ def request_change(switch: str, enabled, *, gate: Optional[Callable] = None,
         with _PENDING_LOCK:
             if switch in _PENDING:
                 _PENDING[switch]["withdrawn"] = True
+                _WITHDRAWN.add(_PENDING[switch]["id"])
         err = _write_switch(switch, False)
         if err:
             return 500, {"error": err}
@@ -2022,6 +2028,7 @@ def _reset_for_tests() -> None:
     with _PENDING_LOCK:
         _PENDING.clear()
         _LAST.clear()
+        _WITHDRAWN.clear()
     try:
         _ENGINE.stop("reset")
     except Exception:
