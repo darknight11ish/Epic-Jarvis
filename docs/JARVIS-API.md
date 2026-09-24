@@ -1088,3 +1088,83 @@ Offer "Add to wiki" only for `new` and `changed`, only when `available` and
 with its `why`. There is no event for the wiki; ask the job route until the
 state is final, then read `GET /api/wiki` again.
 
+
+---
+
+## 14. The big model, slow (added 2026-09-24)
+
+`backend/big-model.patch` and `backend/jarvis_big_model.py`; the owner's
+guide is `docs/BIG-MODEL.md`. A very large model run by colibri on the PC,
+for two background jobs only: the wiki builder and deep questions. Never
+chat, voice or approvals. **Neither app calls these routes yet**;
+`tools/check_parity.py` records all three as `planned`.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/big-model` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_big_model.py` is missing | Token + origin. Folder paths, memory and disk numbers; never the key colibri is started with. Does not start colibri. |
+| `POST /api/big-model` | `{"switch": "master" \| "wiki" \| "deep_questions", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits; **400** unknown switch, `enabled` not a boolean, or a job before the main switch; **503** not possible (colibri or Python not found, no usable model, not enough memory in total, a nearly full drive - the sentence says which), or `big_model_enable` is not tier `ask` | ON is one approval card (action `big_model_enable`). OFF is immediate and stops colibri if nothing else needs it. Show `error` word for word. |
+| `GET /api/deep` | - | 200 `deep_status()` (below) | Token + origin. The owner's own questions and answers; reads only, starts nothing. |
+| `POST /api/deep/ask` | `{"question": "<at most 4,000 characters>"}` | **202** `{"ok": true, "id", "pending": true, "state": "queued", "message"}`; **400** empty, not text or too long; **409** three questions already waiting or running; **503** not available (the switch is off, the model cannot be used, or not enough memory is free right now). Every refusal is `{"ok": false, "state": "refused", "error": "<a sentence>"}` | No approval card per question: the switch was approved, and a question acts on nothing (no tools, no memory writes, no web) and nothing leaves the PC. Hold it on a stale link anyway (rule 4). |
+
+**`status()`** - the real output of each case is in
+`jarvis-desktop/tests/fixtures/big-model-cases.json` (the phone has the same
+file in its test resources). Build against that file, not this summary.
+
+```
+{"detected": {"capable": bool, "why": str,
+              "colibri": {"found", "dir", "why"}, "python": {"found", "why"},
+              "ram": {"total_gb", "available_gb"},
+              "models": [{"id", "name", "kind": "medium"|"giant", "dir", "drive",
+                          "drive_type": "NVMe"|"SATA SSD"|"SATA HDD"|"SATA"|"USB"|"SSD"|"HDD"|"unknown",
+                          "free_gb", "need_gb", "found", "usable", "can_start_now",
+                          "why", "note": str|null}]},
+ "enabled": bool,            the main switch
+ "active": bool,             main switch on AND capable
+ "pending": [ids],           switches with a card waiting ("master" included)
+ "engine": {"state": "off"|"loading"|"ready"|"failed", "why", "model": id|null,
+            "listens_on": "127.0.0.1:8765", "idle_minutes", "since": epoch|null, "busy": bool},
+ "cuda": {"setting": "off"|"on", "usable": bool, "why"},
+ "key_kept": "not-made-yet"|"credential-manager"|"this-run-only", "key_where": str,
+ "switches": [{"id": "wiki"|"deep_questions", "name", "what", "enabled", "available",
+               "model", "model_name", "why"}],
+ "measured": {"wiki": M|null, "deep_questions": M|null},
+ "verified": false, "unverified": str}
+M = {"model", "seconds", "tokens", "tokens_per_s", "words", "words_per_s", "at"}
+```
+
+Show `why` under each switch and each model; `note` (for example "a giant
+model on a SATA drive") as a warning line; `unverified` somewhere near the
+speed, always. `available` on a switch means it can run now or as soon as a
+job asks (colibri starts on demand); it is false when not enough memory is
+free right now or the last start failed, and `why` says which. `engine.state` `loading` can last minutes.
+A switch whose model has gone stays `enabled`: show it as on-but-waiting.
+
+**`deep_status()`**:
+
+```
+{"available": bool, "why": str, "enabled": bool, "model": id|null,
+ "jobs": [{"id", "question", "state": "queued"|"loading"|"thinking"|"done"|"failed",
+           "queued", "started", "finished", "seconds", "tokens",
+           "words_per_s", "tokens_per_s", "model", "why", "answer"?}],   newest first, at most 20
+ "limits": {"question_chars": 4000, "queue": 3, "answer_tokens": int}}
+```
+
+`answer` is there only when `state` is `done`. `why` is the sentence to show
+under each job (on `done` it says the speed; on `failed`, what went wrong).
+Times are Unix seconds. The answers are kept on the PC in
+`<config dir>/deep-questions.jsonl` (the last 100), so they survive a
+restart; questions still waiting when the backend stops are lost.
+
+**The event.** When a deep question finishes, the event stream carries kind
+`deep` with `{"id", "state": "done"|"failed"}` - a doorbell, never the
+question or the answer. On it, read `GET /api/deep`. Neither app handles this
+kind yet (ARCHITECTURE.md §6 asks for the handler in the same change; the
+apps come next). Until they do, poll `GET /api/deep` while a job is
+`queued`, `loading` or `thinking`. There is no event for the switches: read
+`GET /api/big-model` again after a card is decided.
+
+**The wiki.** With the big model's `wiki` switch on, `GET /api/wiki`'s
+`why` names the big model, and `POST /api/wiki/ingest` may answer 202 while
+colibri is still loading: the job's `state` stays `reading` and its
+`message` says it is waiting for the big model. Nothing else about the wiki
+routes changes.

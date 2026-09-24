@@ -140,6 +140,11 @@ It works only when the "Wiki builder" switch above is on and working (the
 second card is in, its Ollama is running, the model is installed). Until
 then the Wiki plate says why, in the same words as the switch.
 
+**Or on the big model.** If you switch the big model on for the wiki
+([BIG-MODEL.md](BIG-MODEL.md)), the wiki uses that instead - and then only
+that: much slower (it may wait minutes for the big model to load, and says
+so), and it never falls back to the second card by itself.
+
 ### Using it
 
 1. **Make the folders, once.** In Obsidian (or Explorer), inside your vault,

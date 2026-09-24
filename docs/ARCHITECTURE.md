@@ -275,9 +275,12 @@ is unaffected.
 `jarvis_events.Pump` runs the pollers on one thread; every client learns state
 changes from it and from nowhere else. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
-`hello`. (`step` is the tool loop saying what it is doing - asking the model,
+`deep`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
-and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.)
+and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
+`deep` is a deep question finishing, `{"id", "state"}` only -
+`jarvis_big_model.py`; added 2026-09-24 with NO client handler yet, which
+is the defect named below: the apps' big-model screens, next, must add it.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. This bus reaches a phone that surfaces notifications with the
@@ -472,7 +475,9 @@ they landed):
 - **The wiki builder** (added 2026-09-24). Documents the owner puts in the
   vault's `Jarvis Wiki/Sources` become linked pages in `Jarvis Wiki/Pages`,
   written ONLY by the second card's model (`lane_for("wiki")`; None means
-  nothing runs). `backend/jarvis_wiki.py` and `wiki.patch`: `GET /api/wiki`,
+  nothing runs) - or, when the owner has switched the big model on for the
+  wiki, ONLY by the big model (below), never by both and never by falling
+  back from one to the other. `backend/jarvis_wiki.py` and `wiki.patch`: `GET /api/wiki`,
   `GET`/`POST /api/wiki/ingest`, gate action `wiki_update` (tier `ask` as
   shipped), the same four steps as section 3 - with one honest difference:
   its `plan()` opens a socket, to the lane on 127.0.0.1 only, because the
@@ -481,6 +486,24 @@ they landed):
   lists each page with a one-line summary rather than its full text. Both
   apps have a Wiki plate (the desktop's Brain → Memory, the phone's Mind).
   Not run against a real model yet.
+
+- **The big model, slow** (added 2026-09-24), built and ALL OFF.
+  `jarvis_big_model.py` runs a very large model with colibri (an Apache-2.0
+  engine that streams most of the model from the SSD; Jarvis only talks to
+  its HTTP API) for two background jobs: the wiki builder and "deep
+  questions". Never chat, voice or approvals. Three switches (main, wiki,
+  deep questions), each turned on by one approval card (`big_model_enable`,
+  the same four steps as section 3), and only once colibri, Python 3, a
+  downloaded model and enough memory and disk are found. colibri is started
+  on demand on `127.0.0.1` with a key kept in Credential Manager, stopped
+  when idle, and uses no graphics card unless the owner sets `cuda = "on"`,
+  and then only the second card. Deep questions: no card per question (the
+  switch was the approval; a question acts on nothing), answers kept in
+  `deep-questions.jsonl` on the PC with their measured speed.
+  `GET`/`POST /api/big-model`, `GET /api/deep`, `POST /api/deep/ask`
+  (`big-model.patch`). Not run against a real colibri or on the owner's PC;
+  none of colibri's speed claims checked there; the apps' screens for it are
+  not built yet. [`BIG-MODEL.md`](BIG-MODEL.md) is the owner's guide.
 
 **Still missing:**
 

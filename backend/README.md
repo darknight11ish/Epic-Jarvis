@@ -100,7 +100,8 @@ on a throwaway copy instead.
 | `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq, Joplin or Obsidian (`#obs`, since 2026-09-24) through the gate, says honestly whether it landed, and lists which of the three this PC is set up for. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
 | `power-mode.patch` | `jarvis_hud.py` | **Nothing could change the power mode.** Adds `POST /api/power` (Active / Quiet / Standby) through the gate as `power_manage`. Needs `note-capture.patch` (textual) and `jarvis_power_switch.py` — see its own section, at the end. |
 | `second-card.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The second graphics card, all switched off.** Adds `GET`/`POST /api/second-card` (each ON is one approval card, `second_card_enable`), says in the chat route header when the second card answered, shortens the learner's quiet wait when it runs there, and gives the approval notice true words for the new action. Needs `jarvis_second_card.py` — see its own section, at the end, and `docs/SECOND-CARD.md`. |
-| `wiki.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The wiki builder.** Adds `GET /api/wiki` (the documents in your vault's `Jarvis Wiki/Sources` and their state) and `GET`/`POST /api/wiki/ingest` ("Add to wiki": the second card's model proposes pages, then ONE approval card, `wiki_update`, before anything is written), and the approval notice's words for it. Last in the list, after `second-card.patch` (textual). Needs `jarvis_wiki.py` — see its own section, at the end, and `docs/SECOND-CARD.md`, "Wiki builder". |
+| `wiki.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The wiki builder.** Adds `GET /api/wiki` (the documents in your vault's `Jarvis Wiki/Sources` and their state) and `GET`/`POST /api/wiki/ingest` ("Add to wiki": the second card's model proposes pages, then ONE approval card, `wiki_update`, before anything is written), and the approval notice's words for it. After `second-card.patch` (textual). Needs `jarvis_wiki.py` — see its own section, at the end, and `docs/SECOND-CARD.md`, "Wiki builder". |
+| `big-model.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The big model (slow), all switched off.** Adds `GET`/`POST /api/big-model` (three switches; each ON is one approval card, `big_model_enable`), `GET /api/deep` and `POST /api/deep/ask` (deep questions, answered in the background), and the approval notice's words for the new action. Last in the list, after `wiki.patch` (textual). Needs `jarvis_big_model.py` — see its own section, at the end, and `docs/BIG-MODEL.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
@@ -5524,3 +5525,126 @@ if it is stale.
 how good the pages are, and how often a real model's answer is refused, is
 not known yet. The token count is an estimate (3 bytes a token, on the
 cautious side). The patch has been rehearsed only against stand-ins.
+
+# `big-model.patch` and `jarvis_big_model.py` — the big model (slow), background jobs only
+
+**What it is.** A very large model, run by colibri
+(<https://github.com/JustVugg/colibri>, Apache-2.0) on this PC's processor
+and SSD, for two jobs nobody waits on: the wiki builder and "deep
+questions". Never chat, voice or approvals. No colibri code is in this
+repository: Jarvis starts `coli serve` and talks to its OpenAI-compatible
+API on 127.0.0.1. How to install and use it is in
+[`docs/BIG-MODEL.md`](../docs/BIG-MODEL.md); this section is what the code
+does.
+
+**`jarvis_big_model.py`** (shipped whole):
+
+- **Detection** (cached about 30 s; never raises): colibri's launcher from
+  `[big_model] coli_path` (else `coli.cmd` on PATH); Python 3 (the `py`
+  launcher, then `python`, then `python3`, skipping the Microsoft Store's
+  stand-in, which colibri's `docs/windows.md` calls the commonest trap); the
+  models under `[[big_model.models]]` (`id`, `name`, `dir`, `kind` =
+  `medium`|`giant`; the folder must hold a `config.json`); total and free
+  memory (`GlobalMemoryStatusEx` on Windows, `/proc/meminfo` elsewhere);
+  free disk on each model's drive; the drive's type (`Get-PhysicalDisk`,
+  one PowerShell line, 4 s at most, cached, "unknown" on any failure).
+  The memory needs are colibri's own README table: a medium model (Qwen3.6)
+  24 GB, "needs full RAM residency"; a giant one (DeepSeek V4 Flash) 16 GB
+  minimum, 32 comfortable. Each refusal says which and the numbers. A giant
+  model on a SATA drive gets the owner's own note ("too slow").
+- **Three switches** in `<config dir>/big-model.json`, all off: `master`,
+  `wiki`, `deep_questions`. ON is one approval card through `jarvis_gate`,
+  action `big_model_enable`, tier `ask` checked before the card and on the
+  answer (only `ask` + `approved` turns it on); a second ON while a card
+  waits is 409; OFF is at once. The card names the model, its memory need
+  against the PC's, free disk and drive type, `127.0.0.1` only, where the
+  key is kept, the graphics-card setting, that nothing leaves the PC, and
+  that the speed is unverified.
+- **colibri, on demand.** `lane_for("wiki" | "deep_questions")` starts it
+  when that job's switch is on and returns None until it has loaded (any
+  other job id gets None). Readiness is checked on a background thread with
+  `GET /v1/models` and the key; colibri binds its port before it loads the
+  model (`c/openai_server.py`), so "connects but does not answer" is read as
+  "still loading". Stopped after `idle_minutes` (10) with no job, when the
+  switches go off, and at exit - the whole process tree, and only it.
+  Refused, with the numbers, when the model's memory is not free right now;
+  refused when something else holds the port.
+- **The command:** `<python> <colibri folder>\coli serve --model <dir> --host
+  127.0.0.1 --port <8765> --model-id <id> --ctx <16384> --gpu none` (`--ram
+  <GB>` for a giant model; colibri's default takes ~88% of free memory).
+  `coli.cmd` only finds Python and runs `coli`; Jarvis does that itself
+  because cmd.exe re-reads a batch file's arguments, and uses `coli.cmd`
+  only when `coli` is not beside it (then refusing any argument with
+  `& | < > ^ % !` or a quote). Any host but 127.0.0.1 is refused (rule 2).
+- **The key.** Made here, kept in Credential Manager as `Jarvis Big
+  Model/api key` (`jarvis_token_store.WindowsStore(target=...)`), passed to
+  colibri only in `COLI_API_KEY` (`coli serve` reads it in-process; it is
+  never on a command line), and sent only as `Authorization: Bearer` to
+  `http://127.0.0.1:<port>`, through an opener with no proxy. Never logged,
+  never in status, an error, an event or a card. Where there is no
+  Credential Manager it lives in memory for the run.
+- **The graphics card.** `cuda = "off"` (default): `CUDA_VISIBLE_DEVICES=-1`,
+  `COLI_CUDA=0`, `DSV4_CUDA=0` (DeepSeek V4's own switch), `--gpu none`.
+  `"on"`: the SECOND card only, by its id, only when `jarvis_second_card`
+  sees a capable one and its own lane is not starting or running; otherwise
+  refused with the reason. Never the main card. colibri's prebuilt Windows
+  release has no CUDA DLL for RTX 20 cards - see `docs/BIG-MODEL.md`.
+- **The wiki.** `jarvis_wiki` uses `lane_for("wiki")` from here instead of
+  the second card's when this module's `wiki` switch is on, and then only
+  this one: while colibri loads, the job waits in `reading` with the reason;
+  if the big model becomes unavailable the job fails with the reason; it
+  never moves to the second card. colibri's `response_format` is a speed
+  hint, not a constraint, and is refused (HTTP 400) for every engine but
+  GLM (`docs/grammar-draft.md`, `c/openai_server.py`), so it is not sent:
+  the schema is given in the instructions and the wiki's own strict
+  validation decides, as before. A reply wrapped in a code fence is
+  unwrapped; anything else that is not the shape asked for is refused.
+- **Deep questions.** `ask()` queues one job (at most three waiting or
+  running) and returns 202; one worker answers them in turn with no tools,
+  no memory writes and no web; the answer, its time, tokens and tokens and
+  words per second go to `<config dir>/deep-questions.jsonl` (last 100 jobs,
+  2 MB at most). No approval card per question - said in the docstring: the
+  switch was approved, a question acts on nothing and leaves the PC for
+  nowhere. A `deep` event (`{"id", "state"}` only) is published when one
+  finishes.
+
+**`big-model.patch`** (last in `$PATCHES`, after `wiki.patch`):
+
+- `GET /api/big-model` → `status()`; `GET /api/deep` → `deep_status()`.
+  Neither starts colibri.
+- `POST /api/big-model` `{"switch", "enabled"}` → `handle_post()`;
+  `POST /api/deep/ask` `{"question"}` → `handle_deep_post()`.
+- `jarvis_gate.py`: a `_RISK` line for `big_model_enable` - "local" and
+  reversible.
+
+Its context is wiki's own GET and POST route blocks and its `jarvis_gate.py`
+line. Rehearsed against stand-ins built from the patches before it, forwards
+and backwards, with `wiki.patch` and `second-card.patch` still coming off
+cleanly after it (`test_big_model.py`); the owner's own `apply-patches.ps1`
+run is the proof against the real file.
+
+## Test it
+
+```powershell
+python test_big_model.py
+python ..\tools\gen_big_model_cases.py --check
+```
+
+Runs anywhere: the PC (folders, memory, disk, drive type, starting a
+process) is a stand-in, and colibri's answers come from a stand-in function
+or a small HTTP server on 127.0.0.1 in colibri's documented shape - never a
+real colibri. It covers detection, the switches and their card, the command
+line and environment, the key appearing in no status, card, error, log,
+event, audit line or printed output, the second card with `cuda = "on"`,
+idle stop, `lane_for`'s None states, the wiki on the big model, deep
+questions (queued, answered, kept, capped, failures, speed), and the patch.
+`jarvis-desktop/tests/fixtures/big-model-cases.json` (and the phone's copy)
+is the real output of the routes in named cases; the test fails if it is
+stale.
+
+**Not checked, said plainly:** no colibri has been started by this code, on
+any machine, and nothing here has run on the owner's PC. None of colibri's
+speed claims have been checked there. Whether Qwen3.6 or DeepSeek V4 answer
+the wiki's JSON reliably without a constraint is not known. The drive-type
+line has not run on a real Windows disk. The patch has been rehearsed only
+against stand-ins.
