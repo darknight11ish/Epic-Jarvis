@@ -279,10 +279,9 @@ changes from it and from nowhere else. Kinds: `approval`, `proposal`,
 a tool starting, finishing or refused - with tool names from its own table
 and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
 `deep` is a deep question finishing, `{"id", "state"}` only -
-`jarvis_big_model.py`; added 2026-09-24. The phone handles it
-(`JarvisRuntime.onEvent` re-reads `/api/deep`); the desktop's big-model
-screen, being built separately, still owes its handler - until then it is
-the defect named below, on the desktop's side.)
+`jarvis_big_model.py`; added 2026-09-24. Both apps handle it: the desktop's
+Brain reads `GET /api/deep` again (`brain.js`, Deep questions), and the
+phone's `JarvisRuntime.onEvent` re-reads `/api/deep` and `/api/big-model`.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. This bus reaches a phone that surfaces notifications with the

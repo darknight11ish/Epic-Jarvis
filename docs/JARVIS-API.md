@@ -1096,11 +1096,13 @@ state is final, then read `GET /api/wiki` again.
 `backend/big-model.patch` and `backend/jarvis_big_model.py`; the owner's
 guide is `docs/BIG-MODEL.md`. A very large model run by colibri on the PC,
 for two background jobs only: the wiki builder and deep questions. Never
-chat, voice or approvals. **The phone calls all three** (2026-09-24: Mind
-screen, "Big model (slow)" and "Deep questions", `BigModelPlate.kt` /
-`net/BigModel.kt`); the desktop does not yet. `tools/check_parity.py` keeps
-all three `planned` until the desktop calls them too, then they become
-`ported`.
+chat, voice or approvals. **Both apps call all three** (2026-09-24). The
+desktop: Settings, "Big model (slow)" (`get_big_model` / `set_big_model` in
+`commands.rs`, granted to the settings window only), and the Brain's Memory
+tab, "Deep questions" (`get_deep` / `ask_deep`, the `brain-deep` set, Brain
+window only; `src/deep.js`). The phone: Mind screen, "Big model (slow)" and
+"Deep questions" (`BigModelPlate.kt` / `net/BigModel.kt`).
+`tools/check_parity.py` records all three as `ported`.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
@@ -1160,15 +1162,14 @@ restart; questions still waiting when the backend stops are lost.
 
 **The event.** When a deep question finishes, the event stream carries kind
 `deep` with `{"id", "state": "done"|"failed"}` - a doorbell, never the
-question or the answer. On it, read `GET /api/deep`. **The phone handles
-it** (`JarvisRuntime.onEvent`: it re-reads `GET /api/deep`, and
-`GET /api/big-model` for the measured speed); the desktop does not yet.
-States change between `queued`, `loading` and `thinking` with no event, so
-the phone also re-reads `GET /api/deep` every 20 s while a job is in one of
-those states and its plate is on screen, and at no other time. There is no
-event for the switches: read `GET /api/big-model` again after a card is
-decided (the phone does, on the `approval` event, while one of its cards
-waits).
+question or the answer. On it, read `GET /api/deep`. Both apps do. The
+desktop: `brain.js`'s `onEvent` (`stream.rs` fans the frame out to every
+window and reads nothing for it), and a poll every 15 s only while a job is
+`queued`, `loading` or `thinking`, in case the event is missed. The phone:
+`JarvisRuntime.onEvent` re-reads `GET /api/deep`, and `GET /api/big-model`
+for the measured speed, and polls every 20 s only while a job is going and
+its plate is on screen. There is no event for the switches: read `GET
+/api/big-model` again after a card is decided (both apps do).
 
 **The wiki.** With the big model's `wiki` switch on, `GET /api/wiki`'s
 `why` names the big model, and `POST /api/wiki/ingest` may answer 202 while

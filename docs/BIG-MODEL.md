@@ -242,19 +242,26 @@ model, how much memory and disk, that it listens on `127.0.0.1` only, and
 that nothing leaves this PC. Turning a switch off is immediate and stops
 colibri if nothing else needs it.
 
+**On the desktop:** open Settings (right-click the Jarvis icon by the clock,
+then Settings) and scroll to **"Big model (slow)"**, just under "Second
+graphics card". It shows what Jarvis found, and one switch for the big model
+itself, then one per job. Tick "Use the big model" first and approve the
+card; then tick "Deep questions" (and/or "Wiki builder") and approve that
+card too. The page shows "Waiting for your approval" until you do. The
+switches stay greyed out, with the reason written above them, until Jarvis
+has found colibri, Python, a model and enough memory and disk. Deep
+questions are asked in the Brain window, Memory tab, "Deep questions".
+
 **On the phone:** open Mind (the button on Home), then the "Big model
 (slow)" section, under "Second graphics card". It shows what Jarvis found,
-the main switch and one switch per job. The main switch can only be turned
-on once Jarvis has found everything it needs. Turning a switch on raises the
+the main switch and one switch per job. Turning a switch on raises the
 approval card; the switch says "Waiting for you to approve the card on your
 PC or phone" until you answer it. Right below it, "Deep questions" has the
 box to ask one ("Ask slowly") and the recent answers. The phone does not
 notify you when an answer is ready; look in that list.
 
-**On the desktop** the Brain window's switches are being built separately.
-Until they are, use the phone, or PowerShell, **in your Jarvis backend
-folder** (one line each; the first reads your pairing token into `$t`
-without showing it):
+Without either app, in PowerShell, **in your Jarvis backend folder** (one
+line each; the first reads your pairing token into `$t` without showing it):
 
 ```powershell
 $t = (py -3 .\jarvis_token_store.py show); $h = @{ 'X-Jarvis-Token' = $t; 'X-Jarvis-Client' = 'hud' }; Invoke-RestMethod -Method Post -Uri http://127.0.0.1:4719/api/big-model -Headers $h -ContentType 'application/json' -Body '{"switch":"master","enabled":true}'
@@ -269,6 +276,16 @@ $t = (py -3 .\jarvis_token_store.py show); $h = @{ 'X-Jarvis-Token' = $t; 'X-Jar
 ```
 
 ### Asking a deep question
+
+**On the desktop:** right-click the Jarvis icon by the clock, choose "Open
+the Brain", and stay on the **Memory** tab (it opens there). Under "Wiki" is
+**"Deep questions"**: type the question and press **Ask slowly** (or
+Ctrl+Enter). The list below shows each question with its state, and when it
+is done, how long it took, the words a second and the answer. It updates by
+itself when an answer is ready. The box only appears once the "Deep
+questions" switch is on and working; until then the line above it says why.
+
+Without the desktop app, in PowerShell:
 
 ```powershell
 $t = (py -3 .\jarvis_token_store.py show); $h = @{ 'X-Jarvis-Token' = $t; 'X-Jarvis-Client' = 'hud' }; Invoke-RestMethod -Method Post -Uri http://127.0.0.1:4719/api/deep/ask -Headers $h -ContentType 'application/json' -Body (@{ question = 'Why is the sky blue?' } | ConvertTo-Json)
