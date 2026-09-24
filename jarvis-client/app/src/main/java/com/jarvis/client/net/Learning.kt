@@ -167,6 +167,13 @@ data class MemoryCardView(
     val ownWords: Boolean,
     /** Where it came from, for the small "from ..." line, or null to show none. */
     val sourceLine: String?,
+    /**
+     * Why automatic learning did not save this without asking
+     * (docs/JARVIS-API.md section 19): the row's `auto_reason`, as one quiet
+     * line - "Not saved automatically: from pasted text". Null when the PC
+     * said nothing (absent or "").
+     */
+    val autoReasonLine: String? = null,
 )
 
 object MemoryCards {
@@ -214,6 +221,21 @@ object MemoryCards {
     /** `{"id": <proposal id>}` - one id, one decision, like /api/memory/decide. */
     fun keepBothBody(id: Long): String = """{"id":$id}"""
 
+    /** The start of the line under a card that automatic learning left for a yes. */
+    const val AUTO_REASON_PREFIX = "Not saved automatically: "
+
+    /**
+     * `auto_reason` off a pending row, as the card's line, or null. The PC's
+     * words are shown as they are, trimmed and without a trailing full stop
+     * so the line reads as one phrase. Only a string counts.
+     */
+    fun autoReasonLine(row: JsonObject): String? {
+        val p = row["auto_reason"] as? JsonPrimitive ?: return null
+        if (p is JsonNull || !p.isString) return null
+        val why = p.content.trim().trimEnd('.').trim().takeIf { it.isNotEmpty() } ?: return null
+        return AUTO_REASON_PREFIX + why
+    }
+
     fun from(row: JsonObject): MemoryCardView {
         val id = row.str("id")?.toLongOrNull()
         val source = row.str("source")
@@ -244,6 +266,7 @@ object MemoryCards {
             }
         }.distinct()
         val ownWords = row.bool("verbatim") == true || source == REMEMBER_SOURCE
+        val autoReason = autoReasonLine(row)
         return when (kind) {
             MemoryCardKind.RETIRE -> MemoryCardView(
                 id = id,
@@ -261,6 +284,7 @@ object MemoryCards {
                 checked = row.bool("flags_checked"),
                 ownWords = false,
                 sourceLine = null,
+                autoReasonLine = autoReason,
             )
             else -> MemoryCardView(
                 id = id,
@@ -285,6 +309,7 @@ object MemoryCards {
                 ownWords = ownWords,
                 // "your own words" says it better than "from remember".
                 sourceLine = source?.takeIf { !ownWords }?.let { "from ${it.replace('_', ' ')}" },
+                autoReasonLine = autoReason,
             )
         }
     }

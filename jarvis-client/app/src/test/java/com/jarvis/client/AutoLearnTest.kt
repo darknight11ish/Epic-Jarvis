@@ -265,6 +265,44 @@ class AutoLearnTest {
         assertNull(AutoLearn.fromWhere(null))
     }
 
+    // --------------------------------------------- cards that stayed cards ---
+
+    @Test
+    fun aCardThatStayedACardSaysWhyInOneQuietLine() {
+        val c = com.jarvis.client.net.MemoryCards.from(
+            obj("""{"id": 12, "text": "The owner's PIN is 4411", "source": "conversation",
+                   "auto_reason": "sensitive: money"}"""),
+        )
+        assertEquals("Not saved automatically: sensitive: money", c.autoReasonLine)
+        val pasted = com.jarvis.client.net.MemoryCards.from(
+            obj("""{"id": 13, "text": "x", "auto_reason": "  from pasted text. "}"""),
+        )
+        assertEquals("Not saved automatically: from pasted text", pasted.autoReasonLine)
+        // A correction and a "stop using this fact?" card carry it too.
+        val correction = com.jarvis.client.net.MemoryCards.from(
+            obj("""{"id": 14, "text": "x", "replaces_id": 3, "replaces_text": "y", "auto_reason": "replaces a fact"}"""),
+        )
+        assertEquals("Not saved automatically: replaces a fact", correction.autoReasonLine)
+        val retire = com.jarvis.client.net.MemoryCards.from(
+            obj("""{"id": 15, "source": "feedback_retire", "replaces_text": "y", "auto_reason": "not in your own words"}"""),
+        )
+        assertEquals("Not saved automatically: not in your own words", retire.autoReasonLine)
+    }
+
+    @Test
+    fun noReasonMeansNoLine() {
+        for (row in listOf(
+            """{"id": 1, "text": "x"}""",
+            """{"id": 1, "text": "x", "auto_reason": ""}""",
+            """{"id": 1, "text": "x", "auto_reason": "   "}""",
+            """{"id": 1, "text": "x", "auto_reason": null}""",
+            """{"id": 1, "text": "x", "auto_reason": true}""",
+            """{"id": 1, "text": "x", "auto_reason": {"why": "x"}}""",
+        )) {
+            assertNull(row, com.jarvis.client.net.MemoryCards.from(obj(row)).autoReasonLine)
+        }
+    }
+
     // ----------------------------------------------------------- forget ---
 
     @Test

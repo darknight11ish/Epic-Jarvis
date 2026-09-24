@@ -1493,6 +1493,12 @@ private fun MemoryProposalRow(
             Gap(2)
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
+        // Automatic learning left this one for a yes, and the PC said why
+        // (docs/JARVIS-API.md section 19) - one quiet line.
+        card.autoReasonLine?.let {
+            Gap(2)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
         if (card.checked == false) {
             Gap(2)
             Text(MemoryCards.NOT_CHECKED, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
