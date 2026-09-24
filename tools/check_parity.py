@@ -177,6 +177,14 @@ CLASSIFICATION = {
     "/api/watch/remove": ("ported", "Forget a topic, after a warning. Never held on a stale link."),
     "/api/watch/report": ("ported", "What is new - a peek that marks nothing read."),
     "/api/watch/seen": ("ported", "Mark these read - a POST on purpose, so opening a link cannot clear the list."),
+    # Chat history on the PC (docs/JARVIS-API.md section 18, 2026-09-24).
+    # Built on the backend and both apps at once; the phone side landed
+    # first, so these are "planned" until the desktop calls them too - then
+    # they become "ported".
+    "/api/history": ("planned", "Chat history: the switch, why nothing is being kept (if so), how long it is kept, and conversations newest first with Load older. Phone: Mind, Chat history (HistoryScreen.kt, net/ChatLog.kt). Desktop: the Brain window's History section, next to Memory."),
+    "/api/history/conversation": ("planned", "One conversation, read-only, with where each message came from (shared, pasted, from clipboard)."),
+    "/api/history/delete": ("planned", "Delete ONE conversation, after a confirm. There is no delete-all route, on purpose. Never held on a stale link."),
+    "/api/history/settings": ("planned", "\"Keep chat history on this PC\": ON is one approval card (history_enable), OFF is immediate; and \"Delete conversations older than\" (keep_days). Both apps hold ON on a stale link."),
     "/api/wiki": ("ported", "The wiki builder's documents and their state (backend/wiki.patch, 2026-09-24). Both apps list them; neither browses files or reads pages - the vault reaches the phone through Syncthing."),
     "/api/wiki/ingest": ("ported", "\"Add to wiki\" for one document, then its job. Raises one approval card (wiki_update); nothing is written before it is answered."),
 }
