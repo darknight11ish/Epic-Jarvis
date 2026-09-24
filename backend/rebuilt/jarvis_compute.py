@@ -16,6 +16,23 @@ the specification:
     "capability": the biggest model the pair can hold, generation bounded by
                   the slower card (a P100 is Pascal: ~2-3x slower per token).
 
+WHICH CARD IS "FIRST" (fixed 2026-09-24). This used to rank "fastest card =
+most free memory". With the second card the owner is adding - an RTX 2060
+12 GB beside the 2080 Super 8 GB - that put everyday chat on the 2060: more
+free memory, about two thirds the memory speed (docs/MODEL-TOPOLOGY.md, "The
+planned second card"). The everyday card is now chosen by one rule, which
+jarvis_second_card.py uses too (it imports it from here):
+
+    1. `[compute] primary_gpu` in the toml - a UUID ("GPU-...") or an
+       nvidia-smi index - when it names a card that is there;
+    2. otherwise the card a monitor is plugged into (nvidia-smi's
+       `display_active`), because the owner plugs the monitors into the
+       fast card (MODEL-TOPOLOGY's install checklist, step 2);
+    3. otherwise nvidia-smi index 0.
+
+`primary()` returns the card AND the sentence saying which rule chose it, so
+a screen can say why rather than just what.
+
 `simulated` is the honest field. When no GPU can be interrogated this returns
 a plan anyway - the HUD prints one at startup and must not crash on a machine
 with no card - but it says so, rather than reporting a confident layout for
@@ -26,6 +43,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
@@ -41,6 +59,11 @@ class Device:
     name: str
     total_mb: int
     free_mb: int
+    # Added 2026-09-24 for the primary-card rule and jarvis_second_card.py.
+    # Defaults, so a Device built with the original four fields still works.
+    uuid: str = ""
+    compute_cap: Optional[float] = None     # None: nvidia-smi did not say
+    display_active: Optional[bool] = None   # None: nvidia-smi did not say
 
 
 @dataclass
@@ -104,6 +127,124 @@ def _cfg(key: str, default=None):
         return default
 
 
+# --------------------------------------------------------------------------
+#   Reading the cards
+# --------------------------------------------------------------------------
+
+#: What is asked for. `compute_cap` only exists in newer drivers' nvidia-smi
+#: (an older one refuses the WHOLE query, saying the field is not a valid
+#: field to query), so a refusal is retried without it, and the generation
+#: is then looked up by name (COMPUTE_BY_NAME) or left unknown.
+FIELDS_FULL = "index,uuid,name,memory.total,memory.free,compute_cap,display_active"
+FIELDS_OLD = "index,uuid,name,memory.total,memory.free,display_active"
+FIELDS_OLDEST = "index,name,memory.total,memory.free"
+
+#: Compute capability by marketing name, for a driver too old to report it.
+#: Checked in order; the first substring found wins. Only families whose
+#: every member shares one capability are listed; anything else is None,
+#: which jarvis_second_card treats as "unknown, so not capable".
+COMPUTE_BY_NAME = (
+    ("RTX 50", 12.0), ("RTX 40", 8.9), ("RTX 30", 8.6), ("A100", 8.0),
+    ("RTX 20", 7.5), ("GTX 16", 7.5), ("TITAN RTX", 7.5), ("QUADRO RTX", 7.5),
+    ("TESLA T4", 7.5), ("TITAN V", 7.0), ("V100", 7.0),
+    ("P100", 6.0), ("P40", 6.1), ("GTX 10", 6.1), ("TITAN X", 6.1),
+    ("GTX 9", 5.2),
+)
+
+_CACHE_SECONDS = 30.0
+_cache: dict = {"at": -1e9, "cards": None, "fields": ""}
+
+
+def _run_smi(args: list) -> Optional[str]:
+    """nvidia-smi's stdout, or None if it is absent or refused. Never raises.
+    Replaced in tests with recorded output."""
+    exe = shutil.which("nvidia-smi")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe] + list(args), capture_output=True, text=True,
+                             timeout=10)
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout
+
+
+def _num(text) -> Optional[float]:
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None           # "[N/A]", "[Not Supported]", "", garbage
+
+
+def compute_from_name(name: str) -> Optional[float]:
+    up = " ".join(str(name or "").upper().split())
+    for key, cc in COMPUTE_BY_NAME:
+        if key in up:
+            return cc
+    return None
+
+
+def parse_smi(text: str, fields: str = FIELDS_FULL) -> list:
+    """Rows of `nvidia-smi --query-gpu=<fields> --format=csv,noheader,nounits`
+    as Devices. A line that does not parse is skipped, never guessed at."""
+    names = fields.split(",")
+    found = []
+    for line in str(text or "").splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) != len(names):
+            continue
+        row = dict(zip(names, parts))
+        try:
+            index = int(row["index"])
+            total = int(float(row["memory.total"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if index < 0 or total <= 0:
+            continue
+        free = _num(row.get("memory.free", ""))
+        name = row.get("name", "") or f"GPU {index}"
+        cc = _num(row.get("compute_cap", "")) if "compute_cap" in row else None
+        if cc is None:
+            cc = compute_from_name(name)
+        da = row.get("display_active", "").strip().lower()
+        display = True if da == "enabled" else False if da == "disabled" else None
+        uuid = row.get("uuid", "")
+        if not uuid.startswith("GPU-"):
+            uuid = ""
+        found.append(Device(index, name, total,
+                            int(free) if free is not None and free >= 0 else 0,
+                            uuid=uuid, compute_cap=cc, display_active=display))
+    return found
+
+
+def query_cards(fresh: bool = False) -> list:
+    """Every NVIDIA card, via nvidia-smi, cached for 30 seconds. Empty when
+    there is none or nvidia-smi is missing. Never raises."""
+    now = time.monotonic()
+    if not fresh and _cache["cards"] is not None and now - _cache["at"] < _CACHE_SECONDS:
+        return list(_cache["cards"])
+    cards: list = []
+    used = ""
+    for fields in (FIELDS_FULL, FIELDS_OLD, FIELDS_OLDEST):
+        try:
+            out = _run_smi([f"--query-gpu={fields}", "--format=csv,noheader,nounits"])
+        except Exception:
+            out = None
+        if out is None:
+            continue
+        try:
+            cards = parse_smi(out, fields)
+        except Exception:
+            cards = []
+        if cards:
+            used = fields
+            break
+    _cache.update(at=now, cards=list(cards), fields=used)
+    return list(cards)
+
+
 def devices() -> list:
     """The GPUs, via nvidia-smi. Empty list if there are none or it is absent.
 
@@ -111,28 +252,37 @@ def devices() -> list:
     is standard-library-only and a dependency here would make the startup
     banner the one thing that needs pip.
     """
-    exe = shutil.which("nvidia-smi")
-    if not exe:
-        return []
-    try:
-        out = subprocess.run(
-            [exe, "--query-gpu=index,name,memory.total,memory.free",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10)
-    except Exception:
-        return []
-    if out.returncode != 0:
-        return []
-    found = []
-    for line in out.stdout.splitlines():
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) < 4:
-            continue
-        try:
-            found.append(Device(int(parts[0]), parts[1], int(parts[2]), int(parts[3])))
-        except ValueError:
-            continue
-    return found
+    return query_cards()
+
+
+def primary(devs: list, configured=None) -> tuple:
+    """(the everyday card, the sentence saying which rule chose it), or
+    (None, why) with no cards. The rule is in this module's docstring.
+    `configured` is `[compute] primary_gpu`; None reads it from the toml."""
+    devs = [d for d in devs or [] if d is not None]
+    if not devs:
+        return None, "no graphics card was found"
+    if configured is None:
+        configured = _cfg("primary_gpu", "")
+    want = str(configured if configured is not None else "").strip()
+    note = ""
+    if want:
+        for d in devs:
+            if getattr(d, "uuid", "") and d.uuid.lower() == want.lower():
+                return d, f"[compute] primary_gpu names this card by its id ({want})"
+        if want.isdigit():
+            for d in devs:
+                if d.index == int(want):
+                    return d, (f"[compute] primary_gpu names nvidia-smi number {want} "
+                               f"(an id starting GPU- is safer: numbers can change)")
+        note = (f"[compute] primary_gpu is {want!r}, which is not a card in this PC, "
+                f"so it was ignored and ")
+    shown = sorted((d for d in devs if getattr(d, "display_active", None) is True),
+                   key=lambda d: d.index)
+    if shown:
+        return shown[0], note + "a monitor is plugged into it"
+    first = min(devs, key=lambda d: d.index)
+    return first, note + "it is nvidia-smi's first card (no monitor was seen on any card)"
 
 
 def plan(model: Optional[str] = None) -> Plan:
@@ -150,21 +300,32 @@ def plan(model: Optional[str] = None) -> Plan:
                     devices=[],
                     why="no GPU could be interrogated; this layout is a guess")
 
-    # Fastest card = most free memory. A crude proxy, and named as one: the
-    # real answer is memory bandwidth, which nvidia-smi does not report.
-    ranked = sorted(devs, key=lambda d: -d.free_mb)
-    first = ranked[0]
+    # The everyday card by the primary rule (module docstring), never "the
+    # one with the most free memory": that picked a 12 GB RTX 2060 over the
+    # faster 8 GB 2080 Super. The others follow in nvidia-smi order.
+    first, rule = primary(devs)
+    ranked = [first] + sorted((d for d in devs if d is not first), key=lambda d: d.index)
     second = ranked[1] if len(ranked) > 1 else None
 
     if prefer == "speed":
         text_on = f"cuda:{first.index}"
-        # The config's own words: "the second card carries vision + voice
-        # resident so nothing swaps". With one card, keeping them resident
-        # would evict the text model mid-answer, so they go on demand.
-        vision = tts = bool(second)
-        why = ("speed: text on the freest card; "
-               + ("vision and voice resident on the second"
-                  if second else "one card only, so vision and voice load on demand"))
+        # Voice runs on the processor (docs/ARCHITECTURE.md section 11: 0 GB
+        # of graphics memory), so it is never resident on a card. Pictures
+        # are on the second card only while its "Pictures" switch is on and
+        # working (jarvis_second_card.py) - not merely because a second card
+        # exists, which is what this used to claim, for voice as well.
+        tts = False
+        vision = False
+        if second is not None:
+            try:
+                import jarvis_second_card
+                vision = jarvis_second_card.lane_for("vision") is not None
+            except Exception:
+                vision = False
+        why = (f"speed: everyday chat on the {first.name} (because {rule}); "
+               + ("the second card runs only the second-card features that are "
+                  "switched on (GET /api/second-card)"
+                  if second else "one card only"))
     else:
         text_on = "+".join(f"cuda:{d.index}" for d in ranked)
         vision = tts = False
