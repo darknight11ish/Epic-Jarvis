@@ -804,8 +804,8 @@ def _prints(voice: dict) -> dict:
 
 
 def _strict_state(voice: dict) -> dict:
-    """gate.strictness / privacy / memory / sensitive_memory / settings / models /
-    cohort / repeat, from
+    """gate.strictness / privacy / memory / sensitive_memory / hands_free /
+    settings / models / cohort / repeat, from
     jarvis_voice.status(); the strict defaults, and `models` saying nothing
     is known, for a jarvis_voice.py older than them. Never raises."""
     st = voice.get("settings") if isinstance(voice.get("settings"), dict) else {}
@@ -820,6 +820,9 @@ def _strict_state(voice: dict) -> dict:
         # fact, the owner's decision of 2026-09-24): "" from an older
         # jarvis_voice.py, and the apps then do not offer it.
         "sensitive_memory": str(voice.get("sensitive_memory") or ""),
+        # The fifth (how far "hey Jarvis" is trusted, the owner's decision of
+        # 2026-09-24): "" from an older jarvis_voice.py - not offered.
+        "hands_free": str(voice.get("hands_free") or ""),
         "settings": st or {"strictness": strict, "privacy": "private_on_screen",
                            "voice_is_enough_allowed": strict == "very_strict",
                            "min_command_seconds": 0.0},
@@ -1251,6 +1254,9 @@ class Heard:
     #: passed a real check - never in broad mode. Not implied by
     #: memory_aloud or private_aloud (the owner's decision, 2026-09-24). An
     #: app that finds no such field treats it as false.
+    #: All three *_aloud are false, too, when the owner chose "only trust the
+    #: talk button" (jarvis_voice `hands_free: button_only`) and this clip's
+    #: source is not `push_to_talk` - "hey Jarvis", or no source said.
     sensitive_aloud: bool = False
     #: The words asked about something private (the router's private-topic
     #: backstop). A hint for the app, not a guarantee - see JARVIS-API.md.
@@ -1320,19 +1326,27 @@ def _note_short(mic: str) -> None:
         pass
 
 
-def _note_for_history(words: str, verdict, embedder) -> None:
+def _note_for_history(words: str, verdict, embedder, source: str = "") -> None:
     """Tell the chat history (jarvis_chat_log) that THIS PC's speech route
     produced these words from a voice that passed the check, so the chat
     turn that carries them is recorded as "voice" rather than
     "voice_unverified". A hash is kept, never the words (see
     jarvis_chat_log.note_transcript). Never raises: history must never be
-    the reason a spoken turn fails."""
+    the reason a spoken turn fails.
+
+    `source` - how the clip started, "push_to_talk" or "wake_word" - goes
+    with it (since 2026-09-24), so automatic learning can honour the
+    owner's "hands-free" voice setting (jarvis_auto_learn.check_voice). A
+    jarvis_chat_log.py older than that is not given it."""
     try:
         import jarvis_chat_log
+        kw = {}
+        if _takes(jarvis_chat_log.note_transcript, "source"):
+            kw["source"] = str(source or "")
         jarvis_chat_log.note_transcript(
             words, strictness=str(getattr(verdict, "strictness", "") or ""),
             model=_deciding_model(verdict, embedder),
-            mode=str(getattr(verdict, "mode", "") or ""))
+            mode=str(getattr(verdict, "mode", "") or ""), **kw)
     except Exception:
         pass
 
@@ -1378,6 +1392,20 @@ def _sensitive_aloud() -> bool:
         return bool(jarvis_voice.sensitive_aloud())
     except Exception:
         return False                # an older jarvis_voice.py: on screen
+
+
+def _source_trusted(source: str) -> bool:
+    """Is a clip from `source` trusted like the talk button? (The owner's
+    "hands-free" voice setting, jarvis_voice.hands_free_trusted.) A
+    jarvis_voice.py older than that setting: yes, as it always was. One that
+    cannot answer: no - the answer stays on screen."""
+    fn = getattr(jarvis_voice, "hands_free_trusted", None)
+    if fn is None:
+        return True
+    try:
+        return bool(fn(source))
+    except Exception:
+        return False
 
 
 def _private_aloud() -> bool:
@@ -1536,6 +1564,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         kw["mic"] = mic
     verdict = jarvis_voice.verify(samples, embedder, **kw)
     steps["owner_check"] = (time.monotonic() - t) * 1000.0
+    trusted = _source_trusted(source)
     common = dict(score=verdict.score, threshold=verdict.threshold,
                   source=source, mode=verdict.mode, seconds=seconds,
                   wake_score=spot.score if spot else 0.0,
@@ -1547,9 +1576,18 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                   # voice passes the very strict check". Nothing private is
                   # read aloud to a voice nobody checked (voice audit,
                   # 2026-09-24).
-                  private_aloud=_private_aloud() and _really_checked(verdict, very=True),
-                  memory_aloud=_memory_aloud() and _really_checked(verdict),
-                  sensitive_aloud=_sensitive_aloud() and _really_checked(verdict))
+                  #
+                  # And only for a clip the owner's "hands-free" setting
+                  # trusts: under "only trust the talk button", a clip that
+                  # did not come from the talk button (hey Jarvis, or no
+                  # source said) reads none of these aloud - a recording of
+                  # the owner played near the microphone passes the voice
+                  # check (the owner's decision, 2026-09-24).
+                  private_aloud=(_private_aloud() and _really_checked(verdict, very=True)
+                                 and trusted),
+                  memory_aloud=_memory_aloud() and _really_checked(verdict) and trusted,
+                  sensitive_aloud=(_sensitive_aloud() and _really_checked(verdict)
+                                   and trusted))
 
     if not verdict.is_owner:
         return Heard(False, reason=verdict.reason, **common)
@@ -1577,7 +1615,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         if words:
             _flow("note_heard", t_in, steps, source=source, mic=mic,
                   waited_ms=waited_ms, cold=cold)
-            _note_for_history(words, verdict, embedder)
+            _note_for_history(words, verdict, embedder, source)
 
     if not wake or via_window:
         timed(text)

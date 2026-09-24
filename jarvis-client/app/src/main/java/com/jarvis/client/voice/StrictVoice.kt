@@ -28,10 +28,16 @@ import kotlin.math.roundToInt
  *   KEPT ON SCREEN by default - even when memories are read aloud, and even
  *   under "voice check is enough" - or READ ALOUD. Offered only when the PC
  *   reports the setting.
+ * - Hands-free ("Hey Jarvis") (the owner's decision, 2026-09-24): a question
+ *   started with "Hey Jarvis" is trusted THE SAME AS THE TALK BUTTON by
+ *   default, or ONLY THE TALK BUTTON is trusted - then a hands-free turn
+ *   cannot teach Jarvis facts without a card, and memory, sensitive or
+ *   private answers stay on screen. Offered only when the PC reports it.
  *
  * The same shape as every other switch that widens what Jarvis does:
  * LOOSENING (balanced, voice is enough, memories or sensitive facts read
- * aloud) raises one approval card on the PC
+ * aloud, "Hey Jarvis" trusted like the button again) raises one approval
+ * card on the PC
  * and changes nothing until it is approved - so it is held on a stale link
  * (rule 4). TIGHTENING applies at once and always goes: it only narrows.
  */
@@ -120,6 +126,31 @@ object StrictVoice {
 
     const val SENSITIVE_MEMORY_TITLE = "Answers that use sensitive saved facts"
 
+    /**
+     * How far a question started with "Hey Jarvis" is trusted (the owner's
+     * decision, 2026-09-24). The same as the talk button by default - marked
+     * "(default)", not "(recommended)": it is the owner's choice, not the
+     * safer one. "Only trust the talk button" is the stricter choice and
+     * applies at once; going back asks first. Offered only when the PC
+     * reports it.
+     */
+    val HANDS_FREE: List<Choice> = listOf(
+        Choice(
+            VoiceStrict.SAME_AS_BUTTON,
+            "Same as the talk button (default)",
+            "A question started with \"Hey Jarvis\" is trusted like one where you press the button.",
+        ),
+        Choice(
+            VoiceStrict.BUTTON_ONLY,
+            "Only trust the talk button",
+            "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or " +
+                "private answers stay on screen. Safer if a recording of your voice could be played " +
+                "near the microphone.",
+        ),
+    )
+
+    const val HANDS_FREE_TITLE = "Hands-free (\"Hey Jarvis\")"
+
     const val PRIVACY_ONLY_VERY_STRICT =
         "\"Voice check is enough\" can only be chosen while the check is very strict."
 
@@ -164,6 +195,7 @@ object StrictVoice {
         VoiceStrict.STRICTNESS -> STRICTNESS
         VoiceStrict.MEMORY -> MEMORY
         VoiceStrict.SENSITIVE_MEMORY -> SENSITIVE_MEMORY
+        VoiceStrict.HANDS_FREE -> HANDS_FREE
         else -> PRIVACY
     }
 
@@ -172,12 +204,14 @@ object StrictVoice {
         VoiceStrict.STRICTNESS -> view.strictness
         VoiceStrict.MEMORY -> view.memory
         VoiceStrict.SENSITIVE_MEMORY -> view.sensitiveMemory
+        VoiceStrict.HANDS_FREE -> view.handsFree
         else -> view.privacy
     }
 
-    /** The label for [value], in the same words as the choices above. */
+    /** The label for [value], in the same words as the choices above, without "(recommended)" or "(default)". */
     fun label(setting: String, value: String): String =
-        choices(setting).firstOrNull { it.value == value }?.label?.removeSuffix(" (recommended)") ?: value
+        choices(setting).firstOrNull { it.value == value }?.label
+            ?.removeSuffix(" (recommended)")?.removeSuffix(" (default)") ?: value
 
     /** What is set now, as one line, or null when the PC has not said. */
     fun nowLine(view: VoiceStrict.View): String? {
@@ -217,6 +251,7 @@ object StrictVoice {
             !view.settings -> NOT_ON_THIS_PC
             setting == VoiceStrict.MEMORY && view.memory.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.SENSITIVE_MEMORY && view.sensitiveMemory.isBlank() -> NOT_ON_THIS_PC
+            setting == VoiceStrict.HANDS_FREE && view.handsFree.isBlank() -> NOT_ON_THIS_PC
             !settingOpen(setting, view) -> MEMORY_WHILE_VOICE_IS_ENOUGH
             loosening && linkBlocker != null -> linkBlocker
             setting == VoiceStrict.PRIVACY && value == VoiceStrict.VOICE_IS_ENOUGH && !view.isVeryStrict ->

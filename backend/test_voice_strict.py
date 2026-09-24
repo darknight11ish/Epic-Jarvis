@@ -530,6 +530,113 @@ def t_sensitive_saved_facts_stay_on_screen_by_default():
               and gate_state["settings"]["sensitive_memory"] == "sensitive_on_screen", gate_state)
 
 
+HANDS_FREE_CARD = (
+    "Let a question started with \"Hey Jarvis\" count the same as pressing the talk "
+    "button?\n\n"
+    "Then a recording or a copy of your voice played near the microphone could have "
+    "Jarvis remember things, or read memory and private answers aloud.\n\n"
+    "If you did not just do this, say no.\n\n"
+    "If you say no: nothing changes - \"Hey Jarvis\" questions stay on the stricter "
+    "setting.")
+
+
+def t_hands_free_setting():
+    """The owner's decision, 2026-09-24: hands-free voice ("hey Jarvis") is as
+    trusted as the talk button by default, with a fifth setting to make it
+    stricter. Choosing "only trust the talk button" is immediate; going back
+    is the voice card. A damaged value is the stricter one."""
+    with Temp():
+        check("no settings file: same_as_button, and a wake-word turn is trusted",
+              V.settings()["hands_free"] == "same_as_button"
+              and V.hands_free_trusted("wake_word"))
+        V.settings_path().write_text(json.dumps({"strictness": "very_strict",
+                                                 "memory": "memory_aloud"}))
+        check("a file from before this setting: same_as_button (the default)",
+              V.settings()["hands_free"] == "same_as_button")
+        V.settings_path().write_text(json.dumps({"hands_free": "trust_everyone"}))
+        check("a damaged value: button_only (fail closed)",
+              V.settings()["hands_free"] == "button_only"
+              and not V.hands_free_trusted("wake_word"))
+        V.settings_path().write_text(json.dumps({"hands_free": None}))
+        check("a null value: button_only", V.settings()["hands_free"] == "button_only")
+        V.settings_path().write_text("{not json", encoding="utf-8")
+        check("an unreadable file: button_only",
+              V.settings()["hands_free"] == "button_only")
+        V.settings_path().write_text("[1, 2]", encoding="utf-8")
+        check("a file that is not an object: button_only",
+              V.settings()["hands_free"] == "button_only")
+        V.settings_path().unlink()
+        st = V.status()
+        check("status: hands_free at the top, in settings, choices and defaults",
+              st["hands_free"] == "same_as_button"
+              and st["settings"]["hands_free"] == "same_as_button"
+              and st["settings"]["choices"]["hands_free"] == ["same_as_button", "button_only"]
+              and st["settings"]["defaults"]["hands_free"] == "same_as_button", st)
+        check("is_loosening: same_as_button loosens (from button_only), button_only does not",
+              not V.is_loosening("hands_free", "button_only"))
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free", "button_only")
+        check("Only trust the talk button: immediate, no card",
+              code == 200 and out["changed"] and not gate.calls
+              and V.settings()["hands_free"] == "button_only"
+              and out["settings"]["hands_free"] == "button_only", (code, out))
+        check("button_only: the talk button is still trusted, hey Jarvis is not, nor a "
+              "missing or unknown source",
+              V.hands_free_trusted("push_to_talk") and not V.hands_free_trusted("wake_word")
+              and not V.hands_free_trusted("") and not V.hands_free_trusted(None)
+              and not V.hands_free_trusted("barge_in"))
+        check("the other settings are kept when it is written",
+              V.settings()["memory"] == "memory_aloud"
+              and V.settings()["strictness"] == "very_strict"
+              and V.settings()["sensitive_memory"] == "sensitive_on_screen")
+        check("is_loosening: going back to same_as_button loosens",
+              V.is_loosening("hands_free", "same_as_button"))
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free", "same_as_button",
+                                   Verdict(False, outcome="denied"))
+        check("Same as the talk button raises ONE card; denied: stays button_only",
+              code == 202 and len(gate.calls) == 1
+              and V.settings()["hands_free"] == "button_only", (code, out))
+        check("the card: the agreed words",
+              gate.calls and gate.calls[0][2] == HANDS_FREE_CARD, gate.calls)
+        check("the card names the setting and the value",
+              gate.calls and gate.calls[0][1]["setting"] == "hands_free"
+              and gate.calls[0][1]["to"] == "same_as_button", gate.calls)
+        check("...and the last card says so",
+              (E._LAST or {}).get("setting") == "hands_free"
+              and (E._LAST or {}).get("outcome") == "denied", E._LAST)
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free", "same_as_button",
+                                   Verdict(False, outcome="timed_out"))
+        check("timed out: stays button_only", V.settings()["hands_free"] == "button_only")
+        E._reset_for_tests()
+        code, out, gate = _setting("hands_free", "same_as_button", Verdict(True))
+        check("approved: same_as_button", V.settings()["hands_free"] == "same_as_button"
+              and V.hands_free_trusted("wake_word"), (code, out))
+        V.set_setting("hands_free", "button_only")
+        try:
+            V.set_setting("hands_free", "same_as_button")
+            ok = False
+        except ValueError:
+            ok = True
+        check("set_setting refuses to loosen it without approval", ok)
+        E._reset_for_tests()
+        with mock.patch.object(V, "_CHOICES", {k: c for k, c in V._CHOICES.items()
+                                               if k != "hands_free"}):
+            code, out, gate = _setting("hands_free", "button_only")
+        check("a voice module older than the setting: 503 in words, no card",
+              code == 503 and "too old" in out["error"] and not gate.calls, (code, out))
+        code, out, gate = _setting("hands_free", "everyone")
+        check("an unknown value: 400", code == 400, (code, out))
+        gate_state = S._strict_state({"strictness": "very_strict"})
+        check("an older PC's status: hands_free is \"\" (the apps do not offer it)",
+              gate_state["hands_free"] == "", gate_state)
+        gate_state = S._strict_state(V.status())
+        check("gate.hands_free is the PC's setting",
+              gate_state["hands_free"] == "button_only"
+              and gate_state["settings"]["hands_free"] == "button_only", gate_state)
+
+
 def t_nothing_private_aloud_without_a_real_check():
     """Broad mode lets every voice in without checking it. "Voice check is
     enough" and "read memories aloud" must then read nothing private aloud:
@@ -1105,6 +1212,91 @@ def t_private_fields_on_the_reply():
                   and noted[0][1]["strictness"] == "very_strict", noted)
 
 
+def t_hands_free_on_the_reply():
+    """Under "only trust the talk button", a clip that did not come from the
+    talk button - "hey Jarvis", or no source said (fail closed) - gets
+    private_aloud, memory_aloud and sensitive_aloud all false, and its
+    transcript is noted for history with how it started. Under the default,
+    nothing changes."""
+    import jarvis_wakeword as W
+    import jarvis_chat_log
+    with Temp():
+        small = Table("sherpa-onnx:357a834f702b", {"loud": OWNER})
+        V.enroll(["a", "b", "c"], embedder=Table(small.name, {"a": OWNER, "b": OWNER,
+                                                               "c": OWNER}))
+        # Every "read aloud" setting at its loosest, so each field is true
+        # for a trusted clip and only the hands-free rule can make it false.
+        V.set_setting("privacy", "voice_is_enough", approved=True)
+        V.set_setting("sensitive_memory", "sensitive_aloud", approved=True)
+        aloud = ("private_aloud", "memory_aloud", "sensitive_aloud")
+        noted = []
+
+        def note(words, *, strictness, model, mode, source=""):
+            noted.append((words, source))
+
+        S.set_wake_enabled(True, gate=lambda *a: Verdict(True, outcome="approved"),
+                           tier_of=ask, spawn=run_sync)
+        try:
+            with mock.patch.object(V, "EcapaEmbedder", lambda: small), \
+                    mock.patch.object(V, "strong_embedder", lambda *a: None), \
+                    mock.patch.object(S, "_speech_span", return_value="skip"), \
+                    mock.patch.object(S, "_stt_engine", return_value=object()), \
+                    mock.patch.object(W, "spot",
+                                      return_value=W.Spot(True, heard=True, score=0.9)), \
+                    mock.patch.object(jarvis_chat_log, "note_transcript", note):
+
+                def hear(source, words="what is on my calendar today"):
+                    with mock.patch.object(S, "_transcribe", return_value=words):
+                        if source is None:
+                            return S.hear(_clip("owner", 2.5)).as_dict()
+                        return S.hear(_clip("owner", 2.5), source=source).as_dict()
+
+                def all_aloud(h, want):
+                    return all(h[k] is want for k in aloud)
+
+                h = hear("push_to_talk")
+                check("same_as_button (default), the talk button: all three aloud as today",
+                      h["ok"] and all_aloud(h, True), h)
+                h = hear("wake_word", "Hey Jarvis, what is on my calendar today")
+                check("same_as_button, hey Jarvis: all three aloud - nothing changes",
+                      h["ok"] and h["wake_heard"] and all_aloud(h, True), h)
+                h = hear("")
+                check("same_as_button, no source said: all three aloud - nothing changes",
+                      h["ok"] and all_aloud(h, True), h)
+                check("the transcript is noted with how the clip started",
+                      [s for _, s in noted] == ["push_to_talk", "wake_word", ""], noted)
+
+                V.set_setting("hands_free", "button_only")
+                h = hear("push_to_talk")
+                check("button_only, the talk button: all three still aloud",
+                      h["ok"] and all_aloud(h, True), h)
+                h = hear(None)
+                check("button_only, the route's default (push_to_talk): aloud",
+                      h["ok"] and all_aloud(h, True), h)
+                h = hear("wake_word", "Hey Jarvis, what is on my calendar today")
+                check("button_only, hey Jarvis: private, memory and sensitive answers stay "
+                      "on screen", h["ok"] and h["wake_heard"] and all_aloud(h, False), h)
+                check("...and it is still answered (the words are there)",
+                      h["text"] == "what is on my calendar today", h)
+                h = hear("")
+                check("button_only, no source said: treated as hands-free (on screen)",
+                      h["ok"] and all_aloud(h, False), h)
+                h = hear("carrier_pigeon")
+                check("button_only, an unknown source: on screen",
+                      h["ok"] and all_aloud(h, False), h)
+                with mock.patch.object(V, "hands_free_trusted", side_effect=RuntimeError):
+                    h = hear("push_to_talk")
+                check("a voice module that cannot answer: on screen",
+                      h["ok"] and all_aloud(h, False), h)
+                with mock.patch.object(S, "jarvis_voice", mock.Mock(wraps=V, spec=[
+                        n for n in dir(V) if n != "hands_free_trusted"])):
+                    check("a voice module older than the setting: trusted, as before",
+                          S._source_trusted("wake_word") is True)
+        finally:
+            S.set_wake_enabled(False)
+            S._close_awake()
+
+
 # ------------------------------------------------ 12. nothing on the disk --
 
 def t_no_audio_is_written():
@@ -1184,13 +1376,15 @@ if __name__ == "__main__":
     for fn in (t_hole_one_the_basic_check_lets_nobody_in, t_hole_two_one_noisy_clip,
                t_settings_tighten_now_loosen_with_a_card, t_may_speak,
                t_memory_answers_aloud_by_default, t_sensitive_saved_facts_stay_on_screen_by_default,
+               t_hands_free_setting,
                t_nothing_private_aloud_without_a_real_check,
                t_the_stronger_model_decides, t_cohort_maths,
                t_a_bank_of_the_wrong_width_is_not_used, t_building_a_bank_on_this_pc,
                t_the_shipped_bank,
                t_training_in_rounds, t_rounds_make_subprints_and_add_adds,
                t_repeat_counters, t_measure_and_someone_else, t_minimum_command_length,
-               t_private_fields_on_the_reply, t_no_audio_is_written, t_real_models):
+               t_private_fields_on_the_reply, t_hands_free_on_the_reply, t_no_audio_is_written,
+               t_real_models):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

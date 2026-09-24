@@ -679,4 +679,159 @@ class VoiceStrictTest {
         assertTrue(block, block.contains("setting = VoiceStrict.SENSITIVE_MEMORY"))
         assertTrue(block, block.contains("choices = StrictVoice.SENSITIVE_MEMORY"))
     }
+
+    // ------------------------------------------ hands-free ("Hey Jarvis") --
+    //
+    // The owner's decision, 2026-09-24: a question started with "Hey Jarvis"
+    // is as trusted as the talk button by default, with a fifth setting to
+    // make it stricter. The fixture carries it (the backend's own statuses).
+
+    /** A real status with `hands_free` set to [value] in the gate and its settings, or taken out (null). */
+    private fun withHandsFree(case: String, value: String?): JsonObject {
+        val gate = status(case)["gate"]!!.jsonObject
+        val settings = gate["settings"]?.jsonObject.orEmpty() - "hands_free"
+        val add: Map<String, JsonPrimitive> =
+            if (value == null) emptyMap() else mapOf("hands_free" to JsonPrimitive(value))
+        val newGate = gate - "hands_free" - "settings" + add + ("settings" to JsonObject(settings + add))
+        return JsonObject(status(case) + ("gate" to JsonObject(newGate)))
+    }
+
+    @Test
+    fun `hands-free is read from the PC's real status, and only when the PC reports it`() {
+        assertEquals(VoiceStrict.SAME_AS_BUTTON, view("trained_three_rounds").handsFree)
+        assertEquals(VoiceStrict.BUTTON_ONLY, view("hands_free_button_only").handsFree)
+        assertEquals(VoiceStrict.BUTTON_ONLY, view("hands_free_back_denied").handsFree)
+        assertEquals(VoiceStrict.SAME_AS_BUTTON, view("hands_free_back_approved").handsFree)
+        // An older PC: "" - the screen does not offer it.
+        assertEquals("", VoiceStrict.parse(withHandsFree("trained_three_rounds", null)).handsFree)
+        // A damaged value is the strict one, never "same as the button".
+        assertEquals(
+            VoiceStrict.BUTTON_ONLY,
+            VoiceStrict.parse(withHandsFree("trained_three_rounds", "everyone")).handsFree,
+        )
+        // The talk-button half still decodes with the field in it.
+        assertTrue(VoiceStrict.read(status("hands_free_button_only")) is ApiResult.Ok)
+    }
+
+    @Test
+    fun `hands-free - only the button is at once, going back asks and is held on a stale link`() {
+        val same = view("trained_three_rounds")
+        val strictOnly = view("hands_free_button_only")
+        assertTrue(StrictVoice.isCurrent(VoiceStrict.HANDS_FREE, VoiceStrict.SAME_AS_BUTTON, same))
+        assertTrue(StrictVoice.isCurrent(VoiceStrict.HANDS_FREE, VoiceStrict.BUTTON_ONLY, strictOnly))
+        assertTrue(VoiceStrict.isLoosening(VoiceStrict.HANDS_FREE, VoiceStrict.SAME_AS_BUTTON))
+        assertFalse(VoiceStrict.isLoosening(VoiceStrict.HANDS_FREE, VoiceStrict.BUTTON_ONLY))
+        // Only the talk button: never held, even on a stale link.
+        assertNull(StrictVoice.blocker(VoiceStrict.HANDS_FREE, VoiceStrict.BUTTON_ONLY, same, "stale"))
+        // Back to the default: held on a stale link, sent on a live one.
+        assertEquals("stale", StrictVoice.blocker(VoiceStrict.HANDS_FREE, VoiceStrict.SAME_AS_BUTTON, strictOnly, "stale"))
+        assertNull(StrictVoice.blocker(VoiceStrict.HANDS_FREE, VoiceStrict.SAME_AS_BUTTON, strictOnly, null))
+        // An older PC does not offer it.
+        assertEquals(
+            StrictVoice.NOT_ON_THIS_PC,
+            StrictVoice.blocker(VoiceStrict.HANDS_FREE, VoiceStrict.BUTTON_ONLY, same.copy(handsFree = ""), null),
+        )
+        // A card for it already waiting.
+        val waiting = strictOnly.copy(pendingKind = "setting", pendingSetting = VoiceStrict.HANDS_FREE,
+            pendingValue = VoiceStrict.SAME_AS_BUTTON)
+        assertEquals(
+            "A card for this is already waiting. " + com.jarvis.client.net.Approvals.WHERE,
+            StrictVoice.blocker(VoiceStrict.HANDS_FREE, VoiceStrict.SAME_AS_BUTTON, waiting, null),
+        )
+        assertEquals(
+            "Waiting for your approval to change this to \"Same as the talk button\". " +
+                com.jarvis.client.net.Approvals.WHERE,
+            StrictVoice.waitingLine(VoiceStrict.HANDS_FREE, waiting),
+        )
+        // The body is the PC's own mode, with only this setting's two values.
+        assertEquals(
+            "{\"mode\":\"hands_free\",\"value\":\"button_only\"}",
+            VoiceStrict.settingBody(VoiceStrict.HANDS_FREE, VoiceStrict.BUTTON_ONLY),
+        )
+        assertEquals(
+            "{\"mode\":\"hands_free\",\"value\":\"same_as_button\"}",
+            VoiceStrict.settingBody(VoiceStrict.HANDS_FREE, VoiceStrict.SAME_AS_BUTTON),
+        )
+        assertTrue(runCatching { VoiceStrict.settingBody(VoiceStrict.HANDS_FREE, VoiceStrict.MEMORY_ALOUD) }.isFailure)
+        assertTrue(runCatching { VoiceStrict.settingBody(VoiceStrict.MEMORY, VoiceStrict.BUTTON_ONLY) }.isFailure)
+        // The PC's REAL answers: at once, then the card.
+        val tightened = answer("hands_free_button_only")
+        assertTrue(tightened.accepted && tightened.changed && !tightened.pending)
+        assertEquals("Done - that applies now.", StrictVoice.answerLine(tightened))
+        val asked = answer("hands_free_back_waiting")
+        assertTrue(asked.accepted && asked.pending)
+        assertEquals(202, asked.code)
+    }
+
+    @Test
+    fun `the hands-free plate uses the agreed words, the same as the desktop's`() {
+        assertEquals("Hands-free (\"Hey Jarvis\")", StrictVoice.HANDS_FREE_TITLE)
+        assertEquals(
+            listOf("Same as the talk button (default)", "Only trust the talk button"),
+            StrictVoice.HANDS_FREE.map { it.label },
+        )
+        assertEquals(
+            listOf(VoiceStrict.SAME_AS_BUTTON, VoiceStrict.BUTTON_ONLY),
+            StrictVoice.HANDS_FREE.map { it.value },
+        )
+        assertEquals(
+            "A question started with \"Hey Jarvis\" is trusted like one where you press the button.",
+            StrictVoice.HANDS_FREE[0].detail,
+        )
+        assertEquals(
+            "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or private " +
+                "answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
+            StrictVoice.HANDS_FREE[1].detail,
+        )
+        assertEquals("Same as the talk button", StrictVoice.label(VoiceStrict.HANDS_FREE, VoiceStrict.SAME_AS_BUTTON))
+        assertEquals("Only trust the talk button", StrictVoice.label(VoiceStrict.HANDS_FREE, VoiceStrict.BUTTON_ONLY))
+        // The last setting card, in the same shape as the others - one from the PC's real status.
+        assertEquals(
+            "You said no, so \"Only trust the talk button\" stays.",
+            StrictVoice.lastLine(view("hands_free_back_denied").last, view("hands_free_back_denied")),
+        )
+        fun last(outcome: String) =
+            VoiceStrict.Last(outcome = outcome, setting = VoiceStrict.HANDS_FREE, value = VoiceStrict.SAME_AS_BUTTON)
+        assertEquals("Approved: \"Same as the talk button\" is on now.", StrictVoice.lastLine(last("setting_changed")))
+        assertEquals("You said no, so \"Only trust the talk button\" stays.", StrictVoice.lastLine(last("denied")))
+        assertEquals("Nobody answered the card in time, so nothing changed.", StrictVoice.lastLine(last("timed_out")))
+        assertEquals("You made it stricter while the card waited, so approving it changed nothing.",
+            StrictVoice.lastLine(last("withdrawn")))
+        // One wording for both apps: the desktop's voice-training.js has the same title, labels and words.
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        var found: java.io.File? = null
+        var html: java.io.File? = null
+        while (dir != null && found == null) {
+            java.io.File(dir, "jarvis-desktop/src/voice-training.js").takeIf { it.isFile }?.let { found = it }
+            java.io.File(dir, "jarvis-desktop/src/settings.html").takeIf { it.isFile }?.let { html = it }
+            dir = dir.parentFile
+        }
+        val js = requireNotNull(found).readText().replace("\\\"", "\"")
+        val block = requireNotNull(
+            Regex("""HANDS_FREE\s*=\s*Object\.freeze\(\[(.*?)\]\);""", RegexOption.DOT_MATCHES_ALL).find(js),
+        ) { "HANDS_FREE not found in voice-training.js" }.groupValues[1]
+        for (c in StrictVoice.HANDS_FREE) {
+            assertTrue(c.detail, block.contains(c.detail))
+            assertTrue(c.label, block.contains("label: \"${c.label.removeSuffix(" (default)")}\""))
+        }
+        assertTrue(requireNotNull(html).readText().contains(">Hands-free (\"Hey Jarvis\")<"))
+    }
+
+    @Test
+    fun `the voice check screen shows the hands-free plate only when the PC reports it`() {
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        var screen: java.io.File? = null
+        while (dir != null && screen == null) {
+            screen = java.io.File(dir, "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/VoiceCheckScreen.kt")
+                .takeIf { it.isFile }
+            dir = dir.parentFile
+        }
+        val src = requireNotNull(screen).readText()
+        val at = src.indexOf("if (strict.handsFree.isNotBlank()) {")
+        assertTrue(at >= 0)
+        val block = src.substring(at, at + 500)
+        assertTrue(block, block.contains("title = StrictVoice.HANDS_FREE_TITLE"))
+        assertTrue(block, block.contains("setting = VoiceStrict.HANDS_FREE"))
+        assertTrue(block, block.contains("choices = StrictVoice.HANDS_FREE"))
+    }
 }

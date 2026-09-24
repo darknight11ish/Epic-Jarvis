@@ -639,6 +639,69 @@ def t_voice_counts_only_when_very_strict_strong_and_owner():
             w.done()
 
 
+def t_hands_free_voice_follows_the_owners_setting():
+    """The owner's decision, 2026-09-24: hands-free voice ("hey Jarvis") is as
+    trusted as the talk button by default. Under "only trust the talk
+    button", a voice turn that was not started with the button - or whose
+    start the speech route did not say - is never learned from without a
+    card."""
+    import jarvis_voice as V
+    keep = V.PROFILE_PATH
+    V.PROFILE_PATH = Path(tempfile.mkdtemp(prefix="jarvis-hands-free-")) / "owner.json"
+    strong = {"strictness": "very_strict", "model": A.STRONG_MODEL_LABEL, "mode": "owner"}
+    words = "I usually go running on Tuesday mornings"
+    fact = "The owner usually goes running on Tuesday mornings"
+    try:
+        for setting, source, ok in (("same_as_button", "wake_word", True),
+                                    ("same_as_button", "push_to_talk", True),
+                                    ("same_as_button", None, True),
+                                    ("button_only", "push_to_talk", True),
+                                    ("button_only", "wake_word", False),
+                                    ("button_only", "", False),
+                                    ("button_only", None, False)):
+            V.settings_path().parent.mkdir(parents=True, exist_ok=True)
+            V.settings_path().write_text(json.dumps({"hands_free": setting}))
+            w = World()
+            try:
+                if source is None:
+                    w.log.note_transcript(words, **strong)
+                else:
+                    w.log.note_transcript(words, source=source, **strong)
+                w.say(words, prov="voice")
+                res = w.learn([fact])
+                label = f"{setting}, source {source!r}"
+                if ok:
+                    check(f"voice ({label}): saved as before", saved(res), res)
+                else:
+                    check(f"voice ({label}): a card, saying why in plain words",
+                          carded(res, "said hands-free - your setting only trusts the "
+                                      "talk button"), res)
+            finally:
+                w.done()
+        # A damaged setting is the stricter choice.
+        V.settings_path().write_text(json.dumps({"hands_free": "everyone"}))
+        w = World()
+        try:
+            w.log.note_transcript(words, source="wake_word", **strong)
+            w.say(words, prov="voice")
+            res = w.learn([fact])
+            check("a damaged hands-free setting: a hey-Jarvis turn is a card",
+                  carded(res, "said hands-free"), res)
+        finally:
+            w.done()
+        # Typed turns are not touched by it.
+        V.settings_path().write_text(json.dumps({"hands_free": "button_only"}))
+        w = World()
+        try:
+            w.say(words)
+            res = w.learn([fact])
+            check("button_only: a typed turn is saved as before", saved(res), res)
+        finally:
+            w.done()
+    finally:
+        V.PROFILE_PATH = keep
+
+
 def t_a_tainted_conversation_keeps_cards():
     w = World()
     try:

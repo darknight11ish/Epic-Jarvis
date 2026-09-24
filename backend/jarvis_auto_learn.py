@@ -49,7 +49,9 @@ THE CHECKS (each a small function below, returning a reason in words or "")
               from that pass a card: the model read it, and nothing says
               which turn a fact came from (GUARDS L1, L2, L4, H1, H5).
   Voice       a voice turn counts only when the check that let it in was
-              very strict, decided by the stronger model, in mode "owner" (L8).
+              very strict, decided by the stronger model, in mode "owner" (L8)
+              - and, when the owner chose "only trust the talk button" for
+              hands-free voice, only when it was started with the talk button.
   Outside     no sign of pasted text in any turn: a link or web-page code,
               hidden characters, a long encoded block, email headers, more
               than TURN_MAX_CHARS, or an injection_flags() hit - on the turns
@@ -599,7 +601,34 @@ def check_voice(entry: dict) -> str:
             or not _strong(vc.get("model"))):
         return ("said aloud, but the voice check was not at its strictest "
                 "(very strict, the stronger voice model)")
+    if not _source_trusted(vc.get("source")):
+        return HANDS_FREE_WHY
     return ""
+
+
+#: The card's reason when the owner's "hands-free" voice setting is "only
+#: trust the talk button" and the turn was not started with the button.
+HANDS_FREE_WHY = "said hands-free - your setting only trusts the talk button"
+
+
+def _source_trusted(source) -> bool:
+    """The owner's "hands-free" voice setting (jarvis_voice.
+    hands_free_trusted, the owner's decision of 2026-09-24): is a voice turn
+    that started this way - "push_to_talk", "wake_word", or "" when the
+    speech route did not say - trusted like the talk button? A jarvis_voice
+    without that setting: yes, as before. One that cannot answer: no (a
+    card)."""
+    try:
+        import jarvis_voice
+    except Exception:
+        return True
+    fn = getattr(jarvis_voice, "hands_free_trusted", None)
+    if fn is None:
+        return True
+    try:
+        return bool(fn(source))
+    except Exception:
+        return False
 
 
 def check_taint(entry: dict) -> str:

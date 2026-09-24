@@ -350,6 +350,7 @@
         "ok": true,
         "pending": false,
         "settings": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -366,6 +367,7 @@
         "ok": true,
         "pending": false,
         "settings": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -382,6 +384,7 @@
         "ok": true,
         "pending": false,
         "settings": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
@@ -525,6 +528,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -610,6 +614,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -628,11 +636,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 1.5,
           "privacy": "private_on_screen",
@@ -674,6 +684,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -768,6 +779,10 @@
       "settings": {
         "changed": 1790000000.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -786,11 +801,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 1.5,
         "privacy": "private_on_screen",
@@ -996,6 +1013,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": false,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -1076,6 +1094,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -1094,11 +1116,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -1138,6 +1162,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "Jarvis has not learned your voice yet. Use Train my voice on the Checks screen.",
@@ -1227,6 +1252,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -1245,11 +1274,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -1455,6 +1486,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -1540,6 +1572,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -1558,11 +1594,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -1615,6 +1653,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -1709,6 +1748,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -1727,11 +1770,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -1937,6 +1982,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2022,6 +2068,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2040,11 +2090,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -2080,6 +2132,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC's voice check changed since you trained it. Train your voice again.",
@@ -2174,6 +2227,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -2192,11 +2249,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -2402,6 +2461,7 @@
         "embedder": "spectral-v1",
         "enabled": true,
         "enrolled": false,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2482,6 +2542,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2500,11 +2564,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -2540,6 +2606,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no voice-ID model installed, so it cannot tell your voice from anyone else's. Install it (backend/README.md, \"Install the better voice check\").",
@@ -2629,6 +2696,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -2647,11 +2718,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -2857,6 +2930,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": false,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -2937,6 +3011,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -2955,11 +3033,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3009,6 +3089,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "Jarvis has not learned your voice yet. Use Train my voice on the Checks screen.",
@@ -3098,6 +3179,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -3116,11 +3201,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -3326,6 +3413,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -3411,6 +3499,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -3429,11 +3521,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3483,6 +3577,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -3577,6 +3672,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -3595,11 +3694,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -3805,6 +3906,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -3890,6 +3992,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -3908,11 +4014,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -3955,6 +4063,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -4049,6 +4158,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -4067,11 +4180,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -4277,6 +4392,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -4362,6 +4478,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -4380,11 +4500,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -4420,6 +4542,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -4514,6 +4637,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -4532,11 +4659,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -4742,6 +4871,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -4832,6 +4962,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -4850,11 +4984,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -4890,6 +5026,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -4989,6 +5126,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -5007,11 +5148,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -5217,6 +5360,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -5302,6 +5446,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -5320,11 +5468,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -5366,6 +5516,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -5460,6 +5611,10 @@
       "settings": {
         "changed": 1790000000.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -5478,11 +5633,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -5688,6 +5845,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -5777,6 +5935,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -5795,11 +5957,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -5847,6 +6011,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -5945,6 +6110,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -5963,11 +6132,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -6173,6 +6344,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -6266,6 +6438,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -6284,11 +6460,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -6346,6 +6524,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -6448,6 +6627,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -6466,11 +6649,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -6676,6 +6861,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": false,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -6756,6 +6942,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -6774,11 +6964,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -6818,6 +7010,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "Jarvis has not learned your voice yet. Use Train my voice on the Checks screen.",
@@ -6907,6 +7100,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -6925,11 +7122,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -7135,6 +7334,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": false,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -7215,6 +7415,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -7233,11 +7437,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -7304,6 +7510,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "Jarvis has not learned your voice yet. Use Train my voice on the Checks screen.",
@@ -7393,6 +7600,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -7411,11 +7622,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -7621,6 +7834,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -7706,6 +7920,10 @@
         "settings": {
           "changed": 0.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -7724,11 +7942,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "private_on_screen",
@@ -7767,6 +7987,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -7861,6 +8082,10 @@
       "settings": {
         "changed": 0.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -7879,11 +8104,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "private_on_screen",
@@ -8089,6 +8316,7 @@
         "embedder": "sherpa-onnx:fixture00000",
         "enabled": true,
         "enrolled": true,
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "mode": "owner",
         "models": {
@@ -8174,6 +8402,10 @@
         "settings": {
           "changed": 1790000000.0,
           "choices": {
+            "hands_free": [
+              "same_as_button",
+              "button_only"
+            ],
             "memory": [
               "memory_aloud",
               "memory_on_screen"
@@ -8192,11 +8424,13 @@
             ]
           },
           "defaults": {
+            "hands_free": "same_as_button",
             "memory": "memory_aloud",
             "privacy": "private_on_screen",
             "sensitive_memory": "sensitive_on_screen",
             "strictness": "very_strict"
           },
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "min_command_seconds": 2.0,
           "privacy": "voice_is_enough",
@@ -8238,6 +8472,7 @@
           "settings": true
         }
       },
+      "hands_free": "same_as_button",
       "listening": {
         "push_to_talk": false,
         "push_to_talk_why": "The PC has no speech-to-text set up yet, so it cannot turn what you say into words.",
@@ -8332,6 +8567,10 @@
       "settings": {
         "changed": 1790000000.0,
         "choices": {
+          "hands_free": [
+            "same_as_button",
+            "button_only"
+          ],
           "memory": [
             "memory_aloud",
             "memory_on_screen"
@@ -8350,11 +8589,13 @@
           ]
         },
         "defaults": {
+          "hands_free": "same_as_button",
           "memory": "memory_aloud",
           "privacy": "private_on_screen",
           "sensitive_memory": "sensitive_on_screen",
           "strictness": "very_strict"
         },
+        "hands_free": "same_as_button",
         "memory": "memory_aloud",
         "min_command_seconds": 2.0,
         "privacy": "voice_is_enough",

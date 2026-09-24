@@ -40,8 +40,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * "Voice check": how strict Jarvis is about the owner's voice, whether
  * private answers, answers that use memories, and answers that use
- * sensitive saved facts may be read aloud, the guided "how often would I
- * have to say it twice?" test, and how often that really happened.
+ * sensitive saved facts may be read aloud, how far a question started with
+ * "Hey Jarvis" is trusted, the guided "how often would I have to say it
+ * twice?" test, and how often that really happened.
  *
  * The settings follow the shape of every other switch that widens what
  * Jarvis does: the LOOSER choice (balanced; voice check is enough; read
@@ -321,6 +322,21 @@ private fun CheckPlates(
                         strict = strict,
                         busy = busy,
                         note = note?.takeIf { it.first == VoiceStrict.SENSITIVE_MEMORY }?.second,
+                        onPick = onPick,
+                    )
+                }
+                // Hands-free ("Hey Jarvis") (the owner's decision, 2026-09-24) -
+                // only when the PC reports the setting. "Only trust the talk
+                // button" applies at once; going back asks, and is held on a
+                // stale link (StrictVoice.blocker).
+                if (strict.handsFree.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.HANDS_FREE_TITLE,
+                        setting = VoiceStrict.HANDS_FREE,
+                        choices = StrictVoice.HANDS_FREE,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.HANDS_FREE }?.second,
                         onPick = onPick,
                     )
                 }

@@ -587,17 +587,38 @@ MEMORY = (MEMORY_ALOUD, MEMORY_ON_SCREEN)
 SENSITIVE_ON_SCREEN = "sensitive_on_screen"
 SENSITIVE_ALOUD = "sensitive_aloud"
 SENSITIVE_MEMORY = (SENSITIVE_ON_SCREEN, SENSITIVE_ALOUD)
+#: How far a question started HANDS-FREE ("hey Jarvis", `source=wake_word`)
+#: is trusted. The owner's decision, 2026-09-24: "as trusted as the talk
+#: button by default, with a setting to make it stricter". The voice check
+#: tells the owner's voice from other people's; it cannot tell it from a
+#: recording or a copy played near the microphone, and the hands-free path
+#: is the one such a recording can reach without anyone touching a device.
+#: `button_only`: a turn that did not come from the talk button
+#: (`source=push_to_talk`) - including one whose source is missing or
+#: unknown - reads nothing private, remembered or sensitive aloud, and
+#: automatic learning never saves a fact from it without a card.
+SAME_AS_BUTTON = "same_as_button"
+BUTTON_ONLY = "button_only"
+HANDS_FREE = (SAME_AS_BUTTON, BUTTON_ONLY)
+#: The one source the talk button sends (jarvis_speech.hear's `source`).
+PUSH_TO_TALK = "push_to_talk"
 #: The default of each setting. For strictness, privacy and sensitive_memory
 #: it is the strict value, also used for a missing, unreadable or unknown
-#: one. For memory the default is the owner's looser choice; an unknown VALUE
-#: (a damaged file) still falls back to the strict one - see settings().
+#: one. For memory and hands_free the default is the owner's looser choice;
+#: an unknown VALUE (a damaged file) still falls back to the strict one -
+#: see settings().
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
-            "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN}
+            "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
+            "hands_free": SAME_AS_BUTTON}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
-            "sensitive_memory": SENSITIVE_MEMORY}
+            "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
-          "sensitive_memory": SENSITIVE_ALOUD}
+          "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON}
+#: The settings whose DEFAULT is the looser value, and the strict value each
+#: falls back to when the file is unreadable or holds a value that is not
+#: one of its choices. Only a file that never had the key gets the default.
+_STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY}
 _SETTINGS_LOCK = threading.Lock()
 
 #: The least speech a COMMAND must have, in seconds (the VAD's span, which
@@ -616,11 +637,11 @@ def settings_path() -> Path:
 
 
 def settings() -> dict:
-    """{"strictness", "privacy", "memory", "sensitive_memory", "changed"}.
-    The strict value for anything missing, unreadable or unknown - except
-    that a file with no
-    "memory" in it (every file written before 2026-09-24, and no file at
-    all) gets the owner's default for memory, MEMORY_ALOUD. The one rule
+    """{"strictness", "privacy", "memory", "sensitive_memory", "hands_free",
+    "changed"}. The strict value for anything missing, unreadable or
+    unknown - except that a file with no "memory" or no "hands_free" in it
+    (every file written before 2026-09-24, and no file at all) gets the
+    owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON. The one rule
     applied on every read as well as every write: private answers may be
     read aloud only while the check is very strict."""
     out = {**DEFAULTS, "changed": 0.0}
@@ -632,15 +653,15 @@ def settings() -> dict:
     except Exception:
         raw = None                      # there, but unreadable: strict
     if not isinstance(raw, dict):
-        out["memory"] = MEMORY_ON_SCREEN
+        out.update(_STRICT_WHEN_DAMAGED)
         raw = {}
     for key, choices in _CHOICES.items():
         if raw.get(key) in choices:
             out[key] = raw[key]
-        elif key == "memory" and key in raw:
+        elif key in _STRICT_WHEN_DAMAGED and key in raw:
             # Present but not a known value: the strict one, as for the
-            # other two. Only a file that never had it gets the default.
-            out[key] = MEMORY_ON_SCREEN
+            # others. Only a file that never had it gets the default.
+            out[key] = _STRICT_WHEN_DAMAGED[key]
     ch = raw.get("changed")
     if isinstance(ch, (int, float)) and not isinstance(ch, bool) and math.isfinite(ch):
         out["changed"] = float(ch)
@@ -676,7 +697,7 @@ def set_setting(key: str, value: str, *, approved: bool = False) -> dict:
                              "check is very strict")
         new = {"strictness": cur["strictness"], "privacy": cur["privacy"],
                "memory": cur["memory"], "sensitive_memory": cur["sensitive_memory"],
-               key: value}
+               "hands_free": cur["hands_free"], key: value}
         if new["strictness"] != VERY_STRICT:
             new["privacy"] = PRIVATE_ON_SCREEN
         new["changed"] = time.time()
@@ -1864,6 +1885,19 @@ def sensitive_aloud() -> bool:
     return settings()["sensitive_memory"] == SENSITIVE_ALOUD
 
 
+def hands_free_trusted(source) -> bool:
+    """Is a voice turn that came from `source` trusted like the talk button -
+    may its answers be read aloud under the other settings, and may
+    automatic learning save from it without a card?
+
+    The talk button (`push_to_talk`): always. Anything else - `wake_word`,
+    and a source that is missing or not known (fail closed) - only while
+    the owner keeps the default, `same_as_button`."""
+    if str(source or "").strip().lower() == PUSH_TO_TALK:
+        return True
+    return settings()["hands_free"] == SAME_AS_BUTTON
+
+
 def may_speak(private: bool, origin: str = "voice") -> dict:
     """{"speak": bool, "why": str} - may an answer be read aloud?
 
@@ -1995,15 +2029,18 @@ def status() -> dict:
         "privacy": s["privacy"],
         "memory": s["memory"],
         "sensitive_memory": s["sensitive_memory"],
+        "hands_free": s["hands_free"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
+            "hands_free": s["hands_free"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],
             "choices": {"strictness": list(STRICTNESS), "privacy": list(PRIVACY),
                         "memory": list(MEMORY),
-                        "sensitive_memory": list(SENSITIVE_MEMORY)},
+                        "sensitive_memory": list(SENSITIVE_MEMORY),
+                        "hands_free": list(HANDS_FREE)},
             "defaults": dict(DEFAULTS),
         },
         "models": {

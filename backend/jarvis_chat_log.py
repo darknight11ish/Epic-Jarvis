@@ -467,10 +467,17 @@ class ChatLog:
         return len(ids)
 
     # -- voice ------------------------------------------------------------
-    def note_transcript(self, text: str, *, strictness, model, mode) -> None:
+    def note_transcript(self, text: str, *, strictness, model, mode,
+                        source: str = "") -> None:
         """The PC's speech route produced this transcript. For 10 minutes a
         user message with exactly these words, claimed as voice, is recorded
-        as "voice"; otherwise as "voice_unverified". Only a hash is kept."""
+        as "voice"; otherwise as "voice_unverified". Only a hash is kept.
+
+        `source` is how the clip started: "push_to_talk" (the talk button)
+        or "wake_word" ("hey Jarvis"), kept with the voice check's facts so
+        automatic learning can honour the owner's "hands-free" voice setting
+        (jarvis_auto_learn.check_voice). "" when the speech route did not
+        say - which that check treats as hands-free."""
         if not isinstance(text, str) or not _norm(text):
             return
         now = self._clock()
@@ -480,7 +487,8 @@ class ChatLog:
             if len(self._heard) >= 500:
                 del self._heard[min(self._heard, key=lambda h: self._heard[h][0])]
             self._heard[_hash(text)] = (now, {"strictness": str(strictness),
-                                              "model": str(model), "mode": str(mode)})
+                                              "model": str(model), "mode": str(mode),
+                                              "source": str(source or "")})
 
     def _heard_facts(self, text: str):
         # Used up on the first match: one spoken sentence verifies ONE chat
@@ -817,9 +825,10 @@ def record_turn(body, *, lane: str = "", turn: Optional[dict] = None,
     return _log().record_turn(body, lane=lane, turn=turn, at=at)
 
 
-def note_transcript(text: str, *, strictness, model, mode) -> None:
+def note_transcript(text: str, *, strictness, model, mode, source: str = "") -> None:
     """Called by the PC's speech route with each transcript it produced."""
-    _log().note_transcript(text, strictness=strictness, model=model, mode=mode)
+    _log().note_transcript(text, strictness=strictness, model=model, mode=mode,
+                           source=source)
 
 
 def live_turn(conversation_id, text) -> Optional[dict]:

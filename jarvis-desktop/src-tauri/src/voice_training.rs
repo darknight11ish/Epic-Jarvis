@@ -689,6 +689,12 @@ pub(crate) fn voice_setting(
         ("sensitive_memory", "sensitive_aloud") => {
             Ok(("sensitive_memory", "sensitive_aloud", true))
         }
+        // How far "Hey Jarvis" is trusted (the owner's decision,
+        // 2026-09-24). "Only trust the talk button" is the stricter choice
+        // and applies at once; going back to "same as the talk button" (the
+        // default) raises the voice card and is held on a stale link.
+        ("hands_free", "button_only") => Ok(("hands_free", "button_only", false)),
+        ("hands_free", "same_as_button") => Ok(("hands_free", "same_as_button", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
     }
 }
@@ -1159,6 +1165,16 @@ mod tests {
         // Each value belongs to its own setting only.
         assert!(voice_setting("memory", "sensitive_aloud").is_err());
         assert!(voice_setting("sensitive_memory", "memory_aloud").is_err());
+        assert_eq!(
+            voice_setting("hands_free", "same_as_button"),
+            Ok(("hands_free", "same_as_button", true))
+        );
+        assert_eq!(
+            voice_setting("hands_free", "button_only"),
+            Ok(("hands_free", "button_only", false))
+        );
+        assert!(voice_setting("hands_free", "sensitive_aloud").is_err());
+        assert!(voice_setting("memory", "button_only").is_err());
         assert!(voice_setting("mode", "broad").is_err());
     }
 
