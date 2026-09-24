@@ -52,6 +52,36 @@ class BigModelContractTest {
 
     // ------------------------------------------------------------- status --
 
+    /** AP-6: `last` as jarvis_big_model.py's status() sends it (fix-b2), added to a real case. */
+    private fun withLast(case: String, last: String): BigModel.Status {
+        val obj = cases[case]!!.jsonObject.toMutableMap()
+        obj["last"] = JarvisJson.parseToJsonElement(last)
+        return requireNotNull(BigModel.parse(JsonObject(obj)))
+    }
+
+    @Test
+    fun `how the last card ended is said under its switch, and nothing when absent`() {
+        val denied = withLast(
+            "status_ready_off",
+            """{"feature": "master", "outcome": "denied",
+                "why": "You said no, so The big model stays off.", "at": 1800000000}""",
+        )
+        assertEquals("You said no, so The big model stays off.", BigModel.master(denied).lastLine)
+        BigModel.switches(denied).forEach { assertNull(it.id, it.lastLine) }
+
+        val failed = withLast("status_on_idle", """{"feature": "wiki", "outcome": "enabled", "why": "x"}""")
+        assertNull("turned on is not news", job(failed, BigModel.WIKI).lastLine)
+
+        val pending = withLast("status_pending", """{"feature": "master", "outcome": "timed_out", "why": "Old."}""")
+        assertNull("a newer card waits", BigModel.master(pending).lastLine)
+
+        for (name in names("status_")) {
+            val s = status(name)
+            assertNull(name, BigModel.master(s).lastLine)
+            BigModel.switches(s).forEach { assertNull("$name ${it.id}", it.lastLine) }
+        }
+    }
+
     @Test
     fun `every case in the file is one this test knows the kind of`() {
         val kinds = listOf("status_", "deep_", "post_", "ask_")

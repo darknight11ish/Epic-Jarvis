@@ -165,6 +165,8 @@ object BigModel {
         val measured: Map<String, Measured>,
         /** The PC's sentence that its speeds are not verified. Shown always. */
         val unverified: String,
+        /** How the last approval card ended ([SecondCard.LastCard], the same shape). */
+        val last: SecondCard.LastCard? = null,
     ) {
         fun job(id: String): Job? = jobs.firstOrNull { it.id == id }
     }
@@ -265,6 +267,7 @@ object BigModel {
                 )
             }.toMap(),
             unverified = obj.str("unverified").orEmpty(),
+            last = SecondCard.lastCard(obj),
         )
     }
 
@@ -321,6 +324,7 @@ object BigModel {
             blocked = if (!s.found.capable) notReady else null,
             modelLine = null,
             needsLine = null,
+            lastLine = SecondCard.lastLine(s.last, MASTER, MASTER_NAME, on = s.enabled, waiting = waiting),
         )
     }
 
@@ -347,6 +351,7 @@ object BigModel {
             },
             modelLine = modelLine(s, j),
             needsLine = null,
+            lastLine = SecondCard.lastLine(s.last, j.id, j.name, on = j.enabled, waiting = waiting),
         )
     }
 

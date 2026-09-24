@@ -101,9 +101,22 @@ object SecondCard {
         /** Whether there is a pin command at all. The phone never shows it. */
         val hasPinCommand: Boolean,
         val features: List<Feature>,
+        /** How the last approval card ended, any switch; null when none has, or an older PC. */
+        val last: LastCard? = null,
     ) {
         fun feature(id: String): Feature? = features.firstOrNull { it.id == id }
     }
+
+    /**
+     * `status()["last"]` (AP-6, since 2026-09-24): the most recent approval
+     * card to END, whichever switch it was for. The big model sends the same
+     * shape. [why] is the PC's own sentence, meant to be shown as it is.
+     *
+     * [outcome] is one of `enabled`, `denied`, `timed_out` (nobody answered),
+     * `refused`, `failed`, `withdrawn` (switched off while the card waited) -
+     * kept as a string, so a word added later is shown, not dropped.
+     */
+    data class LastCard(val feature: String, val outcome: String, val why: String?)
 
     /** How the last read came back. The screen draws each one differently. */
     sealed interface Read {
@@ -152,6 +165,7 @@ object SecondCard {
             mainOllamaPinned = obj.bool("main_ollama_pinned"),
             pinNote = obj.str("pin_note"),
             hasPinCommand = obj.str("pin_command") != null,
+            last = lastCard(obj),
             features = features.mapNotNull { el ->
                 val f = el as? JsonObject ?: return@mapNotNull null
                 val id = f.str("id") ?: return@mapNotNull null
@@ -218,6 +232,12 @@ object SecondCard {
         val modelLine: String?,
         /** The features it needs, by name - null when none. */
         val needsLine: String?,
+        /**
+         * How this switch's last card ended, when that is news: it was not
+         * turned on, and no newer card waits. Null otherwise, and always on
+         * a PC that does not send `last` - the plate then reads as before.
+         */
+        val lastLine: String? = null,
     ) {
         /** OFF always goes; ON only when nothing blocks it and no card waits. */
         val canTurnOn: Boolean get() = !on && !waiting && blocked == null
@@ -241,6 +261,7 @@ object SecondCard {
             blocked = if (!s.capable) "Needs a capable second graphics card: ${s.detectedWhy}." else null,
             modelLine = null,
             needsLine = null,
+            lastLine = lastLine(s.last, MASTER, MASTER_NAME, on = s.enabled, waiting = waiting),
         )
     }
 
@@ -264,7 +285,42 @@ object SecondCard {
             },
             modelLine = modelLine(f),
             needsLine = if (f.needs.isEmpty()) null else "Needs: ${names(s, f.needs)}.",
+            lastLine = lastLine(s.last, f.id, f.name, on = f.enabled, waiting = waiting),
         )
+    }
+
+    // ----------------------------------------------------------- last card --
+
+    /** `last` from a status answer, or null: absent, `null`, or not the shape. */
+    fun lastCard(obj: JsonObject): LastCard? {
+        val l = obj["last"] as? JsonObject ?: return null
+        val feature = l.str("feature")?.takeIf { it.isNotBlank() } ?: return null
+        val outcome = l.str("outcome")?.takeIf { it.isNotBlank() } ?: return null
+        return LastCard(feature, outcome, l.str("why")?.trim()?.takeIf { it.isNotEmpty() })
+    }
+
+    /**
+     * What to say under switch [id] about how its last card ended, or null.
+     *
+     * Before `last` existed, a card that was denied, timed out or failed
+     * left the switch reading plain "Off." - as if nothing had been asked.
+     * Said only when the last card to end was THIS switch's, it did not turn
+     * it on, the switch is off and no newer card waits. "Turned on" is not
+     * repeated: the switch's own "On." says it. The PC's own sentence is
+     * used when it sends one; these are the fallbacks.
+     */
+    fun lastLine(last: LastCard?, id: String, name: String, on: Boolean, waiting: Boolean): String? {
+        if (last == null || last.feature != id || waiting || on || last.outcome == "enabled") return null
+        last.why?.let { return it }
+        val q = "\"$name\""
+        return when (last.outcome) {
+            "denied" -> "You said no, so $q stays off."
+            "timed_out", "expired" -> "Nobody answered the card in time, so $q stays off."
+            "withdrawn" -> "You turned $q off while its card was waiting, so approving that card changed nothing."
+            "failed" -> "$q could not be turned on."
+            "refused" -> "$q was not turned on: your PC refused it."
+            else -> "The last card for $q ended: ${last.outcome.replace('_', ' ')}."
+        }
     }
 
     /**

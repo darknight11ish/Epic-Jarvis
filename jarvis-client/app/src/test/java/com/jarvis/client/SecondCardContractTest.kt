@@ -115,6 +115,63 @@ class SecondCardContractTest {
         assertNull(switch(s, "vision").needsLine)
     }
 
+    /**
+     * AP-6: `last`, as backend/jarvis_second_card.py's status() sends it
+     * (fix-b2): {feature, outcome, why, at}, or null. Added to a real case
+     * here, because the fixture this branch carries predates it.
+     */
+    private fun withLast(case: String, last: String): SecondCard.Status {
+        val obj = cases[case]!!.jsonObject.toMutableMap()
+        obj["last"] = JarvisJson.parseToJsonElement(last)
+        return requireNotNull(SecondCard.parse(JsonObject(obj)))
+    }
+
+    @Test
+    fun `how the last card ended is said under that switch, and only there`() {
+        val denied = withLast(
+            "capable_off",
+            """{"feature": "vision", "outcome": "denied",
+                "why": "You said no, so \"Pictures\" stays off.", "at": 1800000000}""",
+        )
+        assertEquals(SecondCard.LastCard("vision", "denied", "You said no, so \"Pictures\" stays off."), denied.last)
+        assertEquals("You said no, so \"Pictures\" stays off.", switch(denied, "vision").lastLine)
+        assertNull("another switch's card is not this one's news", switch(denied, "long_context").lastLine)
+        assertNull(SecondCard.master(denied).lastLine)
+
+        // The PC's own sentence is used; without one, a plain fallback per outcome.
+        val timedOut = withLast("capable_off", """{"feature": "master", "outcome": "timed_out", "at": 1}""")
+        assertEquals(
+            "Nobody answered the card in time, so \"Use the second graphics card\" stays off.",
+            SecondCard.master(timedOut).lastLine,
+        )
+        val failed = withLast("capable_off", """{"feature": "vision", "outcome": "failed", "why": ""}""")
+        assertTrue(switch(failed, "vision").lastLine!!.contains("could not be turned on"))
+        val withdrawn = withLast("capable_off", """{"feature": "vision", "outcome": "withdrawn"}""")
+        assertTrue(switch(withdrawn, "vision").lastLine!!.contains("changed nothing"))
+        val odd = withLast("capable_off", """{"feature": "vision", "outcome": "rolled_back"}""")
+        assertTrue("a new word is shown, not dropped", switch(odd, "vision").lastLine!!.contains("rolled back"))
+
+        // "Turned on" is not news: the switch says "On." itself.
+        val on = withLast("running_long_context", """{"feature": "long_context", "outcome": "enabled", "why": "On."}""")
+        assertNull(switch(on, "long_context").lastLine)
+        // A newer card waiting for that switch: its "Waiting" line, not the old outcome.
+        val waiting = withLast("capable_pending", """{"feature": "long_context", "outcome": "denied", "why": "No."}""")
+        assertNull(switch(waiting, "long_context").lastLine)
+    }
+
+    @Test
+    fun `no last - null, absent or junk - reads exactly as before`() {
+        for (name in cases.keys) {
+            val s = status(name)
+            assertNull(name, s.last)
+            assertNull(name, SecondCard.master(s).lastLine)
+            SecondCard.switches(s).forEach { assertNull("$name ${it.id}", it.lastLine) }
+        }
+        assertNull(withLast("capable_off", "null").last)
+        assertNull(withLast("capable_off", "\"denied\"").last)
+        assertNull(withLast("capable_off", """{"outcome": "denied"}""").last)
+    }
+
     @Test
     fun `a card waiting - the wake-word wording, and no second ask`() {
         val s = status("capable_pending")
