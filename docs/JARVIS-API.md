@@ -417,6 +417,15 @@ quickbar used to guess from each chunk's `model` name and the HUD page tested
 `gate == "privacy"`, a gate the router never returns - so every answer there
 was painted as cloud.
 
+**`offer` in `X-Jarvis-Route`** (the router, 2026-09-24): a cloud lane that
+could have answered this turn, named but NOT used - gate `"offer"`, `where`
+`"local"`. The router sends a turn to a cloud lane only when the owner said
+yes for that one question (`jarvis_router.choose(owner_said_yes=True)`), and
+never for a turn a privacy gate kept local; those carry no `offer` at all.
+No app sends that yes yet - asking is built with "model advice" - so today
+no answer goes to a cloud lane on its own. Apps that do not know `offer`
+read the turn as local, which it is.
+
 **`second_card` in `X-Jarvis-Route`** (`second-card.patch`, 2026-09-24): on a
 turn the second graphics card answered, `where` is still `"local"` (it is
 this PC), `lane` is the model really answering (e.g. `"qwen3:14b"`), and

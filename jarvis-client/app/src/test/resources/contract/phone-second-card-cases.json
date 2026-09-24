@@ -140,7 +140,7 @@
   "route_headers": [
     {
       "name": "a picture, on the second card",
-      "header": "{\"lane\": \"qwen2.5vl:7b\", \"reason\": \"the message carries a picture, which can show anything that was on screen, so it stays on this machine\", \"gate\": \"image\", \"complexity\": 0.025, \"inject_memory\": true, \"tainted\": false, \"where\": \"local\", \"second_card\": \"vision\"}",
+      "header": "{\"lane\": \"qwen2.5vl:7b\", \"reason\": \"the message carries a picture, which can show anything that was on screen, so it stays on this machine\", \"gate\": \"image\", \"complexity\": 0.025, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"where\": \"local\", \"second_card\": \"vision\"}",
       "expect": {
         "second_card": "vision",
         "model": "qwen2.5vl:7b",
@@ -149,7 +149,7 @@
     },
     {
       "name": "a long conversation, on the second card",
-      "header": "{\"lane\": \"qwen3:14b\", \"reason\": \"complexity 0.042 is under the threshold\", \"gate\": \"complexity\", \"complexity\": 0.042, \"inject_memory\": true, \"tainted\": false, \"where\": \"local\", \"second_card\": \"long_context\"}",
+      "header": "{\"lane\": \"qwen3:14b\", \"reason\": \"complexity 0.042 is under the threshold\", \"gate\": \"complexity\", \"complexity\": 0.042, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"where\": \"local\", \"second_card\": \"long_context\"}",
       "expect": {
         "second_card": "long_context",
         "model": "qwen3:14b",
@@ -158,7 +158,7 @@
     },
     {
       "name": "an everyday answer, main card",
-      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"complexity 0.042 is under the threshold\", \"gate\": \"complexity\", \"complexity\": 0.042, \"inject_memory\": true, \"tainted\": false, \"where\": \"local\"}",
+      "header": "{\"lane\": \"jarvis-primary\", \"reason\": \"complexity 0.042 is under the threshold\", \"gate\": \"complexity\", \"complexity\": 0.042, \"inject_memory\": true, \"tainted\": false, \"offer\": \"\", \"where\": \"local\"}",
       "expect": {
         "second_card": null,
         "model": null,

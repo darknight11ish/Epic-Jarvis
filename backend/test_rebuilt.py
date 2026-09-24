@@ -997,6 +997,56 @@ class Router(unittest.TestCase):
                     self.assertFalse(d.inject_memory,
                                      f"memory offered to cloud lane for {q[:30]!r}")
 
+    def test_the_cloud_is_offered_never_taken_without_a_yes(self):
+        """The owner's decision, 2026-09-24: ask each time. A long, plain
+        question used to go to the first cloud lane by itself."""
+        long_q = ("explain in detail and compare the trade-offs of three sorting "
+                  "algorithms, step by step, why each is chosen ") * 3
+        fresh = RT.Budget(path=None)
+        d = RT.choose(long_q, local_model="local", lanes=self.LANES, budget=fresh)
+        self.assertEqual((d.lane, d.gate, d.offer), ("local", "offer", "jarvis-escalate"))
+        self.assertIn("say yes", d.reason)
+        # Only a real True counts: a truthy string or number from a JSON body
+        # is not the owner's yes.
+        for almost in ("yes", 1, "true", [True], None, False):
+            d = RT.choose(long_q, local_model="local", lanes=self.LANES, budget=fresh,
+                          owner_said_yes=almost)
+            self.assertEqual(d.lane, "local", f"{almost!r} counted as a yes")
+        d = RT.choose(long_q, local_model="local", lanes=self.LANES, budget=fresh,
+                      owner_said_yes=True)
+        self.assertEqual((d.lane, d.gate, d.offer), ("jarvis-escalate", "escalate", ""))
+        self.assertFalse(d.inject_memory)
+
+    def test_a_yes_never_carries_a_private_turn_out_and_nothing_private_is_offered(self):
+        long_tail = " explain in detail and compare step by step" * 4
+        fresh = RT.Budget(path=None)
+        cases = [dict(query="what is my password" + long_tail),
+                 dict(query="summarise this" + long_tail, has_image=True),
+                 dict(query="summarise this" + long_tail, conversation_tainted=True),
+                 dict(query="sk-ant-api03-AbC9dEf1GhI2jKl3MnO4pQr5StU6vWx7" + long_tail)]
+        for kw in cases:
+            for yes in (False, True):
+                d = RT.choose(local_model="local", lanes=self.LANES, budget=fresh,
+                              owner_said_yes=yes, **kw)
+                self.assertEqual(d.lane, "local", f"{kw} went out with yes={yes}")
+                self.assertEqual(d.offer, "", f"{kw} was offered to the cloud")
+
+    def test_todays_api_key_shapes_are_recognised(self):
+        """Anthropic and current OpenAI keys have dashes inside; the old
+        pattern (letters and digits only after "sk-") missed both."""
+        for key, kind in (
+                ("sk-ant-api03-AbC9dEf1GhI2jKl3MnO4pQr5StU6vWx7Yz8aB9cD0eF1", "API key"),
+                ("sk-proj-Ab_C9dEf1-GhI2jKl3MnO4pQr5StU6vWx7", "API key"),
+                ("sk-AbC9dEf1GhI2jKl3MnO4pQr5", "API key"),
+                ("AIzaSyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUvW", "Google"),
+                ("hf_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "Hugging Face")):
+            found = RT.looks_like_a_secret(f"here is my config: {key} thanks")
+            self.assertIsNotNone(found, key[:12])
+            self.assertIn(kind, found)
+            self.assertNotIn(key, found, "the finding must not repeat the key")
+        for plain in ("the sk-8 skateboard", "task-list-for-monday", "AIza is a prefix"):
+            self.assertIsNone(RT.looks_like_a_secret(plain), plain)
+
     def test_taint_pins_the_turn_local(self):
         long_q = ("explain in detail and compare the trade-offs, step by step, "
                   "why this design was chosen " * 4)
@@ -1017,10 +1067,11 @@ class Router(unittest.TestCase):
         fresh = RT.Budget(path=None)
         # CONTROL: the same question with no picture does escalate, so the
         # assertion below is about the picture and nothing else.
-        plain = RT.choose(long_q, local_model="local", lanes=lanes, budget=fresh)
+        plain = RT.choose(long_q, local_model="local", lanes=lanes, budget=fresh,
+                          owner_said_yes=True)
         self.assertIn(plain.lane, lanes, f"control did not escalate: {plain}")
         d = RT.choose(long_q, local_model="local", lanes=lanes, has_image=True,
-                      budget=fresh)
+                      budget=fresh, owner_said_yes=True)
         self.assertEqual(d.lane, "local")
         self.assertEqual(d.gate, "image")
         self.assertIn("picture", d.reason)
@@ -1110,7 +1161,7 @@ class Router(unittest.TestCase):
             "an AWS access key": "AKIAABCDEFGHIJKLMNOP",
             "a GitHub token": "ghp_" + "a" * 36,
             "a Slack token": "xoxb-1234567890-abcdefghij",
-            "an OpenAI-style API key": "sk-" + "a" * 24,
+            "an OpenAI or Anthropic API key": "sk-" + "a" * 24,
             "a JSON web token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
             "a bearer token": "Bearer " + "a" * 24,
             "a labelled secret value": 'api_key: "abcdefghijklmnop1234"',

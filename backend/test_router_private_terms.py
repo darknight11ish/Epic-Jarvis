@@ -75,13 +75,13 @@ def t_every_config_topic_keeps_a_turn_local():
     # CONTROL: without a private word, this question does escalate - so the
     # private gate is what keeps each one below local, not something else.
     control = RT.choose("tell me about rivers" + PAD, local_model="local", lanes=LANES,
-                        budget=RT.Budget(path=None))
+                        budget=RT.Budget(path=None), owner_said_yes=True)
     check("CONTROL: the same question with no private word goes to a cloud lane",
           control.lane in LANES, repr(control))
     for term in terms:
         typed = term.replace("_", " ")
         d = RT.choose(f"tell me about my {typed}" + PAD, local_model="local", lanes=LANES,
-                      budget=RT.Budget(path=None))
+                      budget=RT.Budget(path=None), owner_said_yes=True)
         check(f"'{typed}' (from the config) keeps the turn local", d.lane == "local"
               and d.gate == "private", repr(d))
 
@@ -111,7 +111,7 @@ def t_the_note_stores_without_their_app_names():
                   "check our wiki", "read my meeting notes", "my note about the boiler",
                   "what's in logseq about Sam", "My Journal, yesterday"):
             check(f"{q!r} is private", RT.is_private(q))
-            d = RT.choose(q + PAD, local_model="local", lanes=LANES, budget=RT.Budget(path=None))
+            d = RT.choose(q + PAD, local_model="local", lanes=LANES, budget=RT.Budget(path=None), owner_said_yes=True)
             check(f"... and a long {q!r} stays on the local model", d.lane == "local" and d.gate == "private",
                   repr(d))
         for q in ("show me the release notes for python 3.12",

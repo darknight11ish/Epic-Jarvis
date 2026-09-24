@@ -186,7 +186,14 @@ _SECRET_PATTERNS = [
     ("an AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("a GitHub token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b")),
     ("a Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
-    ("an OpenAI-style API key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    # Anthropic (sk-ant-api03-...) and today's OpenAI keys (sk-proj-...,
+    # sk-svcacct-...) have dashes and underscores inside. The old pattern
+    # allowed only letters and digits after "sk-", so it caught the 2023
+    # OpenAI shape and missed both of those - the very keys the 2026-09-17
+    # API-key rule made likely to be pasted here.
+    ("an OpenAI or Anthropic API key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}")),
+    ("a Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
+    ("a Hugging Face token", re.compile(r"\bhf_[A-Za-z0-9]{30,}\b")),
     ("a JSON web token", re.compile(
         r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
     ("a bearer token", re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}", re.I)),
@@ -356,6 +363,11 @@ class Decision:
     complexity: float = 0.0
     inject_memory: bool = False
     tainted: bool = False
+    #: A cloud lane that COULD answer this turn, offered - never taken - when
+    #: the owner has not said yes for this one question (gate "offer").
+    #: Empty whenever a privacy gate kept the turn local: those are never
+    #: offered to the cloud at all.
+    offer: str = ""
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -402,10 +414,10 @@ def complexity(query: str) -> float:
 def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            has_image: bool = False, conversation_tainted: bool = False,
            budget: Optional[Budget] = None, tainted: Optional[bool] = None,
-           **_extra) -> Decision:
+           owner_said_yes: bool = False, **_extra) -> Decision:
     """Which lane answers this turn.
 
-    Seven gates, in this order, and the order is the policy. Each one can only
+    Eight gates, in this order, and the order is the policy. Each one can only
     send the answer DOWNWARD toward local - none of them can escalate past a
     gate that already refused.
 
@@ -416,7 +428,20 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
       3. a real secret was found     -> local, unconditionally
       4. not complex enough          -> local
       5. budget spent                -> local
+      6. the owner has not said yes  -> local, with the cloud lane OFFERED
+         for THIS question
       otherwise                      -> the first cloud lane
+
+    GATE 6, AND WHY THE DEFAULT IS "NO" (the owner's decision, 2026-09-24).
+    docs/ARCHITECTURE.md says cloud use is "per use, with permission ...
+    and asks. No standing grant." This function used to decide on its own:
+    any long, non-private question went to the first cloud lane, and the
+    owner saw a Cloud badge afterwards. Now a turn reaches a cloud lane only
+    when the caller passes `owner_said_yes=True` - the owner's own yes for
+    this one question - and even then gates 0-5 still apply, so a yes can
+    never carry a private or tainted turn out. Without it, the turn is
+    answered here and `offer` names the lane that could have answered, so an
+    app can ask. Nothing learned, remembered or configured sets the yes.
 
     Gate 2 (`is_private`) catches the WORD for a secret ("what's my api
     key"); gate 3 (`looks_like_a_secret`) catches the secret ITSELF pasted
@@ -504,7 +529,14 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         return local_decision("budget", f"the {which} cloud budget is spent")
 
     lane = lanes[0]
-    return Decision(lane, f"complexity {c} and budget available", "escalate", c,
+    if owner_said_yes is not True:
+        d = local_decision(
+            "offer", f"complexity {c}: {lane} could answer this, but the cloud is used "
+                     f"only when you say yes for this question")
+        d.offer = lane
+        return d
+    return Decision(lane, f"complexity {c}, budget available, and you said yes for this "
+                          f"question", "escalate", c,
                     inject_memory=False, tainted=conversation_tainted)
 
 

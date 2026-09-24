@@ -633,7 +633,7 @@ Do not relitigate these without new evidence.
 | Reachability | Tailscale, properly. Never a public tunnel. |
 | Face / appearance | Rendered locally on each device; the server is a sync channel only. |
 | Voice | sherpa-onnx for STT (Parakeet TDT 0.6B v2), speaker verification, Kokoro TTS, Silero VAD. 0 GB VRAM. First audio is 0.5–1.5 s, not 100 ms; design a "thinking" state that survives a second of silence. **The wake word is the exception**: openWakeWord's `hey_jarvis` model on ONNX Runtime, on the phone and the PC alike - sherpa-onnx has no Android library on Maven Central/Google, and the TOML and `WAKE-WORD.md` had already chosen openWakeWord. Measured side by side in `backend/README.md`. |
-| Cloud / API keys | Allowed, **per use, with permission**. Jarvis works out what it genuinely needs the internet for, explains it, and asks. No standing grant. |
+| Cloud / API keys | Allowed, **per use, with permission**. Jarvis works out what it genuinely needs the internet for, explains it, and asks. No standing grant. Enforced in `jarvis_router.choose()` since 2026-09-24 (the owner chose "ask each time"): without the owner's yes for that one question it answers locally and only names the cloud lane in `offer`; a yes never carries a private, tainted or picture turn out. Before that, the router escalated long questions by itself. |
 | Structured output | Ollama's native `format: <schema>` — GBNF at the sampler. **Not** `outlines`, which cannot constrain Ollama. |
 | Sandbox | Git worktrees, not Docker. |
 | Extraction | `ast-grep` — measured 54,490 → 1,088 bytes, 0 VRAM. |

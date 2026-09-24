@@ -202,8 +202,14 @@ def build_route_headers() -> list:
     long_q = ("explain in detail and compare the trade-offs of three sorting "
               "algorithms, step by step, why each is chosen ") * 3
     cloud = RT.choose(long_q, local_model="jarvis-primary", lanes=lanes,
-                      budget=RT.Budget(path=None)).as_dict()
+                      budget=RT.Budget(path=None), owner_said_yes=True).as_dict()
+    # Since 2026-09-24 the router only OFFERS the cloud unless the owner said
+    # yes for that question: the same long question, with no yes, is answered
+    # here and names the lane in `offer`. The apps must still read it as local.
+    offered = RT.choose(long_q, local_model="jarvis-primary", lanes=lanes,
+                        budget=RT.Budget(path=None)).as_dict()
     assert local["lane"] == "jarvis-primary" and cloud["lane"] == "jarvis-escalate", (local, cloud)
+    assert offered["lane"] == "jarvis-primary" and offered["offer"] == "jarvis-escalate", offered
 
     def turn_id():
         tid = FB.record_turn(["fact_1"])
@@ -215,8 +221,11 @@ def build_route_headers() -> list:
     cloud.update({"inject_memory": False, "injected_facts": 0, "injected_ids": [],
                   "memory_side": "none", "turn_id": turn_id(), "lane": "jarvis-escalate",
                   "where": "cloud"})
+    offered.update({"injected_facts": 0, "injected_ids": [], "memory_side": "hud",
+                    "turn_id": turn_id(), "lane": "jarvis-primary", "where": "local"})
     out = []
-    for name, h in (("local answer", local), ("cloud answer", cloud)):
+    for name, h in (("local answer", local), ("cloud answer", cloud),
+                    ("local answer, cloud offered", offered)):
         exp = {"where": h["where"], "lane": h["lane"], "turn_id": FIXED_TURN_ID}
         out.append({"name": name, "header": json.dumps(h), "expect": exp})
         old = {k: v for k, v in h.items() if k != "where"}
