@@ -961,33 +961,37 @@ memory (`available`) - which is the measured desktop share for 4.1.
 
 ---
 
-## 5. Decisions for the owner
+## 5. Decisions for the owner - DECIDED 2026-09-24
 
-**1. The empty gap on each graphics card.** llama.cpp keeps 1 GB of every
-card empty, in case the desktop or a browser needs more memory later. On an
-8 GB card that costs the 8B model about half its conversation memory.
+The owner answered all four. The build follows these; the options that were
+offered are kept below each answer.
 
-- **Keep 1 GB, measure first, then decide** (recommended)
-- **Lower it to 0.5 GB now** (8B chat gets about 12K instead of 6K)
+**1. The empty gap on each graphics card: 0.75 GB** (the owner's own middle
+choice). llama.cpp's default is 1 GB (`common/common.h:481`,
+1024 MiB per device). With the arithmetic of section 4.4 (8B chat grows
+~0.075 GiB per 1,000 tokens of context; desktop share + CUDA start-up ~1.43
+GiB), the 8 GB card holds about **11,000** tokens of chat at 0.75 GB, against
+~6,000 at 1 GB and ~12-14,000 at 0.5 GB. **Calculated, not measured:** the
+presets use 0.75 GB, the measuring step (4.7) confirms it on the owner's PC,
+and a preset that does not fit when measured drops to the next context size
+rather than spilling onto the processor.
+(Offered: keep 1 GB and measure first; lower to 0.5 GB now.)
 
-**2. AMD and Intel cards.** Nothing here has been tested on them.
+**2. AMD and Intel cards: best effort, marked "not tested".** Detected and
+given safe settings (f16 cache on Vulkan, section 2.2), with every preset on
+those cards labelled untested.
+(Offered: full support, same as NVIDIA.)
 
-- **Best effort: presets shown, marked "not tested"** (recommended)
-- **Full support, same as NVIDIA**
+**3. Ollama's Vulkan route: switched off on all-NVIDIA PCs, in the same
+one-line command** (`OLLAMA_VULKAN=0`; the default is on,
+`envconfig/config.go:234`). The second-card lane's environment must set it
+too, not just remove `GGML_VK_VISIBLE_DEVICES` (a bug in today's
+`jarvis_second_card.py`, on the bug audit's fix list).
+(Offered: leave it on.)
 
-**3. Ollama's second route to the cards.** Ollama can also reach NVIDIA
-cards through "Vulkan", which ignores the setting that keeps chat on the
-main card. On an all-NVIDIA PC it can be switched off.
-
-- **Switch it off, in the same one-line command** (recommended)
-- **Leave it on**
-
-**4. Spark-X2.5-4B for long conversations.** It could hold far longer
-conversations than Qwen 3 in the same memory, but how well it answers and
-uses tools is unknown.
-
-- **Try it later as a test, after the second card is measured** (recommended)
-- **Not now**
+**4. Spark-X2.5-4B: test later**, once the second card is installed and
+measured, against the Qwen choice; not in any preset until then.
+(Offered: not at all.)
 
 ---
 
