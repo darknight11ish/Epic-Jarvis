@@ -5,7 +5,7 @@
 > is the detail.
 
 
-Forty patches against the Jarvis backend, each with an executable test
+Forty-one patches against the Jarvis backend, each with an executable test
 (counted from the `$PATCHES` list in `scripts/apply-patches.ps1`, which
 refuses to run if a `.patch` file here is missing from it). The paragraphs
 below were written as the list grew, so the counts in them are the count at
@@ -99,6 +99,7 @@ on a throwaway copy instead.
 | `task-control.patch` | `jarvis_hud.py` | **The Pause, Resume, Stop and note buttons on both apps went nowhere.** Adds the routes they call. Resume raises an approval card; nothing else here approves anything. Needs `jarvis_task_control.py` and the updated `jarvis_agent.py` — see its own section, at the end. |
 | `note-capture.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **`#log`, `#joplin` and the quick note never filed anything** — they asked the model for tools that did not exist. Adds a route that files the owner's own words in Logseq, Joplin or Obsidian (`#obs`, since 2026-09-24) through the gate, says honestly whether it landed, and lists which of the three this PC is set up for. Needs `task-control.patch` (textual) and `jarvis_note_capture.py` — see its own section, at the end. |
 | `power-mode.patch` | `jarvis_hud.py` | **Nothing could change the power mode.** Adds `POST /api/power` (Active / Quiet / Standby) through the gate as `power_manage`. Needs `note-capture.patch` (textual) and `jarvis_power_switch.py` — see its own section, at the end. |
+| `second-card.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The second graphics card, all switched off.** Adds `GET`/`POST /api/second-card` (each ON is one approval card, `second_card_enable`), says in the chat route header when the second card answered, shortens the learner's quiet wait when it runs there, and gives the approval notice true words for the new action. Last in the list. Needs `jarvis_second_card.py` — see its own section, at the end, and `docs/SECOND-CARD.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
@@ -5027,3 +5028,94 @@ live round trip through the real Credential Manager under a throwaway name
 (CI's `credential-manager` job). `test_token_file.py` runs the installed
 `_resolve_token` against a stand-in store — never your real saved token —
 and fails on a `jarvis_hud.py` without this patch.
+
+# `second-card.patch` and `jarvis_second_card.py` — the second graphics card, all off
+
+**What it is.** Everything Jarvis can do with a second graphics card (an RTX
+2060 12 GB, or a 2080 Ti 11 GB), built and switched off. The owner's guide is
+[`docs/SECOND-CARD.md`](../docs/SECOND-CARD.md); this section is what the
+code does.
+
+**`jarvis_second_card.py`** (shipped whole):
+
+- **Detection.** `nvidia-smi` via `jarvis_compute.query_cards()` (cached 30 s;
+  an older driver without `compute_cap` is asked again without it, and the
+  generation looked up by name). The main card is chosen by one rule, shared
+  with `jarvis_compute.plan()`: `[compute] primary_gpu`, else the card with a
+  monitor, else index 0. A second card is capable at compute capability 7.5
+  or more and 10,240 MiB or more, and with a card id. Every other card gets a
+  reason in words.
+- **Switches.** A main switch and five features — `long_context`, `vision`,
+  `learning`, `browser_control` (needs `long_context`), `wiki` — in
+  `second-card.json` in the config folder, never in the toml. All default off.
+  ON is one approval card through `jarvis_gate.check("second_card_enable",
+  ...)`, tier checked `ask` before the card and again on the answer (the same
+  shape as the wake-word card); a second ON while a card waits is refused;
+  OFF is immediate and withdraws a waiting card. A switch whose card has gone
+  stays on, reports `active: false` and says why.
+- **The second Ollama.** While the main switch and a feature are on:
+  `ollama serve` with `OLLAMA_HOST=127.0.0.1:11435` (anything else is refused),
+  `CUDA_VISIBLE_DEVICES=<the card's id>`, `CUDA_DEVICE_ORDER=PCI_BUS_ID`,
+  `OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_MAX_LOADED_MODELS=1`,
+  `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_CONTEXT_LENGTH` (the only way to size the
+  context for the `/v1` chat endpoint) and `OLLAMA_KEEP_ALIVE=30m`.
+  `OLLAMA_FLASH_ATTENTION` is left unset, as MODEL-TOPOLOGY.md says (Ollama's
+  `LlamaServerFlashAttention`, read 2026-09-24: unset is "auto"; `1` forces
+  `--flash-attn on`). Health is `/api/version`; state is `off | starting |
+  running | failed` with a reason. It is stopped (it and its runners, and
+  nothing else) when everything is off and at exit. A port already held by
+  an Ollama it did not start is left alone and reported.
+- **`lane_for(feature)`** returns `Lane(url, model, num_ctx, why)` only when
+  everything is ready, else None. It never raises.
+
+**The hooks** (all no-ops while `lane_for` is None):
+
+- `jarvis_agent.choose_lane()` / `run_local_turn(lane_choice=...)`: a
+  conversation the main model would have to trim goes to `long_context`
+  whole; a picture in the newest message goes to `vision` (no tools offered
+  on that turn). With the switches off, not even the context length is asked.
+- `jarvis_agent.offered_tools()`: `browser_control` needs its lane as well
+  as `[tools].enabled`; the rounds after it runs continue on the lane.
+- `jarvis_intake.propose()`: the learner's model calls go to `learning`'s
+  lane, falling back to the usual call if it does not answer.
+
+**`second-card.patch`** (last in `$PATCHES`):
+
+- `GET /api/second-card` → `jarvis_second_card.status()`.
+- `POST /api/second-card` `{"feature", "enabled"}` →
+  `{"ok": true, "pending": true}` (a card is up), `{"ok": true, "enabled": false}`
+  (off), 409 (a card already waits), 400/503 `{"error": "<sentence>"}`.
+- The chat turn: `jarvis_agent.choose_lane()` is asked before the headers go;
+  on a second-card turn `X-Jarvis-Route` keeps `where: "local"`, sets `lane`
+  to the model really answering and adds `second_card: "long_context" |
+  "vision"`, and the answer is not counted in the everyday model's speed.
+- The learner's quiet wait asks `learning_idle_seconds()` (10 s when the
+  learner runs on the second card, else `EXTRACT_IDLE` as before).
+- `jarvis_gate.py`: a `_RISK` line for `second_card_enable` — "local" and
+  reversible — so the approval notice does not call it an unknown action
+  that might leave the machine.
+
+Its context is extraction-wiring's learner loop, note-capture's GET block,
+power-mode's POST block, chat-stream's route-header lines and note-capture's
+`jarvis_gate.py` lines. Rehearsed against stand-ins built from those patches,
+forwards and backwards (`test_second_card.py`); the owner's own
+`apply-patches.ps1` run is the proof against the real file.
+
+**Settings.** `[second_card]` (`port`, `keep_alive`, `flash_attention`) and
+`[compute] primary_gpu` in the shipped toml, and `second_card_enable = "ask"`
+under `[autonomy.tiers]`. Your own toml is never edited: `apply-patches.ps1`
+prints the difference. Without the tier line the unknown-action default,
+`ask`, applies, which is correct.
+
+## Test it
+
+```powershell
+python test_second_card.py
+python ..\tools\gen_second_card_cases.py --check
+```
+
+Runs anywhere, with nvidia-smi's output replayed in its real format (made-up
+values) and Ollama answered by a stand-in on 127.0.0.1; no process is
+started. `jarvis-desktop/tests/fixtures/second-card-cases.json` is the real
+`status()` output in six named cases, for the desktop and phone to build
+against; the test fails if it is stale.

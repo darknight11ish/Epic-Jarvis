@@ -300,6 +300,33 @@ be the **bigger or longer-context lane, not the fast one**.
 - Do not split one model across both cards by default. It works, but it ties
   up both cards and runs at the slower card's pace for its share.
 
+**The alternative: an RTX 2080 Ti 11 GB.** Also Turing, compute capability
+7.5, so everything above about drivers and the `q8_0` cache applies. Its
+memory is the fastest of the three (about 616 GB/s published, against the
+2080 Super's ~496 and the 2060's ~336), so it would generate faster than the
+2060 - but it has 1 GB less, and that 1 GB is exactly what the 14B needs:
+
+```
+ceiling    11 GiB card, no display attached             ≈ 10.4 GiB
+Qwen 3 14B Q4_K_M, q8_0 KV @ 16K   8.42 + 1.33 + 0.63   = 10.38 GiB  ✗ 0.02 spare
+Qwen 3 14B Q4_K_M, q8_0 KV @ 12K   8.42 + 1.00 + 0.63   = 10.05 GiB  ~ 0.35 spare
+Qwen 3 8B  Q4_K_M, q8_0 KV @ 32K   4.67 + 2.39 + 0.63   =  7.69 GiB  ✓ 2.7 spare
+```
+
+(12K: 87,040 B × 12,288 = 1.00 GiB.) 0.02 GiB is not a margin: Ollama's own
+estimate under-counts a `q8_0` cache by about 6% (see "The budget"), which
+alone is more than that. So on an 11 GB card Jarvis uses **Qwen 3 8B at 32K**
+for the longer-conversation lane - twice the main card's context, same model
+family, fast memory. The 14B at 12K would fit with little room and gives
+less context than the main card's 8B at 16K, so it is not offered.
+
+**Built, and switched off** (2026-09-24): `backend/jarvis_second_card.py`
+picks between these by the card's reported memory (11.5 GiB and up counts as
+a 12 GB card), starts the second Ollama on it, and does nothing until the
+owner turns a switch on through an approval card. It leaves
+`OLLAMA_FLASH_ATTENTION` unset on that second Ollama too, for the reason in
+"Setup" above. The owner's guide is [SECOND-CARD.md](SECOND-CARD.md).
+
 **Before and after installing:**
 
 1. Check the power supply's label. The two cards plus the 3900X draw a lot

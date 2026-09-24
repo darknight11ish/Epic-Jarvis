@@ -416,6 +416,12 @@ quickbar used to guess from each chunk's `model` name and the HUD page tested
 `gate == "privacy"`, a gate the router never returns - so every answer there
 was painted as cloud.
 
+**`second_card` in `X-Jarvis-Route`** (`second-card.patch`, 2026-09-24): on a
+turn the second graphics card answered, `where` is still `"local"` (it is
+this PC), `lane` is the model really answering (e.g. `"qwen3:14b"`), and
+`second_card` says why: `"long_context"` or `"vision"`. Absent on every other
+turn. See section 12.
+
 **No tool receipt.** A 200 from `/api/chat` means "a chat completed", not
 "the thing you asked for happened". There is no `tool_calls` field on the
 response. `docs/API-DISAGREEMENTS.md` §10 records the consequence: the quick-
@@ -920,3 +926,63 @@ screen buttons (`JarvisRuntime.setPower`). Both hold **waking** on a stale
 link and let going quieter through.
 
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->
+
+---
+
+## 12. The second graphics card (added 2026-09-24)
+
+`backend/second-card.patch` and `backend/jarvis_second_card.py`. The owner's
+guide is `docs/SECOND-CARD.md`. Neither app calls these routes yet;
+`tools/check_parity.py` records `/api/second-card` as `planned` until the
+desktop does (then reclassify it: `ported` once the phone calls it too).
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/second-card` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_second_card.py` is missing | Token + origin. Card names and hardware ids (`GPU-...`); never a token. Re-read it after a card is decided - there is no event for it. |
+| `POST /api/second-card` | `{"feature": "master" \| "<feature id>", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits; **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), or `second_card_enable` is not tier `ask` | ON is one approval card (action `second_card_enable`). OFF is immediate. Show `error` word for word. |
+
+**`status()`** - the real output of each case is in
+`jarvis-desktop/tests/fixtures/second-card-cases.json` (`one_card`,
+`capable_off`, `capable_pending`, `running_long_context`,
+`card_missing_but_enabled`, `not_capable_old_card`). Build against that file,
+not this summary.
+
+```
+{"detected": {"capable": bool, "why": str,
+              "primary": {"uuid", "index", "name"} | null,
+              "second": {"uuid", "index", "name", "total_mb", "compute_cap"} | null,
+              "cards": [{"index", "uuid", "name", "total_mb", "free_mb", "compute_cap",
+                         "display_active", "role": "primary"|"second"|"unused", "why"}]},
+ "enabled": bool,            the main switch
+ "active": bool,             main switch on AND a capable card seen
+ "pending": [ids],           switches with a card waiting ("master" included)
+ "lane": {"state": "off"|"starting"|"running"|"failed", "why": str},
+ "main_ollama_pinned": true|false|null, "pin_note": str, "pin_command": str|null,
+ "features": [{"id", "name", "what", "enabled", "active", "available", "needs": [ids],
+               "model", "model_installed": bool|null, "memory_gib": float|null, "why"}]}
+```
+
+Feature ids, in display order: `long_context`, `vision`, `learning`,
+`browser_control` (needs `long_context`), `wiki`. `enabled` is the owner's
+switch; `active` is that switch with the main switch, its needs and a capable
+card; `available` is active and actually working (second Ollama running,
+model installed). Show `why` as the line under each switch - it always says,
+in words, what is missing. A switch whose card has gone stays `enabled` with
+`active: false`: show it as on-but-waiting, never flip it off.
+
+`pin_command` is one PowerShell line (Windows PowerShell 5.1-safe) that keeps
+the owner's everyday Ollama on the main card; show it with a copy button and
+`pin_note` above it, on the desktop. The phone shows `pin_note` only (the
+command is run on the PC).
+
+**Pictures: what the apps must change.** The desktop's
+`vision.rs::local_model_vision` asks `/api/models` for `current` and then
+asks Ollama's `/api/show` about that model. With the second card's Pictures
+switch working, the picture does NOT go to `current` - it goes to
+`qwen2.5vl:7b` on the second card - so that check keeps answering "cannot
+see pictures". The backend cannot make it say yes without lying about
+`current`. So, before that check, read `GET /api/second-card` and find the
+`vision` row: if `available` is true, the answer is "yes" (reason: "Pictures
+go to <model> on the second graphics card."); otherwise do what it does
+today. The phone does the same wherever it decides whether to send a
+picture. The route header then carries `second_card: "vision"` on that turn.

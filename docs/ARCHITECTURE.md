@@ -456,6 +456,19 @@ they landed):
   model only - `backend/test_obsidian_notes.py` puts its real output through
   the agent loop and the cloud cut to prove it.
 
+- **The second graphics card** (added 2026-09-24), built and ALL OFF.
+  `jarvis_second_card.py` detects a capable second card (Turing or newer,
+  10 GB or more), and five switches - longer conversations, pictures,
+  background learning, browser control, a wiki builder's lane - each turned
+  on by one approval card (`second_card_enable`, the same four steps as
+  section 3) and only while that card is detected. When one is on, a second
+  Ollama runs on `127.0.0.1:11435`, pinned to that card by its id; chat,
+  pictures, the learner and browser control reach it only through
+  `lane_for()`, which is None - "do what you did before" - in every other
+  state. `GET`/`POST /api/second-card` (`second-card.patch`). Not measured on
+  real cards; the apps' screens for it are not built yet.
+  [`SECOND-CARD.md`](SECOND-CARD.md) is the owner's guide.
+
 **Still missing:**
 
 - **Obsidian daily notes in every date format.** Only formats that can be
@@ -475,14 +488,17 @@ they landed):
   false alarms it produced were all dropped by the transcript check. Its
   false-alarm rate on real speech, TV, and battery use on the phone are not
   measured yet.
-- **A picture-capable local model.** The default model (`qwen3:8b`, via
-  `jarvis-primary.Modelfile`) reads text only. A screenshot sent to it is
-  not seen, so the quickbar asks Ollama first (`local_model_vision`) and
-  offers to send the words without the picture. A vision model such as
-  `qwen2.5vl` would fix it but needs more graphics memory than the 8 GB card
-  has spare beside the main model; the planned second card is where it
-  would go. Pictures never go to a cloud lane (`jarvis_router.choose()`
-  keeps any turn with an image local).
+- **A picture-capable local model, switched on.** The default model
+  (`qwen3:8b`, via `jarvis-primary.Modelfile`) reads text only. A screenshot
+  sent to it is not seen, so the quickbar asks Ollama first
+  (`local_model_vision`) and offers to send the words without the picture.
+  The fix is BUILT but off: the second card's "Pictures" switch sends a
+  picture turn to `qwen2.5vl:7b` there (`jarvis_second_card.py`, below), and
+  nothing changes until that card is installed and the switch approved. The
+  desktop's check does not know about it yet (it asks Ollama about the
+  everyday model only; `docs/JARVIS-API.md` section 12 says what to read
+  instead). Pictures never go to a cloud lane (`jarvis_router.choose()`
+  keeps any turn with an image local, and the second card is on this PC).
 - **A reasoning trace.** Brain → Live shows each tool Jarvis starts and
   finishes (the `step` event, from `jarvis_agent.py`, only when tools are
   switched on), but not the model's private reasoning: that text can quote
