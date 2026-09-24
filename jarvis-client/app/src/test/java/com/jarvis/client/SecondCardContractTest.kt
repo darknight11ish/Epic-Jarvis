@@ -102,7 +102,7 @@ class SecondCardContractTest {
         val line = vision.modelLine!!
         assertTrue(line, line.contains("qwen2.5vl:7b - not installed"))
         assertTrue(line, line.contains("type qwen2.5vl:7b into the Install box"))
-        assertTrue(switch(s, "long_context").modelLine!!.startsWith("Model: qwen3:14b (installed)."))
+        assertTrue(switch(s, "long_context").modelLine!!.startsWith("Model: qwen3:8b (installed)."))
     }
 
     @Test
@@ -134,7 +134,7 @@ class SecondCardContractTest {
         val s = status("running_long_context")
         val long = switch(s, "long_context")
         assertTrue(long.on)
-        assertTrue(long.line, long.line.startsWith("Working: qwen3:14b"))
+        assertTrue(long.line, long.line.startsWith("Working: qwen3:8b"))
         assertTrue(SecondCard.laneLine(s).startsWith("Running: running on 127.0.0.1:11435"))
         // Pictures is off, so chat offers no photo.
         assertFalse(SecondCard.visionAvailable(SecondCard.Read.Loaded(s)))

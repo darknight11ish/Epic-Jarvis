@@ -159,16 +159,18 @@ def t_capable_and_not():
           det["capable"] is False and "id" in det["why"], det["why"])
     with G.World(G.SMI["2080s_2060"]):
         det = SC.detect(fresh=True)
-    check("the 12 GB card gets qwen3:14b at 16K (10.38 GiB)",
-          SC._feature_model("long_context", det) == ("qwen3:14b", 16384, 10.38))
+    check("the 12 GB card gets qwen3:8b at 32K (7.69 GiB): HARDWARE-PROFILES 4.4, and more "
+          "room than the main card's 16K (T3)",
+          SC._feature_model("long_context", det) == ("qwen3:8b", 32768, 7.69))
     with G.World(G.SMI["2080s_2080ti"]):
         det = SC.detect(fresh=True)
     check("the 11 GB 2080 Ti gets qwen3:8b at 32K (7.69 GiB)",
           SC._feature_model("long_context", det) == ("qwen3:8b", 32768, 7.69))
-    check("the arithmetic in the comment holds: 14B cache at 16K is 1.33 GiB, 8B at 32K 2.39",
-          round(2 * 40 * 8 * 128 * 1.0625 * 16384 / 2 ** 30, 2) == 1.33
-          and round(2 * 36 * 8 * 128 * 1.0625 * 32768 / 2 ** 30, 2) == 2.39
-          and round(8.42 + 1.33 + 0.63, 2) == 10.38 and round(4.67 + 2.39 + 0.63, 2) == 7.69)
+    check("the arithmetic in the comment holds: 8B cache at 32K is 2.39 GiB; 7.36 needed "
+          "(HARDWARE-PROFILES 8.2) + 0.33 start-up = 7.69; it fits a 12 GB card's 10.32",
+          round(2 * 36 * 8 * 128 * 1.0625 * 32768 / 2 ** 30, 2) == 2.39
+          and round(4.67 + 2.39 + 0.30, 2) == 7.36 and round(7.36 + 0.33, 2) == 7.69
+          and round(12 - 0.60 - 0.33 - 0.75, 2) == 10.32)
 
 
 # ------------------------------------------------------------ switches --
@@ -206,8 +208,8 @@ def t_switches():
               code == 400 and "Longer conversations" in out["error"] and not seen, out)
         code, out = SC.request_change("long_context", True, gate=gate)
         check("long_context: one card, with the model and memory on it",
-              code == 200 and len(seen) == 1 and "qwen3:14b" in seen[0][2]
-              and "10.4 GB" in seen[0][2] and seen[0][1]["model"] == "qwen3:14b")
+              code == 200 and len(seen) == 1 and "qwen3:8b" in seen[0][2]
+              and "7.7 GB" in seen[0][2] and seen[0][1]["model"] == "qwen3:8b")
         check("long_context is on", SC._read_switches()["features"]["long_context"] is True)
         # A "yes" that is not a person: refused.
         for label, v in (("tier notify", Verdict(True, "notify", "notify")),
@@ -314,16 +316,16 @@ def t_the_second_ollama():
         check("it listens on 127.0.0.1:11435 only", env["OLLAMA_HOST"] == "127.0.0.1:11435")
         check("it sees only the second card, by its id",
               env["CUDA_VISIBLE_DEVICES"] == G.U_2060 and G.U_2080S not in env["CUDA_VISIBLE_DEVICES"])
-        check("PCI order, q8_0 cache, one model, one conversation, 16K",
+        check("PCI order, q8_0 cache, one model, one conversation, 32K",
               env["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID" and env["OLLAMA_KV_CACHE_TYPE"] == "q8_0"
               and env["OLLAMA_MAX_LOADED_MODELS"] == "1" and env["OLLAMA_NUM_PARALLEL"] == "1"
-              and env["OLLAMA_CONTEXT_LENGTH"] == "16384")
+              and env["OLLAMA_CONTEXT_LENGTH"] == "32768")
         check("flash attention left to Ollama's auto (MODEL-TOPOLOGY: do not force it)",
               "OLLAMA_FLASH_ATTENTION" not in env)
         lane = SC.lane_for("long_context")
-        check("lane_for: the loopback lane, the model, 16K",
+        check("lane_for: the loopback lane, the model, 32K",
               lane is not None and lane.url == "http://127.0.0.1:11435"
-              and lane.model == "qwen3:14b" and lane.num_ctx == 16384, repr(lane))
+              and lane.model == "qwen3:8b" and lane.num_ctx == 32768, repr(lane))
         check("asking again does not start a second one", len(w.started) == 1)
         SC.request_change("long_context", False)
         check("everything off: it is stopped - that one, and only that one",
@@ -577,13 +579,13 @@ def t_lane_for_is_none_when_not_ready():
         w.switches(master=True, long_context=True)
         check("never answered: None, and failed", SC.lane_for("long_context") is None
               and SC._LANE.state == "failed")
-    with ready(installed=("qwen3:8b",)) as w:
+    with ready(installed=("qwen3:14b",)) as w:
         w.switches(master=True, long_context=True)
         check("model not installed: None", SC.lane_for("long_context") is None)
         st = SC.status()
         check("and status says how to install it",
               st["features"][0]["model_installed"] is False
-              and "ollama pull qwen3:14b" in st["features"][0]["why"])
+              and "ollama pull qwen3:8b" in st["features"][0]["why"])
     with ready(tags_answer=False) as w:
         w.switches(master=True, long_context=True)
         check("cannot ask whether it is installed: None", SC.lane_for("long_context") is None)
@@ -719,6 +721,35 @@ def t_hooks_are_no_ops_when_off():
         check("and the quiet wait is unchanged", SC.learning_idle_seconds(45.0) == 45.0)
 
 
+def t_long_context_needs_more_room():
+    # T3: a long turn moved to the second card although its lane had the
+    # SAME room as the main model (16,384 each), and was trimmed there just
+    # the same. The audit's shape, at the real 16,384.
+    msgs = [{"role": "system", "content": "recalled facts"}]
+    for i in range(10):
+        msgs.append({"role": "user", "content": f"q{i} " + "word " * 1100})
+        msgs.append({"role": "assistant", "content": f"a{i} " + "word " * 1100})
+    msgs.append({"role": "user", "content": "and now?"})
+    same = SC.Lane("http://127.0.0.1:11435", "qwen3:14b", 16384, "test")
+    bigger = SC.Lane("http://127.0.0.1:11435", "qwen3:8b", 32768, "test")
+    lc = AG.choose_lane(msgs, "jarvis-primary", ollama_url="x", context_length=16384,
+                        lane_for=lambda f: same if f == "long_context" else None)
+    check("lane with the same 16,384 as the main model: the turn stays on the main card",
+          lc is None, repr(lc))
+    lc = AG.choose_lane(msgs, "jarvis-primary", ollama_url="x", context_length=16384,
+                        lane_for=lambda f: bigger if f == "long_context" else None)
+    check("lane with 32,768 against the main model's 16,384: the turn moves",
+          lc is not None and lc.feature == "long_context" and lc.context_length == 32768, repr(lc))
+    sent = _turn(msgs, context_length=16384,
+                 lane_for=lambda f: same if f == "long_context" else None)
+    check("... and the request really goes to the main card",
+          sent[0][0] == "http://127.0.0.1:11434/v1/chat/completions")
+    with G.World(G.SMI["2080s_2060"]):
+        det = SC.detect(fresh=True)
+    check("the 12 GB card's planned lane has more room than jarvis-primary's 16,384",
+          SC._feature_model("long_context", det)[1] > 16384)
+
+
 def t_hooks_when_on():
     msgs = _long_history()
     sent = _turn(msgs, lane_for=lambda f: LANE14 if f == "long_context" else None)
@@ -747,7 +778,7 @@ def t_hooks_when_on():
               and out == '{"facts": []}', (gen, asked, out))
         body = [p for (u, p) in w.http if u.endswith("/api/generate")][0]
         check("with the lane's context size, so the model is never reloaded",
-              body["options"]["num_ctx"] == 16384 and body["model"] == "qwen3:14b")
+              body["options"]["num_ctx"] == 32768 and body["model"] == "qwen3:8b")
         check("and the learner's quiet wait shortens to 10 s", SC.learning_idle_seconds(45.0) == 10.0)
     # jarvis_intake.propose() goes through it.
     seen = []

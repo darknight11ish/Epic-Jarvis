@@ -1455,7 +1455,10 @@ def choose_lane(messages: list, model: str, *, ollama_url: str,
       working. Otherwise nothing changes: the main model gets it as today
       (and the desktop warns first - vision.rs).
     - A conversation the main model would have to TRIM (fit_messages would
-      drop earlier turns) goes to the "long_context" lane, whole.
+      drop earlier turns) goes to the "long_context" lane - but only when
+      that lane has MORE room than the main model (T3: with both at 16,384
+      the turn moved and was trimmed there exactly as it would have been at
+      home, on a different model, for nothing).
     The switches are asked first, so with them off nothing else is done -
     not even asking Ollama for the main model's context length."""
     try:
@@ -1479,6 +1482,8 @@ def choose_lane(messages: list, model: str, *, ollama_url: str,
         budget = max(512, n_ctx - max_tokens - _TEMPLATE_TOKENS - estimate_tokens(schemas))
         if estimate_tokens(list(messages or [])) <= budget:
             return None
+        if int(getattr(lane, "num_ctx", 0) or 0) <= int(n_ctx):
+            return None         # no more room there than here: nothing gained
         return LaneChoice(lane.url, lane.model, lane.num_ctx, "long_context",
                           "the conversation is longer than the main card has room for")
     except Exception:

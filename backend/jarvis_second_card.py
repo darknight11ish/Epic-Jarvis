@@ -143,26 +143,39 @@ MIN_COMPUTE = 7.5
 MIN_TOTAL_MB = 10240
 #: A card sold as "12 GB". 11.5 GiB rather than exactly 12,288 MiB, because
 #: a card can report a little under its label; an 11 GB 2080 Ti (11,264 MiB)
-#: stays below it, which is the point (see LONG_CONTEXT below).
+#: stays below it. Since 2026-09-24 both sizes get the same lane (below);
+#: the line is kept so a bigger plan for 12 GB can be put back in one place.
 BIG_TOTAL_MB = 11776
 
-# What the long-context lane holds, by the second card's memory. The same
-# arithmetic as MODEL-TOPOLOGY.md "The budget" and "The planned second card":
+# What the long-context lane holds, by the second card's memory.
+#
+# CHANGED 2026-09-24 (bug audit T3). This used to be Qwen 3 14B at 16K on a
+# 12 GB card. The everyday model, jarvis-primary, also has 16,384 tokens of
+# room (backend/jarvis-primary.Modelfile, num_ctx 16384), so a conversation
+# too long for the main card was moved to a lane with NO more room, and was
+# trimmed there exactly as it would have been at home. The lane is only
+# worth having if it holds more than the main card, so 12 GB now gets what
+# docs/HARDWARE-PROFILES.md section 4.4 gives a 12 GB long-context lane
+# ("8 + 12 GB, monitor on the 12" and "12 + 12 GB": qwen3:8b, 32K), with
+# the owner's 0.75 GB gap (section 5, decision 1):
 #
 #   KV per token, q8_0 = 2 (K and V) x layers x kv_heads x 128 x 1.0625 bytes
-#     Qwen 3 8B : 2 x 36 x 8 x 128 x 1.0625 = 78,336 B
-#     Qwen 3 14B: 2 x 40 x 8 x 128 x 1.0625 = 87,040 B
+#     Qwen 3 8B : 2 x 36 x 8 x 128 x 1.0625 = 78,336 B   (section 2.8)
 #
-#   Qwen 3 14B Q4_K_M @ 16K : 8.42 + 87,040 x 16,384 = 1.33 + 0.63 = 10.38 GiB
-#   Qwen 3 8B  Q4_K_M @ 32K : 4.67 + 78,336 x 32,768 = 2.39 + 0.63 =  7.69 GiB
-#                            (weights)  (cache)             (runtime)
+#   Qwen 3 8B Q4_K_M @ 32K: 4.67 + 2.39 + 0.30 = 7.36 GiB   (section 8.2's "need")
+#                           (weights) (cache) (compute)
+#   + 0.33 GiB CUDA start-up, which section 4.2 counts on the card's side
+#   = 7.69 GiB, the figure the approval card shows.
 #
-#   ceiling, no monitor on the card, about 0.6 GiB kept by the driver:
-#     12 GB card (2060 12 GB)  ~11.4 GiB  -> 14B @ 16K fits, 1 GiB spare
-#     11 GB card (2080 Ti)     ~10.4 GiB  -> 14B @ 16K would have 0.02 spare:
-#                                            no. 8B @ 32K, 2.7 GiB spare.
-#     10 GB card               ~ 9.4 GiB  -> 8B @ 32K, 1.7 GiB spare.
-LONG_BIG = ("qwen3:14b", 16384, 10.38)
+#   room on the card, no monitor: total - 0.60 desktop - 0.33 - 0.75 gap
+#     12 GB card (2060 12 GB)  10.32 GiB  -> 8B @ 32K (7.36), 2.96 spare
+#     11 GB card (2080 Ti)      9.32 GiB  -> 8B @ 32K, 1.96 spare
+#     10 GB card                8.32 GiB  -> 8B @ 32K, 0.96 spare
+#
+# Qwen 3 14B at 16K (10.10 needed) would fit a 12 GB card, but gives no more
+# room than the main card; 14B at 32K (11.43) does not fit. Measure on the
+# PC before changing this (HARDWARE-PROFILES section 4.7).
+LONG_BIG = ("qwen3:8b", 32768, 7.69)
 LONG_SMALL = ("qwen3:8b", 32768, 7.69)
 
 # Pictures. NOT CHECKED against ollama.com: the library page could not be
@@ -183,7 +196,7 @@ RUNTIME_GIB = 0.63
 FEATURES = (
     {"id": "long_context", "name": "Longer conversations", "needs": [],
      "what": ("When a conversation grows past what the main card has room for, "
-              "that answer is written on the second card, which can read all of it.")},
+              "that answer is written on the second card, which has room for more of it.")},
     {"id": "vision", "name": "Pictures", "needs": [],
      "what": ("A message with a picture goes to a picture-reading model on the "
               "second card, on this PC, so Jarvis can see what you attached.")},
