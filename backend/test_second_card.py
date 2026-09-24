@@ -354,6 +354,24 @@ def t_the_second_ollama():
           and env["PATH"] == "/bin")
     check("flash attention 'on' in the toml is honoured",
           SC.lane_env(G.U_2060, port=11435, num_ctx=1, base={}, flash="on")["OLLAMA_FLASH_ATTENTION"] == "1")
+    # flash_attention = "off" with the lane's q8_0 cache: llama.cpp refuses
+    # to load the model (llama-context.cpp ~3737-3741). Refused, in words.
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, long_context=True)
+        cfg = {"flash_attention": "off"}
+        with mock.patch.object(SC, "_cfg", lambda key, default=None: cfg.get(key, default)):
+            st = SC.status()
+        check("flash_attention 'off': not started, and says why and what to do",
+              not w.started and st["lane"]["state"] == "failed"
+              and "flash_attention is \"off\"" in st["lane"]["why"]
+              and "q8_0" in st["lane"]["why"] and "Delete that line" in st["lane"]["why"],
+              st["lane"])
+        cfg["flash_attention"] = "on"
+        SC._LANE.failed_at = -1e9
+        with mock.patch.object(SC, "_cfg", lambda key, default=None: cfg.get(key, default)):
+            st = SC.status()
+        check("flash_attention 'on' still starts it",
+              len(w.started) == 1 and st["lane"]["state"] == "running", st["lane"])
     with G.World(G.SMI["2080s_2060"], foreign_on_port=True) as w:
         w.switches(master=True, long_context=True)
         st = SC.status()

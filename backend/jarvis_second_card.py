@@ -59,7 +59,8 @@ this starts `ollama serve` with:
     OLLAMA_KEEP_ALIVE=30m            (configurable)
 
 and NOT OLLAMA_FLASH_ATTENTION, unless `[second_card] flash_attention` says
-"on". I checked Ollama's source (llm/llama_server.go,
+"on". "off" is refused with a plain reason (_flash_refusal): with the q8_0
+cache, llama.cpp will not load a model with flash attention off. I checked Ollama's source (llm/llama_server.go,
 LlamaServerFlashAttention, main branch, 2026-09-24): unset means llama.cpp's
 "auto", which falls back per model; set to 1 it passes `--flash-attn on`,
 which removes that fallback. MODEL-TOPOLOGY.md already says not to set it, for
@@ -396,6 +397,21 @@ def _keep_alive() -> str:
 def _flash_setting() -> str:
     v = str(_cfg("flash_attention", "auto") or "auto").strip().lower()
     return v if v in ("auto", "on", "off") else "auto"
+
+
+def _flash_refusal() -> Optional[str]:
+    """Why the lane must not start with this [second_card] flash_attention,
+    or None. "off" cannot work with the lane's q8_0 cache: llama.cpp
+    refuses to create the model's context ("quantized V cache requires
+    flash_attn to be enabled", src/llama-context.cpp ~3737-3741, b11081 -
+    docs/HARDWARE-PROFILES.md 2.2), so every model on the lane would fail
+    to load. Refused here, in words, instead."""
+    if _flash_setting() != "off":
+        return None
+    return ("[second_card] flash_attention is \"off\" in jarvis-framework.toml, which cannot "
+            "work: the second copy of Ollama keeps the conversation in the compact q8_0 "
+            "format, and llama.cpp refuses to load a model that way with flash attention "
+            "off. Delete that line (or set it to \"auto\"), and the second card starts")
 
 
 def _main_ollama_url() -> str:
@@ -746,6 +762,9 @@ class _LaneProcess:
                     f"jarvis-framework.toml")
             return self._fail(f"another program is already using {HOST}:{port}; set "
                               f"another port under [second_card] in jarvis-framework.toml")
+        refused = _flash_refusal()
+        if refused:
+            return self._fail(refused)
         try:
             env = lane_env(uuid, port=port, num_ctx=num_ctx, flash=_flash_setting(),
                            keep_alive=_keep_alive())

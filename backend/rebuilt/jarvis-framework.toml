@@ -471,7 +471,9 @@ port = 11435
 # How long a model stays loaded on the second card after its last use.
 keep_alive = "30m"
 # "auto" leaves it to Ollama, which is what docs/MODEL-TOPOLOGY.md says to
-# do. "on" forces it; "off" turns it off.
+# do. "on" forces it. "off" is refused (the second card then does not
+# start, and says why): its compact q8_0 conversation memory needs flash
+# attention, and llama.cpp will not load a model that way with it off.
 flash_attention = "auto"
 
 # ------------------------------------------------------------------------
