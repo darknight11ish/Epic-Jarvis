@@ -7,7 +7,7 @@ repository is how a new setting ends up read as "missing, so off" with nobody
 told. So instead of copying, the script runs this and prints the difference,
 setting by setting, for the owner to decide on.
 
-    python backend\\_config_diff.py <your file> <this repository's file>
+    py -3 backend\\_config_diff.py <your file> <this repository's file>
 
 Prints plain lines, and exits 0 whether or not anything differs (a difference
 is information, not an error). Exits 2 if a file cannot be read or parsed -
@@ -47,16 +47,39 @@ def _show(v) -> str:
     return s if len(s) <= 100 else s[:97] + "..."
 
 
+_TIERS = "[autonomy.tiers] "
+
+
+def missing_tier(theirs_flat: dict) -> str:
+    """The tier the backend gives an action with no line in the owner's
+    file: their `[autonomy] unknown_action_tier` if that is "never", else
+    "ask" - jarvis_framework clamps anything more permissive back to "ask"."""
+    val = str(theirs_flat.get("[autonomy] unknown_action_tier", "ask")).strip().lower()
+    return "never" if val == "never" else "ask"
+
+
 def diff(theirs: dict, ours: dict) -> list[str]:
     a, b = flatten(theirs), flatten(ours)
     lines: list[str] = []
+    tier_note = f'   (missing from yours, so it is "{missing_tier(a)}" for you)'
     new = sorted(set(b) - set(a))
     gone = sorted(set(a) - set(b))
     changed = sorted(k for k in set(a) & set(b) if a[k] != b[k])
     if new:
-        lines.append(f"In this repository's copy but NOT in yours ({len(new)}) - "
-                     "the backend treats a missing setting as its default:")
-        lines += [f"    {k} = {_show(b[k])}" for k in new]
+        # The value shown is the REPOSITORY's, not what the backend uses while
+        # the line is missing. For an approval tier that difference matters:
+        # `append_obsidian_daily = "auto"` listed here must not read as "it is
+        # auto for you now". A missing tier is `unknown_action_tier`, which is
+        # "ask" (or "never", if the owner set that) and can never be more
+        # permissive (rebuilt/jarvis_framework.py, action_tier and
+        # unknown_action_tier). Every other missing setting takes the default
+        # the code that reads it has.
+        lines.append(f"In this repository's copy but NOT in yours ({len(new)}). The value "
+                     "shown is this repository's. Until you add a line, a missing approval "
+                     "tier is the one named on its line (never \"auto\"), and any other "
+                     "missing setting is its built-in default:")
+        lines += [f"    {k} = {_show(b[k])}" + (tier_note if k.startswith(_TIERS) else "")
+                  for k in new]
     if changed:
         lines.append(f"Set differently ({len(changed)}) - yours is the one in use:")
         lines += [f"    {k}:  yours {_show(a[k])}   repository {_show(b[k])}" for k in changed]
