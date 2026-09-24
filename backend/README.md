@@ -5864,7 +5864,7 @@ these hold:
 - it does not replace a fact you already have;
 - nothing sensitive (health, money, passwords and account details, other
   people's private details) unless you allowed that - see "The
-  sensitive-topic check" below. Passwords, PINs, account and ID numbers
+  sensitive-topic check" below. Passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses
   are never saved without your yes, even when you allowed sensitive topics
   (your decision of 2026-09-24, after the safety research).
 

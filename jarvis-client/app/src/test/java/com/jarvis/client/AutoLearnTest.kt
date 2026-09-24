@@ -42,7 +42,8 @@ class AutoLearnTest {
         assertEquals("Also remember sensitive topics automatically", Which.SENSITIVE.title)
         assertEquals(
             "Health, money, and private details about other people. When this is off, Jarvis asks " +
-                "you first. Passwords, PINs, account and ID numbers always wait for your yes.",
+                "you first. Passwords, PINs, account and ID numbers, birthdays, phone numbers " +
+                "and email addresses always wait for your yes.",
             Which.SENSITIVE.under,
         )
         assertEquals("Saved automatically", AutoLearn.TITLE)

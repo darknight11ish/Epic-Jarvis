@@ -301,7 +301,7 @@ word or he/she/they of theirs left out of the fact - never a correction,
 nothing sensitive unless the owner allowed it (`jarvis_sensitive.py`: word
 lists in eight languages, number and token shapes, any fact about another
 person, then the learner's own local model - its "unsure" or no answer is a
-card too; and passwords, PINs, account and ID numbers are a card even when
+card too; and passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are a card even when
 the owner allowed sensitive topics, by the patterns alone,
 `jarvis_sensitive.always_asks`), and a local model by address AND name. Anything else is the same
 card as before, with the reason on it. Saved facts are `source = "auto"` and

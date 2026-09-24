@@ -88,7 +88,7 @@ await check("the wording is the contract's, word for word (section 5)", async ()
     "to it - never from web pages, emails, documents or notes. You can forget any of them here.");
   assert.equal(SENSITIVE_LABEL, "Also remember sensitive topics automatically");
   assert.equal(SENSITIVE_DETAIL, "Health, money, and private details about other people. When this " +
-    "is off, Jarvis asks you first. Passwords, PINs, account and ID numbers always wait for your yes.");
+    "is off, Jarvis asks you first. Passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses always wait for your yes.");
   assert.equal(rememberedLine(2), "Jarvis remembered 2 things");
   assert.equal(rememberedLine(1), "Jarvis remembered 1 thing");
   assert.equal(rememberedLine(0), "");

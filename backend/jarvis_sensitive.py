@@ -31,7 +31,7 @@ the fact a card:
      treated as sensitive (fail closed).
   3. The owner's switch: with "Also remember sensitive topics automatically"
      on, jarvis_auto_learn skips this whole check - except always_asks() at
-     the end of this file (passwords, PINs, account and ID numbers).
+     the end of this file (passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses).
 
 Nothing here writes to disk or logs the words it is given. A verdict names
 which rule fired, never the words that fired it.

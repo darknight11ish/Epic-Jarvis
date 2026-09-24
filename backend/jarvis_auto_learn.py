@@ -63,7 +63,7 @@ THE CHECKS (each a small function below, returning a reason in words or "")
               other-person rule, then the learner's own local model. Unless
               "Also remember sensitive topics automatically" is on, a hit is a
               card (L7). When unsure - or when the model does not answer: a hit.
-              With it on, passwords, PINs, account and ID numbers are still a
+              With it on, passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are still a
               card (jarvis_sensitive.always_asks - the patterns only, no
               model; the owner's decision of 2026-09-24, after the safety
               research).
@@ -126,8 +126,8 @@ SENSITIVE_CARD = "\n".join([
     "or say to Jarvis, will be saved without asking you first, and listed under "
     "\"Saved automatically\" with Forget.",
     "",
-    "Passwords, PINs, account and ID numbers always wait for your yes, even with "
-    "this on.",
+    "Passwords, PINs, account and ID numbers, birthdays, phone numbers and "
+    "email addresses always wait for your yes, even with this on.",
     "",
     "Nothing leaves this PC. You can turn it off at any time from either app, "
     "and that is instant.",
@@ -139,8 +139,9 @@ AUTO_TEXT = ("Jarvis saves facts about you and your projects from what you type 
              "or say to it - never from web pages, emails, documents or notes. "
              "You can forget any of them here.")
 SENSITIVE_TEXT = ("Health, money, and private details about other people. When this "
-                  "is off, Jarvis asks you first. Passwords, PINs, account and ID numbers "
-                  "always wait for your yes.")
+                  "is off, Jarvis asks you first. Passwords, PINs, account and ID "
+                  "numbers, birthdays, phone numbers and email addresses always wait "
+                  "for your yes.")
 #: The note under "Learn automatically" while background learning is off -
 #: the desktop's sentence, which both apps now show (fit audit item 10).
 NEEDS_LEARNING = ("Background learning is off, so nothing is saved automatically. "
@@ -1052,7 +1053,7 @@ def check_sensitive(fact: str, turns: list, allowed: bool) -> str:
     remember sensitive topics automatically".
 
     On, health, money, other people and the rest are saved - but passwords,
-    PINs, account and ID numbers still are not (jarvis_sensitive.
+    PINs, account and ID numbers, birthdays, phone numbers and email addresses still are not (jarvis_sensitive.
     always_asks, on the fact AND the words it came from). That check is the
     patterns alone: the model is not asked, so the switch adds no wait."""
     try:

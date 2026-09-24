@@ -12,7 +12,8 @@
  * - "Learn automatically" (on by default) and "Also remember sensitive
  *   topics automatically" (off by default). Turning either ON raises one
  *   approval card; OFF is immediate. The same shape as the learning switch.
- *   Passwords, PINs, account and ID numbers wait for a yes even with the
+ *   Passwords, PINs, account and ID numbers, birthdays, phone numbers and
+ *   email addresses wait for a yes even with the
  *   second one on (the owner's decision after the safety research; the PC
  *   enforces it, this window only says so).
  * - "Saved automatically": newest first, the fact, when, a small "said
@@ -37,7 +38,8 @@ export const AUTO_DETAIL =
 export const SENSITIVE_LABEL = "Also remember sensitive topics automatically";
 export const SENSITIVE_DETAIL =
   "Health, money, and private details about other people. When this is off, Jarvis " +
-  "asks you first. Passwords, PINs, account and ID numbers always wait for your yes.";
+  "asks you first. Passwords, PINs, account and ID numbers, birthdays, phone " +
+  "numbers and email addresses always wait for your yes.";
 export const LIST_TITLE = "Saved automatically";
 
 /** The approval-card actions each switch's ON raises (jarvis-framework.toml). */

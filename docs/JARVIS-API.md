@@ -2349,7 +2349,7 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    replace a fact you already have".
 9. **Not sensitive**, unless "Also remember sensitive topics automatically"
    is on (GUARDS L7). **With it on**, only one narrow check runs:
-   passwords, PINs, account and ID numbers still wait
+   passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses still wait
    (`jarvis_sensitive.always_asks`, on the fact AND the turns it shares
    words with, the patterns alone - the model is not asked, so the switch
    adds no wait). It catches whatever the patterns put under passwords and
@@ -2551,7 +2551,7 @@ Where the learning switch lives today (desktop: Brain -> Memory; phone: Mind
   documents or notes. You can forget any of them here."
 - **"Also remember sensitive topics automatically"** (off by default), with:
   "Health, money, and private details about other people. When this is
-  off, Jarvis asks you first. Passwords, PINs, account and ID numbers always
+  off, Jarvis asks you first. Passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses always
   wait for your yes." (Changed 2026-09-24 with the owner's decision; it
   used to list "passwords and account details" among what the switch
   covers.)
@@ -2569,7 +2569,7 @@ Where the learning switch lives today (desktop: Brain -> Memory; phone: Mind
 The approval cards read "Turn on automatic learning. ..." and "Also remember
 sensitive topics automatically. ..." (`jarvis_auto_learn.AUTO_CARD`,
 `SENSITIVE_CARD`); both say nothing leaves this PC and what a "no" means.
-The sensitive one also says "Passwords, PINs, account and ID numbers always
+The sensitive one also says "Passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses always
 wait for your yes, even with this on."
 
 ### 19.6 Known gaps, said plainly

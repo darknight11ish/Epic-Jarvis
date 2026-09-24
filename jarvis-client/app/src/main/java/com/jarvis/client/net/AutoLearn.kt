@@ -95,7 +95,8 @@ object AutoLearn {
             action = "learning_sensitive_enable",
             title = "Also remember sensitive topics automatically",
             under = "Health, money, and private details about other people. When this is off, " +
-                "Jarvis asks you first. Passwords, PINs, account and ID numbers always wait for your yes.",
+                "Jarvis asks you first. Passwords, PINs, account and ID numbers, birthdays, " +
+                "phone numbers and email addresses always wait for your yes.",
             key = "auto_sensitive",
             waitingKey = "sensitive_waiting",
             lastKey = "sensitive_last",
