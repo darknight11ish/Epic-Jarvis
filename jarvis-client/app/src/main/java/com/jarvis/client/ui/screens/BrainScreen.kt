@@ -349,6 +349,10 @@ fun BrainScreen(
                 }
             }
 
+            // The tool loop's steps, live (StepsPlate.kt) - the desktop's
+            // Brain → Live. Reads JarvisRuntime directly.
+            item(key = "steps") { StepsSection() }
+
             if (models != null) {
                 item(key = "models") {
                     Section("Model") {

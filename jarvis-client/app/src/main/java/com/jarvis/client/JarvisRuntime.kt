@@ -305,6 +305,21 @@ object JarvisRuntime {
     val activityDetail: StateFlow<String?> = _activityDetail.asStateFlow()
 
     /**
+     * The tool loop's `step` events in words, newest last, as the desktop's
+     * Brain → Live shows them ([com.jarvis.client.net.Steps]). In memory
+     * only, at most [com.jarvis.client.net.Steps.KEEP] lines; tool names
+     * only, never what a tool read. Empty until the PC sends one - it sends
+     * them only while tools are switched on.
+     */
+    private val _steps = MutableStateFlow<List<com.jarvis.client.net.Steps.Line>>(emptyList())
+    val steps: StateFlow<List<com.jarvis.client.net.Steps.Line>> = _steps.asStateFlow()
+
+    /** Mind's Clear on the steps list. Only this phone's copy; nothing is sent. */
+    fun clearSteps() {
+        _steps.value = emptyList()
+    }
+
+    /**
      * `/api/models`, or null when this backend does not offer the capability
      * or has not been asked yet. Switching between models the desktop already
      * has was allowed onto the phone on 2026-09-18, and installing a typed
@@ -972,6 +987,16 @@ object JarvisRuntime {
             // just re-reads the shared document; nothing here redraws
             // anything directly.
             "appearance" -> refreshAppearance()
+            // One step of the tool loop - asking the model, a tool starting,
+            // finishing or refused - kept for Mind's "What Jarvis is doing".
+            // It used to fall through to "unhandled" below.
+            "step" -> {
+                val line = com.jarvis.client.net.Steps.Line(
+                    com.jarvis.client.net.Steps.clock(System.currentTimeMillis()),
+                    com.jarvis.client.net.Steps.text(event.data),
+                )
+                _steps.update { com.jarvis.client.net.Steps.append(it, line) }
+            }
             else -> Log.d(TAG, "unhandled event kind '${event.kind}'")
         }
     }
