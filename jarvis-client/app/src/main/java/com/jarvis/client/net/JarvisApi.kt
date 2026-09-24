@@ -449,6 +449,39 @@ class JarvisApi(
     suspend fun setPower(mode: String): ApiResult<JsonObject> =
         postForJob("/api/power", "{\"mode\":${quote(mode)}}")
 
+    // ------------------------------------------------------ second card ----
+
+    /**
+     * `GET /api/second-card` - what the PC found and each switch's state
+     * ([SecondCard.parse]). A 404 is an older backend and a 503 a module that
+     * did not load; [SecondCard.readOf] turns both into sentences.
+     */
+    suspend fun secondCard(): ApiResult<JsonObject> = probe(SecondCard.PATH)
+
+    /**
+     * One second-card switch on or off. ON raises one approval card on the PC
+     * and changes nothing until it is approved; OFF is immediate. So a success
+     * never means "it is on" - re-read [secondCard] for that. See
+     * [SecondCard.classifyPost] for which answers come back as sentences.
+     */
+    suspend fun setSecondCard(feature: String, enabled: Boolean): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SecondCard.PATH) ?: return@withContext ApiResult.Failed(
+                ApiError.Unreachable("No desktop address set"),
+            )
+            val body = SecondCard.postBody(feature, enabled)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    SecondCard.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage())) }
+        }
+
     // ------------------------------------------------------- appearance ----
 
     /**

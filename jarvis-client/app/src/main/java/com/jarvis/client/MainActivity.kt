@@ -40,6 +40,7 @@ import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.SecondCard
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.PlatformReadiness
@@ -469,6 +470,12 @@ class MainActivity : FragmentActivity() {
         val models by JarvisRuntime.models.collectAsState()
         val activityDetail by JarvisRuntime.activityDetail.collectAsState()
         var modelBusy by remember { mutableStateOf(false) }
+        // The second graphics card: what the PC last said, which switch has a
+        // request out, and what that request came back with - held like the
+        // wake word's busy/notice pair, for the same reason.
+        val secondCard by JarvisRuntime.secondCard.collectAsState()
+        var secondCardBusy by remember { mutableStateOf<String?>(null) }
+        var secondCardNotice by remember { mutableStateOf<String?>(null) }
         // Held here rather than in JarvisRuntime: a one-shot read the Brain
         // screen asks for, thrown away the moment a different date is asked
         // for - not app state anything else reads.
@@ -1242,6 +1249,37 @@ class MainActivity : FragmentActivity() {
                             },
                             // backend/power-mode.patch: Active / Quiet / Standby.
                             onSetPower = { mode -> scope.launch { JarvisRuntime.setPower(mode) } },
+                            // backend/second-card.patch: one switch at a time.
+                            // ON raises a card and turns nothing on; the plate
+                            // shows what the PC reports afterwards.
+                            secondCard = secondCard,
+                            secondCardBusy = secondCardBusy,
+                            secondCardNotice = secondCardNotice,
+                            onSetSecondCard = { feature, enabled ->
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = feature
+                                    secondCardNotice = null
+                                    scope.launch {
+                                        try {
+                                            secondCardNotice = JarvisRuntime.setSecondCard(feature, enabled)
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
+                            onRecheckSecondCard = {
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = ""
+                                    scope.launch {
+                                        try {
+                                            JarvisRuntime.refreshSecondCard()
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
                         )
                     }
 

@@ -42,6 +42,7 @@ import com.jarvis.client.net.MemoryCardKind
 import com.jarvis.client.net.MemoryCardView
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ModelsInfo
+import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
 import com.jarvis.client.ui.BackButton
@@ -170,6 +171,22 @@ fun BrainScreen(
      * ([com.jarvis.client.JarvisRuntime.setPower]). Null hides the buttons.
      */
     onSetPower: ((mode: String) -> Unit)? = null,
+    /**
+     * `GET /api/second-card`, as last read ([com.jarvis.client.JarvisRuntime.secondCard]).
+     * The plate is always drawn: an older backend or a missing module is
+     * said in words there, not hidden.
+     */
+    secondCard: SecondCard.Read = SecondCard.Read.NotAsked,
+    /** The second-card switch whose request is in flight, or null. */
+    secondCardBusy: String? = null,
+    /** What the last second-card request came back with, or null. */
+    secondCardNotice: String? = null,
+    /**
+     * One second-card switch on (raises an approval card) or off (at once) -
+     * [com.jarvis.client.JarvisRuntime.setSecondCard]. `"master"` is the main switch.
+     */
+    onSetSecondCard: (feature: String, enabled: Boolean) -> Unit = { _, _ -> },
+    onRecheckSecondCard: () -> Unit = {},
     /**
      * Re-read the board every this many milliseconds while the screen is
      * open and the link is up. 0, the default, is off - the battery reasoning
@@ -346,6 +363,22 @@ fun BrainScreen(
                             onOpenApprovals = onOpenApprovals,
                         )
                     }
+                }
+            }
+
+            // backend/second-card.patch. Right under Model, because a feature
+            // whose model is missing is installed with the box above.
+            item(key = "second-card") {
+                Section("Second graphics card") {
+                    SecondCardPlate(
+                        read = secondCard,
+                        busy = secondCardBusy,
+                        notice = secondCardNotice,
+                        canAct = canAct,
+                        onSet = onSetSecondCard,
+                        onRecheck = onRecheckSecondCard,
+                        onOpenApprovals = onOpenApprovals,
+                    )
                 }
             }
 

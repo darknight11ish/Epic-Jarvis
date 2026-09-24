@@ -24,6 +24,7 @@ import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
 import com.jarvis.client.widget.ApprovalWidget
@@ -311,6 +312,15 @@ object JarvisRuntime {
      */
     private val _models = MutableStateFlow<ModelsInfo?>(null)
     val models: StateFlow<ModelsInfo?> = _models.asStateFlow()
+
+    /**
+     * `/api/second-card`: what the PC found, and the second-card switches
+     * ([com.jarvis.client.net.SecondCard]). Read on each connect, on the Mind
+     * screen, after every switch, and after an approval is decided while one
+     * of its cards was waiting.
+     */
+    private val _secondCard = MutableStateFlow<SecondCard.Read>(SecondCard.Read.NotAsked)
+    val secondCard: StateFlow<SecondCard.Read> = _secondCard.asStateFlow()
 
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
@@ -854,7 +864,18 @@ object JarvisRuntime {
      */
     private suspend fun onEvent(event: SseEvent) {
         when (event.kind) {
-            "approval" -> refreshPending()
+            "approval" -> {
+                refreshPending()
+                // A second-card switch waiting on a card has no event of its
+                // own (docs/JARVIS-API.md section 12: "re-read it after a
+                // card is decided"). A decided card changes the queue, and
+                // this is the doorbell for that, so the switches are asked
+                // again - only while one of them is waiting.
+                val sc = _secondCard.value
+                if (sc is SecondCard.Read.Loaded && sc.status.pending.isNotEmpty()) {
+                    recheckSecondCardAfterDecision(sc.status.pending)
+                }
+            }
             "attention" -> refreshAttention()
             "activity" -> {
                 // The one field read straight off an event rather than
@@ -904,6 +925,8 @@ object JarvisRuntime {
         refreshStatus()
         refreshPending()
         refreshAttention()
+        // One small read, so the second-card switches are known.
+        refreshSecondCard()
     }
 
     suspend fun refreshStatus() {
@@ -1051,6 +1074,62 @@ object JarvisRuntime {
             is ApiResult.Failed -> _notice.value = describeDraft(result.error)
         }
         return result
+    }
+
+    // ------------------------------------------------------ second card ----
+
+    /**
+     * Re-reads `/api/second-card`. A failed read replaces what was there:
+     * the plate then says it could not ask, rather than showing switches the
+     * PC may no longer agree with - and chat stops offering a picture.
+     */
+    suspend fun refreshSecondCard() {
+        _secondCard.value = SecondCard.readOf(api.secondCard())
+    }
+
+    /**
+     * Re-reads the switches after an approval was decided while one of their
+     * cards [waiting] - at once, then twice more a little later if the PC
+     * still says it waits. The PC writes the switch when its own wait for the
+     * card returns, which can land just after the event that woke this, so
+     * one read alone could leave the plate on "Waiting" over a card already
+     * answered. Stops as soon as any of those cards is no longer waiting.
+     * Launched, so the event loop is not held up.
+     */
+    private fun recheckSecondCardAfterDecision(waiting: List<String>) {
+        scope.launch {
+            for (wait in SECOND_CARD_RECHECK_MS) {
+                delay(wait)
+                refreshSecondCard()
+                val now = (_secondCard.value as? SecondCard.Read.Loaded)?.status?.pending ?: return@launch
+                if (!now.containsAll(waiting)) return@launch
+            }
+        }
+    }
+
+    /**
+     * Turns one second-card switch off, or asks for it to be turned on, then
+     * asks the PC what actually happened - the same shape as the wake word
+     * ([com.jarvis.client.voice.VoiceSession.setWakeWord]).
+     *
+     * ON raises one approval card on the PC (`second_card_enable`, tier
+     * `ask`), so a success means "a card is up", never "it is on"; the card
+     * is decided on the PC or in this phone's approval list, one at a time,
+     * like any other. OFF is immediate. Either way the reply is not trusted
+     * for the state: [refreshSecondCard] decides what the plate shows.
+     *
+     * Refused while the link is down or stale ([actionBlocker], rule 4).
+     *
+     * @param feature a feature id, or [SecondCard.MASTER] for the main switch.
+     * @return a sentence to show, or null when the plate already says it.
+     */
+    suspend fun setSecondCard(feature: String, enabled: Boolean): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setSecondCard(feature, enabled)
+        // The card should appear in this phone's approvals too.
+        if (enabled && result is ApiResult.Ok) refreshPending()
+        refreshSecondCard()
+        return SecondCard.replyLine(result)
     }
 
     /**
@@ -1341,6 +1420,7 @@ object JarvisRuntime {
                 val skills = async { api.probe("/api/skills").asSection() }
                 val initiative = async { api.probe("/api/initiative").asSection() }
                 val contentRisk = async { api.probe("/api/content-risk").asSection() }
+                val secondCardRead = async { refreshSecondCard() }
                 val (computeData, computeRead) = compute.await()
                 val (memoryData, memoryRead) = memory.await()
                 val (ledgerData, ledgerRead) = ledger.await()
@@ -1392,6 +1472,7 @@ object JarvisRuntime {
                 attention.await()
                 jobs.await()
                 models.await()
+                secondCardRead.await()
             }
         } finally {
             val left = brainReadsInFlight.decrementAndGet()
@@ -2103,6 +2184,9 @@ object JarvisRuntime {
      * keep pretending to think.
      */
     private const val RECONNECT_GRACE_MS = 12_000L
+
+    /** When to re-read the second-card switches after a decision: see [recheckSecondCardAfterDecision]. */
+    private val SECOND_CARD_RECHECK_MS = longArrayOf(0L, 1_500L, 5_000L)
 
     /**
      * Past this, "reconnecting" stops being the honest word for it. Short
