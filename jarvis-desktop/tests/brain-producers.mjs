@@ -99,9 +99,14 @@ await check("Compute shows the real plan, not 'No compute plan reported'", async
   await page.close();
   assert.doesNotMatch(text, /No compute plan reported/);
   assert.match(text, /qwen3:8b/, "the model the plan is for");
-  assert.match(text, /graphics card 1/, "where it runs, in words (text_on)");
+  // Everyday chat stays on the 2080 SUPER. It used to go to the card with the
+  // most FREE memory - the slower 2060 12 GB - which is what this test once
+  // asserted; jarvis_compute now picks the monitor's card, else nvidia-smi's
+  // first (docs/MODEL-TOPOLOGY.md, docs/SECOND-CARD.md).
+  assert.match(text, /graphics card 0/, "where it runs, in words (text_on)");
+  assert.doesNotMatch(text, /graphics card 1/, "everyday chat went to the second card");
   assert.match(text, /RTX 2060/, "the cards");
-  assert.match(text, /speed: text on the freest card/, "the plan's own why");
+  assert.match(text, /everyday chat on the NVIDIA GeForce RTX 2080 SUPER/, "the plan's own why");
 });
 
 await check("CONTROL: a plan with no card measured says it is a guess", async () => {
