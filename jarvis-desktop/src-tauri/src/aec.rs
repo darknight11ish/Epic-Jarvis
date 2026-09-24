@@ -78,25 +78,33 @@ pub(crate) fn run(
 pub(crate) fn to_i16(bytes: &[u8], float: bool, bits: u16) -> Vec<i16> {
     if float && bits == 32 {
         bytes
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|b| {
-                let v = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+                let v = f32::from_le_bytes(*b);
                 (v.clamp(-1.0, 1.0) * i16::MAX as f32) as i16
             })
             .collect()
     } else if !float && bits == 16 {
         bytes
-            .chunks_exact(2)
-            .map(|b| i16::from_le_bytes([b[0], b[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| i16::from_le_bytes(*b))
             .collect()
     } else if !float && bits == 32 {
         bytes
-            .chunks_exact(4)
-            .map(|b| (i32::from_le_bytes([b[0], b[1], b[2], b[3]]) >> 16) as i16)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| (i32::from_le_bytes(*b) >> 16) as i16)
             .collect()
     } else if !float && bits == 24 {
         bytes
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|b| (i32::from_le_bytes([0, b[0], b[1], b[2]]) >> 16) as i16)
             .collect()
     } else {
