@@ -176,6 +176,26 @@ class WakeListenTest {
         assertTrue(why!!.contains("nothing was sent"))
     }
 
+    /** AP-7: what makes the runtime re-read the voice status after an approval event. */
+    @Test
+    fun `a waiting wake-word or training card is seen, and no card is not`() {
+        assertTrue(status("""{"listening": {"wake_word": false, "wake_word_pending": true}}""").cardWaiting)
+        assertTrue(status("""{"wake": {"enabled": false, "pending": true}}""").cardWaiting)
+        assertTrue(status("""{"gate": {"training": {"available": true, "pending": true, "clips": 5}}}""").cardWaiting)
+        assertFalse(on.cardWaiting)
+        assertFalse(off.cardWaiting)
+        assertFalse("an older desktop that says nothing", status("""{"available": true}""").cardWaiting)
+    }
+
+    /** Rule 4: turning it ON raises a card, so it waits for a live link. OFF never waits. */
+    @Test
+    fun `asking for the wake word ON is held on a stale link, and OFF never is`() {
+        val down = "Not connected to the desktop, so this cannot be delivered."
+        assertEquals(down, WakeRules.requestBlocker(enabled = true, linkBlocker = down))
+        assertNull(WakeRules.requestBlocker(enabled = true, linkBlocker = null))
+        assertNull("off only closes things", WakeRules.requestBlocker(enabled = false, linkBlocker = down))
+    }
+
     @Test
     fun `the phone uses the desktop's threshold, held in range`() {
         assertEquals(0.6f, WakeRules.threshold(on), 1e-6f)
@@ -224,7 +244,8 @@ class WakeListenTest {
     fun `asking to turn it on is never reported as it being on`() {
         assertEquals(null, WakeRules.afterRequest(enabled = true, nowOn = true, pending = false))
         val waiting = WakeRules.afterRequest(enabled = true, nowOn = false, pending = true)
-        assertTrue(waiting!!.contains("Approve the card"))
+        assertTrue(waiting!!.contains(com.jarvis.client.net.Approvals.WHERE))
+        assertFalse("cards are on Home, not in Inbox", waiting.contains("Inbox"))
         assertNotNull(WakeRules.afterRequest(enabled = true, nowOn = false, pending = false))
         assertNull(WakeRules.afterRequest(enabled = false, nowOn = false, pending = false))
         assertTrue(WakeRules.afterRequest(enabled = false, nowOn = true, pending = false)!!.contains("still reports"))

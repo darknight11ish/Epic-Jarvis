@@ -347,3 +347,54 @@ object MemoryDates {
         return date.atTime(23, 59, 59).atZone(zone).toEpochSecond()
     }
 }
+
+/**
+ * The answer to `/api/memory/facts?known_at=`, as the list of facts it is.
+ *
+ * `bitemporal.patch` sends `{"available", "facts": [{"id", "text", …,
+ * "current"}], "known_at", "note", "learning", "pending"}`. The as-of plate
+ * used to put that object through the Brain screen's generic `flatten()`,
+ * which turns an array of objects into its length - so the owner asked
+ * "what did you know on this date?" and was shown "Facts: 2" and nothing
+ * else. This reads the list itself.
+ *
+ * `current` is the backend's own verdict AS OF THAT MOMENT, not as of now:
+ * true when the fact had no end date yet then (or one still in its future),
+ * false when Jarvis already knew then that it had stopped being true. Absent
+ * (an older backend) gives no tag rather than a guess.
+ */
+object MemoryAsOf {
+
+    data class Fact(val text: String, val trueThen: Boolean?)
+
+    data class Answer(
+        val facts: List<Fact>,
+        /** The desktop's own one-line explanation, when it sends one. */
+        val note: String?,
+    )
+
+    const val TRUE_THEN = "true then"
+    const val NO_LONGER_TRUE = "no longer true"
+
+    /** Null when there is no `facts` list at all - a shape this cannot read. */
+    fun parse(body: JsonObject): Answer? {
+        val list = body["facts"] as? JsonArray ?: return null
+        val facts = list.mapNotNull { el ->
+            val f = el as? JsonObject ?: return@mapNotNull null
+            val text = (f["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val current = (f["current"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+            Fact(text, current)
+        }
+        val note = (body["note"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            ?.trim()?.takeIf { it.isNotEmpty() }
+        return Answer(facts, note)
+    }
+
+    /** The tag beside one fact, or null when the desktop did not say. */
+    fun tag(fact: Fact): String? = when (fact.trueThen) {
+        true -> TRUE_THEN
+        false -> NO_LONGER_TRUE
+        null -> null
+    }
+}

@@ -208,6 +208,12 @@ internal fun ApprovalSwitchRow(
                 else -> chrome.textMid
             },
         )
+        // How its last card ended (denied, nobody answered, failed…), when
+        // the PC says so - otherwise the row read "Off." as if nothing had
+        // been asked.
+        view.lastLine?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
         val blocked = view.blocked
         if (!view.on && !view.waiting && blocked != null && blocked != view.line) {
             Text(blocked, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)

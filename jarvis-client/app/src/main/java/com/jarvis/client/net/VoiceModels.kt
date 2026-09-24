@@ -84,6 +84,15 @@ data class VoiceStatus(
      * said no such thing.
      */
     val sttMissing: Boolean get() = available && stt.status.isNotBlank() && !stt.available
+
+    /**
+     * A voice card is waiting for the owner: the one that turns "hey Jarvis"
+     * on, or a voice training. Neither has an event of its own, so while
+     * this is true the runtime re-reads the status when any approval is
+     * decided - otherwise "Waiting…" stayed on screen after the card was
+     * answered, until something else happened to ask again.
+     */
+    val cardWaiting: Boolean get() = listening.wakeWordPending || wake.pending || gate.training.pending
 }
 
 /**

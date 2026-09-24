@@ -266,13 +266,18 @@ class WakeWordService : Service() {
                 }
                 if (running && answering() && bargeInOn()) {
                     try {
-                        voice.speaker.beginVoiceCall()
-                        val cutIn = listenWhileAnswering(answering, models, stopHead, turnModel)
+                        // Voice-call mode starts inside listenWhileAnswering,
+                        // once Jarvis actually speaks; ended here either way.
+                        var cutIn = listenWhileAnswering(answering, models, stopHead, turnModel)
+                        // Short after a "hey Jarvis" cut-in: that cancelled the
+                        // old turn. After a "stop", the rest of the answer is
+                        // still arriving on screen, silently.
                         while (running && answering()) delay(50)
-                        if (cutIn != null && running) {
-                            // Handed to the loop above as a fresh clip next
-                            // time round would lose it; sent now instead.
-                            answerListening(cutIn, models, stopHead, turnModel)
+                        // Handed to the loop above as a fresh clip next time
+                        // round would lose it; sent now instead - and a cut-in
+                        // over THAT answer is sent too, rather than dropped.
+                        while (cutIn != null && running) {
+                            cutIn = answerListening(cutIn, models, stopHead, turnModel).second
                         }
                     } finally {
                         voice.speaker.endVoiceCall()
@@ -353,10 +358,13 @@ class WakeWordService : Service() {
     )
 
     /**
-     * Sends [clip] as a wake-word clip and waits for the whole answer. With
+     * Sends [clip] as a wake-word clip and waits for the answer. With
      * barge-in on, listens meanwhile (see [listenWhileAnswering]) and
      * returns, as the second value, what the owner said after "hey Jarvis"
-     * over the reply - or null.
+     * over the reply - or null. A "hey Jarvis" cancels the old turn
+     * ([VoiceSession.interruptForWake]), so the wait for it ends as soon as
+     * the owner's next sentence is recorded, not when the old answer would
+     * have finished.
      */
     private suspend fun answerListening(
         clip: ShortArray,
@@ -365,9 +373,22 @@ class WakeWordService : Service() {
         turnModel: TurnModel?,
     ): Pair<Heard?, ShortArray?> = coroutineScope {
         val voice = JarvisRuntime.voice
+        // Rule 4, checked before EVERY post, not only the first clip. The
+        // follow-up sentence after "Hey Jarvis." and a sentence cut in over
+        // a reply both come through here too, and each can be recorded many
+        // seconds after the first check - long enough for the link to drop.
+        // Nothing is sent; the listener says why and carries on.
+        WakeRules.mayPost(voice.answered.value, voice.status.value, JarvisRuntime.stale.value)?.let { why ->
+            goForeground(why)
+            return@coroutineScope null to null
+        }
         val wav = Wav.encode(clip)
         if (!bargeInOn()) return@coroutineScope voice.deliverWakeClip(wav) to null
-        voice.speaker.beginVoiceCall()
+        // Voice-call mode is entered by listenWhileAnswering when the reply
+        // starts (SPEAKING), not here: the PC may take many seconds to check
+        // and answer, and until it speaks there is nothing to cancel the echo
+        // of - only the phone's audio switched into call mode for no reason.
+        // Ended here in every case (safe when it never started).
         try {
             val turn = async { voice.deliverWakeClip(wav) }
             val cutIn = listenWhileAnswering({ turn.isActive }, models, stopHead, turnModel)
@@ -381,8 +402,9 @@ class WakeWordService : Service() {
      * While [answering] and Jarvis is SPEAKING: the echo-cancelled
      * microphone, the wake spotter and the stop head on every 80 ms step.
      * "Stop" silences the reply ([VoiceSession.stopSpeaking]) and nothing
-     * else. "Hey Jarvis" silences it and returns the clip of what follows,
-     * recorded until the owner's pause. Nothing is sent from here.
+     * else. "Hey Jarvis" ends the old turn ([VoiceSession.interruptForWake])
+     * and returns the clip of what follows, recorded until the owner's
+     * pause. Nothing is sent from here.
      */
     private suspend fun listenWhileAnswering(
         answering: () -> Boolean,
@@ -393,6 +415,25 @@ class WakeWordService : Service() {
         val voice = JarvisRuntime.voice
         while (running && answering() && voice.phase.value != VoiceSession.Phase.SPEAKING) delay(50)
         if (!running || !answering()) return null
+        // Now, and not before: the reply is starting. SPEAKING is set just
+        // before the first sentence goes to the PC for its audio, so this
+        // normally lands (within one 50 ms check) before that audio comes
+        // back and is played - on the voice-call path the echo canceller
+        // needs. The caller ends it in its `finally`.
+        voice.speaker.beginVoiceCall()
+        // NOT CHANGED - needs a real-phone test first (audit T10). The
+        // sentence after a "hey Jarvis" cut-in is recorded here, on
+        // VOICE_COMMUNICATION: the path Android's echo canceller works on,
+        // which is why it is used. But the owner's phone voice print was
+        // trained on VOICE_RECOGNITION clips (Recorder.kt, the talk button
+        // and "Train my voice"), and the call path adds its own processing -
+        // echo cancelling, noise suppression, automatic gain - that the
+        // training clips never had. So the PC's voice check may score these
+        // sentences lower than an ordinary "hey Jarvis" and refuse more of
+        // them. That fails safe (a refusal, never a false pass), and it is a
+        // guess until measured: say the same sentence both ways on a real
+        // phone and compare the scores the PC reports, before changing the
+        // source or training on call-path clips.
         val rec = openRecorder(MediaRecorder.AudioSource.VOICE_COMMUNICATION) ?: return null
         val canceller = runCatching {
             if (AcousticEchoCanceler.isAvailable()) {
@@ -413,6 +454,9 @@ class WakeWordService : Service() {
                 stops.clear()
                 val wakes = spotter.feed(buf, buf.size) { w -> stops.add(stopHead?.score(w) ?: 0f) }
                 val wakeThreshold = WakeRules.threshold(voice.status.value)
+                // Read once per buffer: the sentences of the last few seconds,
+                // not only the one playing now (see BargeIn.decide).
+                val recentlySaid = if (stops.any { it >= StopHead.THRESHOLD }) voice.recentlySpoken() else emptyList()
                 for (k in wakes.indices) {
                     when (
                         BargeIn.decide(
@@ -421,6 +465,7 @@ class WakeWordService : Service() {
                             stopThreshold = StopHead.THRESHOLD,
                             wakeThreshold = wakeThreshold,
                             speakingText = voice.speakingText.value,
+                            recentlySaid = recentlySaid,
                         )
                     ) {
                         BargeIn.Action.STOP_SPEAKING -> {
@@ -428,7 +473,12 @@ class WakeWordService : Service() {
                             return null
                         }
                         BargeIn.Action.WAKE -> {
-                            voice.stopSpeaking()
+                            // The old turn ends now - speech stopped, its chat
+                            // stream cancelled, the face off "speaking" - and
+                            // not after the whole old answer has arrived. Not
+                            // waited for here: the owner is already talking,
+                            // and this microphone's buffer is short.
+                            voice.interruptForWake()
                             _state.value = WakeListen.Heard
                             return recordUntilPause(rec, ring.snapshot(), GRACE_SECONDS, turnModel)
                         }

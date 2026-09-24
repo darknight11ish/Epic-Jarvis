@@ -1,6 +1,7 @@
 package com.jarvis.client.voice
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.jarvis.client.audio.Recorder
 import com.jarvis.client.audio.Speaker
@@ -35,6 +36,13 @@ class VoiceSession(
     context: Context,
     private val api: JarvisApi,
     private val scope: CoroutineScope,
+    /**
+     * Why a state-changing request cannot go now (the runtime's
+     * `actionBlocker()`: a stale or dropped link, rule 4), or null. Read only
+     * by [setWakeWord], and only for turning it ON - see
+     * [WakeRules.requestBlocker].
+     */
+    private val linkBlocker: () -> String? = { null },
     /**
      * Sends a turn and returns the reply, or null if it could not be sent.
      * `onDelta` is called, zero or more times, with the reply accumulated so
@@ -115,15 +123,68 @@ class VoiceSession(
      */
     val speakingText: StateFlow<String?> = _speakingText.asStateFlow()
 
+    private val recentSpeech = RecentSpeech()
+
+    /**
+     * Every sentence Jarvis is saying now or said in the last few seconds
+     * ([RecentSpeech.WINDOW_MS]). Read by the barge-in listener alongside
+     * [speakingText]: the stop head fires after the quiet that follows a
+     * word, when Jarvis may already be on its next sentence, so "is the
+     * current sentence saying stop" alone missed its own voice.
+     */
+    fun recentlySpoken(): List<String> = recentSpeech.texts(SystemClock.elapsedRealtime())
+
     /**
      * Silences the reply being spoken - and nothing else. The turn carries
      * on (the answer still arrives on screen); only the voice stops, for the
      * rest of this turn. The one thing the stop word may do.
+     *
+     * "For the rest of this turn" is held by the turn's own
+     * [Turn.silenced], not only by the speaker's stop flag. Before, the
+     * later sentences still went to the PC's say route one by one (the PC
+     * made audio nobody would hear), and when the PC had no voice the
+     * phone's own voice refused them - which was then reported as "No
+     * offline voice on this phone", a false notice.
      */
     fun stopSpeaking() {
+        current?.silenced = true
         speaker.stop()
         _speakingText.value = null
     }
+
+    /**
+     * "Hey Jarvis" said over a reply: the old turn ends NOW, so the new
+     * sentence can be sent at once - the way the desktop aborts its old
+     * stream when it is interrupted.
+     *
+     * Before, the listener stopped the voice and then waited for the whole
+     * old answer to finish arriving from the model (tens of seconds for a
+     * long one) with the face stuck on "speaking", and only then sent what
+     * the owner had just said. Now the old turn's speech is stopped and its
+     * job cancelled - which cancels its chat stream, and with it the HTTP
+     * call (see `ChatSession.send`'s `closer`) - and its own `finally` puts
+     * the phase back to OFF as it unwinds. The cut-off answer stays on screen
+     * as far as it got; it is not added to the conversation, as any
+     * interrupted answer is not.
+     *
+     * Not suspending, on purpose: the listener calls this and goes straight
+     * on recording the owner's next words, and the microphone's buffer holds
+     * well under a second - waiting here for the old turn to unwind could
+     * lose the start of the sentence. [deliverWakeClip] waits for it instead,
+     * when the new clip is ready to go.
+     *
+     * Nothing is approved, sent or decided here: the new sentence still goes
+     * through every check the desktop makes on any "hey Jarvis".
+     */
+    fun interruptForWake() {
+        stopSpeaking()
+        val running = job ?: return
+        interrupted = running
+        running.cancel()
+    }
+
+    /** The turn [interruptForWake] cancelled, until [deliverWakeClip] has waited for it. */
+    @Volatile private var interrupted: Job? = null
 
     private var job: Job? = null
 
@@ -167,6 +228,9 @@ class VoiceSession(
      */
     private class Turn {
         @Volatile var releaseRequested = false
+
+        /** "Stop" was said: nothing more of this turn's reply is spoken. See [stopSpeaking]. */
+        @Volatile var silenced = false
     }
 
     private var current: Turn? = null
@@ -220,10 +284,15 @@ class VoiceSession(
      * would show "off" over a microphone that is still open, or "on" over a
      * card nobody has approved.
      *
+     * Turning it ON is held while the link is stale or down, like every
+     * other request that raises a card (rule 4); nothing is sent then.
+     * Turning it OFF always goes.
+     *
      * @return null when the desktop now says what was asked for, or a sentence
      *   to show the owner (including "approve the card").
      */
     suspend fun setWakeWord(enabled: Boolean): String? {
+        WakeRules.requestBlocker(enabled, linkBlocker())?.let { return it }
         val sent = api.setWakeWord(enabled)
         refreshStatus()
         if (!_answered.value) {
@@ -249,6 +318,13 @@ class VoiceSession(
      * or the desktop could not be reached.
      */
     suspend fun deliverWakeClip(wav: ByteArray): Heard? {
+        // A turn "hey Jarvis" just cut off may still be unwinding. It has
+        // been cancelled, so this is short; without it the guards below
+        // could see it half-finished and drop the owner's new sentence.
+        interrupted?.let { old ->
+            old.join()
+            if (interrupted === old) interrupted = null
+        }
         val previous = job
         if (previous != null && !previous.isCompleted) return null
         if (_phase.value != Phase.OFF) return null
@@ -601,16 +677,24 @@ class VoiceSession(
      * screen is an acceptable outcome; uploading it is not.
      */
     private suspend fun speak(turn: Turn, text: String) {
+        // Stopped this turn: not spoken, not even asked of the PC. The reply
+        // is still on screen; only the voice was told to stop.
+        if (turn.silenced) return
         _speakingText.value = text
+        recentSpeech.started(text)
         try {
             speakNow(turn, text)
         } finally {
             _speakingText.value = null
+            recentSpeech.ended(SystemClock.elapsedRealtime())
         }
     }
 
     private suspend fun speakNow(turn: Turn, text: String) {
-        when (val said = api.say(text)) {
+        val said = api.say(text)
+        // "Stop" may have landed while the PC was making the audio.
+        if (turn.silenced) return
+        when (said) {
             is ApiResult.Ok -> when (val out = said.value) {
                 is SaidAloud.Audio -> speaker.play(out.wav)
                 is SaidAloud.NoEngine -> {
@@ -625,13 +709,10 @@ class VoiceSession(
                     val spoke = runCatching { speaker.speakOnDevice(text) }
                         .onFailure { Log.w(TAG, "on-device synthesis failed", it) }
                         .getOrDefault(false)
-                    if (!spoke) {
-                        setNotice(
-                            turn,
-                            "No offline voice on this phone, so it was not spoken aloud. " +
-                                "The reply is on screen.",
-                        )
-                    }
+                    // `speakOnDevice` also returns false when it was stopped;
+                    // only a real failure is reported as one.
+                    SpokenNotice.afterOnDevice(spoke, stoppedThisTurn = turn.silenced)
+                        ?.let { setNotice(turn, it) }
                 }
             }
             // Deliberately no fallback. `client_fallback_ok` is the only thing

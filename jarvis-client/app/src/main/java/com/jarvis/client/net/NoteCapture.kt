@@ -105,16 +105,29 @@ object NoteCapture {
         val said = job.str("message")
         return when (job.str("state")) {
             "filed" -> Said(said ?: "Filed in $place.", final = true, filed = true)
-            "waiting" -> Said("Waiting for your approval on the desktop to file this in $place.",
+            "waiting" -> Said("Waiting for your approval to file this in $place. ${Approvals.WHERE}",
                 final = false, filed = false)
-            "not_filed", "failed" -> Said(said ?: "Not filed in $place.", final = true, filed = false)
+            // `message` first; without one, the desktop's reason in `error` -
+            // the same fallback the wiki reader uses. A refusal the desktop
+            // explained only in `error` (a 429 "several notes are already
+            // waiting", a note too long) used to show as a bare "Not filed".
+            "not_filed", "failed" -> Said(
+                said ?: job.str("error")?.let(::asSentence) ?: "Not filed in $place.",
+                final = true,
+                filed = false,
+            )
             else -> Said("The desktop answered, but did not say whether the note was filed. Check $place.",
                 final = true, filed = false)
         }
     }
 
+    /** The desktop's `error` strings are lower-case fragments; shown as a sentence. */
+    private fun asSentence(s: String): String =
+        s.replaceFirstChar { it.uppercase() }.let { if (it.last() in ".!?") it else "$it." }
+
     /** Said when the desktop stopped answering while a card was still up. */
-    const val GAVE_UP = "Still waiting for approval on the desktop. Nothing is filed until you answer the card."
+    const val GAVE_UP =
+        "Still waiting for your approval. " + Approvals.WHERE + " Nothing is filed until you do."
 
     /** A failed request, in words. `null` means use the generic sentence. */
     fun failure(e: ApiError): String? = when (e) {

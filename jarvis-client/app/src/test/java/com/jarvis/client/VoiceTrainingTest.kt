@@ -90,7 +90,10 @@ class VoiceTrainingTest {
                 "you sound like, and how you say \"hey Jarvis\". It takes about two minutes.",
             VoiceTraining.INTRO,
         )
-        assertEquals("Approve the card on your PC or phone to finish.", VoiceTraining.AFTER_SENDING)
+        assertEquals(
+            "Sent. A card is waiting to finish it. Approve it on your PC or on this phone's Home screen.",
+            VoiceTraining.AFTER_SENDING,
+        )
     }
 
     // --------------------------------------------------------- the clips ----
@@ -192,7 +195,7 @@ class VoiceTrainingTest {
                          "training": {"available": true, "pending": true, "clips": 5, "expires_in": 170}}}""",
         )
         assertEquals(
-            "Waiting for you to approve the card on your PC or phone.",
+            "Waiting for your approval. Approve it on your PC or on this phone's Home screen.",
             VoiceTraining.stateLine(waiting, answered = true),
         )
         val retrain = status("""{"gate": {"enrolled": true, "samples": 5, "needs_retraining": true}}""")

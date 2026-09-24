@@ -71,10 +71,13 @@
 
             <!-- "Share" from another app - a web page's selected text, a
                  note, an address - lands here as plain text and is folded
-                 into the composer draft, never sent on its own. Text only:
-                 this app has no use for a shared image or file, and offering
-                 to accept one would be a share-sheet entry that silently
-                 does nothing. -->
+                 into the composer draft, never sent on its own. Text only,
+                 for now. Chat CAN send a photo with a question (ChatPicture),
+                 but only one picked inside the app, and only while the PC
+                 says its Pictures feature works (the second graphics card).
+                 A share-sheet entry for images would be offered even when
+                 that is off, and would then silently do nothing - so shared
+                 images and files are not accepted here yet. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -152,10 +155,14 @@
                 android:resource="@xml/recognition_service" />
         </service>
 
-        <!-- Not a power tile: the API has no endpoint that sets power mode, and a
-             tile that appeared to switch Jarvis to Quiet and silently did nothing
-             would be worse than no tile. This one carries the link's real state
-             and mutes spoken interruptions, which /api/attention/mute supports. -->
+        <!-- Not a power tile. The desktop CAN set power mode now (POST /api/power,
+             power-mode.patch; the phone's Mind screen has the buttons), but the
+             answer is often not "done": waking is held on a stale link, and the
+             desktop decides through its approval gate (power_manage). A tile has
+             nowhere to say that, and a tile that appeared to switch Jarvis to
+             Quiet and silently did not would be worse than no tile. This one
+             carries the link's real state and mutes spoken interruptions, which
+             /api/attention/mute supports. -->
         <service
             android:name=".service.LinkTileService"
             android:exported="true"

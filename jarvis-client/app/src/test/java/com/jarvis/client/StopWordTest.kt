@@ -107,6 +107,54 @@ class StopWordTest {
         assertFalse(BargeIn.saysStop("The shop is open."))
     }
 
+    /**
+     * T5: the head fires after the quiet that follows the word, when the
+     * NEXT sentence is already playing. Its own "stop" one sentence back
+     * must still not count as the owner's.
+     */
+    @Test
+    fun `stop said by Jarvis a sentence ago is still not trusted`() {
+        fun decide(saying: String?, recent: List<String>) = BargeIn.decide(
+            0.9f, 0.2f, stopThreshold = 0.5f, wakeThreshold = 0.5f,
+            speakingText = saying, recentlySaid = recent,
+        )
+        assertEquals(
+            BargeIn.Action.NONE,
+            decide("It leaves at nine.", listOf("The bus will stop at the corner.", "It leaves at nine.")),
+        )
+        assertEquals(BargeIn.Action.STOP_SPEAKING, decide("It leaves at nine.", listOf("It is sunny.", "It leaves at nine.")))
+        // Between two sentences nothing is playing, and the last one said it.
+        assertEquals(BargeIn.Action.NONE, decide(null, listOf("Say stop to end it.")))
+        // "Hey Jarvis" still always wins.
+        assertEquals(
+            BargeIn.Action.WAKE,
+            BargeIn.decide(0.9f, 0.9f, 0.5f, 0.5f, speakingText = null, recentlySaid = listOf("stop")),
+        )
+        assertFalse(BargeIn.saysStop("It runs nonstop."))
+    }
+
+    @Test
+    fun `recent speech keeps a few seconds, and what is playing now`() {
+        val r = com.jarvis.client.voice.RecentSpeech()
+        assertEquals(3_000L, com.jarvis.client.voice.RecentSpeech.WINDOW_MS)
+        r.started("The bus will stop here.")
+        assertEquals(listOf("The bus will stop here."), r.texts(now = 100_000L))
+        assertEquals("still playing, however long", listOf("The bus will stop here."), r.texts(now = 999_999L))
+        r.ended(now = 10_000L)
+        r.started("It leaves at nine.")
+        assertEquals(
+            listOf("The bus will stop here.", "It leaves at nine."),
+            r.texts(now = 12_000L),
+        )
+        assertEquals("gone once the window has passed", listOf("It leaves at nine."), r.texts(now = 13_001L))
+        r.ended(now = 14_000L)
+        assertEquals(listOf("It leaves at nine."), r.texts(now = 17_000L))
+        assertEquals(emptyList<String>(), r.texts(now = 17_001L))
+        // Bounded, whatever happens.
+        repeat(50) { r.started("s$it") }
+        assertEquals(com.jarvis.client.voice.RecentSpeech.KEEP, r.texts(now = 0L).size)
+    }
+
     @Test
     fun `the switch says what it does in plain words`() {
         assertTrue(BargeIn.describe(true, true).contains("stop"))

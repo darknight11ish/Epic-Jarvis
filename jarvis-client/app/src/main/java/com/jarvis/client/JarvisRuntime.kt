@@ -467,7 +467,9 @@ object JarvisRuntime {
         val tokenStore = TokenStore(app)
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         val chatSession = ChatSession(jarvisApi)
-        val voiceSession = VoiceSession(app, jarvisApi, scope) { text, onDelta ->
+        // The link check is a lambda, not a value: it is read at the moment
+        // "hey Jarvis" ON is asked for, and `actionBlocker` reads the flows.
+        val voiceSession = VoiceSession(app, jarvisApi, scope, linkBlocker = { actionBlocker() }) { text, onDelta ->
             // The value `send` returns, not the shared flow read afterwards.
             // There is one `_reply`, so a typed message sent mid-answer would
             // cancel the spoken one and leave its own partial reply in there —
@@ -902,6 +904,12 @@ object JarvisRuntime {
                 if (bm is BigModel.Read.Loaded<BigModel.Status> && bm.value.pending.isNotEmpty()) {
                     recheckBigModelAfterDecision(bm.value.pending)
                 }
+                // And the voice cards: "hey Jarvis" ON and a voice training.
+                // Neither has an event of its own either, so without this the
+                // Checks screen said "Waiting" over a card already decided.
+                if (voice.answered.value && voice.status.value.cardWaiting) {
+                    recheckVoiceAfterDecision()
+                }
             }
             // A deep question finished (`{"id", "state"}` only - a doorbell,
             // never the question or the answer). The list is re-read for the
@@ -924,11 +932,13 @@ object JarvisRuntime {
             }
             "power", "persona" -> refreshStatus()
             "finding" -> Unit // the digest covers these; nothing to show live
-            // A model download publishes progress here. The phone cannot start,
-            // cancel or retry one, so rendering a bar for it would invite a tap
-            // on a control that has to be somewhere else. The LIST is re-read,
-            // though: a switch or a rollback made on the desktop should change
-            // which model the phone's own picker marks as active.
+            // A model download publishes progress here. The phone CAN start
+            // one - Install, by typed name, raises a card (the owner's
+            // 2026-09-20 amendment; see installModel) - but it cannot cancel
+            // or retry one, so no progress bar is drawn: it would invite a tap
+            // on a control that has to be on the desktop. The LIST is re-read,
+            // though: an install finishing, or a switch or rollback made on
+            // the desktop, should change what the phone's own picker shows.
             "model" -> refreshModels()
             "voice" -> Unit
             // Announced as Signal.Open, and EventStream then falls through and
@@ -1186,6 +1196,23 @@ object JarvisRuntime {
                 val now = (_bigModel.value as? BigModel.Read.Loaded<BigModel.Status>)?.value?.pending
                     ?: return@launch
                 if (!now.containsAll(waiting)) return@launch
+            }
+        }
+    }
+
+    /**
+     * [recheckSecondCardAfterDecision], for the voice cards (the wake word's
+     * and voice training's): re-reads `/api/voice/status` at once, then twice
+     * more a little later while it still says a card waits. The PC records
+     * the outcome when its own wait for the card returns, which can land
+     * just after the event that woke this.
+     */
+    private fun recheckVoiceAfterDecision() {
+        scope.launch {
+            for (wait in SECOND_CARD_RECHECK_MS) {
+                delay(wait)
+                voice.refreshStatus()
+                if (!voice.answered.value || !voice.status.value.cardWaiting) return@launch
             }
         }
     }
@@ -1842,11 +1869,18 @@ object JarvisRuntime {
      * that could name jobs long finished. Neither is an approval. Both are
      * actions, and rule 4 is about actions.
      *
-     * Deliberately not applied to `markDigestSeen`, `setMuted` or
-     * `setWakeWord`: marking a brief read is idempotent and claims nothing
-     * about the brief, and mute and the wake word are settings on this device's
-     * relationship with Jarvis rather than verdicts on anything Jarvis is
-     * holding. Refusing those on a stale link would be ceremony, not safety.
+     * Deliberately not applied to `markDigestSeen` or `setMuted`: marking a
+     * brief read is idempotent and claims nothing about the brief, and mute is
+     * a setting on this device's relationship with Jarvis rather than a
+     * verdict on anything Jarvis is holding. Refusing those on a stale link
+     * would be ceremony, not safety.
+     *
+     * Turning the wake word ON is NOT in that list any more. It used to be,
+     * described as a mere setting, but it raises a `change_own_config`
+     * approval card on the desktop - a card-raising action like the second
+     * card or a model switch - so [VoiceSession.setWakeWord] holds it here
+     * too ([com.jarvis.client.voice.WakeRules.requestBlocker]). Turning it
+     * OFF still always goes: it only closes a microphone.
      */
     fun actionBlocker(): String? =
         if (_stale.value || _link.value != LinkState.CONNECTED) {
@@ -1965,7 +1999,7 @@ object JarvisRuntime {
      * Deliberately not gated on [decisionBlocker] the way [decide] is: a
      * note is never itself a verdict on anything Jarvis is holding, only a
      * message attached to one - the same reasoning that already excuses
-     * `markDigestSeen`/`setMuted`/`setWakeWord` from that gate.
+     * `markDigestSeen`/`setMuted` from that gate.
      *
      * What the desktop does with it (`backend/task-control.patch`): the note
      * is kept WITH the card, the card itself does not change, and the model
@@ -2052,18 +2086,23 @@ object JarvisRuntime {
         if (!said.final && id != null) {
             scope.launch {
                 val started = SystemClock.elapsedRealtime()
+                // Survives a dropped link and a failed poll or two - see JobFollow.
+                val follow = com.jarvis.client.net.JobFollow()
                 while (true) {
                     delay(com.jarvis.client.net.NoteCapture.POLL_MS)
                     if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.NoteCapture.GIVE_UP_MS) {
                         _notice.value = com.jarvis.client.net.NoteCapture.GAVE_UP
                         break
                     }
+                    if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
                     val next = api.noteStatus(id)
                     if (next is ApiResult.Failed) {
+                        if (!follow.failed()) continue
                         _notice.value = "Lost track of the note (${describe(next.error)}). " +
                             "Check the approval card on the desktop and your notes app."
                         break
                     }
+                    follow.answered()
                     val now = com.jarvis.client.net.NoteCapture.describe(
                         (next as ApiResult.Ok).value, target,
                     )
@@ -2133,6 +2172,8 @@ object JarvisRuntime {
         if (!said.final && id != null) {
             scope.launch {
                 val started = SystemClock.elapsedRealtime()
+                // Survives a dropped link and a failed poll or two - see JobFollow.
+                val follow = com.jarvis.client.net.JobFollow()
                 while (true) {
                     delay(com.jarvis.client.net.Wiki.POLL_MS)
                     if (SystemClock.elapsedRealtime() - started > com.jarvis.client.net.Wiki.GIVE_UP_MS) {
@@ -2141,8 +2182,10 @@ object JarvisRuntime {
                         )
                         break
                     }
+                    if (!follow.shouldPoll(_link.value == LinkState.CONNECTED)) continue
                     val next = api.wikiJob(id)
                     if (next is ApiResult.Failed) {
+                        if (!follow.failed()) continue
                         _wikiJob.value = source to com.jarvis.client.net.Wiki.Said(
                             "Lost track of it (${describe(next.error)}). Check the approval " +
                                 "card on the desktop and the wiki folder.",
@@ -2150,6 +2193,7 @@ object JarvisRuntime {
                         )
                         break
                     }
+                    follow.answered()
                     val now = com.jarvis.client.net.Wiki.describe((next as ApiResult.Ok).value)
                     _wikiJob.value = source to now
                     if (now.final) break

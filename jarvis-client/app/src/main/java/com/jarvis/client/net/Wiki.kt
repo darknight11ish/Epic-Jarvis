@@ -115,7 +115,7 @@ object Wiki {
         return when (job.str("state")) {
             "reading" -> Said(said ?: "The model on the second card is reading it. No card yet.",
                 final = false, done = false)
-            "waiting" -> Said(said ?: "Waiting for your approval. Nothing is written until you answer.",
+            "waiting" -> Said(said ?: "Waiting for your approval. ${Approvals.WHERE} Nothing is written until you do.",
                 final = false, done = false)
             "writing" -> Said(said ?: "Writing the pages.", final = false, done = false)
             "done" -> Said(said ?: "Added to the wiki.", final = true, done = true)
@@ -127,7 +127,8 @@ object Wiki {
     }
 
     /** Said when the phone stopped following a job that was still going. */
-    const val GAVE_UP = "Still going on the desktop. Nothing is written until you approve its card."
+    const val GAVE_UP =
+        "Still going on the desktop, and nothing is written until you answer its card. " + Approvals.WHERE
 
     /** A failed request, in words. `null` means use the generic sentence. */
     fun failure(e: ApiError): String? = when (e) {

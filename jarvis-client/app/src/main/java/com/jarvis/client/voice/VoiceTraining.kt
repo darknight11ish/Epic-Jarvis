@@ -1,5 +1,6 @@
 package com.jarvis.client.voice
 
+import com.jarvis.client.net.Approvals
 import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.VoiceCalibration
 import com.jarvis.client.net.VoiceStatus
@@ -89,7 +90,7 @@ object VoiceTraining {
             "changes until you do. The recordings are deleted from this phone as soon as " +
             "they are sent, and from the PC once the card is answered."
 
-    const val AFTER_SENDING = "Approve the card on your PC or phone to finish."
+    const val AFTER_SENDING = "Sent. A card is waiting to finish it. " + Approvals.WHERE
 
     /** One recorded sentence, held in memory only until it is sent. */
     class Clip(val wav: ByteArray, val seconds: Float)
@@ -144,7 +145,7 @@ object VoiceTraining {
         return when {
             !answered -> "Your PC has not answered yet, so this is not known."
             !status.available -> "The voice part of Jarvis is not running on your PC."
-            gate.training.pending -> "Waiting for you to approve the card on your PC or phone."
+            gate.training.pending -> "Waiting for your approval. " + Approvals.WHERE
             gate.needsRetraining ->
                 "Your PC's voice check changed since you trained it. Train your voice again."
             gate.prints.phone.trained ->

@@ -56,6 +56,8 @@ class NoteCaptureTest {
         assertFalse(said.final)
         assertFalse(said.filed)
         assertTrue(said.text.contains("Waiting for your approval"))
+        assertTrue("one sentence for where cards are", said.text.endsWith(com.jarvis.client.net.Approvals.WHERE))
+        assertTrue(NoteCapture.GAVE_UP.contains(com.jarvis.client.net.Approvals.WHERE))
     }
 
     @Test
@@ -66,6 +68,30 @@ class NoteCaptureTest {
         assertTrue(said.final)
         assertFalse(said.filed)
         assertEquals("You said no, so nothing was written.", said.text)
+    }
+
+    /** K10: a reason sent only in `error` is shown, not a bare "Not filed". */
+    @Test
+    fun aRefusalWithOnlyAnErrorShowsThatError() {
+        // The 429 jarvis_note_capture.py sends when too many cards wait: `error`, no `message`.
+        val said = NoteCapture.describe(
+            job(
+                """{"ok":false,"state":"not_filed",
+                    "error":"several notes are already waiting for approval - answer those first"}""",
+            ),
+            "logseq",
+        )
+        assertTrue(said.final)
+        assertFalse(said.filed)
+        assertEquals("Several notes are already waiting for approval - answer those first.", said.text)
+        // `message` still wins when both are there.
+        val both = NoteCapture.describe(
+            job("""{"state":"not_filed","error":"empty","message":"Not filed: the note was empty."}"""),
+            "logseq",
+        )
+        assertEquals("Not filed: the note was empty.", both.text)
+        // Neither: the plain fallback.
+        assertEquals("Not filed in Logseq.", NoteCapture.describe(job("""{"state":"failed"}"""), "logseq").text)
     }
 
     @Test
