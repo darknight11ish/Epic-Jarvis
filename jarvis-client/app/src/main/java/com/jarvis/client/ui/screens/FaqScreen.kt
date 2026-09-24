@@ -44,8 +44,9 @@ import com.jarvis.client.ui.theme.LocalRadii
  *
  * Answers specific to THIS app — the one on the phone. The desktop program has
  * its own FAQ, in its own Settings window, because the two run into different
- * problems: this one is a thin client with no model of its own, reached over
- * a private mesh network (Tailscale or Meshnet), gated by the phone's
+ * problems: this one is a thin client (its only models are small sound
+ * models - the wake word, the end of speech and "stop" - and none of them
+ * makes words), reached over a private mesh network (Tailscale or Meshnet), gated by the phone's
  * fingerprint sensor rather than its keyboard. A phone owner asking "does this run anything on my phone" needs a different
  * answer than a desktop owner asking the same question about their graphics
  * card.
@@ -67,13 +68,17 @@ private val FAQS = listOf(
     ),
     Faq(
         "Does this app run any AI on my phone?",
-        "No. This app is a thin client: it shows you what the desktop says, " +
-            "and it sends the desktop what you type or say. Recognising your " +
-            "voice, understanding it, and deciding what to say back all " +
-            "happen on the desktop, never here — a phone that transcribed " +
-            "your voice itself would have already turned it into text before " +
-            "the desktop's owner-voice check ever saw it, and there would be " +
-            "nothing left for that check to examine.",
+        // Used to answer "No." It was never true once the wake word came in:
+        // three small sound models run here (voice/OrtWakeModels.kt,
+        // SmartTurn.kt, StopWord.kt). None of them makes words.
+        "Only small sound models. They listen for the \"hey Jarvis\" wake " +
+            "word, for the end of your sentence, and for \"stop\" while Jarvis " +
+            "is talking. They only listen for sounds: none of them turns " +
+            "speech into words. Everything else runs on your PC: checking it " +
+            "is your voice, writing down what you said, understanding it, " +
+            "and deciding what to say back. That order matters - a phone " +
+            "that wrote down your words itself would have done it before " +
+            "your PC could check it was your voice.",
     ),
     Faq(
         "How do I use \"hey Jarvis\"?",
@@ -366,8 +371,9 @@ private fun AboutCard() {
             "A thin client to the Jarvis brain running on your own desktop, " +
                 "reached only over a private network between only the devices " +
                 "you own (Tailscale, or NordVPN's Meshnet), never the open " +
-                "internet. No AI runs on " +
-                "this phone; there is no approve-all anywhere in this app, and " +
+                "internet. Only small sound models run on this phone, and " +
+                "none of them turns speech into words; there is no " +
+                "approve-all anywhere in this app, and " +
                 "every action still stops and asks first, one at a time.",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textMid,

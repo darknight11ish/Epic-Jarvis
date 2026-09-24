@@ -21,9 +21,11 @@ Non-commercial, for one owner.
 - **Ask before acting.** Anything risky waits for your decision, and you can
   approve or deny it on the PC or the phone. Nothing is ever auto-approved, and
   there is no "approve all".
-- **Remember things.** Jarvis proposes facts, and you review them before they
-  are kept. Old facts are retired rather than deleted, so Jarvis knows both
-  what is true now and what was true before.
+- **Remember things.** Jarvis saves facts about you from your own words -
+  never from emails, web pages or files. Every saved fact is listed in both
+  apps with a Forget button. Health, money, passwords and other people's
+  private details wait for your yes. Old facts are retired rather than
+  deleted, so Jarvis knows both what is true now and what was true before.
 - **Stay quiet.** Jarvis may speak up on its own only a few times a day.
   Anything else waits in a daily digest.
 - **Show what it is doing.** An animated reactor face shows its state:

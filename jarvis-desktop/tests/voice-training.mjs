@@ -199,6 +199,13 @@ await check("how a strictness, privacy or memory card ended: the words both apps
     ["Stay on screen (recommended)", "Voice check is enough"],
     ["Read aloud (recommended)", "Keep on screen"],
   ]);
+  // Word for word what the phone says (StrictVoice.kt, pinned by
+  // VoiceStrictTest.kt): one wording for both apps. The last two sentences
+  // say plainly what the voice check cannot do (a recording or a clone).
+  assert.equal(VT.STRICTNESS[0].detail,
+    "Needs about 2 seconds of speech and a close match. Best at turning other people away; " +
+    "now and then it may ask you to say it again. It tells your voice from other people's. " +
+    "It cannot tell your voice from a recording or a copy of it.");
 });
 
 await check("\"asked you to repeat\" and the guided test, in plain words", async () => {

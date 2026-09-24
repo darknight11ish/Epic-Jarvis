@@ -28,9 +28,11 @@
 //! not have one — the backend is `jarvis_hud.py`, a script. Declaring
 //! `externalBin` for a file that does not exist fails `tauri build` outright,
 //! which would break packaging (step 7) to describe a binary nobody has built
-//! yet. So supervision runs a configured program instead: `python` and the
-//! script by default, or the frozen executable once one exists, by pointing
-//! the same setting at it.
+//! yet. So supervision runs a configured program instead: the full path to
+//! the real `python.exe` and the script (never bare `python`, which on a
+//! fresh Windows is the Store shortcut - docs/INSTALL.md 1.1 and 2.5), or the
+//! frozen executable once one exists, by pointing the same setting at it.
+//! Nothing is configured until the owner sets it.
 //!
 //! It also avoids `tauri-plugin-shell` entirely, which matters beyond
 //! convenience: adding it to reach `sidecar()` would put `shell:allow-execute`
@@ -97,7 +99,8 @@ const WEBVIEW_ORIGIN: &str = "http://tauri.localhost";
 /// What to run, and where.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BackendConfig {
-    /// The program. `python`, `pythonw.exe`, or a frozen backend executable.
+    /// The program: the full path to `python.exe` or `pythonw.exe`, or a
+    /// frozen backend executable.
     #[serde(default)]
     pub program: String,
     /// Its arguments — normally the path to `jarvis_hud.py`.

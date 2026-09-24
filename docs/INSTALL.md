@@ -295,7 +295,7 @@ The README used to say the app has no window at startup. **It does.** Expect:
   Drag it onto the taskbar now. You will need it.
 
 The HUD window will say **"demo · not connected"** and show a banner telling you
-to run `python jarvis_hud.py`. If you already did that in Part 1, ignore it —
+to run `py -3 jarvis_hud.py`. If you already did that in Part 1, ignore it —
 that page is the backend's own browser page and does not know the desktop app
 exists. The surfaces that tell you the truth are the tray and the spotlight bar.
 
@@ -340,13 +340,18 @@ backend, and therefore stops the phone from reaching anything.
 Worth knowing before you use it rather than after.
 
 About 45 seconds after a conversation goes quiet, Jarvis re-reads **what you
-typed** — never its own replies, never anything a tool returned — and asks the
-local model which of it would still be true and useful next month. Anything it
-finds goes into a review queue.
+typed or said** — never its own replies, never anything a tool returned — and asks the
+local model which of it would still be true and useful next month.
 
-**Nothing it finds enters memory until you accept it, one at a time.** The
-queue is the Memory tab in the Brain window, which is also where you can
-reword a fact, stop one being recalled, or copy the lot out as JSON.
+**Facts from your own words are saved straight away** ("Learn automatically",
+on by default) - never from emails, web pages, documents or files. Every one
+is listed under "Saved automatically" in the Memory tab of the Brain window,
+with a Forget button. **Health, money, passwords and other people's private
+details wait for your yes**, one at a time, in the same tab, unless you turn
+on "Also remember sensitive topics automatically" (off by default). Anything
+Jarvis is not sure came from you waits for your yes too. The Memory tab is
+also where you can reword a fact, stop one being recalled, or copy the lot
+out as JSON.
 
 It never leaves the machine: the extractor talks to Ollama on loopback and
 refuses to run at all if `OLLAMA_URL` points anywhere else.
