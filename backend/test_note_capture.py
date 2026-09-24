@@ -349,11 +349,13 @@ def t_every_refusal_says_why_in_message():
     for label, (code, out) in (
             ("an empty note", NC.handle_post({"target": "logseq", "text": ""})),
             ("an unknown target", NC.handle_post({"target": "x", "text": "y"})),
-            ("a non-object body", NC.handle_post(["x"])),
-            ("an unknown id", NC.capture_status("note_nope"))):
+            ("a non-object body", NC.handle_post(["x"]))):
         check(f"{label} ({code}) carries a message too",
               code >= 400 and isinstance(out.get("message"), str) and out["message"].strip(),
               repr(out))
+    # Not a refusal: a status poll for an id this PC does not know. Its 404
+    # body is also what an older backend answers (the phone's note-targets
+    # contract fixture), so it stays as it was.
     time.sleep(0.05)
 
 

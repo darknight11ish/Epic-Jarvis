@@ -852,9 +852,7 @@ def capture_status(job_id: str) -> tuple:
     with _lock:
         job = dict(_jobs.get(str(job_id)) or {})
     if not job:
-        return 404, {"ok": False, "error": "no note with that id on this PC",
-                     "message": "This PC has no note with that id - it may have been "
-                                "restarted since. Check the note app itself."}
+        return 404, {"ok": False, "error": "no note with that id on this PC"}
     job.pop("by", None)
     job["ok"] = job["state"] in ("filed", "waiting")
     return (202 if job["state"] == "waiting" else 200), job
