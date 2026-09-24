@@ -880,7 +880,7 @@
           "model_name": "DeepSeek V4 Flash",
           "name": "Deep questions",
           "what": "Ask a question that deserves a careful answer. It is answered in the background by the big model and kept for you to read later.",
-          "why": "On. Usable, but not right now: it needs 16 GB of free memory to start and 12.4 GB is free. Close something big, or wait.."
+          "why": "On. Usable, but not right now: it needs 16 GB of free memory to start and 12.4 GB is free. Close something big, or wait."
         }
       ],
       "unverified": "None of colibri's speed figures have been checked on this PC. The numbers Jarvis records here, from your own jobs, are the first real ones.",

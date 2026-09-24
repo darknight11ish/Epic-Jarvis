@@ -1394,14 +1394,21 @@ def _switch_row(job: str, sw: dict, det: dict, pending: list) -> dict:
     enabled = bool(sw[job])
     row = _model_for(job, det)
     st, why = job_state(job)
+
+    def full(s: str) -> str:
+        # A reason that already ends a sentence keeps its own stop; "wait.."
+        # was the result of adding one regardless.
+        s = str(s).rstrip()
+        return s if s.endswith((".", "!", "?")) else s + "."
+
     if not det.get("capable"):
         if enabled:
-            why = (f"On, but it cannot run: {det['why']}. Your choice is kept; it works again "
+            why = (f"On, but it cannot run: {full(det['why'])} Your choice is kept; it works again "
                    f"once that is fixed.")
         else:
-            why = f"Needs the big model set up: {det['why']}."
+            why = f"Needs the big model set up: {full(det['why'])}"
     elif row is None:
-        why = f"Cannot run: {_model_missing_why(job)}."
+        why = f"Cannot run: {full(_model_missing_why(job))}"
     elif not enabled:
         why = "Off."
         if job in pending:
@@ -1411,7 +1418,7 @@ def _switch_row(job: str, sw: dict, det: dict, pending: list) -> dict:
     elif not sw["master"]:
         why = "On, but the big-model switch is off."
     elif not row["usable"]:
-        why = f"On, but {row['name']} cannot be used: {row['why']}"
+        why = f"On, but {row['name']} cannot be used: {full(row['why'])}"
     elif st == "ready":
         why = f"Working: {row['name']} is loaded."
     elif st == "loading":
@@ -1420,7 +1427,7 @@ def _switch_row(job: str, sw: dict, det: dict, pending: list) -> dict:
                f"On. {row['name']} starts when this job next has work, and stops "
                f"{_idle_minutes()} minutes after.")
     else:
-        why = f"On. {why[:1].upper() + why[1:]}." if why else "On."
+        why = f"On. {full(why[:1].upper() + why[1:])}" if why else "On."
     return {"id": job, "name": JOB_NAMES[job], "what": JOB_WHAT[job], "enabled": enabled,
             "available": bool(det.get("capable") and sw["master"] and enabled and row
                               and row["usable"] and st in ("ready", "loading", "busy")),
