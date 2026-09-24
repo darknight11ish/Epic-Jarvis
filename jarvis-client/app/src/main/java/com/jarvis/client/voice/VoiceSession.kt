@@ -152,6 +152,40 @@ class VoiceSession(
         _speakingText.value = null
     }
 
+    /**
+     * "Hey Jarvis" said over a reply: the old turn ends NOW, so the new
+     * sentence can be sent at once - the way the desktop aborts its old
+     * stream when it is interrupted.
+     *
+     * Before, the listener stopped the voice and then waited for the whole
+     * old answer to finish arriving from the model (tens of seconds for a
+     * long one) with the face stuck on "speaking", and only then sent what
+     * the owner had just said. Now the old turn's speech is stopped and its
+     * job cancelled - which cancels its chat stream, and with it the HTTP
+     * call (see `ChatSession.send`'s `closer`) - and its own `finally` puts
+     * the phase back to OFF as it unwinds. The cut-off answer stays on screen
+     * as far as it got; it is not added to the conversation, as any
+     * interrupted answer is not.
+     *
+     * Not suspending, on purpose: the listener calls this and goes straight
+     * on recording the owner's next words, and the microphone's buffer holds
+     * well under a second - waiting here for the old turn to unwind could
+     * lose the start of the sentence. [deliverWakeClip] waits for it instead,
+     * when the new clip is ready to go.
+     *
+     * Nothing is approved, sent or decided here: the new sentence still goes
+     * through every check the desktop makes on any "hey Jarvis".
+     */
+    fun interruptForWake() {
+        stopSpeaking()
+        val running = job ?: return
+        interrupted = running
+        running.cancel()
+    }
+
+    /** The turn [interruptForWake] cancelled, until [deliverWakeClip] has waited for it. */
+    @Volatile private var interrupted: Job? = null
+
     private var job: Job? = null
 
     /**
@@ -284,6 +318,13 @@ class VoiceSession(
      * or the desktop could not be reached.
      */
     suspend fun deliverWakeClip(wav: ByteArray): Heard? {
+        // A turn "hey Jarvis" just cut off may still be unwinding. It has
+        // been cancelled, so this is short; without it the guards below
+        // could see it half-finished and drop the owner's new sentence.
+        interrupted?.let { old ->
+            old.join()
+            if (interrupted === old) interrupted = null
+        }
         val previous = job
         if (previous != null && !previous.isCompleted) return null
         if (_phase.value != Phase.OFF) return null

@@ -267,12 +267,16 @@ class WakeWordService : Service() {
                 if (running && answering() && bargeInOn()) {
                     try {
                         voice.speaker.beginVoiceCall()
-                        val cutIn = listenWhileAnswering(answering, models, stopHead, turnModel)
+                        var cutIn = listenWhileAnswering(answering, models, stopHead, turnModel)
+                        // Short after a "hey Jarvis" cut-in: that cancelled the
+                        // old turn. After a "stop", the rest of the answer is
+                        // still arriving on screen, silently.
                         while (running && answering()) delay(50)
-                        if (cutIn != null && running) {
-                            // Handed to the loop above as a fresh clip next
-                            // time round would lose it; sent now instead.
-                            answerListening(cutIn, models, stopHead, turnModel)
+                        // Handed to the loop above as a fresh clip next time
+                        // round would lose it; sent now instead - and a cut-in
+                        // over THAT answer is sent too, rather than dropped.
+                        while (cutIn != null && running) {
+                            cutIn = answerListening(cutIn, models, stopHead, turnModel).second
                         }
                     } finally {
                         voice.speaker.endVoiceCall()
@@ -353,10 +357,13 @@ class WakeWordService : Service() {
     )
 
     /**
-     * Sends [clip] as a wake-word clip and waits for the whole answer. With
+     * Sends [clip] as a wake-word clip and waits for the answer. With
      * barge-in on, listens meanwhile (see [listenWhileAnswering]) and
      * returns, as the second value, what the owner said after "hey Jarvis"
-     * over the reply - or null.
+     * over the reply - or null. A "hey Jarvis" cancels the old turn
+     * ([VoiceSession.interruptForWake]), so the wait for it ends as soon as
+     * the owner's next sentence is recorded, not when the old answer would
+     * have finished.
      */
     private suspend fun answerListening(
         clip: ShortArray,
@@ -390,8 +397,9 @@ class WakeWordService : Service() {
      * While [answering] and Jarvis is SPEAKING: the echo-cancelled
      * microphone, the wake spotter and the stop head on every 80 ms step.
      * "Stop" silences the reply ([VoiceSession.stopSpeaking]) and nothing
-     * else. "Hey Jarvis" silences it and returns the clip of what follows,
-     * recorded until the owner's pause. Nothing is sent from here.
+     * else. "Hey Jarvis" ends the old turn ([VoiceSession.interruptForWake])
+     * and returns the clip of what follows, recorded until the owner's
+     * pause. Nothing is sent from here.
      */
     private suspend fun listenWhileAnswering(
         answering: () -> Boolean,
@@ -441,7 +449,12 @@ class WakeWordService : Service() {
                             return null
                         }
                         BargeIn.Action.WAKE -> {
-                            voice.stopSpeaking()
+                            // The old turn ends now - speech stopped, its chat
+                            // stream cancelled, the face off "speaking" - and
+                            // not after the whole old answer has arrived. Not
+                            // waited for here: the owner is already talking,
+                            // and this microphone's buffer is short.
+                            voice.interruptForWake()
                             _state.value = WakeListen.Heard
                             return recordUntilPause(rec, ring.snapshot(), GRACE_SECONDS, turnModel)
                         }
