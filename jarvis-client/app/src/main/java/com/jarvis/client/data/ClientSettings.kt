@@ -71,6 +71,42 @@ class ClientSettings(context: Context) {
         _security.value = value
     }
 
+    private val _updateChecks = MutableStateFlow(prefs.getBoolean(KEY_UPDATE_CHECKS, true))
+
+    /**
+     * "Check for new versions" (Checks, This app). On by default; off means
+     * the phone never asks GitHub at all (`net/UpdateCheck.kt`).
+     */
+    val updateChecks: StateFlow<Boolean> = _updateChecks.asStateFlow()
+
+    fun setUpdateChecks(on: Boolean) {
+        prefs.edit {
+            putBoolean(KEY_UPDATE_CHECKS, on)
+            // Off forgets what the last check found, so nothing stale is
+            // shown if it is turned back on later.
+            if (!on) {
+                remove(KEY_UPDATE_NEWER)
+                remove(KEY_UPDATE_PROBLEM)
+            }
+        }
+        _updateChecks.value = on
+    }
+
+    /** When GitHub was last asked (wall clock, so it survives a restart), or null. */
+    var updateLastTryMs: Long?
+        get() = prefs.getLong(KEY_UPDATE_LAST_TRY, -1L).takeIf { it >= 0 }
+        set(value) = prefs.edit { if (value == null) remove(KEY_UPDATE_LAST_TRY) else putLong(KEY_UPDATE_LAST_TRY, value) }
+
+    /** The line for a newer build, as last found, or null. Shown until a check says otherwise. */
+    var updateNewerLine: String?
+        get() = prefs.getString(KEY_UPDATE_NEWER, null)
+        set(value) = prefs.edit { if (value == null) remove(KEY_UPDATE_NEWER) else putString(KEY_UPDATE_NEWER, value) }
+
+    /** Why the last check did not get an answer, for Checks only, or null. */
+    var updateProblem: String?
+        get() = prefs.getString(KEY_UPDATE_PROBLEM, null)
+        set(value) = prefs.edit { if (value == null) remove(KEY_UPDATE_PROBLEM) else putString(KEY_UPDATE_PROBLEM, value) }
+
     /**
      * The base URL. `http` rather than `https`: the desktop serves plain HTTP
      * over the tailnet, which is why the network security config exists at all.
@@ -83,5 +119,9 @@ class ClientSettings(context: Context) {
         const val KEY_HOST = "host"
         const val KEY_LAST_EVENT = "last_event_id"
         const val KEY_BARGE_IN = "barge_in"
+        const val KEY_UPDATE_CHECKS = "update_checks"
+        const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
+        const val KEY_UPDATE_NEWER = "update_newer_line"
+        const val KEY_UPDATE_PROBLEM = "update_problem"
     }
 }

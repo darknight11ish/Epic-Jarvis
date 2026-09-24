@@ -28,6 +28,7 @@ import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.platform.UpdateChecker
 import com.jarvis.client.widget.ApprovalWidget
 import com.jarvis.client.widget.QuickLinkWidget
 import androidx.glance.appwidget.updateAll
@@ -236,6 +237,13 @@ object JarvisRuntime {
 
     /** Theme, face and the seven state bindings. Per device — see the class. */
     lateinit var appearance: AppearanceStore
+        private set
+
+    /**
+     * "A newer version is available": one GET to GitHub's public release
+     * page for this app, never to the PC. See [UpdateChecker].
+     */
+    lateinit var updates: UpdateChecker
         private set
 
     /**
@@ -509,6 +517,7 @@ object JarvisRuntime {
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
+        updates = UpdateChecker(clientSettings)
         chat = chatSession
         voice = voiceSession
         stream = EventStream(jarvisApi)

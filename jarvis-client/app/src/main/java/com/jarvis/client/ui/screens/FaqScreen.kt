@@ -222,6 +222,18 @@ private val FAQS = listOf(
             "Jarvis updates only from your own release page, never from a " +
             "file someone sends you.",
     ),
+    Faq(
+        "How do I know when there is a newer version?",
+        // net/UpdateCheck.kt.
+        "Jarvis asks GitHub, at most every six hours, whether a newer build " +
+            "is on the client-latest release page, and if there is one, a " +
+            "quiet line near the top of Home offers to open that page. It " +
+            "never downloads or installs anything: you install it yourself, " +
+            "the same way as before. The question to GitHub carries nothing " +
+            "about you or Jarvis. To stop it, open Platform checks and turn " +
+            "off Check for new versions on the This app card; that card also " +
+            "says if the last check failed.",
+    ),
 )
 
 @Composable

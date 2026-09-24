@@ -26,7 +26,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.BuildConfig
 import com.jarvis.client.LinkState
+import com.jarvis.client.net.UpdateCheck
 import com.jarvis.client.net.VoiceStatus
 import com.jarvis.client.net.WakeWord
 import com.jarvis.client.platform.DisplayRate
@@ -39,6 +41,8 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
+import com.jarvis.client.ui.parts.ageText
+import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.VoiceTraining
@@ -130,6 +134,13 @@ fun ReadinessScreen(
     securitySummary: String? = null,
     /** Opens Security. */
     onOpenSecurity: () -> Unit = {},
+    /** The last update check (`net/UpdateCheck.kt`). Null hides the card. */
+    update: UpdateCheck.State? = null,
+    /** "Check for new versions" - on by default. */
+    updateChecks: Boolean = true,
+    onUpdateChecks: (Boolean) -> Unit = {},
+    /** Opens the release page in the browser. */
+    onOpenRelease: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     // Split rather than re-sorted, so within each group the order stays the
@@ -210,6 +221,9 @@ fun ReadinessScreen(
             }
             items(others, key = { it.title }) { ReadinessCard(it, fixFor(it)) }
             item(key = "frame-rate") { FrameRateCard() }
+            if (update != null) {
+                item(key = "this-app") { ThisAppCard(update, updateChecks, onUpdateChecks, onOpenRelease) }
+            }
         }
     }
 }
@@ -790,5 +804,63 @@ private fun SecurityCard(summary: String, onOpen: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             onClick = onOpen,
         )
+    }
+}
+
+/**
+ * This build, and "a newer version is available" (net/UpdateCheck.kt).
+ *
+ * The one place a failed check is mentioned: Home stays quiet about it.
+ * The switch turns the request to GitHub off entirely.
+ */
+@Composable
+private fun ThisAppCard(
+    update: UpdateCheck.State,
+    checks: Boolean,
+    onChecks: (Boolean) -> Unit,
+    onOpenRelease: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val now = rememberTickingNow(update.lastTryMs, periodMs = 60_000L)
+    Plate {
+        Text("This app", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        Gap(6)
+        Field("Build", UpdateCheck.ownSha(BuildConfig.GIT_SHA)?.take(7) ?: "unknown", machine = true)
+        Gap(6)
+        SwitchRow(
+            title = "Check for new versions",
+            detail = "At most every six hours, this phone asks GitHub whether a newer build of this app is " +
+                "on its release page. Nothing about you or Jarvis is sent, and nothing is " +
+                "downloaded or installed.",
+            checked = checks,
+            onChange = onChecks,
+        )
+        if (checks) {
+            val newer = update.newerLine
+            val last = update.lastTryMs
+            Gap(6)
+            Text(
+                when {
+                    newer != null -> newer
+                    last == null -> "Not checked yet."
+                    update.problem == null -> "Up to date, as of ${ageText(now - last)}."
+                    else -> "Last checked ${ageText(now - last)}."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (newer != null) chrome.textHi else chrome.textMid,
+            )
+            update.problem?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+            }
+            if (newer != null) {
+                Gap(8)
+                Secondary(
+                    text = "Open release page",
+                    color = chrome.textMid,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onOpenRelease,
+                )
+            }
+        }
     }
 }

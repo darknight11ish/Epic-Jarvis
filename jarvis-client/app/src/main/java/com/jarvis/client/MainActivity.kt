@@ -50,6 +50,7 @@ import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.SecondCard
+import com.jarvis.client.net.UpdateCheck
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.PictureEncoder
@@ -542,6 +543,20 @@ class MainActivity : FragmentActivity() {
         // Jarvis is blank rather than a snapshot of what the lock hides.
         LaunchedEffect(security.appLock, security.privateLists) {
             setRecentsScreenshotEnabled(!security.appLock && !security.privateLists)
+        }
+
+        // "A newer version is available": asked when the app opens (at most
+        // every six hours) and once a day while it stays open. Never while
+        // "Check for new versions" is off. See UpdateCheck.
+        val updateState by JarvisRuntime.updates.state.collectAsState()
+        val updateChecks by JarvisRuntime.settings.updateChecks.collectAsState()
+        LaunchedEffect(updateChecks) {
+            if (!updateChecks) return@LaunchedEffect
+            JarvisRuntime.updates.checkIfDue(onStart = true)
+            while (true) {
+                delay(UPDATE_RECHECK_MS)
+                JarvisRuntime.updates.checkIfDue(onStart = false)
+            }
         }
 
         val link by JarvisRuntime.link.collectAsState()
@@ -1205,6 +1220,15 @@ class MainActivity : FragmentActivity() {
                             // phone only; nothing here reaches the desktop.
                             securitySummary = SecurityRules.summary(security),
                             onOpenSecurity = { nav.go(Screen.SECURITY) },
+                            // "Check for new versions", and the one place a
+                            // failed check is mentioned.
+                            update = updateState,
+                            updateChecks = updateChecks,
+                            onUpdateChecks = { on ->
+                                JarvisRuntime.settings.setUpdateChecks(on)
+                                if (!on) JarvisRuntime.updates.cleared()
+                            },
+                            onOpenRelease = ::openReleasePage,
                         )
                     }
 
@@ -1599,6 +1623,7 @@ class MainActivity : FragmentActivity() {
                             pictureLine = picture.value?.let { ChatPicture.attachedLine(it) },
                             pictureBusy = pictureBusy.value,
                             noteTargets = noteTargets,
+                            updateLine = updateState.newerLine.takeIf { updateChecks },
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1746,6 +1771,7 @@ class MainActivity : FragmentActivity() {
                                 // Only the note apps the desktop says are set up.
                                 onLoadNoteTargets = { JarvisRuntime.noteTargets() },
                                 onQuickNoteOpenChange = { open -> quickNoteOpen.value = open },
+                                onOpenUpdate = ::openReleasePage,
                             )
                         },
                         modifier = root,
@@ -1993,6 +2019,17 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * The client-latest release page, in the phone's own browser. The
+     * address is fixed in [UpdateCheck.RELEASE_PAGE], never taken from
+     * GitHub's answer. Nothing is downloaded here: installing stays the
+     * owner's own step, as it always was.
+     */
+    private fun openReleasePage() {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(UpdateCheck.RELEASE_PAGE))) }
+            .onFailure { JarvisRuntime.setNotice("No browser on this phone could open the release page.") }
+    }
+
+    /**
      * Opens the platform's own exemption dialog. Never granted silently, and the
      * readiness screen keeps reporting the real state either way.
      */
@@ -2063,6 +2100,9 @@ private val pairingBusy = mutableStateOf(false)
  * app lock is on.
  */
 private val lockSession = LockSession()
+
+/** How often, while the app stays open, the once-a-day update check is looked at. */
+private const val UPDATE_RECHECK_MS = 60 * 60 * 1000L
 
 /** How long to wait before re-offering a theme the dwell window refused. */
 private const val THEME_RETRY_MS = 600L
