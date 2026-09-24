@@ -82,6 +82,7 @@ NOT_SHIPPED = {
     "selftest.py": "run from this repository against the backend",
     "import_history.py": "run from this repository against the backend",
     "grade-peers.py": "a research tool, not part of the backend",
+    "_ollama_wire.py": "test fixture: Ollama's real /v1 stream format, for the chat tests",
 }
 
 
