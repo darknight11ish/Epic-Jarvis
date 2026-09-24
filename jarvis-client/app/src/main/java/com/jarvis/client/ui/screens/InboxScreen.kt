@@ -328,13 +328,6 @@ fun InboxScreen(
                             style = MaterialTheme.typography.titleSmall,
                             color = chrome.textHi,
                         )
-                        entry.target?.takeIf { it.isNotBlank() }?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = chrome.textMid,
-                            )
-                        }
                         if (entry.holdHandle != null) {
                             // Not sent yet: neither undoable nor final. The
                             // desktop's Brain window shows the same button.

@@ -517,16 +517,15 @@ data class UndoEntry(
     val detail: JsonObject? = null,
     /*
      * The desktop's names for the same row (brain.js renderUndo): `action` or
-     * `kind` for what happened, `target` for what it happened to, and
-     * `revertible`. jarvis_undo.py lives only on the owner's PC and neither
-     * app has seen it; the desktop's names match the config's own word
-     * ("non-revertible", jarvis-framework.toml), so they are at least as
-     * likely. Both sets are read, on both apps, and [title] / [canRevert]
-     * pick whichever the server sent.
+     * `kind` for what happened, and `revertible`. jarvis_undo.py lives only
+     * on the owner's PC and neither app has seen it; the desktop's names
+     * match the config's own word ("non-revertible", jarvis-framework.toml),
+     * so they are at least as likely. Both sets are read, on both apps, and
+     * [title] / [canRevert] pick whichever the server sent. (The desktop
+     * also shows `target`; the phone deliberately shows no more than it did.)
      */
     val action: String? = null,
     val kind: String? = null,
-    val target: String? = null,
     val revertible: Boolean? = null,
 ) {
     /** What happened, in whichever field the server used. */

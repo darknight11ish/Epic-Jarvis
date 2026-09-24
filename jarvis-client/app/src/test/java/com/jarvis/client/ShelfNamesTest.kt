@@ -28,7 +28,6 @@ class ShelfNamesTest {
         val e = undo("""{"id":"u1","action":"file_write","target":"C:\\notes.txt","revertible":true,"ts":1700000000}""")
         assertEquals("file_write", e.title)
         assertTrue(e.canRevert)
-        assertEquals("C:\\notes.txt", e.target)
     }
 
     @Test
