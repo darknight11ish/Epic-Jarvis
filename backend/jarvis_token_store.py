@@ -375,9 +375,12 @@ def _desktop_has_token(desktop_store) -> Optional[bool]:
     return bool(got and str(got).strip())
 
 
-def _other_sources(environ, desktop_store) -> list:
+def _other_sources(environ, desktop_store, *, always_desktop: bool = True) -> list:
     """Plain sentences about the tokens these commands cannot see or change.
-    Never contains a token."""
+    Never contains a token. With `always_desktop` False, the desktop sentence
+    is said only when the desktop really has a token saved - `show` passes
+    that, so a script that captures its output (docs/BIG-MODEL.md does) is
+    not handed a warning on every run."""
     out = []
     if environ.get("HUD_TOKEN", "").strip():
         out.append("HUD_TOKEN is set in this window's environment. A backend started from "
@@ -386,6 +389,8 @@ def _other_sources(environ, desktop_store) -> list:
                    "[Environment]::SetEnvironmentVariable('HUD_TOKEN', $null, 'User') "
                    "and open a new window.")
     has = _desktop_has_token(desktop_store)
+    if not has and not always_desktop:
+        return out
     lead = ("The desktop app has a token of its own saved (typed into its Settings). "
             if has else "")
     out.append(lead + "When the desktop app starts Jarvis, it passes a token typed into its "
@@ -408,6 +413,7 @@ def _main(argv, *, store=None, desktop_store=None, environ=None) -> int:
     # `show` prints the token alone on standard output, so it can be piped
     # (`| clip`); everything else it says goes to standard error.
     note_to = sys.stderr if cmd == "show" else sys.stdout
+    quiet = cmd == "show"
     try:
         if cmd == "forget":
             had = store.delete()
@@ -422,7 +428,7 @@ def _main(argv, *, store=None, desktop_store=None, environ=None) -> int:
         return 1
     if tok is None:
         print("There is no saved token in Credential Manager yet. Start Jarvis once and it "
-              "makes one - unless one of these is in use:", file=note_to)
+              "makes one.", file=note_to)
         for n in _other_sources(env, desktop_store):
             print(n, file=note_to)
         return 1
@@ -430,7 +436,7 @@ def _main(argv, *, store=None, desktop_store=None, environ=None) -> int:
         print(f'Windows Credential Manager > Windows Credentials > "{TARGET}"')
     else:
         print(tok)
-    for n in _other_sources(env, desktop_store):
+    for n in _other_sources(env, desktop_store, always_desktop=not quiet):
         print(n, file=note_to)
     return 0
 

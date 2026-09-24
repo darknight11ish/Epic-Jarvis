@@ -291,6 +291,10 @@ def t_the_owner_is_told_about_the_other_token_sources():
     code, out, err = _run_main("show", store=FakeStore(None), environ=env, desktop=desk)
     check("show with nothing saved: does not stop at 'no saved token' - names HUD_TOKEN",
           code == 1 and "HUD_TOKEN is set" in err and out == "", repr((out, err)))
+    code, out, err = _run_main("show", store=FakeStore("saved-token-1"), environ={},
+                               desktop=FakeStore(None))
+    check("show, no HUD_TOKEN and no desktop token: the token and nothing else, anywhere",
+          code == 0 and out == "saved-token-1\n" and err == "", repr((out, err)))
     code, out, err = _run_main("where", store=FakeStore(None), environ={},
                                desktop=FakeStore(None))
     check("where, nothing saved anywhere: still says a desktop-typed token would win",
