@@ -1157,3 +1157,145 @@ body {
   font-size: 11px;
   color: var(--text-faint);
 }
+
+/* ---- Deep questions (backend/big-model.patch; deep.js) ------------------ */
+
+.deep-state {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.deep-state[data-ready="true"] {
+  color: var(--ok);
+}
+
+.deep-ask {
+  margin: 0 0 10px;
+}
+
+.deep-label {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.deep-question {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.deep-ask-row {
+  align-items: center;
+  padding-top: 8px;
+  white-space: normal;
+  flex-wrap: wrap;
+}
+
+.deep-count {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.deep-said {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.deep-said:empty {
+  display: none;
+}
+
+.deep-said[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.deep-said[data-tone="bad"] {
+  padding-left: 8px;
+  border-left: 2px solid var(--bad);
+}
+
+.deep-answer {
+  margin-top: 6px;
+}
+
+.deep-answer summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+/* The answer is the model's own text, rendered by markdown.js. */
+.deep-answer-body {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.deep-answer-body > :first-child {
+  margin-top: 0;
+}
+
+.deep-answer-body > :last-child {
+  margin-bottom: 0;
+}
+
+.deep-answer-body p,
+.deep-answer-body ul,
+.deep-answer-body ol,
+.deep-answer-body blockquote {
+  margin: 0 0 8px;
+}
+
+.deep-answer-body h1,
+.deep-answer-body h2,
+.deep-answer-body h3,
+.deep-answer-body h4 {
+  margin: 10px 0 6px;
+  font-size: 12.5px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+}
+
+.deep-answer-body pre {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-control);
+}
+
+.deep-answer-body code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.deep-answer-body blockquote {
+  padding-left: 8px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.deep-answer-body table {
+  border-collapse: collapse;
+  margin: 0 0 8px;
+}
+
+.deep-answer-body th,
+.deep-answer-body td {
+  padding: 3px 6px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  text-align: left;
+}

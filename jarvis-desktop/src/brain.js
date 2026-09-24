@@ -13,8 +13,10 @@
  * descriptions from GitHub, skill names from disk, job labels, model
  * identifiers, ledger hashes. All of it reaches the DOM through `textContent`
  * or through the `el()` helper, which uses `textContent`. There is no
- * `innerHTML` in this file that touches server data, and the markdown renderer
- * lives in the quickbar where the content is the model's own answer.
+ * `innerHTML` in this file that touches server data. The one place the
+ * window renders model text as Markdown is a deep question's answer, in
+ * deep.js, through the quickbar's own renderer (markdown.js), which escapes
+ * everything before it adds any markup - see that module's note.
  *
  * @module brain
  */
@@ -34,6 +36,15 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
+import {
+  askDeep,
+  leadLine as deepLead,
+  POLL_MS as DEEP_POLL_MS,
+  readDeep,
+  renderJobs as renderDeepJobs,
+  RUNNING as DEEP_RUNNING,
+  runningCount,
+} from "./deep.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -471,6 +482,7 @@ function render(name) {
       renderProposals();
       renderFacts();
       renderWikiPlate();
+      renderDeepPlate();
       break;
     case "work":
       renderJobs();
@@ -1640,6 +1652,147 @@ async function openWikiFolder() {
   }
 }
 
+/* ==========================================================================
+   Deep questions - backend/big-model.patch. Their own plate on the Memory
+   tab, beside the wiki (the big model's other job), read through their own
+   commands; the list itself is deep.js.
+
+   Refreshed by the `deep` event (a question finished) - see the onEvent
+   handler at the bottom - and, only while a question is still going, by a
+   gentle poll in case that event is missed.
+   ========================================================================== */
+
+const deep = { view: null, error: "", at: 0, loading: false, openId: undefined,
+  asking: false, pollTimer: null, going: new Set() };
+/** The Memory tab repaints often; the list is re-read at most this often. */
+const DEEP_READ_MS = 15000;
+
+async function loadDeep() {
+  if (deep.loading) return;
+  deep.loading = true;
+  try {
+    deep.view = readDeep(await invoke("get_deep"));
+    deep.error = "";
+  } catch (error) {
+    deep.error = String((error && error.message) || error);
+  } finally {
+    deep.loading = false;
+    deep.at = Date.now();
+  }
+  // Say when one this window saw going has finished.
+  if (deep.view) {
+    for (const job of deep.view.jobs) {
+      if (deep.going.has(job.id) && !DEEP_RUNNING.has(job.state)) {
+        announce(job.state === "done" ? "A deep question has been answered."
+          : `A deep question was not answered. ${job.why}`);
+      }
+    }
+    deep.going = new Set(deep.view.jobs.filter((j) => DEEP_RUNNING.has(j.state)).map((j) => j.id));
+  }
+  paintDeep();
+  scheduleDeepPoll();
+}
+
+function paintDeep() {
+  const lead = $("deep-state");
+  if (!lead) return;
+  const v = deep.view;
+  const ask = $("deep-ask");
+  if (!v) {
+    lead.textContent = deep.error ? `Could not read the deep questions: ${deep.error}` : "Reading…";
+    lead.dataset.ready = "false";
+    ask.hidden = true;
+  } else {
+    lead.textContent = deepLead(v);
+    lead.dataset.ready = String(v.available);
+    // Only when GET /api/deep says available; otherwise the line says why.
+    ask.hidden = !v.available;
+    const box = $("deep-question");
+    box.maxLength = v.questionChars;
+    paintDeepCount();
+  }
+  renderDeepJobs($("deep-jobs"), {
+    view: v, error: v ? deep.error : "", openId: deep.openId,
+    onToggle: (id, open) => {
+      if (open) deep.openId = id;
+      else if (deep.openId === id || deep.openId === undefined) deep.openId = null;
+    },
+  }, { el, row });
+}
+
+function paintDeepCount() {
+  const v = deep.view;
+  const box = $("deep-question");
+  const count = $("deep-count");
+  if (!v || !box || !count) return;
+  const n = box.value.length;
+  const going = runningCount(v);
+  count.textContent = `${n.toLocaleString("en-US")} / ${v.questionChars.toLocaleString("en-US")} characters` +
+    (going >= v.queue ? ` · ${going} questions are already waiting or running; ask again when one has finished.` : "");
+}
+
+function renderDeepPlate() {
+  paintDeep();
+  if (IS_TAURI && !deep.loading && Date.now() - deep.at > DEEP_READ_MS) loadDeep();
+}
+
+/** Only while a question is going, and only while the Memory tab shows. */
+function scheduleDeepPoll() {
+  clearTimeout(deep.pollTimer);
+  deep.pollTimer = null;
+  if (!deep.view || runningCount(deep.view) === 0) return;
+  deep.pollTimer = setTimeout(() => {
+    deep.pollTimer = null;
+    if (state.view === "memory" && !document.hidden) loadDeep();
+    else scheduleDeepPoll();
+  }, DEEP_POLL_MS);
+}
+
+/** "Ask slowly": one question, queued in the background. No card. */
+async function askDeepNow() {
+  if (deep.asking) return;
+  const box = $("deep-question");
+  const said = $("deep-said");
+  deep.asking = true;
+  said.textContent = "Asking…";
+  delete said.dataset.tone;
+  try {
+    const out = await askDeep(invoke, box.value);
+    said.textContent = out.text;
+    said.dataset.tone = out.tone;
+    announce(out.text, out.tone === "bad" ? "assertive" : "polite");
+    if (out.queued) {
+      box.value = "";
+      paintDeepCount();
+    }
+  } finally {
+    deep.asking = false;
+  }
+  await loadDeep();
+}
+
+function setupDeepAsk() {
+  const rowBox = $("deep-ask-row");
+  const box = $("deep-question");
+  if (!rowBox || !box) return;
+  const go = button("Ask slowly", askDeepNow, {
+    live: true,
+    title: "The big model answers in the background, on this PC - expect minutes. No approval " +
+      "card per question: you approved the Deep questions switch.",
+  });
+  go.id = "deep-ask-button";
+  rowBox.prepend(go);
+  box.addEventListener("input", paintDeepCount);
+  box.addEventListener("keydown", (event) => {
+    // Ctrl+Enter asks; a plain Enter is a new line in the question.
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      if (!go.disabled) go.click();
+    }
+  });
+}
+setupDeepAsk();
+
 /** "learned 12d ago" only when that differs from when the fact became true.
  *
  * valid_from and created are stamped together for anything typed or accepted
@@ -2120,6 +2273,9 @@ function pushTrace(frame) {
     // the number, and the memory pane is where you go to read them.
     const n = data.count ?? (Array.isArray(data.value) ? data.value.length : "?");
     body = n === 0 ? "review queue empty" : `${n} to review`;
+  } else if (kind === "deep") {
+    // The id and how it ended - never the question or the answer.
+    body = `question ${String(data.id || "?")} ${String(data.state || "")}`.trim();
   } else if (kind === "hello") {
     body = `resumed from ${data.resumed_from ?? 0}${data.stale ? " · STALE" : ""}`;
   } else {
@@ -3200,6 +3356,13 @@ onEvent((frame) => {
   if (kind === "model" && state.modelAsk) {
     state.modelAsk = null;
     if (state.view === "faculties") renderModels();
+  }
+  // A deep question finished (`{id, state}` only - a doorbell): read the
+  // list again, so the answer shows without polling. Off the Memory tab it
+  // is only marked old, and read when the tab is next shown.
+  if (kind === "deep") {
+    deep.at = 0;
+    if (state.view === "memory") loadDeep();
   }
   const refreshes = {
     model: ["models"],

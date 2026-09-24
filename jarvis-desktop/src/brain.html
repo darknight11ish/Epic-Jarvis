@@ -325,6 +325,31 @@
               </p>
               <div id="wiki"></div>
             </div>
+            <!-- Deep questions (backend/big-model.patch; deep.js). The box
+                 stays put across repaints so typing is never lost; only the
+                 line above it and the list below are redrawn. -->
+            <div class="card card-wide" id="deep-card">
+              <h2>Deep questions</h2>
+              <p class="note">
+                Ask one question you want a careful answer to. The big model
+                answers it in the background on this PC, with no tools, no
+                internet and no memory of your other conversations. It is
+                slow: expect minutes, not seconds. Nothing leaves this PC, and
+                the answer is kept on it for you to read here.
+              </p>
+              <p class="deep-state" id="deep-state" role="status">Reading…</p>
+              <div class="deep-ask" id="deep-ask" hidden>
+                <label class="deep-label" for="deep-question">Your question</label>
+                <textarea class="field deep-question" id="deep-question" rows="3"
+                          maxlength="4000" spellcheck="true"
+                          aria-describedby="deep-count deep-said"></textarea>
+                <div class="row-actions deep-ask-row" id="deep-ask-row">
+                  <span class="deep-count" id="deep-count"></span>
+                </div>
+                <p class="deep-said" id="deep-said" role="status"></p>
+              </div>
+              <div id="deep-jobs"></div>
+            </div>
           </div>
         </section>
 
