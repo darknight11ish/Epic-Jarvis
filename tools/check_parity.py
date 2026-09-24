@@ -164,6 +164,13 @@ CLASSIFICATION = {
                         "itself (assets/turn/, voice/SmartTurn.kt), so its audio never leaves it to ask; "
                         "the desktop asks its own PC over loopback."),
     "/api/voice/utterance": ("ported", ""),
+    # Custom voices (backend/voices.patch, 2026-09-24): built on the backend
+    # first; both apps are to build against docs/JARVIS-API.md section 15.
+    "/api/voice/voices": ("planned", "Custom voices: the list, which one Jarvis speaks in and why the built-in voice is used instead, the better voice's state, and say() timings (docs/JARVIS-API.md section 15)."),
+    "/api/voice/voices/create": ("planned", "Add a custom voice: a recording and its exact words. One approval card (custom_voice); a voice that sounds like the owner's is refused."),
+    "/api/voice/voices/active": ("planned", "Speak in a custom voice (one approval card) or back in the built-in one (immediate)."),
+    "/api/voice/voices/delete": ("planned", "Delete a custom voice. Immediate; the built-in voice comes back if it was the one in use."),
+    "/api/voice/voices/better": ("planned", "The better voice (F5-TTS on the second graphics card): ON is one approval card (better_voice_enable), OFF is immediate."),
     "/api/voice/wake": ("ported", "The wake-word switch; turning it on raises an approval card."),
     "/api/watch": ("todo", "Watches - what Jarvis is keeping an eye on. Probably the single most useful unported feature."),
     "/api/watch/add": ("todo", "Creating a watch from the phone."),

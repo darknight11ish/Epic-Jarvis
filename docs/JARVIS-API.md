@@ -450,6 +450,14 @@ only what Jarvis itself said it did.
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
 | `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"` | **no** | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
 | `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
+| `/api/voice/voices` (+ `/create`, `/active`, `/delete`, `/better`) | GET / POST | see section 15 | **not yet** | **not yet** | Custom voices (2026-09-24, `voices.patch`). Built on the backend first; both apps to build against section 15. |
+
+**Since 2026-09-24 `/api/voice/say` may answer in a custom voice** (section
+15) - the same WAV, the same 503 when nothing can speak. `/api/voice/status`'s
+`tts` block gained `voice` (`{"active", "name", "engine": "kokoro" |
+"zipvoice" | "f5", "fallback"}` - `fallback` is the sentence saying why the
+built-in voice is used instead of the chosen one, or `""`) and `timings` (the
+last five rows of section 15's `timings`).
 
 **The audio format: 16-bit PCM in a WAV container. The two apps send
 different rates, and the server copes with both** (checked against the code
@@ -1236,3 +1244,124 @@ its plate is on screen. There is no event for the switches: read `GET
 colibri is still loading: the job's `state` stays `reading` and its
 `message` says it is waiting for the big model. Nothing else about the wiki
 routes changes.
+
+## 15. Custom voices (added 2026-09-24)
+
+`backend/voices.patch` and `backend/jarvis_voices.py` (with
+`backend/jarvis_f5_worker.py` for the better voice). Jarvis can speak in a
+voice the owner recorded: 3 to 10 seconds of someone reading a sentence
+Jarvis shows (so the words are exact), or an uploaded clip with its words
+typed in. **Built on the backend first; neither app calls these routes
+yet** - `tools/check_parity.py` lists all five as `planned`. How it works,
+and the owner's install lines, are in `backend/README.md`, "Custom voices".
+
+Two engines make the voice, and the built-in Kokoro voice is always the
+fallback:
+
+- **ZipVoice** (sherpa-onnx) on the PC's **processor**. Always tried first.
+- **F5-TTS**, "the better voice", on the **second graphics card**, in its
+  own program, behind its own switch (off by default; ON is a card). Started
+  only when Jarvis speaks in a custom voice, stopped after idle minutes, in
+  standby and when switched off. While it loads, ZipVoice speaks in the same
+  voice.
+
+**Where the audio goes: nowhere.** The recording is held in the PC's memory
+until the card is answered; approved, it is kept in
+`<config dir>/voices/<id>/` (`clip.wav` - mono, 24 kHz, 16-bit -
+`transcript.txt`, `voice.json`); anything else, it is dropped. The PC makes
+no network call for any of this. The clip, its words and the text Jarvis
+says are never logged, never in an audit line, never in an event.
+
+**The owner's own voice is refused.** A recording that scores at or above
+any trained voice print's threshold minus 0.10 (`[voice]
+custom_voice_margin`) is refused, with the reason: Jarvis speaking in the
+owner's voice through the speakers could pass its own "is it the owner?"
+check. Checked on create, on switch, and again before the first word after
+any voice print changes.
+
+All routes: token + origin, like every other write. A client sends
+`X-Jarvis-Client: hud` as always. **Hold every POST on a stale link** (rule
+4). Show every `error` and `why` word for word: they are written for the
+owner.
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `GET /api/voice/voices` | - | 200 `status()` (below); **503** `{"available": false, "error", "reason"}` if `jarvis_voices.py` is missing; 500 `{"available": false, "error": "<exception name>"}` | Loads no model, starts nothing. |
+| `POST /api/voice/voices/create` | `{"name": "<1-40 characters>", "clip": "<base64 of one WAV>", "transcript": "<exactly what is said in it>"}` | **202** `{"ok": true, "pending": true, "voice": "<id>", "name", "seconds": 5.3, "message"}` - ONE card is up (action `custom_voice`), **nothing is saved yet**; **400** `{"ok": false, "error"}` - the clip, words or name (see limits); **409** `{"ok": false, "refused": "owner_voice", "error"}` - it sounds like the owner (no card); **409** `{"ok": false, "refused": "owner_check_failed" \| "no_voice_check", "error"}` - it could not be checked, so it is refused; **409** `{"ok": false, "pending": true, "error"}` - a voice card already waits; **409** `{"ok": false, "error"}` - that name exists, or there are already 20 voices; **409** `{"ok": false, "pending": false, "error"}` - `custom_voice` is not tier `ask` (no card); **503** module missing | The WAV: 16- or 24-bit PCM, 8-48 kHz, mono or stereo, at most 2.9 MB; 3-10 s of speech once silence at the ends is trimmed; not silent. The words must fit the length (0.5-8 words a second). Approving saves it; Jarvis does **not** start speaking in it - that is `active`, its own card. |
+| `POST /api/voice/voices/active` | `{"voice": "<id>"}` or `{"voice": "builtin"}` | `builtin`: **200** `{"ok": true, "active": "builtin", "pending": false, "message"}` at once, no card (it also withdraws a waiting switch card and stops the better voice). A custom voice: **202** `{"ok": true, "pending": true, "voice": "<id>", "message"}` - ONE card (`custom_voice`); **200** `{"ok": true, "active": "<id>", "pending": false, "message"}` if already active; **404** unknown id; **409** as for create (`refused: "owner_voice"`, a card waiting, tier not `ask`, or its recording unreadable) | Nothing changes until the card is approved. |
+| `POST /api/voice/voices/delete` | `{"voice": "<id>"}` | **200** `{"ok": true, "deleted": "<id>", "active": "<id>" \| "builtin"}` at once, no card; **400** for `builtin`; **404** unknown id; 500 `{"ok": false, "error"}` if the folder could not be removed | Deletes the folder. If Jarvis was speaking in it, it goes back to the built-in voice (`active` says so). |
+| `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
+
+Errors from the route itself (not the module): **400** `{"error": "the
+request is not JSON"}` or `{"error": "could not read the request
+(<name>)"}`, **403** cross-origin, **401** token, **500** `{"error":
+"<exception name>"}` - never the exception's message, which could quote the
+request.
+
+**`status()`**, exactly (from the code; `null` where shown):
+
+```
+{"available": true,
+ "active": "builtin" | "<id>",
+ "active_name": "Built-in voice" | "<name>",
+ "speaking_with": "kokoro" | "zipvoice" | "f5",   what the NEXT sentence would use
+ "fallback": "" | "<why the built-in voice is used instead of the chosen one>",
+ "voices": [
+   {"id": "builtin", "name": "Built-in voice", "builtin": true, "ready": bool, "why": str},
+   {"id": "<id>", "name": str, "builtin": false, "ready": true, "why": "",
+    "seconds": 5.3, "created": <unix seconds>, "transcript": str},
+   {"id": "<id>", "name": "<id>", "builtin": false, "ready": false, "why": str}   a broken folder
+ ],
+ "engines": {"kokoro":   {"available": bool, "why": str},
+             "zipvoice": {"available": bool, "why": str, "where": "this PC's processor"},
+             "f5":       {"available": bool, "why": str, "where": "the second graphics card"}},
+ "better_voice": {"enabled": bool,        the switch
+                  "pending": bool,        its card is waiting
+                  "can_turn_on": bool,    a capable second card is here
+                  "why": str,             what it is, or why it cannot be turned on
+                  "files": bool, "files_why": str,     F5-TTS's model files on the PC
+                  "state": "off" | "loading" | "ready" | "failed",
+                  "state_why": str,       show this under the switch
+                  "card": str | null, "idle_minutes": 10, "load_seconds": float | null,
+                  "need_mb": 3072, "need_mb_measured": false,
+                  "last": {"outcome": "enabled"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
+                           "at", "why"} | null},
+ "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
+ "last": {"kind": "create" | "switch", "voice": "<id>",
+          "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
+          "at": <unix seconds>, "why": "<a sentence to show>"} | null,
+ "timings": [T, ...],           oldest first, at most 20
+ "sentences": [str, ...],       sentences to show for recording; the transcript sent must be the one read
+ "limits": {"min_seconds": 3.0, "max_seconds": 10.0, "max_clip_bytes": 2900000,
+            "max_transcript_chars": 300, "max_name_chars": 40, "max_voices": 20}}
+
+T = {"at": <unix seconds>, "engine": "kokoro" | "zipvoice" | "f5" | "none",
+     "voice": "builtin" | "<id>", "chars": int,
+     "seconds": float,          from say() being called to the sound being ready (loading included)
+     "audio_seconds": float,    how long the sound lasts
+     "rtf": float | null,       seconds / audio_seconds
+     "fallback": str,           why the chosen custom voice was not used ("" if it was, or none was chosen)
+     "note": str,               e.g. "better voice not used: loading F5-TTS ..." (it still spoke)
+     "failed": str}             engine "none": why nothing was said
+```
+
+`timings` counts every `say()`, whoever asked (`/api/voice/say`, the
+desktop, the phone). Never the text.
+
+**The event.** When a card ends, a voice is deleted, the voice goes back to
+the built-in one, or the better voice is switched off, the stream carries
+kind `voices` with `{"what": "create" | "switch" | "delete" | "better",
+"outcome": "<as in last.outcome, or builtin / deleted / off>"}` - a doorbell,
+never a name or words. On it, read `GET /api/voice/voices` again.
+
+**What an app should build** (suggested, for both): a "Voices" list with the
+built-in voice and each custom one (name, length, `why` when not ready), a
+radio for the active one (built-in: immediate; custom: "waiting for your
+approval" until `last` says otherwise), delete per voice (immediate; confirm
+on the client), "Add a voice" (record while showing one of `sentences`, or
+pick a file and type its words; show the 202's message, or the 409's
+`error` - the owner-voice refusal especially - word for word), the better
+voice switch with `state_why` under it, and `fallback` wherever the active
+voice is shown. Recording on the phone sends the clip; **the phone must not
+transcribe it** (CLAUDE.md): the words come from the sentence shown or from
+the owner's typing.

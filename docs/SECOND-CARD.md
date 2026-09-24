@@ -233,6 +233,32 @@ How good the pages are, and how often a real answer is refused, will only
 be known once the second card is in. "Too big" is worked out from an
 estimate (about 3 bytes per token, on the cautious side).
 
+## The better voice (custom voices)
+
+A sixth use of the second card, with its **own** switch - it is not one of
+the five above and is not listed by `GET /api/second-card`. When Jarvis
+speaks in a custom voice you recorded (`backend/README.md`, "Custom
+voices"), it normally makes that voice on the processor (ZipVoice). With the
+better voice on, it starts **F5-TTS** on the second card instead, in its own
+program, for a more natural copy of the voice.
+
+- **Off by default.** Turning it on is one approval card
+  (`better_voice_enable`); off is immediate. It can only be turned on when a
+  capable second card is detected.
+- **On demand.** Nothing starts until Jarvis actually speaks in a custom
+  voice. While F5-TTS loads, the processor's copy of the same voice speaks,
+  so there is never silence.
+- **It does not hold the card.** It stops after 10 minutes with nothing to
+  say (`[voice] f5_idle_minutes`), in standby, and when switched off.
+- **It shares the card.** It does not start while the big model is using
+  the card, or when the card has less than about 3 GB free (an estimate, not
+  measured). It does not stop the second Ollama; both may be on the card at
+  once, which the 12 GB card's plan (7.7 GB for the long-context lane) leaves
+  room for only on paper.
+- **Not checked:** F5-TTS has never run in this project - there was no
+  graphics card where it was written. Its speed and real memory use on the
+  RTX 2060 are the first things to measure.
+
 ## What was not built, and why
 
 - **Voice on the graphics card.** Speech-to-text, the voice check and the
