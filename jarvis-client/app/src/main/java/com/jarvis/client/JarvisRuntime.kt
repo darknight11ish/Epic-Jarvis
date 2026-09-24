@@ -305,6 +305,21 @@ object JarvisRuntime {
     val activityDetail: StateFlow<String?> = _activityDetail.asStateFlow()
 
     /**
+     * The tool loop's `step` events in words, newest last, as the desktop's
+     * Brain → Live shows them ([com.jarvis.client.net.Steps]). In memory
+     * only, at most [com.jarvis.client.net.Steps.KEEP] lines; tool names
+     * only, never what a tool read. Empty until the PC sends one - it sends
+     * them only while tools are switched on.
+     */
+    private val _steps = MutableStateFlow<List<com.jarvis.client.net.Steps.Line>>(emptyList())
+    val steps: StateFlow<List<com.jarvis.client.net.Steps.Line>> = _steps.asStateFlow()
+
+    /** Mind's Clear on the steps list. Only this phone's copy; nothing is sent. */
+    fun clearSteps() {
+        _steps.value = emptyList()
+    }
+
+    /**
      * `/api/models`, or null when this backend does not offer the capability
      * or has not been asked yet. Switching between models the desktop already
      * has was allowed onto the phone on 2026-09-18, and installing a typed
@@ -323,6 +338,16 @@ object JarvisRuntime {
      */
     private val _secondCard = MutableStateFlow<SecondCard.Read>(SecondCard.Read.NotAsked)
     val secondCard: StateFlow<SecondCard.Read> = _secondCard.asStateFlow()
+
+    /**
+     * Which note apps the desktop said are set up, as last asked
+     * ([noteTargets]) - or null before the first answer. Chat reads it to
+     * say, under the box, where a `#log` / `#obs` / `#joplin` line will be
+     * filed ([com.jarvis.client.net.NoteCapture.chip]). The send asks again.
+     */
+    private val _noteTargets = MutableStateFlow<com.jarvis.client.net.NoteCapture.Targets?>(null)
+    val noteTargetsKnown: StateFlow<com.jarvis.client.net.NoteCapture.Targets?> =
+        _noteTargets.asStateFlow()
 
     /**
      * `/api/big-model`: what the PC found for the big model (slow), and its
@@ -931,7 +956,9 @@ object JarvisRuntime {
                 refreshStatus()
             }
             "power", "persona" -> refreshStatus()
-            "finding" -> Unit // the digest covers these; nothing to show live
+            // The brief covers these; the Watches plate on Mind reads its
+            // lists again, as the desktop's Brain does.
+            "finding" -> _watchTick.update { it + 1 }
             // A model download publishes progress here. The phone CAN start
             // one - Install, by typed name, raises a card (the owner's
             // 2026-09-20 amendment; see installModel) - but it cannot cancel
@@ -960,6 +987,16 @@ object JarvisRuntime {
             // just re-reads the shared document; nothing here redraws
             // anything directly.
             "appearance" -> refreshAppearance()
+            // One step of the tool loop - asking the model, a tool starting,
+            // finishing or refused - kept for Mind's "What Jarvis is doing".
+            // It used to fall through to "unhandled" below.
+            "step" -> {
+                val line = com.jarvis.client.net.Steps.Line(
+                    com.jarvis.client.net.Steps.clock(System.currentTimeMillis()),
+                    com.jarvis.client.net.Steps.text(event.data),
+                )
+                _steps.update { com.jarvis.client.net.Steps.append(it, line) }
+            }
             else -> Log.d(TAG, "unhandled event kind '${event.kind}'")
         }
     }
@@ -971,6 +1008,8 @@ object JarvisRuntime {
         refreshAttention()
         // One small read, so chat knows whether a picture can be offered.
         refreshSecondCard()
+        // And one more, so chat can say where a `#log` line will be filed.
+        noteTargets()
     }
 
     suspend fun refreshStatus() {
@@ -1273,8 +1312,7 @@ object JarvisRuntime {
         refreshSecondCard()
         val read = _secondCard.value
         if (SecondCard.visionAvailable(read)) return null
-        val why = (read as? SecondCard.Read.Loaded)?.status?.feature(SecondCard.VISION)?.why
-            ?: SecondCard.readLine(read)
+        val why = com.jarvis.client.net.ChatPicture.notWorkingWhy(read)
         return "The picture was not sent: Pictures on the second graphics card is not " +
             "working right now" + (why?.let { " ($it)" } ?: "") + "."
     }
@@ -1607,7 +1645,7 @@ object JarvisRuntime {
                 val compute = async { api.probe("/api/compute").asSection() }
                 val memory = async { api.probe(MemoryCards.PENDING_PATH).asSection() }
                 val ledger = async { api.probe("/api/ledger").asSection() }
-                val skills = async { api.probe("/api/skills").asSection() }
+                val skills = async { api.probe(com.jarvis.client.net.Skills.PATH).asSection() }
                 val initiative = async { api.probe("/api/initiative").asSection() }
                 val contentRisk = async { api.probe("/api/content-risk").asSection() }
                 val secondCardRead = async { refreshSecondCard() }
@@ -2121,11 +2159,38 @@ object JarvisRuntime {
      * quick-note plate opens. A failure is [NoteCapture.Targets.Unknown] with
      * the reason, so the plate shows no button rather than all of them.
      */
-    suspend fun noteTargets(): com.jarvis.client.net.NoteCapture.Targets =
-        when (val r = api.noteTargets()) {
+    suspend fun noteTargets(): com.jarvis.client.net.NoteCapture.Targets {
+        val t = when (val r = api.noteTargets()) {
             is ApiResult.Ok -> com.jarvis.client.net.NoteCapture.targets(r.value)
             is ApiResult.Failed ->
                 com.jarvis.client.net.NoteCapture.targetsFailure(r.error, describe(r.error))
+        }
+        _noteTargets.value = t
+        return t
+    }
+
+    /**
+     * A chat line that starts with `#log`, `#obs`, `#joplin` (and the rest of
+     * [com.jarvis.client.net.NoteCapture.PREFIXES]) files the rest as a note
+     * instead of asking Jarvis - the desktop's quickbar does the same.
+     *
+     * Asks the desktop which note apps are set up first, then follows the
+     * desktop's own decision ([com.jarvis.client.net.NoteCapture.chatNote]):
+     * an app the PC says is not set up, or an empty note, is refused here
+     * with nothing sent. Otherwise [fileNote] sends it, and reports how it
+     * ended in the desktop's words.
+     *
+     * @return true once the note was accepted (filed, or waiting for its
+     *   card), so the caller can clear the chat box; false keeps the words.
+     */
+    suspend fun fileChatNote(p: com.jarvis.client.net.NoteCapture.Prefixed): Boolean =
+        when (val plan = com.jarvis.client.net.NoteCapture.chatNote(p, noteTargets())) {
+            is com.jarvis.client.net.NoteCapture.ChatNote.NotFiled -> {
+                _notice.value = plan.why
+                false
+            }
+            is com.jarvis.client.net.NoteCapture.ChatNote.File ->
+                fileNote(plan.target, plan.text) is ApiResult.Ok
         }
 
     // ------------------------------------------------------------- wiki ----
@@ -2201,6 +2266,131 @@ object JarvisRuntime {
             }
         }
         return ApiResult.Ok(Unit)
+    }
+
+    // ------------------------------------------------------------ watch ----
+
+    private val _watchTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one on every `finding` event, so the Watches plate on Mind
+     * reads its two lists again - the desktop's Brain re-reads the same two
+     * on that event (`brain.js`, `refreshes.finding`).
+     */
+    val watchTick: StateFlow<Int> = _watchTick.asStateFlow()
+
+    /** `GET /api/watch` - see [com.jarvis.client.net.Watch]. */
+    suspend fun watch(): ApiResult<JsonObject> = api.watch()
+
+    /** `GET /api/watch/report` - a peek; it marks nothing read. */
+    suspend fun watchReport(): ApiResult<JsonObject> = api.watchReport()
+
+    /**
+     * Watch a GitHub topic. Creating a watch is turning something ON, so it
+     * is held while the link is down or stale ([actionBlocker], rule 4). If
+     * the PC asks first, its card is answered like any other.
+     *
+     * @return whether the PC took it (added, or waiting for its card), and
+     *   the sentence to show. Not taken leaves the form filled in.
+     */
+    suspend fun addWatch(
+        name: String,
+        query: String,
+        minStars: String,
+        language: String,
+        notify: Boolean,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Watch.addBody(name, query, minStars, language, notify)
+            ?: return false to "Type a name. Min stars, if you fill it in, must be a whole number."
+        return when (val r = writeNoticingCards { api.watchAdd(body) }) {
+            is ApiResult.Ok -> (r.value !is com.jarvis.client.net.DesktopWrite.Outcome.Refused) to
+                com.jarvis.client.net.Watch.addSaid(name.trim(), r.value)
+            is ApiResult.Failed -> false to ("Not added. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error)))
+        }
+    }
+
+    /**
+     * Forget a topic. Never held on a stale link: it only stops something,
+     * the same rule as every OFF on this phone.
+     */
+    suspend fun removeWatch(name: String): String =
+        when (val r = writeNoticingCards { api.watchRemove(name) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Watch.removeSaid(name, r.value)
+            is ApiResult.Failed -> "Not forgotten. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error))
+        }
+
+    /**
+     * "Mark these read". Not held on a stale link, like the brief's own
+     * mark-read ([markDigestSeen]) and like the desktop's: it approves and
+     * starts nothing.
+     */
+    suspend fun markWatchSeen(): String =
+        when (val r = writeNoticingCards { api.watchSeen() }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Watch.seenSaid(r.value)
+            is ApiResult.Failed -> "Not marked read. " +
+                (com.jarvis.client.net.Watch.failure(r.error) ?: describe(r.error))
+        }
+
+    // --------------------------------------------------- memory counts ----
+
+    /** `GET /api/memory/status` - see [com.jarvis.client.net.MemoryCounts]. Read-only. */
+    suspend fun memoryStatus(): ApiResult<JsonObject> =
+        api.probe(com.jarvis.client.net.MemoryCounts.STATUS_PATH)
+
+    /**
+     * Whether learning is on, off `GET /api/memory/facts?limit=1`. Read-only:
+     * the phone has no learning switch, because turning it on must ask first
+     * and the PC's route does not ([com.jarvis.client.net.MemoryCounts]).
+     */
+    suspend fun memoryLearning(): Boolean? =
+        (api.probe(com.jarvis.client.net.MemoryCounts.LEARNING_PATH) as? ApiResult.Ok)
+            ?.value?.let { com.jarvis.client.net.MemoryCounts.learning(it) }
+
+    // ----------------------------------------------------------- skills ----
+
+    /**
+     * Removes one skill ([com.jarvis.client.net.Skills]), after the Mind
+     * screen's own "are you sure". Not held on a stale link: it only takes
+     * something away, the same rule as every OFF here - and the desktop does
+     * not hold it either. If the PC raises a card for it, that is said.
+     * The list is read again either way.
+     *
+     * @return the sentence to show under the list.
+     */
+    suspend fun removeSkill(name: String): String {
+        val said = when (val r = writeNoticingCards { api.removeSkill(name) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.Skills.removeSaid(name, r.value)
+            is ApiResult.Failed -> "Not removed. " +
+                (com.jarvis.client.net.Skills.failure(r.error) ?: describe(r.error))
+        }
+        refreshSkills()
+        return said
+    }
+
+    /** Just the skills list - all a removal can have changed. */
+    suspend fun refreshSkills() {
+        val (skills, read) = api.probe(com.jarvis.client.net.Skills.PATH).asSection()
+        _brain.update { it.copy(skills = skills, skillsRead = read) }
+    }
+
+    /**
+     * Sends one change whose answer's shape is not written down, and counts
+     * it as waiting for a card when a new card turned up in the queue while
+     * it was out ([com.jarvis.client.net.DesktopWrite.withNewCard]) - so the
+     * phone never says "done" over a card it can see.
+     */
+    private suspend fun writeNoticingCards(
+        call: suspend () -> ApiResult<com.jarvis.client.net.DesktopWrite.Outcome>,
+    ): ApiResult<com.jarvis.client.net.DesktopWrite.Outcome> {
+        val before = _pending.value.map { it.id }.toSet()
+        val r = call()
+        if (r !is ApiResult.Ok) return r
+        refreshPending()
+        val newCard = _pending.value.any { it.id !in before }
+        return ApiResult.Ok(com.jarvis.client.net.DesktopWrite.withNewCard(r.value, newCard))
     }
 
     private suspend fun runTaskAction(call: suspend () -> ApiResult<Unit>): ApiResult<Unit> {

@@ -71,17 +71,26 @@
 
             <!-- "Share" from another app - a web page's selected text, a
                  note, an address - lands here as plain text and is folded
-                 into the composer draft, never sent on its own. Text only,
-                 for now. Chat CAN send a photo with a question (ChatPicture),
-                 but only one picked inside the app, and only while the PC
-                 says its Pictures feature works (the second graphics card).
-                 A share-sheet entry for images would be offered even when
-                 that is off, and would then silently do nothing - so shared
-                 images and files are not accepted here yet. -->
+                 into the composer draft, never sent on its own. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
+            </intent-filter>
+
+            <!-- One photo shared from another app (Gallery, the camera, a
+                 screenshot). Attached to the next question under the Photo
+                 button's own rule - only while the PC says Pictures on the
+                 second graphics card works, and shrunk to the same limits
+                 (ChatPicture, PictureEncoder). When Pictures is off the share
+                 still opens Jarvis, and Home says in words why the photo was
+                 not attached: it is never silently dropped. Never sent on its
+                 own - the owner types the question and taps Send. One image
+                 only: SEND, not SEND_MULTIPLE. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
             </intent-filter>
 
             <!-- Makes this app a candidate for the older, plain-intent style

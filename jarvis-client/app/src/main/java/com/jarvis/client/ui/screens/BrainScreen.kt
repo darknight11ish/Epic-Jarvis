@@ -349,6 +349,10 @@ fun BrainScreen(
                 }
             }
 
+            // The tool loop's steps, live (StepsPlate.kt) - the desktop's
+            // Brain → Live. Reads JarvisRuntime directly.
+            item(key = "steps") { StepsSection() }
+
             if (models != null) {
                 item(key = "models") {
                     Section("Model") {
@@ -410,6 +414,9 @@ fun BrainScreen(
             item(key = "compute") {
                 Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
             }
+            // How much Jarvis remembers, and whether it is learning - the
+            // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
+            item(key = "memory-counts") { MemoryCountsSection() }
             item(key = "memory") {
                 // The QUEUE, not the corpus. /api/graph is desktop-only by the
                 // contract's own instruction, and a memory graph is not a thing
@@ -435,6 +442,9 @@ fun BrainScreen(
             // backend/wiki.patch - its own plate, reading and acting through
             // JarvisRuntime directly (WikiPlate.kt), so this is its only line.
             item(key = "wiki") { WikiSection(canAct = canAct) }
+            // The GitHub watch list (WatchPlate.kt) - it reads and acts
+            // through JarvisRuntime directly, so this is its only line.
+            item(key = "watch") { WatchSection(canAct = canAct) }
             item(key = "memory-as-of") {
                 Section("What did I believe on this date?") {
                     MemoryAsOfPlate(
@@ -464,7 +474,11 @@ fun BrainScreen(
                 )
             }
             item(key = "skills") {
-                Probed("Skills", brain.skills, "Installed, with scan verdicts", brain.skillsRead, retry)
+                // Read as the desktop reads it, with Remove (SkillsPlate.kt).
+                // An answer with no list falls back to its raw keys, as before.
+                SkillsSection(data = brain.skills) {
+                    Probed("Skills", brain.skills, "Installed, with scan verdicts", brain.skillsRead, retry)
+                }
             }
 
             item(key = "capabilities") {

@@ -43,6 +43,7 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
@@ -111,6 +112,13 @@ class MainActivity : FragmentActivity() {
      * so the same share cannot be re-applied on a later recomposition.
      */
     private val sharedText = mutableStateOf<String?>(null)
+
+    /**
+     * A photo handed to this app by another app's share sheet, waiting to be
+     * attached to the next question - under the Photo button's own rule
+     * ([ChatPicture.sharedRefusal]). Consumed once, like [sharedText].
+     */
+    private val sharedPicture = mutableStateOf<Uri?>(null)
 
     /**
      * Set when the [com.jarvis.client.widget.QuickLinkWidget]'s Mic action
@@ -202,6 +210,15 @@ class MainActivity : FragmentActivity() {
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri == null) return@registerForActivityResult
+        attachPicture(uri)
+    }
+
+    /**
+     * Reads one photo - picked, or shared from another app - and makes it
+     * small enough for the PC ([PictureEncoder]). The same path for both, so
+     * the same size limits hold for both.
+     */
+    private fun attachPicture(uri: Uri) {
         pictureBusy.value = true
         lifecycleScope.launch {
             when (val out = PictureEncoder.encode(this@MainActivity, uri)) {
@@ -285,9 +302,20 @@ class MainActivity : FragmentActivity() {
      * needs the `onNewIntent` half too.
      */
     private fun readShareIntent(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
-        if (!text.isNullOrEmpty()) sharedText.value = text
+        if (intent?.action != Intent.ACTION_SEND) return
+        if (intent.type == "text/plain") {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+            if (!text.isNullOrEmpty()) sharedText.value = text
+            return
+        }
+        // One photo. Its words, if the other app sent some, go into the
+        // draft; the photo is attached only if the Photo button would be
+        // offered (see the LaunchedEffect on sharedPicture in App()).
+        if (!ChatPicture.isSharedImage(intent.type)) return
+        val uri = intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) ?: return
+        intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { sharedText.value = it }
+        sharedPicture.value = uri
     }
 
     /**
@@ -389,6 +417,19 @@ class MainActivity : FragmentActivity() {
             draft = if (draft.isBlank()) text else "$draft\n\n$text"
             sharedText.value = null
             nav.resetTo(Screen.HOME)
+        }
+
+        // A photo shared from another app: attached under the Photo button's
+        // own rule, asked fresh - only while the PC says Pictures works - or
+        // refused in words, never dropped silently. Nothing is sent here; the
+        // owner still types the question and taps Send, which checks again.
+        LaunchedEffect(sharedPicture.value) {
+            val uri = sharedPicture.value ?: return@LaunchedEffect
+            sharedPicture.value = null
+            nav.resetTo(Screen.HOME)
+            JarvisRuntime.refreshSecondCard()
+            val refusal = ChatPicture.sharedRefusal(JarvisRuntime.secondCard.value)
+            if (refusal != null) JarvisRuntime.setNotice(refusal) else attachPicture(uri)
         }
 
         var memoryDecideBusyId by remember { mutableStateOf<Long?>(null) }
@@ -509,6 +550,7 @@ class MainActivity : FragmentActivity() {
         // request out, and what that request came back with - held like the
         // wake word's busy/notice pair, for the same reason.
         val secondCard by JarvisRuntime.secondCard.collectAsState()
+        val noteTargets by JarvisRuntime.noteTargetsKnown.collectAsState()
         var secondCardBusy by remember { mutableStateOf<String?>(null) }
         var secondCardNotice by remember { mutableStateOf<String?>(null) }
         // Held here rather than in JarvisRuntime: a one-shot read the Brain
@@ -1463,6 +1505,7 @@ class MainActivity : FragmentActivity() {
                             pictureOffered = SecondCard.visionAvailable(secondCard),
                             pictureLine = picture.value?.let { ChatPicture.attachedLine(it) },
                             pictureBusy = pictureBusy.value,
+                            noteTargets = noteTargets,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -1486,7 +1529,20 @@ class MainActivity : FragmentActivity() {
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value
-                                    if (pic == null) {
+                                    // `#log`, `#obs`, `#joplin` ... at the start
+                                    // files the rest as a note instead of asking
+                                    // Jarvis, as on the desktop. An attached
+                                    // picture stays for the next question. The
+                                    // words stay in the box unless the desktop
+                                    // took the note.
+                                    val note = NoteCapture.prefixed(text)
+                                    if (note != null) {
+                                        scope.launch {
+                                            if (JarvisRuntime.fileChatNote(note) && draft == text) {
+                                                draft = ""
+                                            }
+                                        }
+                                    } else if (pic == null) {
                                         draft = ""
                                         scope.launch { chat.send(text) }
                                     } else {

@@ -135,4 +135,115 @@ object NoteCapture {
             "This desktop cannot file notes yet - its backend needs the note-capture patch. Nothing was filed."
         else -> null
     }
+
+    // ------------------------------------------------ chat-line prefixes ----
+
+    /**
+     * A chat line that starts with one of these files the rest as a note
+     * instead of asking Jarvis anything - the desktop's quickbar prefixes,
+     * word for word (`jarvis-desktop/src/main.js`, `NOTE_PREFIXES`). `#vault`
+     * means Obsidian since 2026-09-24, on the desktop and in the backend
+     * (`jarvis_note_capture._ALIASES`) alike.
+     */
+    val PREFIXES: Map<String, String> = linkedMapOf(
+        "#log" to "logseq",
+        "#logseq" to "logseq",
+        "#journal" to "logseq",
+        "#joplin" to "joplin",
+        "#jop" to "joplin",
+        "#vault" to "obsidian",
+        "#obs" to "obsidian",
+        "#obsidian" to "obsidian",
+        "#daily" to "obsidian",
+    )
+
+    /** The desktop's `parseNotePrefix` pattern: `#` and letters, then a space or the end. */
+    private val PREFIX = Regex("""^\s*(#[a-z]+)(\s+|$)""", RegexOption.IGNORE_CASE)
+
+    /** A chat line that starts with a note prefix: which app, and the words after the prefix. */
+    data class Prefixed(val target: String, val body: String)
+
+    /** The prefix and the words after it, or null for an ordinary question. */
+    fun prefixed(line: String): Prefixed? {
+        val m = PREFIX.find(line) ?: return null
+        val target = PREFIXES[m.groupValues[1].lowercase()] ?: return null
+        return Prefixed(target, line.substring(m.range.last + 1))
+    }
+
+    /** The desktop's chip label for each app (`NOTE_PREFIXES`' `label`). */
+    fun label(target: String): String = when (normal(target)) {
+        "joplin" -> "Joplin Note"
+        "obsidian" -> "Obsidian Daily Note"
+        else -> "Logseq Journal"
+    }
+
+    /** What to set up on the PC, word for word from the desktop (`note-capture.js`, `TARGETS`). */
+    fun setUp(target: String): String = when (normal(target)) {
+        "joplin" -> "Put Joplin's Web Clipper token in JARVIS_JOPLIN_TOKEN (docs/INSTALL.md, Notes)."
+        "obsidian" -> "Set [notes.obsidian] vault_directory in jarvis-framework.toml (docs/INSTALL.md, Notes)."
+        else -> "Set [notes.logseq] graph_directory in jarvis-framework.toml (docs/INSTALL.md, Notes)."
+    }
+
+    /** Said when the PC said, for certain, that this app is not set up - the desktop's `notSetUp`. */
+    fun notSetUp(target: String): String =
+        "${name(target)} isn't set up on your PC, so nothing was filed. ${setUp(target)}"
+
+    /** The desktop's words for a prefix with nothing after it. */
+    const val NOTHING_TO_FILE = "Nothing to file - type the note after the prefix."
+
+    /** What a prefixed chat line comes to. */
+    sealed interface ChatNote {
+        /** File [text] in [target] through [com.jarvis.client.JarvisRuntime.fileNote]. */
+        data class File(val target: String, val text: String) : ChatNote
+
+        /** Send nothing, and show [why]. */
+        data class NotFiled(val why: String) : ChatNote
+    }
+
+    /**
+     * The desktop's `fileFromBar` decision, in its order: an app the PC said
+     * is NOT set up is refused here, with nothing sent; an empty note is
+     * refused; anything else is sent. When the PC could not be asked
+     * ([Targets.Unknown]) the note is sent anyway, and the PC's own answer -
+     * it refuses an app that is not set up, saying why - is what is shown.
+     */
+    fun chatNote(p: Prefixed, targets: Targets): ChatNote {
+        if (targets is Targets.Known && p.target !in targets.names) {
+            return ChatNote.NotFiled(notSetUp(p.target))
+        }
+        val text = p.body.trim()
+        if (text.isEmpty()) return ChatNote.NotFiled(NOTHING_TO_FILE)
+        return ChatNote.File(p.target, text)
+    }
+
+    /**
+     * The line under the chat box while a prefix is typed - the desktop's
+     * chip beside its prompt - or null for an ordinary question. Says "not
+     * set up" only when the PC said so; while the list is unknown it says
+     * where the note will go, as the desktop does.
+     */
+    fun chip(draft: String, targets: Targets?): String? {
+        val p = prefixed(draft) ?: return null
+        if (targets is Targets.Known && p.target !in targets.names) {
+            return "${label(p.target)} - not set up on your PC, so this would not be filed."
+        }
+        return "${label(p.target)}: this is filed as a note, not asked as a question."
+    }
+
+    /**
+     * The prefix shown for each app the PC is set up for, with what it does
+     * - the desktop's help list (`index.html`, the `data-note-target` rows),
+     * which shows a prefix only for a note app that is set up. None when the
+     * list is unknown or empty.
+     */
+    fun primer(targets: Targets?): List<Pair<String, String>> {
+        val ready = (targets as? Targets.Known)?.names.orEmpty()
+        return ready.map { t ->
+            when (t) {
+                "joplin" -> "#joplin" to "File what you type as a new Joplin note"
+                "obsidian" -> "#obs" to "File what you type in today's Obsidian daily note"
+                else -> "#log" to "File what you type in today's Logseq journal"
+            }
+        }
+    }
 }

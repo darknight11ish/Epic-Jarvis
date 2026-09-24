@@ -76,6 +76,34 @@ object ChatPicture {
         override fun toString(): String = "ChatPicture.Ready(${width}x$height, $jpegBytes bytes)"
     }
 
+    /**
+     * A share from another app that chat can take as a picture: one image,
+     * any `image/...` type (Android's Share sheet, `ACTION_SEND`). It is
+     * decoded and shrunk exactly as a picked photo is, so the size limits
+     * below hold for both.
+     */
+    fun isSharedImage(mimeType: String?): Boolean =
+        mimeType?.trim()?.lowercase()?.startsWith("image/") == true
+
+    /** Why Pictures is not working, in the PC's words where it has some. */
+    fun notWorkingWhy(read: SecondCard.Read): String? =
+        (read as? SecondCard.Read.Loaded)?.status?.feature(SecondCard.VISION)?.why
+            ?: SecondCard.readLine(read)
+
+    /**
+     * Why a picture shared from another app is NOT attached, or null when it
+     * is. The Photo button's own rule ([SecondCard.visionAvailable], read
+     * fresh): a share is attached only when that button would be offered, and
+     * is never dropped without a word. Sending checks again, as it does for a
+     * picked photo.
+     */
+    fun sharedRefusal(read: SecondCard.Read): String? {
+        if (SecondCard.visionAvailable(read)) return null
+        return "The shared picture was not attached: Jarvis takes pictures only while Pictures " +
+            "on the second graphics card is working" +
+            (notWorkingWhy(read)?.let { " ($it)" } ?: "") + ". Nothing was sent."
+    }
+
     /** The line under the composer while a picture is attached. */
     fun attachedLine(p: Ready): String =
         "Picture attached (${p.width} × ${p.height}, ${p.jpegBytes / 1024} KB). " +
