@@ -200,6 +200,17 @@ def _lane():
         return None
 
 
+def _big_release() -> None:
+    """Tells the big model the wiki is done with it, so a waiting deep
+    question may have it (jarvis_big_model.release). Never raises."""
+    try:
+        bm = _big()
+        if bm is not None and hasattr(bm, "release"):
+            bm.release(FEATURE)
+    except Exception:
+        pass
+
+
 def _big_state() -> tuple:
     """(state, why) of the big model for the wiki - see
     jarvis_big_model.job_state. Starts nothing."""
@@ -1294,6 +1305,10 @@ def _worker(job_id: str, source: str, lane, call, gate_check) -> None:
             _set(job_id, message=("The big model is reading it. No card yet, and nothing "
                                   "is written."))
         p = plan(source, lane=lane, call=call)
+        if _is_big_lane(lane):
+            # The model's part is done; the card and the writing need no
+            # model, so another big-model job need not wait for them.
+            _big_release()
         if p.reason_empty:
             _set(job_id, state="refused",
                  message=f"Not added: {p.reason_empty}. Nothing was written.")
@@ -1344,6 +1359,9 @@ def _worker(job_id: str, source: str, lane, call, gate_check) -> None:
     except Exception as exc:
         _set(job_id, state="failed",
              message=f"Not added: an unexpected {type(exc).__name__}. Check the wiki folder.")
+    finally:
+        if _big_selected():
+            _big_release()
 
 
 def ingest(source, *, lane_for: Optional[Callable] = None, call: Optional[Callable] = None,

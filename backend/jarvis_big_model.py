@@ -982,10 +982,22 @@ def _release_card(uuid: Optional[str]) -> None:
 # --------------------------------------------------------------------------
 
 class _Engine:
-    """The one `coli serve` this module started, or none."""
+    """The one `coli serve` this module started, or none.
+
+    ONE JOB AT A TIME (K2). The wiki and deep questions may want different
+    models (by default a medium one and a giant one), and colibri holds one.
+    Each job's lane_for() used to restart the engine for its own model, so
+    two jobs waiting at once took turns killing each other's load and
+    neither ever finished. Now the first job to ask holds the engine
+    (`holder`) until it ends (release()), and another job's lane_for()
+    does not restart it meanwhile: that job waits, and job_state() says
+    "busy" and why. A hold its job stopped refreshing (no lane_for() and no
+    answer in progress for HOLD_SECONDS) lapses, so a job that died without
+    release() cannot keep the engine forever."""
 
     RETRY_SECONDS = 60.0
     PROBE_EVERY = 2.0
+    HOLD_SECONDS = 120.0
 
     def __init__(self) -> None:
         self.lock = threading.RLock()
@@ -1002,6 +1014,8 @@ class _Engine:
         self.failed_at = -1e9
         self.card: Optional[str] = None
         self.reaper = False
+        self.holder: Optional[str] = None      # the job holding the engine
+        self.held_at = -1e9
 
     def url(self) -> str:
         return f"http://{HOST}:{self.port}"
@@ -1029,9 +1043,36 @@ class _Engine:
     def _fail(self, why: str) -> None:
         self.state, self.why, self.failed_at = "failed", why, _mono()
 
-    def ensure(self, row: dict, det: dict) -> None:
-        """Start colibri with `row`'s model if it is not running it."""
+    def other_holder(self, job: Optional[str]) -> Optional[str]:
+        """The job, other than `job`, that holds the engine now, or None.
+        A hold only counts while colibri is loading or running: with it
+        off or failed, starting it for another job interrupts nothing."""
         with self.lock:
+            h = self.holder
+            if h is None or h == job:
+                return None
+            if self.state not in ("loading", "ready") or not self.alive():
+                return None
+            if self.busy or _mono() - self.held_at < self.HOLD_SECONDS:
+                return h
+            self.holder = None          # lapsed: its job stopped asking
+            return None
+
+    def hold(self, job: str) -> None:
+        with self.lock:
+            self.holder, self.held_at = job, _mono()
+
+    def release(self, job: str) -> None:
+        with self.lock:
+            if self.holder == job:
+                self.holder = None
+
+    def ensure(self, row: dict, det: dict, job: Optional[str] = None) -> None:
+        """Start colibri with `row`'s model if it is not running it. Never
+        restarts it for `job` while another job holds it."""
+        with self.lock:
+            if self.model_id != row["id"] and self.other_holder(job) is not None:
+                return          # another job's model; this one waits its turn
             if self.model_id == row["id"] and self.state in ("loading", "ready") and self.alive():
                 return
             if self.state == "ready" and self.model_id == row["id"] and not self.alive():
@@ -1314,8 +1355,16 @@ def lane_for(job: str) -> Optional[Lane]:
         row = _model_for(job, det)
         if not det.get("capable") or row is None or not row["usable"]:
             return None
-        _ENGINE.check_idle()
-        _ENGINE.ensure(row, det)
+        with _ENGINE.lock:
+            # One step under the engine's lock, so two jobs asking at the
+            # same moment cannot both take it.
+            other = _ENGINE.other_holder(job)
+            if other is not None and _ENGINE.model_id != row["id"]:
+                return None     # another job holds the engine for its model
+            if other is None:
+                _ENGINE.hold(job)
+            _ENGINE.check_idle()
+            _ENGINE.ensure(row, det, job)
         if _ENGINE.state == "ready" and _ENGINE.model_id == row["id"] and _ENGINE.alive():
             _ENGINE.touch()
             url = _ENGINE.url()
@@ -1326,6 +1375,16 @@ def lane_for(job: str) -> Optional[Lane]:
         return None
     except Exception:
         return None
+
+
+def release(job: str) -> None:
+    """A job is done with the big model: another job may now have it (and
+    colibri may be restarted for that job's model). The wiki builder and
+    deep questions call this when a job ends. Never raises."""
+    try:
+        _ENGINE.release(job)
+    except Exception:
+        pass
 
 
 def job_state(job: str) -> tuple:
@@ -1356,6 +1415,11 @@ def job_state(job: str) -> tuple:
             return "loading", why
         if st == "failed" and mid == row["id"]:
             return "failed", why
+        other = _ENGINE.other_holder(job)
+        if other is not None and mid != row["id"]:
+            return "busy", (f"the big model is working on the {JOB_NAMES.get(other, other)} "
+                            f"job ({_ENGINE.model_name}); this one waits until that job is "
+                            f"done, then starts {row['name']}")
         if st in ("loading", "ready") and alive and _ENGINE.busy:
             return "busy", (f"the big model is busy with another job ({_ENGINE.model_name}); "
                             f"this one waits for it")
@@ -1982,6 +2046,8 @@ def _deep_worker() -> None:
             _run_deep(nxt)
         except Exception as exc:
             _fail_deep(nxt, f"an unexpected {type(exc).__name__}")
+        finally:
+            release("deep_questions")
 
 
 def _fail_deep(jid: str, why: str) -> None:

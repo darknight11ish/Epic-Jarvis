@@ -446,6 +446,44 @@ def t_the_engine():
             check(f"a card only by its id, not {bad!r}", True)
 
 
+def t_one_job_at_a_time():
+    # K2: the wiki and deep questions (by default two different models) each
+    # restarted colibri for their own model while the other was loading.
+    # The audit's shape: both jobs polling, three rounds each.
+    with World(spawn_now=False) as w:
+        w.switches(master=True, wiki=True, deep_questions=True)
+        for _ in range(3):
+            BM.lane_for("wiki")
+            BM.lane_for("deep_questions")
+        check("two jobs asking in turn: colibri started ONCE, never killed",
+              len(w.started) == 1 and not w.killed, [p.args for p in w.started])
+        st, why = BM.job_state("deep_questions")
+        check("the waiting job is 'busy', and says which job has it and what it waits for",
+              st == "busy" and "Wiki builder job" in why and "DeepSeek V4 Flash" in why,
+              (st, why))
+        check("the holding job still reads 'loading'", BM.job_state("wiki")[0] == "loading")
+        BM.release("deep_questions")          # not the holder: changes nothing
+        BM.lane_for("deep_questions")
+        check("only the holder's release frees it", len(w.started) == 1)
+        BM.release("wiki")
+        BM.lane_for("deep_questions")
+        check("after the wiki job ends, deep questions get it: one stop, one start",
+              len(w.started) == 2 and len(w.killed) == 1
+              and BM._ENGINE.model_id == "dsv4-flash" and BM._ENGINE.holder == "deep_questions")
+    with World(spawn_now=False) as w:
+        w.switches(master=True, wiki=True, deep_questions=True)
+        BM.lane_for("wiki")
+        w.clock += BM._Engine.HOLD_SECONDS + 1        # the wiki job died without release
+        BM.lane_for("deep_questions")
+        check("a hold nobody refreshed lapses after HOLD_SECONDS",
+              len(w.started) == 2 and BM._ENGINE.model_id == "dsv4-flash")
+    with World() as w:
+        w.switches(master=True, deep_questions=True)
+        BM.ask("Why is the sky blue?")
+        check("a deep question gives the engine back when it ends",
+              BM._ENGINE.holder is None and BM.deep_status()["jobs"][0]["state"] == "done")
+
+
 def t_the_graphics_card():
     capable = {"capable": True, "uuid": G.U_2060, "name": "NVIDIA GeForce RTX 2060",
                "lane": "off", "why": "the RTX 2060 can take the second-card features"}
@@ -534,6 +572,11 @@ def t_lane_for_is_none_when_not_ready():
               BM.lane_for("deep_questions") is None and BM.job_state("deep_questions")[0] == "busy"
               and len(w.started) == 1 and not w.killed)
         BM._ENGINE.end()
+        BM.lane_for("deep_questions")
+        check("its answer is done, but the wiki job has not ended: still not restarted (K2)",
+              len(w.started) == 1 and not w.killed
+              and BM.job_state("deep_questions")[0] == "busy")
+        BM.release("wiki")
         BM.lane_for("deep_questions")
         check("once it is free, it switches model: the old one stopped first",
               len(w.started) == 2 and w.killed == [w.started[0]]
@@ -628,6 +671,8 @@ def t_the_wiki():
             check("the wiki call's speed is measured",
                   BM.status()["measured"]["wiki"]["words"] > 0)
             check("and the second card was never asked", asked_second == [])
+            check("the wiki job gave the engine back when it ended (K2)",
+                  BM._ENGINE.holder is None)
         with World() as w, TW.Vault() as v:
             w.switches(master=True, wiki=True)
             w.answer_fn = lambda payload: "Sure! Here are the pages: {not json"
