@@ -6124,10 +6124,28 @@ was changed for them:
   flattering from then on.
 
 Both batches were written by the same author as the rules, so even these
-flatter the check. The fair test is a second held-out set being written by
-someone else now; it has not been measured here. A guess, not a
-measurement: roughly nine new sensitive lines in ten caught by the patterns
-alone, and somewhere between 1% and 10% of harmless lines flagged.
+flatter the check.
+
+**The fair test: a second held-out set (measured 2026-09-24).** 983 lines
+(610 sensitive, 373 harmless, 73% English) written by someone who never saw
+the rules or the other sets. The patterns alone, no model:
+
+| | caught (sensitive) | harmless flagged |
+|---|---|---|
+| the old word list (before the rebuild) | 43.4% | 23.6% |
+| round 1 | 78.0% | 18.0% |
+| **round 2 (now)** | **84.8%** | **13.9%** |
+
+By category, round 2: credentials 94%, identity 97%, other people 98%,
+money 89%, special 83%, health 76%, location 67%. Languages outside the
+eight covered: 6 of 18.
+
+**What this means, plainly:** word lists stop improving at about 85% on
+wording they have not seen - each round fixes what it is shown and new
+wording slips past. Closing the gap is the local model's job (the second
+layer). How much it closes has not been measured, because no model runs
+here; run the command above on the PC with `--with-model` and this set.
+This set is kept out of the rules on purpose, so it stays a fair test.
 
 On the development file, round 2 changed nothing that mattered: still 100%
 of 777 lines in the eight languages, 0 of 259 harmless flagged, and the
