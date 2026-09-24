@@ -176,6 +176,17 @@ class WakeListenTest {
         assertTrue(why!!.contains("nothing was sent"))
     }
 
+    /** AP-7: what makes the runtime re-read the voice status after an approval event. */
+    @Test
+    fun `a waiting wake-word or training card is seen, and no card is not`() {
+        assertTrue(status("""{"listening": {"wake_word": false, "wake_word_pending": true}}""").cardWaiting)
+        assertTrue(status("""{"wake": {"enabled": false, "pending": true}}""").cardWaiting)
+        assertTrue(status("""{"gate": {"training": {"available": true, "pending": true, "clips": 5}}}""").cardWaiting)
+        assertFalse(on.cardWaiting)
+        assertFalse(off.cardWaiting)
+        assertFalse("an older desktop that says nothing", status("""{"available": true}""").cardWaiting)
+    }
+
     /** Rule 4: turning it ON raises a card, so it waits for a live link. OFF never waits. */
     @Test
     fun `asking for the wake word ON is held on a stale link, and OFF never is`() {

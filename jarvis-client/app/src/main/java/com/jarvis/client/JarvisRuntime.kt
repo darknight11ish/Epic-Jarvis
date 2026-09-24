@@ -904,6 +904,12 @@ object JarvisRuntime {
                 if (bm is BigModel.Read.Loaded<BigModel.Status> && bm.value.pending.isNotEmpty()) {
                     recheckBigModelAfterDecision(bm.value.pending)
                 }
+                // And the voice cards: "hey Jarvis" ON and a voice training.
+                // Neither has an event of its own either, so without this the
+                // Checks screen said "Waiting" over a card already decided.
+                if (voice.answered.value && voice.status.value.cardWaiting) {
+                    recheckVoiceAfterDecision()
+                }
             }
             // A deep question finished (`{"id", "state"}` only - a doorbell,
             // never the question or the answer). The list is re-read for the
@@ -1188,6 +1194,23 @@ object JarvisRuntime {
                 val now = (_bigModel.value as? BigModel.Read.Loaded<BigModel.Status>)?.value?.pending
                     ?: return@launch
                 if (!now.containsAll(waiting)) return@launch
+            }
+        }
+    }
+
+    /**
+     * [recheckSecondCardAfterDecision], for the voice cards (the wake word's
+     * and voice training's): re-reads `/api/voice/status` at once, then twice
+     * more a little later while it still says a card waits. The PC records
+     * the outcome when its own wait for the card returns, which can land
+     * just after the event that woke this.
+     */
+    private fun recheckVoiceAfterDecision() {
+        scope.launch {
+            for (wait in SECOND_CARD_RECHECK_MS) {
+                delay(wait)
+                voice.refreshStatus()
+                if (!voice.answered.value || !voice.status.value.cardWaiting) return@launch
             }
         }
     }
