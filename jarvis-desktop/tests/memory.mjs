@@ -185,6 +185,28 @@ await check("turning learning on waits for its approval card, and says so", asyn
   assert.equal(still, 1, "it is not on until the card is approved");
 });
 
+await check("a learning card raised elsewhere (the phone) shows the waiting line too, and it goes with the card", async () => {
+  // The history switch's rule (`chats.ask || v.waiting`), for learning: the
+  // PC sends no `waiting` for learning, so the queue says it.
+  const CARD = { id: "gate-learning-9", action: "learning_enable", tier: "ask", detail: {}, created: 1 };
+  const brain = { ...K.BRAIN, memory_facts: { ...K.BRAIN.memory_facts, learning: false } };
+  const page = await memoryTab({ brain });
+  const before = await page.locator("#memory-learning .learning-waiting").count();
+  await page.evaluate((card) => window.__emit("approvals-changed", { count: 1, items: [card] }), CARD);
+  await page.waitForTimeout(150);
+  const line = await page.locator("#memory-learning .learning-waiting").allInnerTexts();
+  // Another kind of card is not a learning card.
+  await page.evaluate((card) => window.__emit("approvals-changed",
+    { count: 1, items: [{ ...card, id: "gate-other", action: "history_enable" }] }), CARD);
+  await page.waitForTimeout(150);
+  const other = await page.locator("#memory-learning .learning-waiting").count();
+  await page.close();
+  assert.equal(before, 0);
+  assert.equal(line.length, 1, "no waiting line for a card raised on the phone");
+  assert.match(line[0], /^Waiting for your approval to turn learning on\. Approve it /);
+  assert.equal(other, 0, "the line stayed after the learning card left");
+});
+
 await check("when the environment overrides the switch, the toast says so", async () => {
   // JARVIS_EXTRACT=0 is a floor the pane cannot lift. The server answers 200
   // and still refuses, so a pane that rendered its own request would show

@@ -905,10 +905,25 @@ function modelCardGone(ask) {
   }, MODEL_ASK_GRACE_MS);
 }
 
+/** Whether the approval queue holds a card to turn learning on, wherever it
+ *  was raised (`learning_enable`, docs/JARVIS-API.md `/api/memory/learning`). */
+function learningCardWaiting(queue = currentQueue()) {
+  const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
+  return items.some((item) => item && item.action === "learning_enable");
+}
+let learningCardSeen = false;
+
 /** The learning card left the queue: read the switch after the backend has
  *  had a moment to apply an approval. On: the line goes (renderLearning).
  *  Still off: it was denied or ran out of time, and that is said. */
 onQueue((queue) => {
+  // A learning card raised elsewhere (the phone, or another window) came
+  // or went: the waiting line follows it, as History's does.
+  const waitingNow = learningCardWaiting(queue);
+  if (waitingNow !== learningCardSeen) {
+    learningCardSeen = waitingNow;
+    if (state.view === "memory") renderLearning();
+  }
   const ask = state.learningAsk;
   if (!ask || !ask.cardId || ask.gone) return;
   const items = (queue && Array.isArray(queue.items)) ? queue.items : [];
@@ -1490,7 +1505,9 @@ function renderLearning() {
   }
   dom.memoryLearning.append(dl);
 
-  if (state.learningAsk) {
+  // Our own click, or a card raised elsewhere - the history switch's rule
+  // (`chats.ask || v.waiting`), read from the queue.
+  if (state.learningAsk || (!on && learningCardWaiting())) {
     dom.memoryLearning.append(el("p", "hint learning-waiting",
       `Waiting for your approval to turn learning on. Approve it ${APPROVE_WHERE}.`));
   }
